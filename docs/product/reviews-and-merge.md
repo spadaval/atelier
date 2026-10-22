@@ -82,7 +82,13 @@ make approval stale. Later commits may add new review/evidence files, create
 issues outside the reviewed scope (such as the follow-up a `defer` disposition
 names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
 Close Reason, including the implementer report it carries, without changing
-the approved acceptance.
+the approved acceptance. An issue outside the scope that did not exist at the
+approval's pin is planning in every later commit too, so a follow-up filed
+during review may be created with `--discovered-from`, then linked to its
+mission (`atelier issue link <follow-up> <mission> --role advances`, stored on
+the follow-up) or edited in later commits, and the approval stays current
+(atelier-iaas). Its own done claim is not covered: closing it on the branch
+fails `claims.reviewed`, as below.
 
 This is the one rule for what an approval or trivial exemption covers, and
 `merge` (its `review.current` gate), `land` on the work branch and `land` on
@@ -101,8 +107,8 @@ Adding a child to the
 owner edits the owner's record, so it does make approval stale. A link is
 stored only on the record that declares it (atelier-ihss), so new work that
 links itself `blocked_by` the owner leaves the owner's record and its approval
-alone; a link the owner declares, or one written into an existing record
-outside the scope, is a relationship edit and makes approval stale. Each commit is checked; changing and then restoring code
+alone; a link the owner declares, or one written into a record outside the
+scope that existed at the pin, is a relationship edit and makes approval stale. Each commit is checked; changing and then restoring code
 does not recover an old approval. New material edits require renewed review.
 
 Merging the base into a reviewed branch keeps its approval when the merge is
@@ -259,9 +265,13 @@ the base commits that are not yet on the base's upstream. A commit counts as
 reviewed when a commit pinned by an approval or trivial exemption contains it,
 for completed owners that branched from this base and are not already done
 upstream, and only an approval `merge` would accept counts (atelier-n90q). Its
-identity must be independent of the branch's own authors, judged as
-`review.current` judges it: authors of base commits the branch merged in do
-not count (atelier-0cj6). Every finding pinned at or before it needs an
+identity must be independent of the branch's own authors: authors of base
+commits the branch merged in do not count, as in `review.current`
+(atelier-0cj6). Judging from history, `land` cannot tell a side branch that
+was never on the base from one that was, so it leaves out the authors of every
+branch merged into the work branch, where `review.current` counts a side
+branch not on the base. `merge` may therefore refuse an approval that `land`
+would accept, never the reverse (atelier-p5qp). Every finding pinned at or before it needs an
 accepted disposition, and a FIX NOW's resolution commit must be at or before
 the approval's pin; the disposition itself may be recorded later. That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with

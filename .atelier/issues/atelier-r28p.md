@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Keep approvals and land's scope steady through planning records"
-updated_at: "2026-10-22T22:12:46.139224870+00:00"
+updated_at: "2026-10-22T22:18:33.668129095+00:00"
 ---
 
 ## Goal
@@ -44,3 +44,5 @@ Both children change what the review gate and land's touched-claims scope treat 
 ## Notes
 
 - 2026-10-22 [note] From review of atelier-1ztv (finding atelier-p5qp): docs/product/reviews-and-merge.md:261-264 and the doc comments on approval_accepted and author_identities_to say land judges independence as review.current does. land leaves out authors of every side branch merged into the work branch (original_independent passes HEAD as base), while review.current counts a side branch not on the base. Describe that difference and document the base argument at the call site.
+- 2026-10-22 [decision] Resolve finding atelier-p5qp in docs: reviews-and-merge.md, approval_accepted and author_identities_to now say land leaves out authors of every branch merged into the work branch (original_independent passes HEAD as base) while review.current passes the fork point and counts a side branch not on the base; a comment at the call site documents the base argument.
+  Reason: 1ztv's decision keeps the asymmetry because merge refusing earlier is the safe direction; only the description was wrong.

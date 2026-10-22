@@ -3258,7 +3258,9 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
 /// base. Anything else after the approval, or an approval `merge` would not
 /// accept (atelier-n90q), leaves the claim uncovered under both: `merge`
 /// refuses before integrating, and after a forced integration `land` refuses.
-/// Each case runs under both merge strategies.
+/// A follow-up filed after the approval and linked to its mission in a later
+/// commit keeps it current, though its own done claim is not covered
+/// (atelier-iaas). Each case runs under both merge strategies.
 #[test]
 fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
     let covered_cases = [
@@ -3267,12 +3269,14 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "children_in_one_commit",
         "reviewer_base_close_then_approve",
         "reviewer_base_reapproved_after_code",
+        "follow_up_linked",
     ];
     let stale_cases = [
         "with_code",
         "with_goal",
         "with_note",
         "new_done_issue",
+        "follow_up_done",
         "sibling_close",
         "self_approval",
         "open_fix_now",
@@ -3349,6 +3353,23 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         commit(f.path(), "plan a sibling outside the scope");
         sibling
     });
+    // A mission outside the scope that a follow-up filed during review
+    // advances (atelier-iaas).
+    let mission = case.starts_with("follow_up").then(|| {
+        let mission = ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Mission",
+                "--issue-type",
+                "mission",
+            ],
+        );
+        commit(f.path(), "plan a mission");
+        mission
+    });
     if case == "open_fix_now" {
         ok(
             f.path(),
@@ -3405,6 +3426,38 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
                 new_done = Some(id);
             }
             "sibling_close" => close_issue(sibling.as_deref().unwrap()),
+            "follow_up_linked" | "follow_up_done" => {
+                // Filed, then linked to its mission in a later commit, the
+                // way an agent records a follow-up during review.
+                let id = ok(
+                    f.path(),
+                    &[
+                        "-q",
+                        "issue",
+                        "create",
+                        "Follow-up found in review",
+                        "--discovered-from",
+                        &f.id,
+                    ],
+                );
+                commit(f.path(), "file a follow-up after approval");
+                ok(
+                    f.path(),
+                    &[
+                        "issue",
+                        "link",
+                        &id,
+                        mission.as_deref().unwrap(),
+                        "--role",
+                        "advances",
+                    ],
+                );
+                commit(f.path(), "link the follow-up to its mission");
+                if case == "follow_up_done" {
+                    close_issue(&id);
+                    new_done = Some(id);
+                }
+            }
             _ => {}
         }
         match (&child, case) {

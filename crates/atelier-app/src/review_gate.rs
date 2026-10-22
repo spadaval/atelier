@@ -105,10 +105,13 @@ fn body_without_close_reason(text: &str) -> Option<String> {
     Some(kept.trim_end().to_owned())
 }
 
+/// Whether `edge` changes only what an approval of `ids` pinned at `pin`
+/// keeps current (see `approval_is_current_to`).
 fn allowed_edge(
     read: &mut git::ReadContext<'_>,
     edge: &git::CommitEdge,
     ids: &BTreeSet<String>,
+    pin: &str,
 ) -> Result<bool> {
     for path in &edge.paths {
         let old = read.entry(&edge.parent, path)?;
@@ -128,9 +131,16 @@ fn allowed_edge(
             && path.extension().is_some_and(|ext| ext == "md"))
         .then(|| path.file_stem().and_then(|name| name.to_str()))
         .flatten();
-        // A new issue outside the scope, such as the follow-up a deferred
-        // finding needs, is planning, not reviewed work (atelier-cafy).
-        if issue_id.is_some_and(|id| !ids.contains(id)) && old.is_none() && regular(&new) {
+        // An issue outside the scope that is new since the pin, such as the
+        // follow-up a deferred finding needs, is planning, not reviewed work
+        // (atelier-cafy). It stays planning as it is linked or edited in
+        // later commits (atelier-iaas); its own done claim is judged by
+        // `claims.reviewed` and `land`, not by the approval.
+        if issue_id.is_some_and(|id| !ids.contains(id))
+            && (old.is_none() || regular(&old))
+            && regular(&new)
+            && read.entry(pin, path)?.is_none()
+        {
             continue;
         }
         if path.starts_with(".atelier/issues") && regular(&old) && regular(&new) {
@@ -168,8 +178,9 @@ pub fn approval_is_current(
 }
 /// The one rule for what an approval or trivial exemption covers
 /// (atelier-n642). Pinned at `pin`, it stays current at `end` when every
-/// commit after the pin only adds review or evidence records, files issues
-/// outside the approved scope `ids`, changes a record in `ids` by status,
+/// commit after the pin only adds review or evidence records, files or edits
+/// issues outside the approved scope `ids` that are new since the pin (a
+/// follow-up and its links, atelier-iaas), changes a record in `ids` by status,
 /// timestamps and Close Reason alone, or cleanly merges commits already on
 /// `base`. So a close commit that changes only the scope's own records keeps
 /// it current, and one that also edits code or another field does not.
@@ -184,8 +195,8 @@ pub fn approval_is_current_to(
 ) -> Result<bool> {
     for (edge, merge) in work_edges(read, pin, end, base)? {
         let allowed = match &merge {
-            Some(merge) => allowed_base_merge(read, &edge, merge, ids)?,
-            None => allowed_edge(read, &edge, ids)?,
+            Some(merge) => allowed_base_merge(read, &edge, merge, ids, pin)?,
+            None => allowed_edge(read, &edge, ids, pin)?,
         };
         if !allowed {
             return Ok(false);
@@ -196,8 +207,8 @@ pub fn approval_is_current_to(
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
 /// approval's identity is independent of the branch's own authors up to the
-/// event, base commits merged in left out as `review.current` leaves them
-/// out (an exemption is explicit and names itself), and every finding on the
+/// event, leaving out the commits of every branch merged in (an exemption is
+/// explicit and names itself), and every finding on the
 /// scope pinned at or before it has an accepted disposition: a FIX NOW whose
 /// resolution commit is at or before the approval's pin, or a DEFER or NO
 /// ACTION accepted by a non-author. Only that resolution commit is checked
@@ -259,6 +270,7 @@ fn allowed_base_merge(
     edge: &git::CommitEdge,
     merge: &git::MergeResolution,
     ids: &BTreeSet<String>,
+    pin: &str,
 ) -> Result<bool> {
     // A conflict resolved to the branch side's version changes nothing
     // against it, yet may drop the base's side, so every conflict is checked.
@@ -293,7 +305,7 @@ fn allowed_base_merge(
             paths: vec![path.clone()],
             ..edge.clone()
         };
-        if !allowed_edge(read, &single, ids)? {
+        if !allowed_edge(read, &single, ids, pin)? {
             return Ok(false);
         }
     }
@@ -507,11 +519,15 @@ pub fn author_identities(
 ) -> Result<BTreeSet<String>> {
     author_identities_to(read, base_commit, ids, "HEAD", base_commit)
 }
-/// The one author set review independence is judged against, for `merge`
-/// and `land` alike (atelier-0cj6): the authors of the commits from `start`
-/// to `end` that change more than an approval keeps current, leaving out
-/// the commits merges bring in from `base`. A reviewer who authored work on
-/// the base that the branch merged in is still independent of the branch.
+/// The author set review independence is judged against (atelier-0cj6):
+/// the authors of the commits from `start` to `end` that change more than an
+/// approval keeps current, leaving out the commits merges bring in from
+/// `base`. A reviewer who authored work on the base that the branch merged in
+/// is still independent of the branch. `merge`'s `review.current` passes the
+/// branch's fork point with the base as `base`, so it counts the authors of a
+/// merged side branch not on the base; `land` judges from history and passes the tip, so it leaves
+/// out every merged side branch. `merge` can therefore refuse an approval
+/// `land` accepts, never the reverse (atelier-p5qp).
 fn author_identities_to(
     read: &mut git::ReadContext<'_>,
     start: &str,
@@ -530,7 +546,7 @@ fn author_identities_to(
         .iter()
         .filter(|edge| !merged_base.contains(&edge.commit))
     {
-        if !allowed_edge(read, edge, ids)? && inspected.insert(edge.commit.clone()) {
+        if !allowed_edge(read, edge, ids, start)? && inspected.insert(edge.commit.clone()) {
             add_author(read, &edge.commit, &mut authors)?;
         }
     }
@@ -1305,6 +1321,10 @@ fn original_independent(
         read.issue_at(commit, owner)
             .is_ok_and(|record| record.issue.workflow_branch.is_some())
     });
+    // History records no base for the branch, so `head` stands for it: the
+    // commits of every branch merged into this one are left out, including
+    // side branches never on the base, which `review.current` would count
+    // (atelier-p5qp).
     let authors = if let Some(origin) = branch_start {
         match read.first_parent(origin)? {
             Some(parent) => author_identities_to(read, &parent, &ids, event, &head)?,
