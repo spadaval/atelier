@@ -18,7 +18,7 @@ schema_version: 2
 closed_at: "2026-10-22T20:52:15.983357090+00:00"
 status: "done"
 title: "Find review records that were created inside a merge commit"
-updated_at: "2026-10-22T20:52:15.983357090+00:00"
+updated_at: "2026-10-22T23:05:41.799978960+00:00"
 ---
 
 ## Goal
@@ -44,6 +44,7 @@ Found in astromech (its issue astromech-sx84, with the bisect). 20 defer/no_acti
   Reason: A merge adding a path neither parent has is already kept by default history simplification but has no diff for --diff-filter=A to match; first-parent diffing gives it one, while a merge that takes the path from its second parent stays simplified away so the side commit remains the origin. --diff-merges prints the merge's patch, which --no-patch removes so the output is only commit IDs. The updates query has no diff filter, so it already lists such merges.
   Rejected: Diffing merges against every parent (-m), which also lists side-branch merges; --first-parent traversal, which would stop following the side branch that really introduced most records
 - 2026-10-22 [note] Checked read-only against /home/supadava/projects/astromech at 649dc8ec with target/debug/atelier from faed7efe. All 2147 review records now have an introducing commit (25 had none with the old query, among them astromech-3h36 at merge 201c809b). In a --shared local clone, land on main with one new commit adding an issue that advances astromech-7q0z passes (the 4cf082ca binary fails there with 'review event history missing'). doctor no longer errors but still fails one gate: 'session findings.disposed: astromech-h9kb, astromech-zdy2: unresolved FIX NOW: resolution needs fresh independent approval'. astromech-y296 has author fix_now dispositions (astromech-clc7, astromech-f3ta) and only 'review' events (astromech-bt1w, astromech-a1ec), no approval, so no approval covers the resolutions. The old abort hid this. It is a gap in astromech's records, not a history lookup, so the doctor part of Done when is not met by this change alone.
+- 2026-10-22 [note] Correction from review finding atelier-83w3, applied in atelier-7b6e: the decision note above says a merge that takes the path from its second parent stays simplified away under --diff-merges=first-parent. It does not. Any --diff-merges option, like -m, turns history simplification off, so git lists both the side commit that added the path and the clean merge. Callers take the first commit after --reverse as the introducer; git orders its walk by committer date, so the side commit, an ancestor of the merge, comes first while commit dates increase along history. The comment on introduced_query now says so.
 
 ## Close Reason
 
