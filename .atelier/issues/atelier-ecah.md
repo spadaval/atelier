@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T20:54:37.599894951+00:00"
+status: "done"
 title: "Add land --push so a refused land can never be pushed behind a pipe"
-updated_at: "2026-10-22T20:53:42.440556963+00:00"
+updated_at: "2026-10-22T20:54:37.599894951+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,19 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
   Rejected: plain git push
 - 2026-10-22 [decision] Verdict line follows human-cli-output.md ('land: passed' / 'land: refused — 1 check (code)'), with ', pushed to <remote>/<branch>' or ', nothing pushed' suffixes; a rejected push ends 'land: push failed, nothing pushed'; failures print Error then the verdict on stderr and main exits 1 via a Reported marker
   Reason: Done-when asks for PASS/FAIL, but the documented verdict form is the repository convention (ADR 0022); rc8j will extend the failure count later
+
+## Close Reason
+
+`atelier land --push` pushes the checked HEAD to the branch's configured upstream only after land passes, and every non-hook land now ends with a verdict line; a refusal or rejected push pushes nothing and exits non-zero. Setup-generated hooks are prefixed `set -o pipefail; `.
+
+### Deviations
+The verdict uses the documented form (`land: passed` / `land: refused — 1 check (code)`) rather than literal PASS/FAIL, per human-cli-output.md and ADR 0022. A refusal always counts one check (the one that stopped land); atelier-rc8j/bvl3 will list all failed checks. Hook mode (`--hook`) is unchanged and does not combine with `--push`.
+
+### Decisions
+Two decision notes on this item: explicit-refspec push to the configured upstream, and the verdict wording/Reported-error mechanism in main.
+
+### Surprises
+No verdict line existed in code, only in the docs. The hook pipefail prefix has no effect on the hook's own command (it has no pipe); it protects pipelines users append, as the Done-when asked.
+
+### Open items
+None.
