@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Let a trivial change land on the base with a visible exemption, without an issue or work branch"
-updated_at: "2026-10-22T23:03:39.766001592+00:00"
+updated_at: "2026-10-22T23:14:16.328263708+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,9 @@ The human rejected two alternatives on 2026-10-22: exempting planning paths from
 ## Notes
 
 - 2026-10-22 [note] From review of atelier-r28p (finding atelier-kotb): docs/product/reviews-and-merge.md:85-94, the comment at review_gate.rs:134-139 and atelier-r28p's decision note say a record 'filed on the base after the approval' stays editable; the code checks only that the record is absent from the approval's pinned tree, so a base record filed before the approval and merged in later is editable too. Reword all three to 'not in the approval's pinned tree' while editing this doc section.
+- 2026-10-22 [decision] A base exemption is a trivial_exemption review file that names base: <branch> instead of target, loaded as its own BaseExemption type beside the review events; land and start count exactly its pinned commit's paths as covered, never its done claims or another commit
+  Reason: The record keeps one exemption kind under one standard and stays visible in .atelier/reviews, review list and review show, while a separate type keeps owner gate code (review.current, approval_accepted, scope) from ever treating an exemption with no owner as an owner event. Old binaries cannot read the new field, so reinstall after merging.
+  Rejected: An optional target on ReviewRecord (every gate site would need a no-owner case); requiring a mission or issue as target (an owner in all but name); a new event kind (a second exemption standard)
+- 2026-10-22 [decision] A mission debrief shows the base exemptions recorded from the mission's start to its done claim on its timeline, so a base exemption shows in every mission running when it was recorded
+  Reason: A base exemption names no mission; time is the only link that needs no extra argument, and showing it to every concurrent mission errs toward visibility.
+  Rejected: An optional mission argument on review trivial --base (omitting it would hide the exemption from every debrief)

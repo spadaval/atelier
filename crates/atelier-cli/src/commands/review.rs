@@ -70,6 +70,38 @@ pub fn append(
     Ok(())
 }
 
+/// Records a trivial exemption of one commit on the base branch, with no
+/// owner issue (atelier-mbrf). It is recorded on the base, for a commit the
+/// base already holds, and `land` counts exactly that commit as covered.
+pub fn exempt_base(commit: &str, identity: &str, summary: &str, quiet: bool) -> Result<()> {
+    let layout = StorageLayout::discover()?;
+    let repo = layout.repo_root();
+    // Loading checks the records are valid before one is added.
+    RecordIndex::load_structural(&layout.canonical_dir())?;
+    let base = atelier_app::workflow_policy::load(repo)?
+        .branch_policy
+        .base_branch;
+    let branch = crate::commands::git::current_branch(repo)?;
+    if branch.as_deref() != Some(base.as_str()) {
+        bail!(
+            "review_base_not_checked_out: a base exemption is recorded on {base}, for a commit {base} already holds; run it from a checkout of {base}"
+        );
+    }
+    let pin = crate::commands::git::resolve(repo, commit)
+        .map_err(|_| anyhow::anyhow!("review_base_commit: {commit} is not a commit"))?;
+    if git::git_output(repo, &["merge-base", "--is-ancestor", &pin, "HEAD"]).is_err() {
+        bail!("review_base_commit: {commit} is not on {base}; a base exemption covers a commit the base already holds");
+    }
+    let created = atelier_app::project_config::record_store(&layout.canonical_dir())?
+        .create_base_exemption(&base, identity, &pin, summary)?;
+    if quiet {
+        println!("{}", created.header.id);
+    } else {
+        println!("Base exemption: {}\nIdentity: {}\nCommit: {} on {}\n{}\nIt covers this commit alone. Commit this record on {}.", created.header.id, created.identity, created.commit, created.base, created.summary, created.base);
+    }
+    Ok(())
+}
+
 pub fn disposition(
     finding: &str,
     identity: &str,
@@ -98,7 +130,8 @@ pub fn disposition(
     append(&original.target, identity, None, summary, event, quiet)
 }
 
-/// Quiet output is the event IDs, one per line.
+/// Quiet output is the event IDs, one per line. Without an owner, base
+/// exemptions are listed too, after the events about issues.
 pub fn list(owner: Option<&str>, json: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
@@ -109,17 +142,41 @@ pub fn list(owner: Option<&str>, json: bool, quiet: bool) -> Result<()> {
         .reviews()
         .filter(|record| owner.as_ref().is_none_or(|id| &record.target == id))
         .collect::<Vec<_>>();
+    let exemptions = index
+        .base_exemptions()
+        .filter(|_| owner.is_none())
+        .collect::<Vec<_>>();
     if json {
-        println!("{}", serde_json::to_string_pretty(&records)?);
+        let mut values = records
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<serde_json::Result<Vec<_>>>()?;
+        for exemption in &exemptions {
+            values.push(serde_json::to_value(exemption)?);
+        }
+        println!("{}", serde_json::to_string_pretty(&values)?);
     } else if quiet {
         for record in records {
             println!("{}", record.header.id);
+        }
+        for exemption in exemptions {
+            println!("{}", exemption.header.id);
         }
     } else {
         for record in records {
             println!(
                 "{} {:?} {} {} {}",
                 record.header.id, record.event, record.target, record.identity, record.summary
+            );
+        }
+        for exemption in exemptions {
+            println!(
+                "{} TrivialExemption base {} {} {} {}",
+                exemption.header.id,
+                exemption.base,
+                &exemption.commit[..8.min(exemption.commit.len())],
+                exemption.identity,
+                exemption.summary
             );
         }
     }
@@ -130,7 +187,16 @@ pub fn list(owner: Option<&str>, json: bool, quiet: bool) -> Result<()> {
 pub fn show(id: &str, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    let record = index.require_review(&index.resolve(RecordKind::Review, id)?)?;
+    let id = index.resolve(RecordKind::Review, id)?;
+    if let Some(exemption) = index.base_exemption(&id) {
+        if quiet {
+            println!("{} trivial_exemption", exemption.header.id);
+        } else {
+            println!("{}", serde_json::to_string_pretty(exemption)?);
+        }
+        return Ok(());
+    }
+    let record = index.require_review(&id)?;
     if quiet {
         println!("{} {}", record.header.id, event_name(&record.event));
         return Ok(());

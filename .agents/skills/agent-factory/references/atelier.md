@@ -106,6 +106,9 @@ what each record contains.
   `approve`, `finding`, and `trivial`, each with an explicit `--identity` and
   summary. Approval must come from an identity other than the code's Git
   authors. `trivial` is the visible form of the trivial-change exemption.
+  A trivial change can also be committed on the base and exempted there,
+  with no owner issue or work branch: `atelier review trivial --base
+  <commit>` covers exactly that commit.
 - Record each [finding disposition](finding-disposition.md) with
   `atelier review disposition`. `fix_now` needs a later resolution commit and
   fresh independent approval; `defer` needs an existing follow-up issue;

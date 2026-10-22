@@ -421,8 +421,11 @@ impl RecordStore {
                 self.write_evidence_atomic(&record)?;
             }
             "review" => {
-                let mut record = review::parse_review_record(&text, &relative)?;
-                if mutate(&mut record.header.relationships) {
+                let mut relationships = match review::parse_review_file(&text, &relative)? {
+                    review::ReviewFile::Event(record) => record.header.relationships,
+                    review::ReviewFile::BaseExemption(record) => record.header.relationships,
+                };
+                if mutate(&mut relationships) {
                     bail!("review records are append-only; create a successor event");
                 }
                 return Ok(false);

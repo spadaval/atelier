@@ -131,11 +131,12 @@ fn allowed_edge(
             && path.extension().is_some_and(|ext| ext == "md"))
         .then(|| path.file_stem().and_then(|name| name.to_str()))
         .flatten();
-        // An issue outside the scope that did not exist at the pin is
-        // planning, not reviewed work, in every later commit: whether it was
-        // created on the branch, such as the follow-up a deferred finding
-        // needs (atelier-cafy, atelier-iaas), or on the base after the pin
-        // and merged in (atelier-g0mh). Such records may be committed to the
+        // An issue outside the scope that is not in the approval's pinned
+        // tree is planning, not reviewed work, in every later commit: whether
+        // it was created on the branch, such as the follow-up a deferred
+        // finding needs (atelier-cafy, atelier-iaas), or on the base, before
+        // or after the approval, and merged in (atelier-g0mh, atelier-kotb).
+        // Such records may be committed to the
         // base without review anyway. Its own done claim is judged by
         // `claims.reviewed` and `land`, not by the approval.
         if issue_id.is_some_and(|id| !ids.contains(id))
@@ -1493,10 +1494,15 @@ fn retired_review_cluster(
     edge: &git::CommitEdge,
     path: &Path,
 ) -> Result<bool> {
-    let record = atelier_records::review::parse_review_record(
-        &read.blob(&edge.parent, path)?,
-        path.strip_prefix(".atelier")?,
-    )?;
+    // A base exemption has no target to retire with, so it is never removed.
+    let atelier_records::review::ReviewFile::Event(record) =
+        atelier_records::review::parse_review_file(
+            &read.blob(&edge.parent, path)?,
+            path.strip_prefix(".atelier")?,
+        )?
+    else {
+        return Ok(false);
+    };
     let issue_path = std::path::PathBuf::from(format!(".atelier/issues/{}.md", record.target));
     if read.entry(&edge.commit, &issue_path)?.is_some() {
         return Ok(false);
@@ -1525,10 +1531,14 @@ fn retired_review_cluster(
         {
             continue;
         }
-        let other = atelier_records::review::parse_review_record(
-            &read.blob(&edge.parent, other_path)?,
-            other_path.strip_prefix(".atelier")?,
-        )?;
+        let atelier_records::review::ReviewFile::Event(other) =
+            atelier_records::review::parse_review_file(
+                &read.blob(&edge.parent, other_path)?,
+                other_path.strip_prefix(".atelier")?,
+            )?
+        else {
+            continue;
+        };
         if other.target == record.target && read.entry(&edge.commit, other_path)?.is_some() {
             return Ok(false);
         }

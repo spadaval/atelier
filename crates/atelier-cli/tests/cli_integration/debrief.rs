@@ -1445,3 +1445,41 @@ fn decisions_off_the_timeline_results_and_record_text_keep_their_place() {
     assert!(html.contains("Planned &lt;script&gt;x&lt;/script&gt; &amp; more"));
     assert!(html.contains("Val &lt;i&gt;idator&lt;/i&gt;"));
 }
+
+#[test]
+fn a_base_exemption_made_while_the_mission_ran_is_on_its_timeline() {
+    let dir = tempdir().unwrap();
+    let (mission, _) = started(dir.path());
+    fs::write(dir.path().join("README"), "Fixed typo\n").unwrap();
+    commit_all(dir.path(), "fix a typo on the base");
+    let exemption = ok(
+        dir.path(),
+        &[
+            "review",
+            "trivial",
+            "-q",
+            "--base",
+            "HEAD",
+            "--identity",
+            "Author",
+            "One-word typo fix in README; correctness is evident from the diff",
+        ],
+    )
+    .trim()
+    .to_string();
+    commit_all(dir.path(), "exempt the typo fix");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let did = section(&page, "What We Did");
+    assert!(
+        did.contains(&format!(
+            "exempted as trivial ({exemption}) by Author | One-word typo fix"
+        )),
+        "{page}"
+    );
+    let printed = ok(dir.path(), &["debrief", &mission, "--html", "-q"]);
+    let html = fs::read_to_string(printed.trim()).unwrap();
+    assert!(
+        html.contains("Base commit exempted as trivial</b> by Author") && html.contains(&exemption),
+        "{html}"
+    );
+}

@@ -2934,6 +2934,157 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
         "{output}"
     );
 }
+/// A trivial exemption pinned to a base commit, with no owner issue or work
+/// branch, covers exactly that commit for `land` (atelier-mbrf).
+#[test]
+fn a_base_exemption_covers_exactly_its_commit() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    // Unexempted, a direct code commit is refused.
+    fs::write(f.path().join("README"), "Fixed typo\n").unwrap();
+    commit(f.path(), "fix a typo on the base");
+    let typo = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains(&format!("land_base_unreviewed: commit {}", &typo[..8])),
+        "{output}"
+    );
+
+    // Off the base, or for a commit the base does not hold, it is refused.
+    let side = git(f.path(), &["rev-parse", &f.branch]);
+    let (pass, output) = cli(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            "--base",
+            &side,
+            "--identity",
+            "Author",
+            "Not here",
+        ],
+    );
+    assert!(!pass && output.contains("review_base_commit"), "{output}");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let (pass, output) = cli(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            "--base",
+            &typo,
+            "--identity",
+            "Author",
+            "Not here",
+        ],
+    );
+    assert!(
+        !pass && output.contains("review_base_not_checked_out"),
+        "{output}"
+    );
+    git(f.path(), &["switch", "-q", "main"]);
+    let (pass, output) = cli(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            &f.id,
+            "--base",
+            &typo,
+            "--identity",
+            "Author",
+            "Both",
+        ],
+    );
+    assert!(!pass, "an owner and --base together: {output}");
+
+    let exemption = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "trivial",
+            "--base",
+            "HEAD",
+            "--identity",
+            "Author",
+            "One-word typo fix in README; correctness is evident from the diff",
+            "--commit-records",
+        ],
+    );
+    let record =
+        fs::read_to_string(f.path().join(format!(".atelier/reviews/{exemption}.md"))).unwrap();
+    assert!(
+        record.contains("\nbase: main\n")
+            && record.contains(&format!("\ncommit: {typo}\n"))
+            && !record.contains("\ntarget:")
+            && record.contains("event: trivial_exemption"),
+        "{record}"
+    );
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("1 unpushed record-only commit outside review; 1 unpushed commit exempted as trivial on main"),
+        "{output}"
+    );
+    let listed = ok(f.path(), &["review", "list"]);
+    assert!(
+        listed.contains(&format!(
+            "{exemption} TrivialExemption base main {}",
+            &typo[..8]
+        )),
+        "{listed}"
+    );
+    let shown = ok(f.path(), &["review", "show", &exemption]);
+    assert!(
+        shown.contains(&format!("\"commit\": \"{typo}\"")),
+        "{shown}"
+    );
+
+    // The exemption does not cover a later commit, even one on top of it.
+    fs::write(f.path().join("README"), "Fixed typo, and more\n").unwrap();
+    commit(f.path(), "a later edit on the base");
+    let later = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains(&format!("land_base_unreviewed: commit {}", &later[..8]))
+            && output.contains("changes README"),
+        "{output}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
+
+    // It covers no done claim: that still travels on a work branch.
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.close_reason = Some("completed claim".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    fs::write(f.path().join("README"), "Fixed typo again\n").unwrap();
+    commit(f.path(), "a claim and an edit on the base");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            "--base",
+            "HEAD",
+            "--identity",
+            "Author",
+            "Typo fix",
+            "--commit-records",
+        ],
+    );
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_done_claim"), "{output}");
+}
 #[test]
 fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() {
     let f = Fixture::new();
