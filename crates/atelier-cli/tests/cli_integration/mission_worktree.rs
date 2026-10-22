@@ -3136,11 +3136,7 @@ fn branches_without_a_tracker_are_summarised_without_git_errors() {
         assert!(success, "{command}: {stderr}");
         let output = format!("{stdout}{stderr}");
         assert!(
-            output.contains("No tracker on: feature/old, route-clipboard"),
-            "{command}: {output}"
-        );
-        assert!(
-            output.contains("No started work on: unstarted"),
+            output.contains("Unowned: feature/old, route-clipboard, unstarted"),
             "{command}: {output}"
         );
         assert!(

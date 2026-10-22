@@ -465,16 +465,13 @@ fn done_merged(repo: &Path, id: &str, status: &str, branch: &str, base_branch: &
 /// An owner as its branch's committed records describe it.
 struct BranchOwner {
     branch: String,
-    commit: String,
     id: String,
     title: String,
     status: String,
-    priority: String,
     /// The status's category under the branch's own policy.
     category: Option<String>,
     /// Set for a done owner: whether its claim is merged into the base.
     merged: Option<bool>,
-    active: usize,
 }
 
 impl BranchOwner {
@@ -483,25 +480,17 @@ impl BranchOwner {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
     }
 
-    /// `<branch> @ <commit>: <item line> | <merge state> | N active`, with
-    /// no active cue when nothing is active.
-    fn line(&self, base: &str) -> String {
-        let mut line =
-            crate::human_output::ItemLine::new(&self.id, &self.status, &self.priority, &self.title)
-                .state(self.category.as_deref(), None);
-        match self.merged {
-            Some(true) => line = line.cue(format!("merged into {base}")),
-            Some(false) => line = line.cue(format!("not merged into {base}")),
-            None => {}
-        }
-        if self.active > 0 {
-            line = line.cue(format!("{} active", self.active));
-        }
+    /// `<branch>  <id> <status>[, merged|, not merged]  <title>`: one dense
+    /// line, with the columns a merge-readiness fact can be appended to.
+    fn line(&self) -> String {
+        let merge = match self.merged {
+            Some(true) => ", merged",
+            Some(false) => ", not merged",
+            None => "",
+        };
         format!(
-            "{} @ {}: {}",
-            self.branch,
-            crate::human_output::short_commit(&self.commit),
-            line.text()
+            "{}  {} {}{merge}  {}",
+            self.branch, self.id, self.status, self.title
         )
     }
 }
@@ -521,8 +510,8 @@ pub(crate) struct BranchSummaries {
     base_branch: String,
     /// In branch order.
     entries: Vec<Result<BranchOwner, UnreadableBranch>>,
-    unstarted: Vec<String>,
-    untracked: Vec<String>,
+    /// Branches with no started work or no tracker, in branch order.
+    unowned: Vec<String>,
 }
 
 /// Marks for ready rows owned on other branches, and notices for unreadable
@@ -536,12 +525,11 @@ pub(crate) struct InFlight {
 impl BranchSummaries {
     /// The status section's lines.
     pub(crate) fn lines(&self) -> Vec<String> {
-        let base = &self.base_branch;
         let mut lines = self
             .entries
             .iter()
             .map(|owner| match owner {
-                Ok(owner) => owner.line(base),
+                Ok(owner) => owner.line(),
                 Err(unreadable) => {
                     format!(
                         "{}: unavailable — {:#}",
@@ -550,11 +538,8 @@ impl BranchSummaries {
                 }
             })
             .collect::<Vec<_>>();
-        if !self.unstarted.is_empty() {
-            lines.push(format!("No started work on: {}", self.unstarted.join(", ")));
-        }
-        if !self.untracked.is_empty() {
-            lines.push(format!("No tracker on: {}", self.untracked.join(", ")));
+        if !self.unowned.is_empty() {
+            lines.push(format!("Unowned: {}", self.unowned.join(", ")));
         }
         lines
     }
@@ -644,8 +629,7 @@ fn branch_summaries_for(
         ],
     )?;
     let mut entries = Vec::new();
-    let mut untracked = Vec::new();
-    let mut unstarted = Vec::new();
+    let mut unowned = Vec::new();
     for head in heads.lines() {
         let Some((reference, commit)) = head.split_once(' ') else {
             continue;
@@ -667,7 +651,7 @@ fn branch_summaries_for(
             ],
         );
         if listed.as_ref().is_ok_and(|output| output.is_empty()) {
-            untracked.push(branch.to_string());
+            unowned.push(branch.to_string());
             continue;
         }
         // Legacy branches can contain thousands of obsolete records. Inspect
@@ -701,35 +685,23 @@ fn branch_summaries_for(
             let mut rows = Vec::new();
             for id in owners {
                 let owner = snapshot.index.require_issue(&id)?;
-                let ids = atelier_app::review_gate::scope(&snapshot.index, &id)?;
-                let active = ids
-                    .iter()
-                    .filter(|id| {
-                        snapshot.index.get_issue(id).is_some_and(|issue| {
-                            branch_policy.status_category(&issue.status) == Some("active")
-                        })
-                    })
-                    .count();
                 let category = branch_policy.status_category(&owner.status);
                 let merged = (category == Some("done"))
                     .then(|| done_merged(repo, &id, &owner.status, branch, base_branch));
                 rows.push(BranchOwner {
                     branch: branch.to_owned(),
-                    commit: commit.to_owned(),
                     title: owner.title.clone(),
                     status: owner.status.clone(),
-                    priority: owner.priority.clone(),
                     category: category.map(str::to_owned),
                     id,
                     merged,
-                    active,
                 });
             }
             Ok(Some(rows))
         })();
         match view {
             Ok(Some(rows)) => entries.extend(rows.into_iter().map(Ok)),
-            Ok(None) => unstarted.push(branch.to_string()),
+            Ok(None) => unowned.push(branch.to_string()),
             Err(error) => entries.push(Err(UnreadableBranch {
                 branch: branch.to_string(),
                 owners: owners.unwrap_or_default(),
@@ -740,8 +712,7 @@ fn branch_summaries_for(
     Ok(BranchSummaries {
         base_branch: base_branch.to_owned(),
         entries,
-        unstarted,
-        untracked,
+        unowned,
     })
 }
 

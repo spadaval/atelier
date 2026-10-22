@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Render other local branches as a dense section of the status page"
-updated_at: "2026-10-22T20:32:24.275345548+00:00"
+updated_at: "2026-10-22T20:39:25.909567655+00:00"
 ---
 
 ## Goal
@@ -53,3 +53,9 @@ No started work on: feature-x, old-pre
 ## Context
 
 Rows are built in crates/atelier-cli/src/commands/git.rs:604-624. atelier-7n5u marks ready work that is in flight on these branches, so the two views should use the same branch wording.
+
+## Notes
+
+- 2026-10-22 [decision] The approval mark on Branches rows moves to atelier-tciw
+  Reason: Review currency for another branch needs a new per-branch computation in review_gate.rs (history walk from the approval pin to that branch's tip plus the independence rule), which tciw's approval-state fact needs anyway; atelier-1ztv is changing that file now
+  Rejected: Mark ✓ approved when the branch snapshot holds an approval record: it shows stale approvals as approved

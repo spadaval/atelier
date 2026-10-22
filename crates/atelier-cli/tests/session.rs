@@ -176,7 +176,7 @@ fn status_preserves_native_branch_trimming_for_header_owner_and_orientation() {
             }
             let unstarted = status
                 .lines()
-                .find_map(|line| line.strip_prefix("No started work on: "))
+                .find_map(|line| line.strip_prefix("Unowned: "))
                 .unwrap_or_default();
             assert_eq!(
                 unstarted.split(", ").any(|listed| listed == branch),
@@ -604,16 +604,15 @@ fn cross_branch_status_keeps_base_clean_and_reports_legacy_without_loading_it() 
     let head = git(f.path(), &["rev-parse", "HEAD"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} @", f.branch))
-            && output.contains(&format!("{} in_progress ", f.id))
-            && output.contains("Other Local Work Branches (committed records)"),
+        output.contains(&format!("{}  {} in_progress  ", f.branch, f.id))
+            && output.contains("\nBranches\n--------\n"),
         "{output}"
     );
     // The branch rows come before the footer, which is the last section.
     let (body, footer) = output
         .rsplit_once("\n\nNext\n----\n")
         .unwrap_or_else(|| panic!("no Next section:\n{output}"));
-    assert!(body.contains("Other Local Work Branches"), "{output}");
+    assert!(body.contains("\nBranches\n--------\n"), "{output}");
     assert!(
         footer.lines().all(|line| line.starts_with("  ")),
         "{output}"
@@ -1170,7 +1169,7 @@ fn custom_branch_only_owner_is_discovered_without_overlaying_base() {
     git(f.path(), &["switch", "main"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains("custom/ship-session @") && output.contains(&id),
+        output.contains(&format!("custom/ship-session  {id} in_progress  ")),
         "{output}"
     );
     assert!(f.store().load_issue_by_id(&id).is_err());
@@ -1430,7 +1429,7 @@ fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
     git(f.path(), &["switch", "main"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} @", f.branch)) && output.contains(&format!("{branch} @")),
+        output.contains(&format!("{}  ", f.branch)) && output.contains(&format!("{branch}  ")),
         "{output}"
     );
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
@@ -3642,7 +3641,7 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     // The kept branch's row on the base reads its committed records.
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} ✓ done ", f.id)) && output.contains("| merged into main"),
+        output.contains(&format!("{}  {} done, merged  ", f.branch, f.id)),
         "{output}"
     );
 
@@ -4247,7 +4246,7 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     assert!(
         status
             .lines()
-            .any(|line| line.contains(&format!(": {} ", f.id)) && line.ends_with(" | 1 active")),
+            .any(|line| line.starts_with(&format!("{}  {} in_progress  ", f.branch, f.id))),
         "{status}"
     );
     git(f.path(), &["switch", "-q", &f.branch]);
@@ -4265,21 +4264,19 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     assert!(
         status
             .lines()
-            .any(|line| line.contains(&format!(": {} ✓ done ", f.id))
-                && line.ends_with(" | not merged into main")),
+            .any(|line| line.starts_with(&format!("{}  {} done, not merged  ", f.branch, f.id))),
         "{status}"
     );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
-    // Nothing is active on the branch, so its row has no `| 0 active` cue.
     assert!(
         status
             .lines()
-            .any(|line| line.ends_with(" | merged into main")),
+            .any(|line| line.starts_with(&format!("{}  {} done, merged  ", f.branch, f.id))),
         "{status}"
     );
-    assert!(!status.contains("| 0 active"), "{status}");
+    assert!(!status.contains("active)"), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);
@@ -4353,8 +4350,8 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("{finished} ✓ done medium Finished elsewhere | not merged into main"),
-        format!("{stuck} ⚠ blocked medium Stuck elsewhere"),
+        format!("task/{finished}  {finished} done, not merged  Finished elsewhere"),
+        format!("task/{stuck}  {stuck} blocked  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
     }
