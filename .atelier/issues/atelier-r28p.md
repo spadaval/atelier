@@ -23,9 +23,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T22:25:18.348155330+00:00"
+status: "done"
 title: "Keep approvals and land's scope steady through planning records"
-updated_at: "2026-10-22T22:18:33.668129095+00:00"
+updated_at: "2026-10-22T22:25:18.348155330+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,20 @@ Both children change what the review gate and land's touched-claims scope treat 
 - 2026-10-22 [note] From review of atelier-1ztv (finding atelier-p5qp): docs/product/reviews-and-merge.md:261-264 and the doc comments on approval_accepted and author_identities_to say land judges independence as review.current does. land leaves out authors of every side branch merged into the work branch (original_independent passes HEAD as base), while review.current counts a side branch not on the base. Describe that difference and document the base argument at the call site.
 - 2026-10-22 [decision] Resolve finding atelier-p5qp in docs: reviews-and-merge.md, approval_accepted and author_identities_to now say land leaves out authors of every branch merged into the work branch (original_independent passes HEAD as base) while review.current passes the fork point and counts a side branch not on the base; a comment at the call site documents the base argument.
   Reason: 1ztv's decision keeps the asymmetry because merge refusing earlier is the safe direction; only the description was wrong.
+
+## Close Reason
+
+### Outcome
+Planning records written during review no longer cost a re-review or a mission-wide re-check. A follow-up created on an approved branch can be linked and edited in later commits without staling the approval, because a record counts as new when it did not exist at the approval, while closing it still fails claims.reviewed and land (atelier-iaas). A base commit that adds an issue advancing a mission re-checks no old done claim in that mission; land's touched-claims walk stops at the mission, and doctor still reports old problems (atelier-ss25). The product doc now states the side-branch difference in reviewer independence (finding atelier-p5qp). Delivers atelier-k8h8 S7's follow-up and planning-commit parts.
+
+### Deviations
+None.
+
+### Decisions
+See the decision notes on atelier-iaas, atelier-ss25 and atelier-r28p.
+
+### Surprises
+iaas was already true for a follow-up created and linked in one commit; only a later link or edit staled the approval.
+
+### Open items
+`atelier issue link <mission> <issue> --role advances` writes onto the mission's record and still stales an approval; the doc shows the right direction. The claims.reviewed refusal wording is confusing for out-of-scope issues. touched_claims still follows blocked_by in the direction no claim depends on.
