@@ -546,6 +546,10 @@ fn setup_is_atomic_idempotent_and_preserves_other_handlers() {
         assert!(handler["hooks"][0]["command"]
             .as_str()
             .unwrap()
+            .starts_with("set -o pipefail; "));
+        assert!(handler["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
             .ends_with(&format!(
                 " {action} --hook claude # atelier-managed:{event}"
             )));
@@ -4970,5 +4974,99 @@ fn scoped_views_offer_start_only_for_work_that_passes_the_readiness_gates() {
     assert!(
         !started && out.contains(&format!("{gated} -> {closed} -> {tail}")),
         "{out}"
+    );
+}
+
+/// A local bare remote (never the network) holding `main` and the owner branch.
+fn with_remote(f: &Fixture) -> TempDir {
+    let remote = tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    let url = remote.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", url]);
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["push", "-q", "-u", "origin", &f.branch]);
+    remote
+}
+fn last_line(output: &str) -> &str {
+    output.trim_end().lines().last().unwrap()
+}
+
+#[test]
+fn land_ends_with_a_verdict_line_and_push_follows_only_a_pass() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    let tip = |dir: &Path, branch: &str| git(dir, &["rev-parse", &format!("refs/heads/{branch}")]);
+    // Plain land states its verdict last.
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass && last_line(&out) == "land: passed", "{out}");
+    // A pass with --push publishes the branch and says so last.
+    fs::write(f.path().join("more"), "more\n").unwrap();
+    commit(f.path(), "more code");
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        pass && last_line(&out) == format!("land: passed, pushed to origin/{}", f.branch),
+        "{out}"
+    );
+    assert_eq!(
+        tip(remote.path(), &f.branch),
+        git(f.path(), &["rev-parse", "HEAD"])
+    );
+    // A refusal pushes nothing, exits non-zero, and ends with the refusal even
+    // when the output is piped.
+    fs::write(f.path().join("unpushed"), "unpushed\n").unwrap();
+    commit(f.path(), "unpushed code");
+    let before = tip(remote.path(), &f.branch);
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.issue.priority = "low".into();
+    f.store().write_issue_atomic(&record).unwrap();
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass, "{out}");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_records_uncommitted), nothing pushed"
+    );
+    assert_eq!(tip(remote.path(), &f.branch), before);
+    let piped = Command::new("sh")
+        .args(["-c", "set -o pipefail; \"$0\" land --push 2>&1 | tail -1"])
+        .arg(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .output()
+        .unwrap();
+    assert!(!piped.status.success());
+    assert!(String::from_utf8_lossy(&piped.stdout).starts_with("land: refused"));
+}
+
+#[test]
+fn land_push_reports_a_failed_push_and_a_missing_upstream() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    fs::write(f.path().join("more"), "more\n").unwrap();
+    commit(f.path(), "more code");
+    let hook = remote.path().join("hooks/pre-receive");
+    fs::write(&hook, "#!/bin/sh\necho rejected by test >&2\nexit 1\n").unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let before = git(
+        remote.path(),
+        &["rev-parse", &format!("refs/heads/{}", f.branch)],
+    );
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass && out.contains("rejected by test"), "{out}");
+    assert_eq!(last_line(&out), "land: push failed, nothing pushed");
+    assert_eq!(
+        git(
+            remote.path(),
+            &["rev-parse", &format!("refs/heads/{}", f.branch)]
+        ),
+        before
+    );
+    git(f.path(), &["branch", "--unset-upstream"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass && out.contains("land_push_no_upstream"), "{out}");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_no_upstream), nothing pushed"
     );
 }

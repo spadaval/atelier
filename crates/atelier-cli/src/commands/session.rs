@@ -440,11 +440,105 @@ pub(crate) fn read_hook_payload(event: &str) -> Result<bool> {
     Ok(payload["stop_hook_active"].as_bool().unwrap_or(false))
 }
 
-pub fn land(requested: Option<&str>, hook: bool, install: bool, quiet: bool) -> Result<()> {
+/// The error `land` has already reported with its verdict line; `main` exits
+/// non-zero without printing it again.
+#[derive(Debug)]
+pub struct Reported;
+impl std::fmt::Display for Reported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("land refused")
+    }
+}
+impl std::error::Error for Reported {}
+
+/// The leading `land_*` check code of a refusal, if it has one.
+fn refusal_code(error: &anyhow::Error) -> Option<String> {
+    let message = error.to_string();
+    let (code, _) = message.split_once(':')?;
+    (code.starts_with("land_") && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
+        .then(|| code.to_owned())
+}
+
+/// Pushes the checked branch to its configured upstream, never another ref.
+/// Returns the destination, as `<remote>/<branch>`.
+fn push_checked_branch(repo: &Path, head: &str) -> Result<String> {
+    let branch = git::checkout_branch(repo)?.context(
+        "land_push_detached: a detached HEAD has no branch to push; switch to the owner's branch",
+    )?;
+    let config = |key: &str| {
+        git::text(
+            repo,
+            &["config", "--get", &format!("branch.{branch}.{key}")],
+        )
+        .ok()
+    };
+    let (Some(remote), Some(merge)) = (config("remote"), config("merge")) else {
+        bail!("land_push_no_upstream: {branch} has no upstream; set one with `git push -u <remote> {branch}`, then rerun `atelier land --push`");
+    };
+    let destination = merge.trim_start_matches("refs/heads/").to_owned();
+    if git::resolve(repo, "HEAD")? != head {
+        bail!("land_state_changed: HEAD moved after the checks; nothing pushed");
+    }
+    let output = atelier_app::git_freshness::command(repo)
+        .args(["push", &remote, &format!("{head}:refs/heads/{destination}")])
+        .output()?;
+    let detail = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        bail!(
+            "land_push_failed: git push to {remote} refused {branch}: {}",
+            detail.trim()
+        );
+    }
+    Ok(format!("{remote}/{destination}"))
+}
+
+pub fn land(
+    requested: Option<&str>,
+    hook: bool,
+    install: bool,
+    push: bool,
+    quiet: bool,
+) -> Result<()> {
     if !hook {
-        let output = land_text(requested, install, false)?;
-        println!("{}", if quiet { "passed" } else { &output });
-        return Ok(());
+        let nothing_pushed = if push { ", nothing pushed" } else { "" };
+        let checked = land_text(requested, install, false);
+        let pushed = checked.and_then(|output| {
+            let destination = if push {
+                let layout = StorageLayout::discover()?;
+                let head = git_freshness::head_commit(layout.repo_root())?;
+                Some(push_checked_branch(layout.repo_root(), &head)?)
+            } else {
+                None
+            };
+            Ok((output, destination))
+        });
+        match pushed {
+            Ok((output, destination)) => {
+                let verdict = match &destination {
+                    Some(to) => format!("land: passed, pushed to {to}"),
+                    None => "land: passed".to_owned(),
+                };
+                if quiet {
+                    println!("{}", verdict.trim_start_matches("land: "));
+                } else {
+                    println!("{output}\n{verdict}");
+                }
+                return Ok(());
+            }
+            Err(error) => {
+                let code = refusal_code(&error);
+                eprintln!("Error: {error:?}");
+                eprintln!(
+                    "{}",
+                    match code.as_deref() {
+                        Some("land_push_failed") => "land: push failed, nothing pushed".to_owned(),
+                        Some(code) => format!("land: refused — 1 check ({code}){nothing_pushed}"),
+                        None => format!("land: refused{nothing_pushed}"),
+                    }
+                );
+                return Err(Reported.into());
+            }
+        }
     }
     let mut repeated = false;
     let result = read_hook_payload("Stop").and_then(|active| {

@@ -5,6 +5,7 @@ atelier status
 atelier land
 atelier land <owner-or-child-id>
 atelier land --install
+atelier land --push
 atelier setup claude
 atelier setup claude --binary <path-to-atelier>
 ```
@@ -69,6 +70,19 @@ so on an installing branch it blocks each turn's stop with
 `land_install_unconfirmed`, warning instead on a repeated stop, until the
 install merges.
 
+`land` ends with a verdict line, the last line of its combined output (see
+[verdict line](human-cli-output.md#verdict-line)): `land: passed`, or `land:
+refused — 1 check (<code>)` with a non-zero exit. `land --push` runs the same
+checks and, only when they pass, pushes the checked HEAD to the current
+branch's configured upstream (`branch.<name>.remote` and `.merge`) through
+git, then ends `land: passed, pushed to <remote>/<branch>`. A refusal pushes
+nothing and ends `land: refused — 1 check (<code>), nothing pushed`; a branch
+with no upstream or a detached HEAD refuses (`land_push_no_upstream`,
+`land_push_detached`); a push git rejects exits non-zero with git's message
+and `land: push failed, nothing pushed`. `--push` does not combine with
+`--hook`. Prefer it to `atelier land && git push`, and never push behind a
+pipe: a pipe's exit status is its last command's (atelier-ecah).
+
 On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
@@ -109,7 +123,8 @@ and restart Claude Code to load them. Existing disabled-hook settings are
 preserved and reported.
 
 Installed commands are `atelier status --hook claude` and
-`atelier land --hook claude`, with the selected executable. Rerunning setup
+`atelier land --hook claude`, with the selected executable, each prefixed
+`set -o pipefail; ` so a pipeline a user appends cannot hide a failure. Rerunning setup
 replaces an earlier managed `prime --hook claude` handler. The adapters read
 JSON stdin and use its `cwd` to find the checkout. SessionStart returns context
 through `hookSpecificOutput.additionalContext`. A failed Stop returns

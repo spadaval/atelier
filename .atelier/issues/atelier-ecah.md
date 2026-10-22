@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add land --push so a refused land can never be pushed behind a pipe"
-updated_at: "2026-10-22T20:32:25.872850889+00:00"
+updated_at: "2026-10-22T20:53:42.440556963+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,11 @@ Twice a refused `land` was hidden by `| tail` and the push still ran: broken mas
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168). Related: mission atelier-rc8j (every gate ends in a verdict).
+
+## Notes
+
+- 2026-10-22 [decision] land --push pushes the checked HEAD to the branch's configured upstream (branch.<name>.remote/.merge) by explicit refspec, and refuses with no upstream
+  Reason: A bare 'git push' depends on push.default and could publish other branches; an explicit refspec pushes exactly the commit land checked
+  Rejected: plain git push
+- 2026-10-22 [decision] Verdict line follows human-cli-output.md ('land: passed' / 'land: refused — 1 check (code)'), with ', pushed to <remote>/<branch>' or ', nothing pushed' suffixes; a rejected push ends 'land: push failed, nothing pushed'; failures print Error then the verdict on stderr and main exits 1 via a Reported marker
+  Reason: Done-when asks for PASS/FAIL, but the documented verdict form is the repository convention (ADR 0022); rc8j will extend the failure count later

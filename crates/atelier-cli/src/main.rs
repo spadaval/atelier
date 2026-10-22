@@ -178,6 +178,10 @@ enum Commands {
         /// workflow policy yet, so it lands through the repository's usual review
         #[arg(long)]
         install: bool,
+        /// After the checks pass, push the current branch to its configured
+        /// upstream; a refused land or a failed push exits non-zero
+        #[arg(long, conflicts_with = "hook")]
+        push: bool,
     },
 
     /// Check merge gates and fast-forward, or create only a merge commit under merge_commit
@@ -647,6 +651,7 @@ fn main() -> std::process::ExitCode {
     restore_default_sigpipe();
     match load_dotenv().and_then(|()| run()) {
         Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) if error.is::<commands::session::Reported>() => std::process::ExitCode::from(1),
         Err(error) => {
             eprintln!("Error: {error:?}");
             // An invalid value is a usage error wherever it is checked.
@@ -720,9 +725,12 @@ fn run() -> Result<()> {
 
         Commands::Status { hook } => commands::status::run(hook.is_some(), quiet, false),
         Commands::Prime { hook } => commands::status::run(hook.is_some(), quiet, true),
-        Commands::Land { id, hook, install } => {
-            commands::session::land(id.as_deref(), hook.is_some(), install, quiet)
-        }
+        Commands::Land {
+            id,
+            hook,
+            install,
+            push,
+        } => commands::session::land(id.as_deref(), hook.is_some(), install, push, quiet),
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
         Commands::Brief { id, html } => {

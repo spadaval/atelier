@@ -69,7 +69,7 @@ pub fn run(binary: Option<&Path>, quiet: bool) -> Result<()> {
                 .as_array()
                 .is_none_or(|handlers| !handlers.is_empty())
         });
-        groups.push(json!({"hooks": [{"type": "command", "command": format!("{command} {action} --hook claude{marker}"), "timeout": 30}]}));
+        groups.push(json!({"hooks": [{"type": "command", "command": format!("set -o pipefail; {command} {action} --hook claude{marker}"), "timeout": 30}]}));
     }
     let mut after = serde_json::to_vec_pretty(&settings)?;
     after.push(b'\n');
