@@ -124,6 +124,12 @@ fn render_issue_brief(
             brief_issue_row(index, workflow_policy, parent_id)?
         ));
     }
+    if !discovery_sources(index, record).is_empty() {
+        lines.push(format!(
+            "Discovered from: {}",
+            discovery_sources(index, record).join("; ")
+        ));
+    }
     lines.extend(decision_record_lines(index, workflow_policy, issue)?);
     lines.extend(crate::human_output::decision_brief_lines(
         crate::human_output::RenderContext::for_stdout(),
@@ -469,6 +475,13 @@ fn render_issue_show_human(index: &RecordIndex, record: &CanonicalIssueRecord) -
     }
     render_dependency_section(index, "Blocking", index.get_blocking(canonical_id), false)?;
     render_issue_link_section(index, canonical_id)?;
+    let sources = discovery_sources(index, record);
+    if !sources.is_empty() {
+        print_panel(render_lines_section(
+            "Discovered From",
+            sources.into_iter().map(|source| format!("  {source}")),
+        ));
+    }
     render_objective_rollup_section(issue, objective_summary.as_ref());
     render_subissue_section(index, canonical_id)?;
     render_impact_section(index, canonical_id)?;
@@ -572,6 +585,26 @@ fn render_objective_rollup_section(issue: &Issue, summary: Option<&ObjectiveRead
                 }),
         ));
     }
+}
+
+/// Where the record says it was discovered, one entry per `discovered_from`
+/// link: the record, and for a review event or receipt the item it is about.
+fn discovery_sources(index: &RecordIndex, record: &CanonicalIssueRecord) -> Vec<String> {
+    record
+        .relationships
+        .relates
+        .iter()
+        .filter(|relation| relation.relation_type == atelier_records::DISCOVERED_FROM)
+        .map(|relation| {
+            let about = index
+                .discovery_source(&relation.kind, &relation.id)
+                .filter(|source| source != &relation.id);
+            match about {
+                Some(source) => format!("{} {} (about {source})", relation.kind, relation.id),
+                None => format!("{} {}", relation.kind, relation.id),
+            }
+        })
+        .collect()
 }
 
 /// Typed links stored on either record; blockers have their own sections.
@@ -921,6 +954,8 @@ pub struct LifecycleCreateInput<'a> {
     pub parent: Option<&'a str>,
     pub status: Option<&'a str>,
     pub strategy: Option<&'a str>,
+    /// The issue, review event or receipt the new issue was found in.
+    pub discovered_from: Option<&'a str>,
     pub quiet: bool,
 }
 
@@ -940,6 +975,24 @@ pub fn create_lifecycle(
     let parent_id = input
         .parent
         .map(|parent| resolve_id(index, parent))
+        .transpose()?;
+
+    let discovered_from = input
+        .discovered_from
+        .map(|source| {
+            index
+                .resolve_any(
+                    &[RecordKind::Issue, RecordKind::Review, RecordKind::Evidence],
+                    source,
+                )
+                .map(|(kind, id)| {
+                    atelier_records::relates_relationship(
+                        kind.stored(),
+                        &id,
+                        atelier_records::DISCOVERED_FROM,
+                    )
+                })
+        })
         .transpose()?;
 
     let store = atelier_app::project_config::record_store(state_dir)?;
@@ -981,7 +1034,10 @@ pub fn create_lifecycle(
         },
         labels: atelier_app::lint::size_labels(input.labels)?,
         sections,
-        relationships: Relationships::default(),
+        relationships: Relationships {
+            relates: discovered_from.into_iter().collect(),
+            ..Relationships::default()
+        },
     };
     atelier_app::workflow_policy::validate_issue_hierarchy(
         index,

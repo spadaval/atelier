@@ -11,7 +11,10 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "review"
+    id: "atelier-7neu"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 closed_at: "2026-10-16T20:19:01.150816412+00:00"

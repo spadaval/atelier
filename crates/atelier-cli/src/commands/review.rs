@@ -140,7 +140,7 @@ pub fn show(id: &str, quiet: bool) -> Result<()> {
 }
 
 /// The event's stored name, as in the record's `event` field.
-fn event_name(event: &ReviewEvent) -> &'static str {
+pub fn event_name(event: &ReviewEvent) -> &'static str {
     match event {
         ReviewEvent::Review => "review",
         ReviewEvent::Approval => "approval",

@@ -12,7 +12,10 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "review"
+    id: "atelier-jsd4"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 closed_at: "2026-10-16T22:38:18.270400612+00:00"

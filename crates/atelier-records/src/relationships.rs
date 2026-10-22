@@ -7,6 +7,10 @@ pub use atelier_core::{
 /// declares the edge stores it in `blocks` instead; both mean the same edge.
 pub const BLOCKED_BY: &str = "blocked_by";
 
+/// The typed link new work declares to the record it surfaced from: the item
+/// being worked, a review finding, or an evidence receipt.
+pub const DISCOVERED_FROM: &str = "discovered_from";
+
 pub fn issue_relationship_target(id: &str) -> RelationshipTarget {
     relationship_target(ISSUE_KIND.kind, id)
 }

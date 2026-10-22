@@ -794,6 +794,8 @@ mod criteria;
 mod debrief;
 #[path = "cli_integration/decisions.rs"]
 mod decisions;
+#[path = "cli_integration/discovered_from.rs"]
+mod discovered_from;
 #[path = "cli_integration/issues.rs"]
 mod issues;
 #[path = "cli_integration/mission_worktree.rs"]
@@ -804,12 +806,16 @@ mod output_terms;
 mod piped_output;
 #[path = "cli_integration/quiet_tokens.rs"]
 mod quiet_tokens;
+#[path = "cli_integration/record_commit.rs"]
+mod record_commit;
 #[path = "cli_integration/record_refs.rs"]
 mod record_refs;
 #[path = "cli_integration/records_evidence.rs"]
 mod records_evidence;
 #[path = "cli_integration/reports.rs"]
 mod reports;
+#[path = "cli_integration/review_request.rs"]
+mod review_request;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]

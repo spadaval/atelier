@@ -16,6 +16,9 @@ relationships:
   - kind: "issue"
     id: "atelier-9vq3"
     type: "related"
+  - kind: "review"
+    id: "atelier-imxz"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 closed_at: "2026-10-16T01:01:03.836138476+00:00"

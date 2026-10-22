@@ -66,6 +66,17 @@ A decision record may name the ADR it produced (`issue update --adr <path>`;
 an older one with a `supersedes` link; once the newer one is decided, views
 mark the older one superseded and no longer count it as current.
 
+Work found while doing other work records where, with a `discovered_from`
+link stored on the new issue (`issue create --discovered-from <id>`; like other
+context links it is declared by the new record, so the source is unchanged).
+The source is the issue being worked, a review event such as a finding, or an
+evidence receipt. `issue show` prints it, `check` refuses a source that does
+not exist and a deferred disposition whose follow-up declares a source other
+than the item the finding is about, and the
+[debrief](mission-reviews.md#debrief) lists the work by that source. It marks
+work as found along the way, not as scope: the work needs no `advances` link
+to appear in the debrief, and takes one only if the mission must finish it.
+
 Decisions made inside a work item are decision notes, not records:
 `issue note <id> --kind decision "<choice>" --reason "<why>"`, with optional
 `--rejected "<alternative>"` (repeatable) and `--one-way` for a decision that

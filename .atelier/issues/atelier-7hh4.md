@@ -11,7 +11,16 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "review"
+    id: "atelier-1y1z"
+    type: "discovered_from"
+  - kind: "review"
+    id: "atelier-6hpy"
+    type: "discovered_from"
+  - kind: "review"
+    id: "atelier-9l63"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 closed_at: "2026-10-16T20:29:44.671470592+00:00"

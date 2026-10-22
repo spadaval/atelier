@@ -141,8 +141,12 @@ pub struct WorkEntry {
 pub struct OpenEntry {
     pub id: String,
     pub parent: Option<String>,
-    /// The item (or the mission) whose review filed it.
+    /// The item (or the mission) whose review filed it, or that it was
+    /// discovered from.
     pub from: Option<String>,
+    /// Whether `from` comes from a `discovered_from` link instead of the
+    /// disposition that deferred a finding to it.
+    pub discovered: bool,
     /// When it joined the mission: its link after the start, or its record's
     /// creation for a follow-up outside the scope.
     pub filed_at: Option<DateTime<Utc>>,
@@ -421,6 +425,37 @@ pub fn debrief(
             }
         }
     }
+    // Work that declares it was discovered from an item in scope (directly,
+    // or through one of its findings or receipts) is found along the way
+    // whether or not it advances the mission. A deferral names the same
+    // source, which `check` enforces, so it wins when both are present.
+    let mut discovered_ids: BTreeSet<String> = BTreeSet::new();
+    let source_scope = scope
+        .iter()
+        .map(String::as_str)
+        .chain(std::iter::once(mission_id))
+        .collect::<BTreeSet<_>>();
+    for record in index.issue_records() {
+        let new = &record.issue.id;
+        if follow_up_source.contains_key(new) || new == mission_id {
+            continue;
+        }
+        let source = record
+            .relationships
+            .relates
+            .iter()
+            .filter(|relation| relation.relation_type == atelier_records::DISCOVERED_FROM)
+            .filter_map(|relation| index.discovery_source(&relation.kind, &relation.id))
+            .find(|source| source_scope.contains(source.as_str()));
+        if let Some(source) = source {
+            follow_up_source.insert(new.clone(), source.clone());
+            discovered_ids.insert(new.clone());
+            let list = follow_ups_of.entry(source).or_default();
+            if !list.contains(new) {
+                list.push(new.clone());
+            }
+        }
+    }
     for (finding, target) in &findings {
         let summary = reviews.entry(target.clone()).or_default();
         match dispositions.get(finding).map(|(_, decision, ..)| *decision) {
@@ -499,6 +534,7 @@ pub fn debrief(
             id: id.to_string(),
             parent,
             from: follow_up_source.get(id).cloned(),
+            discovered: discovered_ids.contains(id),
             filed_at: added_at.get(id).copied(),
             added_after_start: added_at.contains_key(id),
             changes: changes_of(id)?,

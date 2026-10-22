@@ -419,7 +419,7 @@ fn every_invalid_value_takes_the_shared_form_and_exits_2() {
     let issue_types = "bug, decision, feature, mission, spike, task, validation. Issue types \
         are declared under issue_types in .atelier/workflow.yaml.";
     let link_roles = "advances, assumption, blocked_by, blocks, contributes_to, derived, \
-        derived_from, duplicates, falsifies, implements, part_of, related, supersedes, inspired_by";
+        derived_from, discovered_from, duplicates, falsifies, implements, part_of, related, supersedes, inspired_by";
     let cases: Vec<(Vec<&str>, String)> = vec![
         (
             vec!["issue", "link", &target, &source, "--role", "nope"],

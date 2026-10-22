@@ -97,8 +97,10 @@ what each record contains.
   the strategy files linked from missions (filing, grooming, decisions,
   strategy edits) may go on the base branch directly; everything else goes
   through a work branch and `atelier merge`.
-- Atelier creates no commits except the merge commit described below.
-  Commit records with the implementation, and commit the done claim on the
+- Atelier creates no commits except the merge commit described below and,
+  when asked with `--commit-records` (or `--stage-records` to group several
+  commands), the records the command wrote. Commit records with the
+  implementation, and commit the done claim on the
   work branch so it is reviewed with the code.
 - Record review against the branch owner with `atelier review record`,
   `approve`, `finding`, and `trivial`, each with an explicit `--identity` and
@@ -108,6 +110,8 @@ what each record contains.
   `atelier review disposition`. `fix_now` needs a later resolution commit and
   fresh independent approval; `defer` needs an existing follow-up issue;
   `defer` and `no_action` need acceptance from a non-author identity.
+- File work found along the way with `atelier issue create
+  --discovered-from <item, finding or receipt id>`.
 - Material changes after approval (code, policy, acceptance, relationships)
   make it stale. Adding evidence or review records and in-scope status changes
   do not.
