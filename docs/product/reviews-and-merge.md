@@ -145,8 +145,17 @@ depends on, merge refuses, naming the claim (`merge blocked: <mission>
 work.terminal`, atelier-m4gv). These claims are read at the merge commit, so a
 claim the base completed and reviewed after the fork point is judged against
 the base commits its reviews pin (atelier-goom). The merge commit reaches the
-base only when every gate passes and the base has not moved during the checks
-(`merge_snapshot_changed`). A lockfile that merges cleanly but is
+base only when every gate passes and the base has not moved during the checks.
+When the base moved during the checks only by commits that change nothing but
+issue, review and evidence records, merge reports `merge_base_moved` and runs
+the gates again against the new base, up to three attempts in all; a record the
+item itself depends on still refuses as `merge_base_records`. If any of those
+commits changes anything else, or the base was rewritten, merge refuses with
+`merge_snapshot_changed`, naming the first such commit and file. Under
+`fast_forward_only` merge cannot land on a base that moved at all, since it
+creates no merge commit; `merge_diverged` then says whether the base gained only
+records-only commits or names the code commit, and the recovery is still `git
+merge <base>` on the work branch (atelier-p189). A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
 as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
