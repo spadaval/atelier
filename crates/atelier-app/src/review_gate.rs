@@ -1,5 +1,10 @@
 //! Review integrity, semantic freshness and derived merge gate graph nodes.
-use crate::{git_freshness as git, record_index::RecordIndex, workflow_policy::WorkflowPolicy};
+use crate::{
+    git_freshness as git,
+    path_log::{Listing, PathLog},
+    record_index::RecordIndex,
+    workflow_policy::WorkflowPolicy,
+};
 use anyhow::{bail, Context, Result};
 use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
 use atelier_records::{parse_issue_record, split_document};
@@ -601,19 +606,17 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
 }
 
 /// Historical acceptance is valid only while review events remain append-only.
+/// The check starts before the first commit to add a review event, which
+/// may be a merge that resolved one into being (atelier-as7i).
 pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
     let head = read.pinned("HEAD")?;
-    let history = read.history(&[
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-filter=A",
-        "--format=%H",
-        &head,
-        "--",
-        ".atelier/reviews/",
-    ])?;
-    let Some(first) = history.lines().next() else {
+    let history = read.path_log(&PathLog {
+        start: head,
+        paths: vec![".atelier/reviews/".to_owned()],
+        listing: Listing::Additions,
+        reverse: true,
+    })?;
+    let Some(first) = history.first() else {
         return Ok(());
     };
     let pin = match read.first_parent(first)? {
@@ -891,37 +894,6 @@ fn evaluate_scope(
             },
             Vec::new(),
         ));
-    }
-    if global {
-        prefetch_original_independent(
-            index,
-            read,
-            index.reviews().filter(|record| {
-                (approval_targets.contains(&record.target)
-                    && matches!(record.event, ReviewEvent::Approval))
-                    || (matches!(
-                        record.event,
-                        ReviewEvent::Disposition {
-                            decision: FindingDecision::Defer | FindingDecision::NoAction,
-                            ..
-                        }
-                    ) && applicable.contains(&record.target))
-            }),
-            // Only retained claims with proof or findings look up where they
-            // were claimed (atelier-nzzz).
-            &applicable
-                .iter()
-                .filter(|_| historical)
-                .filter(|id| {
-                    index.reviews().any(|record| {
-                        record.target == **id && matches!(record.event, ReviewEvent::Finding { .. })
-                    }) || index.list_record_links("issue", id).is_ok_and(|links| {
-                        links.iter().any(|link| link.relation_type == "validates")
-                    })
-                })
-                .cloned()
-                .collect(),
-        )?;
     }
     let candidates = index
         .reviews()
@@ -1318,102 +1290,52 @@ fn add_author(
     }
     Ok(())
 }
-/// The `git log` that finds the commit introducing a review event, including
-/// a merge that adds it when neither parent has it; `--no-patch` keeps the
-/// merge's diff out of the commit list (atelier-as7i).
-fn introduced_query(head: &str, record: &ReviewRecord) -> Vec<String> {
-    [
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-merges=first-parent",
-        "--no-patch",
-        "--diff-filter=A",
-        "--format=%H",
-        head,
-        "--",
-        &format!(".atelier/reviews/{}.md", record.header.id),
-    ]
-    .map(str::to_owned)
-    .to_vec()
+/// The query for the commit that introduced a review event: the commits
+/// whose diff from their first parent adds the event's file, oldest first.
+///
+/// A merge that adds the file when neither parent has it, such as a
+/// conflict resolution, is listed (atelier-as7i). So is a clean merge of a
+/// branch that added it: asking for merge diffs turns history
+/// simplification off, so Git lists the branch's commit and the merge, and
+/// does not simplify the merge away. Callers take the first commit listed
+/// as the introducer. Git orders the walk by committer date, so while dates
+/// increase along history the branch's own commit, an ancestor of the
+/// merge, comes first after `--reverse`.
+fn introduced_query(head: &str, record: &ReviewRecord) -> PathLog {
+    PathLog {
+        start: head.to_owned(),
+        paths: vec![format!(".atelier/reviews/{}.md", record.header.id)],
+        listing: Listing::Additions,
+        reverse: true,
+    }
 }
-/// The `git log` queries for where a reviewed scope starts and for its
-/// owner's record history, both up to the introducing `event`.
+/// The queries for where a reviewed scope starts, the first commit adding
+/// one of its issue records, and for its owner's record history, both up to
+/// the introducing `event` and oldest first.
 fn scope_queries(
     index: &RecordIndex,
     record: &ReviewRecord,
     event: &str,
-) -> Result<(Vec<String>, Vec<String>)> {
+) -> Result<(PathLog, PathLog)> {
     let issue = index.require_issue(&record.target)?;
     let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
     let ids = scope(index, owner)?;
-    let history = [
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-merges=first-parent",
-        "--no-patch",
-        "--diff-filter=A",
-        "--format=%H",
-        event,
-        "--",
-    ]
-    .map(str::to_owned)
-    .into_iter()
-    .chain(ids.iter().map(|id| format!(".atelier/issues/{id}.md")))
-    .collect();
-    let updates = [
-        "log",
-        "--root",
-        "--reverse",
-        "--format=%H",
-        event,
-        "--",
-        &format!(".atelier/issues/{owner}.md"),
-    ]
-    .map(str::to_owned)
-    .to_vec();
-    Ok((history, updates))
-}
-fn as_args(query: &[String]) -> Vec<&str> {
-    query.iter().map(String::as_str).collect()
-}
-/// Run the history queries of `original_independent` for many records at
-/// once; each is an independent `git log` walk (atelier-0349).
-fn prefetch_original_independent<'r>(
-    index: &RecordIndex,
-    read: &mut git::ReadContext<'_>,
-    records: impl IntoIterator<Item = &'r ReviewRecord>,
-    claims: &BTreeSet<String>,
-) -> Result<()> {
-    let head = read.pinned("HEAD")?;
-    let records = records.into_iter().collect::<Vec<_>>();
-    // Each claim's history is walked once per land to find where it was
-    // claimed; walk them alongside the review histories (atelier-v5tt).
-    read.prefetch_histories(
-        records
+    let history = PathLog {
+        start: event.to_owned(),
+        paths: ids
             .iter()
-            .map(|record| introduced_query(&head, record))
-            .chain(
-                claims
-                    .iter()
-                    .map(|id| crate::evidence_freshness::claim_history_query(&head, id)),
-            )
+            .map(|id| format!(".atelier/issues/{id}.md"))
             .collect(),
-    );
-    let mut queries = Vec::new();
-    for record in records {
-        let Ok(introduced) = read.history(&as_args(&introduced_query(&head, record))) else {
-            continue;
-        };
-        if let Some(event) = introduced.lines().next() {
-            if let Ok((history, updates)) = scope_queries(index, record, event) {
-                queries.extend([history, updates]);
-            }
-        }
-    }
-    read.prefetch_histories(queries);
-    Ok(())
+        listing: Listing::Additions,
+        reverse: true,
+    };
+    let updates = PathLog {
+        start: event.to_owned(),
+        paths: vec![format!(".atelier/issues/{owner}.md")],
+        listing: Listing::Changes,
+        reverse: true,
+    };
+    Ok((history, updates))
 }
 fn original_independent(
     index: &RecordIndex,
@@ -1424,11 +1346,8 @@ fn original_independent(
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
     let event_path = format!(".atelier/reviews/{}.md", record.header.id);
     let head = read.pinned("HEAD")?;
-    let introduced = read.history(&as_args(&introduced_query(&head, record)))?;
-    let event = introduced
-        .lines()
-        .next()
-        .context("review event history missing")?;
+    let introduced = read.path_log(&introduced_query(&head, record))?;
+    let event = introduced.first().context("review event history missing")?;
     let path = Path::new(&event_path);
     if read.entry(event, path)? != read.entry("HEAD", path)? {
         bail!(
@@ -1437,14 +1356,11 @@ fn original_independent(
         );
     }
     let (history, updates) = scope_queries(index, record, event)?;
-    let history = read.history(&as_args(&history))?;
-    let start = history
-        .lines()
-        .next()
-        .context("review predates its issue scope")?;
+    let history = read.path_log(&history)?;
+    let start = history.first().context("review predates its issue scope")?;
     let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
-    let updates = read.history(&as_args(&updates))?;
-    let branch_start = updates.lines().find(|commit| {
+    let updates = read.path_log(&updates)?;
+    let branch_start = updates.iter().find(|commit| {
         read.issue_at(commit, owner)
             .is_ok_and(|record| record.issue.workflow_branch.is_some())
     });
