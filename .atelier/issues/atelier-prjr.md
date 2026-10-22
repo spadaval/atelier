@@ -5,6 +5,9 @@ issue_type: "validation"
 labels:
 - "merge"
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: validation/atelier-prjr
 priority: "P1"
 relationships:
   blocks: []
@@ -37,9 +40,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Validate atelier-k8h8 acceptance"
-updated_at: "2026-10-22T23:52:29.130313625+00:00"
+updated_at: "2026-10-22T23:52:29.362913776+00:00"
 ---
 
 ## Goal
