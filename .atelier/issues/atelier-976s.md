@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Refuse land --push when the upstream does not resolve"
-updated_at: "2026-10-22T22:48:09.493694038+00:00"
+updated_at: "2026-10-22T22:48:10.311973858+00:00"
 ---
 
 ## Goal

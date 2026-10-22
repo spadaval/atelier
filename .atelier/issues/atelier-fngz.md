@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "land"
 - "merge"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-fngz
 priority: "P2"
 relationships:
   blocks: []
@@ -26,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Close the push, lease, sync and merge-report follow-ups"
-updated_at: "2026-10-22T22:48:09.888540787+00:00"
+updated_at: "2026-10-22T22:48:10.311971513+00:00"
 ---
 
 ## Goal
