@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T22:24:54.831241145+00:00"
+status: "done"
 title: "Adding an issue to a mission re-checks every done issue in that mission"
-updated_at: "2026-10-22T22:23:47.247994576+00:00"
+updated_at: "2026-10-22T22:24:54.831241145+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,19 @@ Whether following `advances` into a mission was meant for the mission's own clai
 - 2026-10-22 [decision] Stop touched_claims' walk at the mission: an advances link, declared on either side, touches only the end that is a mission and is not followed further; the reverse walk keeps only blocked_by links.
   Reason: Answers the Unknown: the gates read advances only for a mission's own work.terminal (issue_descendant_ids), and blockers pass only from a parent, so a mission's claim depends on its advancing work but no claim depends on the mission. The mission itself is still re-checked, which a done mission gaining open work needs.
   Rejected: Drop advances from the walk entirely (would miss a done mission whose advancing work reopens, covered by land_checks_a_mission_whose_advancing_work_reopens)
+
+## Close Reason
+
+A commit that only adds an issue advancing a mission re-checks no other done claim in that mission: `land` on the base and on a work branch, and `merge --check`, pass while an older done issue in the mission has failing proof, and `doctor` still reports it. Changing a done issue's own record or a blocker still re-checks it, and a done mission is still re-checked when its advancing work changes.
+
+### Deviations
+None.
+
+### Decisions
+See the decision note on atelier-ss25: the walk stops at the mission (only the mission end of an `advances` link is touched, from either side), answering the item's Unknown.
+
+### Surprises
+Missions are still touched, so a commit adding open work to a mission that is already done re-checks (and fails) that mission's own claim, which is correct. The walk's forward `blocked_by` step remains broader than the claim dependencies need (a new issue blocked by an old done one re-checks the old one); left as is because the Done when keeps blocker re-checks.
+
+### Open items
+None.
