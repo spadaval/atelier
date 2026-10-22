@@ -159,7 +159,11 @@ unavailable snapshots are reported separately. Every compatible owner branch
 remains visible, including branches sharing a tracker tree. A branch's done
 claim is not base completion: a done owner's row says `not merged` until the
 base branch's own copy of the record is done, and `merged into <base>` after.
-The row format is in [human-cli-output.md](human-cli-output.md#branches).
+A row that is not merged also shows its approval state, commits behind the
+base, whether proof is at its head, and whether it merges cleanly into the
+current base or which files conflict; a trailing line names waiting branches
+that change the same files. The row format is in
+[human-cli-output.md](human-cli-output.md#branches).
 
 The same summaries, read once per command, mark ready work that is in flight
 elsewhere: in `status`'s ready items and unassigned work, in `work ready`

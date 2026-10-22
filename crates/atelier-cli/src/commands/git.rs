@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use atelier_app::{git_freshness, record_index::RecordIndex, review_gate, workflow_policy};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -576,6 +576,64 @@ struct BranchOwner {
     category: Option<String>,
     /// Set for a done owner: whether its claim is merged into the base.
     merged: Option<bool>,
+    /// For an owner that is not done: how many of its direct children are
+    /// active and done, so a parent-owned branch does not read as idle.
+    children: Children,
+    /// Set for a done owner not merged into the base: how it would merge
+    /// now, or why that could not be read.
+    readiness: Option<Result<Readiness, String>>,
+}
+
+#[derive(Default)]
+struct Children {
+    total: usize,
+    active: usize,
+    done: usize,
+}
+
+/// A waiting branch's readiness to merge into the current base
+/// (atelier-tciw), read without changing any Git state.
+struct Readiness {
+    approval: review_gate::ApprovalState,
+    /// Base commits the branch does not have.
+    behind: usize,
+    /// Every done item in the owner's scope, except superseded ones, has
+    /// fresh passing proof at the branch head.
+    proof: bool,
+    /// The paths `git merge-tree` cannot merge into the current base.
+    conflicts: Vec<PathBuf>,
+}
+
+impl Readiness {
+    /// `, ✓ approved, behind 3, proof at head, merges cleanly`: the facts
+    /// for the row's status part, the conflict list last so its commas end
+    /// the part.
+    fn facts(&self) -> String {
+        let approval = match self.approval {
+            review_gate::ApprovalState::Current => "✓ approved",
+            review_gate::ApprovalState::Stale => "⚠ approval stale",
+            review_gate::ApprovalState::Missing => "⚠ not approved",
+        };
+        let proof = if self.proof {
+            "proof at head"
+        } else {
+            "no proof at head"
+        };
+        let merge = if self.conflicts.is_empty() {
+            "merges cleanly".to_owned()
+        } else {
+            format!("conflicts: {}", display_paths(&self.conflicts))
+        };
+        format!(", {approval}, behind {}, {proof}, {merge}", self.behind)
+    }
+}
+
+fn display_paths(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl BranchOwner {
@@ -584,18 +642,33 @@ impl BranchOwner {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
     }
 
-    /// `<branch>  <id> <status>[, merged into <base>|, not merged]  <title>`:
-    /// one dense line. Merge-readiness facts belong in the status part,
-    /// before the free-text title, and the merge wording matches the `↳`
-    /// in-flight mark for the same item.
+    /// `<branch>  <id> <status>[, merged into <base>|, not merged[,
+    /// <readiness>]][, <children>]  <title>`: one dense line. Merge-readiness
+    /// facts belong in the status part, before the free-text title, and the
+    /// merge wording matches the `↳` in-flight mark for the same item.
     fn line(&self, base: &str) -> String {
-        let merge = match self.merged {
+        let mut facts = match self.merged {
             Some(true) => format!(", merged into {base}"),
             Some(false) => ", not merged".to_owned(),
             None => String::new(),
         };
+        match &self.readiness {
+            Some(Ok(readiness)) => facts.push_str(&readiness.facts()),
+            Some(Err(reason)) => facts.push_str(&format!(", readiness unknown: {reason}")),
+            None => {}
+        }
+        let children = &self.children;
+        if children.active + children.done > 0 {
+            facts.push_str(&format!(
+                ", {} of {} children done",
+                children.done, children.total
+            ));
+            if children.active > 0 {
+                facts.push_str(&format!(", {} active", children.active));
+            }
+        }
         format!(
-            "{}  {} {}{merge}  {}",
+            "{}  {} {}{facts}  {}",
             self.branch,
             self.id,
             self.cue(),
@@ -621,6 +694,8 @@ pub(crate) struct BranchSummaries {
     entries: Vec<Result<BranchOwner, UnreadableBranch>>,
     /// Branches with no started work or no tracker, in branch order.
     unowned: Vec<String>,
+    /// Each pair of waiting branches that change the same files, with them.
+    shared: Vec<(String, String, Vec<PathBuf>)>,
 }
 
 /// Marks for ready rows owned on other branches, and notices for unreadable
@@ -649,6 +724,16 @@ impl BranchSummaries {
             .collect::<Vec<_>>();
         if !self.unowned.is_empty() {
             lines.push(format!("Unowned: {}", self.unowned.join(", ")));
+        }
+        for (first, second, paths) in &self.shared {
+            const SHOWN: usize = 5;
+            let mut touched = display_paths(&paths[..paths.len().min(SHOWN)]);
+            if paths.len() > SHOWN {
+                touched.push_str(&format!(" and {} more", paths.len() - SHOWN));
+            }
+            lines.push(format!(
+                "Shared files: {first} and {second} both touch {touched}"
+            ));
         }
         lines
     }
@@ -737,8 +822,11 @@ fn branch_summaries_for(
             "refs/heads/",
         ],
     )?;
+    let base_head = resolve(repo, &format!("refs/heads/{base_branch}")).ok();
     let mut entries = Vec::new();
     let mut unowned = Vec::new();
+    // The files each waiting branch changes since it left the base.
+    let mut waiting = Vec::<(String, Vec<PathBuf>)>::new();
     for head in heads.lines() {
         let Some((reference, commit)) = head.split_once(' ') else {
             continue;
@@ -792,11 +880,38 @@ fn branch_summaries_for(
                 .index
                 .validate_policy(&branch_policy, snapshot.root())?;
             let mut rows = Vec::new();
+            // Read once per branch, for its first waiting owner.
+            let mut merge = None;
             for id in owners {
                 let owner = snapshot.index.require_issue(&id)?;
                 let category = branch_policy.status_category(&owner.status);
                 let merged = (category == Some("done"))
                     .then(|| done_merged(repo, &id, &owner.status, branch, base_branch));
+                let mut children = Children::default();
+                if category != Some("done") {
+                    for child in snapshot.index.child_ids(&id) {
+                        let child = snapshot.index.require_issue(child)?;
+                        children.total += 1;
+                        match branch_policy.status_category(&child.status) {
+                            Some("active") => children.active += 1,
+                            Some("done") => children.done += 1,
+                            _ => {}
+                        }
+                    }
+                }
+                let readiness = match (merged, &base_head) {
+                    (Some(false), Some(base_head)) => Some(
+                        (|| -> Result<Readiness> {
+                            if merge.is_none() {
+                                merge = Some(branch_merge(repo, commit, base_head)?);
+                            }
+                            let merge = merge.as_ref().expect("branch merge read");
+                            readiness(repo, &snapshot.index, &branch_policy, &id, commit, merge)
+                        })()
+                        .map_err(|error| short_reason(&error)),
+                    ),
+                    _ => None,
+                };
                 rows.push(BranchOwner {
                     branch: branch.to_owned(),
                     title: owner.title.clone(),
@@ -804,7 +919,12 @@ fn branch_summaries_for(
                     category: category.map(str::to_owned),
                     id,
                     merged,
+                    children,
+                    readiness,
                 });
+            }
+            if let Some(merge) = merge {
+                waiting.push((branch.to_owned(), merge.changed));
             }
             Ok(Some(rows))
         })();
@@ -818,10 +938,94 @@ fn branch_summaries_for(
             })),
         }
     }
+    let mut shared = Vec::new();
+    for (index, (first, first_paths)) in waiting.iter().enumerate() {
+        for (second, second_paths) in &waiting[index + 1..] {
+            let both = first_paths
+                .iter()
+                .filter(|path| second_paths.binary_search(path).is_ok())
+                .cloned()
+                .collect::<Vec<_>>();
+            if !both.is_empty() {
+                shared.push((first.clone(), second.clone(), both));
+            }
+        }
+    }
     Ok(BranchSummaries {
         base_branch: base_branch.to_owned(),
         entries,
         unowned,
+        shared,
+    })
+}
+
+/// How a branch at `tip` meets the base at `base_head`; the same for every
+/// owner of the branch.
+struct BranchMerge {
+    /// Where the branch left the base.
+    fork_point: String,
+    behind: usize,
+    conflicts: Vec<PathBuf>,
+    /// The paths the branch changes since `fork_point`, sorted.
+    changed: Vec<PathBuf>,
+}
+
+/// Reads the branch's merge into the base with `git merge-tree`, which
+/// writes only unreachable objects, so no ref, index or checkout changes.
+fn branch_merge(repo: &Path, tip: &str, base_head: &str) -> Result<BranchMerge> {
+    let fork_point = text(repo, &["merge-base", base_head, tip])?;
+    let behind = text(
+        repo,
+        &["rev-list", "--count", &format!("{tip}..{base_head}")],
+    )?
+    .parse()
+    .context("git rev-list --count printed no count")?;
+    let conflicts = if behind == 0 {
+        Vec::new()
+    } else {
+        git_freshness::merge_tree(repo, base_head, tip)?
+            .context("git merge-tree could not merge the branch into the base")?
+            .1
+    };
+    let changed = git_freshness::changed_paths(repo, &fork_point, tip)?;
+    Ok(BranchMerge {
+        fork_point,
+        behind,
+        conflicts,
+        changed,
+    })
+}
+
+/// The owner's readiness on a branch at `tip`, judged from the branch's
+/// committed records: approval as `merge`'s `review.current` judges it, and
+/// whether every done item in the owner's scope has fresh passing proof at
+/// the tip. Superseded work needs no proof, as `merge` asks none of it.
+fn readiness(
+    repo: &Path,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+    owner: &str,
+    tip: &str,
+    merge: &BranchMerge,
+) -> Result<Readiness> {
+    let mut read = git_freshness::ReadContext::from_snapshot(repo, tip.to_owned(), &[]);
+    let approval = review_gate::approval_state(index, &mut read, owner, &merge.fork_point)?;
+    let mut proof = true;
+    for id in review_gate::scope(index, owner)? {
+        let issue = index.require_issue(&id)?;
+        if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
+            && issue.status != "superseded"
+            && !read.issue_gate(index, &id, 1, None)?.passed
+        {
+            proof = false;
+            break;
+        }
+    }
+    Ok(Readiness {
+        approval,
+        behind: merge.behind,
+        proof,
+        conflicts: merge.conflicts.clone(),
     })
 }
 

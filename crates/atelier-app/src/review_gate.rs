@@ -255,6 +255,63 @@ fn in_scope_issue(path: &Path, ids: &BTreeSet<String>) -> bool {
             .and_then(|stem| stem.to_str())
             .is_some_and(|id| ids.contains(id))
 }
+
+/// Whether `record`, an approval or trivial exemption on a work branch that
+/// left the base at `fork_point`, is current at the branch's HEAD as
+/// `merge`'s `review.current` judges it. An approval from before the base
+/// was last merged in still counts; one from before the branch left the base
+/// does not.
+fn current_on_branch(
+    read: &mut git::ReadContext<'_>,
+    record: &ReviewRecord,
+    ids: &BTreeSet<String>,
+    fork_point: &str,
+) -> bool {
+    (ancestor(read, fork_point, &record.commit) || !ancestor(read, &record.commit, fork_point))
+        && approval_is_current(read, &record.commit, ids, fork_point).unwrap_or(false)
+}
+
+/// Where a work branch owner's review stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalState {
+    /// `merge`'s `review.current` would pass.
+    Current,
+    /// An independent approval or trivial exemption exists, but later
+    /// commits changed what it covers.
+    Stale,
+    /// No independent approval or trivial exemption of the owner.
+    Missing,
+}
+
+/// The owner's approval state on a work branch, judged as `merge`'s
+/// `review.current` judges it: `index` holds the branch's records and `read`
+/// is pinned at its tip, and `fork_point` is where it left the base. Status
+/// reads it for other branches without checking them out (atelier-tciw).
+pub fn approval_state(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    owner: &str,
+    fork_point: &str,
+) -> Result<ApprovalState> {
+    let ids = scope(index, owner)?;
+    let authors = author_identities(read, fork_point, &ids)?;
+    let mut state = ApprovalState::Missing;
+    for record in index.reviews().filter(|record| record.target == owner) {
+        let accepted_identity = match record.event {
+            ReviewEvent::TrivialExemption => true,
+            ReviewEvent::Approval => independent(record, &authors),
+            _ => false,
+        };
+        if !accepted_identity {
+            continue;
+        }
+        if current_on_branch(read, record, &ids, fork_point) {
+            return Ok(ApprovalState::Current);
+        }
+        state = ApprovalState::Stale;
+    }
+    Ok(state)
+}
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
 /// approval's identity is independent of the branch's own authors up to the
@@ -863,11 +920,12 @@ fn evaluate_scope(
             // counts; one from before the branch left the base does not.
             accepted_identity
                 && ((historical && retained(read, base_commit, record))
-                    || ((global
-                        || ancestor(read, base_commit, &record.commit)
-                        || !ancestor(read, &record.commit, base_commit))
-                        && approval_is_current(read, &record.commit, &ids, base_commit)
-                            .unwrap_or(false)))
+                    || if global {
+                        approval_is_current(read, &record.commit, &ids, base_commit)
+                            .unwrap_or(false)
+                    } else {
+                        current_on_branch(read, record, &ids, base_commit)
+                    })
         })
         .collect::<Vec<_>>();
     let support = candidates
