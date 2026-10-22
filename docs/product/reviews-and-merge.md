@@ -202,9 +202,12 @@ work branch, review, and `atelier merge`.
 the base commits that are not yet on the base's upstream. A commit counts as
 reviewed when a commit pinned by an approval or trivial exemption contains it,
 for completed owners that branched from this base and are not already done
-upstream, and only an approval `merge` would accept counts: from an identity
-independent of the scope's authors, with every finding pinned at or before it
-disposed by then (atelier-n90q). That is what `atelier merge` integrates. Every other commit may touch only records and the
+upstream, and only an approval `merge` would accept counts (atelier-n90q). Its
+identity must be independent of the branch's own authors, judged as
+`review.current` judges it: authors of base commits the branch merged in do
+not count (atelier-0cj6). Every finding pinned at or before it needs an
+accepted disposition, and a FIX NOW's resolution commit must be at or before
+the approval's pin; the disposition itself may be recorded later. That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. Those record-only commits also may not take a work
 item to done: a done claim travels on the work branch with the work, so `land`

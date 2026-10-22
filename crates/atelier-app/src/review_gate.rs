@@ -195,11 +195,15 @@ pub fn approval_is_current_to(
 }
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
-/// approval's identity is independent of the scope's authors up to the event
-/// (an exemption is explicit and names itself), and every finding on the
-/// scope pinned at or before it has an accepted disposition by then: a FIX
-/// NOW resolved at or before its pin, a DEFER or NO ACTION accepted by a
-/// non-author. `land` on the base counts only these as covering commits.
+/// approval's identity is independent of the branch's own authors up to the
+/// event, base commits merged in left out as `review.current` leaves them
+/// out (an exemption is explicit and names itself), and every finding on the
+/// scope pinned at or before it has an accepted disposition: a FIX NOW whose
+/// resolution commit is at or before the approval's pin, or a DEFER or NO
+/// ACTION accepted by a non-author. Only that resolution commit is checked
+/// against the pin; the disposition itself may be recorded later, as
+/// `merge`'s findings.disposed allows. `land` on the base counts only these
+/// approvals as covering commits.
 pub fn approval_accepted(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
@@ -390,10 +394,30 @@ fn merged(
         _ => false,
     }
 }
+/// The merges in `edges` (from `pin`) that bring in commits already on
+/// `base`, each with the commits only its other sides hold. Those commits
+/// were reviewed on their own branches, so they are neither work the
+/// approval covers nor work its reviewer authored (atelier-n7g1).
+fn base_merges<'e>(
+    read: &mut git::ReadContext<'_>,
+    pin: &str,
+    edges: &'e [git::CommitEdge],
+    base: &str,
+) -> Result<Vec<(&'e git::CommitEdge, HashSet<String>)>> {
+    let mut merges = Vec::new();
+    for edge in edges.iter().filter(|edge| !edge.sides.is_empty()) {
+        if ancestor(read, pin, &edge.parent)
+            && edge.sides.iter().all(|side| ancestor(read, side, base))
+        {
+            merges.push((edge, read.only_in(&edge.sides, &edge.parent)?));
+        }
+    }
+    Ok(merges)
+}
 /// The edges from `pin` to `end` that can change approved work, each with
 /// its merge resolution when it merges commits already on `base`. Those base
-/// commits were reviewed on their own branches, so they are left out
-/// (atelier-n7g1); the merge itself is checked with `allowed_base_merge`.
+/// commits are left out; the merge itself is checked with
+/// `allowed_base_merge`.
 fn work_edges(
     read: &mut git::ReadContext<'_>,
     pin: &str,
@@ -403,16 +427,11 @@ fn work_edges(
     let edges = read.edges(pin, end)?;
     let mut merged_base = HashSet::new();
     let mut merges = BTreeMap::new();
-    for edge in edges.iter().filter(|edge| !edge.sides.is_empty()) {
-        if !(ancestor(read, pin, &edge.parent)
-            && edge.sides.iter().all(|side| ancestor(read, side, base)))
-        {
-            continue;
-        }
+    for (edge, only_in_sides) in base_merges(read, pin, &edges, base)? {
         let Some(merge) = read.merge_resolution(&edge.commit)? else {
             continue;
         };
-        merged_base.extend(read.only_in(&edge.sides, &edge.parent)?);
+        merged_base.extend(only_in_sides);
         merges.insert(edge.commit.clone(), merge);
     }
     Ok(edges
@@ -479,22 +498,38 @@ pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
     append_only(read, &pin)
 }
 
+/// The authors of the work on a branch since `base_commit`, against whom
+/// review independence is judged by `review.current`.
 pub fn author_identities(
     read: &mut git::ReadContext<'_>,
     base_commit: &str,
     ids: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>> {
-    author_identities_to(read, base_commit, ids, "HEAD")
+    author_identities_to(read, base_commit, ids, "HEAD", base_commit)
 }
+/// The one author set review independence is judged against, for `merge`
+/// and `land` alike (atelier-0cj6): the authors of the commits from `start`
+/// to `end` that change more than an approval keeps current, leaving out
+/// the commits merges bring in from `base`. A reviewer who authored work on
+/// the base that the branch merged in is still independent of the branch.
 fn author_identities_to(
     read: &mut git::ReadContext<'_>,
-    base_commit: &str,
+    start: &str,
     ids: &BTreeSet<String>,
     end: &str,
+    base: &str,
 ) -> Result<BTreeSet<String>> {
+    let edges = read.edges(start, end)?;
+    let merged_base = base_merges(read, start, &edges, base)?
+        .into_iter()
+        .flat_map(|(_, only_in_sides)| only_in_sides)
+        .collect::<HashSet<_>>();
     let mut authors = BTreeSet::new();
     let mut inspected = BTreeSet::new();
-    for edge in read.edges(base_commit, end)?.iter() {
+    for edge in edges
+        .iter()
+        .filter(|edge| !merged_base.contains(&edge.commit))
+    {
         if !allowed_edge(read, edge, ids)? && inspected.insert(edge.commit.clone()) {
             add_author(read, &edge.commit, &mut authors)?;
         }
@@ -1272,15 +1307,15 @@ fn original_independent(
     });
     let authors = if let Some(origin) = branch_start {
         match read.first_parent(origin)? {
-            Some(parent) => author_identities_to(read, &parent, &ids, event)?,
+            Some(parent) => author_identities_to(read, &parent, &ids, event, &head)?,
             None => {
-                let mut authors = author_identities_to(read, origin, &ids, event)?;
+                let mut authors = author_identities_to(read, origin, &ids, event, &head)?;
                 add_author(read, origin, &mut authors)?;
                 authors
             }
         }
     } else {
-        let mut authors = author_identities_to(read, start, &ids, event)?;
+        let mut authors = author_identities_to(read, start, &ids, event, &head)?;
         add_author(read, start, &mut authors)?;
         authors
     };

@@ -3258,6 +3258,8 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "close_only",
         "children_close_only",
         "children_in_one_commit",
+        "reviewer_base_close_then_approve",
+        "reviewer_base_reapproved_after_code",
     ];
     let stale_cases = [
         "with_code",
@@ -3291,6 +3293,24 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         .unwrap();
         commit(f.path(), "base merges with a merge commit");
     }
+    // The reviewer authored work on the base that the branch merges in.
+    let reviewer_base = case.starts_with("reviewer_base");
+    if reviewer_base {
+        fs::write(f.path().join("base_work"), "reviewed elsewhere\n").unwrap();
+        git(f.path(), &["add", "."]);
+        git(
+            f.path(),
+            &[
+                "-c",
+                "user.name=Reviewer",
+                "-c",
+                "user.email=reviewer@example.test",
+                "commit",
+                "-qm",
+                "base work by the reviewer",
+            ],
+        );
+    }
     let upstream = tempdir().unwrap();
     git(upstream.path(), &["init", "-q", "--bare"]);
     git(
@@ -3299,6 +3319,16 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
     );
     git(f.path(), &["push", "-q", "-u", "origin", "main"]);
     git(f.path(), &["switch", "-q", &f.branch]);
+    if reviewer_base {
+        git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    }
+    let approve = |identity: &str| {
+        ok(
+            f.path(),
+            &["review", "approve", &f.id, "--identity", identity, "Review"],
+        );
+        commit(f.path(), &format!("approval by {identity}"));
+    };
     let child = case.starts_with("children").then(|| {
         let child = ok(
             f.path(),
@@ -3328,55 +3358,62 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         );
         commit(f.path(), "finding left open");
     }
-    let reviewer = if case == "self_approval" {
-        "Author"
-    } else {
-        "Reviewer"
-    };
-    ok(
-        f.path(),
-        &["review", "approve", &f.id, "--identity", reviewer, "Review"],
-    );
-    commit(f.path(), "approval before the close");
-    let close_issue = |id: &str| {
-        ok(f.path(), &["issue", "transition", id, "start"]);
-        ok(
-            f.path(),
-            &["issue", "transition", id, "close", "--reason", "done too"],
-        );
-    };
     let mut new_done = None;
-    match case {
-        "with_code" => fs::write(f.path().join("code"), "changed while closing\n").unwrap(),
-        "with_goal" => {
-            let path = f.path().join(format!(".atelier/issues/{}.md", f.id));
-            let text = fs::read_to_string(&path).unwrap();
-            fs::write(&path, text.replace("Ship session", "Ship more session")).unwrap();
+    if case == "reviewer_base_close_then_approve" {
+        f.terminal(&f.id);
+        approve("Reviewer");
+    } else if case == "reviewer_base_reapproved_after_code" {
+        approve("Lead");
+        f.terminal(&f.id);
+        fs::write(f.path().join("code"), "changed after the close\n").unwrap();
+        commit(f.path(), "code after the close");
+        approve("Reviewer");
+    } else {
+        let reviewer = if case == "self_approval" {
+            "Author"
+        } else {
+            "Reviewer"
+        };
+        approve(reviewer);
+        let close_issue = |id: &str| {
+            ok(f.path(), &["issue", "transition", id, "start"]);
+            ok(
+                f.path(),
+                &["issue", "transition", id, "close", "--reason", "done too"],
+            );
+        };
+        match case {
+            "with_code" => fs::write(f.path().join("code"), "changed while closing\n").unwrap(),
+            "with_goal" => {
+                let path = f.path().join(format!(".atelier/issues/{}.md", f.id));
+                let text = fs::read_to_string(&path).unwrap();
+                fs::write(&path, text.replace("Ship session", "Ship more session")).unwrap();
+            }
+            "with_note" => {
+                ok(f.path(), &["issue", "note", &f.id, "A note in the close"]);
+            }
+            "new_done_issue" => {
+                let id = ok(f.path(), &["-q", "issue", "create", "Done elsewhere"]);
+                close_issue(&id);
+                new_done = Some(id);
+            }
+            "sibling_close" => close_issue(sibling.as_deref().unwrap()),
+            _ => {}
         }
-        "with_note" => {
-            ok(f.path(), &["issue", "note", &f.id, "A note in the close"]);
+        match (&child, case) {
+            // Both claims in one commit with the owner's.
+            (Some(child), "children_in_one_commit") => {
+                let mut record = f.store().load_issue_by_id(child).unwrap();
+                record.issue.status = "done".into();
+                record.issue.closed_at = Some(chrono::Utc::now());
+                record.sections.close_reason = Some("completed claim".into());
+                f.store().write_issue_atomic(&record).unwrap();
+            }
+            (Some(child), _) => f.terminal(child),
+            _ => {}
         }
-        "new_done_issue" => {
-            let id = ok(f.path(), &["-q", "issue", "create", "Done elsewhere"]);
-            close_issue(&id);
-            new_done = Some(id);
-        }
-        "sibling_close" => close_issue(sibling.as_deref().unwrap()),
-        _ => {}
+        f.terminal(&f.id);
     }
-    match (&child, case) {
-        // Both claims in one commit with the owner's.
-        (Some(child), "children_in_one_commit") => {
-            let mut record = f.store().load_issue_by_id(child).unwrap();
-            record.issue.status = "done".into();
-            record.issue.closed_at = Some(chrono::Utc::now());
-            record.sections.close_reason = Some("completed claim".into());
-            f.store().write_issue_atomic(&record).unwrap();
-        }
-        (Some(child), _) => f.terminal(child),
-        _ => {}
-    }
-    f.terminal(&f.id);
     let close = git(f.path(), &["rev-parse", "HEAD"]);
 
     let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
