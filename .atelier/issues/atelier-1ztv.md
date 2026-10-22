@@ -6,6 +6,9 @@ labels:
 - "land"
 - "merge"
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-1ztv
 priority: "P1"
 relationships:
   blocks: []
@@ -29,7 +32,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make land and merge agree on what review covers"
-updated_at: "2026-10-22T19:58:16.616973437+00:00"
+updated_at: "2026-10-22T20:32:23.468505851+00:00"
 ---
 
 ## Goal
