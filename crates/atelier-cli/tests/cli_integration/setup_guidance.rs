@@ -39,6 +39,40 @@ fn test_init_creates_atelier_directory() {
 }
 
 #[test]
+fn test_init_policy_defaults_the_merge_strategy_from_its_merge_checks() {
+    use atelier_workflow::MergeStrategy;
+    let dir = tempdir().unwrap();
+    run_atelier(dir.path(), &["init", "--slug", "atelier"]);
+    let path = dir.path().join(".atelier/workflow.yaml");
+    let starter = std::fs::read_to_string(&path).unwrap();
+    let strategy = || {
+        atelier_workflow::load(dir.path())
+            .unwrap()
+            .branch_policy
+            .merge_strategy
+    };
+    // No test check proves a merged tree, so the starter keeps fast-forward.
+    assert!(!starter.contains("merge_strategy"), "{starter}");
+    assert_eq!(strategy(), MergeStrategy::FastForwardOnly);
+    // A shell.check makes merge_commit the default; an explicit choice wins.
+    std::fs::write(
+        &path,
+        format!("{starter}merge_checks:\n  - shell.check: {{ command: 'true' }}\n"),
+    )
+    .unwrap();
+    assert_eq!(strategy(), MergeStrategy::MergeCommit);
+    std::fs::write(
+        &path,
+        format!("{starter}merge_checks:\n  - shell.check: {{ command: 'true' }}\n").replace(
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: fast_forward_only\n",
+        ),
+    )
+    .unwrap();
+    assert_eq!(strategy(), MergeStrategy::FastForwardOnly);
+}
+
+#[test]
 fn test_init_twice_is_idempotent() {
     let dir = tempdir().unwrap();
 
@@ -646,8 +680,8 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
     fs::write(
         &policy,
         fs::read_to_string(&policy).unwrap().replace(
-            "merge_strategy: fast_forward_only",
-            "merge_strategy: squash",
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: squash\n",
         ),
     )
     .unwrap();
@@ -994,8 +1028,8 @@ fn merged_pushed_owner_branch(dir: &Path, issue_id: &str) -> (tempfile::TempDir,
     fs::write(
         &policy,
         fs::read_to_string(&policy).unwrap().replace(
-            "merge_strategy: fast_forward_only",
-            "merge_strategy: squash",
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: squash\n",
         ),
     )
     .unwrap();

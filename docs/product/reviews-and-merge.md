@@ -112,7 +112,9 @@ cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
 Merge uses the base branch's committed policy and its
-`branch_policy.merge_strategy`. Under `fast_forward_only`, the default, merge
+`branch_policy.merge_strategy`; omitted, it is `merge_commit` when `merge_checks`
+include a `shell.check` and `fast_forward_only` otherwise (see [workflow
+configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
 fast-forwards only. If the base has moved on, merge it into the work branch,
 record fresh proof, and renew review only if the merge needed resolving (see
 approval freshness).
@@ -128,6 +130,22 @@ checks run in a temporary detached checkout of the merge commit instead of the
 work checkout. The gate output adds `merge.merged_tree`, which passes only when
 the shell checks passed there and names the tree, base commit, and commands,
 and the merge commit's message lists those commands.
+
+Each checkout lives in its own `atelier-merge-*` directory in the Git common
+directory, and the merge holds a lock on that directory's `lock` file while its
+checks run. Normal exit removes the checkout. If merge is killed during its
+checks, the operating system drops the lock, and the next merge removes every
+`atelier-merge-*` checkout whose lock is free before it makes its own; one a
+concurrent merge still holds stays (atelier-rcnk).
+
+Merged-tree checks do not reuse a build cache. Each run builds in the
+checkout's own target directory (the repository's `merge_checks` set
+`CARGO_TARGET_DIR=target`), which goes away with the checkout, so a check
+proves what the merged tree builds and never what an earlier tree left behind.
+A shared target directory is the one cache Atelier does not allow here: it has
+run another branch's binary in tests, and cargo's freshness checks cannot tell
+two checkouts apart. A policy that wants faster checks may put a compiler cache
+keyed by its inputs, such as `sccache`, in the check command itself.
 
 The gates read the records of the merge commit, which is what the base would
 get, so a blocker the base added or reopened holds the merge. Review and
@@ -145,8 +163,17 @@ depends on, merge refuses, naming the claim (`merge blocked: <mission>
 work.terminal`, atelier-m4gv). These claims are read at the merge commit, so a
 claim the base completed and reviewed after the fork point is judged against
 the base commits its reviews pin (atelier-goom). The merge commit reaches the
-base only when every gate passes and the base has not moved during the checks
-(`merge_snapshot_changed`). A lockfile that merges cleanly but is
+base only when every gate passes and the base has not moved during the checks.
+When the base moved during the checks only by commits that change nothing but
+issue, review and evidence records, merge reports `merge_base_moved` and runs
+the gates again against the new base, up to three attempts in all; a record the
+item itself depends on still refuses as `merge_base_records`. If any of those
+commits changes anything else, or the base was rewritten, merge refuses with
+`merge_snapshot_changed`, naming the first such commit and file. Under
+`fast_forward_only` merge cannot land on a base that moved at all, since it
+creates no merge commit; `merge_diverged` then says whether the base gained only
+records-only commits or names the code commit, and the recovery is still `git
+merge <base>` on the work branch (atelier-p189). A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
 as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and

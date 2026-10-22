@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Add atelier merge --sync to bring the base in, re-prove and report approval survival"
-updated_at: "2026-10-22T19:58:19.347066520+00:00"
+updated_at: "2026-10-22T20:56:06.266783361+00:00"
 ---
 
 ## Goal
