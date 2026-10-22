@@ -79,14 +79,50 @@ their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
 
 `status` lists the other local work branches in a `Branches` section (a
 `-----` section before Next), one line per owned branch:
-`<branch>  <id> <status>[, <merge>]  <title>`. The branch, two spaces, the
-owner's ID and status word marked ✓ or ⚠ as in any row, then for a done owner
-`, merged into <base>` or `, not merged` (the wording of the `↳` in-flight
-mark), then two spaces and the title. Facts about a branch go in the status
-part, before the free-text title. There is no priority, commit or active
-count. Branches with no started work or no tracker share one trailing line,
-`Unowned: <branch>, <branch>`. A branch whose records cannot be read is
+`<branch>  <id> <status>[, <merge>][, <readiness>][, <children>]  <title>`.
+The branch, two spaces, the owner's ID and status word marked ✓ or ⚠ as in
+any row, then for a done owner `, merged into <base>` or `, not merged` (the
+wording of the `↳` in-flight mark), then two spaces and the title. Facts
+about a branch go in the status part, before the free-text title. There is no
+priority, commit or active count.
+
+A done owner that is not merged is waiting to land, and its row adds its
+readiness against the current base (atelier-tciw):
+
+```
+task/atelier-cmhv  atelier-cmhv ✓ done, not merged, ✓ approved, behind 3, no proof at head, merges cleanly  Title
+task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind 3, proof at head, conflicts: Cargo.lock, src/lib.rs  Title
+```
+
+- The approval mark: `✓ approved` when `merge`'s `review.current` would pass
+  at the branch head, `⚠ approval stale` when an independent approval or
+  trivial exemption exists but later commits changed what it covers (see
+  [approval freshness](reviews-and-merge.md#approval-freshness)), and
+  `⚠ not approved` otherwise. The stale cause is not shown yet
+  (atelier-cisa).
+- `behind <n>`: base commits the branch does not have.
+- `proof at head` when every done item in the owner's scope, except
+  superseded ones, has fresh passing proof at the branch head; otherwise
+  `no proof at head`.
+- `merges cleanly`, or `conflicts: <path>, <path>` naming the files
+  `git merge-tree` cannot merge into the current base. It comes last, so its
+  commas end the part.
+
+When readiness cannot be read, the row ends its status part with
+`, readiness unknown: <reason>`. An owner that is not done and has children
+adds their activity, `, 1 of 3 children done, 1 active`, so a parent-owned
+branch does not read as idle.
+
+Branches with no started work or no tracker share one trailing line,
+`Unowned: <branch>, <branch>`. Each pair of waiting branches that change the
+same files since they left the base gets a line,
+`Shared files: <branch> and <branch> both touch <path>, <path>`, naming up to
+five paths and then `and <n> more`, so an orchestrator can land them back to
+back. A branch whose records cannot be read is
 `<branch>: unavailable — <reason>`.
+
+The view changes no Git state: it reads the merge with
+`git merge-tree --write-tree`, which moves no ref, index or checkout.
 
 ### Decision Rows
 
@@ -183,7 +219,9 @@ output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
 command's exit status is the pipe's last command's, so check `$?` before
 acting on it. Each command adopts the line in its own item: `land` prints it since
 atelier-ecah (a refusal counts one check, the one that stopped it, until
-atelier-bvl3 and atelier-9jr8 list every failed check), `merge` and `merge --check` in atelier-6rh7,
+atelier-bvl3 and atelier-9jr8 list every failed check), `merge --sync` since
+atelier-s2ei (`merge: passed`, or `merge: refused — 1 check (sync_conflict)`),
+`merge` and `merge --check` in atelier-6rh7,
 `evidence record` in atelier-3ekh, `check` in atelier-4t5l, `start` in
 atelier-501y, and `doctor` in atelier-rc8j.
 

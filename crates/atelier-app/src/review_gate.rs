@@ -196,15 +196,139 @@ pub fn approval_is_current_to(
     base: &str,
 ) -> Result<bool> {
     for (edge, merge) in work_edges(read, pin, end, base)? {
-        let allowed = match &merge {
-            Some(merge) => allowed_base_merge(read, &edge, merge, ids, pin)?,
-            None => allowed_edge(read, &edge, ids, pin)?,
-        };
-        if !allowed {
+        if !edge_allowed(read, &edge, merge.as_ref(), ids, pin)? {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+/// Whether one edge after `pin` keeps an approval of `ids` current: the one
+/// edge check `approval_is_current_to` and `approval_stale_edges` share.
+fn edge_allowed(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    merge: Option<&git::MergeResolution>,
+    ids: &BTreeSet<String>,
+    pin: &str,
+) -> Result<bool> {
+    match merge {
+        Some(merge) => allowed_base_merge(read, edge, merge, ids, pin),
+        None => allowed_edge(read, edge, ids, pin),
+    }
+}
+
+/// Every commit of the branch (not of the base) after `pin` that makes the approval stale at `end`, oldest
+/// first, each with the paths a new review has to look at; empty while the
+/// approval is current. It applies the rule of [`approval_is_current_to`] to
+/// each edge, so what `merge --sync` reports as needing review is exactly
+/// what makes the approval stale, but unlike that check it computes the
+/// paths. For a merge they are those it resolved by hand or edited beyond
+/// Git's own merge, plus in-scope records it changed; for any other commit,
+/// what it changed.
+pub fn approval_stale_edges(
+    read: &mut git::ReadContext<'_>,
+    pin: &str,
+    ids: &BTreeSet<String>,
+    end: &str,
+    base: &str,
+) -> Result<Vec<(String, Vec<std::path::PathBuf>)>> {
+    let mut stale = Vec::new();
+    // Edges come newest first.
+    for (edge, merge) in work_edges(read, pin, end, base)?.into_iter().rev() {
+        // A commit the base already holds is reviewed there; when a merge
+        // brings it in unaccepted, the merge is what to report.
+        if ancestor(read, &edge.commit, base)
+            || edge_allowed(read, &edge, merge.as_ref(), ids, pin)?
+        {
+            continue;
+        }
+        let paths = if edge.sides.is_empty() {
+            edge.paths
+        } else {
+            let mut paths = git::hand_resolved_paths(read.repo, &edge.commit)?;
+            paths.extend(
+                edge.paths
+                    .iter()
+                    .filter(|path| in_scope_issue(path, ids))
+                    .cloned(),
+            );
+            paths.sort();
+            paths.dedup();
+            if paths.is_empty() {
+                edge.paths
+            } else {
+                paths
+            }
+        };
+        stale.push((edge.commit, paths));
+    }
+    Ok(stale)
+}
+
+fn in_scope_issue(path: &Path, ids: &BTreeSet<String>) -> bool {
+    path.parent() == Some(Path::new(".atelier/issues"))
+        && path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|id| ids.contains(id))
+}
+
+/// Whether `record`, an approval or trivial exemption on a work branch that
+/// left the base at `fork_point`, is current at the branch's HEAD as
+/// `merge`'s `review.current` judges it. An approval from before the base
+/// was last merged in still counts; one from before the branch left the base
+/// does not.
+fn current_on_branch(
+    read: &mut git::ReadContext<'_>,
+    record: &ReviewRecord,
+    ids: &BTreeSet<String>,
+    fork_point: &str,
+) -> bool {
+    (ancestor(read, fork_point, &record.commit) || !ancestor(read, &record.commit, fork_point))
+        && approval_is_current(read, &record.commit, ids, fork_point).unwrap_or(false)
+}
+
+/// Where a work branch owner's review stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalState {
+    /// `merge`'s `review.current` would pass.
+    Current,
+    /// An independent approval or trivial exemption exists, but later
+    /// commits changed what it covers.
+    Stale,
+    /// No independent approval or trivial exemption of the owner.
+    Missing,
+}
+
+/// The owner's approval state on a work branch, judged as `merge`'s
+/// `review.current` judges it: `index` holds the branch's records and `read`
+/// is pinned at its tip, and `fork_point` is where it left the base. Status
+/// reads it for other branches without checking them out (atelier-tciw).
+pub fn approval_state(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    owner: &str,
+    fork_point: &str,
+) -> Result<ApprovalState> {
+    let ids = scope(index, owner)?;
+    let authors = author_identities(read, fork_point, &ids)?;
+    let mut state = ApprovalState::Missing;
+    for record in index.reviews().filter(|record| record.target == owner) {
+        let accepted_identity = match record.event {
+            ReviewEvent::TrivialExemption => true,
+            ReviewEvent::Approval => independent(record, &authors),
+            _ => false,
+        };
+        if !accepted_identity {
+            continue;
+        }
+        if current_on_branch(read, record, &ids, fork_point) {
+            return Ok(ApprovalState::Current);
+        }
+        state = ApprovalState::Stale;
+    }
+    Ok(state)
 }
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
@@ -819,11 +943,12 @@ fn evaluate_scope(
             // counts; one from before the branch left the base does not.
             accepted_identity
                 && ((historical && retained(read, base_commit, record))
-                    || ((global
-                        || ancestor(read, base_commit, &record.commit)
-                        || !ancestor(read, &record.commit, base_commit))
-                        && approval_is_current(read, &record.commit, &ids, base_commit)
-                            .unwrap_or(false)))
+                    || if global {
+                        approval_is_current(read, &record.commit, &ids, base_commit)
+                            .unwrap_or(false)
+                    } else {
+                        current_on_branch(read, record, &ids, base_commit)
+                    })
         })
         .collect::<Vec<_>>();
     let support = candidates

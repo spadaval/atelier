@@ -217,11 +217,17 @@ enum Commands {
         /// Issue, or child of the parent, that owns the checked-out work branch
         id: String,
         /// Check the merge gates only; merge nothing
-        #[arg(long)]
+        #[arg(long, conflicts_with = "sync")]
         check: bool,
         /// Print the gate results as JSON
-        #[arg(long)]
+        #[arg(long, conflicts_with = "sync")]
         json: bool,
+        /// Catch up first: merge the base into the work branch, rerun the
+        /// command-backed receipts that were current, commit their new
+        /// receipts, and report whether the approval survived. Integrates
+        /// nothing
+        #[arg(long)]
+        sync: bool,
     },
 
     /// One-shot graph bundle files
@@ -829,7 +835,10 @@ fn run() -> Result<()> {
             commands::start::run(&index, &state_dir, &id, base.as_deref(), take_over, quiet)
         }
 
-        Commands::Merge { id, check, json } => commands::merge::run(&id, check, json, quiet),
+        Commands::Merge { id, sync: true, .. } => commands::merge_sync::run(&id, quiet),
+        Commands::Merge {
+            id, check, json, ..
+        } => commands::merge::run(&id, check, json, quiet),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event| {

@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Print merge's report only from the attempt that returns"
-updated_at: "2026-10-22T20:59:30.576687438+00:00"
+updated_at: "2026-10-22T22:48:09.962504604+00:00"
 ---
 
 ## Goal

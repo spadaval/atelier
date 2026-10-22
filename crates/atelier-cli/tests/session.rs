@@ -4704,7 +4704,7 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     assert!(
         status
             .lines()
-            .any(|line| line.starts_with(&format!("{}  {} ✓ done, not merged  ", f.branch, f.id))),
+            .any(|line| line.starts_with(&format!("{}  {} ✓ done, not merged, ", f.branch, f.id))),
         "{status}"
     );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
@@ -4791,7 +4791,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("task/{finished}  {finished} ✓ done, not merged  Finished elsewhere"),
+        format!("task/{finished}  {finished} ✓ done, not merged, ⚠ not approved, behind 0, no proof at head, merges cleanly  Finished elsewhere"),
         format!("task/{stuck}  {stuck} ⚠ blocked  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
@@ -4802,6 +4802,173 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
         "todo"
     );
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+}
+/// The `Branches` row that starts with `<branch>  `.
+fn branch_row(status: &str, branch: &str) -> String {
+    status
+        .lines()
+        .find(|line| line.starts_with(&format!("{branch}  ")))
+        .unwrap_or_else(|| panic!("no row for {branch}: {status}"))
+        .to_owned()
+}
+fn prove(f: &Fixture, id: &str) {
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{id}"),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Proof",
+        ],
+    );
+    commit(f.path(), "proof");
+}
+fn approve(f: &Fixture, id: &str) {
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+}
+#[test]
+fn waiting_branches_show_merge_readiness_against_the_base() {
+    let f = Fixture::new();
+    prove(&f, &f.id);
+    f.terminal(&f.id);
+    approve(&f, &f.id);
+    git(f.path(), &["switch", "-q", "main"]);
+    // Clean: approved, proven at its head, and the base has not moved.
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        branch_row(&status, &f.branch),
+        format!(
+            "{}  {} ✓ done, not merged, ✓ approved, behind 0, proof at head, merges cleanly  Session owner",
+            f.branch, f.id
+        ),
+        "{status}"
+    );
+    assert!(!status.contains("Shared files:"), "{status}");
+
+    // Conflicted: the base adds the same file differently.
+    fs::write(f.path().join("code"), "base code\n").unwrap();
+    commit(f.path(), "base code");
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        branch_row(&status, &f.branch),
+        format!(
+            "{}  {} ✓ done, not merged, ✓ approved, behind 1, proof at head, conflicts: code  Session owner",
+            f.branch, f.id
+        ),
+        "{status}"
+    );
+
+    // Another waiting branch, unapproved and unproven, changes the same file.
+    let other = ok(f.path(), &["-q", "issue", "create", "Other work"]);
+    commit(f.path(), "plan other work");
+    ok(f.path(), &["start", &other]);
+    fs::write(f.path().join("code"), "other code\n").unwrap();
+    fs::write(f.path().join("other"), "other only\n").unwrap();
+    commit(f.path(), "other code");
+    f.terminal(&other);
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        branch_row(&status, &format!("task/{other}")),
+        format!(
+            "task/{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, no proof at head, merges cleanly  Other work"
+        ),
+        "{status}"
+    );
+    // Branches are listed in name order.
+    let mut pair = [f.branch.clone(), format!("task/{other}")];
+    pair.sort();
+    assert!(
+        status.lines().any(
+            |line| line == format!("Shared files: {} and {} both touch code", pair[0], pair[1])
+        ),
+        "{status}"
+    );
+
+    // Stale: code after the approval and the proof.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    fs::write(f.path().join("code"), "changed after review\n").unwrap();
+    commit(f.path(), "late change");
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        branch_row(&status, &f.branch),
+        format!(
+            "{}  {} ✓ done, not merged, ⚠ approval stale, behind 2, no proof at head, conflicts: code  Session owner",
+            f.branch, f.id
+        ),
+        "{status}"
+    );
+
+    // Bringing the base in cleanly keeps the approval current.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["restore", "--source", "HEAD~1", "code"]);
+    commit(f.path(), "undo late change");
+    approve(&f, &f.id);
+    git(f.path(), &["switch", "-q", "main"]);
+    git(f.path(), &["rm", "-q", "code"]);
+    git(f.path(), &["commit", "-qm", "drop base code"]);
+    let base = git(f.path(), &["rev-parse", "HEAD"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", &base]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let refs = git(f.path(), &["for-each-ref"]);
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        branch_row(&status, &f.branch).contains(", ✓ approved, behind 0, "),
+        "{status}"
+    );
+    // The view changes no Git state.
+    assert_eq!(git(f.path(), &["for-each-ref"]), refs);
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+}
+#[test]
+fn a_parent_owned_branch_shows_its_childrens_activity() {
+    let f = Fixture::new();
+    let done = ok(
+        f.path(),
+        &["-q", "issue", "create", "Done child", "--parent", &f.id],
+    );
+    let active = ok(
+        f.path(),
+        &["-q", "issue", "create", "Active child", "--parent", &f.id],
+    );
+    ok(
+        f.path(),
+        &["-q", "issue", "create", "Waiting child", "--parent", &f.id],
+    );
+    commit(f.path(), "plan children");
+    let mut record = f.store().load_issue_by_id(&active).unwrap();
+    record.issue.status = "in_progress".into();
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "start a child");
+    f.terminal(&done);
+    git(f.path(), &["switch", "-q", "main"]);
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        branch_row(&status, &f.branch),
+        format!(
+            "{}  {} in_progress, 1 of 3 children done, 1 active  Session owner",
+            f.branch, f.id
+        ),
+        "{status}"
+    );
 }
 #[test]
 fn unassigned_work_in_flight_on_another_branch_is_marked_past_the_ready_list() {

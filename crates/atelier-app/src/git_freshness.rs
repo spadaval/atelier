@@ -914,6 +914,39 @@ pub fn merge_resolution(repo: &Path, commit: &str) -> Result<Option<MergeResolut
     }))
 }
 
+/// The paths a two-parent merge commit differs from Git's own merge of its
+/// parents in, plus the paths that conflicted: what a person resolved or
+/// edited by hand. Empty for any other commit.
+pub fn hand_resolved_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
+    let line = String::from_utf8(git_output(
+        repo,
+        &["rev-list", "--parents", "-n", "1", commit],
+    )?)?;
+    let parts = line.split_whitespace().collect::<Vec<_>>();
+    let [_, first, second] = parts.as_slice() else {
+        return Ok(Vec::new());
+    };
+    let Some((merged, mut paths)) = merge_tree(repo, first, second)? else {
+        return Ok(Vec::new());
+    };
+    let differing = nul_paths(&git_output(
+        repo,
+        &[
+            "diff-tree",
+            "-r",
+            "--no-renames",
+            "--name-only",
+            "-z",
+            &merged,
+            &format!("{commit}^{{tree}}"),
+        ],
+    )?);
+    paths.extend(differing);
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
+}
+
 /// Git's own merge of two commits, with the repository's configuration and
 /// attributes: the merged tree and the sorted paths that conflicted. `None`
 /// when Git cannot compute it.
