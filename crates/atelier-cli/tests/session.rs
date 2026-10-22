@@ -34,6 +34,22 @@ fn cli(dir: &Path, args: &[&str]) -> (bool, String) {
         ),
     )
 }
+/// A `git` command that may fail, with its success and combined output.
+fn cli_git(dir: &Path, args: &[&str]) -> (bool, String) {
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+    )
+}
 fn ok(dir: &Path, args: &[&str]) -> String {
     let (pass, out) = cli(dir, args);
     assert!(pass, "atelier {args:?}: {out}");
@@ -2274,6 +2290,114 @@ fn root_review_introductions_cannot_be_hidden_by_log_configuration() {
     }
 }
 
+#[test]
+fn review_records_first_added_by_a_conflict_resolving_merge_are_found() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    fs::write(f.path().join("shared"), "base\n").unwrap();
+    commit(f.path(), "shared file");
+    git(f.path(), &["switch", "-qc", "side"]);
+    fs::write(f.path().join("shared"), "side\n").unwrap();
+    commit(f.path(), "side edit");
+    git(f.path(), &["switch", "main"]);
+    fs::write(f.path().join("shared"), "main\n").unwrap();
+    commit(f.path(), "main edit");
+    let (merged, _) = cli_git(f.path(), &["merge", "-q", "--no-edit", "side"]);
+    assert!(!merged, "the merge conflicts");
+    fs::write(f.path().join("shared"), "resolved\n").unwrap();
+    // The issue and both review events first appear in the merge itself.
+    let id = ok(f.path(), &["-q", "issue", "create", "Merged review work"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Concern raised while merging",
+        ],
+    );
+    let disposition = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "Independent dismissal recorded while merging",
+        ],
+    );
+    commit(f.path(), "resolve conflict with review records");
+    let path = format!(".atelier/reviews/{disposition}.md");
+    for parent in ["HEAD^1", "HEAD^2"] {
+        let (present, _) = cli_git(f.path(), &["cat-file", "-e", &format!("{parent}:{path}")]);
+        assert!(!present, "{parent} has {path}");
+    }
+    f.terminal(&id);
+    ok(f.path(), &["land"]);
+    ok(f.path(), &["doctor"]);
+}
+
+#[test]
+fn a_disposition_without_findable_history_fails_its_gate_by_name() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let id = ok(f.path(), &["-q", "issue", "create", "Untraceable review"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Concern",
+        ],
+    );
+    let disposition = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "Dismissal",
+        ],
+    );
+    // The review events are committed before their issue, so the history of
+    // the scope they review cannot be found.
+    git(f.path(), &["add", ".atelier/reviews"]);
+    git(
+        f.path(),
+        &["commit", "-qm", "review events before their issue"],
+    );
+    commit(f.path(), "the issue they review");
+    f.terminal(&id);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("findings.disposed")
+            && output.contains(&finding)
+            && output.contains(&format!("disposition {disposition} could not be traced")),
+        "{output}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn root_review_mode_must_be_regular_non_executable() {
@@ -3127,6 +3251,226 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
             && output.contains("land_base_unreviewed"),
         "{output}"
     );
+}
+/// One rule for what an approval covers (atelier-n642, atelier-uw4x): a
+/// close after approval that changes only the scope's own records, by status
+/// and Close Reason, stays covered under `merge` and under `land` on the
+/// base. Anything else after the approval, or an approval `merge` would not
+/// accept (atelier-n90q), leaves the claim uncovered under both: `merge`
+/// refuses before integrating, and after a forced integration `land` refuses.
+/// Each case runs under both merge strategies.
+#[test]
+fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
+    let covered_cases = [
+        "close_only",
+        "children_close_only",
+        "children_in_one_commit",
+        "reviewer_base_close_then_approve",
+        "reviewer_base_reapproved_after_code",
+    ];
+    let stale_cases = [
+        "with_code",
+        "with_goal",
+        "with_note",
+        "new_done_issue",
+        "sibling_close",
+        "self_approval",
+        "open_fix_now",
+    ];
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        for case in covered_cases.iter().chain(&stale_cases).copied() {
+            close_after_approval(strategy, case, covered_cases.contains(&case));
+        }
+    }
+}
+fn close_after_approval(strategy: &str, case: &str, covered: bool) {
+    let label = format!("{strategy}/{case}");
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    if strategy == "merge_commit" {
+        let path = f.path().join(".atelier/workflow.yaml");
+        let policy = fs::read_to_string(&path).unwrap().replace(
+            "merge_strategy: fast_forward_only",
+            "merge_strategy: merge_commit",
+        );
+        fs::write(
+            &path,
+            format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'true' }}\n"),
+        )
+        .unwrap();
+        commit(f.path(), "base merges with a merge commit");
+    }
+    // The reviewer authored work on the base that the branch merges in.
+    let reviewer_base = case.starts_with("reviewer_base");
+    if reviewer_base {
+        fs::write(f.path().join("base_work"), "reviewed elsewhere\n").unwrap();
+        git(f.path(), &["add", "."]);
+        git(
+            f.path(),
+            &[
+                "-c",
+                "user.name=Reviewer",
+                "-c",
+                "user.email=reviewer@example.test",
+                "commit",
+                "-qm",
+                "base work by the reviewer",
+            ],
+        );
+    }
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    if reviewer_base {
+        git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    }
+    let approve = |identity: &str| {
+        ok(
+            f.path(),
+            &["review", "approve", &f.id, "--identity", identity, "Review"],
+        );
+        commit(f.path(), &format!("approval by {identity}"));
+    };
+    let child = case.starts_with("children").then(|| {
+        let child = ok(
+            f.path(),
+            &["-q", "issue", "create", "Child", "--parent", &f.id],
+        );
+        commit(f.path(), "plan a child");
+        child
+    });
+    let sibling = (case == "sibling_close").then(|| {
+        let sibling = ok(f.path(), &["-q", "issue", "create", "Sibling"]);
+        commit(f.path(), "plan a sibling outside the scope");
+        sibling
+    });
+    if case == "open_fix_now" {
+        ok(
+            f.path(),
+            &[
+                "review",
+                "finding",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Needs a fix",
+            ],
+        );
+        commit(f.path(), "finding left open");
+    }
+    let mut new_done = None;
+    if case == "reviewer_base_close_then_approve" {
+        f.terminal(&f.id);
+        approve("Reviewer");
+    } else if case == "reviewer_base_reapproved_after_code" {
+        approve("Lead");
+        f.terminal(&f.id);
+        fs::write(f.path().join("code"), "changed after the close\n").unwrap();
+        commit(f.path(), "code after the close");
+        approve("Reviewer");
+    } else {
+        let reviewer = if case == "self_approval" {
+            "Author"
+        } else {
+            "Reviewer"
+        };
+        approve(reviewer);
+        let close_issue = |id: &str| {
+            ok(f.path(), &["issue", "transition", id, "start"]);
+            ok(
+                f.path(),
+                &["issue", "transition", id, "close", "--reason", "done too"],
+            );
+        };
+        match case {
+            "with_code" => fs::write(f.path().join("code"), "changed while closing\n").unwrap(),
+            "with_goal" => {
+                let path = f.path().join(format!(".atelier/issues/{}.md", f.id));
+                let text = fs::read_to_string(&path).unwrap();
+                fs::write(&path, text.replace("Ship session", "Ship more session")).unwrap();
+            }
+            "with_note" => {
+                ok(f.path(), &["issue", "note", &f.id, "A note in the close"]);
+            }
+            "new_done_issue" => {
+                let id = ok(f.path(), &["-q", "issue", "create", "Done elsewhere"]);
+                close_issue(&id);
+                new_done = Some(id);
+            }
+            "sibling_close" => close_issue(sibling.as_deref().unwrap()),
+            _ => {}
+        }
+        match (&child, case) {
+            // Both claims in one commit with the owner's.
+            (Some(child), "children_in_one_commit") => {
+                let mut record = f.store().load_issue_by_id(child).unwrap();
+                record.issue.status = "done".into();
+                record.issue.closed_at = Some(chrono::Utc::now());
+                record.sections.close_reason = Some("completed claim".into());
+                f.store().write_issue_atomic(&record).unwrap();
+            }
+            (Some(child), _) => f.terminal(child),
+            _ => {}
+        }
+        f.terminal(&f.id);
+    }
+    let close = git(f.path(), &["rev-parse", "HEAD"]);
+
+    let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
+    if covered {
+        assert!(
+            pass && output.contains("pass claims.reviewed"),
+            "{label}: {output}"
+        );
+        ok(f.path(), &["merge", &f.id]);
+        git(f.path(), &["switch", "-q", "main"]);
+    } else {
+        assert!(!pass, "{label}: {output}");
+        if let Some(id) = &new_done {
+            // Approval stays current (a new issue outside the scope is
+            // planning), yet land would refuse the claim, so merge does.
+            assert!(
+                output.contains("pass review.current")
+                    && output.contains(&format!(
+                        "FAIL claims.reviewed: commit {} marks {id} done",
+                        &close[..8]
+                    ))
+                    && output.contains("close it on its own reviewed branch"),
+                "{label}: {output}"
+            );
+        }
+        // Integrate past the gate, so land on the base judges it too.
+        git(f.path(), &["switch", "-q", "main"]);
+        if strategy == "merge_commit" {
+            git(
+                f.path(),
+                &["merge", "-q", "--no-ff", "--no-edit", &f.branch],
+            );
+        } else {
+            git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
+        }
+    }
+    let (pass, output) = cli(f.path(), &["land"]);
+    if covered {
+        assert!(pass, "{label}: {output}");
+    } else {
+        let claimed = new_done.as_deref().unwrap_or("");
+        assert!(
+            !pass
+                && output.contains(&format!(
+                    "land_base_done_claim: commit {} on main marks {claimed}",
+                    &close[..8]
+                )),
+            "{label}: {output}"
+        );
+    }
 }
 #[test]
 fn superseding_a_child_of_a_blocked_parent_lands() {

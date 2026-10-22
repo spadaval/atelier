@@ -1,6 +1,6 @@
 //! Pinned, read-only branch snapshots shared by start and orientation.
 use anyhow::{bail, Context, Result};
-use atelier_app::{git_freshness, record_index::RecordIndex, workflow_policy};
+use atelier_app::{git_freshness, record_index::RecordIndex, review_gate, workflow_policy};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
@@ -148,52 +148,13 @@ pub(crate) fn check_base_commits(
             "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
         ));
     };
-    let mut covered = BTreeSet::new();
-    for review in index.reviews().filter(|review| {
-        matches!(
-            review.event,
-            atelier_core::ReviewEvent::Approval | atelier_core::ReviewEvent::TrivialExemption
-        )
-    }) {
-        let Some(owner) = index.get_issue(&review.target) else {
-            continue;
-        };
-        if !owner
-            .workflow_branch
-            .as_ref()
-            .is_some_and(|branch| branch.branch_base == *base)
-            || policy.status_category(&owner.status) != Some("done")
-            || resolve(repo, &review.commit).is_err()
-        {
-            continue;
-        }
-        let path = format!(".atelier/issues/{}.md", owner.id);
-        // An owner already done upstream was integrated before; a review
-        // recorded for it now covers nothing new.
-        let pushed_done = git_freshness::blob(repo, &upstream, Path::new(&path))
-            .ok()
-            .and_then(|blob| {
-                atelier_records::parse_issue_record(
-                    &blob,
-                    Path::new(&path).strip_prefix(".atelier").ok()?,
-                )
-                .ok()
-            })
-            .is_some_and(|record| policy.status_category(&record.issue.status) == Some("done"));
-        if pushed_done {
-            continue;
-        }
-        let range = [
-            "rev-list",
-            review.commit.as_str(),
-            "--not",
-            upstream.as_str(),
-        ];
-        covered.extend(text(repo, &range)?.lines().map(str::to_owned));
-    }
+    // History reads need the tip as a full commit ID.
+    let tip = &resolve(repo, tip)?;
+    let mut read = git_freshness::ReadContext::from_head(repo, tip.clone());
+    let reviews = BaseReviews::new(repo, index, policy, &mut read, &upstream)?;
     let unreviewed = text(repo, &["rev-list", tip, "--not", &upstream])?
         .lines()
-        .filter(|commit| !covered.contains(*commit))
+        .filter(|commit| !reviews.covered.contains(*commit))
         .map(str::to_owned)
         .collect::<Vec<_>>();
     let normalized = |path: &Path| {
@@ -257,39 +218,12 @@ pub(crate) fn check_base_commits(
             continue;
         }
         checked += 1;
-        // A clean merge, such as merging the base into a work branch,
-        // introduces nothing beyond its parents (atelier-n7g1).
-        if git_freshness::clean_merge(repo, commit)? {
+        let Some(changed) = introduced_paths(repo, commit)? else {
             continue;
-        }
-        // A merge (such as a non-rebasing pull) introduces only the paths that
-        // differ from every parent.
-        let changed = text(
-            repo,
-            &[
-                "diff-tree",
-                "-r",
-                "-c",
-                "--no-commit-id",
-                "--name-only",
-                "-z",
-                commit,
-            ],
-        )?;
-        let changed = if text(repo, &["rev-list", "--parents", "-n1", commit])?
-            .split(' ')
-            .count()
-            > 2
-        {
-            changed
-                .split('\0')
-                .filter(|path| !path.is_empty())
-                .map(std::path::PathBuf::from)
-                .collect::<Vec<_>>()
-        } else {
-            git_freshness::changed_paths(repo, &parent, commit)?
         };
-        if let Some(id) = base_done_claim(repo, policy, commit, tip, &upstream, &changed)? {
+        let unreviewed_claim =
+            reviews.unreviewed_claim(repo, &mut read, policy, commit, tip, &upstream, &changed)?;
+        if let Some(id) = unreviewed_claim {
             bail!(
                 "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
                 &commit[..8.min(commit.len())],
@@ -324,19 +258,188 @@ pub(crate) fn check_base_commits(
     })
 }
 
-/// The first work item `commit` takes to done, compared with every parent,
-/// that is still done at `tip` (a later revert withdraws the claim).
+/// The approvals and trivial exemptions that cover commits not yet on a
+/// trusted point of the base (its upstream for `land`, its head for
+/// `merge`): those of completed owners that branched from this base and are
+/// not done at the trusted point, that `merge` would accept (atelier-n90q).
+struct BaseReviews {
+    /// Commits a covering pin contains.
+    covered: BTreeSet<String>,
+    /// Each covering pin with its approved scope, for done claims after it.
+    approvals: Vec<(String, BTreeSet<String>)>,
+}
+
+impl BaseReviews {
+    fn new(
+        repo: &Path,
+        index: &RecordIndex,
+        policy: &atelier_workflow::WorkflowPolicy,
+        read: &mut git_freshness::ReadContext<'_>,
+        trusted: &str,
+    ) -> Result<Self> {
+        let base = &policy.branch_policy.base_branch;
+        let mut reviews = Self {
+            covered: BTreeSet::new(),
+            approvals: Vec::new(),
+        };
+        for review in index.reviews().filter(|review| {
+            matches!(
+                review.event,
+                atelier_core::ReviewEvent::Approval | atelier_core::ReviewEvent::TrivialExemption
+            )
+        }) {
+            let Some(owner) = index.get_issue(&review.target) else {
+                continue;
+            };
+            if !owner
+                .workflow_branch
+                .as_ref()
+                .is_some_and(|branch| branch.branch_base == *base)
+                || policy.status_category(&owner.status) != Some("done")
+                || resolve(repo, &review.commit).is_err()
+            {
+                continue;
+            }
+            let path = format!(".atelier/issues/{}.md", owner.id);
+            // An owner already done at the trusted point was integrated
+            // before; a review recorded for it now covers nothing new.
+            let pushed_done = git_freshness::blob(repo, trusted, Path::new(&path))
+                .ok()
+                .and_then(|blob| {
+                    atelier_records::parse_issue_record(
+                        &blob,
+                        Path::new(&path).strip_prefix(".atelier").ok()?,
+                    )
+                    .ok()
+                })
+                .is_some_and(|record| policy.status_category(&record.issue.status) == Some("done"));
+            if pushed_done || !review_gate::approval_accepted(index, read, review)? {
+                continue;
+            }
+            let range = ["rev-list", review.commit.as_str(), "--not", trusted];
+            reviews
+                .covered
+                .extend(text(repo, &range)?.lines().map(str::to_owned));
+            reviews
+                .approvals
+                .push((review.commit.clone(), review_gate::scope(index, &owner.id)?));
+        }
+        Ok(reviews)
+    }
+
+    /// The first work item `commit` takes to done that no covering approval
+    /// reviewed. A claim after a pin is reviewed while that approval, for a
+    /// scope holding the item, is still current at the claim: the rule
+    /// `merge`'s review.current applies (atelier-n642, atelier-uw4x). The tip
+    /// stands for the base, so a clean merge of base commits keeps it current.
+    #[allow(clippy::too_many_arguments)]
+    fn unreviewed_claim(
+        &self,
+        repo: &Path,
+        read: &mut git_freshness::ReadContext<'_>,
+        policy: &atelier_workflow::WorkflowPolicy,
+        commit: &str,
+        tip: &str,
+        trusted: &str,
+        changed: &[std::path::PathBuf],
+    ) -> Result<Option<String>> {
+        'claims: for id in base_done_claims(repo, policy, commit, tip, trusted, changed)? {
+            for (pin, ids) in self.approvals.iter().filter(|(_, ids)| ids.contains(&id)) {
+                let follows =
+                    git_freshness::git_output(repo, &["merge-base", "--is-ancestor", pin, commit])
+                        .is_ok();
+                if follows && review_gate::approval_is_current_to(read, pin, ids, commit, tip)? {
+                    continue 'claims;
+                }
+            }
+            return Ok(Some(id));
+        }
+        Ok(None)
+    }
+}
+
+/// The paths `commit` introduces, or `None` for a clean merge, which
+/// introduces nothing beyond its parents (atelier-n7g1). A merge (such as a
+/// non-rebasing pull) introduces only the paths that differ from every parent.
+fn introduced_paths(repo: &Path, commit: &str) -> Result<Option<Vec<std::path::PathBuf>>> {
+    if git_freshness::clean_merge(repo, commit)? {
+        return Ok(None);
+    }
+    if text(repo, &["rev-list", "--parents", "-n1", commit])?
+        .split(' ')
+        .count()
+        > 2
+    {
+        let changed = text(
+            repo,
+            &[
+                "diff-tree",
+                "-r",
+                "-c",
+                "--no-commit-id",
+                "--name-only",
+                "-z",
+                commit,
+            ],
+        )?;
+        return Ok(Some(
+            changed
+                .split('\0')
+                .filter(|path| !path.is_empty())
+                .map(std::path::PathBuf::from)
+                .collect(),
+        ));
+    }
+    Ok(Some(git_freshness::changed_paths(
+        repo,
+        &format!("{commit}^"),
+        commit,
+    )?))
+}
+
+/// The first done claim among `tip`'s commits not on `trusted` that no
+/// approval `merge` accepts covers, with its commit: what `land` on the base
+/// would refuse once `tip` is there. `merge` asks this of the commit it would
+/// put on the base, so it refuses before integrating (atelier-uw4x).
+pub(crate) fn first_unreviewed_claim(
+    repo: &Path,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+    tip: &str,
+    trusted: &str,
+) -> Result<Option<(String, String)>> {
+    let mut read = git_freshness::ReadContext::from_head(repo, tip.to_owned());
+    let reviews = BaseReviews::new(repo, index, policy, &mut read, trusted)?;
+    for commit in text(repo, &["rev-list", tip, "--not", trusted])?.lines() {
+        if reviews.covered.contains(commit) {
+            continue;
+        }
+        let Some(changed) = introduced_paths(repo, commit)? else {
+            continue;
+        };
+        if let Some(id) =
+            reviews.unreviewed_claim(repo, &mut read, policy, commit, tip, trusted, &changed)?
+        {
+            return Ok(Some((commit.to_owned(), id)));
+        }
+    }
+    Ok(None)
+}
+
+/// The work items `commit` takes to done, compared with every parent, that
+/// are still done at `tip` (a later revert withdraws the claim).
 /// Missions close and decisions are decided on the base as planning, and
 /// superseding retires work without a claim; anything else reaches done
 /// through a reviewed work branch (atelier-fj1t).
-fn base_done_claim(
+fn base_done_claims(
     repo: &Path,
     policy: &atelier_workflow::WorkflowPolicy,
     commit: &str,
     tip: &str,
     upstream: &str,
     changed: &[std::path::PathBuf],
-) -> Result<Option<String>> {
+) -> Result<Vec<String>> {
+    let mut claims = Vec::new();
     let parents = text(repo, &["rev-list", "--parents", "-n1", commit])?
         .split(' ')
         .skip(1)
@@ -407,13 +510,14 @@ fn base_done_claim(
         if new_claim
             && status_at(tip, path).is_some_and(|now| now.is_some_and(|(_, now)| now == status))
         {
-            return Ok(path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .map(str::to_owned));
+            claims.extend(
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(str::to_owned),
+            );
         }
     }
-    Ok(None)
+    Ok(claims)
 }
 
 /// A done claim on a work branch is not base completion until the base
