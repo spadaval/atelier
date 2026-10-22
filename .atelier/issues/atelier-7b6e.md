@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Batch the per-review history walks in land with exact answers"
-updated_at: "2026-10-16T23:53:46.527253791+00:00"
+updated_at: "2026-10-22T20:52:15.866080420+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,4 @@ Path-limited history simplification and date ordering depend on the start commit
 ## Notes
 
 - 2026-10-16 [note] 2026-10-16: atelier-37uq made land check only claims a change since a trusted point can affect, so land on this repository dropped from about 5.8 s to 0.33 s. These walks now cost mainly atelier doctor (about 4.5 s), which runs on demand, so this is no longer urgent.
+- 2026-10-22 [note] From atelier-as7i: two history queries share the merge blind spot's neighbours. (1) introduced_query in crates/atelier-app/src/review_gate.rs uses --diff-filter=A, so a review record added in a commit that deletes a similar file is shown as a rename (R), not an add, and gets no introducing commit; adding --no-renames would fix it. (2) append_only_history's first-review query (same file, 'log --root --reverse --diff-filter=A ... -- .atelier/reviews/') has no --diff-merges=first-parent, so a repo whose first review record appears in a conflict-resolving merge would find no first commit, or a later one; it needs the same --diff-merges=first-parent --no-patch (and --no-renames) as introduced_query. Cover both in the merge parity tests.
