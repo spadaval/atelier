@@ -37,9 +37,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Validate atelier-k8h8 acceptance"
-updated_at: "2026-10-22T19:58:08.033898524+00:00"
+updated_at: "2026-10-22T23:52:29.130313625+00:00"
 ---
 
 ## Goal
