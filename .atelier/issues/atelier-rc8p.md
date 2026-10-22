@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T21:36:36.611174831+00:00"
+status: "done"
 title: "Add atelier review request to generate the reviewer brief"
-updated_at: "2026-10-22T21:35:09.857437426+00:00"
+updated_at: "2026-10-22T21:36:36.611174831+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,19 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
   Rejected: Always the whole branch (hides what changed since an earlier review)
 - 2026-10-22 [decision] Quiet output of review request is the range <from>..<head> in full commits
   Reason: The brief itself is the human and agent output; scripts need the range, and the quiet-token table requires every leaf command to document one.
+
+## Close Reason
+
+`atelier review request <id>` prints a dense Markdown reviewer brief from records, Git and policy: Goal and Done when (and each child's), the range to review (since the last review or approval, plus the whole branch, and the full head to pin to), findings with latest dispositions, earlier reviews, recorded proof, working rules, and the finding and approval commands. A rendering test pins the exact text, and four CLI tests cover content, range, rules file and the unstarted refusal. The Agent Factory orchestrate procedure names it as the way to build the reviewer brief.
+
+### Deviations
+The working rules come partly from a new `[review] rules_file` key in `.atelier/config.toml` (not in the item), because host-specific rules cannot live in code. This repository's config.toml is not changed, so the host rules in the orchestrator's reviewer-rules.md are not yet in the brief (see Open items). `--from` and `--identity` options were added.
+
+### Decisions
+Four decision notes on atelier-rc8p: where rules come from, leaving this repo's config untouched, omitting author notes and the range choice, and the quiet token.
+
+### Surprises
+config.toml rejects unknown tables, so a repository that sets `[review]` cannot be read by an older installed atelier. `quiet_tokens` requires a documented token and a refusal for every new command.
+
+### Open items
+After this merges and atelier is reinstalled, add `[review] rules_file` to config.toml pointing at a committed file with the host rules (scratch TMPDIR, `-j 4`, no /tmp); not filed as an issue because it is a one-line follow-through for the orchestrator or human. The skill edit is one bullet in procedures/orchestrate.md.
