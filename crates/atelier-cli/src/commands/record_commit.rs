@@ -63,8 +63,21 @@ impl RecordCommit {
             _ => return Ok(Self { active: None }),
         };
         let layout = StorageLayout::discover()?;
-        let pending = read_pending(&layout)?;
-        let staged = staged_paths(layout.repo_root())?;
+        let mut pending = read_pending(&layout)?;
+        let root = layout.repo_root();
+        let staged = staged_paths(root)?;
+        // A group survives only while its records are still staged: a hand
+        // commit, reset or branch switch ends it.
+        pending.paths.retain(|path| staged.contains(path));
+        if pending.paths.is_empty() {
+            pending.labels.clear();
+        }
+        let unstaged = git_paths(root, &["diff", "--name-only", "-z", "--no-renames"])?;
+        if let Some(path) = pending.paths.iter().find(|path| unstaged.contains(path)) {
+            bail!(
+                "record_commit_pending_modified: {path} was staged by an earlier `--stage-records` but has unstaged changes now; stage them with `git add {path}` or undo them with `git restore {path}`, then rerun. Nothing was written"
+            );
+        }
         let others: Vec<&String> = staged
             .iter()
             .filter(|path| !pending.paths.contains(path))
@@ -111,11 +124,13 @@ impl RecordCommit {
             Ok(relative.to_string_lossy().into_owned())
         };
         let mut ids = Vec::new();
+        let mut own = Vec::new();
         for path in &written {
             let path_text = relative(path)?;
             if !pending.paths.contains(&path_text) {
-                pending.paths.push(path_text);
+                pending.paths.push(path_text.clone());
             }
+            own.push(path_text);
             if let Some(stem) = path.file_stem() {
                 ids.push(stem.to_string_lossy().into_owned());
             }
@@ -129,11 +144,14 @@ impl RecordCommit {
             }
             return Ok(());
         }
+        // Remember the group before touching the index, and forget it only
+        // once the commit has succeeded, so an interruption or a rejecting
+        // hook leaves a state the next command understands.
+        write_pending(&layout, &pending)?;
         let mut add = vec!["add", "--"];
-        add.extend(pending.paths.iter().map(String::as_str));
+        add.extend(own.iter().map(String::as_str));
         git_output(root, &add)?;
         if mode == Mode::Stage {
-            write_pending(&layout, &pending)?;
             if !quiet {
                 println!(
                     "Staged {} for the next --commit-records.",
@@ -210,10 +228,14 @@ fn clear_pending(layout: &StorageLayout) -> Result<()> {
 
 /// Every path with a staged change, relative to the repository root.
 fn staged_paths(root: &Path) -> Result<Vec<String>> {
-    let output = git_output(
+    git_paths(
         root,
         &["diff", "--cached", "--name-only", "-z", "--no-renames"],
-    )?;
+    )
+}
+
+fn git_paths(root: &Path, args: &[&str]) -> Result<Vec<String>> {
+    let output = git_output(root, args)?;
     Ok(output
         .split(|byte| *byte == 0)
         .filter(|name| !name.is_empty())

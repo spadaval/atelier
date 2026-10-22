@@ -124,8 +124,18 @@ fn gather(
     let base_head = resolve(repo, &format!("refs/heads/{}", branch.branch_base))
         .with_context(|| format!("base branch {} not found", branch.branch_base))?;
     let fork = text(repo, &["merge-base", &base_head, &head])?;
+    // Only the branch's own commits: those the base has merged in are not.
     let count = |from: &str| -> Result<usize> {
-        Ok(text(repo, &["rev-list", "--count", &format!("{from}..{head}")])?.parse()?)
+        Ok(text(
+            repo,
+            &[
+                "rev-list",
+                "--count",
+                &format!("{from}..{head}"),
+                &format!("^{base_head}"),
+            ],
+        )?
+        .parse()?)
     };
     let whole = Range {
         commits: count(&fork)?,
@@ -386,12 +396,11 @@ pub fn render(facts: &Facts) -> String {
         facts.base
     ));
     out.push_str(&format!(
-        "- Head, to pin records to: `{}`\n- Inspect: `git log --oneline {}..{}`, `git diff {}..{}`\n",
+        "- Head, to pin records to: `{}`\n- Inspect: `git log -p --reverse {}..{} ^{}`, the branch's own commits without ones merged from the base\n",
         facts.head,
         short(&facts.review_range().from),
         short(&facts.head),
-        short(&facts.review_range().from),
-        short(&facts.head),
+        facts.base,
     ));
     if facts.uncommitted > 0 {
         out.push_str(&format!(
@@ -486,7 +495,7 @@ pub fn render(facts: &Facts) -> String {
 
     let who = facts.identity.as_deref().unwrap_or("<your identity>");
     out.push_str(&format!(
-        "\n## Record\n\nPin every record to the head. `--commit-records` commits only the record it writes.\n\n```\natelier review finding {id} --identity \"{who}\" --commit {head} --recommendation {rec} --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"\natelier review approve {id} --identity \"{who}\" --commit {head} --commit-records \"<what you checked>\"\n```\n",
+        "\n## Record\n\nPin every record to the head. `--commit-records` commits the record it writes, with any records staged earlier by `--stage-records`.\n\n```\natelier review finding {id} --identity \"{who}\" --commit {head} --recommendation {rec} --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"\natelier review approve {id} --identity \"{who}\" --commit {head} --commit-records \"<what you checked>\"\n```\n",
         id = owner.id,
         head = facts.head,
         rec = [
@@ -591,7 +600,7 @@ You are an independent reviewer. You did not write this code. Judge it against t
 - Review: `11111111..22222222` (1 commit, since the last approval by Rae (atelier-rev1))
 - Whole branch: `00000000..22222222` (4 commits) on `feature/atelier-own1`, forked from `main`
 - Head, to pin records to: `2222222222222222222222222222222222222222`
-- Inspect: `git log --oneline 11111111..22222222`, `git diff 11111111..22222222`
+- Inspect: `git log -p --reverse 11111111..22222222 ^main`, the branch's own commits without ones merged from the base
 
 ## Goal
 
@@ -634,7 +643,7 @@ Use the repo's scratch directory.
 
 ## Record
 
-Pin every record to the head. `--commit-records` commits only the record it writes.
+Pin every record to the head. `--commit-records` commits the record it writes, with any records staged earlier by `--stage-records`.
 
 ```
 atelier review finding atelier-own1 --identity \"Independent reviewer\" --commit 2222222222222222222222222222222222222222 --recommendation fix_now|defer|no_action --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"

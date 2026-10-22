@@ -266,3 +266,38 @@ fn an_item_with_no_branch_has_nothing_to_review() {
         "{stderr}"
     );
 }
+
+#[test]
+fn merging_the_base_into_the_branch_does_not_grow_the_review_range() {
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path();
+    let id = owner(dir);
+    ok(
+        dir,
+        &[
+            "review",
+            "record",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Read the diff",
+        ],
+    );
+    commit_all(dir, "record review");
+    let branch = git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    git(dir, &["checkout", "-q", "main"]);
+    for n in 0..3 {
+        fs::write(dir.join(format!("base{n}.txt")), "base\n").unwrap();
+        commit_all(dir, &format!("base change {n}"));
+    }
+    git(dir, &["checkout", "-q", &branch]);
+    git(dir, &["merge", "-q", "--no-edit", "main"]);
+
+    let brief = ok(dir, &["review", "request", &id]);
+    // The record commit and the merge are the branch's own; the base's three are not.
+    assert!(
+        brief.contains("(2 commits, since the last review"),
+        "{brief}"
+    );
+    assert!(brief.contains("^main`"), "{brief}");
+}

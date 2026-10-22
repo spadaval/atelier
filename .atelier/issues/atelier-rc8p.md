@@ -19,7 +19,7 @@ schema_version: 2
 closed_at: "2026-10-22T21:36:36.611174831+00:00"
 status: "done"
 title: "Add atelier review request to generate the reviewer brief"
-updated_at: "2026-10-22T21:36:36.611174831+00:00"
+updated_at: "2026-10-22T21:46:45.783348429+00:00"
 ---
 
 ## Goal
@@ -47,6 +47,9 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
   Rejected: Always the whole branch (hides what changed since an earlier review)
 - 2026-10-22 [decision] Quiet output of review request is the range <from>..<head> in full commits
   Reason: The brief itself is the human and agent output; scripts need the range, and the quiet-token table requires every leaf command to document one.
+- 2026-10-22 [decision] The review range excludes commits reachable from the base (rev-list ^<base>) rather than following first-parent history
+  Reason: Finding atelier-bddp: after the branch merges the base, last-review..HEAD included the base's commits. Excluding base-reachable commits keeps the branch's own merge commits countable and works with any merge pattern; first-parent would hide commits brought in by merging side branches.
+  Rejected: first-parent history
 
 ## Close Reason
 

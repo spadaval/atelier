@@ -20,7 +20,7 @@ schema_version: 2
 closed_at: "2026-10-22T21:15:33.114582788+00:00"
 status: "done"
 title: "Commit a step's records together instead of one commit per record"
-updated_at: "2026-10-22T21:15:33.114582788+00:00"
+updated_at: "2026-10-22T21:46:45.444054610+00:00"
 ---
 
 ## Goal
@@ -48,6 +48,8 @@ Whether auto-commit belongs in atelier or in the Agent Factory skill's guidance.
   Rejected: Deriving the records from git status (would sweep in unrelated dirty records)
 - 2026-10-22 [decision] The records to commit come from the record store's write log, not from git status
   Reason: RecordStore::write_atomic is the single funnel for every record write, so logging its paths gives exactly what the command wrote, independent of other staged or unstaged work.
+- 2026-10-22 [decision] A staged group lives only while its records are still staged and clean; each command git-adds only the records it wrote; the group file is written before add/commit and cleared after the commit succeeds
+  Reason: Review findings atelier-t7ce and atelier-mdcm: a stale file after a hand commit swept unstaged edits into the next commit, and a failed commit lost the group. Dropping unstaged-or-unstaged-free paths on begin and ordering the file writes around git makes both safe.
 
 ## Close Reason
 

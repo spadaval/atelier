@@ -237,3 +237,85 @@ fn a_review_step_and_the_close_each_commit_their_own_records() {
         format!("Record close {id}")
     );
 }
+
+#[test]
+fn a_hand_commit_ends_the_staged_group_and_unstaged_edits_are_not_swept_in() {
+    let (dir, id) = fixture();
+    let dir = dir.path();
+    let target = format!("issue/{id}");
+    ok(dir, &evidence_args(&target, "First", "--stage-records"));
+    let first = git(dir, &["diff", "--cached", "--name-only"]);
+    git(dir, &["commit", "-qm", "by hand"]);
+    // WIP on the committed record must stay out of the next record commit.
+    let path = dir.join(&first);
+    fs::write(
+        &path,
+        format!("{}\nwip\n", fs::read_to_string(&path).unwrap()),
+    )
+    .unwrap();
+
+    ok(dir, &evidence_args(&target, "Second", "--commit-records"));
+
+    let changed = changed_in_head(dir);
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert!(!changed.contains(&first));
+    assert!(
+        git(dir, &["log", "-1", "--format=%s"])
+            .matches("evidence")
+            .count()
+            == 1
+    );
+    assert_eq!(git(dir, &["diff", "--name-only"]), first);
+}
+
+#[test]
+fn an_unstaged_edit_to_a_staged_group_record_refuses() {
+    let (dir, id) = fixture();
+    let dir = dir.path();
+    let target = format!("issue/{id}");
+    ok(dir, &evidence_args(&target, "First", "--stage-records"));
+    let first = git(dir, &["diff", "--cached", "--name-only"]);
+    let path = dir.join(&first);
+    fs::write(
+        &path,
+        format!("{}\nwip\n", fs::read_to_string(&path).unwrap()),
+    )
+    .unwrap();
+    let before = commit_count(dir);
+
+    let (success, _, stderr) =
+        run_atelier_raw(dir, &evidence_args(&target, "Second", "--commit-records"));
+
+    assert!(
+        !success && stderr.contains("record_commit_pending_modified"),
+        "{stderr}"
+    );
+    assert_eq!(commit_count(dir), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rejecting_hook_leaves_the_group_for_the_next_commit() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, id) = fixture();
+    let dir = dir.path();
+    let target = format!("issue/{id}");
+    ok(dir, &evidence_args(&target, "First", "--stage-records"));
+    let hook = dir.join(".git/hooks/pre-commit");
+    fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    let before = commit_count(dir);
+
+    let (success, _, _) =
+        run_atelier_raw(dir, &evidence_args(&target, "Second", "--commit-records"));
+    assert!(!success);
+    assert_eq!(commit_count(dir), before);
+
+    fs::remove_file(&hook).unwrap();
+    // The rejected record is not foreign: a retry commits both, labelled.
+    ok(dir, &evidence_args(&target, "Third", "--commit-records"));
+    assert_eq!(commit_count(dir), before + 1);
+    assert_eq!(changed_in_head(dir).len(), 3);
+    let message = git(dir, &["log", "-1", "--format=%B"]);
+    assert_eq!(message.matches("- evidence ").count(), 3, "{message}");
+}

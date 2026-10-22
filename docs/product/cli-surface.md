@@ -111,7 +111,11 @@ unstaged changes are never added. The check runs before the command writes: if
 the index holds anything but records staged earlier by `--stage-records`, the
 command refuses with `record_commit_index_not_clean` and writes nothing. The
 staged group is remembered in `.atelier/runtime/staged-records.json`, which Git
-ignores. `review` keeps `--commit` for the pinned commit; the flags here are
+ignores. A group ends when its records are no longer staged (a hand commit, a reset), and a
+record of the group with unstaged edits refuses with
+`record_commit_pending_modified`; each command stages only the records it wrote.
+The group is remembered before the commit runs and forgotten after it succeeds,
+so a rejecting hook leaves it for the next `--commit-records`. `review` keeps `--commit` for the pinned commit; the flags here are
 separate. Code still belongs in its own commit; `land` and `merge` check the
 committed records either way.
 
