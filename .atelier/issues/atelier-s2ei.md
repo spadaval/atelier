@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "merge"
 - "retro-2026-10-17"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-s2ei
 priority: "P1"
 relationships:
   blocks: []
@@ -19,9 +22,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add atelier merge --sync to bring the base in, re-prove and report approval survival"
-updated_at: "2026-10-22T20:56:06.266783361+00:00"
+updated_at: "2026-10-22T22:12:48.578244827+00:00"
 ---
 
 ## Goal
