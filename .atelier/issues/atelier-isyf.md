@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Pin merge checks to the merged checkout's own target directory"
-updated_at: "2026-10-22T20:41:23.385151398+00:00"
+updated_at: "2026-10-22T20:41:28.838503644+00:00"
 ---
 
 ## Goal
@@ -27,3 +27,9 @@ updated_at: "2026-10-22T20:41:23.385151398+00:00"
 ## Done when
 
 - The nextest merge checks in `.atelier/workflow.yaml` set `CARGO_TARGET_DIR=target`, and the comment says why `.atelier` is excluded from the whitespace check.
+
+## Notes
+
+- 2026-10-22 [decision] Set CARGO_TARGET_DIR=target on the two nextest merge checks only, relative to the merged checkout
+  Reason: The checkout is a fresh worktree, so target resolves inside it and is removed with it; an exported CARGO_TARGET_DIR would otherwise point every merge at one shared directory. The fmt and metadata checks build nothing.
+  Rejected: Unsetting CARGO_TARGET_DIR: leaves a user-level CARGO_BUILD_TARGET_DIR style override in force; an explicit value is the same on every host
