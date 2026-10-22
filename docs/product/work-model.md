@@ -246,8 +246,9 @@ merge, though, that branch says done for work the base does not have. So
 `status`'s owner row shows a done owner as
 `✓ done on branch <work-branch>, not merged into <base>`, or as
 `✓ done, merged into <base>` once the base branch's own copy of the record is
-done. Its `Branches` rows say the same in their own form, `✓ done, not merged`
-(see [human-cli-output.md](human-cli-output.md#branches)). A claim committed
+done. Its `Branches` rows say the same in their own form, `✓ done, not merged`,
+followed by the branch's readiness to merge into the current base (see
+[human-cli-output.md](human-cli-output.md#branches)). A claim committed
 after approval instead, changing only the scope's own records by status and
 Close Reason, keeps the approval current, so it needs no fresh review (see
 [approval freshness](reviews-and-merge.md#approval-freshness)).
