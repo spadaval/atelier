@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Let a follow-up be linked to its mission without staling the branch approval"
-updated_at: "2026-10-22T21:30:00.188339564+00:00"
+updated_at: "2026-10-22T21:58:40.634650161+00:00"
 ---
 
 ## Goal

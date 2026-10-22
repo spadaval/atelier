@@ -29,7 +29,7 @@ schema_version: 2
 closed_at: "2026-10-22T21:30:00.479089843+00:00"
 status: "done"
 title: "Make land and merge agree on what review covers"
-updated_at: "2026-10-22T21:58:24.421634453+00:00"
+updated_at: "2026-10-22T21:58:40.714811649+00:00"
 ---
 
 ## Goal

@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Adding an issue to a mission re-checks every done issue in that mission"
-updated_at: "2026-10-22T21:30:00.283602701+00:00"
+updated_at: "2026-10-22T21:58:40.714501361+00:00"
 ---
 
 ## Goal
