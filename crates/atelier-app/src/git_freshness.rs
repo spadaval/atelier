@@ -789,35 +789,28 @@ impl<'a> ReadContext<'a> {
 
 /// The commits of `rev-list --parents pin..end` output that descend from
 /// `pin`, which is what `rev-list --ancestry-path pin..end` lists, computed
-/// from the same output instead of a second walk (atelier-v5tt). Marking
-/// repeats until nothing changes, as Git's does, so a parent cycle that
-/// grafts can create still ends (atelier-6vfg).
+/// from the same output instead of a second walk (atelier-v5tt). It walks
+/// forward from `pin` over a parent-to-children map and visits each commit
+/// once, so a long side branch dated before its parents costs no extra
+/// passes (atelier-pew5), and a parent cycle that grafts can create still
+/// ends (atelier-6vfg).
 fn ancestry_path<'a>(commits: &'a str, pin: &str) -> Result<HashSet<&'a str>> {
-    let mut graph = Vec::new();
+    let mut children = HashMap::<&str, Vec<&'a str>>::new();
     for line in commits.lines() {
         let mut parts = line.split_whitespace();
         let commit = parts.next().context("invalid Git parent query")?;
-        graph.push((commit, parts.collect::<Vec<_>>()));
+        for parent in parts {
+            children.entry(parent).or_default().push(commit);
+        }
     }
-    // rev-list lists children before parents, so walking it backwards marks
-    // most of the path in one pass.
     let mut marked = HashSet::new();
-    loop {
-        let mut changed = false;
-        for (commit, parents) in graph.iter().rev() {
-            if !marked.contains(commit)
-                && parents
-                    .iter()
-                    .any(|parent| *parent == pin || marked.contains(parent))
-            {
-                marked.insert(*commit);
-                changed = true;
-            }
-        }
-        if !changed {
-            return Ok(marked);
+    let mut pending = children.get(pin).cloned().unwrap_or_default();
+    while let Some(commit) = pending.pop() {
+        if marked.insert(commit) {
+            pending.extend(children.get(commit).into_iter().flatten());
         }
     }
+    Ok(marked)
 }
 
 /// Pinned evidence and review history always describe original Git objects.
@@ -1218,6 +1211,57 @@ mod tests {
         fs::write(path.join(".git/info/grafts"), format!("{c3} {c4}\n")).unwrap();
         compare(&c2, &c4);
         compare(&octopus, &c4);
+    }
+    /// A commit with `parents` and the root's tree, committed at `seconds`.
+    fn dated_commit(repo: &Path, parents: &[&str], seconds: i64) -> String {
+        let tree = String::from_utf8(git_output(repo, &["rev-parse", "HEAD^{tree}"]).unwrap())
+            .unwrap();
+        let mut args = vec!["commit-tree", tree.trim(), "-m", "dated"];
+        for parent in parents {
+            args.extend(["-p", parent]);
+        }
+        let date = format!("{seconds} +0000");
+        let output = command(repo)
+            .args(&args)
+            .env("GIT_COMMITTER_DATE", &date)
+            .env("GIT_AUTHOR_DATE", &date)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    }
+    #[test]
+    fn ancestry_path_matches_git_when_a_side_branch_is_dated_before_its_parents() {
+        let repo = repo("sha1");
+        let path = repo.path();
+        let root = commit(path, "root");
+        let start = 1_700_000_000;
+        let main = dated_commit(path, &[&root], start + 10_000);
+        // Each side commit is dated before its parent, so Git lists the
+        // branch parents-first, against the order a backward pass needs.
+        let mut side = vec![dated_commit(path, &[&main], start + 5_000)];
+        for step in 1..200 {
+            let parent = side.last().unwrap().clone();
+            side.push(dated_commit(path, &[&parent], start + 5_000 - step));
+        }
+        let later = dated_commit(path, &[&main], start + 20_000);
+        let merge = dated_commit(path, &[&later, side.last().unwrap()], start + 30_000);
+        let end = dated_commit(path, &[&merge], start + 40_000);
+        for pin in [&root, &main, &side[0], &side[100], &later, &merge] {
+            let range = format!("{pin}..{end}");
+            let listed =
+                String::from_utf8(git_output(path, &["rev-list", "--parents", &range]).unwrap())
+                    .unwrap();
+            let git = String::from_utf8(
+                git_output(path, &["rev-list", "--ancestry-path", &range]).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                ancestry_path(&listed, pin).unwrap(),
+                git.lines().collect::<HashSet<_>>(),
+                "{range}"
+            );
+        }
     }
     #[test]
     fn native_reads_keep_exact_ranges_and_reject_bad_pins() {
