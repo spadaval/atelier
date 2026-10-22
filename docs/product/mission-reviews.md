@@ -52,11 +52,12 @@ it stands. Both forms follow the same order:
 - **Left to do:** planned work not done, and added work someone has taken on,
   other than what the human is asked for. A done child of a parent that is
   not done appears in the timeline on its own, naming its parent.
-- **Found along the way:** open follow-ups that review filed, with the item
-  (or the mission review) that filed them, and work added after the start
-  that is parked in `backlog` or `draft`. Until follow-ups record their
-  source (atelier-tq1j), parked added work is the only sign of discovered
-  work outside review.
+- **Found along the way:** open follow-ups that review filed (`from review
+  of <item>`), open work that declares a `discovered_from` link to an item in
+  the mission or to a finding or receipt about one (`found in <item>`), with
+  or without an `advances` link to the mission, and work added after the start
+  that is parked in `backlog` or `draft`. A follow-up that is both deferred by
+  a finding and discovered from it appears once, as from review.
 
 Decisions appear where they were made: in a delivered item's timeline
 entry, beside an open, dropped or asked item, and, for decisions on the

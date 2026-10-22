@@ -967,7 +967,6 @@ fn apply_bundle_to_state(
             agent_identity: None,
             independence_level: None,
             residual_risks: Vec::new(),
-            follow_up_ids: Vec::new(),
             exit_code: None,
             exit_status: Some(evidence.result.clone()),
             success: None,

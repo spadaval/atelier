@@ -63,6 +63,7 @@ For example:
 
 ```text
 atelier issue create "Implement the slice" --parent <parent-id>
+atelier issue create "Noticed while working" --discovered-from <issue-review-or-evidence-id>
 atelier issue link <parent-id> <mission-id> --role advances
 atelier issue link <blocked-id> <blocker-id> --role blocked_by
 atelier issue note <id> "Handoff detail" --kind handoff

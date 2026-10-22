@@ -365,6 +365,9 @@ enum IssueCommands {
         /// not the strategy's front matter, is the link
         #[arg(long)]
         strategy: Option<String>,
+        /// Record this work was found in: issue, review event or receipt
+        #[arg(long, value_name = "ID")]
+        discovered_from: Option<String>,
     },
 
     /// Show a brief view of one or more issues; --full shows the whole record
@@ -504,7 +507,7 @@ enum IssueCommands {
         /// target) and blocks (the target waits for the source). Mission scope:
         /// advances (stored under relates). Context only, no effect on
         /// readiness: related, part_of, implements, supersedes, duplicates,
-        /// derived_from, contributes_to, assumption, falsifies, derived, and
+        /// derived_from, discovered_from, contributes_to, assumption, falsifies, derived, and
         /// custom roles from .atelier/config.toml; these are stored under the
         /// record's relates field. Only the source record is written; the
         /// target reads the link from it
@@ -522,7 +525,7 @@ enum IssueCommands {
         /// target) and blocks (the target waits for the source). Mission scope:
         /// advances (stored under relates). Context only, no effect on
         /// readiness: related, part_of, implements, supersedes, duplicates,
-        /// derived_from, contributes_to, assumption, falsifies, derived, and
+        /// derived_from, discovered_from, contributes_to, assumption, falsifies, derived, and
         /// custom roles from .atelier/config.toml; these are stored under the
         /// record's relates field
         #[arg(long, default_value = "advances")]

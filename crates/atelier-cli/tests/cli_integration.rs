@@ -794,6 +794,8 @@ mod criteria;
 mod debrief;
 #[path = "cli_integration/decisions.rs"]
 mod decisions;
+#[path = "cli_integration/discovered_from.rs"]
+mod discovered_from;
 #[path = "cli_integration/issues.rs"]
 mod issues;
 #[path = "cli_integration/mission_worktree.rs"]

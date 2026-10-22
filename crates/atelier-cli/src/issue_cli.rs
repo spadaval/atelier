@@ -15,6 +15,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             parent,
             status,
             strategy,
+            discovered_from,
         } => {
             let (state_dir, index) = load_repository()?;
             commands::issue::create_lifecycle(
@@ -29,6 +30,7 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                     parent: parent.as_deref(),
                     status: status.as_deref(),
                     strategy: strategy.as_deref(),
+                    discovered_from: discovered_from.as_deref(),
                     quiet,
                 },
             )

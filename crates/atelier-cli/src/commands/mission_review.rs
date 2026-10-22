@@ -586,12 +586,12 @@ fn render_markdown(view: &Debrief, context: RenderContext) -> Vec<Vec<String>> {
                     .found
                     .iter()
                     .find(|entry| &entry.id == id)
-                    .and_then(|entry| entry.from.as_deref());
+                    .and_then(origin);
                 let cue = match from {
-                    Some(from) if from == view.mission.id => {
-                        " | from review of the mission".to_string()
+                    Some((from, how)) if from == view.mission.id => {
+                        format!(" | {how} the mission")
                     }
-                    Some(from) => format!(" | from review of {from}"),
+                    Some((from, how)) => format!(" | {how} {from}"),
                     None => String::new(),
                 };
                 did.extend(wrap(format!("{when} filed {}{cue}", item(id))));
@@ -794,11 +794,11 @@ fn render_markdown(view: &Debrief, context: RenderContext) -> Vec<Vec<String>> {
                 let indent = if entry.parent.is_some() { "  " } else { "" };
                 let mut row = format!("{indent}{}", item(&entry.id));
                 if found {
-                    match entry.from.as_deref() {
-                        Some(from) if from == view.mission.id => {
-                            row.push_str(" | from review of the mission");
+                    match origin(entry) {
+                        Some((from, how)) if from == view.mission.id => {
+                            row.push_str(&format!(" | {how} the mission"));
                         }
-                        Some(from) => row.push_str(&format!(" | from review of {from}")),
+                        Some((from, how)) => row.push_str(&format!(" | {how} {from}")),
                         None => {}
                     }
                     if let Some(at) = entry.filed_at {
@@ -1503,10 +1503,10 @@ fn event_html(view: &Debrief, at: Option<chrono::DateTime<chrono::Utc>>, event: 
                 .found
                 .iter()
                 .find(|entry| &entry.id == id)
-                .and_then(|entry| entry.from.as_deref());
+                .and_then(origin);
             let source = match from {
-                Some(from) if from == view.mission.id => " from review of the mission".to_string(),
-                Some(from) => format!(" from review of {}", chip(view, from, 48)),
+                Some((from, how)) if from == view.mission.id => format!(" {how} the mission"),
+                Some((from, how)) => format!(" {how} {}", chip(view, from, 48)),
                 None => String::new(),
             };
             line("back", format!("Filed{source}: {}", chip(view, id, 64)))
@@ -1745,18 +1745,29 @@ fn plan_html(view: &Debrief) -> String {
     html
 }
 
+/// Where filed work came from, and how: `(source, "from review of")` for a
+/// deferred finding, `(source, "found in")` for a `discovered_from` link.
+fn origin(entry: &OpenEntry) -> Option<(&str, &'static str)> {
+    let how = if entry.discovered {
+        "found in"
+    } else {
+        "from review of"
+    };
+    entry.from.as_deref().map(|from| (from, how))
+}
+
 fn open_rows_html(view: &Debrief, entries: &[OpenEntry], found: bool) -> String {
     entries
         .iter()
         .map(|entry| {
             let mut source = Vec::new();
             if found {
-                match entry.from.as_deref() {
-                    Some(from) if from == view.mission.id => {
-                        source.push("from review of the mission".to_string());
+                match origin(entry) {
+                    Some((from, how)) if from == view.mission.id => {
+                        source.push(format!("{how} the mission"));
                     }
-                    Some(from) => {
-                        source.push(format!("from review of {}", chip(view, from, 56)));
+                    Some((from, how)) => {
+                        source.push(format!("{how} {}", chip(view, from, 56)));
                     }
                     None => {}
                 }

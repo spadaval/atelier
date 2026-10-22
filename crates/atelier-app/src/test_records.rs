@@ -63,7 +63,6 @@ pub fn evidence_record(id: &str, issue_id: &str, role: &str) -> EvidenceRecord {
             agent_identity: None,
             independence_level: None,
             residual_risks: Vec::new(),
-            follow_up_ids: Vec::new(),
             exit_code: None,
             exit_status: None,
             success: Some(true),
