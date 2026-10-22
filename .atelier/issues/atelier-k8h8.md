@@ -48,11 +48,11 @@ The rest of the cycle gets cheaper too. Approvals stay current across changes th
 - S4: Linking new work to a shared mission or blocker leaves that record unchanged (atelier-ihss). Shown by a test.
 - S5: An owned branch does not trust local base commits that no land has checked (atelier-kops). Shown by a land test.
 - S6: In an orchestrated run with at least five parallel branches, catch-up merges average at most one per landed branch. The 2026-10-16 baseline is astromech-cmhv's 16 catch-up merges, half of them needing a re-review. Shown by a count from the run's git history, recorded as a dated note.
-- S7: An approval stays current when a follow-up is linked to its mission and across a close commit that touches only the item's record (atelier-iaas, atelier-n642). Shown by merge and land tests.
+- S7: An approval stays current when a follow-up is linked to its mission and across a close commit that touches only the item's record. A planning commit that adds an issue to a mission re-checks no done claim in that mission (atelier-iaas, atelier-n642, atelier-ss25). Shown by merge and land tests.
 - S8: Review effort matches the change: docs-only and low-risk changes get a lighter route, low-priority follow-ups can share one branch and one review, `atelier review request` writes the reviewer brief, and a follow-up records where it was found (atelier-1mn2, atelier-u6f3, atelier-rc8p, atelier-tq1j). Shown by CLI tests and the Agent Factory review guidance.
 - S9: A step's records reach the base in one commit, and planning text reaches the base without a full work-branch cycle (atelier-4ixu, atelier-mbrf). Shown by tests.
 - S10: `land --push` pushes only after a passing land, and pushing warns about base commits made by another owner. `start` takes an explicit base from any checkout, refuses a branch whose type prefix does not match the issue, and warns when another live session holds the item (atelier-ecah, atelier-mvzi, atelier-yc4d, atelier-mhx0, atelier-81e5). Shown by CLI tests.
-- S11: `merge` refuses a done claim that `land` will refuse, runs its checks in the merged checkout's own target directory, and cleans up merged-tree checkouts after an interrupted merge. Land's per-review history walks are batched (atelier-uw4x, atelier-isyf, atelier-rcnk, atelier-7b6e). Shown by merge and land tests.
+- S11: `merge` refuses a done claim that `land` will refuse, runs its checks in the merged checkout's own target directory, and cleans up merged-tree checkouts after an interrupted merge. Land's per-review history walks are batched, and find review records created inside a merge commit (atelier-uw4x, atelier-isyf, atelier-rcnk, atelier-7b6e, atelier-as7i). Shown by merge and land tests.
 
 ## Background
 
