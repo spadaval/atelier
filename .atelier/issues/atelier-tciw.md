@@ -33,7 +33,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Show each waiting branch's merge readiness against the current base in status"
-updated_at: "2026-10-22T22:12:47.114721980+00:00"
+updated_at: "2026-10-22T22:24:17.488160179+00:00"
 ---
 
 ## Goal
@@ -58,3 +58,18 @@ Blocked by atelier-ftqn, which rebuilds the same branches section. It uses the s
 
 - 2026-10-22 [note] tciw now also owns the approval mark on the Branches rows (moved from atelier-ftqn). It should expose a public end-commit variant of approval currency (today the private approval_is_current_to in review_gate.rs) rather than rebuilding it, and follow the rule atelier-n642 settles.
 - 2026-10-22 [note] From review of atelier-ftqn: put readiness facts in the status part of the row, before the free-text title, as ftqn's 'done, not merged ✓ approved  Title' example does (finding atelier-465o). Also show activity on a branch whose owner is a parent, e.g. done or active children, so a parent-owned branch does not read as idle (finding atelier-p3dv).
+- 2026-10-22 [decision] Readiness facts extend the row's comma-separated status part (approval, behind N, proof, merge state), with the conflict list last so its commas end the part
+  Reason: Finding atelier-465o puts branch facts before the free-text title; a fixed order with conflicts last keeps the comma list unambiguous
+  Rejected: Two-space-separated fields as in the Done when example, which read like the title separator
+- 2026-10-22 [decision] Approval state comes from a new review_gate::approval_state that reuses review.current's rule (independence against author_identities, current_on_branch extracted from evaluate_scope, approval_is_current_to); an approval by a branch author counts as not approved, not stale
+  Reason: One rule for merge and status; a non-independent approval would never become current, so calling it stale misleads
+  Rejected: Marking approved when the branch snapshot holds an approval record
+- 2026-10-22 [decision] 'proof at head' means every done item in the owner's scope, except superseded ones, has fresh passing evidence at the branch tip by the evidence freshness rule; otherwise 'no proof at head'
+  Reason: merge's completion checks ask fresh proof of each done claim in scope; checking only the owner would call a parent-owned branch proven when its children are not
+  Rejected: Proof of the owner alone
+  Rejected: 'proof at branch head only' wording about the merged tree, which merge_checks prove instead
+- 2026-10-22 [decision] Shared files compare each pair of waiting branches' paths changed since their fork point, records included, one line per pair naming up to five paths
+  Reason: Shared records such as a mission record are real merge hazards; capping keeps a pair that shares many files to one readable line
+  Rejected: Excluding .atelier paths
+- 2026-10-22 [decision] Measured status cost and added no cache: with five waiting branches in a clone of this repository, release status went from 0.85 s to 1.15 s (about 60 ms per waiting branch); debug 2.25 s to 3.4 s
+  Reason: The item asks to report cost rather than add caches; readiness is computed only for done owners that are not merged
