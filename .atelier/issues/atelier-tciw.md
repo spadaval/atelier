@@ -30,7 +30,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Show each waiting branch's merge readiness against the current base in status"
-updated_at: "2026-10-22T20:39:26.133202294+00:00"
+updated_at: "2026-10-22T20:43:35.596276138+00:00"
 ---
 
 ## Goal
@@ -54,3 +54,4 @@ Blocked by atelier-ftqn, which rebuilds the same branches section. It uses the s
 ## Notes
 
 - 2026-10-22 [note] tciw now also owns the approval mark on the Branches rows (moved from atelier-ftqn). It should expose a public end-commit variant of approval currency (today the private approval_is_current_to in review_gate.rs) rather than rebuilding it, and follow the rule atelier-n642 settles.
+- 2026-10-22 [note] From review of atelier-ftqn: put readiness facts in the status part of the row, before the free-text title, as ftqn's 'done, not merged ✓ approved  Title' example does (finding atelier-465o). Also show activity on a branch whose owner is a parent, e.g. done or active children, so a parent-owned branch does not read as idle (finding atelier-p3dv).
