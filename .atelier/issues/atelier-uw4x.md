@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Make merge refuse a done claim that land will refuse"
-updated_at: "2026-10-22T21:00:00.593658177+00:00"
+updated_at: "2026-10-22T21:04:18.469645457+00:00"
 ---
 
 ## Goal
@@ -35,3 +35,6 @@ updated_at: "2026-10-22T21:00:00.593658177+00:00"
 ## Notes
 
 - 2026-10-17 [note] Retro 2026-10-17: sdb0's merge passed a done claim that land on master then refused, costing a fifth review subagent; still the top cause of the 'approve after close' rule. See also the new approval-carry item.
+- 2026-10-22 [decision] Take the Done when's alternative clause: a status-only close after approval stays covered and land accepts it the same way merge does, rather than making merge refuse it.
+  Reason: atelier-n642 makes this the rule. merge already refuses a close commit that changes code or other fields (review.current), so with land aligned there is no done claim merge integrates that land then refuses. Naming the re-approve command in merge's review.current message is atelier-cisa's Done when, so it is left there.
+  Rejected: Make merge refuse any close after approval

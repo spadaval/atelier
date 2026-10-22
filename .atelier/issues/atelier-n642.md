@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Keep an approval current across a close commit that only touches the item's record"
-updated_at: "2026-10-22T20:59:56.993628991+00:00"
+updated_at: "2026-10-22T21:04:18.393909024+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,12 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 Whether any other record-only change (notes, links) should be covered too.
+
+## Notes
+
+- 2026-10-22 [decision] "The item's own record" is the approved scope: the owner and its descendants (review_gate::scope), not the owner's parent. A close-only commit for any of them, by status, timestamps and Close Reason, keeps the approval current.
+  Reason: Children close on the owner's branch, often after the owner's approval, and merge's review.current already treated the whole scope this way; narrowing it to the owner alone would make children re-trigger review. The parent is outside the approved scope and closes on the base as planning (missions) or on its own branch.
+  Rejected: Owner record only; owner plus parent
+- 2026-10-22 [decision] Fix the disagreement in land, not merge: land on the base accepts a done claim after an approval pin when review_gate::approval_is_current_to (now pub, the one rule) holds at the claim's commit, with the tip standing in for the base.
+  Reason: merge already applied the status/Close Reason rule; land's coverage was the outlier. Passing the tip as the base keeps a clean base merge after approval current, as it was at merge time; using the upstream would wrongly stale merges of unpushed base commits.
+  Rejected: Duplicate the status-only check inside git.rs; use the upstream as the base
