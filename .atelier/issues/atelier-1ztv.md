@@ -29,7 +29,7 @@ schema_version: 2
 closed_at: "2026-10-22T21:30:00.479089843+00:00"
 status: "done"
 title: "Make land and merge agree on what review covers"
-updated_at: "2026-10-22T21:30:00.479089843+00:00"
+updated_at: "2026-10-22T21:58:24.421634453+00:00"
 ---
 
 ## Goal
@@ -63,6 +63,9 @@ atelier-7b6e (batched history walks) follows atelier-as7i on its own branch.
 - 2026-10-22 [decision] land counts an approval as covering only if review_gate::approval_accepted holds: independent by original_independent (the history-based identity check merge's claim gates already use) and every finding on the scope pinned at or before the approval disposed by then (FIX NOW resolved at or before the pin, DEFER/NO ACTION accepted by a non-author).
   Reason: Matches what merge requires of an approval while judging from history, which is all land on the base has. Checked against this repository: land with the new binary in a scratch clone, upstream set 20, 60, 150, 300 and 500 first-parent commits back, gives the same verdict and the same count of commits outside review as the installed binary; the main checkout has no unpushed commits and passes.
   Rejected: Reuse evaluate_scope's candidate filter, which needs the branch's author set at merge time
+- 2026-10-22 [decision] When the branch merges a side branch that is not on the base, land leaves that side's authors out of the independence check while review.current counts them, so merge can refuse where land would accept, never the reverse
+  Reason: Merge refusing earlier is the safe direction; aligning it fully would need review.current to resolve side-branch provenance it does not track today
+  Rejected: Make review.current skip side-branch authors too
 
 ## Close Reason
 
