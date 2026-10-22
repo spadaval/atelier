@@ -3258,7 +3258,9 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
 /// base. Anything else after the approval, or an approval `merge` would not
 /// accept (atelier-n90q), leaves the claim uncovered under both: `merge`
 /// refuses before integrating, and after a forced integration `land` refuses.
-/// Each case runs under both merge strategies.
+/// A follow-up filed after the approval and linked to its mission in a later
+/// commit keeps it current, though its own done claim is not covered
+/// (atelier-iaas). Each case runs under both merge strategies.
 #[test]
 fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
     let covered_cases = [
@@ -3267,12 +3269,16 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "children_in_one_commit",
         "reviewer_base_close_then_approve",
         "reviewer_base_reapproved_after_code",
+        "follow_up_linked",
+        "base_issue_edited",
     ];
     let stale_cases = [
         "with_code",
         "with_goal",
         "with_note",
         "new_done_issue",
+        "follow_up_done",
+        "base_issue_edited_done",
         "sibling_close",
         "self_approval",
         "open_fix_now",
@@ -3283,10 +3289,9 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         }
     }
 }
-fn close_after_approval(strategy: &str, case: &str, covered: bool) {
-    let label = format!("{strategy}/{case}");
-    let f = Fixture::new();
-    git(f.path(), &["switch", "-q", "main"]);
+/// On the base, set the merge strategy `merge` uses; `merge_commit` needs a
+/// shell check to prove the merged tree.
+fn use_strategy(f: &Fixture, strategy: &str) {
     if strategy == "merge_commit" {
         let path = f.path().join(".atelier/workflow.yaml");
         let policy = fs::read_to_string(&path).unwrap().replace(
@@ -3300,6 +3305,12 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         .unwrap();
         commit(f.path(), "base merges with a merge commit");
     }
+}
+fn close_after_approval(strategy: &str, case: &str, covered: bool) {
+    let label = format!("{strategy}/{case}");
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    use_strategy(&f, strategy);
     // The reviewer authored work on the base that the branch merges in.
     let reviewer_base = case.starts_with("reviewer_base");
     if reviewer_base {
@@ -3348,6 +3359,23 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         let sibling = ok(f.path(), &["-q", "issue", "create", "Sibling"]);
         commit(f.path(), "plan a sibling outside the scope");
         sibling
+    });
+    // A mission outside the scope that a follow-up filed during review
+    // advances (atelier-iaas).
+    let mission = case.starts_with("follow_up").then(|| {
+        let mission = ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Mission",
+                "--issue-type",
+                "mission",
+            ],
+        );
+        commit(f.path(), "plan a mission");
+        mission
     });
     if case == "open_fix_now" {
         ok(
@@ -3405,6 +3433,63 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
                 new_done = Some(id);
             }
             "sibling_close" => close_issue(sibling.as_deref().unwrap()),
+            "base_issue_edited" | "base_issue_edited_done" => {
+                // An issue filed on the base after the approval, merged in
+                // and then rewritten on the branch: planning, like a record
+                // the base could take directly (atelier-g0mh).
+                git(f.path(), &["switch", "-q", "main"]);
+                let id = ok(f.path(), &["-q", "issue", "create", "Filed on the base"]);
+                commit(f.path(), "file an issue on the base after the approval");
+                git(f.path(), &["switch", "-q", &f.branch]);
+                git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+                ok(
+                    f.path(),
+                    &[
+                        "issue",
+                        "update",
+                        &id,
+                        "--body",
+                        "## Goal\n\nRewritten.\n\n## Done when\n\nRewritten too.",
+                    ],
+                );
+                commit(f.path(), "rewrite the base issue on the branch");
+                if case == "base_issue_edited_done" {
+                    close_issue(&id);
+                    new_done = Some(id);
+                }
+            }
+            "follow_up_linked" | "follow_up_done" => {
+                // Filed, then linked to its mission in a later commit, the
+                // way an agent records a follow-up during review.
+                let id = ok(
+                    f.path(),
+                    &[
+                        "-q",
+                        "issue",
+                        "create",
+                        "Follow-up found in review",
+                        "--discovered-from",
+                        &f.id,
+                    ],
+                );
+                commit(f.path(), "file a follow-up after approval");
+                ok(
+                    f.path(),
+                    &[
+                        "issue",
+                        "link",
+                        &id,
+                        mission.as_deref().unwrap(),
+                        "--role",
+                        "advances",
+                    ],
+                );
+                commit(f.path(), "link the follow-up to its mission");
+                if case == "follow_up_done" {
+                    close_issue(&id);
+                    new_done = Some(id);
+                }
+            }
             _ => {}
         }
         match (&child, case) {
@@ -5949,4 +6034,181 @@ fn start_replaces_a_stale_lease_with_a_note() {
         out.contains("Replaced a stale lease") && out.contains("no longer exists"),
         "{out}"
     );
+}
+/// A planning commit that only adds an issue advancing a mission re-checks
+/// no other done claim in that mission: a sibling's claim does not depend on
+/// the mission (atelier-ss25). `land` on the base and on a work branch, and
+/// `merge`, skip an old sibling whose proof no longer verifies; `doctor`
+/// still reports it. Each case runs under both merge strategies.
+#[test]
+fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        add_to_mission_under(strategy);
+    }
+}
+fn add_to_mission_under(strategy: &str) {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    use_strategy(&f, strategy);
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--issue-type",
+            "mission",
+            "Mission",
+        ],
+    );
+    let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
+    ok(
+        f.path(),
+        &["issue", "link", &old, &mission, "--role", "advances"],
+    );
+    commit(f.path(), "plan the mission");
+    ok(f.path(), &["issue", "transition", &old, "start"]);
+    ok(
+        f.path(),
+        &["issue", "transition", &old, "close", "--reason", "done"],
+    );
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{old}"),
+            "--kind",
+            "test",
+            "--result",
+            "fail",
+            "Proof that failed",
+        ],
+    );
+    commit(f.path(), "done without the gates");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let reported = |output: &str| output.contains(&format!("{old} evidence.no_newer_failure"));
+
+    let add_to_mission = |title: &str| {
+        let id = ok(f.path(), &["-q", "issue", "create", title]);
+        ok(
+            f.path(),
+            &["issue", "link", &id, &mission, "--role", "advances"],
+        );
+        commit(f.path(), &format!("add {title} to the mission"));
+    };
+    add_to_mission("Planned on the base");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass && !reported(&output), "{strategy}: {output}");
+    let (pass, output) = cli(f.path(), &["doctor"]);
+    assert!(!pass && reported(&output), "{strategy}: {output}");
+    git(f.path(), &["push", "-q"]);
+
+    // A work branch that files one too lands and merges.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    add_to_mission("Planned on the branch");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Review",
+        ],
+    );
+    commit(f.path(), "approval");
+    f.terminal(&f.id);
+    let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
+    assert!(pass && !reported(&output), "{strategy}: {output}");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(pass && !reported(&output), "{strategy}: {output}");
+}
+/// A done mission that a branch gives open work is a claim `land` refuses,
+/// so `merge` refuses it before integrating, under either strategy
+/// (atelier-bu66).
+#[test]
+fn merge_refuses_a_done_mission_the_branch_gives_open_work() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        use_strategy(&f, strategy);
+        // A policy whose missions close only once their advancing work is
+        // done.
+        let policy = f.path().join(".atelier/workflow.yaml");
+        let text = fs::read_to_string(&policy).unwrap();
+        let objective = text.find("  objective:").unwrap();
+        let close = objective
+            + text[objective..]
+                .find("        - blockers.none_open\n")
+                .unwrap();
+        let mut revised = text.clone();
+        revised.insert_str(close, "        - work.terminal\n");
+        fs::write(&policy, revised).unwrap();
+        let mission = ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "--issue-type",
+                "mission",
+                "--body",
+                "## Outcome\n\nShipped.\n\n## Success criteria\n\nIt ships.",
+                "Mission",
+            ],
+        );
+        commit(f.path(), "plan the mission");
+        for transition in ["ready", "start"] {
+            ok(f.path(), &["issue", "transition", &mission, transition]);
+        }
+        ok(
+            f.path(),
+            &["issue", "transition", &mission, "close", "--reason", "done"],
+        );
+        commit(f.path(), "close the mission");
+        let upstream = tempdir().unwrap();
+        git(upstream.path(), &["init", "-q", "--bare"]);
+        git(
+            f.path(),
+            &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+        );
+        git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+        git(f.path(), &["switch", "-q", &f.branch]);
+        git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+        let work = ok(f.path(), &["-q", "issue", "create", "Open work"]);
+        ok(
+            f.path(),
+            &["issue", "link", &work, &mission, "--role", "advances"],
+        );
+        commit(f.path(), "file open work for the done mission");
+        ok(
+            f.path(),
+            &[
+                "review",
+                "approve",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                "Review",
+            ],
+        );
+        commit(f.path(), "approval");
+        f.terminal(&f.id);
+        let refused = format!("{mission} work.terminal");
+        let (pass, output) = cli(f.path(), &["land", &f.id]);
+        assert!(!pass && output.contains(&refused), "{strategy}: {output}");
+        let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
+        assert!(!pass && output.contains(&refused), "{strategy}: {output}");
+    }
 }

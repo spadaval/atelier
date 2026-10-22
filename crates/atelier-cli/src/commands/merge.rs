@@ -529,20 +529,26 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
             .as_ref()
             .map_or(repo, |(_, _, checkout, _)| checkout.path.as_path()),
     )?;
-    if let Some((tree, commit, _, merged)) = &merge {
-        // The merged records can break a done claim the base completed after
-        // the fork point, which no checkout held before (atelier-m4gv). Those
-        // claims are read at the merge commit, which holds the base commits
-        // their reviews pin; the branch head may not (atelier-goom).
-        nodes.extend(crate::commands::session::merge_claim_nodes(
-            repo,
-            &mut git::ReadContext::from_snapshot(repo, commit.clone(), &[]),
-            merged,
-            &source.policy,
-            owner,
-            &base_head,
-            commit,
-        )?);
+    // The commit merging would put on the base, with its records: the merge
+    // commit, or the branch head itself under fast-forward.
+    let (tip, tip_index) = merge
+        .as_ref()
+        .map_or((&head, &index), |(_, commit, _, merged)| (commit, merged));
+    // The records merging puts on the base can break a done claim outside
+    // the item, such as one the base completed after the fork point, which no
+    // checkout held before (atelier-m4gv). Those claims are read at that
+    // commit, which holds the base commits their reviews pin (atelier-goom),
+    // under either strategy, as `land` there reads them (atelier-bu66).
+    nodes.extend(crate::commands::session::merge_claim_nodes(
+        repo,
+        &mut git::ReadContext::from_snapshot(repo, tip.clone(), &[]),
+        tip_index,
+        &source.policy,
+        owner,
+        &base_head,
+        tip,
+    )?);
+    if let Some((tree, _, _, _)) = &merge {
         // Only the shell checks examined the merged tree; it is proven when
         // at least one ran there and every one passed.
         let shell = nodes
@@ -569,9 +575,6 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     // Every done claim merging would put on the base must be one `land`
     // there accepts, judged by the same code, so a refusal comes before
     // integration rather than after it (atelier-uw4x).
-    let (tip, tip_index) = merge
-        .as_ref()
-        .map_or((&head, &index), |(_, commit, _, merged)| (commit, merged));
     let unreviewed = crate::commands::git::first_unreviewed_claim(
         repo,
         tip_index,

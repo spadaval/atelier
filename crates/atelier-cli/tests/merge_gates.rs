@@ -3002,6 +3002,55 @@ fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() 
     }
 }
 
+/// A follow-up filed after the approval and linked to its mission in a
+/// later commit keeps the approval, and `merge --sync`'s report of what went
+/// stale agrees with `review.current`: both ask the one edge check
+/// (atelier-iaas).
+#[test]
+fn sync_keeps_the_approval_across_a_follow_up_linked_after_it() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        let fixture = synced_fixture(strategy, "test -f src.rs", ("other.rs", "landed\n"));
+        let mission = ok(
+            fixture.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Mission",
+                "--issue-type",
+                "mission",
+            ],
+        );
+        let follow_up = ok(
+            fixture.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Found in review",
+                "--discovered-from",
+                &fixture.id,
+            ],
+        );
+        commit(fixture.path(), "file a follow-up after the approval");
+        ok(
+            fixture.path(),
+            &["issue", "link", &follow_up, &mission, "--role", "advances"],
+        );
+        commit(fixture.path(), "link the follow-up to its mission");
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(
+            passed && out.contains("Approval kept:") && !out.contains("needs fresh review"),
+            "{strategy}: {out}\n{err}"
+        );
+        let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(
+            checked.contains("pass review.current"),
+            "{strategy}: {checked}"
+        );
+    }
+}
+
 #[test]
 fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resolution() {
     for strategy in ["fast_forward_only", "merge_commit"] {
