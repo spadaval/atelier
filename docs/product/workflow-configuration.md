@@ -135,7 +135,7 @@ field and without merge checks, so a new repository starts on
 added. The default exists because `fast_forward_only` makes every landing force
 each other open branch to catch up, re-prove and be re-approved: three days of
 parallel work produced 122 catch-up merges and 41 fresh-approval commits, while
-the first two branches landed under `merge_commit` needed none. The condition is the test
+the first two branches that landed under `merge_commit` needed none. The condition is the test
 check: a merge that Git accepts can still be broken, and a `shell.check` is what
 runs on the merged tree before it reaches the base (atelier-6mgg).
 
