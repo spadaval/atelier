@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "evidence"
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-zuow
 priority: "P2"
 relationships:
   blocks: []
@@ -24,7 +27,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Record and request review with less hand work"
-updated_at: "2026-10-22T19:58:17.723939008+00:00"
+updated_at: "2026-10-22T20:32:26.676982290+00:00"
 ---
 
 ## Goal

@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Commit a step's records together instead of one commit per record"
-updated_at: "2026-10-22T19:58:19.748027082+00:00"
+updated_at: "2026-10-22T20:32:26.676985075+00:00"
 ---
 
 ## Goal
