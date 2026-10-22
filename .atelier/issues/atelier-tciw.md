@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "cli-output"
 - "status"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-tciw
 priority: "P1"
 relationships:
   blocks: []
@@ -28,9 +31,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show each waiting branch's merge readiness against the current base in status"
-updated_at: "2026-10-22T20:57:56.439475971+00:00"
+updated_at: "2026-10-22T22:12:47.114721980+00:00"
 ---
 
 ## Goal
