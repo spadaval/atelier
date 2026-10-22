@@ -5422,6 +5422,115 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
     }
 }
 
+/// Low-priority follow-ups batched as children of one parent share its
+/// branch and one review: a single approval on the parent covers every child
+/// closed on the branch, through `land`, `merge` and `land` on the base
+/// (atelier-u6f3).
+#[test]
+fn one_approval_on_the_parent_covers_follow_ups_closed_on_its_branch() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    git(path, &["init", "-qb", "main"]);
+    git(path, &["config", "user.name", "Author"]);
+    git(path, &["config", "user.email", "author@example.test"]);
+    ok(path, &["init", "--slug", "atelier"]);
+    let body = "## Goal\n\nClose the follow-ups.\n\n## Done when\n\nEach follow-up is done.";
+    let parent = ok(
+        path,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Batched follow-ups",
+            "--body",
+            body,
+        ],
+    );
+    let children = ["First", "Second", "Third"].map(|title| {
+        ok(
+            path,
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--parent",
+                &parent,
+                "--priority",
+                "low",
+            ],
+        )
+    });
+    commit(path, "plan the batch");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        path,
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(path, &["push", "-q", "-u", "origin", "main"]);
+
+    // Each follow-up starts on the parent's branch, with its own code and
+    // its own done claim, and no review of its own.
+    let branch = format!("task/{parent}");
+    for (number, child) in children.iter().enumerate() {
+        ok(path, &["start", child]);
+        assert_eq!(git(path, &["branch", "--show-current"]), branch);
+        fs::write(path.join(format!("fix{number}")), "follow-up fix\n").unwrap();
+        commit(path, &format!("fix {child}"));
+        ok(
+            path,
+            &["issue", "transition", child, "close", "--reason", "Fixed"],
+        );
+        commit(path, &format!("close {child}"));
+    }
+    ok(path, &["start", &parent]);
+    ok(
+        path,
+        &[
+            "issue",
+            "transition",
+            &parent,
+            "close",
+            "--reason",
+            "All fixed",
+        ],
+    );
+    commit(path, "close the batch");
+    let (pass, output) = cli(path, &["land"]);
+    assert!(!pass && output.contains("review.current"), "{output}");
+
+    ok(
+        path,
+        &[
+            "review",
+            "approve",
+            &parent,
+            "--identity",
+            "Reviewer",
+            "Reviewed the branch: every follow-up",
+            "--commit-records",
+        ],
+    );
+    ok(path, &["land"]);
+    ok(path, &["merge", &children[0]]);
+    assert_eq!(git(path, &["branch", "--show-current"]), "main");
+    for id in std::iter::once(&parent).chain(&children) {
+        let record = fs::read_to_string(path.join(format!(".atelier/issues/{id}.md"))).unwrap();
+        assert!(record.contains("status: \"done\""), "{record}");
+    }
+    // On the base, the one approval covers the code and every done claim;
+    // only the approval's own record commit follows its pin.
+    let output = ok(path, &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit outside review.")
+            && output.contains("land: passed"),
+        "{output}"
+    );
+    let reviews = ok(path, &["-q", "review", "list"]);
+    assert_eq!(reviews.lines().count(), 1, "{reviews}");
+}
+
 /// Git invocations made by `atelier land`, recorded by a `git` wrapper on PATH.
 fn land_git_calls(dir: &Path) -> Vec<String> {
     let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
