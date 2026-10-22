@@ -3,6 +3,9 @@ created_at: "2026-10-16T21:55:56.381402258+00:00"
 id: "atelier-7b6e"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-7b6e
 priority: "P3"
 relationships:
   blocks: []
@@ -16,16 +19,16 @@ relationships:
     id: "atelier-k8h8"
     type: "advances"
   - kind: "review"
-    id: "atelier-pew5"
+    id: "atelier-83w3"
     type: "discovered_from"
   - kind: "review"
-    id: "atelier-83w3"
+    id: "atelier-pew5"
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Batch the per-review history walks in land with exact answers"
-updated_at: "2026-10-22T20:57:28.440000489+00:00"
+updated_at: "2026-10-22T22:34:25.056850984+00:00"
 ---
 
 ## Goal
