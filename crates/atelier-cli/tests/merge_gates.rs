@@ -2406,6 +2406,106 @@ fn merge_commit_strategy_reruns_the_gates_when_the_base_moves_only_by_records_du
 }
 
 #[test]
+fn merge_commit_strategy_prints_one_json_report_for_a_retried_merge() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    let logs = tempdir().unwrap();
+    let log = logs.path().join("runs");
+    merge_commit_policy(&fixture, &[&base_mover(&log)]);
+    later_branch(&fixture, true);
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(fixture.path())
+        .args(["merge", &fixture.id, "--check", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(runs(&log), 2);
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let reports = serde_json::Deserializer::from_str(&stdout)
+        .into_iter::<serde_json::Value>()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(reports.len(), 1, "{stdout}");
+    assert!(reports[0].is_array());
+}
+
+#[test]
+fn merge_commit_strategy_stops_retrying_a_base_that_keeps_moving() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    let logs = tempdir().unwrap();
+    let log = logs.path().join("runs");
+    // Each run moves the base onto the next records-only commit.
+    merge_commit_policy(
+        &fixture,
+        &[&format!(
+            "echo run >> {log}; n=$(wc -l < {log} | tr -d \" \"); git update-ref refs/heads/main refs/heads/later$n",
+            log = log.display()
+        )],
+    );
+    let mut parent = "main".to_owned();
+    for n in 1..=3 {
+        git(
+            fixture.path(),
+            &["switch", "-q", "-c", &format!("later{n}"), &parent],
+        );
+        ok(fixture.path(), &["-q", "issue", "create", "Follow up"]);
+        commit(fixture.path(), "later base commit");
+        parent = format!("later{n}");
+    }
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        !passed
+            && output.contains("merge_snapshot_changed")
+            && output.contains("kept moving across 3 attempts"),
+        "{output}"
+    );
+    assert_eq!(runs(&log), 3);
+    assert_eq!(
+        git(fixture.path(), &["rev-parse", "main"]),
+        git(fixture.path(), &["rev-parse", "later3"])
+    );
+    assert!(git(fixture.path(), &["branch", "--list", &fixture.branch]).contains(&fixture.branch));
+}
+
+#[test]
+fn merge_commit_strategy_refuses_a_retry_whose_new_base_changes_the_items_records() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    let logs = tempdir().unwrap();
+    let log = logs.path().join("runs");
+    merge_commit_policy(&fixture, &[&base_mover(&log)]);
+    git(fixture.path(), &["switch", "-q", "-c", "later", "main"]);
+    ok(
+        fixture.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{}", fixture.id),
+            "--kind",
+            "test",
+            "--producer",
+            "base",
+            "--summary",
+            "Base proof about the item",
+            "--",
+            "true",
+        ],
+    );
+    commit(fixture.path(), "base adds evidence about the item");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        !passed && output.contains("merge_base_moved") && output.contains("merge_base_records"),
+        "{output}"
+    );
+    assert_eq!(runs(&log), 1);
+    assert!(git(fixture.path(), &["branch", "--list", &fixture.branch]).contains(&fixture.branch));
+}
+
+#[test]
 fn merge_commit_strategy_refuses_a_base_that_moved_by_code_during_checks_naming_the_commit() {
     let fixture = Fixture::new();
     fixture.approval("Reviewer");

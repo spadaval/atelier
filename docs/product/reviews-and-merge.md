@@ -112,7 +112,9 @@ cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
 Merge uses the base branch's committed policy and its
-`branch_policy.merge_strategy`. Under `fast_forward_only`, the default, merge
+`branch_policy.merge_strategy`; omitted, it is `merge_commit` when `merge_checks`
+include a `shell.check` and `fast_forward_only` otherwise (see [workflow
+configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
 fast-forwards only. If the base has moved on, merge it into the work branch,
 record fresh proof, and renew review only if the merge needed resolving (see
 approval freshness).

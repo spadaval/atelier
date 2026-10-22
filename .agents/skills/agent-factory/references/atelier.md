@@ -114,8 +114,9 @@ what each record contains.
 - Integrate only with `atelier merge`, never a plain `git merge` into the
   base branch, which skips every gate. `atelier merge <id> --check` evaluates
   the gates without integrating; `atelier merge <id>` integrates the
-  reviewed work and deletes the local work branch. Under the default
-  `branch_policy.merge_strategy: fast_forward_only` it fast-forwards the
+  reviewed work and deletes the local work branch. Under
+  `branch_policy.merge_strategy: fast_forward_only` (the default unless
+  `merge_checks` include a `shell.check`) it fast-forwards the
   base, so the branch must already contain it. Under `merge_commit` it
   always creates a merge commit of the branch into the current base, runs the
   policy's `merge_checks` on that merged tree, and moves the base to it only

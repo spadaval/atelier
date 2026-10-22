@@ -17,7 +17,7 @@ schema_version: 2
 closed_at: "2026-10-22T20:43:20.103489695+00:00"
 status: "done"
 title: "Clean up merged-tree checkouts after an interrupted merge"
-updated_at: "2026-10-22T20:43:20.103489695+00:00"
+updated_at: "2026-10-22T20:54:58.159242249+00:00"
 ---
 
 ## Goal
@@ -37,6 +37,9 @@ Under `merge_strategy: merge_commit`, `atelier merge` runs `merge_checks` in a t
 - 2026-10-22 [decision] Leftover checkouts are found by a free lock on atelier-merge-*/lock and swept at the start of the next merge; prune and doctor do not sweep them
   Reason: A killed merge cannot run Drop, but the OS releases its lock, so a free lock distinguishes a leftover from a concurrent merge in another worktree, which pid files cannot do safely. The Done when asks for any of merge, prune or doctor; merge is the command that creates them.
   Rejected: Pid files: pid reuse and no atomic claim; deleting every atelier-merge-* directory: would break a concurrent live merge
+- 2026-10-22 [decision] The sweep treats a directory already gone as removed and reports other removal failures as warnings; a live checkout from a binary older than the lock gets no protection
+  Reason: A sweep must not fail a merge over housekeeping. A pre-lock checkout (no lock file) could be swept by a new binary, but every session here runs the reinstalled binary after merge, so the window does not occur.
+  Rejected: Treating a missing lock file as live: strands the leftovers of a kill between mkdir and lock
 
 ## Close Reason
 

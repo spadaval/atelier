@@ -37,7 +37,7 @@ impl MergedCheckout {
         // directory whose lock file does not exist yet.
         let creating = lock_file(&common.join("atelier-merge.lock"))?;
         creating.lock()?;
-        Self::sweep(repo, &common)?;
+        Self::sweep(repo, &common);
         let dir = tempfile::Builder::new()
             .prefix(MERGE_DIR_PREFIX)
             .tempdir_in(&common)?;
@@ -70,9 +70,11 @@ impl MergedCheckout {
     /// Remove the checkouts earlier merges left behind when they were killed
     /// during their checks. A directory whose lock is held belongs to a live
     /// merge and stays.
-    fn sweep(repo: &Path, common: &Path) -> Result<()> {
-        for entry in std::fs::read_dir(common)? {
-            let dir = entry?.path();
+    fn sweep(repo: &Path, common: &Path) {
+        let Ok(entries) = std::fs::read_dir(common) else {
+            return;
+        };
+        for dir in entries.filter_map(|entry| entry.ok().map(|entry| entry.path())) {
             let leftover = dir
                 .file_name()
                 .and_then(|name| name.to_str())
@@ -83,12 +85,23 @@ impl MergedCheckout {
                     .args(["worktree", "remove", "--force"])
                     .arg(dir.join("tree"))
                     .output();
-                std::fs::remove_dir_all(&dir)
-                    .with_context(|| format!("could not remove leftover {}", dir.display()))?;
+                if let Err(error) = discard(&dir) {
+                    eprintln!(
+                        "warning: could not remove leftover merge checkout {}: {error}",
+                        dir.display()
+                    );
+                }
             }
         }
-        git::git_output(repo, &["worktree", "prune"])?;
-        Ok(())
+        let _ = git::git_output(repo, &["worktree", "prune"]);
+    }
+}
+/// Remove a leftover directory; one already gone, such as to a concurrent
+/// sweep, counts as removed.
+fn discard(dir: &Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(dir) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
     }
 }
 impl Drop for MergedCheckout {
@@ -514,6 +527,15 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
             stale_from_checkout: false,
         });
     }
+    // A retry reports nothing: the next attempt prints the one report.
+    if let Ok(current) = crate::commands::git::resolve(repo, &base_ref) {
+        if current != base_head {
+            let moved = base_moved(repo, &id, strategy, base, (&base_head, &current));
+            if moved.downcast_ref::<RetryOnMovedBase>().is_some() {
+                return Err(moved);
+            }
+        }
+    }
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);
     } else if quiet {
@@ -686,4 +708,18 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         println!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::discard;
+
+    #[test]
+    fn a_leftover_directory_already_gone_counts_as_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let leftover = root.path().join("atelier-merge-gone");
+        assert!(discard(&leftover).is_ok());
+        std::fs::create_dir(&leftover).unwrap();
+        assert!(discard(&leftover).is_ok() && !leftover.exists());
+    }
 }
