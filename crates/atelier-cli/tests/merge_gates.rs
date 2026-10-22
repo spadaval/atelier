@@ -2429,6 +2429,36 @@ fn merge_commit_strategy_prints_one_json_report_for_a_retried_merge() {
     assert!(reports[0].is_array());
 }
 
+/// A records-only base move after everything but the locks has been checked
+/// still yields one report, from the attempt that returns (atelier-1hjj).
+#[test]
+#[cfg(feature = "test-hooks")]
+fn merge_commit_strategy_prints_one_json_report_when_the_base_moves_just_before_the_locks() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    merge_commit_policy(&fixture, &["true"]);
+    later_branch(&fixture, true);
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(fixture.path())
+        .args(["merge", &fixture.id, "--check", "--json"])
+        .env("ATELIER_TEST_MERGE_MOVE_BASE_TO", "later")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("merge_base_moved"),
+        "the base moved: {stderr}"
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let reports = serde_json::Deserializer::from_str(&stdout)
+        .into_iter::<serde_json::Value>()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(reports.len(), 1, "{stdout}");
+    assert!(reports[0].is_array());
+}
+
 #[test]
 fn merge_commit_strategy_stops_retrying_a_base_that_keeps_moving() {
     let fixture = Fixture::new();

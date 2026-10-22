@@ -348,6 +348,19 @@ fn base_moved(
     }
 }
 
+/// Lets a test move the base onto the branch named by
+/// `ATELIER_TEST_MERGE_MOVE_BASE_TO` after the checks and before the locks.
+#[cfg(feature = "test-hooks")]
+fn test_move_base_before_locks(repo: &Path, base: &str) {
+    if let Some(target) = std::env::var_os("ATELIER_TEST_MERGE_MOVE_BASE_TO") {
+        let target = format!("refs/heads/{}", target.to_string_lossy());
+        let _ = git::git_output(
+            repo,
+            &["update-ref", &format!("refs/heads/{base}"), &target],
+        );
+    }
+}
+
 /// Quiet output is `passed` once the gates pass (and, without `--check`, the
 /// merge is done); a failed gate's line goes to stderr instead. A base that
 /// moves by records-only commits while checks run is merged again, up to
@@ -596,31 +609,25 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         supports: Vec::new(),
         stale_from_checkout: false,
     });
-    // A retry reports nothing: the next attempt prints the one report.
-    if let Ok(current) = crate::commands::git::resolve(repo, &base_ref) {
-        if current != base_head {
-            let moved = base_moved(repo, &id, strategy, base, (&base_head, &current));
-            if moved.downcast_ref::<RetryOnMovedBase>().is_some() {
-                return Err(moved);
+    let report = || -> Result<()> {
+        if json {
+            println!("{}", serde_json::to_string_pretty(&nodes)?);
+        } else if quiet {
+            for node in nodes.iter().filter(|node| !node.passed) {
+                eprintln!("FAIL {}: {}", node.check, node.reason);
+            }
+        } else {
+            for node in &nodes {
+                println!(
+                    "{} {}: {}",
+                    if node.passed { "pass" } else { "FAIL" },
+                    node.check,
+                    node.reason
+                );
             }
         }
-    }
-    if json {
-        println!("{}", serde_json::to_string_pretty(&nodes)?);
-    } else if quiet {
-        for node in nodes.iter().filter(|node| !node.passed) {
-            eprintln!("FAIL {}: {}", node.check, node.reason);
-        }
-    } else {
-        for node in &nodes {
-            println!(
-                "{} {}: {}",
-                if node.passed { "pass" } else { "FAIL" },
-                node.check,
-                node.reason
-            );
-        }
-    }
+        Ok(())
+    };
     // A failed check about another item names it.
     let failed = nodes
         .iter()
@@ -638,10 +645,27 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     }
     state_paths.sort();
     state_paths.dedup();
+    #[cfg(feature = "test-hooks")]
+    test_move_base_before_locks(repo, base);
     let _transactions = state_paths
         .iter()
         .map(|path| atelier_records::mutation_lock::CanonicalMutationLock::exclusive(path))
         .collect::<Result<Vec<_>>>()?;
+    // The base is read under the locks, then the report prints once: a base
+    // that moves by records-only commits retries without having printed, so
+    // only the attempt that returns reports (atelier-1hjj).
+    let moved = match crate::commands::git::resolve(repo, &base_ref) {
+        Ok(current) if current == base_head => None,
+        Ok(current) => Some(base_moved(repo, &id, strategy, base, (&base_head, &current))),
+        Err(_) => Some(anyhow::anyhow!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review")),
+    };
+    if let Some(moved) = moved {
+        if moved.downcast_ref::<RetryOnMovedBase>().is_none() {
+            report()?;
+        }
+        return Err(moved);
+    }
+    report()?;
     // Shell checks cannot authorize a different tree or leave dirty records.
     snapshot.require_clean(repo)?;
     if git::head_commit(repo)? != head
@@ -652,11 +676,6 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         )? != head
     {
         bail!("merge_snapshot_changed: Git refs changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
-    }
-    match crate::commands::git::resolve(repo, &base_ref) {
-        Ok(current) if current == base_head => {}
-        Ok(current) => return Err(base_moved(repo, &id, strategy, base, (&base_head, &current))),
-        Err(_) => bail!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review"),
     }
     if base_checkout(repo, base)? != base_tree {
         bail!("merge_snapshot_changed: base checkout ownership changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
