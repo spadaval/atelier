@@ -12,7 +12,6 @@ pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
 schema_version: 3
 branch_policy:
   base_branch: main
-  merge_strategy: fast_forward_only
 issue_types:
   bug:
     label: Bug
@@ -221,6 +220,7 @@ pub struct WorkflowPolicy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchLifecycleConfig {
     pub base_branch: String,
+    /// Set by `branch_policy.merge_strategy`, else derived from `merge_checks`.
     pub merge_strategy: MergeStrategy,
 }
 
@@ -531,7 +531,6 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
         )?,
         display_path,
     )?;
-    let branch_policy = parse_branch_policy(root.get("branch_policy"), display_path)?;
     let issue_types = parse_issue_types(
         require_mapping(
             root,
@@ -567,6 +566,8 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
             display_path,
         )?,
     };
+    let branch_policy =
+        parse_branch_policy(root.get("branch_policy"), display_path, &merge_checks)?;
     let policy = WorkflowPolicy {
         merge_checks,
         schema_version,
@@ -580,7 +581,15 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
     Ok(policy)
 }
 
-fn parse_branch_policy(value: Option<&Value>, display_path: &str) -> Result<BranchLifecycleConfig> {
+/// Without `merge_strategy`, a policy that proves the merged tree with a
+/// `shell.check` merges with `merge_commit`, so landing work does not force
+/// every other branch to catch up; any other policy keeps `fast_forward_only`
+/// (atelier-6mgg).
+fn parse_branch_policy(
+    value: Option<&Value>,
+    display_path: &str,
+    merge_checks: &[ValidatorDefinition],
+) -> Result<BranchLifecycleConfig> {
     let Some(value) = value else {
         return Err(policy_error_with_field(
             "workflow_config_invalid_branch_policy",
@@ -609,15 +618,24 @@ fn parse_branch_policy(value: Option<&Value>, display_path: &str) -> Result<Bran
         "branch_policy.base_branch",
         "base branch",
     )?;
-    let merge_strategy = parse_merge_strategy(raw.merge_strategy.as_deref(), display_path)?;
+    let merge_strategy = match raw.merge_strategy.as_deref() {
+        Some(name) => parse_merge_strategy(name, display_path)?,
+        None if merge_checks
+            .iter()
+            .any(|check| matches!(check.params, Some(ValidatorParams::ShellCheck { .. }))) =>
+        {
+            MergeStrategy::MergeCommit
+        }
+        None => MergeStrategy::FastForwardOnly,
+    };
     Ok(BranchLifecycleConfig {
         base_branch,
         merge_strategy,
     })
 }
 
-fn parse_merge_strategy(value: Option<&str>, display_path: &str) -> Result<MergeStrategy> {
-    match value.unwrap_or("squash") {
+fn parse_merge_strategy(value: &str, display_path: &str) -> Result<MergeStrategy> {
+    match value {
         "squash" => Ok(MergeStrategy::Squash),
         "merge_commit" => Ok(MergeStrategy::MergeCommit),
         "fast_forward_only" => Ok(MergeStrategy::FastForwardOnly),
@@ -1795,7 +1813,7 @@ mod tests {
     }
 
     fn default_branch_policy() -> &'static str {
-        "branch_policy:\n  base_branch: main\n  merge_strategy: fast_forward_only\n"
+        "branch_policy:\n  base_branch: main\n"
     }
 
     fn configured_policy() -> String {
@@ -2057,6 +2075,50 @@ mod tests {
             policy.branch_policy.merge_strategy,
             MergeStrategy::FastForwardOnly
         );
+    }
+
+    fn strategy_of(merge_checks: &str, explicit: Option<&str>) -> MergeStrategy {
+        let mut text = valid_policy().to_string();
+        if let Some(name) = explicit {
+            text = text.replace(
+                default_branch_policy(),
+                &format!("{}  merge_strategy: {name}\n", default_branch_policy()),
+            );
+        }
+        text.push_str(merge_checks);
+        parse_policy_text(&text, WORKFLOW_POLICY_PATH)
+            .unwrap()
+            .branch_policy
+            .merge_strategy
+    }
+
+    #[test]
+    fn merge_strategy_defaults_to_merge_commit_only_with_a_shell_check() {
+        let shell = "merge_checks:\n  - shell.check: { command: 'true' }\n";
+        assert_eq!(strategy_of(shell, None), MergeStrategy::MergeCommit);
+        assert_eq!(strategy_of("", None), MergeStrategy::FastForwardOnly);
+        assert_eq!(
+            strategy_of("merge_checks:\n  - lint.none_blocking\n", None),
+            MergeStrategy::FastForwardOnly
+        );
+        assert_eq!(
+            strategy_of("merge_checks: []\n", None),
+            MergeStrategy::FastForwardOnly
+        );
+    }
+
+    #[test]
+    fn explicit_merge_strategy_overrides_the_default() {
+        let shell = "merge_checks:\n  - shell.check: { command: 'true' }\n";
+        assert_eq!(
+            strategy_of(shell, Some("fast_forward_only")),
+            MergeStrategy::FastForwardOnly
+        );
+        assert_eq!(
+            strategy_of("", Some("merge_commit")),
+            MergeStrategy::MergeCommit
+        );
+        assert_eq!(strategy_of(shell, Some("squash")), MergeStrategy::Squash);
     }
 
     #[test]

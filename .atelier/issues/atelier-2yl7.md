@@ -19,9 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Default to merge_commit merging when the repository defines a test check"
-updated_at: "2026-10-22T19:58:19.278824634+00:00"
+updated_at: "2026-10-22T20:47:01.226059885+00:00"
 ---
 
 ## Goal
@@ -39,3 +39,9 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 k8h8 S3 leaves the default to Sumeet; this item is that decision plus its implementation. The post-switch sample is two branches, so S6's count from a larger run may be wanted first.
+
+## Notes
+
+- 2026-10-22 [decision] The starter policy omits merge_strategy so the parser's rule decides; the rule lives only in the parser
+  Reason: atelier init then gives the same result as any policy without the field (fast_forward_only with no shell.check, merge_commit once one is added), with no second copy of the rule to drift. Existing repositories set merge_strategy explicitly and parse unchanged; an installed binary older than this change reads an omitted value as squash, which merge already refuses, so only newly initialised repositories need the new binary.
+  Rejected: Writing the resolved strategy into the starter: preserves old-binary reads but leaves a new repository on fast_forward_only after it adds its first test check

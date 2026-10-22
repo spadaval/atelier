@@ -67,6 +67,14 @@ impl Fixture {
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
         ok(dir.path(), &["init", "--slug", "atelier"]);
+        // These scenarios test fast-forward integration, which a starter policy
+        // with a shell.check no longer selects by default.
+        let policy = dir.path().join(".atelier/workflow.yaml");
+        let text = fs::read_to_string(&policy).unwrap().replace(
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: fast_forward_only\n",
+        );
+        fs::write(policy, text).unwrap();
         let id = ok(
             dir.path(),
             &[
