@@ -7,6 +7,10 @@
 //! and changes the records as they are on that branch, not on the current one.
 //! Atelier never commits here; the record changes are left for the agent to
 //! commit with the work they describe.
+//!
+//! A new owner branch is created from the current branch, or from the base
+//! named by `--base` whatever is checked out, including a detached HEAD. The
+//! recorded base must be the policy's base branch, the one `land` trusts.
 
 use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
@@ -14,20 +18,46 @@ use atelier_app::record_ref::RecordKind;
 use chrono::Utc;
 use std::path::Path;
 
-use crate::commands::workflow;
 use crate::commands::{bundle, git};
+use crate::commands::{lease, workflow};
 use atelier_app::workflow_policy::WORKFLOW_BRANCH_FIELD;
 use atelier_records::CanonicalIssueRecord;
 
 const START_TRANSITION: &str = "start";
 
 /// Quiet output is the branch name alone; notes about human work go to stderr.
-pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) -> Result<()> {
-    let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
+pub fn run(
+    index: &RecordIndex,
+    state_dir: &Path,
+    issue_ref: &str,
+    base_arg: Option<&str>,
+    take_over: bool,
+    quiet: bool,
+) -> Result<()> {
     let repo_root = workflow::repo_root()?;
+    // `--base` names a local branch to create the owner branch from. The issue
+    // and its branch are resolved from that base's records, so the checkout
+    // need not hold the issue (a branch forked before it was planned, or an
+    // older detached commit).
+    let base_pin = base_arg
+        .map(|name| -> Result<(String, String)> {
+            let commit = git::resolve(&repo_root, &format!("refs/heads/{name}")).map_err(|_| {
+                anyhow::anyhow!("start_base_missing: there is no local branch '{name}' to start {issue_ref} from; create or fetch it, then rerun `atelier start {issue_ref} --base {name}`.")
+            })?;
+            Ok((name.to_owned(), commit))
+        })
+        .transpose()?;
+    let mut base_snapshot = base_pin
+        .as_ref()
+        .map(|(_, commit)| git::Snapshot::at(&repo_root, state_dir, commit))
+        .transpose()?;
+    let naming = base_snapshot
+        .as_ref()
+        .map_or(index, |snapshot| &snapshot.index);
+    let issue_id = crate::commands::issue::resolve_id(naming, issue_ref)?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let branch =
-        atelier_app::workflow_policy::resolve_work_branch(&policy, index, &issue_id)?.branch;
+        atelier_app::workflow_policy::resolve_work_branch(&policy, naming, &issue_id)?.branch;
 
     let current = git::current_branch(&repo_root)?;
     let switch_needed = current.as_deref() != Some(branch.as_str());
@@ -41,30 +71,43 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
                 dirty.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join("\n")
             );
         }
-        if !branch_exists && current.is_none() {
+        if !branch_exists && current.is_none() && base_arg.is_none() {
             bail!(
-                "start_detached_head: cannot create branch '{branch}' for {issue_id} from a detached HEAD; check out the branch to start from, then rerun `atelier start {issue_id}`."
+                "start_detached_head: cannot create branch '{branch}' for {issue_id} from a detached HEAD; pass the base to create it from with `atelier start {issue_id} --base <branch>`, or check out the branch to start from."
             );
         }
     }
 
+    let explicit = base_pin.filter(|_| !branch_exists);
     // The records `start` checks and changes: the target branch's when it
-    // switches to an existing branch, otherwise this checkout's (a new branch
-    // starts from the clean current HEAD).
-    let snapshot = if switch_needed && branch_exists {
-        Some(git::Snapshot::at(
-            &repo_root,
-            state_dir,
-            &existing.as_ref().unwrap().1,
-        )?)
+    // switches to an existing branch, the explicit base's when a new branch
+    // is created from it, otherwise this checkout's (a new branch starts from
+    // the clean current HEAD).
+    let pinned = if switch_needed {
+        existing
+            .as_ref()
+            .map(|(_, commit)| commit.clone())
+            .or_else(|| explicit.as_ref().map(|(_, commit)| commit.clone()))
     } else {
         None
+    };
+    let snapshot = match (&existing, explicit.is_some() && switch_needed) {
+        (Some((_, commit)), _) if switch_needed => {
+            Some(git::Snapshot::at(&repo_root, state_dir, commit)?)
+        }
+        (None, true) => base_snapshot.take(),
+        _ => None,
     };
     let (view_index, view_root) = match &snapshot {
         Some(snapshot) => (&snapshot.index, snapshot.root()),
         None => (index, repo_root.as_path()),
     };
     let Some(issue) = view_index.get_issue(&issue_id) else {
+        if let Some((name, _)) = &explicit {
+            bail!(
+                "start_branch_missing_record: base '{name}' does not contain issue {issue_id}; commit the record on {name}, then rerun `atelier start {issue_id} --base {name}`."
+            );
+        }
         bail!(
             "start_branch_missing_record: branch '{branch}' does not contain issue {issue_id}; commit the record on the branch that owns this work, then rerun `atelier start {issue_id}`."
         );
@@ -77,6 +120,52 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
     view_index.validate_policy(&view_policy, view_root)?;
     let work_branch =
         atelier_app::workflow_policy::resolve_work_branch(&view_policy, view_index, &issue_id)?;
+    if let Some(name) = base_arg {
+        let policy_base = &view_policy.branch_policy.base_branch;
+        let recorded = work_branch.recorded_base.as_ref().unwrap_or(policy_base);
+        if name != policy_base || name != recorded {
+            bail!(
+                "start_base_mismatch: --base {name} is not the base land trusts for {issue_id}: the policy base is {policy_base}{}; rerun `atelier start {issue_id} --base {policy_base}`.",
+                if recorded == policy_base { String::new() } else { format!(" and the recorded base is {recorded}") }
+            );
+        }
+    }
+    // Another worktree's live lease on the owner refuses the start unless the
+    // caller takes it over; a stale one is replaced with a note.
+    let mut lease_notes = Vec::new();
+    match lease::held_by_other(&repo_root, &work_branch.owner_id)? {
+        Some(lease::Held::Live(held)) if !take_over => bail!(
+            "start_item_held: {} is held by another session: {}. Work something else, or rerun `atelier start {issue_id} --take-over` to take it over.",
+            work_branch.owner_id,
+            lease::describe(&held)
+        ),
+        Some(lease::Held::Live(held)) => lease_notes.push(format!(
+            "Took over {} from {}.",
+            work_branch.owner_id,
+            lease::describe(&held)
+        )),
+        Some(lease::Held::Stale(held, why)) => lease_notes.push(format!(
+            "Replaced a stale lease on {}: {}; {why}.",
+            work_branch.owner_id,
+            lease::describe(&held)
+        )),
+        None => {}
+    }
+    if work_branch.recorded_base.is_none() && base_arg.is_none() && !branch_exists {
+        if let Some(wrong) = current.as_deref().filter(|name| {
+            *name != branch
+                && name
+                    .rsplit_once('/')
+                    .is_some_and(|(_, tail)| tail == work_branch.owner_id)
+        }) {
+            let owner_type = &view_index.require_issue(&work_branch.owner_id)?.issue_type;
+            let policy_base = &view_policy.branch_policy.base_branch;
+            bail!(
+                "start_branch_prefix_mismatch: you are on '{wrong}', but {} is a {owner_type}, so its branch is '{branch}'; start would record '{wrong}' as its base. Rerun `atelier start {issue_id} --base {policy_base}` (or switch to {policy_base} first) and start creates '{branch}'.",
+                work_branch.owner_id
+            );
+        }
+    }
     if work_branch.branch != branch {
         bail!(
             "start_branch_mismatch: on branch '{branch}', {issue_id} is owned by branch '{}'; repair the owner's {WORKFLOW_BRANCH_FIELD} field, then rerun `atelier start {issue_id}`.",
@@ -120,6 +209,7 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
             .recorded_base
             .clone()
             .unwrap_or_else(|| match (&current, branch_exists) {
+                (_, false) if explicit.is_some() => explicit.as_ref().unwrap().0.clone(),
                 (Some(current), false) => current.clone(),
                 _ => view_policy.branch_policy.base_branch.clone(),
             });
@@ -213,7 +303,10 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
                 vec!["switch", "-c", &branch, "--track", reference]
             }
             Some(_) => vec!["switch", &branch],
-            None => vec!["switch", "-c", &branch],
+            None => match &explicit {
+                Some((_, commit)) => vec!["switch", "-c", &branch, commit],
+                None => vec!["switch", "-c", &branch],
+            },
         };
         if !quiet {
             println!("git {}", args.join(" "));
@@ -223,10 +316,7 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
         println!("Already on branch {branch}; no git operations.");
     }
     let install = (|| -> Result<()> {
-        let expected = existing
-            .as_ref()
-            .map(|(_, pin)| pin)
-            .unwrap_or(&previous_head);
+        let expected = pinned.as_ref().unwrap_or(&previous_head);
         if atelier_app::git_freshness::head_commit(&repo_root)? != *expected
             || git::current_branch(&repo_root)?.as_deref() != Some(&branch)
         {
@@ -254,12 +344,14 @@ pub fn run(index: &RecordIndex, state_dir: &Path, issue_ref: &str, quiet: bool) 
         return Err(error).context("start record transaction failed; prior records restored. Inspect git status before retrying; a newly created local branch may remain.");
     }
 
-    let notes = start_notes(
+    lease::claim(&repo_root, &work_branch.owner_id, &branch)?;
+    let mut notes = start_notes(
         &issue_id,
         human_work,
         &work_branch.owner_id,
         &human_children,
     );
+    notes.extend(lease_notes);
     if quiet {
         println!("{branch}");
         for note in notes {

@@ -176,11 +176,14 @@ land: refused — 2 checks (land_records_uncommitted, land_base_unreviewed)
 ```
 
 The line is the command name, `passed` or `refused`, and on refusal the count
-and codes of the checks that failed. It is the last line of the combined
+and codes of the checks that failed. `land --push` appends what happened to
+the push: `land: passed, pushed to origin/<branch>` or `land: refused — 1
+check (land_push_failed), nothing pushed`. It is the last line of the combined
 output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
 command's exit status is the pipe's last command's, so check `$?` before
-acting on it. Each command adopts the line in its own item: `land` in
-atelier-bvl3 and atelier-9jr8, `merge` and `merge --check` in atelier-6rh7,
+acting on it. Each command adopts the line in its own item: `land` prints it since
+atelier-ecah (a refusal counts one check, the one that stopped it, until
+atelier-bvl3 and atelier-9jr8 list every failed check), `merge` and `merge --check` in atelier-6rh7,
 `evidence record` in atelier-3ekh, `check` in atelier-4t5l, `start` in
 atelier-501y, and `doctor` in atelier-rc8j.
 

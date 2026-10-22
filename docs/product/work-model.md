@@ -172,6 +172,35 @@ Missions coordinate work rather than own a work branch.
 checks out or creates its work branch, records branch metadata, and applies the
 available `start` transition. Commit those record changes with the work.
 
+A new work branch is created from the current branch, which `start` records
+as the branch base without checking it; `land` later refuses with
+`land_base_mismatch` unless that base is the policy's base branch, the one it
+trusts. `atelier start <id> --base <branch>` creates the branch from that local
+branch instead, from any checkout including a detached HEAD, resolves the issue and reads and
+checks the records as they are on that base (the checkout need not hold them), and records it. `--base` names
+the policy's base branch only (`start_base_mismatch` otherwise; a branch that
+does not exist is `start_base_missing`), and a base without the issue's
+committed record is refused with `start_branch_missing_record`. Without
+`--base`, a detached HEAD refuses with `start_detached_head`, and a new branch
+is not created from a current branch named `<prefix>/<owner id>` whose prefix
+is not the owner's type, such as `task/<id>` for a feature: `start` refuses
+with `start_branch_prefix_mismatch` and names the right branch to create, since
+it would record the wrong branch as the base and `land` would later fail with
+`land_base_mismatch` (atelier-mhx0, atelier-yc4d).
+
+`start` also leaves a runtime lease for the owner, so a second session can
+learn the item is taken (atelier-81e5). The lease is a small file under
+`.atelier/runtime/leases/` of the repository's primary checkout, shared by
+all its worktrees and never committed. It names the worktree, branch and a
+heartbeat that `start` sets and `status` renews from the holding worktree.
+Another worktree's lease is live while that worktree exists and its heartbeat
+is under 4 hours old; it expires at once when the worktree is deleted or starts
+a different owner. `start` refuses a live lease with `start_item_held` unless
+given `--take-over`, notes a take-over, and replaces a stale lease with a note.
+`status` shows `Held: ⚠ also held by <worktree> ...` in Local State when
+another live worktree holds the owner. The lease is a warning, not a lock, and
+two sessions in one worktree cannot be told apart.
+
 Begin work with `atelier start`, not `atelier issue transition <id> start`.
 The bare transition only changes the record: it creates no branch and records
 no owner. While such work is active, `atelier land` refuses it with

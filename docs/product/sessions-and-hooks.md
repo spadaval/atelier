@@ -5,6 +5,7 @@ atelier status
 atelier land
 atelier land <owner-or-child-id>
 atelier land --install
+atelier land --push
 atelier setup claude
 atelier setup claude --binary <path-to-atelier>
 ```
@@ -68,6 +69,34 @@ base, and when the base already has a policy. The Stop hook runs plain `land`,
 so on an installing branch it blocks each turn's stop with
 `land_install_unconfirmed`, warning instead on a repeated stop, until the
 install merges.
+
+`land` ends with a verdict line, the last line of its combined output (see
+[verdict line](human-cli-output.md#verdict-line)): `land: passed`, or `land:
+refused — 1 check (<code>)` with a non-zero exit. `land --push` runs the same
+checks and, only when they pass, pushes the checked HEAD to the current
+branch's own configured upstream (`branch.<name>.remote` and `.merge`) through
+git, then ends `land: passed, pushed to <remote>/<branch>`. A refusal pushes
+nothing and ends `land: refused — 1 check (<code>), nothing pushed`; a branch
+with no upstream or a detached HEAD refuses (`land_push_no_upstream`,
+`land_push_detached`), as does an upstream on remote `.` or on a branch of
+another name, such as a work branch created from `origin/main`
+(`land_push_upstream_mismatch`; fix it with `git push -u <remote> <branch>`).
+What is pushed is the commit land checked: if HEAD moved during the checks
+land refuses (`land_state_changed`). A push git rejects exits non-zero with
+git's message and `land: refused — 1 check (land_push_failed), nothing
+pushed`. `--push` does not combine with
+`--hook`. Prefer it to `atelier land && git push`, and never push behind a
+pipe: a pipe's exit status is its last command's (atelier-ecah).
+
+When the local base branch is ahead of its upstream, `land` (and `land
+--push`) prints a warning, before any push, naming the unpushed base commits
+the current owner did not make: up to five, as `<hash> <subject> (<author>)`,
+then a count. A commit is the owner's when its message names the owner or an
+issue in the owner's scope, as the start, close, merge and planning commits
+for owned work do; git authorship cannot tell sessions apart, since agents
+share one identity. With no owner, every unpushed base commit is named. The
+warning does not refuse: pushing the base can be meant, and it publishes
+those commits. A base with no upstream is not checked here (atelier-mvzi).
 
 On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see

@@ -140,7 +140,58 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run `atelier start <id>` from {base}")
     })
 }
+/// Names the commits the local base holds beyond its upstream that the
+/// current owner did not make, since pushing the base publishes them
+/// (atelier-mvzi). A commit is the owner's when its message names the owner or
+/// an issue in the owner's scope (`owned`), as the records start, close and
+/// merge commits for owned work do; with no owner, none are.
+fn foreign_base_commits_note(
+    repo: &Path,
+    base: &str,
+    owned: &std::collections::BTreeSet<String>,
+) -> Result<Option<String>> {
+    let Ok(upstream) = git::resolve(repo, &format!("{base}@{{upstream}}")) else {
+        return Ok(None);
+    };
+    let Ok(local) = git::resolve(repo, &format!("refs/heads/{base}")) else {
+        return Ok(None);
+    };
+    let range = format!("{upstream}..{local}");
+    let log = git::text(repo, &["log", "--format=%h%x1f%an%x1f%s%x1f%B%x1e", &range])?;
+    let foreign = log
+        .split('\x1e')
+        .filter_map(|entry| {
+            let mut parts = entry.trim().splitn(4, '\x1f');
+            let (short, author, subject, message) =
+                (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
+            (!short.is_empty() && !owned.iter().any(|id| message.contains(id.as_str())))
+                .then(|| format!("{short} {subject} ({author})"))
+        })
+        .collect::<Vec<_>>();
+    if foreign.is_empty() {
+        return Ok(None);
+    }
+    const SHOWN: usize = 5;
+    let mut listed = foreign
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("; ");
+    if foreign.len() > SHOWN {
+        listed.push_str(&format!("; and {} more", foreign.len() - SHOWN));
+    }
+    Ok(Some(format!(
+        "Warning: {base} is ahead of its upstream with {} that {}: {listed}. Pushing {base} publishes them; confirm they are meant to go out.",
+        crate::human_output::count_noun(foreign.len(), "commit"),
+        if owned.is_empty() { "no owner made" } else { "this owner did not make" },
+    )))
+}
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
+    land_checked(requested, install, deep).map(|(text, _)| text)
+}
+/// The landing report, and the commit every check ran against.
+fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(String, String)> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let (head, branch, snapshot, initial_paths, index) = {
@@ -221,6 +272,9 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
     // land checks only what changed since then, and atelier doctor checks
     // everything (atelier-37uq).
     let base_name = &source.policy.branch_policy.base_branch;
+    if let Some(note) = foreign_base_commits_note(repo, base_name, &owned)? {
+        lines.push(note);
+    }
     // Trust stops at the base's upstream, not the local base, which can hold
     // commits that no land has checked; without an upstream, nothing is
     // trusted. A work branch trusts no further than its branch base.
@@ -420,7 +474,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");
     }
     lines.push("Landing checks passed. No commits or records created.".into());
-    Ok(lines.join("\n"))
+    Ok((lines.join("\n"), head))
 }
 
 /// Reads a Claude Code hook payload for `event` from stdin and enters its
@@ -440,11 +494,109 @@ pub(crate) fn read_hook_payload(event: &str) -> Result<bool> {
     Ok(payload["stop_hook_active"].as_bool().unwrap_or(false))
 }
 
-pub fn land(requested: Option<&str>, hook: bool, install: bool, quiet: bool) -> Result<()> {
+/// The error `land` has already reported with its verdict line; `main` exits
+/// non-zero without printing it again.
+#[derive(Debug)]
+pub struct Reported;
+impl std::fmt::Display for Reported {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("land refused")
+    }
+}
+impl std::error::Error for Reported {}
+
+/// The leading `land_*` check code of a refusal, if it has one.
+fn refusal_code(error: &anyhow::Error) -> Option<String> {
+    let message = error.to_string();
+    let (code, _) = message.split_once(':')?;
+    (code.starts_with("land_") && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
+        .then(|| code.to_owned())
+}
+
+/// Pushes the commit land checked to the current branch's own upstream
+/// branch, never another ref. Returns the destination, `<remote>/<branch>`.
+fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
+    let branch = git::checkout_branch(repo)?.context(
+        "land_push_detached: a detached HEAD has no branch to push; switch to the owner's branch",
+    )?;
+    let config = |key: &str| {
+        git::text(
+            repo,
+            &["config", "--get", &format!("branch.{branch}.{key}")],
+        )
+        .ok()
+    };
+    let (Some(remote), Some(merge)) = (config("remote"), config("merge")) else {
+        bail!("land_push_no_upstream: {branch} has no upstream; set one with `git push -u <remote> {branch}`, then rerun `atelier land --push`");
+    };
+    if remote == "." || merge != format!("refs/heads/{branch}") {
+        bail!("land_push_upstream_mismatch: {branch} tracks {remote} {merge}, not a remote branch of its own name, so pushing could publish this work to another branch; run `git push -u <remote> {branch}` to set its own upstream, then rerun `atelier land --push`");
+    }
+    if git::resolve(repo, "HEAD")? != checked {
+        bail!("land_state_changed: HEAD moved after the checks; nothing pushed; rerun `atelier land --push`");
+    }
+    let output = atelier_app::git_freshness::command(repo)
+        .args(["push", &remote, &format!("{checked}:{merge}")])
+        .output()?;
+    if !output.status.success() {
+        bail!(
+            "land_push_failed: git push to {remote} refused {branch}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(format!("{remote}/{branch}"))
+}
+
+pub fn land(
+    requested: Option<&str>,
+    hook: bool,
+    install: bool,
+    push: bool,
+    quiet: bool,
+) -> Result<()> {
     if !hook {
-        let output = land_text(requested, install, false)?;
-        println!("{}", if quiet { "passed" } else { &output });
-        return Ok(());
+        let nothing_pushed = if push { ", nothing pushed" } else { "" };
+        // The checks' report prints before any push, so a warning is read
+        // before the commits go out.
+        let pushed = land_checked(requested, install, false).and_then(|(output, checked)| {
+            if !quiet {
+                println!("{output}");
+            }
+            if !push {
+                return Ok(None);
+            }
+            let layout = StorageLayout::discover()?;
+            push_checked_branch(layout.repo_root(), &checked).map(Some)
+        });
+        match pushed {
+            Ok(destination) => {
+                let verdict = match &destination {
+                    Some(to) => format!("land: passed, pushed to {to}"),
+                    None => "land: passed".to_owned(),
+                };
+                println!(
+                    "{}",
+                    if quiet {
+                        verdict.trim_start_matches("land: ")
+                    } else {
+                        &verdict
+                    }
+                );
+                return Ok(());
+            }
+            Err(error) => {
+                let code = refusal_code(&error);
+                eprintln!("Error: {error:?}");
+                eprintln!(
+                    "{}",
+                    match code.as_deref() {
+                        Some(code) => format!("land: refused — 1 check ({code}){nothing_pushed}"),
+                        None => format!("land: refused{nothing_pushed}"),
+                    }
+                );
+                return Err(Reported.into());
+            }
+        }
     }
     let mut repeated = false;
     let result = read_hook_payload("Stop").and_then(|active| {
