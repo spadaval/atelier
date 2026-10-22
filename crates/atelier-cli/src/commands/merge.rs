@@ -378,6 +378,36 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
             stale_from_checkout: false,
         });
     }
+    // Every done claim merging would put on the base must be one `land`
+    // there accepts, judged by the same code, so a refusal comes before
+    // integration rather than after it (atelier-uw4x).
+    let (tip, tip_index) = merge
+        .as_ref()
+        .map_or((&head, &index), |(_, commit, _, merged)| (commit, merged));
+    let unreviewed = crate::commands::git::first_unreviewed_claim(
+        repo,
+        tip_index,
+        &source.policy,
+        tip,
+        &base_head,
+    )?;
+    nodes.push(review_gate::GateNode {
+        kind: "workflow_validator",
+        id: format!("{owner}/claims.reviewed"),
+        target: owner.into(),
+        check: "claims.reviewed".into(),
+        passed: unreviewed.is_none(),
+        reason: match &unreviewed {
+            None => "every done claim merging adds is covered by a current accepted approval".into(),
+            Some((commit, claim)) => format!(
+                "commit {} marks {claim} done outside every current approval, so `land` on {base} would refuse it with land_base_done_claim. An approval covers a done claim in its scope (the owner and its children) while it is still current at the claim's commit. If {claim} is in {owner}'s scope, record a fresh independent approval of {owner} at or after {}; otherwise leave {claim} open on this branch and close it on its own reviewed branch",
+                &commit[..8.min(commit.len())],
+                &commit[..8.min(commit.len())],
+            ),
+        },
+        supports: Vec::new(),
+        stale_from_checkout: false,
+    });
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);
     } else if quiet {

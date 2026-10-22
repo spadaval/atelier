@@ -193,6 +193,56 @@ pub fn approval_is_current_to(
     }
     Ok(true)
 }
+/// Whether an approval or trivial exemption is one `merge` would accept,
+/// judged from history as the base's claim gates judge it (atelier-n90q): an
+/// approval's identity is independent of the scope's authors up to the event
+/// (an exemption is explicit and names itself), and every finding on the
+/// scope pinned at or before it has an accepted disposition by then: a FIX
+/// NOW resolved at or before its pin, a DEFER or NO ACTION accepted by a
+/// non-author. `land` on the base counts only these as covering commits.
+pub fn approval_accepted(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    record: &ReviewRecord,
+) -> Result<bool> {
+    let independent = match record.event {
+        ReviewEvent::TrivialExemption => true,
+        ReviewEvent::Approval => original_independent(index, read, record).unwrap_or(false),
+        _ => false,
+    };
+    if !independent {
+        return Ok(false);
+    }
+    let issue = index.require_issue(&record.target)?;
+    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
+    for finding in index.reviews().filter(|finding| {
+        ids.contains(&finding.target) && matches!(finding.event, ReviewEvent::Finding { .. })
+    }) {
+        if !ancestor(read, &finding.commit, &record.commit) {
+            continue;
+        }
+        let accepted = match index.latest_disposition(&finding.header.id) {
+            Some(disposition) => match &disposition.event {
+                ReviewEvent::Disposition {
+                    decision: FindingDecision::FixNow,
+                    resolution_commit,
+                    ..
+                } => resolution_commit
+                    .as_ref()
+                    .is_some_and(|resolution| ancestor(read, resolution, &record.commit)),
+                ReviewEvent::Disposition { .. } => {
+                    original_independent(index, read, disposition).unwrap_or(false)
+                }
+                _ => false,
+            },
+            None => false,
+        };
+        if !accepted {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
 /// A merge of base content into the work branch, checked against the branch
 /// side. Paths Git merged on its own came from the base, except that an
 /// in-scope issue record may still change only in status, so base planning

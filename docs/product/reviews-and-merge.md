@@ -64,6 +64,10 @@ changes only those records, by status, timestamps and Close Reason, keeps the
 approval current, while a close commit that also edits code or any other field
 makes it stale, and `merge` refuses it before integrating until a fresh
 approval is recorded at or after that commit (atelier-n642, atelier-uw4x).
+`merge` also runs `land`'s own check of done claims on the commit it would put
+on the base, as its `claims.reviewed` gate: a done claim outside every current
+approval's scope, such as an issue created already done after the approval,
+fails it, naming the commit and the fix.
 Adding a child to the
 owner edits the owner's record, so it does make approval stale. A link is
 stored only on the record that declares it (atelier-ihss), so new work that
@@ -198,7 +202,9 @@ work branch, review, and `atelier merge`.
 the base commits that are not yet on the base's upstream. A commit counts as
 reviewed when a commit pinned by an approval or trivial exemption contains it,
 for completed owners that branched from this base and are not already done
-upstream. That is what `atelier merge` integrates. Every other commit may touch only records and the
+upstream, and only an approval `merge` would accept counts: from an identity
+independent of the scope's authors, with every finding pinned at or before it
+disposed by then (atelier-n90q). That is what `atelier merge` integrates. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. Those record-only commits also may not take a work
 item to done: a done claim travels on the work branch with the work, so `land`
