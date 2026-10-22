@@ -24,9 +24,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Match review effort to the change"
-updated_at: "2026-10-22T19:58:17.943603519+00:00"
+updated_at: "2026-10-22T23:03:39.401858930+00:00"
 ---
 
 ## Goal

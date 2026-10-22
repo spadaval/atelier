@@ -8,6 +8,8 @@ use std::{
     rc::Rc,
 };
 
+use crate::path_log::{PathLog, RecordGraph};
+
 #[derive(Clone)]
 pub struct CommitEdge {
     pub parent: String,
@@ -213,6 +215,9 @@ struct ObjectCache {
     trees: HashMap<String, Rc<Vec<TreeEntry>>>,
     commit_trees: HashMap<String, String>,
     histories: HashMap<Vec<String>, String>,
+    /// The history of HEAD behind every [`PathLog`], loaded on first use.
+    record_graph: Option<Rc<RecordGraph>>,
+    path_logs: HashMap<PathLog, Rc<[String]>>,
     commits: HashMap<String, Vec<u8>>,
     merge_resolutions: HashMap<String, Option<MergeResolution>>,
     /// Whether tree diffs matched `git diff` on this read phase's first
@@ -559,45 +564,25 @@ impl<'a> ReadContext<'a> {
         self.cache.status_only.insert(key, answer);
         Ok(answer)
     }
-    /// Fill the `history` cache for many queries, running them in parallel.
-    /// Failures are left uncached so the later `history` call reports them.
-    pub(crate) fn prefetch_histories(&mut self, queries: Vec<Vec<String>>) {
-        let mut pending = queries
-            .into_iter()
-            .filter(|query| !self.cache.histories.contains_key(query))
-            .collect::<Vec<_>>();
-        pending.sort();
-        pending.dedup();
-        if pending.is_empty() {
-            return;
+    /// The commits a path-limited `git log` over records lists. Every such
+    /// query in this read phase is answered from one load of HEAD's history,
+    /// so the Git work does not grow with the number of queries.
+    pub(crate) fn path_log(&mut self, query: &PathLog) -> Result<Rc<[String]>> {
+        if let Some(listed) = self.cache.path_logs.get(query) {
+            return Ok(listed.clone());
         }
-        let workers = std::thread::available_parallelism()
-            .map_or(4, usize::from)
-            .clamp(1, 8);
-        let chunk = pending.len().div_ceil(workers);
-        let repo = self.repo;
-        let results = std::thread::scope(|scope| {
-            let handles = pending
-                .chunks(chunk)
-                .map(|queries| {
-                    scope.spawn(move || {
-                        queries
-                            .iter()
-                            .filter_map(|query| {
-                                let args = query.iter().map(String::as_str).collect::<Vec<_>>();
-                                let output = git_output(repo, &args).ok()?;
-                                Some((query.clone(), String::from_utf8(output).ok()?))
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                })
-                .collect::<Vec<_>>();
-            handles
-                .into_iter()
-                .flat_map(|handle| handle.join().unwrap_or_default())
-                .collect::<Vec<_>>()
-        });
-        self.cache.histories.extend(results);
+        let graph = match &self.cache.record_graph {
+            Some(graph) => graph.clone(),
+            None => {
+                let head = self.pinned("HEAD")?;
+                let graph = Rc::new(RecordGraph::load(self.repo, &head)?);
+                self.cache.record_graph = Some(graph.clone());
+                graph
+            }
+        };
+        let listed: Rc<[String]> = graph.log(query)?.into();
+        self.cache.path_logs.insert(query.clone(), listed.clone());
+        Ok(listed)
     }
     pub(crate) fn author_names(&mut self, commit: &str) -> Result<String> {
         let commit = self.commit_id(commit)?;
@@ -789,35 +774,28 @@ impl<'a> ReadContext<'a> {
 
 /// The commits of `rev-list --parents pin..end` output that descend from
 /// `pin`, which is what `rev-list --ancestry-path pin..end` lists, computed
-/// from the same output instead of a second walk (atelier-v5tt). Marking
-/// repeats until nothing changes, as Git's does, so a parent cycle that
-/// grafts can create still ends (atelier-6vfg).
+/// from the same output instead of a second walk (atelier-v5tt). It walks
+/// forward from `pin` over a parent-to-children map and visits each commit
+/// once, so a long side branch dated before its parents costs no extra
+/// passes (atelier-pew5), and a parent cycle that grafts can create still
+/// ends (atelier-6vfg).
 fn ancestry_path<'a>(commits: &'a str, pin: &str) -> Result<HashSet<&'a str>> {
-    let mut graph = Vec::new();
+    let mut children = HashMap::<&str, Vec<&'a str>>::new();
     for line in commits.lines() {
         let mut parts = line.split_whitespace();
         let commit = parts.next().context("invalid Git parent query")?;
-        graph.push((commit, parts.collect::<Vec<_>>()));
+        for parent in parts {
+            children.entry(parent).or_default().push(commit);
+        }
     }
-    // rev-list lists children before parents, so walking it backwards marks
-    // most of the path in one pass.
     let mut marked = HashSet::new();
-    loop {
-        let mut changed = false;
-        for (commit, parents) in graph.iter().rev() {
-            if !marked.contains(commit)
-                && parents
-                    .iter()
-                    .any(|parent| *parent == pin || marked.contains(parent))
-            {
-                marked.insert(*commit);
-                changed = true;
-            }
-        }
-        if !changed {
-            return Ok(marked);
+    let mut pending = children.get(pin).cloned().unwrap_or_default();
+    while let Some(commit) = pending.pop() {
+        if marked.insert(commit) {
+            pending.extend(children.get(commit).into_iter().flatten());
         }
     }
+    Ok(marked)
 }
 
 /// Pinned evidence and review history always describe original Git objects.
@@ -835,6 +813,46 @@ pub fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
+    Ok(output.stdout)
+}
+/// Output of a Git command fed `input` on stdin. The input is written from
+/// another thread, so a large answer cannot block it, and through
+/// [`Requests`] on Unix, so a command that exits early fails the write
+/// instead of killing atelier.
+pub(crate) fn git_input(repo: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
+    #[cfg(unix)]
+    let (mut requests, stdin) = Requests::pair()?;
+    #[cfg(not(unix))]
+    let stdin = Stdio::piped();
+    // The command, and with it the parent's copy of the child's input, is
+    // dropped here, so the child sees the end of the input.
+    let child = command(repo)
+        .args(args)
+        .stdin(stdin)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("cannot start git {}", args.join(" ")))?;
+    #[cfg(not(unix))]
+    let (child, mut requests) = {
+        let mut child = child;
+        let requests = child.stdin.take().context("Git stdin missing")?;
+        (child, requests)
+    };
+    let (output, written) = std::thread::scope(|scope| {
+        let writer = scope.spawn(move || requests.write_all(input));
+        let output = child.wait_with_output();
+        (output, writer.join().expect("Git input thread panicked"))
+    });
+    let output = output?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    written.with_context(|| format!("cannot write the input of git {}", args.join(" ")))?;
     Ok(output.stdout)
 }
 pub fn head_commit(repo: &Path) -> Result<String> {
@@ -1077,30 +1095,8 @@ pub fn is_record_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, io::Write};
+    use std::fs;
 
-    fn git_input(repo: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
-        let mut child = command(repo)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        let mut stdin = child.stdin.take().context("Git stdin missing")?;
-        let output = std::thread::scope(|scope| -> Result<_> {
-            let writer = scope.spawn(move || stdin.write_all(input));
-            let output = child.wait_with_output()?;
-            writer.join().expect("Git input thread panicked")?;
-            Ok(output)
-        })?;
-        if !output.status.success() {
-            bail!(
-                "git test input failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        Ok(output.stdout)
-    }
     fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
         ReadContext::new(repo)
             .edges(pin, "HEAD")
@@ -1251,6 +1247,57 @@ mod tests {
         fs::write(path.join(".git/info/grafts"), format!("{c3} {c4}\n")).unwrap();
         compare(&c2, &c4);
         compare(&octopus, &c4);
+    }
+    /// A commit with `parents` and the root's tree, committed at `seconds`.
+    fn dated_commit(repo: &Path, parents: &[&str], seconds: i64) -> String {
+        let tree =
+            String::from_utf8(git_output(repo, &["rev-parse", "HEAD^{tree}"]).unwrap()).unwrap();
+        let mut args = vec!["commit-tree", tree.trim(), "-m", "dated"];
+        for parent in parents {
+            args.extend(["-p", parent]);
+        }
+        let date = format!("{seconds} +0000");
+        let output = command(repo)
+            .args(&args)
+            .env("GIT_COMMITTER_DATE", &date)
+            .env("GIT_AUTHOR_DATE", &date)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    }
+    #[test]
+    fn ancestry_path_matches_git_when_a_side_branch_is_dated_before_its_parents() {
+        let repo = repo("sha1");
+        let path = repo.path();
+        let root = commit(path, "root");
+        let start = 1_700_000_000;
+        let main = dated_commit(path, &[&root], start + 10_000);
+        // Each side commit is dated before its parent, so Git lists the
+        // branch parents-first, against the order a backward pass needs.
+        let mut side = vec![dated_commit(path, &[&main], start + 5_000)];
+        for step in 1..200 {
+            let parent = side.last().unwrap().clone();
+            side.push(dated_commit(path, &[&parent], start + 5_000 - step));
+        }
+        let later = dated_commit(path, &[&main], start + 20_000);
+        let merge = dated_commit(path, &[&later, side.last().unwrap()], start + 30_000);
+        let end = dated_commit(path, &[&merge], start + 40_000);
+        for pin in [&root, &main, &side[0], &side[100], &later, &merge] {
+            let range = format!("{pin}..{end}");
+            let listed =
+                String::from_utf8(git_output(path, &["rev-list", "--parents", &range]).unwrap())
+                    .unwrap();
+            let git = String::from_utf8(
+                git_output(path, &["rev-list", "--ancestry-path", &range]).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                ancestry_path(&listed, pin).unwrap(),
+                git.lines().collect::<HashSet<_>>(),
+                "{range}"
+            );
+        }
     }
     #[test]
     fn native_reads_keep_exact_ranges_and_reject_bad_pins() {

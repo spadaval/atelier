@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Let a trivial change land on the base with a visible exemption, without an issue or work branch"
-updated_at: "2026-10-22T20:27:52.828786229+00:00"
+updated_at: "2026-10-22T23:03:39.552623968+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ A trivial change to a non-record file, such as a one-line `workflow.yaml` fix or
 ## Context
 
 The human rejected two alternatives on 2026-10-22: exempting planning paths from review, and a separate review standard for planning text. Records and mission strategies stay exempt as they are, because requiring an issue to edit issues would be recursive.
+
+## Notes
+
+- 2026-10-22 [note] From review of atelier-r28p (finding atelier-kotb): docs/product/reviews-and-merge.md:85-94, the comment at review_gate.rs:134-139 and atelier-r28p's decision note say a record 'filed on the base after the approval' stays editable; the code checks only that the record is absent from the approval's pinned tree, so a base record filed before the approval and merged in later is editable too. Reword all three to 'not in the approval's pinned tree' while editing this doc section.

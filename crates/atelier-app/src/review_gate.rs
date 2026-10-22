@@ -1,5 +1,10 @@
 //! Review integrity, semantic freshness and derived merge gate graph nodes.
-use crate::{git_freshness as git, record_index::RecordIndex, workflow_policy::WorkflowPolicy};
+use crate::{
+    git_freshness as git,
+    path_log::{Listing, PathLog},
+    record_index::RecordIndex,
+    workflow_policy::WorkflowPolicy,
+};
 use anyhow::{bail, Context, Result};
 use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
 use atelier_records::{parse_issue_record, split_document};
@@ -105,10 +110,13 @@ fn body_without_close_reason(text: &str) -> Option<String> {
     Some(kept.trim_end().to_owned())
 }
 
+/// Whether `edge` changes only what an approval of `ids` pinned at `pin`
+/// keeps current (see `approval_is_current_to`).
 fn allowed_edge(
     read: &mut git::ReadContext<'_>,
     edge: &git::CommitEdge,
     ids: &BTreeSet<String>,
+    pin: &str,
 ) -> Result<bool> {
     for path in &edge.paths {
         let old = read.entry(&edge.parent, path)?;
@@ -128,9 +136,18 @@ fn allowed_edge(
             && path.extension().is_some_and(|ext| ext == "md"))
         .then(|| path.file_stem().and_then(|name| name.to_str()))
         .flatten();
-        // A new issue outside the scope, such as the follow-up a deferred
-        // finding needs, is planning, not reviewed work (atelier-cafy).
-        if issue_id.is_some_and(|id| !ids.contains(id)) && old.is_none() && regular(&new) {
+        // An issue outside the scope that did not exist at the pin is
+        // planning, not reviewed work, in every later commit: whether it was
+        // created on the branch, such as the follow-up a deferred finding
+        // needs (atelier-cafy, atelier-iaas), or on the base after the pin
+        // and merged in (atelier-g0mh). Such records may be committed to the
+        // base without review anyway. Its own done claim is judged by
+        // `claims.reviewed` and `land`, not by the approval.
+        if issue_id.is_some_and(|id| !ids.contains(id))
+            && (old.is_none() || regular(&old))
+            && regular(&new)
+            && read.entry(pin, path)?.is_none()
+        {
             continue;
         }
         if path.starts_with(".atelier/issues") && regular(&old) && regular(&new) {
@@ -168,8 +185,9 @@ pub fn approval_is_current(
 }
 /// The one rule for what an approval or trivial exemption covers
 /// (atelier-n642). Pinned at `pin`, it stays current at `end` when every
-/// commit after the pin only adds review or evidence records, files issues
-/// outside the approved scope `ids`, changes a record in `ids` by status,
+/// commit after the pin only adds review or evidence records, files or edits
+/// issues outside the approved scope `ids` that are new since the pin (a
+/// follow-up and its links, atelier-iaas), changes a record in `ids` by status,
 /// timestamps and Close Reason alone, or cleanly merges commits already on
 /// `base`. So a close commit that changes only the scope's own records keeps
 /// it current, and one that also edits code or another field does not.
@@ -183,22 +201,25 @@ pub fn approval_is_current_to(
     base: &str,
 ) -> Result<bool> {
     for (edge, merge) in work_edges(read, pin, end, base)? {
-        if !edge_allowed(read, &edge, merge.as_ref(), ids)? {
+        if !edge_allowed(read, &edge, merge.as_ref(), ids, pin)? {
             return Ok(false);
         }
     }
     Ok(true)
 }
 
+/// Whether one edge after `pin` keeps an approval of `ids` current: the one
+/// edge check `approval_is_current_to` and `approval_stale_edges` share.
 fn edge_allowed(
     read: &mut git::ReadContext<'_>,
     edge: &git::CommitEdge,
     merge: Option<&git::MergeResolution>,
     ids: &BTreeSet<String>,
+    pin: &str,
 ) -> Result<bool> {
     match merge {
-        Some(merge) => allowed_base_merge(read, edge, merge, ids),
-        None => allowed_edge(read, edge, ids),
+        Some(merge) => allowed_base_merge(read, edge, merge, ids, pin),
+        None => allowed_edge(read, edge, ids, pin),
     }
 }
 
@@ -222,7 +243,9 @@ pub fn approval_stale_edges(
     for (edge, merge) in work_edges(read, pin, end, base)?.into_iter().rev() {
         // A commit the base already holds is reviewed there; when a merge
         // brings it in unaccepted, the merge is what to report.
-        if ancestor(read, &edge.commit, base) || edge_allowed(read, &edge, merge.as_ref(), ids)? {
+        if ancestor(read, &edge.commit, base)
+            || edge_allowed(read, &edge, merge.as_ref(), ids, pin)?
+        {
             continue;
         }
         let paths = if edge.sides.is_empty() {
@@ -315,8 +338,8 @@ pub fn approval_state(
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
 /// approval's identity is independent of the branch's own authors up to the
-/// event, base commits merged in left out as `review.current` leaves them
-/// out (an exemption is explicit and names itself), and every finding on the
+/// event, leaving out the commits of every branch merged in (an exemption is
+/// explicit and names itself), and every finding on the
 /// scope pinned at or before it has an accepted disposition: a FIX NOW whose
 /// resolution commit is at or before the approval's pin, or a DEFER or NO
 /// ACTION accepted by a non-author. Only that resolution commit is checked
@@ -378,6 +401,7 @@ fn allowed_base_merge(
     edge: &git::CommitEdge,
     merge: &git::MergeResolution,
     ids: &BTreeSet<String>,
+    pin: &str,
 ) -> Result<bool> {
     // A conflict resolved to the branch side's version changes nothing
     // against it, yet may drop the base's side, so every conflict is checked.
@@ -412,7 +436,7 @@ fn allowed_base_merge(
             paths: vec![path.clone()],
             ..edge.clone()
         };
-        if !allowed_edge(read, &single, ids)? {
+        if !allowed_edge(read, &single, ids, pin)? {
             return Ok(false);
         }
     }
@@ -582,19 +606,17 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
 }
 
 /// Historical acceptance is valid only while review events remain append-only.
+/// The check starts before the first commit to add a review event, which
+/// may be a merge that resolved one into being (atelier-as7i).
 pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
     let head = read.pinned("HEAD")?;
-    let history = read.history(&[
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-filter=A",
-        "--format=%H",
-        &head,
-        "--",
-        ".atelier/reviews/",
-    ])?;
-    let Some(first) = history.lines().next() else {
+    let history = read.path_log(&PathLog {
+        start: head,
+        paths: vec![".atelier/reviews/".to_owned()],
+        listing: Listing::Additions,
+        reverse: true,
+    })?;
+    let Some(first) = history.first() else {
         return Ok(());
     };
     let pin = match read.first_parent(first)? {
@@ -626,11 +648,15 @@ pub fn author_identities(
 ) -> Result<BTreeSet<String>> {
     author_identities_to(read, base_commit, ids, "HEAD", base_commit)
 }
-/// The one author set review independence is judged against, for `merge`
-/// and `land` alike (atelier-0cj6): the authors of the commits from `start`
-/// to `end` that change more than an approval keeps current, leaving out
-/// the commits merges bring in from `base`. A reviewer who authored work on
-/// the base that the branch merged in is still independent of the branch.
+/// The author set review independence is judged against (atelier-0cj6):
+/// the authors of the commits from `start` to `end` that change more than an
+/// approval keeps current, leaving out the commits merges bring in from
+/// `base`. A reviewer who authored work on the base that the branch merged in
+/// is still independent of the branch. `merge`'s `review.current` passes the
+/// branch's fork point with the base as `base`, so it counts the authors of a
+/// merged side branch not on the base; `land` judges from history and passes the tip, so it leaves
+/// out every merged side branch. `merge` can therefore refuse an approval
+/// `land` accepts, never the reverse (atelier-p5qp).
 fn author_identities_to(
     read: &mut git::ReadContext<'_>,
     start: &str,
@@ -649,7 +675,7 @@ fn author_identities_to(
         .iter()
         .filter(|edge| !merged_base.contains(&edge.commit))
     {
-        if !allowed_edge(read, edge, ids)? && inspected.insert(edge.commit.clone()) {
+        if !allowed_edge(read, edge, ids, start)? && inspected.insert(edge.commit.clone()) {
             add_author(read, &edge.commit, &mut authors)?;
         }
     }
@@ -868,37 +894,6 @@ fn evaluate_scope(
             },
             Vec::new(),
         ));
-    }
-    if global {
-        prefetch_original_independent(
-            index,
-            read,
-            index.reviews().filter(|record| {
-                (approval_targets.contains(&record.target)
-                    && matches!(record.event, ReviewEvent::Approval))
-                    || (matches!(
-                        record.event,
-                        ReviewEvent::Disposition {
-                            decision: FindingDecision::Defer | FindingDecision::NoAction,
-                            ..
-                        }
-                    ) && applicable.contains(&record.target))
-            }),
-            // Only retained claims with proof or findings look up where they
-            // were claimed (atelier-nzzz).
-            &applicable
-                .iter()
-                .filter(|_| historical)
-                .filter(|id| {
-                    index.reviews().any(|record| {
-                        record.target == **id && matches!(record.event, ReviewEvent::Finding { .. })
-                    }) || index.list_record_links("issue", id).is_ok_and(|links| {
-                        links.iter().any(|link| link.relation_type == "validates")
-                    })
-                })
-                .cloned()
-                .collect(),
-        )?;
     }
     let candidates = index
         .reviews()
@@ -1295,102 +1290,52 @@ fn add_author(
     }
     Ok(())
 }
-/// The `git log` that finds the commit introducing a review event, including
-/// a merge that adds it when neither parent has it; `--no-patch` keeps the
-/// merge's diff out of the commit list (atelier-as7i).
-fn introduced_query(head: &str, record: &ReviewRecord) -> Vec<String> {
-    [
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-merges=first-parent",
-        "--no-patch",
-        "--diff-filter=A",
-        "--format=%H",
-        head,
-        "--",
-        &format!(".atelier/reviews/{}.md", record.header.id),
-    ]
-    .map(str::to_owned)
-    .to_vec()
+/// The query for the commit that introduced a review event: the commits
+/// whose diff from their first parent adds the event's file, oldest first.
+///
+/// A merge that adds the file when neither parent has it, such as a
+/// conflict resolution, is listed (atelier-as7i). So is a clean merge of a
+/// branch that added it: asking for merge diffs turns history
+/// simplification off, so Git lists the branch's commit and the merge, and
+/// does not simplify the merge away. Callers take the first commit listed
+/// as the introducer. Git orders the walk by committer date, so while dates
+/// increase along history the branch's own commit, an ancestor of the
+/// merge, comes first after `--reverse`.
+fn introduced_query(head: &str, record: &ReviewRecord) -> PathLog {
+    PathLog {
+        start: head.to_owned(),
+        paths: vec![format!(".atelier/reviews/{}.md", record.header.id)],
+        listing: Listing::Additions,
+        reverse: true,
+    }
 }
-/// The `git log` queries for where a reviewed scope starts and for its
-/// owner's record history, both up to the introducing `event`.
+/// The queries for where a reviewed scope starts, the first commit adding
+/// one of its issue records, and for its owner's record history, both up to
+/// the introducing `event` and oldest first.
 fn scope_queries(
     index: &RecordIndex,
     record: &ReviewRecord,
     event: &str,
-) -> Result<(Vec<String>, Vec<String>)> {
+) -> Result<(PathLog, PathLog)> {
     let issue = index.require_issue(&record.target)?;
     let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
     let ids = scope(index, owner)?;
-    let history = [
-        "log",
-        "--root",
-        "--reverse",
-        "--diff-merges=first-parent",
-        "--no-patch",
-        "--diff-filter=A",
-        "--format=%H",
-        event,
-        "--",
-    ]
-    .map(str::to_owned)
-    .into_iter()
-    .chain(ids.iter().map(|id| format!(".atelier/issues/{id}.md")))
-    .collect();
-    let updates = [
-        "log",
-        "--root",
-        "--reverse",
-        "--format=%H",
-        event,
-        "--",
-        &format!(".atelier/issues/{owner}.md"),
-    ]
-    .map(str::to_owned)
-    .to_vec();
-    Ok((history, updates))
-}
-fn as_args(query: &[String]) -> Vec<&str> {
-    query.iter().map(String::as_str).collect()
-}
-/// Run the history queries of `original_independent` for many records at
-/// once; each is an independent `git log` walk (atelier-0349).
-fn prefetch_original_independent<'r>(
-    index: &RecordIndex,
-    read: &mut git::ReadContext<'_>,
-    records: impl IntoIterator<Item = &'r ReviewRecord>,
-    claims: &BTreeSet<String>,
-) -> Result<()> {
-    let head = read.pinned("HEAD")?;
-    let records = records.into_iter().collect::<Vec<_>>();
-    // Each claim's history is walked once per land to find where it was
-    // claimed; walk them alongside the review histories (atelier-v5tt).
-    read.prefetch_histories(
-        records
+    let history = PathLog {
+        start: event.to_owned(),
+        paths: ids
             .iter()
-            .map(|record| introduced_query(&head, record))
-            .chain(
-                claims
-                    .iter()
-                    .map(|id| crate::evidence_freshness::claim_history_query(&head, id)),
-            )
+            .map(|id| format!(".atelier/issues/{id}.md"))
             .collect(),
-    );
-    let mut queries = Vec::new();
-    for record in records {
-        let Ok(introduced) = read.history(&as_args(&introduced_query(&head, record))) else {
-            continue;
-        };
-        if let Some(event) = introduced.lines().next() {
-            if let Ok((history, updates)) = scope_queries(index, record, event) {
-                queries.extend([history, updates]);
-            }
-        }
-    }
-    read.prefetch_histories(queries);
-    Ok(())
+        listing: Listing::Additions,
+        reverse: true,
+    };
+    let updates = PathLog {
+        start: event.to_owned(),
+        paths: vec![format!(".atelier/issues/{owner}.md")],
+        listing: Listing::Changes,
+        reverse: true,
+    };
+    Ok((history, updates))
 }
 fn original_independent(
     index: &RecordIndex,
@@ -1401,11 +1346,8 @@ fn original_independent(
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
     let event_path = format!(".atelier/reviews/{}.md", record.header.id);
     let head = read.pinned("HEAD")?;
-    let introduced = read.history(&as_args(&introduced_query(&head, record)))?;
-    let event = introduced
-        .lines()
-        .next()
-        .context("review event history missing")?;
+    let introduced = read.path_log(&introduced_query(&head, record))?;
+    let event = introduced.first().context("review event history missing")?;
     let path = Path::new(&event_path);
     if read.entry(event, path)? != read.entry("HEAD", path)? {
         bail!(
@@ -1414,17 +1356,18 @@ fn original_independent(
         );
     }
     let (history, updates) = scope_queries(index, record, event)?;
-    let history = read.history(&as_args(&history))?;
-    let start = history
-        .lines()
-        .next()
-        .context("review predates its issue scope")?;
+    let history = read.path_log(&history)?;
+    let start = history.first().context("review predates its issue scope")?;
     let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
-    let updates = read.history(&as_args(&updates))?;
-    let branch_start = updates.lines().find(|commit| {
+    let updates = read.path_log(&updates)?;
+    let branch_start = updates.iter().find(|commit| {
         read.issue_at(commit, owner)
             .is_ok_and(|record| record.issue.workflow_branch.is_some())
     });
+    // History records no base for the branch, so `head` stands for it: the
+    // commits of every branch merged into this one are left out, including
+    // side branches never on the base, which `review.current` would count
+    // (atelier-p5qp).
     let authors = if let Some(origin) = branch_start {
         match read.first_parent(origin)? {
             Some(parent) => author_identities_to(read, &parent, &ids, event, &head)?,
