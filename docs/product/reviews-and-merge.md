@@ -205,12 +205,14 @@ issue, or a review or evidence record about one, since the branch left it:
 merge the base into the work branch so the gates judge them, then retry. Other
 base records do not touch the approval, which is judged on the work branch's
 history: it carries over, because a clean merge combines two reviewed changes
-and nobody edited the result. No checkout holds the merged records before they
-reach the base, so merge also checks the done claims outside the item that
-they affect, as `land` does, trusting the base head. For example, if the base
-closed a mission after the fork point and the branch reopens work that mission
-depends on, merge refuses, naming the claim (`merge blocked: <mission>
-work.terminal`, atelier-m4gv). These claims are read at the merge commit, so a
+and nobody edited the result. Merge also checks the done claims outside the
+item that the commit it would put on the base can affect, as `land` does,
+trusting the base head, under either strategy: the merge commit under
+`merge_commit`, which no checkout holds before it reaches the base, or the
+branch head under `fast_forward_only` (atelier-bu66). For example, if the base
+closed a mission after the fork point and the branch reopens or adds work that
+mission depends on, merge refuses, naming the claim (`merge blocked: <mission>
+work.terminal`, atelier-m4gv). These claims are read at that commit, so a
 claim the base completed and reviewed after the fork point is judged against
 the base commits its reviews pin (atelier-goom). The merge commit reaches the
 base only when every gate passes and the base has not moved during the checks.

@@ -3287,10 +3287,9 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         }
     }
 }
-fn close_after_approval(strategy: &str, case: &str, covered: bool) {
-    let label = format!("{strategy}/{case}");
-    let f = Fixture::new();
-    git(f.path(), &["switch", "-q", "main"]);
+/// On the base, set the merge strategy `merge` uses; `merge_commit` needs a
+/// shell check to prove the merged tree.
+fn use_strategy(f: &Fixture, strategy: &str) {
     if strategy == "merge_commit" {
         let path = f.path().join(".atelier/workflow.yaml");
         let policy = fs::read_to_string(&path).unwrap().replace(
@@ -3304,6 +3303,12 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         .unwrap();
         commit(f.path(), "base merges with a merge commit");
     }
+}
+fn close_after_approval(strategy: &str, case: &str, covered: bool) {
+    let label = format!("{strategy}/{case}");
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    use_strategy(&f, strategy);
     // The reviewer authored work on the base that the branch merges in.
     let reviewer_base = case.starts_with("reviewer_base");
     if reviewer_base {
@@ -5840,11 +5845,17 @@ fn start_replaces_a_stale_lease_with_a_note() {
 /// no other done claim in that mission: a sibling's claim does not depend on
 /// the mission (atelier-ss25). `land` on the base and on a work branch, and
 /// `merge`, skip an old sibling whose proof no longer verifies; `doctor`
-/// still reports it.
+/// still reports it. Each case runs under both merge strategies.
 #[test]
 fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        add_to_mission_under(strategy);
+    }
+}
+fn add_to_mission_under(strategy: &str) {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
+    use_strategy(&f, strategy);
     let mission = ok(
         f.path(),
         &[
@@ -5901,9 +5912,9 @@ fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
     };
     add_to_mission("Planned on the base");
     let (pass, output) = cli(f.path(), &["land"]);
-    assert!(pass && !reported(&output), "{output}");
+    assert!(pass && !reported(&output), "{strategy}: {output}");
     let (pass, output) = cli(f.path(), &["doctor"]);
-    assert!(!pass && reported(&output), "{output}");
+    assert!(!pass && reported(&output), "{strategy}: {output}");
     git(f.path(), &["push", "-q"]);
 
     // A work branch that files one too lands and merges.
@@ -5923,8 +5934,87 @@ fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
     );
     commit(f.path(), "approval");
     f.terminal(&f.id);
-    let (pass, output) = cli(f.path(), &["land", &f.id]);
-    assert!(pass && !reported(&output), "{output}");
     let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
-    assert!(pass && !reported(&output), "{output}");
+    assert!(pass && !reported(&output), "{strategy}: {output}");
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(pass && !reported(&output), "{strategy}: {output}");
+}
+/// A done mission that a branch gives open work is a claim `land` refuses,
+/// so `merge` refuses it before integrating, under either strategy
+/// (atelier-bu66).
+#[test]
+fn merge_refuses_a_done_mission_the_branch_gives_open_work() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        use_strategy(&f, strategy);
+        // A policy whose missions close only once their advancing work is
+        // done.
+        let policy = f.path().join(".atelier/workflow.yaml");
+        let text = fs::read_to_string(&policy).unwrap();
+        let objective = text.find("  objective:").unwrap();
+        let close = objective
+            + text[objective..]
+                .find("        - blockers.none_open\n")
+                .unwrap();
+        let mut revised = text.clone();
+        revised.insert_str(close, "        - work.terminal\n");
+        fs::write(&policy, revised).unwrap();
+        let mission = ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "--issue-type",
+                "mission",
+                "--body",
+                "## Outcome\n\nShipped.\n\n## Success criteria\n\nIt ships.",
+                "Mission",
+            ],
+        );
+        commit(f.path(), "plan the mission");
+        for transition in ["ready", "start"] {
+            ok(f.path(), &["issue", "transition", &mission, transition]);
+        }
+        ok(
+            f.path(),
+            &["issue", "transition", &mission, "close", "--reason", "done"],
+        );
+        commit(f.path(), "close the mission");
+        let upstream = tempdir().unwrap();
+        git(upstream.path(), &["init", "-q", "--bare"]);
+        git(
+            f.path(),
+            &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+        );
+        git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+        git(f.path(), &["switch", "-q", &f.branch]);
+        git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+        let work = ok(f.path(), &["-q", "issue", "create", "Open work"]);
+        ok(
+            f.path(),
+            &["issue", "link", &work, &mission, "--role", "advances"],
+        );
+        commit(f.path(), "file open work for the done mission");
+        ok(
+            f.path(),
+            &[
+                "review",
+                "approve",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                "Review",
+            ],
+        );
+        commit(f.path(), "approval");
+        f.terminal(&f.id);
+        let refused = format!("{mission} work.terminal");
+        let (pass, output) = cli(f.path(), &["land", &f.id]);
+        assert!(!pass && output.contains(&refused), "{strategy}: {output}");
+        let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
+        assert!(!pass && output.contains(&refused), "{strategy}: {output}");
+    }
 }

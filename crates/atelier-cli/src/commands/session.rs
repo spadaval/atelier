@@ -637,8 +637,8 @@ fn lint_trusts(
         .is_ok_and(|changed| changed.trim().is_empty())
 }
 
-/// Gate nodes for the done claims outside the owner's scope that the merge
-/// commit `commit` can affect, judged in its records `index`. `base_head`
+/// Gate nodes for the done claims outside the owner's scope that `commit`,
+/// the merge commit or the fast-forwarded branch head, can affect, judged in its records `index`. `base_head`
 /// passed these checks when it reached the base, so it is the trusted point,
 /// as for land; a policy change or lint gate checks every claim.
 pub(crate) fn merge_claim_nodes(
