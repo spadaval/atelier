@@ -13,6 +13,9 @@ relationships:
   - kind: "issue"
     id: "atelier-rc8j"
     type: "advances"
+  - kind: "review"
+    id: "atelier-9rhe"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

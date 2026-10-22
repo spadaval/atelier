@@ -464,6 +464,16 @@ fn every_command_prints_its_documented_quiet_token() {
         q.ok("review show", &[&finding]),
         format!("{finding} finding\n")
     );
+    let range = q.ok("review request", &[&owner]);
+    let (from, to) = range.trim().split_once("..").expect("a range");
+    assert!(
+        [from, to]
+            .iter()
+            .all(|commit| commit.len() == 40 && commit.chars().all(|c| c.is_ascii_hexdigit())),
+        "{range}"
+    );
+    assert_eq!(to, git_rev_parse(dir, "HEAD").trim());
+    q.refused("review request", &["zzzz"]);
     let (success, _, stderr) = run_atelier_raw(dir, &["-q", "review", "list", "--json"]);
     assert!(
         !success && stderr.contains("'--quiet' cannot be used with '--json'"),

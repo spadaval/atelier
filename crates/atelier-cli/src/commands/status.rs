@@ -178,6 +178,8 @@ fn upstream_divergence(repo: &Path) -> Option<String> {
 struct Owner {
     id: String,
     heading: String,
+    /// A warning when another live worktree holds this owner.
+    held: Option<String>,
     base: Option<String>,
     body: String,
     missions: Vec<(String, Option<String>)>,
@@ -269,9 +271,19 @@ impl Owner {
                     line.text()
                 }),
         );
+        // This worktree renews a lease it holds; another's live lease is a warning.
+        commands::lease::refresh(repo, id, branch);
+        let held = match commands::lease::held_by_other(repo, id)? {
+            Some(commands::lease::Held::Live(lease)) => Some(format!(
+                "⚠ also held by {}",
+                commands::lease::describe(&lease)
+            )),
+            _ => None,
+        };
         Ok(Self {
             id: id.to_owned(),
             heading,
+            held,
             base: record
                 .issue
                 .workflow_branch
@@ -444,6 +456,9 @@ fn render_status_page(
         match owner {
             Ok(Some(owner)) => {
                 local_state.push(("Owner", owner.heading.clone()));
+                if let Some(held) = &owner.held {
+                    local_state.push(("Held", held.clone()));
+                }
                 if let Some(base) = &owner.base {
                     local_state.push(("Integration base", base.clone()));
                 }
@@ -538,10 +553,7 @@ fn render_status_page(
         panels.push(render_lines_section("Evidence", owner.evidence.clone()));
     }
     if !branches.is_empty() {
-        panels.push(render_lines_section(
-            "Other Local Work Branches (committed records)",
-            branches,
-        ));
+        panels.push(render_lines_section("Branches", branches));
     }
     // The footer is the last section.
     panels.push(render_footer_section(context, next_actions));

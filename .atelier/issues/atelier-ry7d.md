@@ -13,6 +13,9 @@ relationships:
   - kind: "issue"
     id: "atelier-2mky"
     type: "advances"
+  - kind: "review"
+    id: "atelier-94ku"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

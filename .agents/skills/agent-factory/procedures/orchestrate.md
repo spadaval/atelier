@@ -68,7 +68,8 @@ read the author's handoff, so you are not an independent reviewer of its code.
 When dispatching a reviewer or validator:
 
 - Give it the diff or scenario, the governing requirements and constraints
-  quoted exactly, and the proof that was run.
+  quoted exactly, and the proof that was run. In Atelier,
+  `atelier review request <id>` prints this brief from the records.
 - Do not pass along the author's rationale or self-assessment.
 - Do not pre-judge its work: do not tell it to ignore a class of findings, cap
   severity, or treat any content as beyond challenge. If two requirements

@@ -14,7 +14,7 @@ use atelier_core::{EvidenceRecord, Issue, RecordLink, Relation, ReviewEvent, Rev
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
     validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships, BLOCKED_BY,
-    WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
+    DISCOVERED_FROM, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 
 use crate::record_ref::{self, RecordKind};
@@ -470,9 +470,9 @@ impl RecordIndex {
             ..
         } = &record.event
         {
-            if let Some(issue) = follow_up {
-                exists("follow-up", "issue", issue);
-            }
+            let follow_up_exists = follow_up
+                .as_ref()
+                .map(|issue| exists("follow-up", "issue", issue));
             let finding_exists = exists("finding", "review", finding);
             let supersedes_exists = supersedes
                 .as_ref()
@@ -505,8 +505,68 @@ impl RecordIndex {
             } else if !roots.insert(finding) {
                 bail!("competing disposition roots for {finding}");
             }
+            if let (Some(issue), Some(true)) = (follow_up, follow_up_exists) {
+                self.check_follow_up_source(issue, record)?;
+            }
         }
         Ok(())
+    }
+
+    /// A follow-up that declares where it was discovered must name the item
+    /// its deferring review is about: a review deferral and the follow-up's
+    /// own `discovered_from` link are two stores of one fact.
+    fn check_follow_up_source(&self, follow_up: &str, disposition: &ReviewRecord) -> Result<()> {
+        let Some(issue) = self.issues.get(follow_up) else {
+            return Ok(());
+        };
+        let sources = issue
+            .relationships
+            .relates
+            .iter()
+            .filter(|relation| relation.relation_type == DISCOVERED_FROM)
+            .map(|relation| {
+                (
+                    relation,
+                    self.discovery_source(&relation.kind, &relation.id),
+                )
+            })
+            .collect::<Vec<_>>();
+        if sources.is_empty()
+            || sources
+                .iter()
+                .any(|(_, source)| source.as_deref() == Some(disposition.target.as_str()))
+        {
+            return Ok(());
+        }
+        let named = sources
+            .iter()
+            .map(|(relation, _)| format!("{} {}", relation.kind, relation.id))
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "review_follow_up_source_mismatch: disposition {} defers a finding on {} to {follow_up}, which says it was discovered from {named}; discovered_from must name {} or one of its findings or receipts",
+            disposition.header.id,
+            disposition.target,
+            disposition.target
+        )
+    }
+
+    /// The work item a `discovered_from` link names: the item itself, the
+    /// item a review event is about, or the item a receipt validates.
+    pub fn discovery_source(&self, kind: &str, id: &str) -> Option<String> {
+        match kind {
+            "issue" => self.issues.contains_key(id).then(|| id.to_owned()),
+            "review" => self.reviews.get(id).map(|review| review.target.clone()),
+            "evidence" => self
+                .evidence
+                .get(id)?
+                .data
+                .target
+                .as_ref()
+                .filter(|target| target.kind == "issue")
+                .map(|target| target.id.clone()),
+            _ => None,
+        }
     }
 
     fn index_issue_graph(&mut self, errors: &mut Vec<anyhow::Error>) {

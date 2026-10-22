@@ -18,6 +18,7 @@ pub use atelier_core::{
 
 pub mod mutation_lock;
 pub mod review;
+pub mod written;
 
 mod record_id;
 mod record_kinds;
@@ -32,7 +33,7 @@ pub use record_kinds::{
 pub use relationships::{
     attachment_relationship, issue_relates_relationship, issue_relationship_target,
     relates_relationship, relationship_target, sort_relationships, AttachmentRelationship,
-    RelatesRelationship, RelationshipTarget, Relationships, BLOCKED_BY,
+    RelatesRelationship, RelationshipTarget, Relationships, BLOCKED_BY, DISCOVERED_FROM,
 };
 
 /// Split a canonical Markdown document into YAML front matter and body text.
@@ -54,6 +55,7 @@ pub const WELL_KNOWN_LINK_TYPES: &[&str] = &[
     "part_of",
     "supersedes",
     "derived_from",
+    "discovered_from",
     "duplicates",
     "related",
 ];
@@ -580,6 +582,7 @@ impl RecordStore {
                 tmp_path.display()
             )
         })?;
+        written::note(&path);
         Ok(())
     }
 
@@ -962,7 +965,6 @@ pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
         "criteria_mission",
         data.criteria_mission.as_deref(),
     )?;
-    write_yaml_array_if_not_empty(&mut output, "follow_up_ids", &data.follow_up_ids)?;
     write_yaml_array_if_not_empty(&mut output, "residual_risks", &data.residual_risks)?;
     write_yaml_relationships(&mut output, &relationships)?;
     write_yaml_scalar(&mut output, "schema", Some(spec.schema))?;
@@ -1009,8 +1011,6 @@ pub fn parse_evidence_record_file(text: &str, relative: &Path) -> Result<Evidenc
         independence_level: optional_scalar(&front_matter, "independence_level")?,
         target: optional_yaml_value::<EvidenceTarget>(&front_matter, "target", relative)?,
         residual_risks: optional_string_array(&front_matter, "residual_risks", relative)?
-            .unwrap_or_default(),
-        follow_up_ids: optional_string_array(&front_matter, "follow_up_ids", relative)?
             .unwrap_or_default(),
         exit_code: optional_i32(&front_matter, "exit_code", relative)?,
         exit_status: optional_scalar(&front_matter, "exit_status")?,
@@ -2377,7 +2377,6 @@ mod tests {
             agent_identity: Some("gpt-5.4 implementer".to_string()),
             independence_level: Some("implementer".to_string()),
             residual_risks: vec!["Need focused export/rebuild verification.".to_string()],
-            follow_up_ids: vec!["atelier-follow".to_string()],
             exit_status: Some("0".to_string()),
             exit_code: None,
             success: None,
@@ -2885,7 +2884,6 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains("captured_at: \"2026-06-10T12:30:00+00:00\""));
         assert!(text.contains("command: \"cargo test record_store\""));
         assert!(text.contains("agent_identity: \"gpt-5.4 implementer\""));
-        assert!(text.contains("follow_up_ids:\n- \"atelier-follow\"\n"));
         assert!(text.contains("RecordStore evidence proof summary."));
         assert!(!text.contains("output:"));
         assert!(!text.contains(&format!("{}: null", "target")));

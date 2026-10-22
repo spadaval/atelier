@@ -29,9 +29,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Run parallel work through review and merge without churn"
-updated_at: "2026-10-22T20:27:53.050653656+00:00"
+updated_at: "2026-10-22T20:32:30.737446430+00:00"
 ---
 
 ## Outcome

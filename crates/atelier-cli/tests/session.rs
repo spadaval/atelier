@@ -83,6 +83,14 @@ impl Fixture {
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
         ok(dir.path(), &["init", "--slug", "atelier"]);
+        // These scenarios test fast-forward integration, which a starter policy
+        // with a shell.check no longer selects by default.
+        let policy = dir.path().join(".atelier/workflow.yaml");
+        let text = fs::read_to_string(&policy).unwrap().replace(
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: fast_forward_only\n",
+        );
+        fs::write(policy, text).unwrap();
         let id = ok(
             dir.path(),
             &[
@@ -192,7 +200,7 @@ fn status_preserves_native_branch_trimming_for_header_owner_and_orientation() {
             }
             let unstarted = status
                 .lines()
-                .find_map(|line| line.strip_prefix("No started work on: "))
+                .find_map(|line| line.strip_prefix("Unowned: "))
                 .unwrap_or_default();
             assert_eq!(
                 unstarted.split(", ").any(|listed| listed == branch),
@@ -620,16 +628,15 @@ fn cross_branch_status_keeps_base_clean_and_reports_legacy_without_loading_it() 
     let head = git(f.path(), &["rev-parse", "HEAD"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} @", f.branch))
-            && output.contains(&format!("{} in_progress ", f.id))
-            && output.contains("Other Local Work Branches (committed records)"),
+        output.contains(&format!("{}  {} in_progress  ", f.branch, f.id))
+            && output.contains("\nBranches\n--------\n"),
         "{output}"
     );
     // The branch rows come before the footer, which is the last section.
     let (body, footer) = output
         .rsplit_once("\n\nNext\n----\n")
         .unwrap_or_else(|| panic!("no Next section:\n{output}"));
-    assert!(body.contains("Other Local Work Branches"), "{output}");
+    assert!(body.contains("\nBranches\n--------\n"), "{output}");
     assert!(
         footer.lines().all(|line| line.starts_with("  ")),
         "{output}"
@@ -1186,7 +1193,7 @@ fn custom_branch_only_owner_is_discovered_without_overlaying_base() {
     git(f.path(), &["switch", "main"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains("custom/ship-session @") && output.contains(&id),
+        output.contains(&format!("custom/ship-session  {id} in_progress  ")),
         "{output}"
     );
     assert!(f.store().load_issue_by_id(&id).is_err());
@@ -1446,7 +1453,7 @@ fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
     git(f.path(), &["switch", "main"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} @", f.branch)) && output.contains(&format!("{branch} @")),
+        output.contains(&format!("{}  ", f.branch)) && output.contains(&format!("{branch}  ")),
         "{output}"
     );
     assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
@@ -3986,7 +3993,10 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     // The kept branch's row on the base reads its committed records.
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{} ✓ done ", f.id)) && output.contains("| merged into main"),
+        output.contains(&format!(
+            "{}  {} ✓ done, merged into main  ",
+            f.branch, f.id
+        )),
         "{output}"
     );
 
@@ -4591,7 +4601,7 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     assert!(
         status
             .lines()
-            .any(|line| line.contains(&format!(": {} ", f.id)) && line.ends_with(" | 1 active")),
+            .any(|line| line.starts_with(&format!("{}  {} in_progress  ", f.branch, f.id))),
         "{status}"
     );
     git(f.path(), &["switch", "-q", &f.branch]);
@@ -4609,21 +4619,20 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     assert!(
         status
             .lines()
-            .any(|line| line.contains(&format!(": {} ✓ done ", f.id))
-                && line.ends_with(" | not merged into main")),
+            .any(|line| line.starts_with(&format!("{}  {} ✓ done, not merged  ", f.branch, f.id))),
         "{status}"
     );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
-    // Nothing is active on the branch, so its row has no `| 0 active` cue.
     assert!(
-        status
-            .lines()
-            .any(|line| line.ends_with(" | merged into main")),
+        status.lines().any(|line| line
+            == format!(
+                "{}  {} ✓ done, merged into main  Session owner",
+                f.branch, f.id
+            )),
         "{status}"
     );
-    assert!(!status.contains("| 0 active"), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);
@@ -4697,8 +4706,8 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("{finished} ✓ done medium Finished elsewhere | not merged into main"),
-        format!("{stuck} ⚠ blocked medium Stuck elsewhere"),
+        format!("task/{finished}  {finished} ✓ done, not merged  Finished elsewhere"),
+        format!("task/{stuck}  {stuck} ⚠ blocked  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
     }
@@ -5313,6 +5322,464 @@ fn scoped_views_offer_start_only_for_work_that_passes_the_readiness_gates() {
     let (started, out) = cli(f.path(), &["start", &gated]);
     assert!(
         !started && out.contains(&format!("{gated} -> {closed} -> {tail}")),
+        "{out}"
+    );
+}
+
+/// A local bare remote (never the network) holding `main` and the owner branch.
+fn with_remote(f: &Fixture) -> TempDir {
+    let remote = tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    let url = remote.path().to_str().unwrap();
+    git(f.path(), &["remote", "add", "origin", url]);
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    git(f.path(), &["push", "-q", "-u", "origin", &f.branch]);
+    remote
+}
+fn last_line(output: &str) -> &str {
+    output.trim_end().lines().last().unwrap()
+}
+
+#[test]
+fn land_ends_with_a_verdict_line_and_push_follows_only_a_pass() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    let tip = |dir: &Path, branch: &str| git(dir, &["rev-parse", &format!("refs/heads/{branch}")]);
+    // Plain land states its verdict last.
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass && last_line(&out) == "land: passed", "{out}");
+    // A pass with --push publishes the branch and says so last.
+    fs::write(f.path().join("more"), "more\n").unwrap();
+    commit(f.path(), "more code");
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        pass && last_line(&out) == format!("land: passed, pushed to origin/{}", f.branch),
+        "{out}"
+    );
+    assert_eq!(
+        tip(remote.path(), &f.branch),
+        git(f.path(), &["rev-parse", "HEAD"])
+    );
+    // A refusal pushes nothing, exits non-zero, and ends with the refusal even
+    // when the output is piped.
+    fs::write(f.path().join("unpushed"), "unpushed\n").unwrap();
+    commit(f.path(), "unpushed code");
+    let before = tip(remote.path(), &f.branch);
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.issue.priority = "low".into();
+    f.store().write_issue_atomic(&record).unwrap();
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass, "{out}");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_records_uncommitted), nothing pushed"
+    );
+    assert_eq!(tip(remote.path(), &f.branch), before);
+    let piped = Command::new("sh")
+        .args(["-c", "set -o pipefail; \"$0\" land --push 2>&1 | tail -1"])
+        .arg(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .output()
+        .unwrap();
+    assert!(!piped.status.success());
+    assert!(String::from_utf8_lossy(&piped.stdout).starts_with("land: refused"));
+}
+
+#[test]
+fn land_push_reports_a_failed_push_and_a_missing_upstream() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    fs::write(f.path().join("more"), "more\n").unwrap();
+    commit(f.path(), "more code");
+    let hook = remote.path().join("hooks/pre-receive");
+    fs::write(&hook, "#!/bin/sh\necho rejected by test >&2\nexit 1\n").unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let before = git(
+        remote.path(),
+        &["rev-parse", &format!("refs/heads/{}", f.branch)],
+    );
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass && out.contains("rejected by test"), "{out}");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_failed), nothing pushed"
+    );
+    assert_eq!(
+        git(
+            remote.path(),
+            &["rev-parse", &format!("refs/heads/{}", f.branch)]
+        ),
+        before
+    );
+    git(f.path(), &["branch", "--unset-upstream"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass && out.contains("land_push_no_upstream"), "{out}");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_no_upstream), nothing pushed"
+    );
+}
+
+#[test]
+fn land_names_unpushed_base_commits_the_owner_did_not_make_before_pushing() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("other"), "another thread's work\n").unwrap();
+    commit(f.path(), "Records from another thread");
+    fs::write(f.path().join("mine"), "this owner's work\n").unwrap();
+    commit(f.path(), &format!("Plan follow-up for {}", f.id));
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(pass, "{out}");
+    assert!(
+        out.contains(
+            "Warning: main is ahead of its upstream with 1 commit that this owner did not make"
+        ) && out.contains("Records from another thread (Author)"),
+        "{out}"
+    );
+    assert!(!out.contains("Plan follow-up"), "{out}");
+    // The warning is read before the push's verdict, which stays last.
+    assert!(out.find("Warning").unwrap() < out.find("land: passed, pushed").unwrap());
+    assert_eq!(
+        last_line(&out),
+        format!("land: passed, pushed to origin/{}", f.branch)
+    );
+    // Only the owner's branch was pushed: the base on the remote is untouched.
+    let remote_main = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    assert_ne!(remote_main, git(f.path(), &["rev-parse", "main"]));
+    // With nothing ahead, or only the owner's commits, land stays silent.
+    git(f.path(), &["push", "-q", "origin", "main"]);
+    let (_, out) = cli(f.path(), &["land"]);
+    assert!(!out.contains("Warning: main"), "{out}");
+}
+
+/// A second, unstarted issue committed on `main`, with `main` checked out.
+fn unstarted_on_main(f: &Fixture) -> String {
+    git(f.path(), &["switch", "-q", "main"]);
+    let id = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Second item",
+            "--body",
+            "## Goal\n\nStart from anywhere.\n\n## Done when\n\nIt starts.",
+        ],
+    );
+    commit(f.path(), "plan second item");
+    id
+}
+fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, String)> {
+    f.store()
+        .load_issue_by_id(id)
+        .unwrap()
+        .issue
+        .workflow_branch
+        .map(|branch| (branch.work_branch, branch.branch_base))
+}
+
+#[test]
+fn start_refuses_a_branch_whose_type_prefix_does_not_match_the_issue() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let wrong = format!("feature/{id}");
+    git(f.path(), &["switch", "-q", "-c", &wrong]);
+    let before = git(f.path(), &["status", "--porcelain"]);
+    let (pass, out) = cli(f.path(), &["start", &id]);
+    assert!(
+        !pass && out.contains("start_branch_prefix_mismatch"),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("its branch is 'task/{id}'")) && out.contains("--base main"),
+        "{out}"
+    );
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), wrong);
+    assert_eq!(git(f.path(), &["status", "--porcelain"]), before);
+    assert_eq!(recorded_branch(&f, &id), None);
+}
+
+#[test]
+fn start_with_a_base_creates_the_owner_branch_from_a_detached_head() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let tip = git(f.path(), &["rev-parse", "main"]);
+    git(f.path(), &["switch", "-q", "--detach", "main"]);
+    let (pass, out) = cli(f.path(), &["start", &id]);
+    assert!(
+        !pass && out.contains("start_detached_head") && out.contains("--base"),
+        "{out}"
+    );
+    ok(f.path(), &["start", &id, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
+    assert_eq!(
+        recorded_branch(&f, &id),
+        Some((format!("task/{id}"), "main".into()))
+    );
+    assert_eq!(
+        f.store().load_issue_by_id(&id).unwrap().issue.status,
+        "in_progress"
+    );
+}
+
+#[test]
+fn start_with_a_base_ignores_the_current_branch_and_checks_the_base() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let tip = git(f.path(), &["rev-parse", "main"]);
+    git(f.path(), &["switch", "-q", "-c", &format!("feature/{id}")]);
+    fs::write(f.path().join("stray"), "unrelated commit\n").unwrap();
+    commit(f.path(), "stray work");
+    ok(f.path(), &["start", &id, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
+    assert!(!f.path().join("stray").exists());
+    assert_eq!(recorded_branch(&f, &id).unwrap().1, "main");
+    // Another branch cannot be recorded as the base, and a missing one is named.
+    let second = {
+        git(f.path(), &["switch", "-q", "main"]);
+        git(f.path(), &["branch", "-q", "elsewhere"]);
+        ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Third item",
+                "--body",
+                "## Goal\n\nx\n\n## Done when\n\ny",
+            ],
+        )
+    };
+    commit(f.path(), "plan third item");
+    git(f.path(), &["branch", "-qf", "elsewhere", "main"]);
+    let (pass, out) = cli(f.path(), &["start", &second, "--base", "elsewhere"]);
+    assert!(
+        !pass && out.contains("start_base_mismatch") && out.contains("--base main"),
+        "{out}"
+    );
+    let (pass, out) = cli(f.path(), &["start", &second, "--base", "nope"]);
+    assert!(!pass && out.contains("start_base_missing"), "{out}");
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+    assert_eq!(recorded_branch(&f, &second), None);
+}
+
+#[test]
+fn land_push_refuses_an_upstream_that_is_not_the_branchs_own_remote_branch() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    fs::write(f.path().join("more"), "unreviewed\n").unwrap();
+    commit(f.path(), "more code");
+    let main_before = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    // Tracking the remote base, as `git switch -c <branch> origin/main` does.
+    git(f.path(), &["branch", "-q", "--set-upstream-to=origin/main"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        !pass && out.contains("land_push_upstream_mismatch"),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("git push -u <remote> {}", f.branch)),
+        "{out}"
+    );
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_upstream_mismatch), nothing pushed"
+    );
+    assert_eq!(
+        git(remote.path(), &["rev-parse", "refs/heads/main"]),
+        main_before
+    );
+    // A local upstream (remote ".") would move a local branch.
+    git(f.path(), &["branch", "-q", "--set-upstream-to=main"]);
+    let main_local = git(f.path(), &["rev-parse", "main"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        !pass && out.contains("land_push_upstream_mismatch"),
+        "{out}"
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "main"]), main_local);
+}
+
+#[test]
+fn land_push_pushes_nothing_when_a_check_moves_head_during_land() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'git -c user.name=x -c user.email=x@x.test commit -q --allow-empty -m moved' }}\n")).unwrap();
+    commit(f.path(), "trusted committing check");
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["rebase", "main"]);
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let remote = with_remote(&f);
+    let before = git(
+        remote.path(),
+        &["rev-parse", &format!("refs/heads/{}", f.branch)],
+    );
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass && out.contains("land_state_changed"), "{out}");
+    assert_eq!(
+        git(
+            remote.path(),
+            &["rev-parse", &format!("refs/heads/{}", f.branch)]
+        ),
+        before
+    );
+}
+
+#[test]
+fn start_with_a_base_works_from_a_checkout_without_the_issue_record() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    git(f.path(), &["branch", "-q", "old"]);
+    let id = unstarted_on_main(&f);
+    let planned = git(f.path(), &["rev-parse", "main"]);
+    // A branch forked before the issue existed.
+    git(f.path(), &["switch", "-q", "old"]);
+    ok(f.path(), &["start", &id, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), planned);
+    // A detached commit older than the plan.
+    git(f.path(), &["switch", "-q", "main"]);
+    let other = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Later item",
+            "--body",
+            "## Goal\n\nx\n\n## Done when\n\ny",
+        ],
+    );
+    commit(f.path(), "plan later item");
+    git(f.path(), &["switch", "-q", "--detach", &planned]);
+    ok(f.path(), &["start", &other, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{other}")
+    );
+}
+
+fn lease_path(f: &Fixture) -> std::path::PathBuf {
+    f.path()
+        .join(".atelier/runtime/leases")
+        .join(format!("{}.json", f.id))
+}
+/// A second worktree of the fixture's repository, on a detached HEAD.
+fn second_worktree(f: &Fixture) -> (TempDir, std::path::PathBuf) {
+    let holder = tempdir().unwrap();
+    let path = holder.path().join("other");
+    git(
+        f.path(),
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            path.to_str().unwrap(),
+            "main",
+        ],
+    );
+    (holder, path)
+}
+
+#[test]
+fn start_refuses_an_item_a_live_lease_holds_until_taken_over() {
+    let f = Fixture::new();
+    assert!(lease_path(&f).exists(), "start leaves a lease");
+    let (holder, other) = second_worktree(&f);
+    // The holder's own checkout sees no conflict.
+    assert!(!ok(f.path(), &["status"]).contains("also held"));
+    // Another worktree is refused while the lease is live.
+    git(f.path(), &["switch", "-q", "main"]);
+    let (pass, out) = cli(&other, &["start", &f.id]);
+    assert!(
+        !pass && out.contains("start_item_held") && out.contains("--take-over"),
+        "{out}"
+    );
+    assert!(git(&other, &["branch", "--show-current"]).is_empty());
+    // status on the owner branch reports the other holder.
+    let lease: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    let mut forged = lease.clone();
+    forged["worktree"] = holder.path().to_str().unwrap().into();
+    fs::write(lease_path(&f), forged.to_string()).unwrap();
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        status.contains("Held")
+            && status.contains("also held by")
+            && status.contains(holder.path().to_str().unwrap()),
+        "{status}"
+    );
+    // --take-over starts anyway and the lease moves to the new worktree.
+    git(f.path(), &["switch", "-q", "main"]);
+    let out = ok(&other, &["start", &f.id, "--take-over"]);
+    assert!(out.contains("Took over"), "{out}");
+    assert_eq!(git(&other, &["branch", "--show-current"]), f.branch);
+    let moved: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    assert_eq!(
+        fs::canonicalize(moved["worktree"].as_str().unwrap()).unwrap(),
+        fs::canonicalize(&other).unwrap()
+    );
+}
+
+#[test]
+fn start_replaces_a_stale_lease_with_a_note() {
+    let f = Fixture::new();
+    let (_holder, other) = second_worktree(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    // Stale by age.
+    let mut lease: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    lease["heartbeat"] = (chrono::Utc::now() - chrono::Duration::hours(5))
+        .to_rfc3339()
+        .into();
+    fs::write(lease_path(&f), lease.to_string()).unwrap();
+    let out = ok(&other, &["start", &f.id]);
+    assert!(
+        out.contains("Replaced a stale lease") && out.contains("over 4 hours old"),
+        "{out}"
+    );
+    // Stale because the holder's worktree is gone.
+    git(&other, &["switch", "-q", "--detach", "main"]);
+    let gone = tempdir().unwrap().path().join("deleted");
+    lease["worktree"] = gone.to_str().unwrap().into();
+    lease["heartbeat"] = chrono::Utc::now().to_rfc3339().into();
+    fs::write(lease_path(&f), lease.to_string()).unwrap();
+    let out = ok(&other, &["start", &f.id]);
+    assert!(
+        out.contains("Replaced a stale lease") && out.contains("no longer exists"),
         "{out}"
     );
 }

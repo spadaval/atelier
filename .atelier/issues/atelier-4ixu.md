@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T21:15:33.114582788+00:00"
+status: "done"
 title: "Commit a step's records together instead of one commit per record"
-updated_at: "2026-10-22T19:58:19.748027082+00:00"
+updated_at: "2026-10-22T21:46:45.444054610+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,31 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 Whether auto-commit belongs in atelier or in the Agent Factory skill's guidance.
+
+## Notes
+
+- 2026-10-22 [decision] Grouping uses --stage-records on earlier commands and --commit-records on the last; the flags are named for records because review already owns --commit (the pinned commit)
+  Reason: A step is a sequence of separate commands, so grouping needs state between processes. Staging the records and remembering them in the git-ignored .atelier/runtime/staged-records.json lets the next --commit-records commit them as one commit, and lets the pre-write index check tell an earlier staged group from foreign staged changes.
+  Rejected: Amending the previous record commit (rewrites history, can orphan review pins)
+  Rejected: A batch command taking several entries (new input format to learn, and evidence capture runs arbitrary commands)
+  Rejected: Deriving the records from git status (would sweep in unrelated dirty records)
+- 2026-10-22 [decision] The records to commit come from the record store's write log, not from git status
+  Reason: RecordStore::write_atomic is the single funnel for every record write, so logging its paths gives exactly what the command wrote, independent of other staged or unstaged work.
+- 2026-10-22 [decision] A staged group lives only while its records are still staged and clean; each command git-adds only the records it wrote; the group file is written before add/commit and cleared after the commit succeeds
+  Reason: Review findings atelier-t7ce and atelier-mdcm: a stale file after a hand commit swept unstaged edits into the next commit, and a failed commit lost the group. Dropping unstaged-or-unstaged-free paths on begin and ordering the file writes around git makes both safe.
+
+## Close Reason
+
+`--commit-records` and `--stage-records` on review record/approve/finding/trivial/disposition, `evidence record` and `issue transition <id> <name>` stage and commit exactly the records the command wrote; a sequence groups into one commit, and a foreign staged change refuses before anything is written. Documented in docs/product/cli-surface.md and shown by four CLI tests.
+
+### Deviations
+The flags are `--commit-records` / `--stage-records`, not `--commit`, because `review` already uses `--commit` for the pinned commit. `issue note`, `create`, `link` and `evidence attach` do not take the flags; the item named only the commands above.
+
+### Decisions
+Two decision notes on atelier-4ixu: grouping by stage-then-commit with a git-ignored pending file, and taking the records from the record store's write log rather than git status.
+
+### Surprises
+The test helper `run_atelier` commits dirty state before evidence/transition commands, which hid index state; the new tests use `run_atelier_raw`.
+
+### Open items
+None. Unknown from the item resolved: auto-commit lives in atelier; the Agent Factory skill text still describes hand commits and is left for the orchestrator's upstream sync.

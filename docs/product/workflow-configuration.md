@@ -117,14 +117,27 @@ be valid; fallback does not excuse an invalid candidate. Ordinary commands can
 read working policy and visibly fall back to committed history when it is
 malformed. Fix policy through reviewed work.
 
-The supported gated integration strategies are `fast_forward_only`, the
-default, and `merge_commit`. Under `fast_forward_only`, Atelier creates no
-commit: if the base has moved on, merge it into the work branch with ordinary
-Git and renew any proof or approval made stale by the merge. Under
-`merge_commit`, a branch that merges cleanly into the current base lands as a
-merge commit, the only commit Atelier creates, after `merge_checks`, which
-must include a `shell.check`, pass on the merged tree; see [reviews and merge](reviews-and-merge.md). Rebase only before
-any review is recorded: rebasing rewrites the commits review records pin.
+The supported gated integration strategies are `fast_forward_only` and
+`merge_commit`. Under `fast_forward_only`, Atelier creates no commit: if the
+base has moved on, merge it into the work branch with ordinary Git and renew any
+proof or approval made stale by the merge. Under `merge_commit`, a branch that
+merges cleanly into the current base lands as a merge commit, the only commit
+Atelier creates, after `merge_checks`, which must include a `shell.check`, pass
+on the merged tree, in a temporary checkout that reuses no build cache; see
+[reviews and merge](reviews-and-merge.md). Rebase only before any review is
+recorded: rebasing rewrites the commits review records pin.
+
+A policy that omits `branch_policy.merge_strategy` gets `merge_commit` when its
+`merge_checks` include a `shell.check`, and `fast_forward_only` otherwise. An
+explicit value always wins. `atelier init` writes a starter policy without the
+field and without merge checks, so a new repository starts on
+`fast_forward_only` and moves to `merge_commit` when its first `shell.check` is
+added. The default exists because `fast_forward_only` makes every landing force
+each other open branch to catch up, re-prove and be re-approved: three days of
+parallel work produced 122 catch-up merges and 41 fresh-approval commits, while
+the first two branches that landed under `merge_commit` needed none. The condition is the test
+check: a merge that Git accepts can still be broken, and a `shell.check` is what
+runs on the merged tree before it reaches the base (atelier-6mgg).
 
 Consult the workflow parser and command help for exact schema fields. See
 [reviews and merge](reviews-and-merge.md) and

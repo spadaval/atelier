@@ -1240,8 +1240,6 @@ pub struct EvidenceRecordData {
     #[serde(default)]
     pub residual_risks: Vec<String>,
     #[serde(default)]
-    pub follow_up_ids: Vec<String>,
-    #[serde(default)]
     pub exit_code: Option<i32>,
     #[serde(default)]
     pub exit_status: Option<String>,

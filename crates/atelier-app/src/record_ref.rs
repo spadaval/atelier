@@ -26,6 +26,15 @@ impl RecordKind {
         }
     }
 
+    /// The kind as a record stores it in a relationship.
+    pub fn stored(self) -> &'static str {
+        match self {
+            RecordKind::Issue => "issue",
+            RecordKind::Evidence => "evidence",
+            RecordKind::Review => "review",
+        }
+    }
+
     pub fn show_command(self) -> &'static str {
         match self {
             RecordKind::Issue => "atelier issue show",

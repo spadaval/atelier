@@ -5,6 +5,7 @@ atelier status
 atelier land
 atelier land <owner-or-child-id>
 atelier land --install
+atelier land --push
 atelier setup claude
 atelier setup claude --binary <path-to-atelier>
 ```
@@ -69,6 +70,34 @@ so on an installing branch it blocks each turn's stop with
 `land_install_unconfirmed`, warning instead on a repeated stop, until the
 install merges.
 
+`land` ends with a verdict line, the last line of its combined output (see
+[verdict line](human-cli-output.md#verdict-line)): `land: passed`, or `land:
+refused — 1 check (<code>)` with a non-zero exit. `land --push` runs the same
+checks and, only when they pass, pushes the checked HEAD to the current
+branch's own configured upstream (`branch.<name>.remote` and `.merge`) through
+git, then ends `land: passed, pushed to <remote>/<branch>`. A refusal pushes
+nothing and ends `land: refused — 1 check (<code>), nothing pushed`; a branch
+with no upstream or a detached HEAD refuses (`land_push_no_upstream`,
+`land_push_detached`), as does an upstream on remote `.` or on a branch of
+another name, such as a work branch created from `origin/main`
+(`land_push_upstream_mismatch`; fix it with `git push -u <remote> <branch>`).
+What is pushed is the commit land checked: if HEAD moved during the checks
+land refuses (`land_state_changed`). A push git rejects exits non-zero with
+git's message and `land: refused — 1 check (land_push_failed), nothing
+pushed`. `--push` does not combine with
+`--hook`. Prefer it to `atelier land && git push`, and never push behind a
+pipe: a pipe's exit status is its last command's (atelier-ecah).
+
+When the local base branch is ahead of its upstream, `land` (and `land
+--push`) prints a warning, before any push, naming the unpushed base commits
+the current owner did not make: up to five, as `<hash> <subject> (<author>)`,
+then a count. A commit is the owner's when its message names the owner or an
+issue in the owner's scope, as the start, close, merge and planning commits
+for owned work do; git authorship cannot tell sessions apart, since agents
+share one identity. With no owner, every unpushed base commit is named. The
+warning does not refuse: pushing the base can be meant, and it publishes
+those commits. A base with no upstream is not checked here (atelier-mvzi).
+
 On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
@@ -128,9 +157,9 @@ the current checkout uses live records. It does not fetch remote branches or
 overlay another branch's records onto the current graph. Incompatible or
 unavailable snapshots are reported separately. Every compatible owner branch
 remains visible, including branches sharing a tracker tree. A branch's done
-claim is not base completion: a done owner's item line ends `| not merged
-into <base>` until the base branch's own copy of the record is done, and
-`| merged into <base>` after.
+claim is not base completion: a done owner's row says `not merged` until the
+base branch's own copy of the record is done, and `merged into <base>` after.
+The row format is in [human-cli-output.md](human-cli-output.md#branches).
 
 The same summaries, read once per command, mark ready work that is in flight
 elsewhere: in `status`'s ready items and unassigned work, in `work ready`

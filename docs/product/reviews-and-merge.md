@@ -25,6 +25,9 @@ from an identity other than the substantive Git authors. Identity is
 self-declared and compared with author names and email addresses. `trivial`
 is an explicit visible exemption with a reason, never an implicit fallback.
 `review list` accepts `--json` and can omit the owner to list all events.
+Every command that records an event also takes `--commit-records` and
+`--stage-records`, which commit the records it wrote (alone or grouped with the
+rest of a step); see [Committing records](cli-surface.md#committing-records).
 
 Every finding requires a disposition. Recommendations and decisions use
 `fix_now`, `defer`, or `no_action`:
@@ -45,6 +48,32 @@ from the base, including edits subsequently reverted.
 Terminal targets and their eligible review clusters can leave the active tree
 together through [protected prune](retention-and-prune.md); retained events
 remain immutable.
+
+## Requesting a review
+
+`atelier review request <id> [--identity <name>] [--from <rev>]` prints the
+brief to give an independent reviewer, as dense Markdown (ADR 0022), so the
+orchestrator does not hand-write it. `<id>` is the branch owner or one of its
+children; run it from the owner's worktree. The brief holds only what comes
+from records, Git and policy:
+
+- the owner's Goal and Done when, and each child's Done when;
+- the range to review: the commits since the last `review` or `approve` on the
+  owner (or after `--from`), and the whole branch since it left the base, with
+  the full head commit to pin records to;
+- every finding with its latest disposition, open ones first, earlier reviews
+  and approvals, and the newest recorded proof;
+- the working rules: the built-in ones (read-only on code, run the proof,
+  approve only without `fix_now` findings, an identity that differs from the
+  authors), the base policy's `merge_checks` commands, and the text of the
+  file named by `[review] rules_file` in `.atelier/config.toml`, a
+  repository-relative Markdown path where a repository keeps rules the
+  reviewer needs, such as where to put scratch files;
+- the `review finding` and `review approve` commands, pinned to the head and
+  using `--commit-records`, with `--identity` filled in when given.
+
+It never includes the author's notes or Close Reason: a reviewer judges the
+change against the requirements, not the author's account of it.
 
 ## Approval freshness
 
@@ -127,7 +156,9 @@ cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
 Merge uses the base branch's committed policy and its
-`branch_policy.merge_strategy`. Under `fast_forward_only`, the default, merge
+`branch_policy.merge_strategy`; omitted, it is `merge_commit` when `merge_checks`
+include a `shell.check` and `fast_forward_only` otherwise (see [workflow
+configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
 fast-forwards only. If the base has moved on, merge it into the work branch,
 record fresh proof, and renew review only if the merge needed resolving (see
 approval freshness).
@@ -143,6 +174,22 @@ checks run in a temporary detached checkout of the merge commit instead of the
 work checkout. The gate output adds `merge.merged_tree`, which passes only when
 the shell checks passed there and names the tree, base commit, and commands,
 and the merge commit's message lists those commands.
+
+Each checkout lives in its own `atelier-merge-*` directory in the Git common
+directory, and the merge holds a lock on that directory's `lock` file while its
+checks run. Normal exit removes the checkout. If merge is killed during its
+checks, the operating system drops the lock, and the next merge removes every
+`atelier-merge-*` checkout whose lock is free before it makes its own; one a
+concurrent merge still holds stays (atelier-rcnk).
+
+Merged-tree checks do not reuse a build cache. Each run builds in the
+checkout's own target directory (the repository's `merge_checks` set
+`CARGO_TARGET_DIR=target`), which goes away with the checkout, so a check
+proves what the merged tree builds and never what an earlier tree left behind.
+A shared target directory is the one cache Atelier does not allow here: it has
+run another branch's binary in tests, and cargo's freshness checks cannot tell
+two checkouts apart. A policy that wants faster checks may put a compiler cache
+keyed by its inputs, such as `sccache`, in the check command itself.
 
 The gates read the records of the merge commit, which is what the base would
 get, so a blocker the base added or reopened holds the merge. Review and
@@ -160,8 +207,17 @@ depends on, merge refuses, naming the claim (`merge blocked: <mission>
 work.terminal`, atelier-m4gv). These claims are read at the merge commit, so a
 claim the base completed and reviewed after the fork point is judged against
 the base commits its reviews pin (atelier-goom). The merge commit reaches the
-base only when every gate passes and the base has not moved during the checks
-(`merge_snapshot_changed`). A lockfile that merges cleanly but is
+base only when every gate passes and the base has not moved during the checks.
+When the base moved during the checks only by commits that change nothing but
+issue, review and evidence records, merge reports `merge_base_moved` and runs
+the gates again against the new base, up to three attempts in all; a record the
+item itself depends on still refuses as `merge_base_records`. If any of those
+commits changes anything else, or the base was rewritten, merge refuses with
+`merge_snapshot_changed`, naming the first such commit and file. Under
+`fast_forward_only` merge cannot land on a base that moved at all, since it
+creates no merge commit; `merge_diverged` then says whether the base gained only
+records-only commits or names the code commit, and the recovery is still `git
+merge <base>` on the work branch (atelier-p189). A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
 as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and

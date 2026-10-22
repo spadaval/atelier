@@ -66,6 +66,17 @@ A decision record may name the ADR it produced (`issue update --adr <path>`;
 an older one with a `supersedes` link; once the newer one is decided, views
 mark the older one superseded and no longer count it as current.
 
+Work found while doing other work records where, with a `discovered_from`
+link stored on the new issue (`issue create --discovered-from <id>`; like other
+context links it is declared by the new record, so the source is unchanged).
+The source is the issue being worked, a review event such as a finding, or an
+evidence receipt. `issue show` prints it, `check` refuses a source that does
+not exist and a deferred disposition whose follow-up declares a source other
+than the item the finding is about, and the
+[debrief](mission-reviews.md#debrief) lists the work by that source. It marks
+work as found along the way, not as scope: the work needs no `advances` link
+to appear in the debrief, and takes one only if the mission must finish it.
+
 Decisions made inside a work item are decision notes, not records:
 `issue note <id> --kind decision "<choice>" --reason "<why>"`, with optional
 `--rejected "<alternative>"` (repeatable) and `--one-way` for a decision that
@@ -172,6 +183,35 @@ Missions coordinate work rather than own a work branch.
 checks out or creates its work branch, records branch metadata, and applies the
 available `start` transition. Commit those record changes with the work.
 
+A new work branch is created from the current branch, which `start` records
+as the branch base without checking it; `land` later refuses with
+`land_base_mismatch` unless that base is the policy's base branch, the one it
+trusts. `atelier start <id> --base <branch>` creates the branch from that local
+branch instead, from any checkout including a detached HEAD, resolves the issue and reads and
+checks the records as they are on that base (the checkout need not hold them), and records it. `--base` names
+the policy's base branch only (`start_base_mismatch` otherwise; a branch that
+does not exist is `start_base_missing`), and a base without the issue's
+committed record is refused with `start_branch_missing_record`. Without
+`--base`, a detached HEAD refuses with `start_detached_head`, and a new branch
+is not created from a current branch named `<prefix>/<owner id>` whose prefix
+is not the owner's type, such as `task/<id>` for a feature: `start` refuses
+with `start_branch_prefix_mismatch` and names the right branch to create, since
+it would record the wrong branch as the base and `land` would later fail with
+`land_base_mismatch` (atelier-mhx0, atelier-yc4d).
+
+`start` also leaves a runtime lease for the owner, so a second session can
+learn the item is taken (atelier-81e5). The lease is a small file under
+`.atelier/runtime/leases/` of the repository's primary checkout, shared by
+all its worktrees and never committed. It names the worktree, branch and a
+heartbeat that `start` sets and `status` renews from the holding worktree.
+Another worktree's lease is live while that worktree exists and its heartbeat
+is under 4 hours old; it expires at once when the worktree is deleted or starts
+a different owner. `start` refuses a live lease with `start_item_held` unless
+given `--take-over`, notes a take-over, and replaces a stale lease with a note.
+`status` shows `Held: ⚠ also held by <worktree> ...` in Local State when
+another live worktree holds the owner. The lease is a warning, not a lock, and
+two sessions in one worktree cannot be told apart.
+
 Begin work with `atelier start`, not `atelier issue transition <id> start`.
 The bare transition only changes the record: it creates no branch and records
 no owner. While such work is active, `atelier land` refuses it with
@@ -203,12 +243,14 @@ Sumeet 2026-10-15): the reviewer sees the claim together with the code. A
 review that finds problems leaves the claim in place: the author fixes the
 findings on the work branch, and the merge waits for fresh approval. Until the
 merge, though, that branch says done for work the base does not have. So
-`status`, in its owner row and its other-branch rows, shows a done owner as
+`status`'s owner row shows a done owner as
 `✓ done on branch <work-branch>, not merged into <base>`, or as
 `✓ done, merged into <base>` once the base branch's own copy of the record is
-done. A claim committed after approval instead, changing only the scope's own
-records by status and Close Reason, keeps the approval current, so it needs no
-fresh review (see [approval freshness](reviews-and-merge.md#approval-freshness)).
+done. Its `Branches` rows say the same in their own form, `✓ done, not merged`
+(see [human-cli-output.md](human-cli-output.md#branches)). A claim committed
+after approval instead, changing only the scope's own records by status and
+Close Reason, keeps the approval current, so it needs no fresh review (see
+[approval freshness](reviews-and-merge.md#approval-freshness)).
 
 Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.

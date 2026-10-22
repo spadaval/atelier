@@ -64,8 +64,8 @@ view is a choice of rows, fields and grouping over the shared order. That
 keeps views expressible as declarations later (atelier-e95f).
 
 Every view that lists items uses this line: the `work` views, `status`
-(Current Work, Owner, Mission, Owner Work, Ready Work, unassigned work and the
-other-branch rows), `work missions`, `issue list`, and `issue show` (title
+(Current Work, Owner, Mission, Owner Work, Ready Work and unassigned work;
+its `Branches` rows use the branch row below), `work missions`, `issue list`, and `issue show` (title
 line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
 Subissues and the Mission Rollup or Parent Rollup). So the Current Work row
 and the Owner row in `status` read alike. A record that is not an issue uses
@@ -74,6 +74,19 @@ the same order without a priority, as `evidence show` titles it:
 their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
 `review list` in atelier-h6o4, `review show` in atelier-3u2u, and
 `evidence list` in atelier-u0ig.
+
+### Branches
+
+`status` lists the other local work branches in a `Branches` section (a
+`-----` section before Next), one line per owned branch:
+`<branch>  <id> <status>[, <merge>]  <title>`. The branch, two spaces, the
+owner's ID and status word marked ✓ or ⚠ as in any row, then for a done owner
+`, merged into <base>` or `, not merged` (the wording of the `↳` in-flight
+mark), then two spaces and the title. Facts about a branch go in the status
+part, before the free-text title. There is no priority, commit or active
+count. Branches with no started work or no tracker share one trailing line,
+`Unowned: <branch>, <branch>`. A branch whose records cannot be read is
+`<branch>: unavailable — <reason>`.
 
 ### Decision Rows
 
@@ -129,8 +142,7 @@ Text that says whether work is finished calls work that is not closed `open`
 and closed work `closed`, never `nonterminal` or `terminal`: `Unassigned: 6
 open issues`, `closed ancestor <id> retires open descendant <id>`. Workflow
 configuration terms keep their names, such as the `work.terminal` validator
-and "terminal status" in policy errors. A status row on another branch drops its
-`| N active` cue when nothing is active.
+and "terminal status" in policy errors.
 
 A list of counts leaves out its zeros, and a line that would count nothing is
 left out: `status` prints no `Needs a human: 0`, and `work missions` no `Open
@@ -164,11 +176,14 @@ land: refused — 2 checks (land_records_uncommitted, land_base_unreviewed)
 ```
 
 The line is the command name, `passed` or `refused`, and on refusal the count
-and codes of the checks that failed. It is the last line of the combined
+and codes of the checks that failed. `land --push` appends what happened to
+the push: `land: passed, pushed to origin/<branch>` or `land: refused — 1
+check (land_push_failed), nothing pushed`. It is the last line of the combined
 output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
 command's exit status is the pipe's last command's, so check `$?` before
-acting on it. Each command adopts the line in its own item: `land` in
-atelier-bvl3 and atelier-9jr8, `merge` and `merge --check` in atelier-6rh7,
+acting on it. Each command adopts the line in its own item: `land` prints it since
+atelier-ecah (a refusal counts one check, the one that stopped it, until
+atelier-bvl3 and atelier-9jr8 list every failed check), `merge` and `merge --check` in atelier-6rh7,
 `evidence record` in atelier-3ekh, `check` in atelier-4t5l, `start` in
 atelier-501y, and `doctor` in atelier-rc8j.
 
@@ -267,6 +282,7 @@ refusal of it leaves stdout empty:
 | `evidence show` | `<id> <result>` |
 | `evidence list`, `review list` | IDs, one per line |
 | `review record`, `approve`, `finding`, `trivial`, `disposition` | the new event's ID |
+| `review request` | the range to review, `<from>..<head>` in full commits |
 | `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |
 | `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit |
 | `bundle apply` | the IDs of the records it created or updated, one per line |

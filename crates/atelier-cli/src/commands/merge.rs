@@ -10,24 +10,39 @@ use atelier_app::{
     storage_layout::StorageLayout,
     workflow_policy::{MergeStrategy, ValidatorParams, WorkflowPolicy},
 };
+use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 
 /// A detached checkout of the merge commit, outside every working tree, so
 /// `merge_checks` run on exactly the tree merging would put on the base.
+///
+/// Each checkout sits in its own `atelier-merge-*` directory in the Git common
+/// directory and holds an exclusive lock on that directory's `lock` file for
+/// its life. `Drop` removes the checkout, but a killed merge cannot run it:
+/// the operating system releases the lock instead, which is how the next merge
+/// tells a leftover checkout from one a concurrent merge is still using.
 struct MergedCheckout {
     repo: PathBuf,
     path: PathBuf,
     _dir: tempfile::TempDir,
+    _lock: File,
 }
 impl MergedCheckout {
     fn add(repo: &Path, commit: &str) -> Result<Self> {
-        let common = text(
+        let common = PathBuf::from(text(
             repo,
             &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-        )?;
+        )?);
+        // Sweeping and creating are serialized, so the sweep never meets a
+        // directory whose lock file does not exist yet.
+        let creating = lock_file(&common.join("atelier-merge.lock"))?;
+        creating.lock()?;
+        Self::sweep(repo, &common);
         let dir = tempfile::Builder::new()
-            .prefix("atelier-merge-")
-            .tempdir_in(common)?;
+            .prefix(MERGE_DIR_PREFIX)
+            .tempdir_in(&common)?;
+        let lock = lock_file(&dir.path().join("lock"))?;
+        lock.lock()?;
         let path = dir.path().join("tree");
         git::command(repo)
             .args([
@@ -48,7 +63,45 @@ impl MergedCheckout {
             repo: repo.to_owned(),
             path,
             _dir: dir,
+            _lock: lock,
         })
+    }
+
+    /// Remove the checkouts earlier merges left behind when they were killed
+    /// during their checks. A directory whose lock is held belongs to a live
+    /// merge and stays.
+    fn sweep(repo: &Path, common: &Path) {
+        let Ok(entries) = std::fs::read_dir(common) else {
+            return;
+        };
+        for dir in entries.filter_map(|entry| entry.ok().map(|entry| entry.path())) {
+            let leftover = dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(MERGE_DIR_PREFIX))
+                && lock_file(&dir.join("lock")).is_ok_and(|lock| lock.try_lock().is_ok());
+            if leftover {
+                let _ = git::command(repo)
+                    .args(["worktree", "remove", "--force"])
+                    .arg(dir.join("tree"))
+                    .output();
+                if let Err(error) = discard(&dir) {
+                    eprintln!(
+                        "warning: could not remove leftover merge checkout {}: {error}",
+                        dir.display()
+                    );
+                }
+            }
+        }
+        let _ = git::git_output(repo, &["worktree", "prune"]);
+    }
+}
+/// Remove a leftover directory; one already gone, such as to a concurrent
+/// sweep, counts as removed.
+fn discard(dir: &Path) -> std::io::Result<()> {
+    match std::fs::remove_dir_all(dir) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
     }
 }
 impl Drop for MergedCheckout {
@@ -58,6 +111,18 @@ impl Drop for MergedCheckout {
             .arg(&self.path)
             .output();
     }
+}
+
+const MERGE_DIR_PREFIX: &str = "atelier-merge-";
+
+fn lock_file(path: &Path) -> Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .with_context(|| format!("could not open {}", path.display()))
 }
 
 /// Git's merge of the work branch into the base, refused on any conflict.
@@ -225,9 +290,85 @@ fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
     Ok(None)
 }
 
+/// How many times one `atelier merge` re-runs its gates against a base that
+/// moved by records-only commits while the checks ran.
+const MAX_ATTEMPTS: usize = 3;
+
+/// The base moved during the checks only by records-only commits, so the
+/// gates are worth running again against the new base.
+#[derive(Debug)]
+struct RetryOnMovedBase(String);
+impl std::fmt::Display for RetryOnMovedBase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+impl std::error::Error for RetryOnMovedBase {}
+
+/// The first of the commits `from..to` that changes anything but records, or
+/// `None` when they are all records-only. Records the item itself owns are
+/// judged by the next attempt's gates, not here.
+fn first_code_commit(repo: &Path, from: &str, to: &str) -> Result<Option<(String, PathBuf)>> {
+    let commits = text(repo, &["rev-list", "--reverse", &format!("{from}..{to}")])?;
+    for commit in commits.lines() {
+        let parent = format!("{commit}^1");
+        if let Some(path) = git::changed_paths(repo, &parent, commit)?
+            .into_iter()
+            .find(|path| !git::is_record_path(path))
+        {
+            return Ok(Some((commit.to_owned(), path)));
+        }
+    }
+    Ok(None)
+}
+
+/// The error for a base that moved while checks ran: a retry marker when the
+/// move is records-only and the strategy can land on the new base without
+/// creating commits other than the merge commit, else a refusal naming what
+/// prevents the retry.
+fn base_moved(
+    repo: &Path,
+    id: &str,
+    strategy: MergeStrategy,
+    base: &str,
+    (from, to): (&str, &str),
+) -> anyhow::Error {
+    let named = |commit: &str, path: &Path| {
+        anyhow::anyhow!("merge_snapshot_changed: {base} moved while checks ran, and {} changes {}, which is not a record. Next: rerun `atelier merge {id}` with fresh proof and review", crate::human_output::short_commit(commit), path.display())
+    };
+    let ancestor = git::git_output(repo, &["merge-base", "--is-ancestor", from, to]).is_ok();
+    if !ancestor {
+        return anyhow::anyhow!("merge_snapshot_changed: {base} was rewritten while checks ran, from {} to {}. Next: rerun `atelier merge {id}` with fresh proof and review", crate::human_output::short_commit(from), crate::human_output::short_commit(to));
+    }
+    match first_code_commit(repo, from, to) {
+        Err(error) => error,
+        Ok(Some((commit, path))) => named(&commit, &path),
+        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, record fresh proof, then retry; a clean merge keeps the approval.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
+        Ok(None) => RetryOnMovedBase(format!("{base} moved from {} to {} while checks ran, only by records-only commits", crate::human_output::short_commit(from), crate::human_output::short_commit(to))).into(),
+    }
+}
+
 /// Quiet output is `passed` once the gates pass (and, without `--check`, the
-/// merge is done); a failed gate's line goes to stderr instead.
+/// merge is done); a failed gate's line goes to stderr instead. A base that
+/// moves by records-only commits while checks run is merged again, up to
+/// `MAX_ATTEMPTS` times; any other move refuses.
 pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+    for attempt in 1..=MAX_ATTEMPTS {
+        match merge_once(issue_ref, check_only, json, quiet) {
+            Err(error) => match error.downcast_ref::<RetryOnMovedBase>() {
+                Some(moved) if attempt < MAX_ATTEMPTS => {
+                    eprintln!("merge_base_moved: {moved}; running the gates again on the new base")
+                }
+                Some(moved) => bail!("merge_snapshot_changed: {moved}, and it kept moving across {MAX_ATTEMPTS} attempts. Next: rerun `atelier merge {issue_ref}` once the base is quiet"),
+                None => return Err(error),
+            },
+            done => return done,
+        }
+    }
+    unreachable!("the last attempt returns")
+}
+
+fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let head = git::head_commit(repo)?;
@@ -282,7 +423,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
         }
         Some(merged_tree(repo, base, &base_head, &branch, &head)?)
     } else {
-        git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| anyhow::anyhow!("merge_diverged: {base} is not an ancestor of {branch}. Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin."))?;
+        git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| {
+            let fork = text(repo, &["merge-base", &base_head, &head]).unwrap_or_default();
+            let moved = match first_code_commit(repo, &fork, &base_head) {
+                Ok(None) => format!("{base} gained only records-only commits since {branch} left it, but merge_strategy fast_forward_only creates no merge commit."),
+                Ok(Some((commit, path))) => format!("{base} gained {}, which changes {}, not a record.", crate::human_output::short_commit(&commit), path.display()),
+                Err(_) => format!("{base} is not an ancestor of {branch}."),
+            };
+            anyhow::anyhow!("merge_diverged: {moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin.")
+        })?;
         None
     };
     // Where the branch left the base; the base itself under fast-forward.
@@ -408,6 +557,15 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
         supports: Vec::new(),
         stale_from_checkout: false,
     });
+    // A retry reports nothing: the next attempt prints the one report.
+    if let Ok(current) = crate::commands::git::resolve(repo, &base_ref) {
+        if current != base_head {
+            let moved = base_moved(repo, &id, strategy, base, (&base_head, &current));
+            if moved.downcast_ref::<RetryOnMovedBase>().is_some() {
+                return Err(moved);
+            }
+        }
+    }
     if json {
         println!("{}", serde_json::to_string_pretty(&nodes)?);
     } else if quiet {
@@ -453,10 +611,13 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
             repo,
             &["rev-parse", "--verify", &format!("refs/heads/{branch}")],
         )? != head
-        || crate::commands::git::resolve(repo, &base_ref)
-            .map_or(true, |current| current != base_head)
     {
         bail!("merge_snapshot_changed: Git refs changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
+    }
+    match crate::commands::git::resolve(repo, &base_ref) {
+        Ok(current) if current == base_head => {}
+        Ok(current) => return Err(base_moved(repo, &id, strategy, base, (&base_head, &current))),
+        Err(_) => bail!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review"),
     }
     if base_checkout(repo, base)? != base_tree {
         bail!("merge_snapshot_changed: base checkout ownership changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
@@ -577,4 +738,18 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
         println!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::discard;
+
+    #[test]
+    fn a_leftover_directory_already_gone_counts_as_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let leftover = root.path().join("atelier-merge-gone");
+        assert!(discard(&leftover).is_ok());
+        std::fs::create_dir(&leftover).unwrap();
+        assert!(discard(&leftover).is_ok() && !leftover.exists());
+    }
 }

@@ -15,6 +15,15 @@ pub struct ProjectConfig {
     pub project_slug: String,
     pub issue_links: IssueLinkConfig,
     pub prune: PruneConfig,
+    pub review: ReviewConfig,
+}
+
+/// How reviews are requested.
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct ReviewConfig {
+    /// Repository-relative Markdown file whose text `atelier review request`
+    /// adds to every reviewer brief as the repository's working rules.
+    pub rules_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Eq, PartialEq)]
@@ -66,6 +75,14 @@ struct RawProjectConfig {
     issue_links: Option<IssueLinkConfig>,
     #[serde(default)]
     prune: Option<RawPruneConfig>,
+    #[serde(default)]
+    review: Option<RawReviewConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawReviewConfig {
+    rules_file: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,10 +106,12 @@ pub fn parse_project_config(text: &str, config_path: &Path) -> Result<ProjectCon
     require_non_empty(&raw.paths.state_root, config_path, "paths.state_root")?;
     let issue_links = parse_issue_link_config(raw.issue_links, config_path)?;
     let prune = parse_prune_config(raw.prune, config_path)?;
+    let review = parse_review_config(raw.review, config_path)?;
     Ok(ProjectConfig {
         project_slug: raw.project_slug,
         issue_links,
         prune,
+        review,
     })
 }
 
@@ -137,6 +156,25 @@ fn parse_prune_config(raw: Option<RawPruneConfig>, config_path: &Path) -> Result
     Ok(PruneConfig {
         canonical_retention_days,
     })
+}
+
+fn parse_review_config(raw: Option<RawReviewConfig>, config_path: &Path) -> Result<ReviewConfig> {
+    let rules_file = raw.and_then(|review| review.rules_file);
+    if let Some(path) = &rules_file {
+        let relative = Path::new(path);
+        let confined = !path.trim().is_empty()
+            && relative.is_relative()
+            && relative
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_)));
+        if !confined {
+            bail!(
+                "project_config_invalid: {} field 'review.rules_file' must be a path inside the repository, such as docs/review-rules.md",
+                config_path.display()
+            );
+        }
+    }
+    Ok(ReviewConfig { rules_file })
 }
 
 fn parse_issue_link_config(

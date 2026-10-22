@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T20:47:43.824859062+00:00"
+status: "done"
 title: "Default to merge_commit merging when the repository defines a test check"
-updated_at: "2026-10-22T19:58:19.278824634+00:00"
+updated_at: "2026-10-22T20:47:43.824859062+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,25 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 k8h8 S3 leaves the default to Sumeet; this item is that decision plus its implementation. The post-switch sample is two branches, so S6's count from a larger run may be wanted first.
+
+## Notes
+
+- 2026-10-22 [decision] The starter policy omits merge_strategy so the parser's rule decides; the rule lives only in the parser
+  Reason: atelier init then gives the same result as any policy without the field (fast_forward_only with no shell.check, merge_commit once one is added), with no second copy of the rule to drift. Existing repositories set merge_strategy explicitly and parse unchanged; an installed binary older than this change reads an omitted value as squash, which merge already refuses, so only newly initialised repositories need the new binary.
+  Rejected: Writing the resolved strategy into the starter: preserves old-binary reads but leaves a new repository on fast_forward_only after it adds its first test check
+
+## Close Reason
+
+A policy without `branch_policy.merge_strategy` now resolves to `merge_commit` when its `merge_checks` include a `shell.check`, else `fast_forward_only`; explicit values win. `atelier init` writes a starter without the field, so it follows the same rule, and docs/product/workflow-configuration.md states the default and why.
+
+### Deviations
+The omitted value used to parse as `squash`, which merge refuses; it now parses by the rule. Several test fixtures (merge_gates, session, prune tests) pinned `merge_strategy` explicitly because they relied on the starter text.
+
+### Decisions
+Starter omits the field so the rule exists only in the parser; see the decision note on this item.
+
+### Surprises
+Starter policy text was an anchor in many tests, and fixtures that add a shell.check to a starter silently changed strategy, so I pinned fast_forward_only in the two Fixture::new helpers.
+
+### Open items
+A binary older than this change reads a newly initialised repository's omitted value as squash and merge refuses; reinstall the CLI after merging. This repo and existing repositories set the value explicitly and are unaffected.

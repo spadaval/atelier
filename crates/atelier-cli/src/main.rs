@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use atelier::commands;
+use atelier::commands::record_commit::{RecordCommit, RecordCommitArgs};
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases::{self, load_repository};
 use atelier_core::{EvidenceResult, FindingDecision, InvalidValue};
@@ -49,6 +50,8 @@ struct ReviewArgs {
     commit: Option<String>,
     /// What was checked, found or decided
     summary: String,
+    #[command(flatten)]
+    record_commit: RecordCommitArgs,
 }
 #[derive(Subcommand)]
 enum ReviewCommands {
@@ -84,6 +87,24 @@ enum ReviewCommands {
         follow_up: Option<String>,
         /// Why the decision was taken
         summary: String,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
+    },
+    /// Print the brief an independent reviewer is given for an item
+    ///
+    /// The item's Goal and Done when, the commits to review, earlier
+    /// findings, dispositions and reviews, recorded proof, the working rules
+    /// from policy, and the commands that record the review. It never
+    /// includes the author's notes or Close Reason.
+    Request {
+        /// Branch owner, or an item of the owner's parent, to be reviewed
+        id: String,
+        /// The name the reviewer records under, filled into the commands
+        #[arg(long)]
+        identity: Option<String>,
+        /// Review the commits after this one [default: since the last review]
+        #[arg(long)]
+        from: Option<String>,
     },
     /// List review events, for one owner or all
     List {
@@ -153,6 +174,13 @@ enum Commands {
     Start {
         /// Issue ID
         id: String,
+        /// Create the owner branch from this local branch, from any checkout
+        /// including a detached HEAD; it must be the policy's base branch
+        #[arg(long)]
+        base: Option<String>,
+        /// Start even though another live session or worktree holds the item
+        #[arg(long)]
+        take_over: bool,
     },
 
     /// First-class evidence records
@@ -178,6 +206,10 @@ enum Commands {
         /// workflow policy yet, so it lands through the repository's usual review
         #[arg(long)]
         install: bool,
+        /// After the checks pass, push the current branch to its configured
+        /// upstream; a refused land or a failed push exits non-zero
+        #[arg(long, conflicts_with = "hook")]
+        push: bool,
     },
 
     /// Check merge gates and fast-forward, or create only a merge commit under merge_commit
@@ -360,6 +392,9 @@ enum IssueCommands {
         /// not the strategy's front matter, is the link
         #[arg(long)]
         strategy: Option<String>,
+        /// Record this work was found in: issue, review event or receipt
+        #[arg(long, value_name = "ID")]
+        discovered_from: Option<String>,
     },
 
     /// Show a brief view of one or more issues; --full shows the whole record
@@ -420,6 +455,8 @@ enum IssueCommands {
         /// Show validator passes, action preflight detail, descriptions, and debug context
         #[arg(long)]
         verbose: bool,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
     },
 
     /// Update an issue
@@ -497,7 +534,7 @@ enum IssueCommands {
         /// target) and blocks (the target waits for the source). Mission scope:
         /// advances (stored under relates). Context only, no effect on
         /// readiness: related, part_of, implements, supersedes, duplicates,
-        /// derived_from, contributes_to, assumption, falsifies, derived, and
+        /// derived_from, discovered_from, contributes_to, assumption, falsifies, derived, and
         /// custom roles from .atelier/config.toml; these are stored under the
         /// record's relates field. Only the source record is written; the
         /// target reads the link from it
@@ -515,7 +552,7 @@ enum IssueCommands {
         /// target) and blocks (the target waits for the source). Mission scope:
         /// advances (stored under relates). Context only, no effect on
         /// readiness: related, part_of, implements, supersedes, duplicates,
-        /// derived_from, contributes_to, assumption, falsifies, derived, and
+        /// derived_from, discovered_from, contributes_to, assumption, falsifies, derived, and
         /// custom roles from .atelier/config.toml; these are stored under the
         /// record's relates field
         #[arg(long, default_value = "advances")]
@@ -589,6 +626,8 @@ another target.")]
         /// Command to run and capture; its exit status sets the result
         #[arg(last = true, num_args = 0..)]
         command: Vec<String>,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
     },
     /// Show an evidence record
     Show {
@@ -647,6 +686,7 @@ fn main() -> std::process::ExitCode {
     restore_default_sigpipe();
     match load_dotenv().and_then(|()| run()) {
         Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) if error.is::<commands::session::Reported>() => std::process::ExitCode::from(1),
         Err(error) => {
             eprintln!("Error: {error:?}");
             // An invalid value is a usage error wherever it is checked.
@@ -720,9 +760,12 @@ fn run() -> Result<()> {
 
         Commands::Status { hook } => commands::status::run(hook.is_some(), quiet, false),
         Commands::Prime { hook } => commands::status::run(hook.is_some(), quiet, true),
-        Commands::Land { id, hook, install } => {
-            commands::session::land(id.as_deref(), hook.is_some(), install, quiet)
-        }
+        Commands::Land {
+            id,
+            hook,
+            install,
+            push,
+        } => commands::session::land(id.as_deref(), hook.is_some(), install, push, quiet),
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
         Commands::Brief { id, html } => {
@@ -777,15 +820,21 @@ fn run() -> Result<()> {
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
-        Commands::Start { id } => {
+        Commands::Start {
+            id,
+            base,
+            take_over,
+        } => {
             let (state_dir, index) = load_repository()?;
-            commands::start::run(&index, &state_dir, &id, quiet)
+            commands::start::run(&index, &state_dir, &id, base.as_deref(), take_over, quiet)
         }
 
         Commands::Merge { id, check, json } => commands::merge::run(&id, check, json, quiet),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event| {
+                let group = RecordCommit::begin(args.record_commit)?;
+                let verb = commands::review::event_name(&event);
                 commands::review::append(
                     &args.id,
                     &args.identity,
@@ -793,7 +842,8 @@ fn run() -> Result<()> {
                     &args.summary,
                     event,
                     quiet,
-                )
+                )?;
+                group.finish(verb, quiet)
             };
             match action {
                 ReviewCommands::Record(args) => append(args, ReviewEvent::Review),
@@ -810,15 +860,23 @@ fn run() -> Result<()> {
                     resolution_commit,
                     follow_up,
                     summary,
-                } => commands::review::disposition(
-                    &finding,
-                    &identity,
-                    decision,
-                    resolution_commit,
-                    follow_up,
-                    &summary,
-                    quiet,
-                ),
+                    record_commit,
+                } => {
+                    let group = RecordCommit::begin(record_commit)?;
+                    commands::review::disposition(
+                        &finding,
+                        &identity,
+                        decision,
+                        resolution_commit,
+                        follow_up,
+                        &summary,
+                        quiet,
+                    )?;
+                    group.finish("disposition", quiet)
+                }
+                ReviewCommands::Request { id, identity, from } => {
+                    commands::review_request::run(&id, identity.as_deref(), from.as_deref(), quiet)
+                }
                 ReviewCommands::List { id, json } => {
                     commands::review::list(id.as_deref(), json, quiet)
                 }
@@ -850,7 +908,9 @@ fn run() -> Result<()> {
                 criteria,
                 summary_text,
                 command,
+                record_commit,
             } => {
+                let group = RecordCommit::begin(record_commit)?;
                 let parsed_target = match target.as_deref() {
                     Some(target) => Some(use_cases::parse_evidence_target_arg(target)?),
                     None => None,
@@ -900,7 +960,8 @@ fn run() -> Result<()> {
                     }
                     let evidence = atelier_records::RecordStore::new(&state_dir)
                         .load_evidence_by_id(&evidence_id)?;
-                    commands::evidence::print_new_record(&evidence, quiet)
+                    commands::evidence::print_new_record(&evidence, quiet)?;
+                    group.finish("evidence", quiet)
                 } else {
                     let command_summary = summary.as_deref().or(summary_text.as_deref());
                     commands::evidence::capture(commands::evidence::CaptureOptions {
@@ -915,7 +976,8 @@ fn run() -> Result<()> {
                         command: &command,
                         criteria: &commands::evidence::captured_criteria(&criteria)?,
                         quiet,
-                    })
+                    })?;
+                    group.finish("evidence", quiet)
                 }
             }
             EvidenceCommands::Show { id } => {

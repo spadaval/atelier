@@ -15,6 +15,12 @@ relationships:
   - kind: "issue"
     id: "atelier-k8h8"
     type: "advances"
+  - kind: "review"
+    id: "atelier-pew5"
+    type: "discovered_from"
+  - kind: "review"
+    id: "atelier-83w3"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"

@@ -5,6 +5,7 @@ pub mod init;
 pub mod issue;
 pub mod issue_workflow;
 pub mod prune;
+pub mod record_commit;
 pub mod relate;
 pub mod start;
 pub mod status;
@@ -16,7 +17,9 @@ pub mod merge;
 pub mod migrate;
 pub mod mission_review;
 pub mod review;
+pub mod review_request;
 
 pub(crate) mod git;
+pub mod lease;
 pub mod session;
 pub mod setup;
