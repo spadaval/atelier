@@ -5084,8 +5084,9 @@ fn land_names_unpushed_base_commits_the_owner_did_not_make_before_pushing() {
     let (pass, out) = cli(f.path(), &["land", "--push"]);
     assert!(pass, "{out}");
     assert!(
-        out.contains("Warning: main is ahead of its upstream with 1 commit that this owner did not make")
-            && out.contains("Records from another thread (Author)"),
+        out.contains(
+            "Warning: main is ahead of its upstream with 1 commit that this owner did not make"
+        ) && out.contains("Records from another thread (Author)"),
         "{out}"
     );
     assert!(!out.contains("Plan follow-up"), "{out}");
