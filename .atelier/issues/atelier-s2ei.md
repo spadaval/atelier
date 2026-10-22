@@ -22,9 +22,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T22:23:14.180284695+00:00"
+status: "done"
 title: "Add atelier merge --sync to bring the base in, re-prove and report approval survival"
-updated_at: "2026-10-22T22:22:21.180488011+00:00"
+updated_at: "2026-10-22T22:23:14.180284695+00:00"
 ---
 
 ## Goal
@@ -53,3 +54,23 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 - 2026-10-22 [decision] merge --sync is one catch-up command under both merge strategies: git merge <base> into the owner branch (never a rebase), rerun, commit receipts, report approval, verdict; it integrates nothing
   Reason: Under fast_forward_only the base must come into the branch whenever it moved. Under merge_commit, atelier merge merges a clean branch itself (atelier-p189), so --sync matters for conflicts and merge_base_records, but its mechanics need no strategy branch; output ends in 'Next: atelier merge --check' either way
   Rejected: reading the base policy to vary behaviour per strategy; integrating after the sync
+
+## Close Reason
+
+Added `atelier merge <id> --sync`: it merges the base into the owner branch, reruns current command-backed receipts, commits the new receipts, reports whether the approval survived, and ends in `merge: passed` or `merge: refused — N checks (codes)`. It integrates nothing.
+
+### Deviations
+- A stale approval is reported (first failing commit and the hand-resolved or edited paths) but does not make the verdict refused; only `sync_conflict`, `sync_rerun_failed` and early refusals do.
+- Resume case: if the base is already merged and HEAD is that merge commit, reruns use receipts current at its first parent. An already-synced branch reruns nothing.
+- Dirty checkout is refused by the existing `merge_checkout_dirty`, not a new code.
+
+### Decisions
+Four decision notes on the item: one command under both strategies; conflict leaves the merge in progress and resumes; rerun scope and failure recording; approval survival reuses one rule.
+
+### Surprises
+`approval_is_current_to` now delegates to new `approval_stale_edge` (returns the failing commit and paths), so there is still one rule. `capture` was split into `capture_record` plus printing, and `split_command` inverts `format_command`. `owned_branch` was extracted from `merge_once`.
+
+### Open items
+- Review outstanding.
+- A conflict resolved by hand and committed, then `--sync`, relies on the first-parent heuristic; a resolution followed by further commits before the sync reruns nothing.
+- Evidence reruns run in the caller's working directory, like `evidence record`.
