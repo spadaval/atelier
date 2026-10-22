@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T22:58:05.093171505+00:00"
+status: "done"
 title: "Make merge --sync's resume and stale-approval verdict read plainly"
-updated_at: "2026-10-22T22:58:02.091472566+00:00"
+updated_at: "2026-10-22T22:58:05.093171505+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,19 @@ A resumed sync says it is resuming after a merge made by hand and names the merg
 - 2026-10-22 [decision] A sync that leaves the approval stale ends 'merge: synced — approval needs fresh review' and still exits zero
   Reason: The sync did its work and a stale approval is the reviewer's next step, not a failed check; only the verdict wording changes, so scripts keyed on the exit status behave as before. The Next: --check line is dropped in that case because check will refuse.
   Rejected: Exit non-zero (turns an expected outcome into a failure); keeping 'merge: passed' (the reported contradiction)
+
+## Close Reason
+
+`merge --sync` now says `Resuming after a merge of <base> made by hand (<merge commit>)` when it resumes, prints `running <item>: <command>` before each rerun, and ends `merge: synced — approval needs fresh review` (exit zero) when the approval is left stale. docs/product/human-cli-output.md and reviews-and-merge.md document the forms.
+
+### Deviations
+None.
+
+### Decisions
+One decision note on atelier-o2pm: the stale-approval verdict exits zero.
+
+### Surprises
+None.
+
+### Open items
+None.
