@@ -368,7 +368,20 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
     unreachable!("the last attempt returns")
 }
 
-fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+/// The checked-out work branch of the item's owner, read from its committed
+/// records: what `merge` and `merge --sync` both start from.
+pub(super) struct Owned {
+    pub layout: StorageLayout,
+    pub head: String,
+    pub branch: String,
+    pub snapshot: committed_snapshot::CommittedSnapshot,
+    pub index: RecordIndex,
+    pub id: String,
+    pub owner: String,
+    pub base: String,
+}
+
+pub(super) fn owned_branch(issue_ref: &str) -> Result<Owned> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let head = git::head_commit(repo)?;
@@ -383,8 +396,8 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     };
     let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, issue_ref)?;
     let issue = index.require_issue(&id)?;
-    let owner = issue.parent_id.as_deref().unwrap_or(&id);
-    let owner_record = index.require_issue(owner)?;
+    let owner = issue.parent_id.clone().unwrap_or_else(|| id.clone());
+    let owner_record = index.require_issue(&owner)?;
     if owner_record.issue_type == "mission" {
         bail!("merge_mission: {owner} is a mission, and missions have no work branch. Next: merge one of its issues, listed by `atelier work mission {owner}`");
     }
@@ -398,7 +411,33 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
             recorded.branch_base
         );
     }
-    let base = &recorded.branch_base;
+    let base = recorded.branch_base.clone();
+    Ok(Owned {
+        layout,
+        head,
+        branch,
+        snapshot,
+        index,
+        id,
+        owner,
+        base,
+    })
+}
+
+fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+    let Owned {
+        layout,
+        head,
+        branch,
+        snapshot,
+        index,
+        id,
+        owner,
+        base,
+    } = owned_branch(issue_ref)?;
+    let repo = layout.repo_root();
+    let owner = owner.as_str();
+    let base = &base;
     let base_ref = format!("refs/heads/{base}");
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
     let base_head = crate::commands::git::resolve(repo, &base_ref)?;
