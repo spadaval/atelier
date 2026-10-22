@@ -13,11 +13,7 @@ relationships:
   - kind: "issue"
     id: "atelier-as7i"
   - kind: "issue"
-    id: "atelier-iaas"
-  - kind: "issue"
     id: "atelier-n642"
-  - kind: "issue"
-    id: "atelier-ss25"
   - kind: "issue"
     id: "atelier-uw4x"
   attachments: []
@@ -29,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make land and merge agree on what review covers"
-updated_at: "2026-10-22T19:58:16.616973437+00:00"
+updated_at: "2026-10-22T21:58:40.714811649+00:00"
 ---
 
 ## Goal
