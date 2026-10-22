@@ -10,7 +10,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{EvidenceRecord, Issue, RecordLink, Relation, ReviewEvent, ReviewRecord};
+use atelier_core::{
+    BaseExemption, EvidenceRecord, Issue, RecordLink, Relation, ReviewEvent, ReviewRecord,
+};
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
     validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships, BLOCKED_BY,
@@ -27,6 +29,8 @@ pub struct RecordFiles {
     pub issues: Vec<CanonicalIssueRecord>,
     pub evidence: Vec<EvidenceRecord>,
     pub reviews: Vec<ReviewRecord>,
+    /// Trivial exemptions of base commits, which name no issue.
+    pub base_exemptions: Vec<BaseExemption>,
     /// One error per unreadable, unparsable, or unsupported file, in path
     /// order. Each error names the file.
     pub errors: Vec<RecordFileError>,
@@ -36,7 +40,8 @@ impl RecordFiles {
         if let Some(error) = self.errors.into_iter().next() {
             return Err(error.error);
         }
-        RecordIndex::from_records(self.issues, self.evidence, self.reviews)
+        RecordIndex::from_records(self.issues, self.evidence, self.reviews)?
+            .with_base_exemptions(self.base_exemptions)
     }
 }
 
@@ -82,6 +87,7 @@ pub(crate) fn read_record_paths(
             Ok(Some(ParsedRecord::Issue(record))) => files.issues.push(*record),
             Ok(Some(ParsedRecord::Evidence(record))) => files.evidence.push(*record),
             Ok(Some(ParsedRecord::Review(record))) => files.reviews.push(*record),
+            Ok(Some(ParsedRecord::BaseExemption(record))) => files.base_exemptions.push(*record),
             Ok(None) => {}
             Err(error) => files.errors.push(RecordFileError {
                 error: name_record_file(error, &relative),
@@ -108,6 +114,7 @@ enum ParsedRecord {
     Issue(Box<CanonicalIssueRecord>),
     Evidence(Box<EvidenceRecord>),
     Review(Box<ReviewRecord>),
+    BaseExemption(Box<BaseExemption>),
 }
 
 fn read_record_file(
@@ -152,9 +159,14 @@ fn read_record_file(
     Ok(Some(if top == "issues" {
         ParsedRecord::Issue(Box::new(parse_issue_record(&text, relative)?))
     } else if top == "reviews" {
-        ParsedRecord::Review(Box::new(atelier_records::review::parse_review_record(
-            &text, relative,
-        )?))
+        match atelier_records::review::parse_review_file(&text, relative)? {
+            atelier_records::review::ReviewFile::Event(record) => {
+                ParsedRecord::Review(Box::new(record))
+            }
+            atelier_records::review::ReviewFile::BaseExemption(record) => {
+                ParsedRecord::BaseExemption(Box::new(record))
+            }
+        }
     } else {
         ParsedRecord::Evidence(Box::new(parse_evidence_record_file(&text, relative)?))
     }))
@@ -214,6 +226,7 @@ pub struct RecordIndex {
     relations: BTreeMap<String, Vec<Relation>>,
     evidence: BTreeMap<String, EvidenceRecord>,
     reviews: BTreeMap<String, ReviewRecord>,
+    base_exemptions: BTreeMap<String, BaseExemption>,
     /// Evidence attachments and issue-to-issue relations, sorted.
     links: Vec<RecordLink>,
     /// `(kind, id)` to indices into `links` touching that record.
@@ -268,7 +281,25 @@ impl RecordIndex {
         if let Some(first) = files.errors.into_iter().next() {
             return Err(first.error);
         }
-        Self::from_project_records(state_dir, files.issues, files.evidence, files.reviews)
+        Self::from_project_records(state_dir, files.issues, files.evidence, files.reviews)?
+            .with_base_exemptions(files.base_exemptions)
+    }
+
+    /// Adds the base exemptions read beside the other records. They name no
+    /// other record, so only their IDs are checked.
+    pub fn with_base_exemptions(mut self, exemptions: Vec<BaseExemption>) -> Result<Self> {
+        for record in exemptions {
+            let id = record.header.id.clone();
+            if self.issues.contains_key(&id)
+                || self.evidence.contains_key(&id)
+                || self.reviews.contains_key(&id)
+                || self.base_exemptions.contains_key(&id)
+            {
+                bail!("Duplicate record ID in record files: {id}");
+            }
+            self.base_exemptions.insert(id, record);
+        }
+        Ok(self)
     }
 
     /// Builds an index from already-parsed records and applies the
@@ -422,6 +453,13 @@ impl RecordIndex {
     }
     pub fn reviews(&self) -> impl Iterator<Item = &ReviewRecord> {
         self.reviews.values()
+    }
+    /// Trivial exemptions of base commits, by ID.
+    pub fn base_exemptions(&self) -> impl Iterator<Item = &BaseExemption> {
+        self.base_exemptions.values()
+    }
+    pub fn base_exemption(&self, id: &str) -> Option<&BaseExemption> {
+        self.base_exemptions.get(id)
     }
     pub fn require_review(&self, id: &str) -> Result<&ReviewRecord> {
         self.reviews
@@ -1124,7 +1162,12 @@ impl RecordIndex {
         match kind {
             RecordKind::Issue => Box::new(self.issues.keys().map(String::as_str)),
             RecordKind::Evidence => Box::new(self.evidence.keys().map(String::as_str)),
-            RecordKind::Review => Box::new(self.reviews.keys().map(String::as_str)),
+            RecordKind::Review => Box::new(
+                self.reviews
+                    .keys()
+                    .chain(self.base_exemptions.keys())
+                    .map(String::as_str),
+            ),
         }
     }
 

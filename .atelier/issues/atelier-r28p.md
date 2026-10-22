@@ -26,7 +26,7 @@ schema_version: 2
 closed_at: "2026-10-22T22:25:18.348155330+00:00"
 status: "done"
 title: "Keep approvals and land's scope steady through planning records"
-updated_at: "2026-10-22T22:40:12.698976487+00:00"
+updated_at: "2026-10-22T23:14:16.415803248+00:00"
 ---
 
 ## Goal
@@ -53,6 +53,7 @@ Both children change what the review gate and land's touched-claims scope treat 
 - 2026-10-22 [decision] merge runs merge_claim_nodes on the commit it would put on the base under either strategy: the merge commit under merge_commit, the branch head under fast_forward_only, trusting the base head (finding atelier-bu66).
   Reason: Under fast_forward_only the branch head becomes the base head, so it is the tree land on the base will judge; running the same check there restores the 1ztv rule that merge refuses any done claim land would refuse.
   Rejected: File bu66 as a separate follow-up (orchestrator chose FIX NOW)
+- 2026-10-22 [note] Correction from finding atelier-kotb (fixed under atelier-mbrf): this item's decision note says records 'filed on the base after the pin' stay editable. The rule the code applies is records not in the approval's pinned tree, which includes a base record filed before the approval and merged in later. docs/product/reviews-and-merge.md and the comment at allowed_edge now say so.
 
 ## Close Reason
 

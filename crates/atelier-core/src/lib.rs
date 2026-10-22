@@ -343,6 +343,21 @@ pub struct ReviewRecord {
     pub summary: String,
 }
 
+/// A trivial exemption of one commit on the base branch, with no owner issue
+/// or work branch (atelier-mbrf). It is stored with the review events, as a
+/// `trivial_exemption` that names `base` instead of a target, and covers
+/// exactly `commit`, never a later one.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct BaseExemption {
+    pub header: RecordHeader,
+    /// The base branch the commit was made on.
+    pub base: String,
+    pub identity: String,
+    pub commit: String,
+    /// Why correctness is evident from the diff.
+    pub summary: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingDecision {

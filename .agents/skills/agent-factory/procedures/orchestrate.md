@@ -158,6 +158,14 @@ blocks the current outcome. Otherwise record it as follow-up work. Preserve
 completed work and failed evidence when superseding plans; do not rewrite
 history to make the new route look inevitable.
 
+When you take up low-priority follow-ups, such as deferred review findings,
+batch them instead of running each through its own branch and review. Make
+them children of one parent increment: they share the parent's branch, each
+keeps its own Done when and proof and closes there, and one independent
+review of the branch, approved on the parent, covers them all. In Atelier,
+the children `atelier start` onto the parent's branch, and `atelier review
+request <parent>` briefs every child's Done when.
+
 ## Closeout
 
 Close against demonstrated outcomes, not issue count:

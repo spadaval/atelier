@@ -228,6 +228,9 @@ pub enum Event {
     Validated(usize),
     /// A review event on the mission, by index into `mission_events`.
     MissionReview(usize),
+    /// A base commit exempted from review as trivial while the mission ran,
+    /// by index into `base_exemptions`.
+    BaseExemption(usize),
     /// The mission made its done claim.
     Closed,
 }
@@ -274,6 +277,10 @@ pub struct Debrief {
     pub validation: Validation,
     pub decisions: Decisions,
     pub mission_events: Vec<MissionEvent>,
+    /// Base commits exempted from review as trivial, with no owner issue,
+    /// from the mission's start to its done claim (atelier-mbrf). They name
+    /// no mission, so every mission running at the time shows them.
+    pub base_exemptions: Vec<MissionEvent>,
     pub refs: BTreeMap<String, IssueRef>,
     /// Reviews and receipts on the mission and its scope, for mentions.
     pub record_refs: BTreeMap<String, RecordRef>,
@@ -781,6 +788,7 @@ pub fn debrief(
         .collect::<Vec<_>>();
 
     let mission_events = mission_events(index, mission_id);
+    let base_exemptions = base_exemptions(index, &timeline);
     let validation = validation(index, &criteria, &work, &asker_of);
     let events = events(
         &timeline,
@@ -790,7 +798,7 @@ pub fn debrief(
         &found,
         &dropped,
         &validation,
-        &mission_events,
+        (&mission_events, &base_exemptions),
         index,
     );
 
@@ -814,6 +822,19 @@ pub fn debrief(
             RecordRef {
                 kind: event_name(&review.event).to_string(),
                 summary: review
+                    .summary
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            },
+        );
+    }
+    for exemption in &base_exemptions {
+        record_refs.insert(
+            exemption.id.clone(),
+            RecordRef {
+                kind: "trivial".into(),
+                summary: exemption
                     .summary
                     .split_whitespace()
                     .collect::<Vec<_>>()
@@ -882,6 +903,7 @@ pub fn debrief(
         validation,
         decisions,
         mission_events,
+        base_exemptions,
         refs,
         record_refs,
         planned_done,
@@ -1024,7 +1046,7 @@ fn events(
     found: &[OpenEntry],
     dropped: &[OpenEntry],
     validation: &Validation,
-    mission_events: &[MissionEvent],
+    (mission_events, base_exemptions): (&[MissionEvent], &[MissionEvent]),
     index: &RecordIndex,
 ) -> Vec<TimedEvent> {
     let mut events = Vec::new();
@@ -1082,6 +1104,12 @@ fn events(
         events.push(TimedEvent {
             at: Some(event.created_at),
             event: Event::MissionReview(number),
+        });
+    }
+    for (number, exemption) in base_exemptions.iter().enumerate() {
+        events.push(TimedEvent {
+            at: Some(exemption.created_at),
+            event: Event::BaseExemption(number),
         });
     }
     if let Some(closed) = &timeline.closed {
@@ -1238,6 +1266,34 @@ pub fn mission_events(index: &RecordIndex, mission_id: &str) -> Vec<MissionEvent
             commit: review.commit.clone(),
             created_at: review.header.created_at,
             summary: review.summary.clone(),
+        })
+        .collect::<Vec<_>>();
+    events.sort_by(|a, b| (a.created_at, &a.id).cmp(&(b.created_at, &b.id)));
+    events
+}
+
+/// Base exemptions recorded from the mission's start to its done claim,
+/// oldest first; none before it starts.
+fn base_exemptions(index: &RecordIndex, timeline: &MissionTimeline) -> Vec<MissionEvent> {
+    let Some(started) = &timeline.started else {
+        return Vec::new();
+    };
+    let mut events = index
+        .base_exemptions()
+        .filter(|exemption| {
+            exemption.header.created_at >= started.time
+                && timeline
+                    .closed
+                    .as_ref()
+                    .is_none_or(|closed| exemption.header.created_at <= closed.time)
+        })
+        .map(|exemption| MissionEvent {
+            id: exemption.header.id.clone(),
+            event: "trivial",
+            identity: exemption.identity.clone(),
+            commit: exemption.commit.clone(),
+            created_at: exemption.header.created_at,
+            summary: exemption.summary.clone(),
         })
         .collect::<Vec<_>>();
     events.sort_by(|a, b| (a.created_at, &a.id).cmp(&(b.created_at, &b.id)));

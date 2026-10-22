@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T23:22:08.264060633+00:00"
+status: "done"
 title: "Batch low-priority review follow-ups into one branch and one review"
-updated_at: "2026-10-22T23:03:39.477383694+00:00"
+updated_at: "2026-10-22T23:22:08.264060633+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,25 @@ The Agent Factory orchestrate guidance says to batch low-priority deferred follo
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Notes
+
+- 2026-10-22 [decision] No Atelier change: children already start onto their parent's branch and one approval on the parent covers every child's code and done claim through land, merge and land on the base; this item adds the orchestrate guidance and a regression test of that flow
+  Reason: a_task_parent_owns_its_children_through_start_land_and_merge and the scope rule in review_gate (owner and descendants) already support it; task/atelier-fngz runs four follow-ups this way. The new test adds what the existing one did not show: several children each with its own code commit and close, and the base land check after merge.
+  Rejected: A dedicated batch command or follow-up grouping record (the parent increment already is the batch)
+
+## Close Reason
+
+The Agent Factory orchestrate procedure now says to batch low-priority follow-ups as children of one parent increment, sharing its branch and one independent review approved on the parent; a session test shows one approval on the parent covering three children closed on its branch through `land`, `merge` and `land` on the base.
+
+### Deviations
+No Atelier code changed: the support the Done when asks for already existed. The guidance is in the vendored copy only (`.agents/skills/agent-factory/procedures/orchestrate.md`).
+
+### Decisions
+See this item's decision note: no batch command or grouping record, because the parent increment already is the batch.
+
+### Surprises
+None.
+
+### Open items
+The orchestrate guidance is not yet upstream in spadaval/.agents.

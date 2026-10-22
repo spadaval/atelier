@@ -1,7 +1,9 @@
 # Reviews and Merge
 
 Reviews are immutable Markdown events under `.atelier/reviews/`. Each command
-adds a new file with an explicit identity, target, full commit, and explanation.
+adds a new file with an explicit identity, target, full commit, and explanation;
+a [base exemption](#trivial-changes-on-the-base) names its base branch instead
+of a target.
 Agent Factory owns review and finding assessment; Atelier checks the recorded
 invariants. There is no external review backend or review room.
 
@@ -16,6 +18,7 @@ atelier review record <owner-id> --identity "Reviewer" "Checks and limits"
 atelier review approve <owner-id> --identity "Reviewer" "Approval summary"
 atelier review finding <owner-id> --identity "Reviewer" --recommendation fix_now "Problem"
 atelier review trivial <owner-id> --identity "Author" "Why correctness is evident"
+atelier review trivial --base <commit> --identity "Author" "Why correctness is evident"
 atelier review list <owner-id>
 atelier review show <review-id>
 ```
@@ -24,7 +27,10 @@ atelier review show <review-id>
 from an identity other than the substantive Git authors. Identity is
 self-declared and compared with author names and email addresses. `trivial`
 is an explicit visible exemption with a reason, never an implicit fallback.
-`review list` accepts `--json` and can omit the owner to list all events.
+It is for a change whose correctness is evident from the diff, code or prose
+alike; it is the only route that skips independent review, and there is no
+lighter standard for some paths or kinds of text. `review list` accepts
+`--json` and can omit the owner to list all events, base exemptions included.
 Every command that records an event also takes `--commit-records` and
 `--stage-records`, which commit the records it wrote (alone or grouped with the
 rest of a step); see [Committing records](cli-surface.md#committing-records).
@@ -82,19 +88,20 @@ make approval stale. Later commits may add new review/evidence files, create
 issues outside the reviewed scope (such as the follow-up a `defer` disposition
 names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
 Close Reason, including the implementer report it carries, without changing
-the approved acceptance. An issue record outside the scope that did not exist
-at the approval's pin is planning in every later commit too, wherever it was
-created: on the branch, or on the base after the pin and merged into the
-branch. Such records may be committed to the base without review anyway (see
+the approved acceptance. An issue record outside the scope that is not in the
+approval's pinned tree is planning in every later commit too, wherever it was
+created: on the branch, or on the base, before or after the approval, and
+merged into the branch. Such records may be committed to the base without review anyway (see
 [Planning changes on the base](#planning-changes-on-the-base)), so the branch
 may also create, link, or edit them without staling the approval. A follow-up
 filed during review may be created with `--discovered-from`, then linked to its
 mission (`atelier issue link <follow-up> <mission> --role advances`, stored on
-the follow-up) in a later commit (atelier-iaas), and an issue the base filed
-after the approval may be rewritten on the branch (atelier-g0mh). Neither
+the follow-up) in a later commit (atelier-iaas), and an issue from the base
+that is not in the approval's pinned tree may be rewritten on the branch
+(atelier-g0mh, atelier-kotb). Neither
 record's own done claim is covered: closing it on the branch fails
 `claims.reviewed`, and `land` refuses it, as below. A record outside the scope
-that existed at the pin is still reviewed content.
+in the pinned tree is still reviewed content.
 
 This is the one rule for what an approval or trivial exemption covers, and
 `merge` (its `review.current` gate), `land` on the work branch and `land` on
@@ -304,7 +311,9 @@ Filing, grooming, re-prioritising, recording decisions (including deciding a
 (`.atelier/issues`, `.atelier/evidence`, `.atelier/reviews`) and the strategy
 files linked from missions may be committed on the base branch directly
 (atelier-3mjv, decided by Sumeet 2026-10-15). Any other change goes through a
-work branch, review, and `atelier merge`.
+work branch, review, and `atelier merge`, or, when its correctness is evident
+from the diff, is exempted on the base as a [trivial
+change](#trivial-changes-on-the-base).
 
 `atelier land` on the base branch checks this before you push. It looks at
 the base commits that are not yet on the base's upstream. A commit counts as
@@ -319,7 +328,8 @@ branch merged into the work branch, where `review.current` counts a side
 branch not on the base. `merge` may therefore refuse an approval that `land`
 would accept, never the reverse (atelier-p5qp). Every finding pinned at or before it needs an
 accepted disposition, and a FIX NOW's resolution commit must be at or before
-the approval's pin; the disposition itself may be recorded later. That is what `atelier merge` integrates. Every other commit may touch only records and the
+the approval's pin; the disposition itself may be recorded later. That is what `atelier merge` integrates. A commit a [base
+exemption](#trivial-changes-on-the-base) pins is covered too. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. Those record-only commits also may not take a work
 item to done: a done claim travels on the work branch with the work, so `land`
@@ -347,3 +357,25 @@ This is a handoff check, not an access control. Review identities are
 self-declared, so an exemption recorded on the base for an owner that merged
 but is not yet pushed still covers commits after its branch started, and a
 direct commit pushed without running `land` is caught only by later review.
+
+### Trivial changes on the base
+
+A trivial change, such as a one-line policy fix or a typo in an ADR, can be
+committed on the base directly and exempted there, with no owner issue or work
+branch (atelier-mbrf). Commit it, then from the base checkout record:
+
+```text
+atelier review trivial --base <commit> --identity "Author" "Why correctness is evident" --commit-records
+```
+
+The exemption is the same trivial exemption as an owner's, under the same
+standard: correctness evident from the diff. It is stored like other review
+events but names `base: <branch>` instead of a target, with the full commit,
+the identity and the reason. It is recorded only from a checkout of the base
+branch, for a commit the base already holds. `land` on the base, and `start`,
+count exactly that commit as reviewed and report it as exempted as trivial:
+the exemption never covers an earlier or later commit, even one on top of it,
+and it covers no done claim, which still travels on a work branch
+(`land_base_done_claim`). `review list` and `review show` show it, and a
+mission's debrief shows each base exemption recorded between the mission's
+start and its done claim on its timeline, because it names no mission.

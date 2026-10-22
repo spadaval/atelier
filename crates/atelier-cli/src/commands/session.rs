@@ -873,11 +873,14 @@ fn touched_claims(
         } else if path.starts_with(".atelier/reviews/") {
             if before {
                 let Ok(record) = git_freshness::blob(repo, point, Path::new(path))
-                    .and_then(|text| atelier_records::review::parse_review_record(&text, relative))
+                    .and_then(|text| atelier_records::review::parse_review_file(&text, relative))
                 else {
                     return Ok(None);
                 };
-                touched.insert(record.target);
+                // A base exemption is about no issue.
+                if let atelier_records::review::ReviewFile::Event(record) = record {
+                    touched.insert(record.target);
+                }
             }
             if let Ok(review) = index.require_review(id) {
                 touched.insert(review.target.clone());

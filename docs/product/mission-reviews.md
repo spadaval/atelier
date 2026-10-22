@@ -28,7 +28,9 @@ it stands. Both forms follow the same order:
   it, and the follow-ups its review filed. Beside them, at their times: the
   mission's start and close, work added to the scope, work filed other than
   by a delivered item's review, dropped work with why, each validation run,
-  and review events on the mission, such as plan approval.
+  review events on the mission, such as plan approval, and each base commit
+  [exempted as trivial](reviews-and-merge.md#trivial-changes-on-the-base)
+  between the mission's start and its done claim.
 - **Results:** each criterion's mark, the done work that delivers it, and its
   deciding receipt with its age (code commits up to the mission's close, or
   since the receipt while the mission is open), or the open item that will

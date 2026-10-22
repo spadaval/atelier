@@ -633,6 +633,16 @@ fn render_markdown(view: &Debrief, context: RenderContext) -> Vec<Vec<String>> {
                     flat(&event.summary)
                 )));
             }
+            Event::BaseExemption(number) => {
+                let event = &view.base_exemptions[*number];
+                did.extend(wrap(format!(
+                    "{when} base commit {} exempted as trivial ({}) by {} | {}",
+                    short_commit(&event.commit),
+                    event.id,
+                    event.identity,
+                    flat(&event.summary)
+                )));
+            }
             Event::Delivered(id) => {
                 let Some(entry) = view.entry(id) else {
                     continue;
@@ -1555,6 +1565,26 @@ fn event_html(view: &Debrief, at: Option<chrono::DateTime<chrono::Utc>>, event: 
                     "<b>{}</b> by {}: {} {}",
                     escape(&capitalise(event.event)),
                     escape(&event.identity),
+                    rich_inline(
+                        view,
+                        &event
+                            .summary
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    ),
+                    record_chip(view, &event.id)
+                ),
+            )
+        }
+        Event::BaseExemption(number) => {
+            let event = &view.base_exemptions[*number];
+            line(
+                "mark",
+                format!(
+                    "<b>Base commit exempted as trivial</b> by {}: <code>{}</code> {} {}",
+                    escape(&event.identity),
+                    escape(short_commit(&event.commit)),
                     rich_inline(
                         view,
                         &event

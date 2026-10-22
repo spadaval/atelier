@@ -53,6 +53,26 @@ struct ReviewArgs {
     #[command(flatten)]
     record_commit: RecordCommitArgs,
 }
+#[derive(clap::Args)]
+struct TrivialArgs {
+    /// The branch owner, parent issue or standalone issue the exemption is
+    /// about, then why correctness is evident from the diff; with --base, the
+    /// reason alone
+    #[arg(value_names = ["ID", "SUMMARY"], required = true, num_args = 1..=2)]
+    subject: Vec<String>,
+    /// Who records the exemption
+    #[arg(long)]
+    identity: String,
+    /// Full commit the exemption pins, an ancestor on the work branch [default: HEAD]
+    #[arg(long, conflicts_with = "base")]
+    commit: Option<String>,
+    /// Exempt exactly this commit on the base branch, with no owner issue or
+    /// work branch; run on the base, and `land` counts that commit alone as reviewed
+    #[arg(long, value_name = "COMMIT")]
+    base: Option<String>,
+    #[command(flatten)]
+    record_commit: RecordCommitArgs,
+}
 #[derive(Subcommand)]
 enum ReviewCommands {
     /// Record a review account: what was checked and its limits
@@ -68,7 +88,14 @@ enum ReviewCommands {
         recommendation: FindingDecision,
     },
     /// Record an explicit trivial exemption, with why correctness is evident
-    Trivial(ReviewArgs),
+    ///
+    /// For an owner, the exemption covers its branch to the pinned commit,
+    /// as an approval would. With --base and no owner, it covers exactly one
+    /// commit already on the base branch.
+    #[command(
+        override_usage = "atelier review trivial [OPTIONS] --identity <IDENTITY> <ID> <SUMMARY>\n       atelier review trivial [OPTIONS] --identity <IDENTITY> --base <COMMIT> <SUMMARY>"
+    )]
+    Trivial(TrivialArgs),
     /// Record the decision on a finding
     Disposition {
         /// The finding's review event ID
@@ -857,7 +884,29 @@ fn run() -> Result<()> {
             match action {
                 ReviewCommands::Record(args) => append(args, ReviewEvent::Review),
                 ReviewCommands::Approve(args) => append(args, ReviewEvent::Approval),
-                ReviewCommands::Trivial(args) => append(args, ReviewEvent::TrivialExemption),
+                ReviewCommands::Trivial(args) => match (args.base, args.subject.as_slice()) {
+                    (Some(base), [summary]) => {
+                        let group = RecordCommit::begin(args.record_commit)?;
+                        commands::review::exempt_base(&base, &args.identity, summary, quiet)?;
+                        group.finish("trivial_exemption", quiet)
+                    }
+                    (None, [id, summary]) => append(
+                        ReviewArgs {
+                            id: id.clone(),
+                            identity: args.identity,
+                            commit: args.commit,
+                            summary: summary.clone(),
+                            record_commit: args.record_commit,
+                        },
+                        ReviewEvent::TrivialExemption,
+                    ),
+                    (Some(_), _) => anyhow::bail!(
+                        "review trivial --base takes only the reason; a base exemption has no owner"
+                    ),
+                    (None, _) => anyhow::bail!(
+                        "review trivial needs the owner and the reason, or --base <commit> and the reason"
+                    ),
+                },
                 ReviewCommands::Finding {
                     args,
                     recommendation,

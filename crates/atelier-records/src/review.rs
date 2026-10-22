@@ -5,7 +5,7 @@ use crate::{
     validate_record_id, RecordStore,
 };
 use anyhow::{bail, Context, Result};
-use atelier_core::{RecordHeader, Relationships, ReviewEvent, ReviewRecord};
+use atelier_core::{BaseExemption, RecordHeader, Relationships, ReviewEvent, ReviewRecord};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
@@ -17,7 +17,12 @@ struct Front {
     schema_version: i64,
     id: String,
     title: String,
-    target: String,
+    /// The issue an event is about; absent for a base exemption.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<String>,
+    /// The base branch of a base exemption, which has no target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    base: Option<String>,
     identity: String,
     commit: String,
     created_at: DateTime<Utc>,
@@ -60,7 +65,14 @@ fn relationships(target: &str, event: &ReviewEvent) -> Relationships {
     links
 }
 
-pub fn parse_review_record(text: &str, relative: &Path) -> Result<ReviewRecord> {
+/// A file under `reviews/`: an event about an issue, or a base exemption.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReviewFile {
+    Event(ReviewRecord),
+    BaseExemption(BaseExemption),
+}
+
+pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
     let (front, body) = split_document(text).context("review needs YAML front matter")?;
     let front: Front = serde_yaml::from_str(front)
         .with_context(|| format!("invalid review {}", display_state_path(relative)))?;
@@ -76,25 +88,78 @@ pub fn parse_review_record(text: &str, relative: &Path) -> Result<ReviewRecord> 
             display_state_path(relative)
         );
     }
-    let record = ReviewRecord {
-        header: RecordHeader {
-            kind: "review".into(),
-            id: front.id,
-            title: front.title,
-            status: "recorded".into(),
-            labels: Vec::new(),
-            relationships: relationships(&front.target, &front.event),
-            created_at: front.created_at,
-            updated_at: front.created_at,
-        },
-        target: front.target,
-        identity: front.identity,
-        commit: front.commit,
-        event: front.event,
-        summary: body.trim().into(),
+    let header = |relationships| RecordHeader {
+        kind: "review".into(),
+        id: front.id.clone(),
+        title: front.title.clone(),
+        status: "recorded".into(),
+        labels: Vec::new(),
+        relationships,
+        created_at: front.created_at,
+        updated_at: front.created_at,
     };
-    validate_review(&record)?;
-    Ok(record)
+    match (front.target.clone(), front.base.clone()) {
+        (Some(target), None) => {
+            let record = ReviewRecord {
+                header: header(relationships(&target, &front.event)),
+                target,
+                identity: front.identity,
+                commit: front.commit,
+                event: front.event,
+                summary: body.trim().into(),
+            };
+            validate_review(&record)?;
+            Ok(ReviewFile::Event(record))
+        }
+        (None, Some(base)) => {
+            if front.event != ReviewEvent::TrivialExemption {
+                bail!(
+                    "review {} names a base, which only a trivial exemption may",
+                    display_state_path(relative)
+                );
+            }
+            let record = BaseExemption {
+                header: header(Relationships::default()),
+                base,
+                identity: front.identity,
+                commit: front.commit,
+                summary: body.trim().into(),
+            };
+            validate_base_exemption(&record)?;
+            Ok(ReviewFile::BaseExemption(record))
+        }
+        _ => bail!(
+            "review {} needs exactly one of target and base",
+            display_state_path(relative)
+        ),
+    }
+}
+
+/// Parses a review event about an issue; a base exemption is refused.
+pub fn parse_review_record(text: &str, relative: &Path) -> Result<ReviewRecord> {
+    match parse_review_file(text, relative)? {
+        ReviewFile::Event(record) => Ok(record),
+        ReviewFile::BaseExemption(_) => bail!(
+            "review {} is a base exemption, not an event about an issue",
+            display_state_path(relative)
+        ),
+    }
+}
+
+pub fn validate_base_exemption(record: &BaseExemption) -> Result<()> {
+    validate_record_id(&record.header.id)?;
+    validate_commit(&record.commit)?;
+    if record.base.trim().is_empty()
+        || record.identity.trim().is_empty()
+        || record.summary.trim().is_empty()
+        || record.header.title.trim().is_empty()
+    {
+        bail!("base exemption requires a base, an explicit identity and an explanation");
+    }
+    if record.header.kind != "review" || record.header.relationships != Relationships::default() {
+        bail!("base exemption has no relationships");
+    }
+    Ok(())
 }
 
 pub fn validate_review(record: &ReviewRecord) -> Result<()> {
@@ -140,6 +205,27 @@ pub fn validate_review(record: &ReviewRecord) -> Result<()> {
     Ok(())
 }
 
+pub fn render_base_exemption(record: &BaseExemption) -> Result<String> {
+    validate_base_exemption(record)?;
+    let front = Front {
+        schema: REVIEW_KIND.schema.into(),
+        schema_version: REVIEW_KIND.schema_version,
+        id: record.header.id.clone(),
+        title: record.header.title.clone(),
+        target: None,
+        base: Some(record.base.clone()),
+        identity: record.identity.clone(),
+        commit: record.commit.clone(),
+        created_at: record.header.created_at,
+        event: ReviewEvent::TrivialExemption,
+    };
+    Ok(format!(
+        "---\n{}---\n\n{}\n",
+        serde_yaml::to_string(&front)?,
+        record.summary.trim()
+    ))
+}
+
 pub fn render_review_record(record: &ReviewRecord) -> Result<String> {
     validate_review(record)?;
     let front = Front {
@@ -147,7 +233,8 @@ pub fn render_review_record(record: &ReviewRecord) -> Result<String> {
         schema_version: REVIEW_KIND.schema_version,
         id: record.header.id.clone(),
         title: record.header.title.clone(),
-        target: record.target.clone(),
+        target: Some(record.target.clone()),
+        base: None,
         identity: record.identity.clone(),
         commit: record.commit.clone(),
         created_at: record.header.created_at,
@@ -189,16 +276,101 @@ impl RecordStore {
             event,
             summary: summary.into(),
         };
-        let relative = canonical_record_path(&REVIEW_KIND, &record.header.id)?;
-        let text = render_review_record(&record)?;
-        let directory = self.state_dir.join("reviews");
-        fs::create_dir_all(&directory)?;
+        self.publish_review(&record.header.id, render_review_record(&record)?)?;
+        Ok(record)
+    }
+
+    /// Creates a trivial exemption of `commit` on the base branch `base`,
+    /// with no owner issue (atelier-mbrf).
+    pub fn create_base_exemption(
+        &self,
+        base: &str,
+        identity: &str,
+        commit: &str,
+        summary: &str,
+    ) -> Result<BaseExemption> {
+        let _lock = CanonicalMutationLock::exclusive(&self.state_dir)?;
+        let now = Utc::now();
+        let record = BaseExemption {
+            header: RecordHeader {
+                kind: "review".into(),
+                id: self.allocate_record_id()?,
+                title: summary.lines().next().unwrap_or("").into(),
+                status: "recorded".into(),
+                labels: Vec::new(),
+                relationships: Relationships::default(),
+                created_at: now,
+                updated_at: now,
+            },
+            base: base.into(),
+            identity: identity.into(),
+            commit: commit.into(),
+            summary: summary.into(),
+        };
+        self.publish_review(&record.header.id, render_base_exemption(&record)?)?;
+        Ok(record)
+    }
+
+    fn publish_review(&self, id: &str, text: String) -> Result<()> {
+        let relative = canonical_record_path(&REVIEW_KIND, id)?;
+        fs::create_dir_all(self.state_dir.join("reviews"))?;
         // The shared writer publishes complete bytes atomically. Exclusive lock
         // and a pre-existing path check prevent cooperative record replacement.
         if self.state_dir.join(&relative).symlink_metadata().is_ok() {
             bail!("review already exists: {}", relative.display());
         }
-        self.write_atomic(&relative, text)?;
-        Ok(record)
+        self.write_atomic(&relative, text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(subject: &str, event: &str) -> Result<ReviewFile> {
+        let commit = "a".repeat(40);
+        let text = format!(
+            "---\nschema: atelier.review\nschema_version: 1\nid: atelier-r001\ntitle: why\n{subject}identity: Author\ncommit: {commit}\ncreated_at: 2026-10-22T00:00:00Z\nevent:\n  event: {event}\n---\n\nwhy\n"
+        );
+        parse_review_file(&text, Path::new("reviews/atelier-r001.md"))
+    }
+
+    #[test]
+    fn a_base_exemption_names_a_base_instead_of_a_target_and_round_trips() {
+        let Ok(ReviewFile::BaseExemption(record)) = file("base: main\n", "trivial_exemption")
+        else {
+            panic!("a base exemption parses");
+        };
+        assert_eq!(record.base, "main");
+        let text = render_base_exemption(&record).unwrap();
+        assert!(!text.contains("target:"), "{text}");
+        assert_eq!(
+            parse_review_file(&text, Path::new("reviews/atelier-r001.md")).unwrap(),
+            ReviewFile::BaseExemption(record)
+        );
+        assert!(matches!(
+            file("target: atelier-i001\n", "trivial_exemption"),
+            Ok(ReviewFile::Event(_))
+        ));
+        for (subject, event) in [
+            ("base: main\n", "approval"),
+            ("target: atelier-i001\nbase: main\n", "trivial_exemption"),
+            ("", "trivial_exemption"),
+        ] {
+            assert!(file(subject, event).is_err(), "{subject}{event}");
+        }
+        let error = parse_review_record(
+            &text_of(file("base: main\n", "trivial_exemption").unwrap()),
+            Path::new("reviews/atelier-r001.md"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("is a base exemption"), "{error}");
+    }
+
+    fn text_of(file: ReviewFile) -> String {
+        match file {
+            ReviewFile::BaseExemption(record) => render_base_exemption(&record).unwrap(),
+            ReviewFile::Event(record) => render_review_record(&record).unwrap(),
+        }
     }
 }

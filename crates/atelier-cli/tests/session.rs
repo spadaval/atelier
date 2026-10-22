@@ -2934,6 +2934,157 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
         "{output}"
     );
 }
+/// A trivial exemption pinned to a base commit, with no owner issue or work
+/// branch, covers exactly that commit for `land` (atelier-mbrf).
+#[test]
+fn a_base_exemption_covers_exactly_its_commit() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+
+    // Unexempted, a direct code commit is refused.
+    fs::write(f.path().join("README"), "Fixed typo\n").unwrap();
+    commit(f.path(), "fix a typo on the base");
+    let typo = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains(&format!("land_base_unreviewed: commit {}", &typo[..8])),
+        "{output}"
+    );
+
+    // Off the base, or for a commit the base does not hold, it is refused.
+    let side = git(f.path(), &["rev-parse", &f.branch]);
+    let (pass, output) = cli(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            "--base",
+            &side,
+            "--identity",
+            "Author",
+            "Not here",
+        ],
+    );
+    assert!(!pass && output.contains("review_base_commit"), "{output}");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let (pass, output) = cli(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            "--base",
+            &typo,
+            "--identity",
+            "Author",
+            "Not here",
+        ],
+    );
+    assert!(
+        !pass && output.contains("review_base_not_checked_out"),
+        "{output}"
+    );
+    git(f.path(), &["switch", "-q", "main"]);
+    let (pass, output) = cli(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            &f.id,
+            "--base",
+            &typo,
+            "--identity",
+            "Author",
+            "Both",
+        ],
+    );
+    assert!(!pass, "an owner and --base together: {output}");
+
+    let exemption = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "trivial",
+            "--base",
+            "HEAD",
+            "--identity",
+            "Author",
+            "One-word typo fix in README; correctness is evident from the diff",
+            "--commit-records",
+        ],
+    );
+    let record =
+        fs::read_to_string(f.path().join(format!(".atelier/reviews/{exemption}.md"))).unwrap();
+    assert!(
+        record.contains("\nbase: main\n")
+            && record.contains(&format!("\ncommit: {typo}\n"))
+            && !record.contains("\ntarget:")
+            && record.contains("event: trivial_exemption"),
+        "{record}"
+    );
+    let output = ok(f.path(), &["land"]);
+    assert!(
+        output.contains("1 unpushed record-only commit outside review; 1 unpushed commit exempted as trivial on main"),
+        "{output}"
+    );
+    let listed = ok(f.path(), &["review", "list"]);
+    assert!(
+        listed.contains(&format!(
+            "{exemption} TrivialExemption base main {}",
+            &typo[..8]
+        )),
+        "{listed}"
+    );
+    let shown = ok(f.path(), &["review", "show", &exemption]);
+    assert!(
+        shown.contains(&format!("\"commit\": \"{typo}\"")),
+        "{shown}"
+    );
+
+    // The exemption does not cover a later commit, even one on top of it.
+    fs::write(f.path().join("README"), "Fixed typo, and more\n").unwrap();
+    commit(f.path(), "a later edit on the base");
+    let later = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains(&format!("land_base_unreviewed: commit {}", &later[..8]))
+            && output.contains("changes README"),
+        "{output}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
+
+    // It covers no done claim: that still travels on a work branch.
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.close_reason = Some("completed claim".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    fs::write(f.path().join("README"), "Fixed typo again\n").unwrap();
+    commit(f.path(), "a claim and an edit on the base");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "trivial",
+            "--base",
+            "HEAD",
+            "--identity",
+            "Author",
+            "Typo fix",
+            "--commit-records",
+        ],
+    );
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass && output.contains("land_base_done_claim"), "{output}");
+}
 #[test]
 fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() {
     let f = Fixture::new();
@@ -5269,6 +5420,115 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
         let record = fs::read_to_string(path.join(format!(".atelier/issues/{id}.md"))).unwrap();
         assert!(record.contains("status: \"done\""), "{record}");
     }
+}
+
+/// Low-priority follow-ups batched as children of one parent share its
+/// branch and one review: a single approval on the parent covers every child
+/// closed on the branch, through `land`, `merge` and `land` on the base
+/// (atelier-u6f3).
+#[test]
+fn one_approval_on_the_parent_covers_follow_ups_closed_on_its_branch() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    git(path, &["init", "-qb", "main"]);
+    git(path, &["config", "user.name", "Author"]);
+    git(path, &["config", "user.email", "author@example.test"]);
+    ok(path, &["init", "--slug", "atelier"]);
+    let body = "## Goal\n\nClose the follow-ups.\n\n## Done when\n\nEach follow-up is done.";
+    let parent = ok(
+        path,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Batched follow-ups",
+            "--body",
+            body,
+        ],
+    );
+    let children = ["First", "Second", "Third"].map(|title| {
+        ok(
+            path,
+            &[
+                "-q",
+                "issue",
+                "create",
+                title,
+                "--parent",
+                &parent,
+                "--priority",
+                "low",
+            ],
+        )
+    });
+    commit(path, "plan the batch");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        path,
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(path, &["push", "-q", "-u", "origin", "main"]);
+
+    // Each follow-up starts on the parent's branch, with its own code and
+    // its own done claim, and no review of its own.
+    let branch = format!("task/{parent}");
+    for (number, child) in children.iter().enumerate() {
+        ok(path, &["start", child]);
+        assert_eq!(git(path, &["branch", "--show-current"]), branch);
+        fs::write(path.join(format!("fix{number}")), "follow-up fix\n").unwrap();
+        commit(path, &format!("fix {child}"));
+        ok(
+            path,
+            &["issue", "transition", child, "close", "--reason", "Fixed"],
+        );
+        commit(path, &format!("close {child}"));
+    }
+    ok(path, &["start", &parent]);
+    ok(
+        path,
+        &[
+            "issue",
+            "transition",
+            &parent,
+            "close",
+            "--reason",
+            "All fixed",
+        ],
+    );
+    commit(path, "close the batch");
+    let (pass, output) = cli(path, &["land"]);
+    assert!(!pass && output.contains("review.current"), "{output}");
+
+    ok(
+        path,
+        &[
+            "review",
+            "approve",
+            &parent,
+            "--identity",
+            "Reviewer",
+            "Reviewed the branch: every follow-up",
+            "--commit-records",
+        ],
+    );
+    ok(path, &["land"]);
+    ok(path, &["merge", &children[0]]);
+    assert_eq!(git(path, &["branch", "--show-current"]), "main");
+    for id in std::iter::once(&parent).chain(&children) {
+        let record = fs::read_to_string(path.join(format!(".atelier/issues/{id}.md"))).unwrap();
+        assert!(record.contains("status: \"done\""), "{record}");
+    }
+    // On the base, the one approval covers the code and every done claim;
+    // only the approval's own record commit follows its pin.
+    let output = ok(path, &["land"]);
+    assert!(
+        output.contains("Base commits: 1 unpushed record-only commit outside review.")
+            && output.contains("land: passed"),
+        "{output}"
+    );
+    let reviews = ok(path, &["-q", "review", "list"]);
+    assert_eq!(reviews.lines().count(), 1, "{reviews}");
 }
 
 /// Git invocations made by `atelier land`, recorded by a `git` wrapper on PATH.

@@ -126,8 +126,9 @@ pub(crate) fn require_committed_config(repo: &Path, head: &str, command: &str) -
 /// Record-only changes may be committed on the base branch directly; any
 /// other unpushed base commit must be covered by an approval or trivial
 /// exemption of a completed owner that branched from this base, which is what
-/// `atelier merge` integrates. Commits that install the workflow policy
-/// predate the gates and are exempt.
+/// `atelier merge` integrates, or be the very commit a base exemption pins
+/// (atelier-mbrf). Commits that install the workflow policy predate the gates
+/// and are exempt.
 pub(crate) fn check_base_commits(
     repo: &Path,
     index: &RecordIndex,
@@ -169,6 +170,7 @@ pub(crate) fn check_base_commits(
         .map(|strategy| normalized(Path::new(&strategy.path)))
         .collect::<BTreeSet<_>>();
     let mut checked = 0;
+    let mut exempted = 0;
     // The install predates the gates: the first commit on the base's
     // first-parent line that adds the policy, with everything it merges in
     // (an install branch and its review fixes).
@@ -217,7 +219,12 @@ pub(crate) fn check_base_commits(
         if !resolve(repo, &parent).is_ok_and(|parent| has_policy(&parent)) {
             continue;
         }
-        checked += 1;
+        let exempt = reviews.exempt.contains(commit);
+        if exempt {
+            exempted += 1;
+        } else {
+            checked += 1;
+        }
         let Some(changed) = introduced_paths(repo, commit)? else {
             continue;
         };
@@ -229,6 +236,11 @@ pub(crate) fn check_base_commits(
                 &commit[..8.min(commit.len())],
                 &commit[..8.min(commit.len())],
             );
+        }
+        // A base exemption covers the paths of exactly its own commit; a
+        // done claim it makes is still judged above, as it names no scope.
+        if exempt {
+            continue;
         }
         let other = changed
             .into_iter()
@@ -249,13 +261,21 @@ pub(crate) fn check_base_commits(
             );
         }
     }
-    Ok(match checked {
-        0 => "Base commits: none unpushed outside recorded review.".to_owned(),
+    let mut summary = match checked {
+        0 => "Base commits: none unpushed outside recorded review".to_owned(),
         count => format!(
-            "Base commits: {} outside review.",
+            "Base commits: {} outside review",
             crate::human_output::count_noun(count, "unpushed record-only commit")
         ),
-    })
+    };
+    if exempted > 0 {
+        summary.push_str(&format!(
+            "; {} exempted as trivial on {base}",
+            crate::human_output::count_noun(exempted, "unpushed commit")
+        ));
+    }
+    summary.push('.');
+    Ok(summary)
 }
 
 /// The approvals and trivial exemptions that cover commits not yet on a
@@ -267,6 +287,9 @@ struct BaseReviews {
     covered: BTreeSet<String>,
     /// Each covering pin with its approved scope, for done claims after it.
     approvals: Vec<(String, BTreeSet<String>)>,
+    /// Commits a base exemption pins: each covers its own paths, and no
+    /// other commit and no done claim (atelier-mbrf).
+    exempt: BTreeSet<String>,
 }
 
 impl BaseReviews {
@@ -281,6 +304,11 @@ impl BaseReviews {
         let mut reviews = Self {
             covered: BTreeSet::new(),
             approvals: Vec::new(),
+            exempt: index
+                .base_exemptions()
+                .filter(|exemption| exemption.base == *base)
+                .map(|exemption| exemption.commit.clone())
+                .collect(),
         };
         for review in index.reviews().filter(|review| {
             matches!(
