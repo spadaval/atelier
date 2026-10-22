@@ -5988,3 +5988,61 @@ fn start_replaces_a_stale_lease_with_a_note() {
         "{out}"
     );
 }
+
+#[test]
+fn start_warns_instead_of_failing_when_the_lease_cannot_be_written() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    // A file where the lease directory belongs makes the lease write fail.
+    let leases = lease_path(&f).parent().unwrap().to_path_buf();
+    fs::remove_dir_all(&leases).unwrap();
+    fs::write(&leases, "not a directory\n").unwrap();
+    let (pass, out) = cli(f.path(), &["start", &id, "--base", "main"]);
+    assert!(
+        pass && out.contains("Warning") && out.contains("session lease"),
+        "{out}"
+    );
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(
+        f.store().load_issue_by_id(&id).unwrap().issue.status,
+        "in_progress"
+    );
+}
+
+#[cfg(feature = "test-hooks")]
+#[test]
+fn status_does_not_write_the_old_holder_back_over_a_take_over() {
+    let f = Fixture::new();
+    let (holder, _other) = second_worktree(&f);
+    let marker = holder.path().join("checked");
+    let mut status = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .arg("status")
+        .env("ATELIER_TEST_LEASE_PAUSE_BEFORE_REFRESH", &marker)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    // status has seen its own lease and is about to renew it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !marker.exists() {
+        assert!(std::time::Instant::now() < deadline, "status never paused");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // Another worktree takes the lease over in that window.
+    let mut taken: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    taken["worktree"] = holder.path().join("other").to_str().unwrap().into();
+    fs::write(lease_path(&f), taken.to_string()).unwrap();
+    fs::write(marker.with_extension("release"), "go").unwrap();
+    assert!(status.wait().unwrap().success());
+    let after: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    assert_eq!(
+        after["worktree"], taken["worktree"],
+        "old holder written back"
+    );
+}
