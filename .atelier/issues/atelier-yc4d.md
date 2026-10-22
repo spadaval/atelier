@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Let atelier start take an explicit base from any checkout"
-updated_at: "2026-10-22T20:58:52.868152440+00:00"
+updated_at: "2026-10-22T20:59:50.008747083+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,9 @@ To record master as base, an orchestrator ran `git switch --detach master` and `
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168). Related: atelier-e151 (start creates the owner worktree).
+
+## Notes
+
+- 2026-10-22 [decision] The base named by start's base option must equal the policy's base branch (and the recorded base if one exists), is resolved as a local branch, and the owner branch is created from its pinned commit with records read from that commit
+  Reason: land fails with land_base_mismatch unless branch_base is the trusted policy base, and kops requires owned branches not to trust unchecked local base commits; start's existing base-commit check and land's upstream trust point still apply to the local base
+  Rejected: accepting any ref as base (records an untrusted base); remote-tracking refs (not the policy base name)
