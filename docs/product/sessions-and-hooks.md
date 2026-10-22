@@ -83,6 +83,16 @@ and `land: push failed, nothing pushed`. `--push` does not combine with
 `--hook`. Prefer it to `atelier land && git push`, and never push behind a
 pipe: a pipe's exit status is its last command's (atelier-ecah).
 
+When the local base branch is ahead of its upstream, `land` (and `land
+--push`) prints a warning, before any push, naming the unpushed base commits
+the current owner did not make: up to five, as `<hash> <subject> (<author>)`,
+then a count. A commit is the owner's when its message names the owner or an
+issue in the owner's scope, as the start, close, merge and planning commits
+for owned work do; git authorship cannot tell sessions apart, since agents
+share one identity. With no owner, every unpushed base commit is named. The
+warning does not refuse: pushing the base can be meant, and it publishes
+those commits. A base with no upstream is not checked here (atelier-mvzi).
+
 On the base branch itself, `land` checks unpushed base commits: only records
 and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).

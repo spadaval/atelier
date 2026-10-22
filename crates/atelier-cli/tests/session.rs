@@ -5070,3 +5070,36 @@ fn land_push_reports_a_failed_push_and_a_missing_upstream() {
         "land: refused — 1 check (land_push_no_upstream), nothing pushed"
     );
 }
+
+#[test]
+fn land_names_unpushed_base_commits_the_owner_did_not_make_before_pushing() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("other"), "another thread's work\n").unwrap();
+    commit(f.path(), "Records from another thread");
+    fs::write(f.path().join("mine"), "this owner's work\n").unwrap();
+    commit(f.path(), &format!("Plan follow-up for {}", f.id));
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(pass, "{out}");
+    assert!(
+        out.contains("Warning: main is ahead of its upstream with 1 commit that this owner did not make")
+            && out.contains("Records from another thread (Author)"),
+        "{out}"
+    );
+    assert!(!out.contains("Plan follow-up"), "{out}");
+    // The warning is read before the push's verdict, which stays last.
+    assert!(out.find("Warning").unwrap() < out.find("land: passed, pushed").unwrap());
+    assert_eq!(
+        last_line(&out),
+        format!("land: passed, pushed to origin/{}", f.branch)
+    );
+    // Only the owner's branch was pushed: the base on the remote is untouched.
+    let remote_main = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    assert_ne!(remote_main, git(f.path(), &["rev-parse", "main"]));
+    // With nothing ahead, or only the owner's commits, land stays silent.
+    git(f.path(), &["push", "-q", "origin", "main"]);
+    let (_, out) = cli(f.path(), &["land"]);
+    assert!(!out.contains("Warning: main"), "{out}");
+}

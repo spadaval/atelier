@@ -140,6 +140,53 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run `atelier start <id>` from {base}")
     })
 }
+/// Names the commits the local base holds beyond its upstream that the
+/// current owner did not make, since pushing the base publishes them
+/// (atelier-mvzi). A commit is the owner's when its message names the owner or
+/// an issue in the owner's scope (`owned`), as the records start, close and
+/// merge commits for owned work do; with no owner, none are.
+fn foreign_base_commits_note(
+    repo: &Path,
+    base: &str,
+    owned: &std::collections::BTreeSet<String>,
+) -> Result<Option<String>> {
+    let Ok(upstream) = git::resolve(repo, &format!("{base}@{{upstream}}")) else {
+        return Ok(None);
+    };
+    let Ok(local) = git::resolve(repo, &format!("refs/heads/{base}")) else {
+        return Ok(None);
+    };
+    let range = format!("{upstream}..{local}");
+    let log = git::text(repo, &["log", "--format=%h%x1f%an%x1f%s%x1f%B%x1e", &range])?;
+    let foreign = log
+        .split('\x1e')
+        .filter_map(|entry| {
+            let mut parts = entry.trim().splitn(4, '\x1f');
+            let (short, author, subject, message) =
+                (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
+            (!short.is_empty() && !owned.iter().any(|id| message.contains(id.as_str())))
+                .then(|| format!("{short} {subject} ({author})"))
+        })
+        .collect::<Vec<_>>();
+    if foreign.is_empty() {
+        return Ok(None);
+    }
+    const SHOWN: usize = 5;
+    let mut listed = foreign
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("; ");
+    if foreign.len() > SHOWN {
+        listed.push_str(&format!("; and {} more", foreign.len() - SHOWN));
+    }
+    Ok(Some(format!(
+        "Warning: {base} is ahead of its upstream with {} that {}: {listed}. Pushing {base} publishes them; confirm they are meant to go out.",
+        crate::human_output::count_noun(foreign.len(), "commit"),
+        if owned.is_empty() { "no owner made" } else { "this owner did not make" },
+    )))
+}
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
@@ -221,6 +268,9 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
     // land checks only what changed since then, and atelier doctor checks
     // everything (atelier-37uq).
     let base_name = &source.policy.branch_policy.base_branch;
+    if let Some(note) = foreign_base_commits_note(repo, base_name, &owned)? {
+        lines.push(note);
+    }
     // Trust stops at the base's upstream, not the local base, which can hold
     // commits that no land has checked; without an upstream, nothing is
     // trusted. A work branch trusts no further than its branch base.
@@ -501,28 +551,33 @@ pub fn land(
 ) -> Result<()> {
     if !hook {
         let nothing_pushed = if push { ", nothing pushed" } else { "" };
-        let checked = land_text(requested, install, false);
-        let pushed = checked.and_then(|output| {
-            let destination = if push {
-                let layout = StorageLayout::discover()?;
-                let head = git_freshness::head_commit(layout.repo_root())?;
-                Some(push_checked_branch(layout.repo_root(), &head)?)
-            } else {
-                None
-            };
-            Ok((output, destination))
+        // The checks' report prints before any push, so a warning is read
+        // before the commits go out.
+        let pushed = land_text(requested, install, false).and_then(|output| {
+            if !quiet {
+                println!("{output}");
+            }
+            if !push {
+                return Ok(None);
+            }
+            let layout = StorageLayout::discover()?;
+            let head = git_freshness::head_commit(layout.repo_root())?;
+            push_checked_branch(layout.repo_root(), &head).map(Some)
         });
         match pushed {
-            Ok((output, destination)) => {
+            Ok(destination) => {
                 let verdict = match &destination {
                     Some(to) => format!("land: passed, pushed to {to}"),
                     None => "land: passed".to_owned(),
                 };
-                if quiet {
-                    println!("{}", verdict.trim_start_matches("land: "));
-                } else {
-                    println!("{output}\n{verdict}");
-                }
+                println!(
+                    "{}",
+                    if quiet {
+                        verdict.trim_start_matches("land: ")
+                    } else {
+                        &verdict
+                    }
+                );
                 return Ok(());
             }
             Err(error) => {
