@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-10-22T20:27:52.928580551+00:00"
+status: "superseded"
 title: "Scale independent review to docs-only and low-risk changes"
-updated_at: "2026-10-22T19:58:17.797301969+00:00"
+updated_at: "2026-10-22T20:27:52.928580551+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ The Agent Factory skill (vendored and upstream) gives a review budget by change 
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Close Reason
+
+Superseded 2026-10-22 by the human's decision that review has one standard: a review budget by change kind (lighter review for docs-only changes) is a second standard. Prose gets independent review like code, and the trivial exemption covers changes whose correctness is evident (atelier-mbrf). If review noise is still a problem, file it as general review calibration, not docs-specific.

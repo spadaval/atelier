@@ -18,22 +18,22 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Let planning text reach the base without a full work-branch cycle"
-updated_at: "2026-10-22T19:58:17.943290365+00:00"
+title: "Let a trivial change land on the base with a visible exemption, without an issue or work branch"
+updated_at: "2026-10-22T20:27:52.828786229+00:00"
 ---
 
 ## Goal
 
-Records may land on master directly, but ADRs, mission strategies, the vendored skill and `workflow.yaml` need an issue, branch, proof, review and merge. A one-line `workflow.yaml` change (qymu) took a full cycle; ADR 0022 (bw0b) took 3 review rounds and 21 mostly-wording findings; the skill vendoring (92mz, kr30) hit merge_diverged and two re-approvals.
+A trivial change to a non-record file, such as a one-line `workflow.yaml` fix or a typo in an ADR, today needs an owner issue, a work branch, a `review trivial` event and `atelier merge`. `review trivial` pins a commit on a work branch, and `land` on the base accepts only record and strategy commits or commits covered by a merged owner's approval or exemption (`docs/product/reviews-and-merge.md`, `land_base_unreviewed`). So the exemption meant for changes whose correctness is evident costs a full cycle. Under the 2026-10-22 decision, review has one standard: non-trivial changes, prose included, get independent review, and only the trivial exemption skips it. This item removes the owner requirement from that exemption, and nothing else.
 
 ## Done when
 
-The policy can name planning paths that land on the base like records, or accept a human-approval review event ('Sumeet approved this text') in place of an independent review for them. `land` enforces whichever rule is configured, and `docs/product/workflow-configuration.md` documents it. Tests cover an allowed planning path and a code path that still requires review.
+- A trivial exemption can pin a base commit with no owner issue (for example `atelier review trivial --base <commit> --identity <who> "why correctness is evident"`), and `land` on the base counts that commit as covered.
+- `land` still refuses an unexempted non-record commit with `land_base_unreviewed`, and an exemption pinned to one commit does not cover a later one.
+- The exemption shows in the review history and in mission debriefs, as owner exemptions do today.
+- `docs/product/reviews-and-merge.md` states the rule.
+- Tests cover an exempted base commit, an unexempted one, and a later commit after an exemption.
 
 ## Context
 
-Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
-
-## Unknowns
-
-Which paths qualify, and whether policy files themselves should ever skip review.
+The human rejected two alternatives on 2026-10-22: exempting planning paths from review, and a separate review standard for planning text. Records and mission strategies stay exempt as they are, because requiring an issue to edit issues would be recursive.

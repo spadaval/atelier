@@ -31,17 +31,17 @@ updated_at: "2026-10-22T19:58:17.943603519+00:00"
 
 ## Goal
 
-Review effort matches the change. Docs-only branches get one round where only high and medium findings block. Low-priority follow-ups share one branch and one approval. Planning text reaches the base without a full work-branch cycle.
+Review costs no more ceremony than the change needs, under one standard for code and prose. Low-priority follow-ups share one branch and one approval. A trivial change lands on the base with a visible exemption, with no issue or work branch.
 
 ## Done when
 
 - Each child's Done when holds, shown by the Agent Factory skill text (vendored and upstream in spadaval/.agents) and land tests, with independent review.
-- Delivers atelier-k8h8 S8's review-budget part (atelier-1mn2, atelier-u6f3) and S9's planning part (atelier-mbrf).
+- Delivers atelier-k8h8 S8's shared-review part (atelier-u6f3) and S9's base-exemption part (atelier-mbrf).
 
-## Unknowns
+## Context
 
-atelier-mbrf offers two rules: policy-named planning paths, or a human-approval review event. Choosing one changes what needs independent review, so the human decides before this increment is planned into todo.
+On 2026-10-22 the human decided that review keeps one standard for code and prose. atelier-1mn2 (lighter review for docs-only changes) was superseded, and atelier-mbrf was reframed as an owner-free trivial exemption.
 
 ## Background
 
-atelier-u6f3's one approval covering several children, and atelier-mbrf's planning paths, change the review gate. They come after the gate-agreement increment.
+atelier-u6f3's one approval covering several children, and atelier-mbrf's base-commit exemption, change the review gate. They come after the gate-agreement increment.
