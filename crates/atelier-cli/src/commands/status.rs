@@ -538,10 +538,7 @@ fn render_status_page(
         panels.push(render_lines_section("Evidence", owner.evidence.clone()));
     }
     if !branches.is_empty() {
-        panels.push(render_lines_section(
-            "Other Local Work Branches (committed records)",
-            branches,
-        ));
+        panels.push(render_lines_section("Branches", branches));
     }
     // The footer is the last section.
     panels.push(render_footer_section(context, next_actions));

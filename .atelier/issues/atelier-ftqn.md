@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T20:41:02.032816239+00:00"
+status: "done"
 title: "Render other local branches as a dense section of the status page"
-updated_at: "2026-10-22T19:58:19.010780625+00:00"
+updated_at: "2026-10-22T20:49:41.018911688+00:00"
 ---
 
 ## Goal
@@ -53,3 +54,26 @@ No started work on: feature-x, old-pre
 ## Context
 
 Rows are built in crates/atelier-cli/src/commands/git.rs:604-624. atelier-7n5u marks ready work that is in flight on these branches, so the two views should use the same branch wording.
+
+## Notes
+
+- 2026-10-22 [decision] The approval mark on Branches rows moves to atelier-tciw
+  Reason: Review currency for another branch needs a new per-branch computation in review_gate.rs (history walk from the approval pin to that branch's tip plus the independence rule), which tciw's approval-state fact needs anyway; atelier-1ztv is changing that file now
+  Rejected: Mark ✓ approved when the branch snapshot holds an approval record: it shows stale approvals as approved
+- 2026-10-22 [note] 2026-10-22 correction to this Close Reason (review finding atelier-f4b2): since 1d2f67df the Branches rows do carry the ✓/⚠ status mark and the in-flight mark's wording, as in `x ✓ done, not merged  Title`, `x ✓ done, merged into <base>  Title` and `x ⚠ blocked  Title`, per the decision note on atelier-9g48 (finding atelier-qjin). The Close Reason's row shape and 'no ✓ status mark' line predate that fix.
+
+## Close Reason
+
+`atelier status` now renders a `Branches` section (`-----` underline, before Next) with one dense line per owned branch, `<branch>  <id> <status>[, merged|, not merged]  <title>`, and one trailing `Unowned: ...` line for branches with no started work or no tracker. Redirected output is identical to terminal output. The approval mark is not delivered here.
+
+### Deviations
+The `✓ approved` mark from Done when is not implemented; it moved to atelier-tciw by the orchestrator's decision (review_gate.rs is being changed by atelier-1ztv). tciw is now blocked_by atelier-n642 and carries a note.
+
+### Decisions
+See the decision note on this item (approval mark moves to tciw; snapshot-only shortcut rejected).
+
+### Surprises
+The old row carried an `N active` cue and `branch @ commit`; both were dropped with the rewrite, so the active-count computation and the commit/priority fields on the row struct were removed. Rows no longer use the ✓ status mark, following the issue's examples.
+
+### Open items
+Approval mark and the merge-readiness facts: atelier-tciw.
