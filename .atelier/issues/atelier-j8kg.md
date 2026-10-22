@@ -4,6 +4,9 @@ id: "atelier-j8kg"
 issue_type: "task"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-j8kg
 priority: "P2"
 relationships:
   blocks: []
@@ -26,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Match review effort to the change"
-updated_at: "2026-10-22T23:03:39.401858930+00:00"
+updated_at: "2026-10-22T23:03:39.765999549+00:00"
 ---
 
 ## Goal

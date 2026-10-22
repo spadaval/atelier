@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Let a trivial change land on the base with a visible exemption, without an issue or work branch"
-updated_at: "2026-10-22T23:03:39.552623968+00:00"
+updated_at: "2026-10-22T23:03:39.766001592+00:00"
 ---
 
 ## Goal
