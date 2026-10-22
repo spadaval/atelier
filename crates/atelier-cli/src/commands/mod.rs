@@ -5,6 +5,7 @@ pub mod init;
 pub mod issue;
 pub mod issue_workflow;
 pub mod prune;
+pub mod record_commit;
 pub mod relate;
 pub mod start;
 pub mod status;

@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use atelier::commands;
+use atelier::commands::record_commit::{RecordCommit, RecordCommitArgs};
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases::{self, load_repository};
 use atelier_core::{EvidenceResult, FindingDecision, InvalidValue};
@@ -49,6 +50,8 @@ struct ReviewArgs {
     commit: Option<String>,
     /// What was checked, found or decided
     summary: String,
+    #[command(flatten)]
+    record_commit: RecordCommitArgs,
 }
 #[derive(Subcommand)]
 enum ReviewCommands {
@@ -84,6 +87,8 @@ enum ReviewCommands {
         follow_up: Option<String>,
         /// Why the decision was taken
         summary: String,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
     },
     /// List review events, for one owner or all
     List {
@@ -420,6 +425,8 @@ enum IssueCommands {
         /// Show validator passes, action preflight detail, descriptions, and debug context
         #[arg(long)]
         verbose: bool,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
     },
 
     /// Update an issue
@@ -589,6 +596,8 @@ another target.")]
         /// Command to run and capture; its exit status sets the result
         #[arg(last = true, num_args = 0..)]
         command: Vec<String>,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
     },
     /// Show an evidence record
     Show {
@@ -786,6 +795,8 @@ fn run() -> Result<()> {
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event| {
+                let group = RecordCommit::begin(args.record_commit)?;
+                let verb = commands::review::event_name(&event);
                 commands::review::append(
                     &args.id,
                     &args.identity,
@@ -793,7 +804,8 @@ fn run() -> Result<()> {
                     &args.summary,
                     event,
                     quiet,
-                )
+                )?;
+                group.finish(verb, quiet)
             };
             match action {
                 ReviewCommands::Record(args) => append(args, ReviewEvent::Review),
@@ -810,15 +822,20 @@ fn run() -> Result<()> {
                     resolution_commit,
                     follow_up,
                     summary,
-                } => commands::review::disposition(
-                    &finding,
-                    &identity,
-                    decision,
-                    resolution_commit,
-                    follow_up,
-                    &summary,
-                    quiet,
-                ),
+                    record_commit,
+                } => {
+                    let group = RecordCommit::begin(record_commit)?;
+                    commands::review::disposition(
+                        &finding,
+                        &identity,
+                        decision,
+                        resolution_commit,
+                        follow_up,
+                        &summary,
+                        quiet,
+                    )?;
+                    group.finish("disposition", quiet)
+                }
                 ReviewCommands::List { id, json } => {
                     commands::review::list(id.as_deref(), json, quiet)
                 }
@@ -850,7 +867,9 @@ fn run() -> Result<()> {
                 criteria,
                 summary_text,
                 command,
+                record_commit,
             } => {
+                let group = RecordCommit::begin(record_commit)?;
                 let parsed_target = match target.as_deref() {
                     Some(target) => Some(use_cases::parse_evidence_target_arg(target)?),
                     None => None,
@@ -900,7 +919,8 @@ fn run() -> Result<()> {
                     }
                     let evidence = atelier_records::RecordStore::new(&state_dir)
                         .load_evidence_by_id(&evidence_id)?;
-                    commands::evidence::print_new_record(&evidence, quiet)
+                    commands::evidence::print_new_record(&evidence, quiet)?;
+                    group.finish("evidence", quiet)
                 } else {
                     let command_summary = summary.as_deref().or(summary_text.as_deref());
                     commands::evidence::capture(commands::evidence::CaptureOptions {
@@ -915,7 +935,8 @@ fn run() -> Result<()> {
                         command: &command,
                         criteria: &commands::evidence::captured_criteria(&criteria)?,
                         quiet,
-                    })
+                    })?;
+                    group.finish("evidence", quiet)
                 }
             }
             EvidenceCommands::Show { id } => {

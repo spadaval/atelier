@@ -18,6 +18,7 @@ pub use atelier_core::{
 
 pub mod mutation_lock;
 pub mod review;
+pub mod written;
 
 mod record_id;
 mod record_kinds;
@@ -580,6 +581,7 @@ impl RecordStore {
                 tmp_path.display()
             )
         })?;
+        written::note(&path);
         Ok(())
     }
 

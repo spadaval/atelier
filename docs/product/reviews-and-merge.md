@@ -25,6 +25,9 @@ from an identity other than the substantive Git authors. Identity is
 self-declared and compared with author names and email addresses. `trivial`
 is an explicit visible exemption with a reason, never an implicit fallback.
 `review list` accepts `--json` and can omit the owner to list all events.
+Every command that records an event also takes `--commit-records` and
+`--stage-records`, which commit the records it wrote (alone or grouped with the
+rest of a step); see [Committing records](cli-surface.md#committing-records).
 
 Every finding requires a disposition. Recommendations and decisions use
 `fix_now`, `defer`, or `no_action`:

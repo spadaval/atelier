@@ -75,7 +75,7 @@ Commit code and related tracker records yourself. Record focused proof and
 independent review before `merge`; see [evidence](validation.md) and
 [reviews and merge](reviews-and-merge.md). Done claims belong in committed work
 branch records. Run `atelier land` before a session handoff and
-`atelier merge <id> --check` to inspect completed-owner integration gates. Atelier never pushes or squashes, and commits only the merge commit that `merge` creates under `merge_strategy: merge_commit`.
+`atelier merge <id> --check` to inspect completed-owner integration gates. Atelier never pushes or squashes. It commits only the merge commit that `merge` creates under `merge_strategy: merge_commit`, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
 
 ## Review and session commands
 
@@ -88,6 +88,29 @@ the claims that changed since the base; `doctor` checks every claim. `prime` is
 a deprecated alias for `status`, kept for installed hooks.
 `setup claude [--binary <path>]` installs the supported hooks. See
 [sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.
+
+## Committing records
+
+A step usually writes several records (a finding, its disposition, evidence, a
+close). `review record|approve|finding|trivial|disposition`, `evidence record`
+and `issue transition <id> <name>` accept two flags that replace one hand-made
+commit per record:
+
+- `--commit-records` stages the records the command wrote and commits them
+  with a generated subject such as `Record finding atelier-ab12`.
+- `--stage-records` stages them without committing. The next command with
+  `--commit-records` commits them together with its own records, as one commit
+  whose subject is `Record <first> and N more` and whose body lists each.
+
+Only the records the command wrote are staged and committed: Atelier takes them
+from its own record writes, not from `git status`, so other staged or
+unstaged changes are never added. The check runs before the command writes: if
+the index holds anything but records staged earlier by `--stage-records`, the
+command refuses with `record_commit_index_not_clean` and writes nothing. The
+staged group is remembered in `.atelier/runtime/staged-records.json`, which Git
+ignores. `review` keeps `--commit` for the pinned commit; the flags here are
+separate. Code still belongs in its own commit; `land` and `merge` check the
+committed records either way.
 
 ## Bulk input and maintenance
 

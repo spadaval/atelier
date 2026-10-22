@@ -2,6 +2,7 @@ use anyhow::Result;
 use atelier_app::use_cases::load_repository;
 
 use crate::commands;
+use atelier::commands::record_commit::RecordCommit;
 
 pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> {
     match action {
@@ -65,9 +66,11 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             close_reason,
             reason_file,
             verbose,
+            record_commit,
         } => {
             let (state_dir, index) = load_repository()?;
             if let Some(transition) = transition {
+                let group = RecordCommit::begin(record_commit)?;
                 commands::workflow::transition_issue(
                     &index,
                     &state_dir,
@@ -78,8 +81,13 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
                         reason_file: reason_file.as_deref(),
                     },
                     quiet,
-                )
+                )?;
+                group.finish(&transition, quiet)
             } else {
+                anyhow::ensure!(
+                    !record_commit.commit_records && !record_commit.stage_records,
+                    "--commit-records and --stage-records need a transition to run"
+                );
                 commands::issue::transition_options(&index, &id, verbose, quiet)
             }
         }

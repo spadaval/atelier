@@ -804,6 +804,8 @@ mod output_terms;
 mod piped_output;
 #[path = "cli_integration/quiet_tokens.rs"]
 mod quiet_tokens;
+#[path = "cli_integration/record_commit.rs"]
+mod record_commit;
 #[path = "cli_integration/record_refs.rs"]
 mod record_refs;
 #[path = "cli_integration/records_evidence.rs"]
