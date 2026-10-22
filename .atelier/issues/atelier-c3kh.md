@@ -4,6 +4,9 @@ id: "atelier-c3kh"
 issue_type: "feature"
 labels:
 - "merge"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-c3kh
 priority: "P1"
 relationships:
   blocks: []
@@ -27,7 +30,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Merge a moved base without hand work"
-updated_at: "2026-10-22T19:58:17.133950054+00:00"
+updated_at: "2026-10-22T20:32:25.084088303+00:00"
 ---
 
 ## Goal

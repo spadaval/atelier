@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Retry merge when the base moved only by records-only commits"
-updated_at: "2026-10-22T19:58:19.077369581+00:00"
+updated_at: "2026-10-22T20:32:25.084090477+00:00"
 ---
 
 ## Goal
