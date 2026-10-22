@@ -115,6 +115,7 @@ pub fn held_by_other(repo: &Path, owner: &str) -> Result<Option<Held>> {
 
 /// Records that `repo` holds `owner`, replacing any earlier lease.
 pub fn claim(repo: &Path, owner: &str, branch: &str) -> Result<()> {
+    let _lock = lock(repo).context("cannot lock the session leases")?;
     // A worktree works one owner at a time: starting this one releases the
     // others it held.
     let directory = directory(repo)?;
@@ -133,10 +134,54 @@ pub fn claim(repo: &Path, owner: &str, branch: &str) -> Result<()> {
     write(repo, owner, branch)
 }
 
-/// Renews the lease on `owner` when `repo` already holds it.
+fn held_by_this(repo: &Path, owner: &str) -> bool {
+    matches!(read(repo, owner), Ok(Some(lease)) if lease.worktree == worktree_root(repo))
+}
+
+/// Holds the lease directory's lock, so that a claim and a refresh cannot
+/// interleave their read and write.
+fn lock(repo: &Path) -> Result<std::fs::File> {
+    use fs2::FileExt;
+    let directory = directory(repo)?;
+    std::fs::create_dir_all(&directory)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(directory.join(".lock"))?;
+    file.lock_exclusive()?;
+    Ok(file)
+}
+
+/// Renews the lease on `owner` when `repo` holds it. The holder is read again
+/// under the lock, so a `--take-over` that lands after the first look is not
+/// overwritten with the old holder.
 pub fn refresh(repo: &Path, owner: &str, branch: &str) {
-    if matches!(read(repo, owner), Ok(Some(lease)) if lease.worktree == worktree_root(repo)) {
+    if !held_by_this(repo, owner) {
+        return;
+    }
+    #[cfg(feature = "test-hooks")]
+    test_pause_before_refresh_write();
+    let Ok(_lock) = lock(repo) else {
+        return;
+    };
+    if held_by_this(repo, owner) {
         let _ = write(repo, owner, branch);
+    }
+}
+
+/// Lets a test move the lease between a refresh's first look and its write.
+#[cfg(feature = "test-hooks")]
+fn test_pause_before_refresh_write() {
+    let Some(marker) = std::env::var_os("ATELIER_TEST_LEASE_PAUSE_BEFORE_REFRESH") else {
+        return;
+    };
+    let marker = PathBuf::from(marker);
+    let _ = std::fs::write(&marker, b"checked");
+    let release = marker.with_extension("release");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while !release.exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 

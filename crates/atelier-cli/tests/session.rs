@@ -6126,6 +6126,69 @@ fn land_push_refuses_an_upstream_that_is_not_the_branchs_own_remote_branch() {
 }
 
 #[test]
+fn land_push_refuses_pushing_a_base_whose_upstream_does_not_resolve() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("unreviewed"), "code nobody reviewed\n").unwrap();
+    commit(f.path(), "unreviewed code on the base");
+    let before = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    // The remote branch was deleted and pruned: git shows the upstream as gone.
+    git(f.path(), &["update-ref", "-d", "refs/remotes/origin/main"]);
+    let url = remote.path().to_str().unwrap().to_owned();
+    for case in ["gone", "url"] {
+        if case == "url" {
+            git(f.path(), &["fetch", "-q", "origin"]);
+            git(f.path(), &["config", "branch.main.remote", &url]);
+        }
+        // Plain land says why the base was not checked.
+        let (pass, out) = cli(f.path(), &["land"]);
+        assert!(
+            pass && out.contains("main's upstream does not resolve"),
+            "{case}: {out}"
+        );
+        let (pass, out) = cli(f.path(), &["land", "--push"]);
+        assert!(
+            !pass && out.contains("land_push_base_upstream_unresolved"),
+            "{case}: {out}"
+        );
+        assert!(out.contains("git fetch --prune"), "{case}: {out}");
+        assert!(!out.contains("Landing checks passed"), "{case}: {out}");
+        assert_eq!(
+            last_line(&out),
+            "land: refused — 1 check (land_push_base_upstream_unresolved), nothing pushed"
+        );
+        assert_eq!(
+            git(remote.path(), &["rev-parse", "refs/heads/main"]),
+            before,
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn land_push_still_pushes_a_work_branch_when_the_base_upstream_does_not_resolve() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    fs::write(f.path().join("more"), "more\n").unwrap();
+    commit(f.path(), "more code");
+    git(f.path(), &["update-ref", "-d", "refs/remotes/origin/main"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        pass && last_line(&out) == format!("land: passed, pushed to origin/{}", f.branch),
+        "{out}"
+    );
+    // A base that tracks a path or URL remote pushes work branches too.
+    fs::write(f.path().join("again"), "again\n").unwrap();
+    commit(f.path(), "again");
+    git(f.path(), &["fetch", "-q", "origin"]);
+    let url = remote.path().to_str().unwrap();
+    git(f.path(), &["config", "branch.main.remote", url]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(pass, "{out}");
+}
+
+#[test]
 fn land_push_pushes_nothing_when_a_check_moves_head_during_land() {
     let f = Fixture::new();
     git(f.path(), &["switch", "main"]);
@@ -6295,6 +6358,65 @@ fn start_replaces_a_stale_lease_with_a_note() {
         "{out}"
     );
 }
+
+#[test]
+fn start_warns_instead_of_failing_when_the_lease_cannot_be_written() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    // A file where the lease directory belongs makes the lease write fail.
+    let leases = lease_path(&f).parent().unwrap().to_path_buf();
+    fs::remove_dir_all(&leases).unwrap();
+    fs::write(&leases, "not a directory\n").unwrap();
+    let (pass, out) = cli(f.path(), &["start", &id, "--base", "main"]);
+    assert!(
+        pass && out.contains("Warning") && out.contains("session lease"),
+        "{out}"
+    );
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(
+        f.store().load_issue_by_id(&id).unwrap().issue.status,
+        "in_progress"
+    );
+}
+
+#[cfg(feature = "test-hooks")]
+#[test]
+fn status_does_not_write_the_old_holder_back_over_a_take_over() {
+    let f = Fixture::new();
+    let (holder, _other) = second_worktree(&f);
+    let marker = holder.path().join("checked");
+    let mut status = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .arg("status")
+        .env("ATELIER_TEST_LEASE_PAUSE_BEFORE_REFRESH", &marker)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    // status has seen its own lease and is about to renew it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !marker.exists() {
+        assert!(std::time::Instant::now() < deadline, "status never paused");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    // Another worktree takes the lease over in that window.
+    let mut taken: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    taken["worktree"] = holder.path().join("other").to_str().unwrap().into();
+    fs::write(lease_path(&f), taken.to_string()).unwrap();
+    fs::write(marker.with_extension("release"), "go").unwrap();
+    assert!(status.wait().unwrap().success());
+    let after: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    assert_eq!(
+        after["worktree"], taken["worktree"],
+        "old holder written back"
+    );
+}
+
 /// A planning commit that only adds an issue advancing a mission re-checks
 /// no other done claim in that mission: a sibling's claim does not depend on
 /// the mission (atelier-ss25). `land` on the base and on a work branch, and

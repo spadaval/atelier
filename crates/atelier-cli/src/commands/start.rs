@@ -344,7 +344,14 @@ pub fn run(
         return Err(error).context("start record transaction failed; prior records restored. Inspect git status before retrying; a newly created local branch may remain.");
     }
 
-    lease::claim(&repo_root, &work_branch.owner_id, &branch)?;
+    // The lease is advisory and the start has already succeeded: a failed
+    // write is a warning, not a failed start (atelier-x5j3).
+    if let Err(error) = lease::claim(&repo_root, &work_branch.owner_id, &branch) {
+        lease_notes.push(format!(
+            "Warning: started {}, but could not write its session lease ({error:#}); other sessions will not see this item as held.",
+            work_branch.owner_id
+        ));
+    }
     let mut notes = start_notes(
         &issue_id,
         human_work,

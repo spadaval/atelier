@@ -513,6 +513,26 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
         .then(|| code.to_owned())
 }
 
+/// Refuses pushing the base branch itself when it has an upstream configured
+/// that does not resolve to a remote-tracking ref (deleted remote branch, or a
+/// URL or path remote): the base-commit review check skips such a base, so the
+/// push could publish unreviewed base commits. A work branch publishes no base
+/// ref, and an unresolved base upstream makes land check more for it, so it is
+/// not refused. A base with no upstream is left to that check's own note.
+fn refuse_unresolved_base_upstream(repo: &Path) -> Result<()> {
+    let base = atelier_workflow::load(repo)?.branch_policy.base_branch;
+    if git::checkout_branch(repo)?.as_deref() != Some(base.as_str()) {
+        return Ok(());
+    }
+    let configured = ["remote", "merge"]
+        .iter()
+        .all(|key| git::text(repo, &["config", "--get", &format!("branch.{base}.{key}")]).is_ok());
+    if configured && git::resolve(repo, &format!("{base}@{{upstream}}")).is_err() {
+        bail!("land_push_base_upstream_unresolved: {base} has an upstream that does not resolve to a remote-tracking branch (its remote branch is gone, or its remote is a URL or path), so unreviewed {base} commits cannot be checked before publishing; run `git fetch --prune` and `git branch -u <remote>/{base} {base}`, then rerun `atelier land --push`");
+    }
+    Ok(())
+}
+
 /// Pushes the commit land checked to the current branch's own upstream
 /// branch, never another ref. Returns the destination, `<remote>/<branch>`.
 fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
@@ -559,6 +579,10 @@ pub fn land(
         // The checks' report prints before any push, so a warning is read
         // before the commits go out.
         let pushed = land_checked(requested, install, false).and_then(|(output, checked)| {
+            // Refuse before the report, so no pass line precedes the refusal.
+            if push {
+                refuse_unresolved_base_upstream(StorageLayout::discover()?.repo_root())?;
+            }
             if !quiet {
                 println!("{output}");
             }

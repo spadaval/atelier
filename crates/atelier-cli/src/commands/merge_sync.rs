@@ -39,15 +39,26 @@ pub fn run(issue_ref: &str, quiet: bool) -> Result<()> {
             println!("{line}");
         }
     };
-    let failures = match sync(issue_ref, &say) {
-        Ok(failures) => failures,
+    let (failures, stale) = match sync(issue_ref, &say) {
+        Ok(synced) => synced,
         Err(error) => {
             eprintln!("Error: {error:?}");
-            vec![refusal_code(&error)]
+            (vec![refusal_code(&error)], false)
         }
     };
     if failures.is_empty() {
-        println!("{}", if quiet { "passed" } else { "merge: passed" });
+        // A sync that leaves the approval stale did its work, but `merge
+        // --check` will refuse: the verdict says so instead of "passed".
+        let verdict = if stale {
+            "synced — approval needs fresh review"
+        } else {
+            "passed"
+        };
+        if quiet {
+            println!("{verdict}");
+        } else {
+            println!("merge: {verdict}");
+        }
         return Ok(());
     }
     let codes: BTreeSet<_> = failures.iter().flatten().collect();
@@ -75,8 +86,9 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
     .then(|| code.to_owned())
 }
 
-/// The checks that failed, as codes; empty when the sync passed.
-fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
+/// The checks that failed, as codes (empty when the sync passed), and whether
+/// the approval was left needing fresh review.
+fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, bool)> {
     let Owned {
         layout,
         head,
@@ -103,7 +115,12 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
         None => Receipts::default(),
     };
 
-    if contains {
+    if contains && before.is_some() {
+        say(format!(
+            "Resuming after a merge of {base} made by hand ({}); rerunning the receipts that were current before it.",
+            crate::human_output::short_commit(&head)
+        ));
+    } else if contains {
         say(format!(
             "{branch} already contains {base}; nothing to merge."
         ));
@@ -130,7 +147,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
                 "{CONFLICT}: merging {base} into {branch} conflicts in:\n{}\nNothing was committed and the merge is still in progress. Resolve the conflicts and commit (`git commit`), or `git merge --abort`; then rerun `atelier merge {issue_ref} --sync` to re-prove, and expect the approval to need fresh review of the resolved files.",
                 conflicted.lines().map(|path| format!("  {path}")).collect::<Vec<_>>().join("\n")
             );
-            return Ok(vec![Some(CONFLICT.into())]);
+            return Ok((vec![Some(CONFLICT.into())], false));
         }
         say(format!(
             "Merged {base} into {branch} at {}.",
@@ -148,6 +165,8 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
         ));
     }
     for receipt in &receipts.rerun {
+        // A whole workspace suite can run for minutes: name it before it starts.
+        say(format!("  running {}: {}", receipt.target, receipt.command));
         let summary = format!("{} (rerun after merging {base})", receipt.summary);
         let rerun = evidence::split_command(&receipt.command).and_then(|command| {
             // Rerun only a command that reads back as the one recorded.
@@ -218,14 +237,18 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
         }
     }
 
-    if let Err(error) = report_approval(repo, &layout, &owner, &base_head, before.as_deref(), say) {
-        eprintln!("{APPROVAL_ERROR}: could not tell whether the approval survived: {error:#}");
-        failures.push(Some(APPROVAL_ERROR.to_owned()));
-    }
-    if failures.is_empty() {
+    let stale = match report_approval(repo, &layout, &owner, &base_head, before.as_deref(), say) {
+        Ok(stale) => stale,
+        Err(error) => {
+            eprintln!("{APPROVAL_ERROR}: could not tell whether the approval survived: {error:#}");
+            failures.push(Some(APPROVAL_ERROR.to_owned()));
+            false
+        }
+    };
+    if failures.is_empty() && !stale {
         say(format!("Next: atelier merge {issue_ref} --check"));
     }
-    Ok(failures)
+    Ok((failures, stale))
 }
 
 #[derive(Default)]
@@ -334,7 +357,8 @@ fn ancestor(repo: &Path, earlier: &str, later: &str) -> bool {
 
 /// Says whether an approval of the owner's scope survived, by the rule the
 /// gates use (`approval_accepted`, `approval_stale_edges`), and when not,
-/// which paths the new review has to read.
+/// which paths the new review has to read. Returns whether the approval
+/// needs fresh review.
 fn report_approval(
     repo: &Path,
     layout: &atelier_app::storage_layout::StorageLayout,
@@ -342,7 +366,7 @@ fn report_approval(
     base_head: &str,
     before: Option<&str>,
     say: &dyn Fn(String),
-) -> Result<()> {
+) -> Result<bool> {
     let head = git::head_commit(repo)?;
     let index = {
         let _transaction =
@@ -354,6 +378,9 @@ fn report_approval(
     };
     let ids = review_gate::scope(&index, owner)?;
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
+    // `merge`'s `review.current` also requires that the approval not predate
+    // where the branch left the base (atelier-ns03); ask it the same way.
+    let fork = text(repo, &["merge-base", base_head, &head])?;
     let mut approvals = index
         .reviews()
         .filter(|review| {
@@ -367,14 +394,18 @@ fn report_approval(
     approvals.sort_by_key(|review| (review.header.created_at, review.header.id.clone()));
     let mut stale = Vec::new();
     let mut kept = Vec::new();
+    let mut predates_fork = None;
     for review in approvals {
         if !review_gate::approval_accepted(&index, &mut read, review)? {
             continue;
         }
         let edges =
             review_gate::approval_stale_edges(&mut read, &review.commit, &ids, "HEAD", base_head)?;
-        if edges.is_empty() {
+        // Judged per approval, as `review.current` judges each one.
+        if edges.is_empty() && review_gate::current_on_branch(&mut read, review, &ids, &fork) {
             kept.push(review.header.id.clone());
+        } else if edges.is_empty() {
+            predates_fork = Some(review);
         } else {
             stale.push((review, edges));
         }
@@ -384,13 +415,36 @@ fn report_approval(
             "Approval kept: {} still covers the branch.",
             kept.join(", ")
         ));
-        return Ok(());
+        return Ok(false);
+    }
+    if let (Some(review), true) = (predates_fork, stale.is_empty()) {
+        // The base already holds the work after this approval (the branch was
+        // merged there), so no commit on the branch is the one that made it
+        // stale: the approval predates the point the branch left the base.
+        let mut paths = git::changed_paths(repo, &review.commit, &head)?
+            .into_iter()
+            .filter(|path| !git::is_record_path(path))
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths.dedup();
+        say(format!(
+            "Approval needs fresh review: {} predates the point where this branch left the base, which already holds the work since. Review {}, then record a fresh approval:",
+            review.header.id,
+            count_noun(paths.len(), "path"),
+        ));
+        for path in paths.iter().take(LISTED_PATHS) {
+            say(format!("  {}", path.display()));
+        }
+        if paths.len() > LISTED_PATHS {
+            say(format!("  and {} more", paths.len() - LISTED_PATHS));
+        }
+        return Ok(true);
     }
     let Some((review, edges)) = stale.pop() else {
         say(format!(
             "No accepted approval covers {owner}'s scope yet; there is none to keep."
         ));
-        return Ok(());
+        return Ok(false);
     };
     let fork = before.and_then(|before| text(repo, &["merge-base", before, base_head]).ok());
     let was_current = match (before, fork) {
@@ -424,5 +478,5 @@ fn report_approval(
     if paths.len() > LISTED_PATHS {
         say(format!("  and {} more", paths.len() - LISTED_PATHS));
     }
-    Ok(())
+    Ok(true)
 }

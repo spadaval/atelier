@@ -285,7 +285,7 @@ fn in_scope_issue(path: &Path, ids: &BTreeSet<String>) -> bool {
 /// `merge`'s `review.current` judges it. An approval from before the base
 /// was last merged in still counts; one from before the branch left the base
 /// does not.
-fn current_on_branch(
+pub fn current_on_branch(
     read: &mut git::ReadContext<'_>,
     record: &ReviewRecord,
     ids: &BTreeSet<String>,

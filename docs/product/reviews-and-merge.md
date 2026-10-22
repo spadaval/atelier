@@ -193,27 +193,31 @@ atelier merge <owner-or-child-id> --sync
 It merges the base into the branch with `git merge <base>`, never a rebase,
 which would orphan the commits reviews pin; reruns the recorded evidence
 commands; commits the new receipts; and ends in a verdict line, `merge:
-passed` or `merge: refused — 1 check (<code>)` (see [verdict
-line](human-cli-output.md#verdict-line)). It integrates nothing, so the
+passed`, `merge: synced — approval needs fresh review`, or `merge: refused —
+1 check (<code>)` (see [verdict line](human-cli-output.md#verdict-line)). It integrates nothing, so the
 branch still lands with `atelier merge`. It cannot be combined with `--check`
 or `--json`.
 
 - **Conflicts.** `git merge` stops, nothing is committed, and the output lists
   the conflicted files (`sync_conflict`). Resolve and commit them, or
   `git merge --abort`. Running `--sync` again after the resolution commit
+  says `Resuming after a merge of <base> made by hand (<merge commit>)` and
   reruns the receipts that were current before the merge.
 - **Reruns.** Only command-backed receipts on the owner's scope that were
   current before the sync are rerun: for each item and command, the latest
   receipt, if it passed and nothing it proves had changed. Each rerun records
   a new receipt with the same command, kind, target and criteria, passing or
   failing; a failing one stays on the record and the verdict is `refused`
-  (`sync_rerun_failed`). Manual receipts have no command, so they are named
+  (`sync_rerun_failed`). Each command is printed (`running <item>: <command>`)
+  before it starts, since a workspace suite can run for minutes. Manual receipts have no command, so they are named
   and left as recorded.
 - **Approval.** The output says `Approval kept`, by the rule above
   (`approval_accepted` and `approval_is_current_to`), or `Approval needs fresh
   review` with the first commit that made it stale and the paths of every stale commit to review,
   namely the files a merge resolved or edited by hand. A stale approval does
-  not refuse the sync; it is the reviewer's next step.
+  not refuse the sync, which exits zero, but the verdict reads `merge: synced
+  — approval needs fresh review` instead of `passed`, because `merge --check`
+  will refuse until a fresh approval is recorded.
 - **Strategies.** The sync is the same under both. Under `fast_forward_only`
   it is required whenever the base moved, since merge creates no merge commit.
   Under `merge_commit`, merge lands a clean branch on a moved base itself, so
