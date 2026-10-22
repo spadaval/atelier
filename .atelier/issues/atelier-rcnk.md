@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T20:43:20.103489695+00:00"
+status: "done"
 title: "Clean up merged-tree checkouts after an interrupted merge"
-updated_at: "2026-10-22T20:42:40.891000069+00:00"
+updated_at: "2026-10-22T20:43:20.103489695+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,19 @@ Under `merge_strategy: merge_commit`, `atelier merge` runs `merge_checks` in a t
 - 2026-10-22 [decision] Leftover checkouts are found by a free lock on atelier-merge-*/lock and swept at the start of the next merge; prune and doctor do not sweep them
   Reason: A killed merge cannot run Drop, but the OS releases its lock, so a free lock distinguishes a leftover from a concurrent merge in another worktree, which pid files cannot do safely. The Done when asks for any of merge, prune or doctor; merge is the command that creates them.
   Rejected: Pid files: pid reuse and no atomic claim; deleting every atelier-merge-* directory: would break a concurrent live merge
+
+## Close Reason
+
+The next `atelier merge` under `merge_commit` removes merged-tree checkouts an interrupted merge left behind (registered worktree and directory), keeps one a live merge still holds, and a test kills atelier during its checks to prove it. Merged-tree checks reuse no build cache; this is decided and documented in docs/product/reviews-and-merge.md.
+
+### Deviations
+Only merge sweeps; `atelier prune` and `doctor` do not, since the Done when allows any of the three.
+
+### Decisions
+Two decision notes on this item: no build-cache reuse, and lock-based leftover detection swept at merge start.
+
+### Surprises
+A pid file cannot tell a leftover from a concurrent merge in another worktree safely, so the checkout directory carries a lock the OS drops on death. Std `File::lock` suffices; no new dependency.
+
+### Open items
+None.
