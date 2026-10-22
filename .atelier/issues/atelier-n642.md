@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T21:06:18.301519475+00:00"
+status: "done"
 title: "Keep an approval current across a close commit that only touches the item's record"
-updated_at: "2026-10-22T21:04:18.393909024+00:00"
+updated_at: "2026-10-22T21:06:18.301519475+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,19 @@ Whether any other record-only change (notes, links) should be covered too.
 - 2026-10-22 [decision] Fix the disagreement in land, not merge: land on the base accepts a done claim after an approval pin when review_gate::approval_is_current_to (now pub, the one rule) holds at the claim's commit, with the tip standing in for the base.
   Reason: merge already applied the status/Close Reason rule; land's coverage was the outlier. Passing the tip as the base keeps a clean base merge after approval current, as it was at merge time; using the upstream would wrongly stale merges of unpushed base commits.
   Rejected: Duplicate the status-only check inside git.rs; use the upstream as the base
+
+## Close Reason
+
+An approval pinned at A now stays current for a later close commit that changes only the approved scope's own records (the owner and its children) by status, timestamps and Close Reason, under both `merge` and `land` on the base; a close that also edits code or another field goes stale under both. The rule lives in `review_gate::approval_is_current_to`, now public, and is stated once in docs/product/reviews-and-merge.md (Approval freshness).
+
+### Deviations
+merge already applied this rule; only land on the base (`check_base_commits`) disagreed, so the fix is in land, not in the approval-currency check itself.
+
+### Decisions
+Scope is owner plus descendants, not the parent; land asks the shared rule with the tip standing in for the base. See this item's decision notes. atelier-uw4x shares the change and closes with the alternative clause of its Done when.
+
+### Surprises
+`base_done_claim` returned only the first claim in a commit, so a covered claim could have hidden an uncovered one in the same commit; it now returns all of them.
+
+### Open items
+Notes and links after approval still stale it, as before (this item's Unknowns); atelier-iaas takes the follow-up-record case. merge's review.current message still does not say why an approval is stale or name the re-approve command: atelier-cisa. The user memory rule "approve after close" becomes unnecessary once this merges and the CLI is reinstalled.

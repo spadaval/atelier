@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T21:06:18.411724884+00:00"
+status: "done"
 title: "Make merge refuse a done claim that land will refuse"
-updated_at: "2026-10-22T21:04:18.469645457+00:00"
+updated_at: "2026-10-22T21:06:18.411724884+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,19 @@ updated_at: "2026-10-22T21:04:18.469645457+00:00"
 - 2026-10-22 [decision] Take the Done when's alternative clause: a status-only close after approval stays covered and land accepts it the same way merge does, rather than making merge refuse it.
   Reason: atelier-n642 makes this the rule. merge already refuses a close commit that changes code or other fields (review.current), so with land aligned there is no done claim merge integrates that land then refuses. Naming the re-approve command in merge's review.current message is atelier-cisa's Done when, so it is left there.
   Rejected: Make merge refuse any close after approval
+
+## Close Reason
+
+`merge` and `land` now apply one rule for what an approval covers, by the Done when's alternative clause: a status and Close Reason-only close after approval stays covered and `land` on the base accepts it as `merge` does, while a close that also changes code or other fields fails `merge`'s review.current before integrating and `land_base_done_claim` after a forced integration. Stated in docs/product/reviews-and-merge.md; implemented with atelier-n642.
+
+### Deviations
+None.
+
+### Decisions
+Took the alternative clause rather than making merge refuse every close after approval; see this item's decision note and atelier-n642's notes.
+
+### Surprises
+None.
+
+### Open items
+merge's review.current failure does not yet name the fix (record a fresh approval at or after the close commit); that message work is atelier-cisa's Done when.
