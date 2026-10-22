@@ -149,6 +149,8 @@ pub(crate) fn check_base_commits(
         ));
     };
     let mut covered = BTreeSet::new();
+    // Each covering pin with its approved scope, for done claims made after it.
+    let mut approvals = Vec::new();
     for review in index.reviews().filter(|review| {
         matches!(
             review.event,
@@ -190,6 +192,10 @@ pub(crate) fn check_base_commits(
             upstream.as_str(),
         ];
         covered.extend(text(repo, &range)?.lines().map(str::to_owned));
+        approvals.push((
+            review.commit.clone(),
+            atelier_app::review_gate::scope(index, &owner.id)?,
+        ));
     }
     let unreviewed = text(repo, &["rev-list", tip, "--not", &upstream])?
         .lines()
@@ -208,6 +214,7 @@ pub(crate) fn check_base_commits(
         .map(|strategy| normalized(Path::new(&strategy.path)))
         .collect::<BTreeSet<_>>();
     let mut checked = 0;
+    let mut read = git_freshness::ReadContext::from_head(repo, tip.to_owned());
     // The install predates the gates: the first commit on the base's
     // first-parent line that adds the policy, with everything it merges in
     // (an install branch and its review fixes).
@@ -289,7 +296,14 @@ pub(crate) fn check_base_commits(
         } else {
             git_freshness::changed_paths(repo, &parent, commit)?
         };
-        if let Some(id) = base_done_claim(repo, policy, commit, tip, &upstream, &changed)? {
+        let mut unreviewed_claim = None;
+        for id in base_done_claims(repo, policy, commit, tip, &upstream, &changed)? {
+            if !claim_after_current_approval(repo, &mut read, &approvals, &id, commit, tip)? {
+                unreviewed_claim = Some(id);
+                break;
+            }
+        }
+        if let Some(id) = unreviewed_claim {
             bail!(
                 "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
                 &commit[..8.min(commit.len())],
@@ -324,19 +338,43 @@ pub(crate) fn check_base_commits(
     })
 }
 
-/// The first work item `commit` takes to done, compared with every parent,
-/// that is still done at `tip` (a later revert withdraws the claim).
+/// Whether a done claim of `id` at `commit` is reviewed by an approval whose
+/// pin it follows: one for a scope holding `id` that is still current at the
+/// claim, the same rule `merge` applies (atelier-n642, atelier-uw4x). The tip
+/// stands for the base, so a clean merge of base commits keeps it current.
+fn claim_after_current_approval(
+    repo: &Path,
+    read: &mut git_freshness::ReadContext<'_>,
+    approvals: &[(String, BTreeSet<String>)],
+    id: &str,
+    commit: &str,
+    tip: &str,
+) -> Result<bool> {
+    for (pin, ids) in approvals.iter().filter(|(_, ids)| ids.contains(id)) {
+        let follows =
+            git_freshness::git_output(repo, &["merge-base", "--is-ancestor", pin, commit]).is_ok();
+        if follows && atelier_app::review_gate::approval_is_current_to(read, pin, ids, commit, tip)?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The work items `commit` takes to done, compared with every parent, that
+/// are still done at `tip` (a later revert withdraws the claim).
 /// Missions close and decisions are decided on the base as planning, and
 /// superseding retires work without a claim; anything else reaches done
 /// through a reviewed work branch (atelier-fj1t).
-fn base_done_claim(
+fn base_done_claims(
     repo: &Path,
     policy: &atelier_workflow::WorkflowPolicy,
     commit: &str,
     tip: &str,
     upstream: &str,
     changed: &[std::path::PathBuf],
-) -> Result<Option<String>> {
+) -> Result<Vec<String>> {
+    let mut claims = Vec::new();
     let parents = text(repo, &["rev-list", "--parents", "-n1", commit])?
         .split(' ')
         .skip(1)
@@ -407,13 +445,14 @@ fn base_done_claim(
         if new_claim
             && status_at(tip, path).is_some_and(|now| now.is_some_and(|(_, now)| now == status))
         {
-            return Ok(path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .map(str::to_owned));
+            claims.extend(
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(str::to_owned),
+            );
         }
     }
-    Ok(None)
+    Ok(claims)
 }
 
 /// A done claim on a work branch is not base completion until the base

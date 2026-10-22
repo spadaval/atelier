@@ -166,7 +166,16 @@ pub fn approval_is_current(
 ) -> Result<bool> {
     approval_is_current_to(read, pin, ids, "HEAD", base)
 }
-fn approval_is_current_to(
+/// The one rule for what an approval or trivial exemption covers
+/// (atelier-n642). Pinned at `pin`, it stays current at `end` when every
+/// commit after the pin only adds review or evidence records, files issues
+/// outside the approved scope `ids`, changes a record in `ids` by status,
+/// timestamps and Close Reason alone, or cleanly merges commits already on
+/// `base`. So a close commit that changes only the scope's own records keeps
+/// it current, and one that also edits code or another field does not.
+/// `merge`'s `review.current`, the session gates and `land`'s check of done
+/// claims on the base all ask this; `end` must contain `pin`.
+pub fn approval_is_current_to(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     ids: &BTreeSet<String>,

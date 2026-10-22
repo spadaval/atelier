@@ -206,7 +206,9 @@ merge, though, that branch says done for work the base does not have. So
 `status`, in its owner row and its other-branch rows, shows a done owner as
 `✓ done on branch <work-branch>, not merged into <base>`, or as
 `✓ done, merged into <base>` once the base branch's own copy of the record is
-done.
+done. A claim committed after approval instead, changing only the scope's own
+records by status and Close Reason, keeps the approval current, so it needs no
+fresh review (see [approval freshness](reviews-and-merge.md#approval-freshness)).
 
 Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.

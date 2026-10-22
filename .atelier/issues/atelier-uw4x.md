@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make merge refuse a done claim that land will refuse"
-updated_at: "2026-10-22T19:58:16.470320602+00:00"
+updated_at: "2026-10-22T21:00:00.593658177+00:00"
 ---
 
 ## Goal

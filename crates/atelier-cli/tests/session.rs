@@ -3245,6 +3245,94 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
         "{output}"
     );
 }
+/// One rule for what an approval covers (atelier-n642, atelier-uw4x): a
+/// close after approval that changes only the scope's own records, by status
+/// and Close Reason, stays covered under `merge` and under `land` on the
+/// base; a close that also edits code or another field goes stale under both.
+#[test]
+fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
+    for case in [
+        "close_only",
+        "children_close_only",
+        "with_code",
+        "with_goal",
+    ] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        let upstream = tempdir().unwrap();
+        git(upstream.path(), &["init", "-q", "--bare"]);
+        git(
+            f.path(),
+            &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+        );
+        git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+        git(f.path(), &["switch", "-q", &f.branch]);
+        let child = (case == "children_close_only").then(|| {
+            let child = ok(
+                f.path(),
+                &["-q", "issue", "create", "Child", "--parent", &f.id],
+            );
+            commit(f.path(), "plan a child");
+            child
+        });
+        ok(
+            f.path(),
+            &[
+                "review",
+                "approve",
+                &f.id,
+                "--identity",
+                "Reviewer",
+                "Independent review",
+            ],
+        );
+        commit(f.path(), "approval before the close");
+        match case {
+            "with_code" => fs::write(f.path().join("code"), "changed while closing\n").unwrap(),
+            "with_goal" => {
+                let path = f.path().join(format!(".atelier/issues/{}.md", f.id));
+                let text = fs::read_to_string(&path).unwrap();
+                fs::write(&path, text.replace("Ship session", "Ship more session")).unwrap();
+            }
+            _ => {}
+        }
+        if let Some(child) = &child {
+            f.terminal(child);
+        }
+        f.terminal(&f.id);
+        let close = git(f.path(), &["rev-parse", "HEAD"]);
+
+        let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
+        let covered = case.ends_with("close_only");
+        if covered {
+            assert!(pass, "{case}: {output}");
+            ok(f.path(), &["merge", &f.id]);
+            git(f.path(), &["switch", "-q", "main"]);
+        } else {
+            assert!(
+                !pass && output.contains("review.current"),
+                "{case}: {output}"
+            );
+            // Integrate past the gate, so land on the base judges it too.
+            git(f.path(), &["switch", "-q", "main"]);
+            git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
+        }
+        let (pass, output) = cli(f.path(), &["land"]);
+        if covered {
+            assert!(pass, "{case}: {output}");
+        } else {
+            assert!(
+                !pass
+                    && output.contains(&format!(
+                        "land_base_done_claim: commit {} on main marks {}",
+                        &close[..8],
+                        f.id
+                    )),
+                "{case}: {output}"
+            );
+        }
+    }
+}
 #[test]
 fn superseding_a_child_of_a_blocked_parent_lands() {
     let f = Fixture::new();

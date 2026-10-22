@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep an approval current across a close commit that only touches the item's record"
-updated_at: "2026-10-22T19:58:18.810454767+00:00"
+updated_at: "2026-10-22T20:59:56.993628991+00:00"
 ---
 
 ## Goal
