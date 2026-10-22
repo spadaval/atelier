@@ -16,6 +16,9 @@ relationships:
   - kind: "issue"
     id: "atelier-o3lm"
     type: "advances"
+  - kind: "review"
+    id: "atelier-spnf"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 closed_at: "2026-10-17T08:54:36.260262076+00:00"

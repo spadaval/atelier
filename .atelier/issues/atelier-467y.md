@@ -13,6 +13,12 @@ relationships:
   - kind: "issue"
     id: "atelier-rc8j"
     type: "advances"
+  - kind: "review"
+    id: "atelier-268e"
+    type: "discovered_from"
+  - kind: "review"
+    id: "atelier-owat"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

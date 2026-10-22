@@ -15,6 +15,9 @@ relationships:
   - kind: "issue"
     id: "atelier-k8h8"
     type: "advances"
+  - kind: "review"
+    id: "atelier-0c86"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 closed_at: "2026-10-17T06:05:33.756782586+00:00"

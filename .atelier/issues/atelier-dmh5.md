@@ -17,6 +17,9 @@ relationships:
   - kind: "issue"
     id: "atelier-uf97"
     type: "advances"
+  - kind: "review"
+    id: "atelier-3ewf"
+    type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
