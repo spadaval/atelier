@@ -2852,3 +2852,223 @@ fn merge_commit_strategy_accepts_a_sibling_the_base_completed_with_its_own_revie
     assert!(output.contains("pass merge.merged_tree"), "{output}");
     assert_eq!(worktrees(fixture.path()), 1);
 }
+
+/// `merge --sync` output split into stdout, which ends in the verdict, and
+/// stderr.
+fn sync(dir: &Path, id: &str) -> (bool, String, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir)
+        .args(["merge", id, "--sync"])
+        .output()
+        .unwrap();
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+    )
+}
+fn command_receipts(fixture: &Fixture) -> Vec<String> {
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    index
+        .evidence_records()
+        .iter()
+        .filter_map(|record| record.data.command.clone())
+        .collect()
+}
+fn verdict(stdout: &str) -> &str {
+    stdout.lines().last().unwrap_or_default()
+}
+fn record_command(fixture: &Fixture, command: &str) {
+    ok(
+        fixture.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{}", fixture.id),
+            "--kind",
+            "test",
+            "--producer",
+            "Author",
+            "--summary",
+            "Scenario check",
+            "--",
+            "sh",
+            "-c",
+            command,
+        ],
+    );
+    commit(fixture.path(), "command receipt");
+}
+/// A reviewed branch with a passing command receipt and a manual one, behind
+/// a base that gained `landed` (a file, with the given content).
+fn synced_fixture(strategy: &str, command: &str, landed: (&str, &str)) -> Fixture {
+    let fixture = Fixture::new();
+    if strategy == "merge_commit" {
+        merge_commit_policy(&fixture, &["true"]);
+    }
+    record_command(&fixture, command);
+    ok(
+        fixture.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{}", fixture.id),
+            "--kind",
+            "note",
+            "--producer",
+            "Author",
+            "--summary",
+            "Read the design by hand",
+            "--result",
+            "pass",
+        ],
+    );
+    commit(fixture.path(), "manual receipt");
+    fixture.approval("Reviewer");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join(landed.0), landed.1).unwrap();
+    commit(fixture.path(), "work landed on the base");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    fixture
+}
+
+#[test]
+fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        let fixture = synced_fixture(strategy, "test -f src.rs", ("other.rs", "landed\n"));
+        let old = git(fixture.path(), &["rev-parse", "HEAD"]);
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(
+            passed && verdict(&out) == "merge: passed",
+            "{strategy}: {out}\n{err}"
+        );
+        for expected in [
+            "Merged main into",
+            "Rerunning 1 command-backed receipt:",
+            "pass ",
+            "test -f src.rs",
+            "Manual receipts were current before and cannot be rerun",
+            "Approval kept:",
+            "Next: atelier merge",
+        ] {
+            assert!(out.contains(expected), "{strategy}: {expected}: {out}");
+        }
+        // Merged, never rebased: the old head is still an ancestor.
+        git(
+            fixture.path(),
+            &["merge-base", "--is-ancestor", &old, "HEAD"],
+        );
+        git(
+            fixture.path(),
+            &["merge-base", "--is-ancestor", "main", "HEAD"],
+        );
+        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+        let subject = git(fixture.path(), &["log", "-1", "--format=%s"]);
+        assert!(subject.starts_with("Record evidence rerun"), "{subject}");
+        let commands = command_receipts(&fixture);
+        assert_eq!(commands, ["sh -c 'test -f src.rs'"; 2], "{commands:?}");
+        // What the sync reported kept is what the gates accept.
+        let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(
+            checked.contains("pass review.current"),
+            "{strategy}: {checked}"
+        );
+        // Syncing again has nothing to do.
+        let (passed, again, _) = sync(fixture.path(), &fixture.id);
+        assert!(passed && again.contains("already contains main"), "{again}");
+        assert!(again.contains("none were rerun") && verdict(&again) == "merge: passed");
+        let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+        ok(fixture.path(), &["merge", &fixture.id]);
+        assert!(git(
+            fixture.path(),
+            &["merge-base", "--is-ancestor", &head, "main"]
+        )
+        .is_empty());
+    }
+}
+
+#[test]
+fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resolution() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        let fixture = synced_fixture(strategy, "test -f src.rs", ("src.rs", "base code\n"));
+        let old = git(fixture.path(), &["rev-parse", "HEAD"]);
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(!passed, "{strategy}: {out}");
+        assert_eq!(verdict(&out), "merge: refused — 1 check (sync_conflict)");
+        assert!(
+            err.contains("  src.rs") && err.contains("Nothing was committed"),
+            "{err}"
+        );
+        assert_eq!(git(fixture.path(), &["rev-parse", "HEAD"]), old);
+        assert!(fixture.path().join(".git/MERGE_HEAD").exists());
+        assert!(git(fixture.path(), &["status", "--porcelain"]).contains("AA src.rs"));
+
+        // Resolve by hand, commit, and sync again: the receipts are rerun and
+        // the approval is reported stale with the resolved file.
+        fs::write(fixture.path().join("src.rs"), "resolved code\n").unwrap();
+        git(fixture.path(), &["add", "."]);
+        git(fixture.path(), &["commit", "-q", "--no-edit"]);
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(
+            passed && verdict(&out) == "merge: passed",
+            "{strategy}: {out}\n{err}"
+        );
+        assert!(out.contains("already contains main"), "{out}");
+        assert!(out.contains("Rerunning 1 command-backed receipt:"), "{out}");
+        assert!(
+            out.contains("Approval needs fresh review:")
+                && out.contains("went stale at")
+                && out.contains("  src.rs"),
+            "{out}"
+        );
+        let (_, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(checked.contains("FAIL review.current"), "{checked}");
+    }
+}
+
+#[test]
+fn sync_records_a_failing_rerun_and_refuses() {
+    for strategy in ["fast_forward_only", "merge_commit"] {
+        // Passes on the branch alone; the merged tree has the forbidden file.
+        let fixture = synced_fixture(strategy, "test ! -f other.rs", ("other.rs", "landed\n"));
+        let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        assert!(!passed, "{strategy}: {out}");
+        assert_eq!(
+            verdict(&out),
+            "merge: refused — 1 check (sync_rerun_failed)",
+            "{err}"
+        );
+        assert!(
+            out.contains("FAIL ") && out.contains("Approval kept:"),
+            "{out}"
+        );
+        assert!(!out.contains("Next: atelier merge"), "{out}");
+        // The failure is on the record, committed, so the gates see it.
+        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
+        let index =
+            atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+        assert!(index
+            .evidence_records()
+            .iter()
+            .any(|record| record.data.result == atelier_core::EvidenceResult::Fail));
+        let (passed, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(!passed && checked.contains("FAIL"), "{checked}");
+    }
+}
+
+#[test]
+fn sync_refuses_a_dirty_checkout_and_conflicts_with_check() {
+    let fixture = synced_fixture("fast_forward_only", "true", ("other.rs", "landed\n"));
+    fs::write(fixture.path().join("src.rs"), "edited\n").unwrap();
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(!passed && err.contains("merge_checkout_dirty"), "{err}");
+    assert_eq!(
+        verdict(&out),
+        "merge: refused — 1 check (merge_checkout_dirty)"
+    );
+    let (passed, _) = cli(fixture.path(), &["merge", &fixture.id, "--sync", "--check"]);
+    assert!(!passed);
+}

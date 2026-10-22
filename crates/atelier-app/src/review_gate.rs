@@ -182,16 +182,42 @@ pub fn approval_is_current_to(
     end: &str,
     base: &str,
 ) -> Result<bool> {
+    Ok(approval_stale_edge(read, pin, ids, end, base)?.is_none())
+}
+
+/// The first commit after `pin` that makes the approval stale at `end`, with
+/// the paths a new review has to look at, or `None` while it is current.
+/// It is the rule of [`approval_is_current_to`], so what `merge --sync`
+/// reports as needing review is exactly what makes the approval stale. For a
+/// merge, the paths are those it resolved by hand or edited beyond Git's own
+/// merge, or else what it changed against its first parent.
+pub fn approval_stale_edge(
+    read: &mut git::ReadContext<'_>,
+    pin: &str,
+    ids: &BTreeSet<String>,
+    end: &str,
+    base: &str,
+) -> Result<Option<(String, Vec<std::path::PathBuf>)>> {
     for (edge, merge) in work_edges(read, pin, end, base)? {
         let allowed = match &merge {
             Some(merge) => allowed_base_merge(read, &edge, merge, ids)?,
             None => allowed_edge(read, &edge, ids)?,
         };
         if !allowed {
-            return Ok(false);
+            let hand_made = if edge.sides.is_empty() {
+                Vec::new()
+            } else {
+                git::hand_resolved_paths(read.repo, &edge.commit)?
+            };
+            let paths = if hand_made.is_empty() {
+                edge.paths
+            } else {
+                hand_made
+            };
+            return Ok(Some((edge.commit, paths)));
         }
     }
-    Ok(true)
+    Ok(None)
 }
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an

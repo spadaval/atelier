@@ -199,6 +199,13 @@ fn check_criteria(
 }
 
 pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
+    let quiet = options.quiet;
+    let created = capture_record(options)?;
+    print_new_record(&created, quiet)
+}
+
+/// Runs the command and records its receipt, returning the new record.
+pub fn capture_record(options: CaptureOptions<'_>) -> Result<EvidenceRecord> {
     if options.command.is_empty() {
         bail!("evidence capture requires a command after --");
     }
@@ -372,7 +379,7 @@ pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
             target.role,
         )?;
     }
-    print_new_record(&created, options.quiet)
+    Ok(created)
 }
 
 fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
@@ -932,6 +939,40 @@ fn format_command(args: &[String]) -> String {
         .join(" ")
 }
 
+/// The arguments a receipt's stored command was written from: the inverse of
+/// `format_command`, which leaves safe words bare and single-quotes the rest.
+pub fn split_command(command: &str) -> Result<Vec<String>> {
+    let mut args = Vec::new();
+    let mut current: Option<String> = None;
+    let mut quoted = false;
+    let mut chars = command.chars();
+    while let Some(ch) = chars.next() {
+        match (quoted, ch) {
+            (true, '\'') => quoted = false,
+            (true, ch) => current.get_or_insert_with(String::new).push(ch),
+            (false, '\'') => {
+                quoted = true;
+                current.get_or_insert_with(String::new);
+            }
+            // A quote inside a quoted word is written as `'"'"'`.
+            (false, '"') if chars.as_str().starts_with("'\"") => {
+                chars.nth(1);
+                current.get_or_insert_with(String::new).push('\'');
+            }
+            (false, '"' | '\\') => {
+                bail!("recorded command {command:?} uses quoting this command did not write")
+            }
+            (false, ch) if ch.is_whitespace() => args.extend(current.take()),
+            (false, ch) => current.get_or_insert_with(String::new).push(ch),
+        }
+    }
+    if quoted {
+        bail!("recorded command {command:?} has an unterminated quote");
+    }
+    args.extend(current);
+    Ok(args)
+}
+
 fn quote_command_arg(arg: &str) -> String {
     if !arg.is_empty()
         && arg
@@ -947,6 +988,15 @@ fn quote_command_arg(arg: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_recorded_command_splits_back_into_the_arguments_it_was_written_from() {
+        let args = ["sh", "-c", "echo 'it''s' \"x\" $HOME", "", "plain/arg:1=2"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(split_command(&format_command(&args)).unwrap(), args);
+        assert!(split_command("echo \"unterminated").is_err());
+    }
 
     #[test]
     fn capture_bounds_raw_bytes_before_lossy_utf8_conversion() {
