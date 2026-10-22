@@ -143,6 +143,7 @@ and closed work `closed`, never `nonterminal` or `terminal`: `Unassigned: 6
 open issues`, `closed ancestor <id> retires open descendant <id>`. Workflow
 configuration terms keep their names, such as the `work.terminal` validator
 and "terminal status" in policy errors.
+
 A list of counts leaves out its zeros, and a line that would count nothing is
 left out: `status` prints no `Needs a human: 0`, and `work missions` no `Open
 blockers: 0`. A zero stays only where it carries another fact, as in

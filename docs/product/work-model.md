@@ -203,11 +203,11 @@ Sumeet 2026-10-15): the reviewer sees the claim together with the code. A
 review that finds problems leaves the claim in place: the author fixes the
 findings on the work branch, and the merge waits for fresh approval. Until the
 merge, though, that branch says done for work the base does not have. So
-`status`, in its owner row and its `Branches` rows (format in
-[human-cli-output.md](human-cli-output.md#branches)), shows a done owner as
+`status`'s owner row shows a done owner as
 `✓ done on branch <work-branch>, not merged into <base>`, or as
 `✓ done, merged into <base>` once the base branch's own copy of the record is
-done.
+done. Its `Branches` rows say the same in their own form, `✓ done, not merged`
+(see [human-cli-output.md](human-cli-output.md#branches)).
 
 Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.
