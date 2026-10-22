@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "land"
 - "start"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-yim7
 priority: "P2"
 relationships:
   blocks: []
@@ -28,7 +31,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Push and start work safely"
-updated_at: "2026-10-22T19:58:17.506247375+00:00"
+updated_at: "2026-10-22T20:32:25.872849066+00:00"
 ---
 
 ## Goal
