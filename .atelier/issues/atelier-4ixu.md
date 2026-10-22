@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-22T21:15:33.114582788+00:00"
+status: "done"
 title: "Commit a step's records together instead of one commit per record"
-updated_at: "2026-10-22T21:14:34.547229877+00:00"
+updated_at: "2026-10-22T21:15:33.114582788+00:00"
 ---
 
 ## Goal
@@ -47,3 +48,19 @@ Whether auto-commit belongs in atelier or in the Agent Factory skill's guidance.
   Rejected: Deriving the records from git status (would sweep in unrelated dirty records)
 - 2026-10-22 [decision] The records to commit come from the record store's write log, not from git status
   Reason: RecordStore::write_atomic is the single funnel for every record write, so logging its paths gives exactly what the command wrote, independent of other staged or unstaged work.
+
+## Close Reason
+
+`--commit-records` and `--stage-records` on review record/approve/finding/trivial/disposition, `evidence record` and `issue transition <id> <name>` stage and commit exactly the records the command wrote; a sequence groups into one commit, and a foreign staged change refuses before anything is written. Documented in docs/product/cli-surface.md and shown by four CLI tests.
+
+### Deviations
+The flags are `--commit-records` / `--stage-records`, not `--commit`, because `review` already uses `--commit` for the pinned commit. `issue note`, `create`, `link` and `evidence attach` do not take the flags; the item named only the commands above.
+
+### Decisions
+Two decision notes on atelier-4ixu: grouping by stage-then-commit with a git-ignored pending file, and taking the records from the record store's write log rather than git status.
+
+### Surprises
+The test helper `run_atelier` commits dirty state before evidence/transition commands, which hid index state; the new tests use `run_atelier_raw`.
+
+### Open items
+None. Unknown from the item resolved: auto-commit lives in atelier; the Agent Factory skill text still describes hand commits and is left for the orchestrator's upstream sync.
