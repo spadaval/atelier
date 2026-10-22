@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make merge --sync's resume and stale-approval verdict read plainly"
-updated_at: "2026-10-22T22:42:57.061302606+00:00"
+updated_at: "2026-10-22T22:48:09.806085776+00:00"
 ---
 
 ## Goal

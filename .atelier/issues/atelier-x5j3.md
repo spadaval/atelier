@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make the start lease write and status refresh safe"
-updated_at: "2026-10-22T21:18:32.206690950+00:00"
+updated_at: "2026-10-22T22:48:09.649944644+00:00"
 ---
 
 ## Goal
