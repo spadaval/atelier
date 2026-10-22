@@ -3641,7 +3641,10 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
     // The kept branch's row on the base reads its committed records.
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{}  {} done, merged  ", f.branch, f.id)),
+        output.contains(&format!(
+            "{}  {} ✓ done, merged into main  ",
+            f.branch, f.id
+        )),
         "{output}"
     );
 
@@ -4264,19 +4267,20 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     assert!(
         status
             .lines()
-            .any(|line| line.starts_with(&format!("{}  {} done, not merged  ", f.branch, f.id))),
+            .any(|line| line.starts_with(&format!("{}  {} ✓ done, not merged  ", f.branch, f.id))),
         "{status}"
     );
     git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
     git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
     let status = ok(f.path(), &["status"]);
     assert!(
-        status
-            .lines()
-            .any(|line| line.starts_with(&format!("{}  {} done, merged  ", f.branch, f.id))),
+        status.lines().any(|line| line
+            == format!(
+                "{}  {} ✓ done, merged into main  Session owner",
+                f.branch, f.id
+            )),
         "{status}"
     );
-    assert!(!status.contains("active)"), "{status}");
 
     // An uncommitted close on a fresh branch is not on the base either.
     git(f.path(), &["switch", "-q", "main"]);
@@ -4350,8 +4354,8 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("task/{finished}  {finished} done, not merged  Finished elsewhere"),
-        format!("task/{stuck}  {stuck} blocked  Stuck elsewhere"),
+        format!("task/{finished}  {finished} ✓ done, not merged  Finished elsewhere"),
+        format!("task/{stuck}  {stuck} ⚠ blocked  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
     }

@@ -480,17 +480,22 @@ impl BranchOwner {
         crate::human_output::status_cue(&self.status, self.category.as_deref(), None)
     }
 
-    /// `<branch>  <id> <status>[, merged|, not merged]  <title>`: one dense
-    /// line, with the columns a merge-readiness fact can be appended to.
-    fn line(&self) -> String {
+    /// `<branch>  <id> <status>[, merged into <base>|, not merged]  <title>`:
+    /// one dense line. Merge-readiness facts belong in the status part,
+    /// before the free-text title, and the merge wording matches the `↳`
+    /// in-flight mark for the same item.
+    fn line(&self, base: &str) -> String {
         let merge = match self.merged {
-            Some(true) => ", merged",
-            Some(false) => ", not merged",
-            None => "",
+            Some(true) => format!(", merged into {base}"),
+            Some(false) => ", not merged".to_owned(),
+            None => String::new(),
         };
         format!(
             "{}  {} {}{merge}  {}",
-            self.branch, self.id, self.status, self.title
+            self.branch,
+            self.id,
+            self.cue(),
+            self.title
         )
     }
 }
@@ -529,7 +534,7 @@ impl BranchSummaries {
             .entries
             .iter()
             .map(|owner| match owner {
-                Ok(owner) => owner.line(),
+                Ok(owner) => owner.line(&self.base_branch),
                 Err(unreadable) => {
                     format!(
                         "{}: unavailable — {:#}",

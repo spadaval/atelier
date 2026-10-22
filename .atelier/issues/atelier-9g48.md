@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Show which waiting branches are ready to land"
-updated_at: "2026-10-22T20:32:24.275342683+00:00"
+updated_at: "2026-10-22T20:45:46.064222430+00:00"
 ---
 
 ## Goal
@@ -45,3 +45,9 @@ atelier-tciw wants the cause of a stale approval from atelier-cisa (mission atel
 ## Background
 
 Both children change `crates/atelier-cli/src/commands/status.rs`; atelier-ftqn's row format comes first, and atelier-tciw adds the readiness facts. The branches block is already a `-----` section before Next (it renders as `Other Local Work Branches (committed records)`); the dense rows, the `Unowned:` line and approval marks are what remain of atelier-ftqn.
+
+## Notes
+
+- 2026-10-22 [decision] Branches rows mark the status word with ✓ or ⚠ and say 'merged into <base>' / 'not merged', matching the ↳ in-flight mark
+  Reason: The general output rule marks status words; the ftqn example without ✓ was incidental (review finding atelier-qjin)
+  Rejected: Plain status word as in the Done when example
