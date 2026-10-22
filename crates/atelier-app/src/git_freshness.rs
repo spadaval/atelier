@@ -8,6 +8,8 @@ use std::{
     rc::Rc,
 };
 
+use crate::path_log::{PathLog, RecordGraph};
+
 #[derive(Clone)]
 pub struct CommitEdge {
     pub parent: String,
@@ -213,6 +215,9 @@ struct ObjectCache {
     trees: HashMap<String, Rc<Vec<TreeEntry>>>,
     commit_trees: HashMap<String, String>,
     histories: HashMap<Vec<String>, String>,
+    /// The history of HEAD behind every [`PathLog`], loaded on first use.
+    record_graph: Option<Rc<RecordGraph>>,
+    path_logs: HashMap<PathLog, Rc<[String]>>,
     commits: HashMap<String, Vec<u8>>,
     merge_resolutions: HashMap<String, Option<MergeResolution>>,
     /// Whether tree diffs matched `git diff` on this read phase's first
@@ -559,45 +564,25 @@ impl<'a> ReadContext<'a> {
         self.cache.status_only.insert(key, answer);
         Ok(answer)
     }
-    /// Fill the `history` cache for many queries, running them in parallel.
-    /// Failures are left uncached so the later `history` call reports them.
-    pub(crate) fn prefetch_histories(&mut self, queries: Vec<Vec<String>>) {
-        let mut pending = queries
-            .into_iter()
-            .filter(|query| !self.cache.histories.contains_key(query))
-            .collect::<Vec<_>>();
-        pending.sort();
-        pending.dedup();
-        if pending.is_empty() {
-            return;
+    /// The commits a path-limited `git log` over records lists. Every such
+    /// query in this read phase is answered from one load of HEAD's history,
+    /// so the Git work does not grow with the number of queries.
+    pub(crate) fn path_log(&mut self, query: &PathLog) -> Result<Rc<[String]>> {
+        if let Some(listed) = self.cache.path_logs.get(query) {
+            return Ok(listed.clone());
         }
-        let workers = std::thread::available_parallelism()
-            .map_or(4, usize::from)
-            .clamp(1, 8);
-        let chunk = pending.len().div_ceil(workers);
-        let repo = self.repo;
-        let results = std::thread::scope(|scope| {
-            let handles = pending
-                .chunks(chunk)
-                .map(|queries| {
-                    scope.spawn(move || {
-                        queries
-                            .iter()
-                            .filter_map(|query| {
-                                let args = query.iter().map(String::as_str).collect::<Vec<_>>();
-                                let output = git_output(repo, &args).ok()?;
-                                Some((query.clone(), String::from_utf8(output).ok()?))
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                })
-                .collect::<Vec<_>>();
-            handles
-                .into_iter()
-                .flat_map(|handle| handle.join().unwrap_or_default())
-                .collect::<Vec<_>>()
-        });
-        self.cache.histories.extend(results);
+        let graph = match &self.cache.record_graph {
+            Some(graph) => graph.clone(),
+            None => {
+                let head = self.pinned("HEAD")?;
+                let graph = Rc::new(RecordGraph::load(self.repo, &head)?);
+                self.cache.record_graph = Some(graph.clone());
+                graph
+            }
+        };
+        let listed: Rc<[String]> = graph.log(query)?.into();
+        self.cache.path_logs.insert(query.clone(), listed.clone());
+        Ok(listed)
     }
     pub(crate) fn author_names(&mut self, commit: &str) -> Result<String> {
         let commit = self.commit_id(commit)?;
@@ -830,6 +815,46 @@ pub fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     }
     Ok(output.stdout)
 }
+/// Output of a Git command fed `input` on stdin. The input is written from
+/// another thread, so a large answer cannot block it, and through
+/// [`Requests`] on Unix, so a command that exits early fails the write
+/// instead of killing atelier.
+pub(crate) fn git_input(repo: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
+    #[cfg(unix)]
+    let (mut requests, stdin) = Requests::pair()?;
+    #[cfg(not(unix))]
+    let stdin = Stdio::piped();
+    // The command, and with it the parent's copy of the child's input, is
+    // dropped here, so the child sees the end of the input.
+    let child = command(repo)
+        .args(args)
+        .stdin(stdin)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("cannot start git {}", args.join(" ")))?;
+    #[cfg(not(unix))]
+    let (child, mut requests) = {
+        let mut child = child;
+        let requests = child.stdin.take().context("Git stdin missing")?;
+        (child, requests)
+    };
+    let (output, written) = std::thread::scope(|scope| {
+        let writer = scope.spawn(move || requests.write_all(input));
+        let output = child.wait_with_output();
+        (output, writer.join().expect("Git input thread panicked"))
+    });
+    let output = output?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    written.with_context(|| format!("cannot write the input of git {}", args.join(" ")))?;
+    Ok(output.stdout)
+}
 pub fn head_commit(repo: &Path) -> Result<String> {
     Ok(
         String::from_utf8(git_output(repo, &["rev-parse", "HEAD"])?)?
@@ -1037,30 +1062,8 @@ pub fn is_record_path(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, io::Write};
+    use std::fs;
 
-    fn git_input(repo: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {
-        let mut child = command(repo)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        let mut stdin = child.stdin.take().context("Git stdin missing")?;
-        let output = std::thread::scope(|scope| -> Result<_> {
-            let writer = scope.spawn(move || stdin.write_all(input));
-            let output = child.wait_with_output()?;
-            writer.join().expect("Git input thread panicked")?;
-            Ok(output)
-        })?;
-        if !output.status.success() {
-            bail!(
-                "git test input failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        Ok(output.stdout)
-    }
     fn commit_edges(repo: &Path, pin: &str) -> Result<Vec<CommitEdge>> {
         ReadContext::new(repo)
             .edges(pin, "HEAD")
@@ -1214,8 +1217,8 @@ mod tests {
     }
     /// A commit with `parents` and the root's tree, committed at `seconds`.
     fn dated_commit(repo: &Path, parents: &[&str], seconds: i64) -> String {
-        let tree = String::from_utf8(git_output(repo, &["rev-parse", "HEAD^{tree}"]).unwrap())
-            .unwrap();
+        let tree =
+            String::from_utf8(git_output(repo, &["rev-parse", "HEAD^{tree}"]).unwrap()).unwrap();
         let mut args = vec!["commit-tree", tree.trim(), "-m", "dated"];
         for parent in parents {
             args.extend(["-p", parent]);

@@ -1,5 +1,9 @@
 //! Honest evidence decisions used by transition checks and issue displays.
-use crate::{git_freshness as git, record_index::RecordIndex};
+use crate::{
+    git_freshness as git,
+    path_log::{Listing, PathLog},
+    record_index::RecordIndex,
+};
 use anyhow::Result;
 use atelier_core::{EvidenceRecord, EvidenceResult};
 use atelier_records::{issue_record_path, parse_issue_record, CanonicalIssueRecord};
@@ -282,11 +286,16 @@ impl EvidenceReadContext<'_> {
     }
     pub(crate) fn claim_endpoint(&mut self, issue_id: &str, pin: &str) -> Result<String> {
         let head = self.pinned("HEAD")?;
-        let query = claim_history_query(&head, issue_id);
-        let changes = self.history(&query.iter().map(String::as_str).collect::<Vec<_>>())?;
+        // Every commit that touched the issue record, newest first.
+        let changes = self.path_log(&PathLog {
+            start: head.clone(),
+            paths: vec![format!(".atelier/issues/{issue_id}.md")],
+            listing: Listing::Changes,
+            reverse: false,
+        })?;
         let current = self.issue_at(&head, issue_id)?;
         let mut claim = None;
-        for commit in changes.lines() {
+        for commit in changes.iter() {
             let after = self.issue_at_migrated(commit, issue_id, &current)?;
             let parent = self.issue_at_migrated(&format!("{commit}^"), issue_id, &current);
             if parent.is_err() || !completion_claim_matches(&after, &parent?) {
@@ -302,21 +311,6 @@ impl EvidenceReadContext<'_> {
         };
         Ok(end.to_owned())
     }
-}
-
-/// The `git log` behind [`EvidenceReadContext::claim_endpoint`]: every commit
-/// that touched the issue record, newest first. Shared so callers can
-/// prefetch it (atelier-v5tt).
-pub(crate) fn claim_history_query(head: &str, issue_id: &str) -> Vec<String> {
-    [
-        "log".to_owned(),
-        "--root".to_owned(),
-        "--format=%H".to_owned(),
-        head.to_owned(),
-        "--".to_owned(),
-        format!(".atelier/issues/{issue_id}.md"),
-    ]
-    .to_vec()
 }
 
 #[cfg(test)]
