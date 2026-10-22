@@ -513,6 +513,22 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
         .then(|| code.to_owned())
 }
 
+/// Refuses a push when the base has an upstream configured that does not
+/// resolve to a remote-tracking ref (deleted remote branch, or a URL or path
+/// remote): the base-commit review check skips such a base, so the push could
+/// publish unreviewed base commits. A base with no upstream is left to that
+/// check's own "unchecked" note.
+fn refuse_unresolved_base_upstream(repo: &Path) -> Result<()> {
+    let base = atelier_workflow::load(repo)?.branch_policy.base_branch;
+    let configured = ["remote", "merge"]
+        .iter()
+        .all(|key| git::text(repo, &["config", "--get", &format!("branch.{base}.{key}")]).is_ok());
+    if configured && git::resolve(repo, &format!("{base}@{{upstream}}")).is_err() {
+        bail!("land_push_base_upstream_unresolved: {base} has an upstream that does not resolve to a remote-tracking branch (its remote branch is gone, or its remote is a URL or path), so unreviewed {base} commits cannot be checked before publishing; run `git fetch --prune` and `git branch -u <remote>/{base} {base}`, then rerun `atelier land --push`");
+    }
+    Ok(())
+}
+
 /// Pushes the commit land checked to the current branch's own upstream
 /// branch, never another ref. Returns the destination, `<remote>/<branch>`.
 fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
@@ -532,6 +548,7 @@ fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
     if remote == "." || merge != format!("refs/heads/{branch}") {
         bail!("land_push_upstream_mismatch: {branch} tracks {remote} {merge}, not a remote branch of its own name, so pushing could publish this work to another branch; run `git push -u <remote> {branch}` to set its own upstream, then rerun `atelier land --push`");
     }
+    refuse_unresolved_base_upstream(repo)?;
     if git::resolve(repo, "HEAD")? != checked {
         bail!("land_state_changed: HEAD moved after the checks; nothing pushed; rerun `atelier land --push`");
     }

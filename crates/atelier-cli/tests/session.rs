@@ -5781,6 +5781,44 @@ fn land_push_refuses_an_upstream_that_is_not_the_branchs_own_remote_branch() {
 }
 
 #[test]
+fn land_push_refuses_a_base_upstream_that_does_not_resolve() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    fs::write(f.path().join("more"), "more\n").unwrap();
+    commit(f.path(), "more code");
+    let branch_ref = format!("refs/heads/{}", f.branch);
+    let before = git(remote.path(), &["rev-parse", &branch_ref]);
+    // The remote branch was deleted and pruned: git shows the upstream as gone.
+    git(f.path(), &["update-ref", "-d", "refs/remotes/origin/main"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        !pass && out.contains("land_push_base_upstream_unresolved"),
+        "{out}"
+    );
+    assert!(out.contains("git fetch --prune"), "{out}");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_base_upstream_unresolved), nothing pushed"
+    );
+    assert_eq!(git(remote.path(), &["rev-parse", &branch_ref]), before);
+    // A URL or path remote has no remote-tracking ref to check against.
+    git(f.path(), &["fetch", "-q", "origin"]);
+    let url = remote.path().to_str().unwrap();
+    git(f.path(), &["config", "branch.main.remote", url]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        !pass && out.contains("land_push_base_upstream_unresolved"),
+        "{out}"
+    );
+    assert_eq!(git(remote.path(), &["rev-parse", &branch_ref]), before);
+    // A base with no upstream at all stays an unchecked-base note, not a refusal.
+    git(f.path(), &["config", "--unset", "branch.main.remote"]);
+    git(f.path(), &["config", "--unset", "branch.main.merge"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(pass, "{out}");
+}
+
+#[test]
 fn land_push_pushes_nothing_when_a_check_moves_head_during_land() {
     let f = Fixture::new();
     git(f.path(), &["switch", "main"]);

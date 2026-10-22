@@ -81,6 +81,11 @@ with no upstream or a detached HEAD refuses (`land_push_no_upstream`,
 `land_push_detached`), as does an upstream on remote `.` or on a branch of
 another name, such as a work branch created from `origin/main`
 (`land_push_upstream_mismatch`; fix it with `git push -u <remote> <branch>`).
+It also refuses when the base branch has an upstream that does not resolve to
+a remote-tracking branch, because its remote branch is gone or its remote is a
+URL or path, so unreviewed base commits could not be checked
+(`land_push_base_upstream_unresolved`; fix it with `git fetch --prune` and
+`git branch -u <remote>/<base> <base>`).
 What is pushed is the commit land checked: if HEAD moved during the checks
 land refuses (`land_state_changed`). A push git rejects exits non-zero with
 git's message and `land: refused — 1 check (land_push_failed), nothing
