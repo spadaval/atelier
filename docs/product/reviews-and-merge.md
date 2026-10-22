@@ -129,6 +129,22 @@ work checkout. The gate output adds `merge.merged_tree`, which passes only when
 the shell checks passed there and names the tree, base commit, and commands,
 and the merge commit's message lists those commands.
 
+Each checkout lives in its own `atelier-merge-*` directory in the Git common
+directory, and the merge holds a lock on that directory's `lock` file while its
+checks run. Normal exit removes the checkout. If merge is killed during its
+checks, the operating system drops the lock, and the next merge removes every
+`atelier-merge-*` checkout whose lock is free before it makes its own; one a
+concurrent merge still holds stays (atelier-rcnk).
+
+Merged-tree checks do not reuse a build cache. Each run builds in the
+checkout's own target directory (the repository's `merge_checks` set
+`CARGO_TARGET_DIR=target`), which goes away with the checkout, so a check
+proves what the merged tree builds and never what an earlier tree left behind.
+A shared target directory is the one cache Atelier does not allow here: it has
+run another branch's binary in tests, and cargo's freshness checks cannot tell
+two checkouts apart. A policy that wants faster checks may put a compiler cache
+keyed by its inputs, such as `sccache`, in the check command itself.
+
 The gates read the records of the merge commit, which is what the base would
 get, so a blocker the base added or reopened holds the merge. Review and
 evidence pins are judged only along the work branch, though, so merge refuses

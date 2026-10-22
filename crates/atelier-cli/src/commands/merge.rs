@@ -10,24 +10,39 @@ use atelier_app::{
     storage_layout::StorageLayout,
     workflow_policy::{MergeStrategy, ValidatorParams, WorkflowPolicy},
 };
+use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 
 /// A detached checkout of the merge commit, outside every working tree, so
 /// `merge_checks` run on exactly the tree merging would put on the base.
+///
+/// Each checkout sits in its own `atelier-merge-*` directory in the Git common
+/// directory and holds an exclusive lock on that directory's `lock` file for
+/// its life. `Drop` removes the checkout, but a killed merge cannot run it:
+/// the operating system releases the lock instead, which is how the next merge
+/// tells a leftover checkout from one a concurrent merge is still using.
 struct MergedCheckout {
     repo: PathBuf,
     path: PathBuf,
     _dir: tempfile::TempDir,
+    _lock: File,
 }
 impl MergedCheckout {
     fn add(repo: &Path, commit: &str) -> Result<Self> {
-        let common = text(
+        let common = PathBuf::from(text(
             repo,
             &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-        )?;
+        )?);
+        // Sweeping and creating are serialized, so the sweep never meets a
+        // directory whose lock file does not exist yet.
+        let creating = lock_file(&common.join("atelier-merge.lock"))?;
+        creating.lock()?;
+        Self::sweep(repo, &common)?;
         let dir = tempfile::Builder::new()
-            .prefix("atelier-merge-")
-            .tempdir_in(common)?;
+            .prefix(MERGE_DIR_PREFIX)
+            .tempdir_in(&common)?;
+        let lock = lock_file(&dir.path().join("lock"))?;
+        lock.lock()?;
         let path = dir.path().join("tree");
         git::command(repo)
             .args([
@@ -48,7 +63,32 @@ impl MergedCheckout {
             repo: repo.to_owned(),
             path,
             _dir: dir,
+            _lock: lock,
         })
+    }
+
+    /// Remove the checkouts earlier merges left behind when they were killed
+    /// during their checks. A directory whose lock is held belongs to a live
+    /// merge and stays.
+    fn sweep(repo: &Path, common: &Path) -> Result<()> {
+        for entry in std::fs::read_dir(common)? {
+            let dir = entry?.path();
+            let leftover = dir
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(MERGE_DIR_PREFIX))
+                && lock_file(&dir.join("lock")).is_ok_and(|lock| lock.try_lock().is_ok());
+            if leftover {
+                let _ = git::command(repo)
+                    .args(["worktree", "remove", "--force"])
+                    .arg(dir.join("tree"))
+                    .output();
+                std::fs::remove_dir_all(&dir)
+                    .with_context(|| format!("could not remove leftover {}", dir.display()))?;
+            }
+        }
+        git::git_output(repo, &["worktree", "prune"])?;
+        Ok(())
     }
 }
 impl Drop for MergedCheckout {
@@ -58,6 +98,18 @@ impl Drop for MergedCheckout {
             .arg(&self.path)
             .output();
     }
+}
+
+const MERGE_DIR_PREFIX: &str = "atelier-merge-";
+
+fn lock_file(path: &Path) -> Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .with_context(|| format!("could not open {}", path.display()))
 }
 
 /// Git's merge of the work branch into the base, refused on any conflict.

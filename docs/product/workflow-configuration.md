@@ -123,7 +123,8 @@ commit: if the base has moved on, merge it into the work branch with ordinary
 Git and renew any proof or approval made stale by the merge. Under
 `merge_commit`, a branch that merges cleanly into the current base lands as a
 merge commit, the only commit Atelier creates, after `merge_checks`, which
-must include a `shell.check`, pass on the merged tree; see [reviews and merge](reviews-and-merge.md). Rebase only before
+must include a `shell.check`, pass on the merged tree, in a temporary checkout
+that reuses no build cache; see [reviews and merge](reviews-and-merge.md). Rebase only before
 any review is recorded: rebasing rewrites the commits review records pin.
 
 Consult the workflow parser and command help for exact schema fields. See

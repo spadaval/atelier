@@ -2477,6 +2477,51 @@ fn fast_forward_strategy_names_records_only_base_commits_it_cannot_land_on() {
     );
 }
 
+fn leftovers(fixture: &Fixture) -> Vec<std::path::PathBuf> {
+    fs::read_dir(fixture.path().join(".git"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("atelier-merge-")
+        })
+        .collect()
+}
+
+#[test]
+fn merge_commit_strategy_removes_the_checkout_an_interrupted_merge_left_behind() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    let marks = tempdir().unwrap();
+    let mark = marks.path().join("killed");
+    // The first run kills atelier itself during its checks, so no cleanup runs.
+    merge_commit_policy(
+        &fixture,
+        &[&format!(
+            "test -e {mark} || {{ touch {mark}; kill -KILL $PPID; }}",
+            mark = mark.display()
+        )],
+    );
+    let (passed, _) = cli(fixture.path(), &["merge", &fixture.id]);
+    assert!(!passed && mark.exists());
+    assert_eq!(leftovers(&fixture).len(), 1);
+    assert_eq!(worktrees(fixture.path()), 2);
+    // A checkout whose lock a live merge holds is not a leftover.
+    let live = fixture.path().join(".git/atelier-merge-live");
+    fs::create_dir(&live).unwrap();
+    let held = fs::File::create(live.join("lock")).unwrap();
+    fs2::FileExt::lock_exclusive(&held).unwrap();
+    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert_eq!(leftovers(&fixture), vec![live.clone()]);
+    assert_eq!(worktrees(fixture.path()), 1);
+    drop(held);
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(leftovers(&fixture).is_empty());
+    assert_eq!(worktrees(fixture.path()), 1);
+}
+
 #[test]
 fn merge_commit_strategy_needs_merge_checks_to_prove_the_merged_tree() {
     let fixture = Fixture::new();
