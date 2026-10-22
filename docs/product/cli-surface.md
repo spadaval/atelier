@@ -82,6 +82,8 @@ branch records. Run `atelier land` before a session handoff and
 
 `review record`, `approve`, `finding`, and `trivial` require an owner, explicit
 `--identity`, and summary. `review disposition` appends a finding decision.
+`review request <id>` prints the reviewer brief for an owner (see
+[requesting a review](reviews-and-merge.md#requesting-a-review)).
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
 
 `status` orients a session; `land [id] [--install]` checks committed records and

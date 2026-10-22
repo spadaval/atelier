@@ -90,6 +90,22 @@ enum ReviewCommands {
         #[command(flatten)]
         record_commit: RecordCommitArgs,
     },
+    /// Print the brief an independent reviewer is given for an item
+    ///
+    /// The item's Goal and Done when, the commits to review, earlier
+    /// findings, dispositions and reviews, recorded proof, the working rules
+    /// from policy, and the commands that record the review. It never
+    /// includes the author's notes or Close Reason.
+    Request {
+        /// Branch owner, or an item of the owner's parent, to be reviewed
+        id: String,
+        /// The name the reviewer records under, filled into the commands
+        #[arg(long)]
+        identity: Option<String>,
+        /// Review the commits after this one [default: since the last review]
+        #[arg(long)]
+        from: Option<String>,
+    },
     /// List review events, for one owner or all
     List {
         /// Owner or issue ID; omit to list every event
@@ -838,6 +854,9 @@ fn run() -> Result<()> {
                         quiet,
                     )?;
                     group.finish("disposition", quiet)
+                }
+                ReviewCommands::Request { id, identity, from } => {
+                    commands::review_request::run(&id, identity.as_deref(), from.as_deref(), quiet)
                 }
                 ReviewCommands::List { id, json } => {
                     commands::review::list(id.as_deref(), json, quiet)

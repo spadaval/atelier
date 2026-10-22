@@ -49,6 +49,32 @@ Terminal targets and their eligible review clusters can leave the active tree
 together through [protected prune](retention-and-prune.md); retained events
 remain immutable.
 
+## Requesting a review
+
+`atelier review request <id> [--identity <name>] [--from <rev>]` prints the
+brief to give an independent reviewer, as dense Markdown (ADR 0022), so the
+orchestrator does not hand-write it. `<id>` is the branch owner or one of its
+children; run it from the owner's worktree. The brief holds only what comes
+from records, Git and policy:
+
+- the owner's Goal and Done when, and each child's Done when;
+- the range to review: the commits since the last `review` or `approve` on the
+  owner (or after `--from`), and the whole branch since it left the base, with
+  the full head commit to pin records to;
+- every finding with its latest disposition, open ones first, earlier reviews
+  and approvals, and the newest recorded proof;
+- the working rules: the built-in ones (read-only on code, run the proof,
+  approve only without `fix_now` findings, an identity that differs from the
+  authors), the base policy's `merge_checks` commands, and the text of the
+  file named by `[review] rules_file` in `.atelier/config.toml`, a
+  repository-relative Markdown path where a repository keeps rules the
+  reviewer needs, such as where to put scratch files;
+- the `review finding` and `review approve` commands, pinned to the head and
+  using `--commit-records`, with `--identity` filled in when given.
+
+It never includes the author's notes or Close Reason: a reviewer judges the
+change against the requirements, not the author's account of it.
+
 ## Approval freshness
 
 Code, policy, acceptance, relationship, metadata, or existing proof/review edits

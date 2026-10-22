@@ -17,6 +17,7 @@ pub mod merge;
 pub mod migrate;
 pub mod mission_review;
 pub mod review;
+pub mod review_request;
 
 pub(crate) mod git;
 pub mod session;

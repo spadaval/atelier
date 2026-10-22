@@ -267,6 +267,7 @@ refusal of it leaves stdout empty:
 | `evidence show` | `<id> <result>` |
 | `evidence list`, `review list` | IDs, one per line |
 | `review record`, `approve`, `finding`, `trivial`, `disposition` | the new event's ID |
+| `review request` | the range to review, `<from>..<head>` in full commits |
 | `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |
 | `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit |
 | `bundle apply` | the IDs of the records it created or updated, one per line |
