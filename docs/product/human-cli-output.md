@@ -212,7 +212,10 @@ land: refused — 2 checks (land_records_uncommitted, land_base_unreviewed)
 ```
 
 The line is the command name, `passed` or `refused`, and on refusal the count
-and codes of the checks that failed. `land --push` appends what happened to
+and codes of the checks that failed. A command that finished its work but
+leaves a gate it does not own unmet says so in the line instead of `passed`:
+`merge --sync` ends `merge: synced — approval needs fresh review` (exit
+status zero) when the approval it reported is stale. `land --push` appends what happened to
 the push: `land: passed, pushed to origin/<branch>` or `land: refused — 1
 check (land_push_failed), nothing pushed`. It is the last line of the combined
 output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
@@ -220,7 +223,8 @@ command's exit status is the pipe's last command's, so check `$?` before
 acting on it. Each command adopts the line in its own item: `land` prints it since
 atelier-ecah (a refusal counts one check, the one that stopped it, until
 atelier-bvl3 and atelier-9jr8 list every failed check), `merge --sync` since
-atelier-s2ei (`merge: passed`, or `merge: refused — 1 check (sync_conflict)`),
+atelier-s2ei (`merge: passed`, `merge: synced — approval needs fresh review`, or `merge:
+refused — 1 check (sync_conflict)`),
 `merge` and `merge --check` in atelier-6rh7,
 `evidence record` in atelier-3ekh, `check` in atelier-4t5l, `start` in
 atelier-501y, and `doctor` in atelier-rc8j.

@@ -3025,12 +3025,25 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
         git(fixture.path(), &["commit", "-q", "--no-edit"]);
         let merge = git(fixture.path(), &["rev-parse", "HEAD"]);
         let (passed, out, err) = sync(fixture.path(), &fixture.id);
+        // The approval is left stale, so the verdict says so, not "passed".
         assert!(
-            passed && verdict(&out) == "merge: passed",
+            passed && verdict(&out) == "merge: synced — approval needs fresh review",
             "{strategy}: {out}\n{err}"
         );
-        assert!(out.contains("already contains main"), "{out}");
+        assert!(
+            out.contains(&format!(
+                "Resuming after a merge of main made by hand ({}); rerunning the receipts that were current before it.",
+                &merge[..8]
+            )) && !out.contains("nothing to merge"),
+            "{out}"
+        );
         assert!(out.contains("Rerunning 1 command-backed receipt:"), "{out}");
+        // The command is named before it starts running.
+        let running = format!("  running {}: sh -c 'test -f src.rs'", fixture.id);
+        assert!(
+            out.find(&running).unwrap() < out.find("  pass ").unwrap(),
+            "{out}"
+        );
         let line = format!(
             "Approval needs fresh review: {} first went stale at {} (it was current before this sync). Review 1 path, then record a fresh approval:",
             fixture_approval_id(&fixture),
@@ -3103,6 +3116,7 @@ fn sync_names_the_commit_that_staled_the_approval_before_the_sync_and_every_path
     git(fixture.path(), &["commit", "-q", "--no-edit"]);
     let (passed, out, err) = sync(fixture.path(), &fixture.id);
     assert!(passed, "{out}\n{err}");
+    assert_eq!(verdict(&out), "merge: synced — approval needs fresh review");
     let line = format!(
         "Approval needs fresh review: {} first went stale at {} (it was already stale before this sync). Review 2 paths, then record a fresh approval:",
         fixture_approval_id(&fixture),
