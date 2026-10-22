@@ -2876,6 +2876,18 @@ fn command_receipts(fixture: &Fixture) -> Vec<String> {
         .filter_map(|record| record.data.command.clone())
         .collect()
 }
+fn fixture_approval_id(fixture: &Fixture) -> String {
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let id = index
+        .reviews()
+        .find(|review| matches!(review.event, atelier_core::ReviewEvent::Approval))
+        .unwrap()
+        .header
+        .id
+        .clone();
+    id
+}
 fn verdict(stdout: &str) -> &str {
     stdout.lines().last().unwrap_or_default()
 }
@@ -3011,6 +3023,7 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
         fs::write(fixture.path().join("src.rs"), "resolved code\n").unwrap();
         git(fixture.path(), &["add", "."]);
         git(fixture.path(), &["commit", "-q", "--no-edit"]);
+        let merge = git(fixture.path(), &["rev-parse", "HEAD"]);
         let (passed, out, err) = sync(fixture.path(), &fixture.id);
         assert!(
             passed && verdict(&out) == "merge: passed",
@@ -3018,12 +3031,12 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
         );
         assert!(out.contains("already contains main"), "{out}");
         assert!(out.contains("Rerunning 1 command-backed receipt:"), "{out}");
-        assert!(
-            out.contains("Approval needs fresh review:")
-                && out.contains("went stale at")
-                && out.contains("  src.rs"),
-            "{out}"
+        let line = format!(
+            "Approval needs fresh review: {} first went stale at {} (it was current before this sync). Review 1 path, then record a fresh approval:",
+            fixture_approval_id(&fixture),
+            &merge[..8]
         );
+        assert!(out.contains(&format!("{line}\n  src.rs")), "{line}\n{out}");
         let (_, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
         assert!(checked.contains("FAIL review.current"), "{checked}");
     }
@@ -3071,4 +3084,79 @@ fn sync_refuses_a_dirty_checkout_and_conflicts_with_check() {
     );
     let (passed, _) = cli(fixture.path(), &["merge", &fixture.id, "--sync", "--check"]);
     assert!(!passed);
+}
+
+#[test]
+fn sync_names_the_commit_that_staled_the_approval_before_the_sync_and_every_path() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "test -f src.rs",
+        ("src.rs", "base code\n"),
+    );
+    fs::write(fixture.path().join("b.rs"), "unreviewed\n").unwrap();
+    commit(fixture.path(), "unreviewed code after the approval");
+    let unreviewed = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let (passed, _, _) = sync(fixture.path(), &fixture.id);
+    assert!(!passed);
+    fs::write(fixture.path().join("src.rs"), "resolved code\n").unwrap();
+    git(fixture.path(), &["add", "."]);
+    git(fixture.path(), &["commit", "-q", "--no-edit"]);
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    let line = format!(
+        "Approval needs fresh review: {} first went stale at {} (it was already stale before this sync). Review 2 paths, then record a fresh approval:",
+        fixture_approval_id(&fixture),
+        &unreviewed[..8]
+    );
+    assert!(out.contains(&format!("{line}\n  b.rs\n  src.rs")), "{out}");
+}
+
+#[test]
+fn sync_reports_a_rerun_that_errors_with_a_code_and_still_reports_the_approval() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "if test -f other.rs; then touch stray.txt; fi",
+        ("other.rs", "landed\n"),
+    );
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(!passed, "{out}");
+    assert_eq!(verdict(&out), "merge: refused — 1 check (sync_rerun_error)");
+    assert!(
+        err.contains("sync_rerun_error: could not rerun the receipt for")
+            && err.contains("changed code or policy"),
+        "{err}"
+    );
+    assert!(out.contains("Approval kept:"), "{out}");
+    // No receipt is left uncommitted.
+    assert_eq!(
+        git(fixture.path(), &["status", "--porcelain"]),
+        "?? stray.txt"
+    );
+}
+
+#[test]
+fn sync_lists_only_the_in_scope_record_a_clean_base_merge_changed() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "test -f src.rs",
+        ("other.rs", "landed\n"),
+    );
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let record = fixture
+        .path()
+        .join(format!(".atelier/issues/{}.md", fixture.id));
+    let text = fs::read_to_string(&record).unwrap();
+    assert!(text.contains("Ship change."));
+    fs::write(&record, text.replace("Ship change.", "Ship the change.")).unwrap();
+    commit(fixture.path(), "base edits the owner record");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    assert!(
+        out.contains(&format!(
+            "Review 1 path, then record a fresh approval:\n  .atelier/issues/{}.md",
+            fixture.id
+        )),
+        "{out}"
+    );
 }

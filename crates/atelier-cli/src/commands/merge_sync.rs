@@ -18,6 +18,8 @@ use std::path::Path;
 
 const CONFLICT: &str = "sync_conflict";
 const RERUN_FAILED: &str = "sync_rerun_failed";
+const RERUN_ERROR: &str = "sync_rerun_error";
+const APPROVAL_ERROR: &str = "sync_approval_error";
 const LISTED_PATHS: usize = 20;
 
 /// A command-backed receipt to rerun: the latest passing one for a command on
@@ -146,31 +148,47 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
         ));
     }
     for receipt in &receipts.rerun {
-        let command = evidence::split_command(&receipt.command)?;
         let summary = format!("{} (rerun after merging {base})", receipt.summary);
-        let record = evidence::capture_record(CaptureOptions {
-            evidence_kind: &receipt.kind,
-            summary: Some(&summary),
-            path: None,
-            uri: None,
-            producer: Some("atelier merge --sync"),
-            target_kind: Some("issue"),
-            target_id: Some(&receipt.target),
-            role: &receipt.role,
-            command: &command,
-            criteria: &receipt.criteria,
-            quiet: true,
-        })?;
-        let passed = record.data.result == EvidenceResult::Pass;
-        say(format!(
-            "  {} {} {}: {}",
-            if passed { "pass" } else { "FAIL" },
-            record.header.id,
-            receipt.target,
-            receipt.command
-        ));
-        if !passed {
-            failures.push(Some(RERUN_FAILED.to_owned()));
+        let rerun = evidence::split_command(&receipt.command).and_then(|command| {
+            // Rerun only a command that reads back as the one recorded.
+            if evidence::format_command(&command) != receipt.command {
+                bail!("the recorded command does not read back as the one it was captured from");
+            }
+            evidence::capture_record(CaptureOptions {
+                evidence_kind: &receipt.kind,
+                summary: Some(&summary),
+                path: None,
+                uri: None,
+                producer: Some("atelier merge --sync"),
+                target_kind: Some("issue"),
+                target_id: Some(&receipt.target),
+                role: &receipt.role,
+                command: &command,
+                criteria: &receipt.criteria,
+                quiet: true,
+            })
+        });
+        match rerun {
+            Ok(record) => {
+                let passed = record.data.result == EvidenceResult::Pass;
+                say(format!(
+                    "  {} {} {}: {}",
+                    if passed { "pass" } else { "FAIL" },
+                    record.header.id,
+                    receipt.target,
+                    receipt.command
+                ));
+                if !passed {
+                    failures.push(Some(RERUN_FAILED.to_owned()));
+                }
+            }
+            Err(error) => {
+                eprintln!(
+                    "{RERUN_ERROR}: could not rerun the receipt for {} ({}): {error:#}",
+                    receipt.target, receipt.command
+                );
+                failures.push(Some(RERUN_ERROR.to_owned()));
+            }
         }
     }
     if !receipts.manual.is_empty() {
@@ -180,7 +198,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
         ));
     }
     if !receipts.rerun.is_empty() {
-        let status = text(repo, &["status", "--porcelain", "--untracked-files=all"])?;
+        let status = text(repo, &["status", "--porcelain", "--", ".atelier"])?;
         if !status.is_empty() {
             git::git_output(repo, &["add", "-A", "--", ".atelier"])?;
             git::git_output(
@@ -200,7 +218,10 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<Vec<Option<String>>> {
         }
     }
 
-    report_approval(repo, &layout, &owner, &base_head, before.as_deref(), say)?;
+    if let Err(error) = report_approval(repo, &layout, &owner, &base_head, before.as_deref(), say) {
+        eprintln!("{APPROVAL_ERROR}: could not tell whether the approval survived: {error:#}");
+        failures.push(Some(APPROVAL_ERROR.to_owned()));
+    }
     if failures.is_empty() {
         say(format!("Next: atelier merge {issue_ref} --check"));
     }
@@ -312,7 +333,7 @@ fn ancestor(repo: &Path, earlier: &str, later: &str) -> bool {
 }
 
 /// Says whether an approval of the owner's scope survived, by the rule the
-/// gates use (`approval_accepted`, `approval_stale_edge`), and when not,
+/// gates use (`approval_accepted`, `approval_stale_edges`), and when not,
 /// which paths the new review has to read.
 fn report_approval(
     repo: &Path,
@@ -327,7 +348,7 @@ fn report_approval(
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
         CommittedSnapshot::new(&head)?
-            .read_record_files(repo, true)?
+            .read_record_files(repo, false)?
             .0
             .into_index()?
     };
@@ -342,16 +363,20 @@ fn report_approval(
                     ReviewEvent::Approval | ReviewEvent::TrivialExemption
                 )
         })
-        .filter(|review| review_gate::approval_accepted(&index, &mut read, review).unwrap_or(false))
         .collect::<Vec<_>>();
     approvals.sort_by_key(|review| (review.header.created_at, review.header.id.clone()));
     let mut stale = Vec::new();
     let mut kept = Vec::new();
     for review in approvals {
-        match review_gate::approval_stale_edge(&mut read, &review.commit, &ids, "HEAD", base_head) {
-            Ok(None) => kept.push(review.header.id.clone()),
-            Ok(Some(edge)) => stale.push((review, edge)),
-            Err(_) => {}
+        if !review_gate::approval_accepted(&index, &mut read, review)? {
+            continue;
+        }
+        let edges =
+            review_gate::approval_stale_edges(&mut read, &review.commit, &ids, "HEAD", base_head)?;
+        if edges.is_empty() {
+            kept.push(review.header.id.clone());
+        } else {
+            stale.push((review, edges));
         }
     }
     if !kept.is_empty() {
@@ -361,7 +386,7 @@ fn report_approval(
         ));
         return Ok(());
     }
-    let Some((review, (commit, paths))) = stale.pop() else {
+    let Some((review, edges)) = stale.pop() else {
         say(format!(
             "No accepted approval covers {owner}'s scope yet; there is none to keep."
         ));
@@ -371,17 +396,26 @@ fn report_approval(
     let was_current = match (before, fork) {
         (Some(before), Some(fork)) => {
             let mut earlier = git::ReadContext::from_snapshot(repo, before.to_owned(), &[]);
-            review_gate::approval_stale_edge(&mut earlier, &review.commit, &ids, "HEAD", &fork)
-                .is_ok_and(|edge| edge.is_none())
+            review_gate::approval_is_current_to(&mut earlier, &review.commit, &ids, "HEAD", &fork)
+                .unwrap_or(false)
         }
         _ => false,
     };
+    let mut paths = edges
+        .iter()
+        .flat_map(|(_, paths)| paths.iter().cloned())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
     say(format!(
-        "Approval needs fresh review: {} {} since {}; it {}. Review {}, then record a fresh approval:",
+        "Approval needs fresh review: {} first went stale at {} ({}). Review {}, then record a fresh approval:",
         review.header.id,
-        if was_current { "went stale at" } else { "was already stale at" },
-        crate::human_output::short_commit(&commit),
-        if was_current { "was current before this sync" } else { "was not current before this sync either" },
+        crate::human_output::short_commit(&edges[0].0),
+        if was_current {
+            "it was current before this sync"
+        } else {
+            "it was already stale before this sync"
+        },
         count_noun(paths.len(), "path"),
     ));
     for path in paths.iter().take(LISTED_PATHS) {

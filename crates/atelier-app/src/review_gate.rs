@@ -182,42 +182,78 @@ pub fn approval_is_current_to(
     end: &str,
     base: &str,
 ) -> Result<bool> {
-    Ok(approval_stale_edge(read, pin, ids, end, base)?.is_none())
+    for (edge, merge) in work_edges(read, pin, end, base)? {
+        if !edge_allowed(read, &edge, merge.as_ref(), ids)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
-/// The first commit after `pin` that makes the approval stale at `end`, with
-/// the paths a new review has to look at, or `None` while it is current.
-/// It is the rule of [`approval_is_current_to`], so what `merge --sync`
-/// reports as needing review is exactly what makes the approval stale. For a
-/// merge, the paths are those it resolved by hand or edited beyond Git's own
-/// merge, or else what it changed against its first parent.
-pub fn approval_stale_edge(
+fn edge_allowed(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    merge: Option<&git::MergeResolution>,
+    ids: &BTreeSet<String>,
+) -> Result<bool> {
+    match merge {
+        Some(merge) => allowed_base_merge(read, edge, merge, ids),
+        None => allowed_edge(read, edge, ids),
+    }
+}
+
+/// Every commit of the branch (not of the base) after `pin` that makes the approval stale at `end`, oldest
+/// first, each with the paths a new review has to look at; empty while the
+/// approval is current. It applies the rule of [`approval_is_current_to`] to
+/// each edge, so what `merge --sync` reports as needing review is exactly
+/// what makes the approval stale, but unlike that check it computes the
+/// paths. For a merge they are those it resolved by hand or edited beyond
+/// Git's own merge, plus in-scope records it changed; for any other commit,
+/// what it changed.
+pub fn approval_stale_edges(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     ids: &BTreeSet<String>,
     end: &str,
     base: &str,
-) -> Result<Option<(String, Vec<std::path::PathBuf>)>> {
-    for (edge, merge) in work_edges(read, pin, end, base)? {
-        let allowed = match &merge {
-            Some(merge) => allowed_base_merge(read, &edge, merge, ids)?,
-            None => allowed_edge(read, &edge, ids)?,
-        };
-        if !allowed {
-            let hand_made = if edge.sides.is_empty() {
-                Vec::new()
-            } else {
-                git::hand_resolved_paths(read.repo, &edge.commit)?
-            };
-            let paths = if hand_made.is_empty() {
+) -> Result<Vec<(String, Vec<std::path::PathBuf>)>> {
+    let mut stale = Vec::new();
+    // Edges come newest first.
+    for (edge, merge) in work_edges(read, pin, end, base)?.into_iter().rev() {
+        // A commit the base already holds is reviewed there; when a merge
+        // brings it in unaccepted, the merge is what to report.
+        if ancestor(read, &edge.commit, base) || edge_allowed(read, &edge, merge.as_ref(), ids)? {
+            continue;
+        }
+        let paths = if edge.sides.is_empty() {
+            edge.paths
+        } else {
+            let mut paths = git::hand_resolved_paths(read.repo, &edge.commit)?;
+            paths.extend(
+                edge.paths
+                    .iter()
+                    .filter(|path| in_scope_issue(path, ids))
+                    .cloned(),
+            );
+            paths.sort();
+            paths.dedup();
+            if paths.is_empty() {
                 edge.paths
             } else {
-                hand_made
-            };
-            return Ok(Some((edge.commit, paths)));
-        }
+                paths
+            }
+        };
+        stale.push((edge.commit, paths));
     }
-    Ok(None)
+    Ok(stale)
+}
+
+fn in_scope_issue(path: &Path, ids: &BTreeSet<String>) -> bool {
+    path.parent() == Some(Path::new(".atelier/issues"))
+        && path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|id| ids.contains(id))
 }
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an

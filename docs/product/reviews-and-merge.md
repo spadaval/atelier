@@ -192,7 +192,7 @@ or `--json`.
   and left as recorded.
 - **Approval.** The output says `Approval kept`, by the rule above
   (`approval_accepted` and `approval_is_current_to`), or `Approval needs fresh
-  review` with the first commit that made it stale and the paths to review,
+  review` with the first commit that made it stale and the paths of every stale commit to review,
   namely the files a merge resolved or edited by hand. A stale approval does
   not refuse the sync; it is the reviewer's next step.
 - **Strategies.** The sync is the same under both. Under `fast_forward_only`

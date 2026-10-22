@@ -932,7 +932,7 @@ fn display_target_kind(_index: &RecordIndex, kind: &str, _id: &str) -> Result<St
     Ok(kind.to_string())
 }
 
-fn format_command(args: &[String]) -> String {
+pub fn format_command(args: &[String]) -> String {
     args.iter()
         .map(|arg| quote_command_arg(arg))
         .collect::<Vec<_>>()
