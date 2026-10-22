@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Record where a follow-up was found with a discovered_from link"
-updated_at: "2026-10-18T06:31:27.971725108+00:00"
+updated_at: "2026-10-22T19:58:19.883228985+00:00"
 ---
 
 ## Goal

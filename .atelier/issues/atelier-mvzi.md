@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Warn before pushing base commits made by another owner"
-updated_at: "2026-10-17T19:00:36.348421427+00:00"
+updated_at: "2026-10-22T19:58:19.479624525+00:00"
 ---
 
 ## Goal

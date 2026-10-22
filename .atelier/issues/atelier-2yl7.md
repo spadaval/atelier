@@ -12,13 +12,16 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-6mgg"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-k8h8"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Default to merge_commit merging when the repository defines a test check"
-updated_at: "2026-10-17T19:00:36.350119527+00:00"
+updated_at: "2026-10-22T19:58:19.278824634+00:00"
 ---
 
 ## Goal

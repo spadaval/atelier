@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Pin merge checks to the merged checkout's own target directory"
-updated_at: "2026-10-17T15:51:59.572033649+00:00"
+updated_at: "2026-10-22T19:58:19.144250530+00:00"
 ---
 
 ## Goal

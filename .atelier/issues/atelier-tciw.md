@@ -25,9 +25,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show each waiting branch's merge readiness against the current base in status"
-updated_at: "2026-10-17T01:36:20.485223894+00:00"
+updated_at: "2026-10-22T19:58:18.943028061+00:00"
 ---
 
 ## Goal

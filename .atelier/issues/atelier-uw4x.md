@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make merge refuse a done claim that land will refuse"
-updated_at: "2026-10-17T19:00:36.343866065+00:00"
+updated_at: "2026-10-22T19:58:16.470320602+00:00"
 ---
 
 ## Goal

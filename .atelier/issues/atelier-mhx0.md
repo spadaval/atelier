@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Refuse a work branch whose type prefix does not match the issue"
-updated_at: "2026-10-17T19:00:36.356125467+00:00"
+updated_at: "2026-10-22T19:58:19.614469704+00:00"
 ---
 
 ## Goal

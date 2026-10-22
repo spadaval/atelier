@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Find review records that were created inside a merge commit"
-updated_at: "2026-10-22T19:44:07.832418357+00:00"
+updated_at: "2026-10-22T19:58:16.324251875+00:00"
 ---
 
 ## Goal

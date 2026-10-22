@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Scale independent review to docs-only and low-risk changes"
-updated_at: "2026-10-17T19:00:36.353984020+00:00"
+updated_at: "2026-10-22T19:58:17.797301969+00:00"
 ---
 
 ## Goal

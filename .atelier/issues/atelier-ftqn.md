@@ -14,16 +14,18 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-4pzj"
+    id: "atelier-k8h8"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Render other local branches as a dense section of the status page"
-updated_at: "2026-10-17T01:10:57.982420201+00:00"
+updated_at: "2026-10-22T19:58:19.010780625+00:00"
 ---
 
 ## Goal
+
+Partly done as of 2026-10-22: the block is already a `-----` section inside the status page and before Next, titled `Other Local Work Branches (committed records)`. The rows, the unowned-branch line and the approval mark below are what remain.
 
 status.rs:38-44 calls `print_page` a second time, so the branches block gets a page-title `=====` underline where every other section uses `-----`. It also follows the Next Actions footer with no blank line:
 ```
