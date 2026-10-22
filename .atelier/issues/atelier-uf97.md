@@ -95,11 +95,11 @@ updated_at: "2026-10-17T01:44:17.636200248+00:00"
 
 ## Success criteria
 
-- S1: `issue show` shows branch, proof, review and mission state. `issue list` marks blocked and needs-human items, lists open work before done work, and takes several filter values (atelier-jcki, atelier-l9ty, atelier-pu2i, atelier-5qep, atelier-lehs, atelier-yzuv). Shown by CLI tests.
+- S1: `issue show` shows branch, proof, review and mission state. `issue list` marks blocked and needs-human items, lists open work before done work, and takes several filter values. Each link counts once in the Relationships line, and a cycle error names the issues and the role (atelier-jcki, atelier-l9ty, atelier-pu2i, atelier-5qep, atelier-lehs, atelier-yzuv, atelier-t18i). Shown by CLI tests.
 - S2: Mutations confirm the resulting values and the next step. Closing an item says what its done claim still needs before it can merge. Transition options render one per line, and the `--reason` and link-role errors say what to use instead (atelier-7ebi, atelier-8bve, atelier-4ppu, atelier-6gpl, atelier-e6fl, atelier-9pa6, atelier-ceu3, atelier-rh0d). Shown by CLI tests.
 - S3: `issue create` refuses work items without a real Done when, and directional links keep their direction (atelier-k55o, atelier-dmh5). Shown by tests.
 - S4: `start` shows the item's title, acceptance and mission when it succeeds. A refusal reports one line per blocker. Parked items are refused. Hints point at `atelier start`. Start creates the owner worktree or shows the owner branch (atelier-501y, atelier-oxnw, atelier-hugc, atelier-xw8r, atelier-e151). Shown by CLI tests.
-- S5: `issue update --section` replaces one body section, and a drafted record file can be validated and imported. Issues can be searched by text (atelier-cj54, atelier-rz2l, atelier-fpxc). Shown by CLI tests.
+- S5: `issue update --section` replaces one body section, and a drafted record file can be validated and imported. Issues can be searched by text. `issue create` and `issue update` take `--body-file`, and deciding a decision record uses its Decision section as the close reason (atelier-cj54, atelier-rz2l, atelier-fpxc, atelier-sxcj, atelier-49eo). Shown by CLI tests.
 - S6: Claude Code transcripts recorded after S1-S5 land show `issue show` and `issue list` piped through head, grep, sed or tail in under a third of runs. Shown by a dated note with the counts.
 
 ## Background

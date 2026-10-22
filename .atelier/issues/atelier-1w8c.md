@@ -23,19 +23,14 @@ relationships:
     id: "atelier-ihns"
     type: "advances"
   - kind: "issue"
-    id: "atelier-jjvc"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-majk"
-    type: "advances"
-  - kind: "issue"
     id: "atelier-sdb0"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-22T19:48:25.496089572+00:00"
+status: "superseded"
 title: "Orient a session from one view: ADR 0022 follow-ups"
-updated_at: "2026-10-17T04:01:55.233550033+00:00"
+updated_at: "2026-10-22T19:48:25.496089572+00:00"
 ---
 
 ## Outcome
@@ -60,3 +55,7 @@ ADR 0022 (atelier-bw0b, on branch task/atelier-bw0b, proposed) is the governing 
 - 2026-10-17 [note] 2026-10-16: atelier-o3lm was split by surface; the status-page and work-view items it held now sit in atelier-4pzj, which follows this mission.
 - 2026-10-17 [note] 2026-10-16: Activated. ADR 0022 was accepted and atelier-bw0b merged to master, so the Background's 'proposed, on branch task/atelier-bw0b' no longer holds. Plan: sdb0 and 7u4o in parallel (disjoint surfaces), then 7n5u, ihns, deyy in sequence; jjvc stays in backlog until adopters' hooks stop calling prime.
 - 2026-10-17 [note] 2026-10-17: All five ready items merged to master (sdb0, 7u4o, 7n5u, ihns, deyy), each independently reviewed. Independent validation on master 8b26bfe3: S1, S2, S4, S5 pass; S3 fails as worded only for work missions (4 lines per mission), where atelier-lkuy in atelier-4pzj specifies at most four lines - decision for Sumeet whether S3 excludes work missions or lkuy changes. Outcome gaps found are tracked in atelier-4pzj: 8g9d (name missions in status), 46nq (name Needs a Human items), ftqn (dense other-branches section), 1ci8 (owner listed three times), oyzb (omission hints), 3i7x (branch read cost), and new atelier-mfyd (ready count includes in-flight work). S6 waits for later transcripts. jjvc stays in backlog until astromech's hook stops calling prime; majk waits on atelier-r6bt.
+
+## Close Reason
+
+Absorbed into atelier-4pzj on 2026-10-22 at the human's direction. sdb0, 7u4o, 7n5u, ihns and deyy merged with independent review. S1, S2, S4 and S5 pass (atelier-9o3d). S3 fails only for work missions, which spend four lines per mission (atelier-3zwm); atelier-lkuy in atelier-4pzj carries it. S6 was not measured and moved to atelier-4pzj S5. jjvc and majk moved to atelier-4pzj S6.

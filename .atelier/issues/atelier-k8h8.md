@@ -30,13 +30,15 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
-title: "Integrate parallel work branches without catch-up churn"
-updated_at: "2026-10-17T07:21:34.159463209+00:00"
+title: "Run parallel work through review and merge without churn"
+updated_at: "2026-10-22T19:48:01.789813245+00:00"
 ---
 
 ## Outcome
 
 An orchestrator running several work branches at once can see which branches are ready to land, and what landing each one would take. It brings the base into a branch only when that branch is next, and can let `atelier merge` merge a clean branch into a base that has moved, after checking the merged tree. Records that many branches link to stop conflicting. Lockfile and other generated-file changes still get re-review and re-validation; this mission adds no path exemptions.
+
+The rest of the cycle gets cheaper too. Approvals stay current across changes that do not touch reviewed code. Review effort matches the change. A step's records reach the base in one commit. Pushing and starting work cannot quietly go wrong, and merge refuses what land would refuse.
 
 ## Success criteria
 
@@ -46,10 +48,17 @@ An orchestrator running several work branches at once can see which branches are
 - S4: Linking new work to a shared mission or blocker leaves that record unchanged (atelier-ihss). Shown by a test.
 - S5: An owned branch does not trust local base commits that no land has checked (atelier-kops). Shown by a land test.
 - S6: In an orchestrated run with at least five parallel branches, catch-up merges average at most one per landed branch. The 2026-10-16 baseline is astromech-cmhv's 16 catch-up merges, half of them needing a re-review. Shown by a count from the run's git history, recorded as a dated note.
+- S7: An approval stays current when a follow-up is linked to its mission and across a close commit that touches only the item's record (atelier-iaas, atelier-n642). Shown by merge and land tests.
+- S8: Review effort matches the change: docs-only and low-risk changes get a lighter route, low-priority follow-ups can share one branch and one review, `atelier review request` writes the reviewer brief, and a follow-up records where it was found (atelier-1mn2, atelier-u6f3, atelier-rc8p, atelier-tq1j). Shown by CLI tests and the Agent Factory review guidance.
+- S9: A step's records reach the base in one commit, and planning text reaches the base without a full work-branch cycle (atelier-4ixu, atelier-mbrf). Shown by tests.
+- S10: `land --push` pushes only after a passing land, and pushing warns about base commits made by another owner. `start` takes an explicit base from any checkout, refuses a branch whose type prefix does not match the issue, and warns when another live session holds the item (atelier-ecah, atelier-mvzi, atelier-yc4d, atelier-mhx0, atelier-81e5). Shown by CLI tests.
+- S11: `merge` refuses a done claim that `land` will refuse, runs its checks in the merged checkout's own target directory, and cleans up merged-tree checkouts after an interrupted merge. Land's per-review history walks are batched (atelier-uw4x, atelier-isyf, atelier-rcnk, atelier-7b6e). Shown by merge and land tests.
 
 ## Background
 
-This mission comes from the 2026-10-16 transcript retrospective. In astromech, feature/astromech-cmhv merged main into itself 16 times while it waited 4.5 hours to land, and 8 of those merges needed a fresh independent review. The cause was fast-forward-only merging combined with updating every waiting branch after each landing. Clean base merges have kept approvals since atelier-n7g1, and record-only conflicts since atelier-1isk; the remaining churn is conflict resolutions and lockfile regeneration, which rightly need review. The model is a local GitHub: Atelier writes a commit only when merging. Mission integration branches (atelier-w0su) are related but deferred by the human.
+This mission comes from the 2026-10-16 transcript retrospective. In astromech, feature/astromech-cmhv merged main into itself 16 times while it waited 4.5 hours to land, and 8 of those merges needed a fresh independent review. The cause was fast-forward-only merging combined with updating every waiting branch after each landing. Clean base merges have kept approvals since atelier-n7g1, and record-only conflicts since atelier-1isk; the remaining churn is conflict resolutions and lockfile regeneration, which rightly need review. The model is a local GitHub: Atelier writes a commit only when merging. Mission integration branches (atelier-w0su) are related but deferred by the human; the item sits in this mission's backlog without a criterion.
+
+On 2026-10-22 the human widened this mission to the whole review-and-land cycle. It took the 2026-10-17 retrospective's branch, review, merge, land and start items, which had no mission, so S7-S11 were added.
 
 ## Notes
 

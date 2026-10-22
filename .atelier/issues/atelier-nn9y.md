@@ -9,39 +9,13 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "atelier-08rc"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-0vp3"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-6tmk"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-h90a"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-hfze"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-pxyz"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-rmvb"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-rp1c"
-    type: "advances"
-  - kind: "issue"
-    id: "atelier-t3ko"
-    type: "advances"
+  relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+closed_at: "2026-10-22T19:48:12.376497728+00:00"
+status: "superseded"
 title: "Make init, setup, prune and the policy view report what they did"
-updated_at: "2026-10-17T01:44:18.187502518+00:00"
+updated_at: "2026-10-22T19:48:12.376497728+00:00"
 ---
 
 ## Outcome
@@ -58,3 +32,7 @@ updated_at: "2026-10-17T01:44:18.187502518+00:00"
 ## Background
 
 Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come from that mission's six-surface CLI audit; see atelier-o3lm's Background for the method. The output contract (atelier-o3lm S1, atelier-i2qq) and ADR 0022 (atelier-bw0b) govern how output looks. This repository's own `.claude/settings.json` still ran `bd prime` on 2026-10-16; the fix is on task/atelier-bw0b.
+
+## Close Reason
+
+Merged into atelier-2mky on 2026-10-22 at the human's direction; its nine items and S1-S4 are atelier-2mky's S5-S8.

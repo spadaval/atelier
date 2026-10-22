@@ -11,6 +11,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-4pzj"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-o3lm"
     type: "related"
 schema: "atelier.issue"

@@ -98,7 +98,7 @@ updated_at: "2026-10-17T01:44:17.818841106+00:00"
 - its direct blockers, with inherited ones marked;
 - its mission and parent.
 
-Section counts sit in the headings, and no row is dropped without naming the flag that shows it. `work mission` shows the mission's outcome, what holds it up, and its parent and child structure. `status` reports checkout facts in words and chooses its next actions from the checkout's state. Ready work shows which item unblocks the most. This mission follows atelier-1w8c, which makes `status` the session view and sets the one-line row (atelier-deyy).
+Section counts sit in the headings, and no row is dropped without naming the flag that shows it. `work mission` shows the mission's outcome, what holds it up, and its parent and child structure. `status` reports checkout facts in words and chooses its next actions from the checkout's state. Ready work shows which item unblocks the most. This mission follows atelier-1w8c, which makes `status` the session view and sets the one-line row (atelier-deyy). It took over atelier-1w8c's remaining items and its transcript measure when that mission closed on 2026-10-22.
 
 ## Success criteria
 
@@ -107,7 +107,9 @@ Section counts sit in the headings, and no row is dropped without naming the fla
 - S3: `status` shows active work once with its configured status, and names the missions behind its mission count. The owner block shows every scope item. Status warns when land would fail, renders other branches as a dense section, chooses Next Actions from the checkout's state, and reports branch facts in words (atelier-1ci8, atelier-8g9d, atelier-d2xe, atelier-dvnv, atelier-ftqn, atelier-mi3x, atelier-n831). Shown by session tests.
 - S4: Ready work shows blocker chains and how much each item unblocks (atelier-fdxj). Shown by a fixture test.
 - S5: Claude Code transcripts recorded after S1-S4 land show `status` and `work` views piped through head, grep, sed or tail in under a third of runs. Shown by a dated note with the counts.
+- S6: Session start shows recent tracker activity and a since-commit digest of a mission. In-flight marks are computed without reading each branch's whole tracker. `work missions` shows planned versus built work and backlog health. Docs that exist only on unmerged branches are shown. The deprecated `prime` alias is removed once adopters' hooks stop calling it (atelier-majk, atelier-avx0, atelier-3i7x, atelier-jbwi, atelier-kglz, atelier-jjvc). Shown by session and CLI tests, and a timing recorded as evidence for atelier-3i7x.
+- S7: Repositories can define custom work views declaratively (atelier-e95f). Shown by a CLI test.
 
 ## Background
 
-Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come from that mission's six-surface CLI audit, which built on the human's review of `work missions` and `work mission`; see atelier-o3lm's Background for the method and the transcript scripts. Unblock ranking (atelier-fdxj) was deferred out of atelier-1w8c. The output contract (atelier-o3lm S1, atelier-i2qq) and ADR 0022 (atelier-bw0b) govern how output looks. Where an item here rewrites the same renderer as an atelier-1w8c item, it is blocked by it.
+Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come from that mission's six-surface CLI audit, which built on the human's review of `work missions` and `work mission`; see atelier-o3lm's Background for the method and the transcript scripts. Unblock ranking (atelier-fdxj) was deferred out of atelier-1w8c. The output contract (atelier-o3lm S1, atelier-i2qq) and ADR 0022 (atelier-bw0b) govern how output looks. Where an item here rewrites the same renderer as an atelier-1w8c item, it is blocked by it. S5 also carries atelier-1w8c's S6, whose before-measure was about four runs in five piping atelier output. atelier-lkuy carries the part of atelier-1w8c's S3 that its validation found unmet: `work missions` spends four lines per mission.
