@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Keep approvals and land's scope steady through planning records"
-updated_at: "2026-10-22T21:58:40.715139921+00:00"
+updated_at: "2026-10-22T22:04:27.711229239+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ Planning records written during review do not cost a re-review or a mission-wide
 ## Background
 
 Both children change what the review gate and land's touched-claims scope treat as in scope: `allowed_edge` and approval currency in crates/atelier-app/src/review_gate.rs, and `touched_claims` in crates/atelier-cli/src/commands/session.rs. They build on the shared approval rule from atelier-1ztv (`approval_is_current_to`, `claims.reviewed`, land's approval-validity check) and must keep land and merge agreeing. Since atelier-ihss, links are stored on the declaring record, so linking a new follow-up to its mission writes only the new record.
+
+## Notes
+
+- 2026-10-22 [note] From review of atelier-1ztv (finding atelier-p5qp): docs/product/reviews-and-merge.md:261-264 and the doc comments on approval_accepted and author_identities_to say land judges independence as review.current does. land leaves out authors of every side branch merged into the work branch (original_independent passes HEAD as base), while review.current counts a side branch not on the base. Describe that difference and document the base argument at the call site.
