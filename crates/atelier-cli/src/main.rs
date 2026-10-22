@@ -153,6 +153,10 @@ enum Commands {
     Start {
         /// Issue ID
         id: String,
+        /// Create the owner branch from this local branch, from any checkout
+        /// including a detached HEAD; it must be the policy's base branch
+        #[arg(long)]
+        base: Option<String>,
     },
 
     /// First-class evidence records
@@ -785,9 +789,9 @@ fn run() -> Result<()> {
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
-        Commands::Start { id } => {
+        Commands::Start { id, base } => {
             let (state_dir, index) = load_repository()?;
-            commands::start::run(&index, &state_dir, &id, quiet)
+            commands::start::run(&index, &state_dir, &id, base.as_deref(), quiet)
         }
 
         Commands::Merge { id, check, json } => commands::merge::run(&id, check, json, quiet),

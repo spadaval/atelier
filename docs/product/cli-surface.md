@@ -38,7 +38,7 @@ atelier work decisions <mission-id>
 atelier work parent <parent-id> [--all]
 atelier issue show <id>... [--full]
 atelier issue transition <id>
-atelier start <id>
+atelier start <id> [--base <branch>]
 ```
 
 `issue list` is flat inventory, including objective records; `work` is operational

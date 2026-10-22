@@ -5104,3 +5104,122 @@ fn land_names_unpushed_base_commits_the_owner_did_not_make_before_pushing() {
     let (_, out) = cli(f.path(), &["land"]);
     assert!(!out.contains("Warning: main"), "{out}");
 }
+
+/// A second, unstarted issue committed on `main`, with `main` checked out.
+fn unstarted_on_main(f: &Fixture) -> String {
+    git(f.path(), &["switch", "-q", "main"]);
+    let id = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Second item",
+            "--body",
+            "## Goal\n\nStart from anywhere.\n\n## Done when\n\nIt starts.",
+        ],
+    );
+    commit(f.path(), "plan second item");
+    id
+}
+fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, String)> {
+    f.store()
+        .load_issue_by_id(id)
+        .unwrap()
+        .issue
+        .workflow_branch
+        .map(|branch| (branch.work_branch, branch.branch_base))
+}
+
+#[test]
+fn start_refuses_a_branch_whose_type_prefix_does_not_match_the_issue() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let wrong = format!("feature/{id}");
+    git(f.path(), &["switch", "-q", "-c", &wrong]);
+    let before = git(f.path(), &["status", "--porcelain"]);
+    let (pass, out) = cli(f.path(), &["start", &id]);
+    assert!(
+        !pass && out.contains("start_branch_prefix_mismatch"),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("its branch is 'task/{id}'")) && out.contains("--base main"),
+        "{out}"
+    );
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), wrong);
+    assert_eq!(git(f.path(), &["status", "--porcelain"]), before);
+    assert_eq!(recorded_branch(&f, &id), None);
+}
+
+#[test]
+fn start_with_a_base_creates_the_owner_branch_from_a_detached_head() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let tip = git(f.path(), &["rev-parse", "main"]);
+    git(f.path(), &["switch", "-q", "--detach", "main"]);
+    let (pass, out) = cli(f.path(), &["start", &id]);
+    assert!(
+        !pass && out.contains("start_detached_head") && out.contains("--base"),
+        "{out}"
+    );
+    ok(f.path(), &["start", &id, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
+    assert_eq!(
+        recorded_branch(&f, &id),
+        Some((format!("task/{id}"), "main".into()))
+    );
+    assert_eq!(
+        f.store().load_issue_by_id(&id).unwrap().issue.status,
+        "in_progress"
+    );
+}
+
+#[test]
+fn start_with_a_base_ignores_the_current_branch_and_checks_the_base() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let tip = git(f.path(), &["rev-parse", "main"]);
+    git(f.path(), &["switch", "-q", "-c", &format!("feature/{id}")]);
+    fs::write(f.path().join("stray"), "unrelated commit\n").unwrap();
+    commit(f.path(), "stray work");
+    ok(f.path(), &["start", &id, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
+    assert!(!f.path().join("stray").exists());
+    assert_eq!(recorded_branch(&f, &id).unwrap().1, "main");
+    // Another branch cannot be recorded as the base, and a missing one is named.
+    let second = {
+        git(f.path(), &["switch", "-q", "main"]);
+        git(f.path(), &["branch", "-q", "elsewhere"]);
+        ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                "Third item",
+                "--body",
+                "## Goal\n\nx\n\n## Done when\n\ny",
+            ],
+        )
+    };
+    commit(f.path(), "plan third item");
+    git(f.path(), &["branch", "-qf", "elsewhere", "main"]);
+    let (pass, out) = cli(f.path(), &["start", &second, "--base", "elsewhere"]);
+    assert!(
+        !pass && out.contains("start_base_mismatch") && out.contains("--base main"),
+        "{out}"
+    );
+    let (pass, out) = cli(f.path(), &["start", &second, "--base", "nope"]);
+    assert!(!pass && out.contains("start_base_missing"), "{out}");
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+    assert_eq!(recorded_branch(&f, &second), None);
+}

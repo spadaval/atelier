@@ -86,7 +86,7 @@ what each record contains.
 
 ## Branches, Review, and Integration
 
-- Run `atelier start <id>` from the base branch. It resolves the branch
+- Run `atelier start <id> --base <base>` from any checkout, or plain `atelier start <id>` from the base branch. It resolves the branch
   owner (the parent, or a standalone issue), checks out or creates its work
   branch (`<issue_type>/<owner-id>` by default), records the branch and its
   base, and starts the item. The recorded base is never replaced. Children
