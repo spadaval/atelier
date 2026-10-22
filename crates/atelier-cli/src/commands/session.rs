@@ -513,13 +513,17 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
         .then(|| code.to_owned())
 }
 
-/// Refuses a push when the base has an upstream configured that does not
-/// resolve to a remote-tracking ref (deleted remote branch, or a URL or path
-/// remote): the base-commit review check skips such a base, so the push could
-/// publish unreviewed base commits. A base with no upstream is left to that
-/// check's own "unchecked" note.
+/// Refuses pushing the base branch itself when it has an upstream configured
+/// that does not resolve to a remote-tracking ref (deleted remote branch, or a
+/// URL or path remote): the base-commit review check skips such a base, so the
+/// push could publish unreviewed base commits. A work branch publishes no base
+/// ref, and an unresolved base upstream makes land check more for it, so it is
+/// not refused. A base with no upstream is left to that check's own note.
 fn refuse_unresolved_base_upstream(repo: &Path) -> Result<()> {
     let base = atelier_workflow::load(repo)?.branch_policy.base_branch;
+    if git::checkout_branch(repo)?.as_deref() != Some(base.as_str()) {
+        return Ok(());
+    }
     let configured = ["remote", "merge"]
         .iter()
         .all(|key| git::text(repo, &["config", "--get", &format!("branch.{base}.{key}")]).is_ok());
@@ -548,7 +552,6 @@ fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
     if remote == "." || merge != format!("refs/heads/{branch}") {
         bail!("land_push_upstream_mismatch: {branch} tracks {remote} {merge}, not a remote branch of its own name, so pushing could publish this work to another branch; run `git push -u <remote> {branch}` to set its own upstream, then rerun `atelier land --push`");
     }
-    refuse_unresolved_base_upstream(repo)?;
     if git::resolve(repo, "HEAD")? != checked {
         bail!("land_state_changed: HEAD moved after the checks; nothing pushed; rerun `atelier land --push`");
     }
@@ -576,6 +579,10 @@ pub fn land(
         // The checks' report prints before any push, so a warning is read
         // before the commits go out.
         let pushed = land_checked(requested, install, false).and_then(|(output, checked)| {
+            // Refuse before the report, so no pass line precedes the refusal.
+            if push {
+                refuse_unresolved_base_upstream(StorageLayout::discover()?.repo_root())?;
+            }
             if !quiet {
                 println!("{output}");
             }

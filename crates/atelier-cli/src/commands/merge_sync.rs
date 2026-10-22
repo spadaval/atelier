@@ -381,8 +381,6 @@ fn report_approval(
     // `merge`'s `review.current` also requires that the approval not predate
     // where the branch left the base (atelier-ns03); ask it the same way.
     let fork = text(repo, &["merge-base", base_head, &head])?;
-    let current_on_branch = review_gate::approval_state(&index, &mut read, owner, &fork)?
-        == review_gate::ApprovalState::Current;
     let mut approvals = index
         .reviews()
         .filter(|review| {
@@ -403,7 +401,8 @@ fn report_approval(
         }
         let edges =
             review_gate::approval_stale_edges(&mut read, &review.commit, &ids, "HEAD", base_head)?;
-        if edges.is_empty() && current_on_branch {
+        // Judged per approval, as `review.current` judges each one.
+        if edges.is_empty() && review_gate::current_on_branch(&mut read, review, &ids, &fork) {
             kept.push(review.header.id.clone());
         } else if edges.is_empty() {
             predates_fork = Some(review);

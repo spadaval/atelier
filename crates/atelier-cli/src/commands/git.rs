@@ -144,9 +144,14 @@ pub(crate) fn check_base_commits(
             &format!("{base}@{{upstream}}"),
         ],
     ) else {
-        return Ok(format!(
-            "Base commits unchecked: {base} has no upstream, so there is no pushed point to check from."
-        ));
+        let configured = ["remote", "merge"]
+            .iter()
+            .all(|key| text(repo, &["config", "--get", &format!("branch.{base}.{key}")]).is_ok());
+        return Ok(if configured {
+            format!("Base commits unchecked: {base}'s upstream does not resolve to a remote-tracking branch (its remote branch is gone, or its remote is a URL or path), so there is no pushed point to check from.")
+        } else {
+            format!("Base commits unchecked: {base} has no upstream, so there is no pushed point to check from.")
+        });
     };
     // History reads need the tip as a full commit ID.
     let tip = &resolve(repo, tip)?;

@@ -3178,6 +3178,23 @@ fn sync_refuses_a_dirty_checkout_and_conflicts_with_check() {
     assert!(!passed);
 }
 
+/// Whether `review.current` passes in `merge --check --json` at the branch head.
+fn review_current_passes(fixture: &Fixture) -> bool {
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(fixture.path())
+        .args(["merge", &fixture.id, "--check", "--json"])
+        .output()
+        .unwrap();
+    let nodes: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    nodes
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["check"] == "review.current")
+        .map(|node| node["passed"].as_bool().unwrap())
+        .unwrap_or_else(|| panic!("no review.current node: {nodes}"))
+}
+
 /// The sync report and `merge --check` agree when the branch has already been
 /// merged into the base after the approval (atelier-ns03).
 #[test]
@@ -3202,10 +3219,10 @@ fn sync_agrees_with_check_when_the_base_already_holds_work_after_the_approval() 
             &["merge", "-q", how, "--no-edit", &fixture.branch],
         );
         git(fixture.path(), &["switch", "-q", &fixture.branch]);
-        let (accepted, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-        assert!(!accepted, "{strategy}: {checked}");
         let (passed, out, err) = sync(fixture.path(), &fixture.id);
         assert!(passed, "{strategy}: {out}\n{err}");
+        // The sync says stale, and review.current says the same.
+        assert!(!review_current_passes(&fixture), "{strategy}");
         assert!(!out.contains("Approval kept"), "{strategy}: {out}");
         assert!(
             out.contains("Approval needs fresh review") && out.contains("  c.rs"),
@@ -3213,6 +3230,39 @@ fn sync_agrees_with_check_when_the_base_already_holds_work_after_the_approval() 
         );
         assert_eq!(verdict(&out), "merge: synced — approval needs fresh review");
     }
+}
+
+/// "Approval kept" lists only approvals `review.current` accepts one by one
+/// (atelier-3nib): an older approval from before the fork point is not named
+/// beside a fresh one.
+#[test]
+fn sync_keeps_only_approvals_that_are_current_on_their_own() {
+    let fixture = synced_fixture("merge_commit", "true", ("other.rs", "landed\n"));
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    let old = fixture_approval_id(&fixture);
+    fs::write(fixture.path().join("c.rs"), "code after the approval\n").unwrap();
+    commit(fixture.path(), "code after the approval");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    git(
+        fixture.path(),
+        &["merge", "-q", "--no-ff", "--no-edit", &fixture.branch],
+    );
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(
+        passed && out.contains("Approval needs fresh review"),
+        "{out}\n{err}"
+    );
+    let fresh = fixture.approval("Second reviewer");
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    assert!(review_current_passes(&fixture));
+    let kept = out
+        .lines()
+        .find(|line| line.starts_with("Approval kept:"))
+        .unwrap_or_else(|| panic!("{out}"));
+    assert!(kept.contains(&fresh) && !kept.contains(&old), "{kept}");
 }
 
 #[test]
