@@ -19,7 +19,7 @@ schema_version: 2
 closed_at: "2026-10-22T20:54:37.599894951+00:00"
 status: "done"
 title: "Add land --push so a refused land can never be pushed behind a pipe"
-updated_at: "2026-10-22T20:54:37.599894951+00:00"
+updated_at: "2026-10-22T21:09:54.022972412+00:00"
 ---
 
 ## Goal
@@ -41,6 +41,9 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
   Rejected: plain git push
 - 2026-10-22 [decision] Verdict line follows human-cli-output.md ('land: passed' / 'land: refused — 1 check (code)'), with ', pushed to <remote>/<branch>' or ', nothing pushed' suffixes; a rejected push ends 'land: push failed, nothing pushed'; failures print Error then the verdict on stderr and main exits 1 via a Reported marker
   Reason: Done-when asks for PASS/FAIL, but the documented verdict form is the repository convention (ADR 0022); rc8j will extend the failure count later
+- 2026-10-22 [decision] Dropped the 'set -o pipefail; ' prefix from setup-generated hooks, deviating from the Done when's 'hooks use set -o pipefail'
+  Reason: The hook command has no pipe so the prefix guards nothing, and under a /bin/sh that is dash older than 0.5.12-7 'set -o pipefail' is an illegal option that exits 2, which blocks every Stop. The pipeline guard is land --push plus the verdict line (review finding atelier-ztla)
+  Rejected: guarded prefix '(set -o pipefail) 2>/dev/null && set -o pipefail;' (still protects nothing)
 
 ## Close Reason
 

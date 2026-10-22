@@ -33,11 +33,30 @@ pub fn run(
     base_arg: Option<&str>,
     quiet: bool,
 ) -> Result<()> {
-    let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let repo_root = workflow::repo_root()?;
+    // `--base` names a local branch to create the owner branch from. The issue
+    // and its branch are resolved from that base's records, so the checkout
+    // need not hold the issue (a branch forked before it was planned, or an
+    // older detached commit).
+    let base_pin = base_arg
+        .map(|name| -> Result<(String, String)> {
+            let commit = git::resolve(&repo_root, &format!("refs/heads/{name}")).map_err(|_| {
+                anyhow::anyhow!("start_base_missing: there is no local branch '{name}' to start {issue_ref} from; create or fetch it, then rerun `atelier start {issue_ref} --base {name}`.")
+            })?;
+            Ok((name.to_owned(), commit))
+        })
+        .transpose()?;
+    let mut base_snapshot = base_pin
+        .as_ref()
+        .map(|(_, commit)| git::Snapshot::at(&repo_root, state_dir, commit))
+        .transpose()?;
+    let naming = base_snapshot
+        .as_ref()
+        .map_or(index, |snapshot| &snapshot.index);
+    let issue_id = crate::commands::issue::resolve_id(naming, issue_ref)?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
     let branch =
-        atelier_app::workflow_policy::resolve_work_branch(&policy, index, &issue_id)?.branch;
+        atelier_app::workflow_policy::resolve_work_branch(&policy, naming, &issue_id)?.branch;
 
     let current = git::current_branch(&repo_root)?;
     let switch_needed = current.as_deref() != Some(branch.as_str());
@@ -58,16 +77,7 @@ pub fn run(
         }
     }
 
-    // `--base` names a local branch to create the owner branch from.
-    let explicit = base_arg
-        .filter(|_| !branch_exists)
-        .map(|name| -> Result<(String, String)> {
-            let commit = git::resolve(&repo_root, &format!("refs/heads/{name}")).map_err(|_| {
-                anyhow::anyhow!("start_base_missing: there is no local branch '{name}' to start {issue_id} from; create or fetch it, then rerun `atelier start {issue_id} --base {name}`.")
-            })?;
-            Ok((name.to_owned(), commit))
-        })
-        .transpose()?;
+    let explicit = base_pin.filter(|_| !branch_exists);
     // The records `start` checks and changes: the target branch's when it
     // switches to an existing branch, the explicit base's when a new branch
     // is created from it, otherwise this checkout's (a new branch starts from
@@ -80,10 +90,13 @@ pub fn run(
     } else {
         None
     };
-    let snapshot = pinned
-        .as_ref()
-        .map(|commit| git::Snapshot::at(&repo_root, state_dir, commit))
-        .transpose()?;
+    let snapshot = match (&existing, explicit.is_some() && switch_needed) {
+        (Some((_, commit)), _) if switch_needed => {
+            Some(git::Snapshot::at(&repo_root, state_dir, commit)?)
+        }
+        (None, true) => base_snapshot.take(),
+        _ => None,
+    };
     let (view_index, view_root) = match &snapshot {
         Some(snapshot) => (&snapshot.index, snapshot.root()),
         None => (index, repo_root.as_path()),

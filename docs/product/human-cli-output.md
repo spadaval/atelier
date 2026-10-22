@@ -164,7 +164,9 @@ land: refused — 2 checks (land_records_uncommitted, land_base_unreviewed)
 ```
 
 The line is the command name, `passed` or `refused`, and on refusal the count
-and codes of the checks that failed. It is the last line of the combined
+and codes of the checks that failed. `land --push` appends what happened to
+the push: `land: passed, pushed to origin/<branch>` or `land: refused — 1
+check (land_push_failed), nothing pushed`. It is the last line of the combined
 output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
 command's exit status is the pipe's last command's, so check `$?` before
 acting on it. Each command adopts the line in its own item: `land` prints it since

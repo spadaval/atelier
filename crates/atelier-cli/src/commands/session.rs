@@ -188,6 +188,10 @@ fn foreign_base_commits_note(
     )))
 }
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
+    land_checked(requested, install, deep).map(|(text, _)| text)
+}
+/// The landing report, and the commit every check ran against.
+fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(String, String)> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let (head, branch, snapshot, initial_paths, index) = {
@@ -470,7 +474,7 @@ fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<Strin
         bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");
     }
     lines.push("Landing checks passed. No commits or records created.".into());
-    Ok(lines.join("\n"))
+    Ok((lines.join("\n"), head))
 }
 
 /// Reads a Claude Code hook payload for `event` from stdin and enters its
@@ -509,9 +513,9 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
         .then(|| code.to_owned())
 }
 
-/// Pushes the checked branch to its configured upstream, never another ref.
-/// Returns the destination, as `<remote>/<branch>`.
-fn push_checked_branch(repo: &Path, head: &str) -> Result<String> {
+/// Pushes the commit land checked to the current branch's own upstream
+/// branch, never another ref. Returns the destination, `<remote>/<branch>`.
+fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
     let branch = git::checkout_branch(repo)?.context(
         "land_push_detached: a detached HEAD has no branch to push; switch to the owner's branch",
     )?;
@@ -525,21 +529,22 @@ fn push_checked_branch(repo: &Path, head: &str) -> Result<String> {
     let (Some(remote), Some(merge)) = (config("remote"), config("merge")) else {
         bail!("land_push_no_upstream: {branch} has no upstream; set one with `git push -u <remote> {branch}`, then rerun `atelier land --push`");
     };
-    let destination = merge.trim_start_matches("refs/heads/").to_owned();
-    if git::resolve(repo, "HEAD")? != head {
-        bail!("land_state_changed: HEAD moved after the checks; nothing pushed");
+    if remote == "." || merge != format!("refs/heads/{branch}") {
+        bail!("land_push_upstream_mismatch: {branch} tracks {remote} {merge}, not a remote branch of its own name, so pushing could publish this work to another branch; run `git push -u <remote> {branch}` to set its own upstream, then rerun `atelier land --push`");
+    }
+    if git::resolve(repo, "HEAD")? != checked {
+        bail!("land_state_changed: HEAD moved after the checks; nothing pushed; rerun `atelier land --push`");
     }
     let output = atelier_app::git_freshness::command(repo)
-        .args(["push", &remote, &format!("{head}:refs/heads/{destination}")])
+        .args(["push", &remote, &format!("{checked}:{merge}")])
         .output()?;
-    let detail = String::from_utf8_lossy(&output.stderr);
     if !output.status.success() {
         bail!(
             "land_push_failed: git push to {remote} refused {branch}: {}",
-            detail.trim()
+            String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    Ok(format!("{remote}/{destination}"))
+    Ok(format!("{remote}/{branch}"))
 }
 
 pub fn land(
@@ -553,7 +558,7 @@ pub fn land(
         let nothing_pushed = if push { ", nothing pushed" } else { "" };
         // The checks' report prints before any push, so a warning is read
         // before the commits go out.
-        let pushed = land_text(requested, install, false).and_then(|output| {
+        let pushed = land_checked(requested, install, false).and_then(|(output, checked)| {
             if !quiet {
                 println!("{output}");
             }
@@ -561,8 +566,7 @@ pub fn land(
                 return Ok(None);
             }
             let layout = StorageLayout::discover()?;
-            let head = git_freshness::head_commit(layout.repo_root())?;
-            push_checked_branch(layout.repo_root(), &head).map(Some)
+            push_checked_branch(layout.repo_root(), &checked).map(Some)
         });
         match pushed {
             Ok(destination) => {
@@ -586,7 +590,6 @@ pub fn land(
                 eprintln!(
                     "{}",
                     match code.as_deref() {
-                        Some("land_push_failed") => "land: push failed, nothing pushed".to_owned(),
                         Some(code) => format!("land: refused — 1 check ({code}){nothing_pushed}"),
                         None => format!("land: refused{nothing_pushed}"),
                     }

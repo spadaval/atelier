@@ -546,10 +546,6 @@ fn setup_is_atomic_idempotent_and_preserves_other_handlers() {
         assert!(handler["hooks"][0]["command"]
             .as_str()
             .unwrap()
-            .starts_with("set -o pipefail; "));
-        assert!(handler["hooks"][0]["command"]
-            .as_str()
-            .unwrap()
             .ends_with(&format!(
                 " {action} --hook claude # atelier-managed:{event}"
             )));
@@ -5054,7 +5050,10 @@ fn land_push_reports_a_failed_push_and_a_missing_upstream() {
     );
     let (pass, out) = cli(f.path(), &["land", "--push"]);
     assert!(!pass && out.contains("rejected by test"), "{out}");
-    assert_eq!(last_line(&out), "land: push failed, nothing pushed");
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_failed), nothing pushed"
+    );
     assert_eq!(
         git(
             remote.path(),
@@ -5222,4 +5221,117 @@ fn start_with_a_base_ignores_the_current_branch_and_checks_the_base() {
     assert!(!pass && out.contains("start_base_missing"), "{out}");
     assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
     assert_eq!(recorded_branch(&f, &second), None);
+}
+
+#[test]
+fn land_push_refuses_an_upstream_that_is_not_the_branchs_own_remote_branch() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    fs::write(f.path().join("more"), "unreviewed\n").unwrap();
+    commit(f.path(), "more code");
+    let main_before = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    // Tracking the remote base, as `git switch -c <branch> origin/main` does.
+    git(f.path(), &["branch", "-q", "--set-upstream-to=origin/main"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        !pass && out.contains("land_push_upstream_mismatch"),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("git push -u <remote> {}", f.branch)),
+        "{out}"
+    );
+    assert_eq!(
+        last_line(&out),
+        "land: refused — 1 check (land_push_upstream_mismatch), nothing pushed"
+    );
+    assert_eq!(
+        git(remote.path(), &["rev-parse", "refs/heads/main"]),
+        main_before
+    );
+    // A local upstream (remote ".") would move a local branch.
+    git(f.path(), &["branch", "-q", "--set-upstream-to=main"]);
+    let main_local = git(f.path(), &["rev-parse", "main"]);
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(
+        !pass && out.contains("land_push_upstream_mismatch"),
+        "{out}"
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "main"]), main_local);
+}
+
+#[test]
+fn land_push_pushes_nothing_when_a_check_moves_head_during_land() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    fs::write(&path, format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'git -c user.name=x -c user.email=x@x.test commit -q --allow-empty -m moved' }}\n")).unwrap();
+    commit(f.path(), "trusted committing check");
+    git(f.path(), &["switch", &f.branch]);
+    git(f.path(), &["rebase", "main"]);
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let remote = with_remote(&f);
+    let before = git(
+        remote.path(),
+        &["rev-parse", &format!("refs/heads/{}", f.branch)],
+    );
+    let (pass, out) = cli(f.path(), &["land", "--push"]);
+    assert!(!pass && out.contains("land_state_changed"), "{out}");
+    assert_eq!(
+        git(
+            remote.path(),
+            &["rev-parse", &format!("refs/heads/{}", f.branch)]
+        ),
+        before
+    );
+}
+
+#[test]
+fn start_with_a_base_works_from_a_checkout_without_the_issue_record() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    git(f.path(), &["branch", "-q", "old"]);
+    let id = unstarted_on_main(&f);
+    let planned = git(f.path(), &["rev-parse", "main"]);
+    // A branch forked before the issue existed.
+    git(f.path(), &["switch", "-q", "old"]);
+    ok(f.path(), &["start", &id, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{id}")
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), planned);
+    // A detached commit older than the plan.
+    git(f.path(), &["switch", "-q", "main"]);
+    let other = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Later item",
+            "--body",
+            "## Goal\n\nx\n\n## Done when\n\ny",
+        ],
+    );
+    commit(f.path(), "plan later item");
+    git(f.path(), &["switch", "-q", "--detach", &planned]);
+    ok(f.path(), &["start", &other, "--base", "main"]);
+    assert_eq!(
+        git(f.path(), &["branch", "--show-current"]),
+        format!("task/{other}")
+    );
 }

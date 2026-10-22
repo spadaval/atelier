@@ -172,11 +172,12 @@ Missions coordinate work rather than own a work branch.
 checks out or creates its work branch, records branch metadata, and applies the
 available `start` transition. Commit those record changes with the work.
 
-A new work branch is created from the current branch, which `start` records as
-the branch base; the base must be the policy's base branch, the one `land`
+A new work branch is created from the current branch, which `start` records
+as the branch base without checking it; `land` later refuses with
+`land_base_mismatch` unless that base is the policy's base branch, the one it
 trusts. `atelier start <id> --base <branch>` creates the branch from that local
-branch instead, from any checkout including a detached HEAD, reads and
-checks the records as they are on that base, and records it. `--base` names
+branch instead, from any checkout including a detached HEAD, resolves the issue and reads and
+checks the records as they are on that base (the checkout need not hold them), and records it. `--base` names
 the policy's base branch only (`start_base_mismatch` otherwise; a branch that
 does not exist is `start_base_missing`), and a base without the issue's
 committed record is refused with `start_branch_missing_record`. Without
