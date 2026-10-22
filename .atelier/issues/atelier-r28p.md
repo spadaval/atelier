@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "land"
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-r28p
 priority: "P1"
 relationships:
   blocks: []
@@ -22,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Keep approvals and land's scope steady through planning records"
-updated_at: "2026-10-22T22:04:27.711229239+00:00"
+updated_at: "2026-10-22T22:12:46.139224870+00:00"
 ---
 
 ## Goal
