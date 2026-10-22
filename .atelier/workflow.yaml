@@ -157,9 +157,13 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire a question that no longer needs deciding.
-# Run on the merged tree in a temporary checkout. Tests get a fresh TMPDIR
-# outside that checkout: fixtures under a TMPDIR inside a repository find the
-# enclosing repository, and /tmp on this host is a small tmpfs.
+# Run on the merged tree in a temporary checkout. The whitespace check skips
+# .atelier because captured evidence records end with the command output's own
+# blank lines, which `git diff --check` flags. CARGO_TARGET_DIR=target gives the
+# test builds this checkout's own target directory even when the caller exports
+# one, since a shared target has run another branch's binary. Tests get a fresh
+# TMPDIR outside that checkout: fixtures under a TMPDIR inside a repository
+# find the enclosing repository, and /tmp on this host is a small tmpfs.
 merge_checks:
   - shell.check:
       command: "git diff --check HEAD^ HEAD -- . ':!.atelier'"
@@ -168,6 +172,6 @@ merge_checks:
   - shell.check:
       command: "cargo metadata --locked --format-version 1 > /dev/null"
   - shell.check:
-      command: "c=${XDG_CACHE_HOME:-$HOME/.cache}; mkdir -p \"$c\" && t=$(mktemp -d \"$c/atelier-merge-XXXXXX\") || exit 1; TMPDIR=\"$t\" cargo nextest run; r=$?; rm -rf \"$t\"; exit $r"
+      command: "c=${XDG_CACHE_HOME:-$HOME/.cache}; mkdir -p \"$c\" && t=$(mktemp -d \"$c/atelier-merge-XXXXXX\") || exit 1; TMPDIR=\"$t\" CARGO_TARGET_DIR=target cargo nextest run; r=$?; rm -rf \"$t\"; exit $r"
   - shell.check:
-      command: "c=${XDG_CACHE_HOME:-$HOME/.cache}; mkdir -p \"$c\" && t=$(mktemp -d \"$c/atelier-merge-XXXXXX\") || exit 1; TMPDIR=\"$t\" cargo nextest run --features test-hooks; r=$?; rm -rf \"$t\"; exit $r"
+      command: "c=${XDG_CACHE_HOME:-$HOME/.cache}; mkdir -p \"$c\" && t=$(mktemp -d \"$c/atelier-merge-XXXXXX\") || exit 1; TMPDIR=\"$t\" CARGO_TARGET_DIR=target cargo nextest run --features test-hooks; r=$?; rm -rf \"$t\"; exit $r"
