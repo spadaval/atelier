@@ -82,13 +82,19 @@ make approval stale. Later commits may add new review/evidence files, create
 issues outside the reviewed scope (such as the follow-up a `defer` disposition
 names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
 Close Reason, including the implementer report it carries, without changing
-the approved acceptance. An issue outside the scope that did not exist at the
-approval's pin is planning in every later commit too, so a follow-up filed
-during review may be created with `--discovered-from`, then linked to its
+the approved acceptance. An issue record outside the scope that did not exist
+at the approval's pin is planning in every later commit too, wherever it was
+created: on the branch, or on the base after the pin and merged into the
+branch. Such records may be committed to the base without review anyway (see
+[Planning changes on the base](#planning-changes-on-the-base)), so the branch
+may also create, link, or edit them without staling the approval. A follow-up
+filed during review may be created with `--discovered-from`, then linked to its
 mission (`atelier issue link <follow-up> <mission> --role advances`, stored on
-the follow-up) or edited in later commits, and the approval stays current
-(atelier-iaas). Its own done claim is not covered: closing it on the branch
-fails `claims.reviewed`, as below.
+the follow-up) in a later commit (atelier-iaas), and an issue the base filed
+after the approval may be rewritten on the branch (atelier-g0mh). Neither
+record's own done claim is covered: closing it on the branch fails
+`claims.reviewed`, and `land` refuses it, as below. A record outside the scope
+that existed at the pin is still reviewed content.
 
 This is the one rule for what an approval or trivial exemption covers, and
 `merge` (its `review.current` gate), `land` on the work branch and `land` on

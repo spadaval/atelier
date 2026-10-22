@@ -3270,6 +3270,7 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "reviewer_base_close_then_approve",
         "reviewer_base_reapproved_after_code",
         "follow_up_linked",
+        "base_issue_edited",
     ];
     let stale_cases = [
         "with_code",
@@ -3277,6 +3278,7 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "with_note",
         "new_done_issue",
         "follow_up_done",
+        "base_issue_edited_done",
         "sibling_close",
         "self_approval",
         "open_fix_now",
@@ -3431,6 +3433,31 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
                 new_done = Some(id);
             }
             "sibling_close" => close_issue(sibling.as_deref().unwrap()),
+            "base_issue_edited" | "base_issue_edited_done" => {
+                // An issue filed on the base after the approval, merged in
+                // and then rewritten on the branch: planning, like a record
+                // the base could take directly (atelier-g0mh).
+                git(f.path(), &["switch", "-q", "main"]);
+                let id = ok(f.path(), &["-q", "issue", "create", "Filed on the base"]);
+                commit(f.path(), "file an issue on the base after the approval");
+                git(f.path(), &["switch", "-q", &f.branch]);
+                git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+                ok(
+                    f.path(),
+                    &[
+                        "issue",
+                        "update",
+                        &id,
+                        "--body",
+                        "## Goal\n\nRewritten.\n\n## Done when\n\nRewritten too.",
+                    ],
+                );
+                commit(f.path(), "rewrite the base issue on the branch");
+                if case == "base_issue_edited_done" {
+                    close_issue(&id);
+                    new_done = Some(id);
+                }
+            }
             "follow_up_linked" | "follow_up_done" => {
                 // Filed, then linked to its mission in a later commit, the
                 // way an agent records a follow-up during review.

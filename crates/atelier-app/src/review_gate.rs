@@ -131,10 +131,12 @@ fn allowed_edge(
             && path.extension().is_some_and(|ext| ext == "md"))
         .then(|| path.file_stem().and_then(|name| name.to_str()))
         .flatten();
-        // An issue outside the scope that is new since the pin, such as the
-        // follow-up a deferred finding needs, is planning, not reviewed work
-        // (atelier-cafy). It stays planning as it is linked or edited in
-        // later commits (atelier-iaas); its own done claim is judged by
+        // An issue outside the scope that did not exist at the pin is
+        // planning, not reviewed work, in every later commit: whether it was
+        // created on the branch, such as the follow-up a deferred finding
+        // needs (atelier-cafy, atelier-iaas), or on the base after the pin
+        // and merged in (atelier-g0mh). Such records may be committed to the
+        // base without review anyway. Its own done claim is judged by
         // `claims.reviewed` and `land`, not by the approval.
         if issue_id.is_some_and(|id| !ids.contains(id))
             && (old.is_none() || regular(&old))
