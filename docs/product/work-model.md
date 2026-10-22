@@ -188,6 +188,19 @@ with `start_branch_prefix_mismatch` and names the right branch to create, since
 it would record the wrong branch as the base and `land` would later fail with
 `land_base_mismatch` (atelier-mhx0, atelier-yc4d).
 
+`start` also leaves a runtime lease for the owner, so a second session can
+learn the item is taken (atelier-81e5). The lease is a small file under
+`.atelier/runtime/leases/` of the repository's primary checkout, shared by
+all its worktrees and never committed. It names the worktree, branch and a
+heartbeat that `start` sets and `status` renews from the holding worktree.
+Another worktree's lease is live while that worktree exists and its heartbeat
+is under 4 hours old; it expires at once when the worktree is deleted or starts
+a different owner. `start` refuses a live lease with `start_item_held` unless
+given `--take-over`, notes a take-over, and replaces a stale lease with a note.
+`status` shows `Held: ⚠ also held by <worktree> ...` in Local State when
+another live worktree holds the owner. The lease is a warning, not a lock, and
+two sessions in one worktree cannot be told apart.
+
 Begin work with `atelier start`, not `atelier issue transition <id> start`.
 The bare transition only changes the record: it creates no branch and records
 no owner. While such work is active, `atelier land` refuses it with

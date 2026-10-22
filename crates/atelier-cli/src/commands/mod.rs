@@ -18,5 +18,6 @@ pub mod mission_review;
 pub mod review;
 
 pub(crate) mod git;
+pub mod lease;
 pub mod session;
 pub mod setup;

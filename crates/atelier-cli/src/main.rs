@@ -157,6 +157,9 @@ enum Commands {
         /// including a detached HEAD; it must be the policy's base branch
         #[arg(long)]
         base: Option<String>,
+        /// Start even though another live session or worktree holds the item
+        #[arg(long)]
+        take_over: bool,
     },
 
     /// First-class evidence records
@@ -789,9 +792,13 @@ fn run() -> Result<()> {
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
-        Commands::Start { id, base } => {
+        Commands::Start {
+            id,
+            base,
+            take_over,
+        } => {
             let (state_dir, index) = load_repository()?;
-            commands::start::run(&index, &state_dir, &id, base.as_deref(), quiet)
+            commands::start::run(&index, &state_dir, &id, base.as_deref(), take_over, quiet)
         }
 
         Commands::Merge { id, check, json } => commands::merge::run(&id, check, json, quiet),

@@ -5335,3 +5335,98 @@ fn start_with_a_base_works_from_a_checkout_without_the_issue_record() {
         format!("task/{other}")
     );
 }
+
+fn lease_path(f: &Fixture) -> std::path::PathBuf {
+    f.path()
+        .join(".atelier/runtime/leases")
+        .join(format!("{}.json", f.id))
+}
+/// A second worktree of the fixture's repository, on a detached HEAD.
+fn second_worktree(f: &Fixture) -> (TempDir, std::path::PathBuf) {
+    let holder = tempdir().unwrap();
+    let path = holder.path().join("other");
+    git(
+        f.path(),
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            path.to_str().unwrap(),
+            "main",
+        ],
+    );
+    (holder, path)
+}
+
+#[test]
+fn start_refuses_an_item_a_live_lease_holds_until_taken_over() {
+    let f = Fixture::new();
+    assert!(lease_path(&f).exists(), "start leaves a lease");
+    let (holder, other) = second_worktree(&f);
+    // The holder's own checkout sees no conflict.
+    assert!(!ok(f.path(), &["status"]).contains("also held"));
+    // Another worktree is refused while the lease is live.
+    git(f.path(), &["switch", "-q", "main"]);
+    let (pass, out) = cli(&other, &["start", &f.id]);
+    assert!(
+        !pass && out.contains("start_item_held") && out.contains("--take-over"),
+        "{out}"
+    );
+    assert!(git(&other, &["branch", "--show-current"]).is_empty());
+    // status on the owner branch reports the other holder.
+    let lease: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    let mut forged = lease.clone();
+    forged["worktree"] = holder.path().to_str().unwrap().into();
+    fs::write(lease_path(&f), forged.to_string()).unwrap();
+    git(f.path(), &["switch", "-q", &f.branch]);
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        status.contains("Held")
+            && status.contains("also held by")
+            && status.contains(holder.path().to_str().unwrap()),
+        "{status}"
+    );
+    // --take-over starts anyway and the lease moves to the new worktree.
+    git(f.path(), &["switch", "-q", "main"]);
+    let out = ok(&other, &["start", &f.id, "--take-over"]);
+    assert!(out.contains("Took over"), "{out}");
+    assert_eq!(git(&other, &["branch", "--show-current"]), f.branch);
+    let moved: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    assert_eq!(
+        fs::canonicalize(moved["worktree"].as_str().unwrap()).unwrap(),
+        fs::canonicalize(&other).unwrap()
+    );
+}
+
+#[test]
+fn start_replaces_a_stale_lease_with_a_note() {
+    let f = Fixture::new();
+    let (_holder, other) = second_worktree(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    // Stale by age.
+    let mut lease: serde_json::Value =
+        serde_json::from_slice(&fs::read(lease_path(&f)).unwrap()).unwrap();
+    lease["heartbeat"] = (chrono::Utc::now() - chrono::Duration::hours(5))
+        .to_rfc3339()
+        .into();
+    fs::write(lease_path(&f), lease.to_string()).unwrap();
+    let out = ok(&other, &["start", &f.id]);
+    assert!(
+        out.contains("Replaced a stale lease") && out.contains("over 4 hours old"),
+        "{out}"
+    );
+    // Stale because the holder's worktree is gone.
+    git(&other, &["switch", "-q", "--detach", "main"]);
+    let gone = tempdir().unwrap().path().join("deleted");
+    lease["worktree"] = gone.to_str().unwrap().into();
+    lease["heartbeat"] = chrono::Utc::now().to_rfc3339().into();
+    fs::write(lease_path(&f), lease.to_string()).unwrap();
+    let out = ok(&other, &["start", &f.id]);
+    assert!(
+        out.contains("Replaced a stale lease") && out.contains("no longer exists"),
+        "{out}"
+    );
+}
