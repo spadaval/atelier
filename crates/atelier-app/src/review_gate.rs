@@ -761,6 +761,9 @@ fn evaluate_scope(
         else {
             unreachable!()
         };
+        // Why a defer/no_action disposition's original acceptance could not
+        // be checked; it then counts as not accepted (atelier-as7i).
+        let mut untraced = None;
         let accepted = match decision {
             FindingDecision::FixNow => resolution_commit.as_ref().is_some_and(|resolution| {
                 ancestor(read, resolution, "HEAD")
@@ -792,7 +795,10 @@ fn evaluate_scope(
             }),
             FindingDecision::Defer | FindingDecision::NoAction => {
                 if global {
-                    original_independent(index, read, disposition)?
+                    original_independent(index, read, disposition).unwrap_or_else(|error| {
+                        untraced = Some(format!("{error:#}"));
+                        false
+                    })
                 } else {
                     independent(disposition, &authors)
                 }
@@ -800,9 +806,14 @@ fn evaluate_scope(
         };
         if !accepted {
             let reason = if *decision == FindingDecision::FixNow {
-                "unresolved FIX NOW: resolution needs fresh independent approval"
+                "unresolved FIX NOW: resolution needs fresh independent approval".to_owned()
+            } else if let Some(error) = untraced {
+                format!(
+                    "disposition {} could not be traced to the commit that introduced it: {error}",
+                    disposition.header.id
+                )
             } else {
-                "disposition needs independent non-author acceptance"
+                "disposition needs independent non-author acceptance".to_owned()
             };
             unresolved.push(format!("{}: {reason}", finding.header.id));
         }
@@ -1070,12 +1081,16 @@ fn add_author(
     }
     Ok(())
 }
-/// The `git log` that finds the commit introducing a review event.
+/// The `git log` that finds the commit introducing a review event, including
+/// a merge that adds it when neither parent has it; `--no-patch` keeps the
+/// merge's diff out of the commit list (atelier-as7i).
 fn introduced_query(head: &str, record: &ReviewRecord) -> Vec<String> {
     [
         "log",
         "--root",
         "--reverse",
+        "--diff-merges=first-parent",
+        "--no-patch",
         "--diff-filter=A",
         "--format=%H",
         head,
@@ -1099,6 +1114,8 @@ fn scope_queries(
         "log",
         "--root",
         "--reverse",
+        "--diff-merges=first-parent",
+        "--no-patch",
         "--diff-filter=A",
         "--format=%H",
         event,

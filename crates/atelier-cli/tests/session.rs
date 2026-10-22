@@ -34,6 +34,22 @@ fn cli(dir: &Path, args: &[&str]) -> (bool, String) {
         ),
     )
 }
+/// A `git` command that may fail, with its success and combined output.
+fn cli_git(dir: &Path, args: &[&str]) -> (bool, String) {
+    let out = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        ),
+    )
+}
 fn ok(dir: &Path, args: &[&str]) -> String {
     let (pass, out) = cli(dir, args);
     assert!(pass, "atelier {args:?}: {out}");
@@ -2265,6 +2281,114 @@ fn root_review_introductions_cannot_be_hidden_by_log_configuration() {
         let (pass, output) = cli(f.path(), &["land"]);
         assert!(!pass && output.contains("review_append_only"), "{output}");
     }
+}
+
+#[test]
+fn review_records_first_added_by_a_conflict_resolving_merge_are_found() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    fs::write(f.path().join("shared"), "base\n").unwrap();
+    commit(f.path(), "shared file");
+    git(f.path(), &["switch", "-qc", "side"]);
+    fs::write(f.path().join("shared"), "side\n").unwrap();
+    commit(f.path(), "side edit");
+    git(f.path(), &["switch", "main"]);
+    fs::write(f.path().join("shared"), "main\n").unwrap();
+    commit(f.path(), "main edit");
+    let (merged, _) = cli_git(f.path(), &["merge", "-q", "--no-edit", "side"]);
+    assert!(!merged, "the merge conflicts");
+    fs::write(f.path().join("shared"), "resolved\n").unwrap();
+    // The issue and both review events first appear in the merge itself.
+    let id = ok(f.path(), &["-q", "issue", "create", "Merged review work"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Concern raised while merging",
+        ],
+    );
+    let disposition = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "Independent dismissal recorded while merging",
+        ],
+    );
+    commit(f.path(), "resolve conflict with review records");
+    let path = format!(".atelier/reviews/{disposition}.md");
+    for parent in ["HEAD^1", "HEAD^2"] {
+        let (present, _) = cli_git(f.path(), &["cat-file", "-e", &format!("{parent}:{path}")]);
+        assert!(!present, "{parent} has {path}");
+    }
+    f.terminal(&id);
+    ok(f.path(), &["land"]);
+    ok(f.path(), &["doctor"]);
+}
+
+#[test]
+fn a_disposition_without_findable_history_fails_its_gate_by_name() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let id = ok(f.path(), &["-q", "issue", "create", "Untraceable review"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Concern",
+        ],
+    );
+    let disposition = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "Dismissal",
+        ],
+    );
+    // The review events are committed before their issue, so the history of
+    // the scope they review cannot be found.
+    git(f.path(), &["add", ".atelier/reviews"]);
+    git(
+        f.path(),
+        &["commit", "-qm", "review events before their issue"],
+    );
+    commit(f.path(), "the issue they review");
+    f.terminal(&id);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && output.contains("findings.disposed")
+            && output.contains(&finding)
+            && output.contains(&format!("disposition {disposition} could not be traced")),
+        "{output}"
+    );
 }
 
 #[cfg(unix)]
