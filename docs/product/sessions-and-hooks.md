@@ -109,8 +109,11 @@ the local base can hold commits no land has checked, so it is not trusted.
 Without an upstream, every claim is checked. Every change that reaches the
 base had its own claims checked when it landed, so earlier history holds by
 induction. A claim is checked when its record changed; when a changed issue
-record reaches it through blocked, parent, child, or advances links, directly
-or along a chain, before or after the change; when a review or evidence record
+record reaches it through blocked, parent, or child links, directly or along a
+chain, before or after the change; when it is a mission that such a record
+advances (the chain stops at the mission, so adding or editing one issue of a
+mission does not re-check the mission's other done work, atelier-ss25); when
+a review or evidence record
 about it was added, removed, or retargeted; when the workflow policy at HEAD
 or on the base differs from the trusted point; or, under a policy that gates
 on `lint.none_blocking`, which reads every record, when any record changed.

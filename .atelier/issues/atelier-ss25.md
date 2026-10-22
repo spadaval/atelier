@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Adding an issue to a mission re-checks every done issue in that mission"
-updated_at: "2026-10-22T22:20:04.350549232+00:00"
+updated_at: "2026-10-22T22:23:47.247994576+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,9 @@ Bisected in a scratch clone of brewer-corp/astromech at 2ba8bfd2: an unpushed co
 ## Unknowns
 
 Whether following `advances` into a mission was meant for the mission's own claim (a mission's completion can depend on its issues) rather than for its siblings. If so, the fix is to stop the walk at the mission rather than to drop the link.
+
+## Notes
+
+- 2026-10-22 [decision] Stop touched_claims' walk at the mission: an advances link, declared on either side, touches only the end that is a mission and is not followed further; the reverse walk keeps only blocked_by links.
+  Reason: Answers the Unknown: the gates read advances only for a mission's own work.terminal (issue_descendant_ids), and blockers pass only from a parent, so a mission's claim depends on its advancing work but no claim depends on the mission. The mission itself is still re-checked, which a done mission gaining open work needs.
+  Rejected: Drop advances from the walk entirely (would miss a done mission whose advancing work reopens, covered by land_checks_a_mission_whose_advancing_work_reopens)

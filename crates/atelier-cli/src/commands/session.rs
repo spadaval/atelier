@@ -757,7 +757,11 @@ fn claim_nodes(
 /// records may not have changed: every changed issue record and the issues
 /// it links as blocked, parent, child or advanced, and the targets of every changed
 /// review or evidence record, each as it was at `point` and as it is now,
-/// then every issue those reach through the same links.
+/// then every issue those reach through the same links. An `advances` link
+/// touches only the mission at one end and stops there: a mission's claim
+/// depends on the work that advances it, but no claim depends on the
+/// mission's, so a change to one piece of its work does not re-check the
+/// rest (atelier-ss25).
 /// `None` when a record at `point` cannot be read, so every claim is checked.
 fn touched_claims(
     repo: &Path,
@@ -796,14 +800,13 @@ fn touched_claims(
     .lines()
     .map(str::to_owned)
     .collect::<std::collections::BTreeSet<_>>();
-    // Typed links a record declares that the gates follow; the other record
-    // may not store them (atelier-ihss).
-    fn chained(relation_type: &str) -> bool {
-        matches!(relation_type, "advances" | atelier_records::BLOCKED_BY)
-    }
+    // The issues `record` links whose claims its change can affect, through
+    // links the walk continues along and `advances` links it stops at. A
+    // record stores only the links it declares (atelier-ihss).
     fn linked(
         record: &atelier_records::CanonicalIssueRecord,
         touched: &mut std::collections::BTreeSet<String>,
+        stops: &mut std::collections::BTreeSet<String>,
     ) {
         touched.insert(record.issue.id.to_string());
         touched.extend(record.issue.parent_id.iter().map(ToString::to_string));
@@ -815,14 +818,22 @@ fn touched_claims(
                 .chain(&record.relationships.children)
                 .map(|link| link.id.clone()),
         );
-        touched.extend(
-            record
-                .relationships
-                .relates
-                .iter()
-                .filter(|link| link.kind == "issue" && chained(&link.relation_type))
-                .map(|link| link.id.clone()),
-        );
+        for link in record
+            .relationships
+            .relates
+            .iter()
+            .filter(|link| link.kind == "issue")
+        {
+            match link.relation_type.as_str() {
+                atelier_records::BLOCKED_BY => {
+                    touched.insert(link.id.clone());
+                }
+                "advances" => {
+                    stops.insert(link.id.clone());
+                }
+                _ => {}
+            }
+        }
     }
     fn attached(
         evidence: &atelier_records::EvidenceRecord,
@@ -839,6 +850,7 @@ fn touched_claims(
         );
     }
     let mut touched = std::collections::BTreeSet::new();
+    let mut stops = std::collections::BTreeSet::new();
     for path in changed.lines() {
         let Some(id) = Path::new(path).file_stem().and_then(|stem| stem.to_str()) else {
             continue;
@@ -853,10 +865,10 @@ fn touched_claims(
                 let Ok(record) = read.issue_at(point, id) else {
                     return Ok(None);
                 };
-                linked(&record, &mut touched);
+                linked(&record, &mut touched, &mut stops);
             }
             if let Some(record) = index.issue_record(id) {
-                linked(record, &mut touched);
+                linked(record, &mut touched, &mut stops);
             }
         } else if path.starts_with(".atelier/reviews/") {
             if before {
@@ -885,19 +897,28 @@ fn touched_claims(
         }
     }
     // The blocker and open-work checks follow whole chains: blockers of
-    // blockers, blockers a parent passes to its children, children of
-    // children, and work that advances a mission, in either direction, so
-    // a record also reaches the records that declare a link to it. A claim
-    // is checked when anything along its chain changed.
+    // blockers, blockers a parent passes to its children and children of
+    // children, in either direction, so a record also reaches the records
+    // that declare a link to it. A claim is checked when anything along its
+    // chain changed. An `advances` link, declared on either side, touches
+    // the mission at its other end and goes no further.
     let mut declared_by = std::collections::BTreeMap::<String, Vec<String>>::new();
+    let mut advanced_by = std::collections::BTreeMap::<String, Vec<String>>::new();
     for record in index.issue_records() {
-        for link in &record.relationships.relates {
-            if link.kind == "issue" && chained(&link.relation_type) {
-                declared_by
-                    .entry(link.id.clone())
-                    .or_default()
-                    .push(record.issue.id.to_string());
-            }
+        for link in record
+            .relationships
+            .relates
+            .iter()
+            .filter(|link| link.kind == "issue")
+        {
+            let into = match link.relation_type.as_str() {
+                atelier_records::BLOCKED_BY => &mut declared_by,
+                "advances" => &mut advanced_by,
+                _ => continue,
+            };
+            into.entry(link.id.clone())
+                .or_default()
+                .push(record.issue.id.to_string());
         }
     }
     let mut queue = touched.iter().cloned().collect::<Vec<_>>();
@@ -909,10 +930,16 @@ fn touched_claims(
             .into_iter()
             .collect();
         if let Some(record) = index.issue_record(&id) {
-            linked(record, &mut next);
+            linked(record, &mut next, &mut stops);
         }
+        stops.extend(advanced_by.get(&id).into_iter().flatten().cloned());
         queue.extend(next.into_iter().filter(|id| touched.insert(id.clone())));
     }
+    touched.extend(stops.into_iter().filter(|id| {
+        index
+            .issue_record(id)
+            .is_some_and(|record| record.issue.issue_type == "mission")
+    }));
     Ok(Some(touched))
 }
 

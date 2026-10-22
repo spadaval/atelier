@@ -5836,3 +5836,95 @@ fn start_replaces_a_stale_lease_with_a_note() {
         "{out}"
     );
 }
+/// A planning commit that only adds an issue advancing a mission re-checks
+/// no other done claim in that mission: a sibling's claim does not depend on
+/// the mission (atelier-ss25). `land` on the base and on a work branch, and
+/// `merge`, skip an old sibling whose proof no longer verifies; `doctor`
+/// still reports it.
+#[test]
+fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "--issue-type",
+            "mission",
+            "Mission",
+        ],
+    );
+    let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
+    ok(
+        f.path(),
+        &["issue", "link", &old, &mission, "--role", "advances"],
+    );
+    commit(f.path(), "plan the mission");
+    ok(f.path(), &["issue", "transition", &old, "start"]);
+    ok(
+        f.path(),
+        &["issue", "transition", &old, "close", "--reason", "done"],
+    );
+    ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{old}"),
+            "--kind",
+            "test",
+            "--result",
+            "fail",
+            "Proof that failed",
+        ],
+    );
+    commit(f.path(), "done without the gates");
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let reported = |output: &str| output.contains(&format!("{old} evidence.no_newer_failure"));
+
+    let add_to_mission = |title: &str| {
+        let id = ok(f.path(), &["-q", "issue", "create", title]);
+        ok(
+            f.path(),
+            &["issue", "link", &id, &mission, "--role", "advances"],
+        );
+        commit(f.path(), &format!("add {title} to the mission"));
+    };
+    add_to_mission("Planned on the base");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass && !reported(&output), "{output}");
+    let (pass, output) = cli(f.path(), &["doctor"]);
+    assert!(!pass && reported(&output), "{output}");
+    git(f.path(), &["push", "-q"]);
+
+    // A work branch that files one too lands and merges.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    add_to_mission("Planned on the branch");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Review",
+        ],
+    );
+    commit(f.path(), "approval");
+    f.terminal(&f.id);
+    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    assert!(pass && !reported(&output), "{output}");
+    let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
+    assert!(pass && !reported(&output), "{output}");
+}
