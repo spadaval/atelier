@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "merge"
 - "orientation"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-9g48
 priority: "P1"
 relationships:
   blocks: []
@@ -22,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Show which waiting branches are ready to land"
-updated_at: "2026-10-22T19:58:16.763000375+00:00"
+updated_at: "2026-10-22T20:32:24.275342683+00:00"
 ---
 
 ## Goal

@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Render other local branches as a dense section of the status page"
-updated_at: "2026-10-22T19:58:19.010780625+00:00"
+updated_at: "2026-10-22T20:32:24.275345548+00:00"
 ---
 
 ## Goal
