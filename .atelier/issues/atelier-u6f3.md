@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Batch low-priority review follow-ups into one branch and one review"
-updated_at: "2026-10-22T19:58:17.870009528+00:00"
+updated_at: "2026-10-22T23:03:39.477383694+00:00"
 ---
 
 ## Goal
