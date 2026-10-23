@@ -46,7 +46,7 @@ struct ReviewArgs {
     #[arg(long)]
     identity: String,
     /// Full commit the event pins, an ancestor on the work branch [default: HEAD]
-    #[arg(long)]
+    #[arg(long, value_parser = parse_commit)]
     commit: Option<String>,
     /// What was checked, found or decided
     summary: String,
@@ -64,7 +64,7 @@ struct TrivialArgs {
     #[arg(long)]
     identity: String,
     /// Full commit the exemption pins, an ancestor on the work branch [default: HEAD]
-    #[arg(long, conflicts_with = "base")]
+    #[arg(long, conflicts_with = "base", value_parser = parse_commit)]
     commit: Option<String>,
     /// Exempt exactly this commit on the base branch, with no owner issue or
     /// work branch; run on the base, and `land` counts that commit alone as reviewed
@@ -107,7 +107,7 @@ enum ReviewCommands {
         #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
         decision: FindingDecision,
         /// For fix_now: the full commit that resolves the finding, later than its pin
-        #[arg(long)]
+        #[arg(long, value_parser = parse_resolution_commit)]
         resolution_commit: Option<String>,
         /// For defer: the existing follow-up issue
         #[arg(long)]
@@ -302,7 +302,7 @@ enum Commands {
         #[arg(long)]
         apply: bool,
         /// Override record retention, in days, for this prune pass
-        #[arg(long)]
+        #[arg(long, allow_negative_numbers = true, value_parser = parse_retention_days)]
         retention_days: Option<u64>,
     },
 
@@ -462,6 +462,7 @@ enum IssueCommands {
         #[arg(
             long,
             default_value_t = 50,
+            allow_negative_numbers = true,
             value_parser = atelier_app::issue_inventory::parse_limit
         )]
         limit: usize,
@@ -708,6 +709,25 @@ where
     })
 }
 
+/// A full commit ID, as review events pin: the shared invalid-value form
+/// for anything else (atelier-d8ku).
+fn commit_value(field: &str, value: &str) -> Result<String, InvalidValue> {
+    atelier_records::review::validate_commit(value)
+        .map(|()| value.to_owned())
+        .map_err(|_| InvalidValue::new(field, value, &["full 40- or 64-character commit IDs"]))
+}
+fn parse_commit(value: &str) -> Result<String, InvalidValue> {
+    commit_value("commit", value)
+}
+fn parse_resolution_commit(value: &str) -> Result<String, InvalidValue> {
+    commit_value("resolution commit", value)
+}
+fn parse_retention_days(value: &str) -> Result<u64, InvalidValue> {
+    value
+        .parse()
+        .map_err(|_| InvalidValue::new("retention days", value, &["whole numbers of days"]))
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -868,9 +888,9 @@ fn run() -> Result<()> {
         } => commands::merge::run(&id, check, json, quiet),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
-            let append = |args: ReviewArgs, event| {
+            let append = |args: ReviewArgs, event: ReviewEvent| {
                 let group = RecordCommit::begin(args.record_commit)?;
-                let verb = commands::review::event_name(&event);
+                let verb = event.name();
                 commands::review::append(
                     &args.id,
                     &args.identity,

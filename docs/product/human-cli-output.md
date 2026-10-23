@@ -70,10 +70,52 @@ line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
 Subissues and the Mission Rollup or Parent Rollup). So the Current Work row
 and the Owner row in `status` read alike. A record that is not an issue uses
 the same order without a priority, as `evidence show` titles it:
-`atelier-waj0 evidence recorded <title>`. The other review and evidence views adopt it in
-their own items: `status`'s Reviews and Evidence rows in atelier-d2xe,
-`review list` in atelier-h6o4, `review show` in atelier-3u2u, and
+`atelier-waj0 evidence recorded <title>`. The other evidence views adopt it in
+their own items: `status`'s Evidence rows in atelier-d2xe and
 `evidence list` in atelier-u0ig.
+
+### Review Rows
+
+A review event is one row, oldest first, in `review list` and in `status`'s
+Reviews (newest first there):
+
+```
+atelier-1isf  disposition fix_now → atelier-xs5u  @d1c3b1bf  Reviewer R  2026-10-16  Done when: setup claude warns…
+```
+
+The ID, the kind (a finding adds its recommendation, a disposition its
+decision and finding), `on <issue>` unless the list is for that issue, the
+pinned commit, the identity, the local date and the summary's first line, cut
+at 100 characters. A base exemption reads `trivial_exemption  of <base>`.
+`review list <id>` lists the events of the issue's branch owner and its
+scope; for a child without its own branch it first says
+`<child> is reviewed with its branch owner <owner>.` After the rows come the
+owner's approval state and its findings:
+
+```
+Approval: ⚠ stale — atelier-x16l @e2562bd6 by Independent reviewer 3; changed since by 1 commit:
+  1a2b3c4d Tweak the sample: proof-sample.txt
+Findings: 21 disposed, 1 open
+  ⚠ atelier-4cid defer, no disposition  The Stop hook runs at the end of every turn…
+  ✓ atelier-ul0a no_action → no_action atelier-ul3r → no_action atelier-6o75  Name could be better
+  ✓ atelier-1ia7 defer → fix_now atelier-g6fd, fixed at a485ef02  docs/adr/0022…
+```
+
+On the owner's work branch, while it holds commits the base does not, the
+approval is `✓ current`, `⚠ stale` or `⚠ missing` as `merge`'s
+`review.current` judges it at the branch tip, and a stale approval lists the
+commits that made it stale with the paths a new review has to read. Merged
+work is judged on the base as `land` judges history: `✓ accepted on <base>`
+or `⚠ not accepted on <base>`. The views read whichever records the checkout
+has. Why an approval is not current is not shown yet (atelier-cisa). A
+finding is open until it has a disposition; its chain lists every
+disposition, the latest last.
+
+`review show <id>` is brief: a header line,
+`<id> <kind> on <issue> @<pin> by <identity> | <timestamp>`, ending
+`| ✓ current` (or the base's word) for an approval or exemption; then a
+finding's `Dispositions:`, or a disposition's `Finding:`, `Fixed at:`,
+`Follow-up:` and `Supersedes:` lines; then the text once.
 
 ### Branches
 
@@ -299,8 +341,24 @@ stands, one line per field: `<id> <field>: <value>`, or
 `<id> <field>: <old> → <new>` where the old value helps, as in
 `atelier-43m1 priority: medium → high`. A value that did not change is not
 listed. Each command adopts this in its own item (atelier-7ebi for `issue
-update`, `note` and `link`; atelier-8bve for `issue create`; atelier-093h
-for review records; atelier-3ekh for evidence).
+update`, `note` and `link`; atelier-8bve for `issue create`; atelier-3ekh
+for evidence).
+
+A command that adds a review event, which changes no existing value,
+confirms it in one line naming its kind, ID, issue and pinned commit, and
+what a disposition settled or the step a finding needs:
+
+```
+Approval atelier-hleo on atelier-nqgr @c24af21a
+Finding atelier-45rc fix_now on atelier-nqgr @fed2d571. Dispose: atelier review disposition atelier-45rc --identity "..." --decision fix_now --resolution-commit ... "..."
+Disposition atelier-6o75 no_action on atelier-nqgr @c24af21a: finding atelier-rm9e "Name could be better", supersedes atelier-ul3r
+```
+
+An approval, or a defer or no_action disposition, whose identity is one of
+the substantive Git authors `review.current` counts is still recorded, and a
+second line warns `⚠ identity matches a Git author; this will not satisfy
+review.current` (or `findings.disposed`); under `--quiet` the warning goes to
+stderr.
 
 ### Next Footer
 
@@ -385,7 +443,7 @@ refusal of it leaves stdout empty:
 | `start` | the branch name |
 | `evidence record`, `attach` | the record's ID |
 | `evidence show` | `<id> <result>` |
-| `evidence list`, `review list` | IDs, one per line |
+| `evidence list`, `review list` | IDs, one per line; for `review list <id>`, those of the rows it lists |
 | `review record`, `approve`, `finding`, `trivial`, `disposition` | the new event's ID |
 | `review request` | the range to review, `<from>..<head>` in full commits |
 | `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |

@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:35:41.926425951+00:00"
+status: "done"
 title: "Show review list as one readable line per event, in time order"
-updated_at: "2026-10-23T14:14:37.804435249+00:00"
+updated_at: "2026-10-23T14:35:41.926425951+00:00"
 ---
 
 ## Goal
@@ -51,3 +52,24 @@ atelier-sdb0 (status shows the owner's reviews) should reuse this renderer. ADR 
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: short IDs and unknown IDs now resolve (review.rs:139; drop those claims). Still: rows use {:?} (review.rs:167-170), multi-line summaries spill, ID order not time order, no pin/date, owner column repeated, a known owner with no events prints nothing. Reuse the renderer at status.rs:323 (also {:?}). 'prime/status' is now just status.
+- 2026-10-23 [decision] review list <id> lists the events of the issue's branch owner scope (review_gate::scope), naming the target of events on children with 'on <id>'; --json keeps the stored records whose target is the issue, as before.
+  Reason: The gates judge findings across the owner's scope; --json is the script interface ADR 0022 keeps unchanged.
+  Rejected: Filtering rows to target == id
+- 2026-10-23 [decision] Rows use the stored event names (finding, disposition, trivial_exemption) and cut the summary's first line at 100 characters.
+  Reason: Stored names grep the same as the records; long single-paragraph summaries still made rows of several hundred characters, and review show prints the whole text.
+
+## Close Reason
+
+`atelier review list` prints one row per event in time order (`<id>  <kind>[  on <target>]  @<pin>  <identity>  <date>  <summary first line>`), with no Debug text; with an issue the owner column is dropped, a known owner with no events prints `No review events for <id>.`, `--quiet` prints the listed IDs, and `status`'s Reviews rows use the same renderer.
+
+### Deviations
+Short-ID resolution and the unknown-ID error were already on master (regroom note), so only tests were added for them. `review list <id>` now lists the branch owner's whole scope, naming the target of events on children; `--json` is unchanged. Without an ID, base exemptions are merged into the time order instead of following the events. Summary lines are also cut at 100 characters.
+
+### Decisions
+See the decision notes on this item (scope-wide rows; stored event names and the 100-character cut).
+
+### Surprises
+None.
+
+### Open items
+None.

@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make evidence show brief: one transcript, no empty fields, freshness"
-updated_at: "2026-10-23T14:14:22.802461530+00:00"
+updated_at: "2026-10-23T14:47:58.928636359+00:00"
 ---
 
 ## Goal

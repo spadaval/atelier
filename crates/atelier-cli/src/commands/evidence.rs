@@ -1,5 +1,6 @@
 use crate::human_output::{print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,7 +17,11 @@ use atelier_core::{
 use atelier_records::{validate_record_kind, RecordStore};
 
 const KIND: &str = "evidence";
-const OUTPUT_SUMMARY_LIMIT_BYTES: usize = 4096;
+/// A failing capture keeps the first and last bytes of each stream: test
+/// runners print the failure at the end.
+const OUTPUT_HEAD_BYTES: usize = 1024;
+const OUTPUT_TAIL_BYTES: usize = 3072;
+const OUTPUT_SUMMARY_LIMIT_BYTES: usize = OUTPUT_HEAD_BYTES + OUTPUT_TAIL_BYTES;
 const EVIDENCE_LIST_LIMIT: usize = 20;
 const EVIDENCE_LIST_TEXT_LIMIT: usize = 96;
 
@@ -227,24 +232,27 @@ pub fn capture_record(options: CaptureOptions<'_>) -> Result<EvidenceRecord> {
 
     let (exit_code, exit_status, success, stdout_summary, stderr_summary, spawn_error) =
         match command_output {
-            Ok(output) => (
-                output.status.code(),
-                output
-                    .status
-                    .code()
-                    .map(|code| code.to_string())
-                    .unwrap_or_else(|| output.status.to_string()),
-                output.status.success(),
-                bounded_stream(&output.stdout),
-                bounded_stream(&output.stderr),
-                None,
-            ),
+            Ok(output) => {
+                let success = output.status.success();
+                (
+                    output.status.code(),
+                    output
+                        .status
+                        .code()
+                        .map(|code| code.to_string())
+                        .unwrap_or_else(|| output.status.to_string()),
+                    success,
+                    stream_summary(&output.stdout, success),
+                    stream_summary(&output.stderr, success),
+                    None,
+                )
+            }
             Err(error) => (
                 None,
                 "not-started".to_string(),
                 false,
-                bounded_stream(&[]),
-                bounded_stream(error.to_string().as_bytes()),
+                stream_summary(&[], false),
+                stream_summary(error.to_string().as_bytes(), false),
                 Some(error.to_string()),
             ),
         };
@@ -840,13 +848,72 @@ fn print_heading(title: &str) {
     human_output::print_section_heading(title);
 }
 
-fn bounded_stream(bytes: &[u8]) -> EvidenceStreamSummary {
+/// A passing stream keeps no text, only its size, digest and test-count
+/// line; a failing one also keeps its head and tail.
+fn stream_summary(bytes: &[u8], passed: bool) -> EvidenceStreamSummary {
+    let (summary, truncated) = if passed {
+        (String::new(), false)
+    } else {
+        kept_text(bytes)
+    };
     EvidenceStreamSummary {
-        summary: String::from_utf8_lossy(&bytes[..bytes.len().min(OUTPUT_SUMMARY_LIMIT_BYTES)])
-            .to_string(),
+        summary,
         bytes: bytes.len(),
-        truncated: bytes.len() > OUTPUT_SUMMARY_LIMIT_BYTES,
+        truncated,
+        sha256: Some(
+            Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+        ),
+        test_summary: test_summary_line(&String::from_utf8_lossy(bytes)),
     }
+}
+
+/// The whole stream when it fits the limit, otherwise its first and last
+/// bytes joined by an omitted-bytes marker line. Cuts move off UTF-8
+/// continuation bytes so no character is split, and line ends lose trailing
+/// whitespace so the record passes `git diff --check`.
+fn kept_text(bytes: &[u8]) -> (String, bool) {
+    if bytes.len() <= OUTPUT_SUMMARY_LIMIT_BYTES {
+        return (trim_line_ends(&String::from_utf8_lossy(bytes)), false);
+    }
+    let is_continuation = |index: usize| bytes[index] & 0b1100_0000 == 0b1000_0000;
+    let mut head_end = OUTPUT_HEAD_BYTES;
+    while head_end > OUTPUT_HEAD_BYTES - 3 && is_continuation(head_end) {
+        head_end -= 1;
+    }
+    let mut tail_start = bytes.len() - OUTPUT_TAIL_BYTES;
+    while tail_start < bytes.len() - OUTPUT_TAIL_BYTES + 3 && is_continuation(tail_start) {
+        tail_start += 1;
+    }
+    let mut text = String::from_utf8_lossy(&bytes[..head_end]).into_owned();
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(&format!("… {} bytes omitted …\n", tail_start - head_end));
+    text.push_str(&String::from_utf8_lossy(&bytes[tail_start..]));
+    (trim_line_ends(&text), true)
+}
+
+fn trim_line_ends(text: &str) -> String {
+    let mut trimmed = text
+        .split('\n')
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    trimmed.truncate(trimmed.trim_end().len());
+    trimmed
+}
+
+/// The last line a test runner prints with its counts: nextest's
+/// `Summary [...]` or cargo test's `test result:`.
+fn test_summary_line(text: &str) -> Option<String> {
+    text.lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| line.starts_with("Summary [") || line.starts_with("test result:"))
+        .map(str::to_string)
 }
 
 #[derive(Debug)]
@@ -862,19 +929,30 @@ fn print_output_summary(data: &EvidenceRecordData) -> Result<()> {
         return Ok(());
     };
     print_heading("Output Summary");
-    print_stream_summary("Stdout", &output.stdout)?;
-    print_stream_summary("Stderr", &output.stderr)?;
+    let passed = data.result == EvidenceResult::Pass;
+    print_stream_summary("Stdout", &output.stdout, passed)?;
+    print_stream_summary("Stderr", &output.stderr, passed)?;
     Ok(())
 }
 
-fn print_stream_summary(name: &str, value: &EvidenceStreamSummary) -> Result<()> {
+fn print_stream_summary(name: &str, value: &EvidenceStreamSummary, passed: bool) -> Result<()> {
     let bytes = value.bytes;
     let truncated = value.truncated;
     println!("{name}: {bytes} bytes, truncated: {}", yes_no(truncated));
-    if value.summary.is_empty() {
-        println!("(none)");
-    } else {
+    if let Some(line) = value.test_summary.as_deref() {
+        println!("{line}");
+    }
+    if !value.summary.is_empty() {
         println!("{}", value.summary);
+    } else if bytes > 0 && value.sha256.is_some() && passed {
+        // A passing capture keeps its digest, not its text.
+        println!("(not kept; passing output is summarized)");
+    } else if bytes > 0 && value.sha256.is_some() {
+        // A failing capture keeps its text without trailing whitespace, so
+        // only an all-whitespace stream is left empty.
+        println!("(whitespace only)");
+    } else {
+        println!("(none)");
     }
     Ok(())
 }
@@ -999,24 +1077,83 @@ mod tests {
     }
 
     #[test]
-    fn capture_bounds_raw_bytes_before_lossy_utf8_conversion() {
+    fn failing_capture_keeps_head_and_tail_on_character_boundaries() {
         for size in [
             0,
             OUTPUT_SUMMARY_LIMIT_BYTES,
             OUTPUT_SUMMARY_LIMIT_BYTES + 1,
         ] {
-            let stream = bounded_stream(&vec![b'x'; size]);
+            let stream = stream_summary(&vec![b'x'; size], false);
             assert_eq!(stream.bytes, size);
             assert_eq!(stream.truncated, size > OUTPUT_SUMMARY_LIMIT_BYTES);
-            assert_eq!(stream.summary.len(), size.min(OUTPUT_SUMMARY_LIMIT_BYTES));
+            if size <= OUTPUT_SUMMARY_LIMIT_BYTES {
+                assert_eq!(stream.summary, "x".repeat(size));
+            }
         }
-        let mut bytes = vec![b'x'; OUTPUT_SUMMARY_LIMIT_BYTES - 1];
-        bytes.extend_from_slice("🐈".as_bytes());
-        let stream = bounded_stream(&bytes);
-        assert_eq!(stream.bytes, OUTPUT_SUMMARY_LIMIT_BYTES + 3);
+        assert_eq!(
+            stream_summary(&vec![b'x'; OUTPUT_SUMMARY_LIMIT_BYTES + 1], false).summary,
+            format!(
+                "{}\n… 1 bytes omitted …\n{}",
+                "x".repeat(OUTPUT_HEAD_BYTES),
+                "x".repeat(OUTPUT_TAIL_BYTES)
+            )
+        );
+
+        // A four-byte character straddles each cut; neither is split.
+        let cat = "🐈".as_bytes();
+        let mut bytes = vec![b'h'; OUTPUT_HEAD_BYTES - 1];
+        bytes.extend_from_slice(cat);
+        bytes.extend(vec![b'm'; 5000]);
+        bytes.extend_from_slice(cat);
+        bytes.extend(vec![b't'; OUTPUT_TAIL_BYTES - 2]);
+        let stream = stream_summary(&bytes, false);
         assert!(stream.truncated);
-        assert!(stream.summary.ends_with('\u{fffd}'));
-        assert_eq!(stream.summary.len(), OUTPUT_SUMMARY_LIMIT_BYTES + 2);
-        assert_eq!(bounded_stream(b"\xff\n ").summary, "\u{fffd}\n ");
+        assert!(!stream.summary.contains('\u{fffd}'));
+        assert_eq!(
+            stream.summary,
+            format!(
+                "{}\n… {} bytes omitted …\n{}",
+                "h".repeat(OUTPUT_HEAD_BYTES - 1),
+                cat.len() + 5000 + cat.len(),
+                "t".repeat(OUTPUT_TAIL_BYTES - 2)
+            )
+        );
+        assert_eq!(stream_summary(b"\xff\n ", false).summary, "\u{fffd}");
+    }
+
+    #[test]
+    fn failing_capture_keeps_the_final_failure_line() {
+        let mut output = String::new();
+        for index in 0..600 {
+            output.push_str(&format!("PASS test_{index:03}\n"));
+        }
+        output.push_str("FAIL x\n");
+        let stream = stream_summary(output.as_bytes(), false);
+        assert!(stream.truncated);
+        assert!(stream.summary.starts_with("PASS test_000\n"));
+        assert!(stream.summary.ends_with("PASS test_599\nFAIL x"));
+        assert!(stream.summary.contains(" bytes omitted …\n"));
+    }
+
+    #[test]
+    fn passing_capture_keeps_digest_and_test_count_not_text() {
+        let output = b"   Compiling x\n     Summary [   1.0s] 3 tests run: 3 passed, 0 skipped\n";
+        let stream = stream_summary(output, true);
+        assert_eq!(stream.summary, "");
+        assert!(!stream.truncated);
+        assert_eq!(stream.bytes, output.len());
+        assert_eq!(
+            stream_summary(b"abc", true).sha256.as_deref(),
+            Some("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        );
+        assert_eq!(
+            stream.test_summary.as_deref(),
+            Some("Summary [   1.0s] 3 tests run: 3 passed, 0 skipped")
+        );
+        assert_eq!(
+            test_summary_line("test result: ok. 1 passed\ntest result: ok. 2 passed\n"),
+            Some("test result: ok. 2 passed".to_string())
+        );
+        assert_eq!(test_summary_line("all good\n"), None);
     }
 }

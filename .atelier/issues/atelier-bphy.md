@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:28:10.864853828+00:00"
+status: "done"
 title: "Keep the tail of captured command output in evidence"
-updated_at: "2026-10-23T14:14:37.571452093+00:00"
+updated_at: "2026-10-23T14:28:10.864853828+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,22 @@ Command capture keeps only the first 4,096 bytes of stdout and stderr (`OUTPUT_S
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. bounded_stream (evidence.rs:843) keeps bytes[..4096] only; a failing last line is lost. Output lives only in the body Markdown (## Stdout, Bytes:, Truncated:, fenced block); keep 'Truncated: yes' parseable. Record-format change: reinstall after merge.
+- 2026-10-23 [decision] A failing stream over 4,096 bytes keeps its first 1,024 and last 3,072 bytes, cut on UTF-8 character boundaries (not line boundaries), joined by a '… N bytes omitted …' line; kept text loses trailing whitespace at line ends.
+  Reason: Snapping the tail to a line start can drop most of a long final failure line; trailing whitespace inside captured output would make the new record fail git diff --check.
+  Rejected: Cutting at line boundaries; keeping trailing whitespace verbatim
+
+## Close Reason
+
+A failing or blocked capture now keeps each stream whole up to 4,096 bytes, otherwise its first 1,024 and last 3,072 bytes joined by a `… N bytes omitted …` line under `Truncated: yes`, so a command that prints 8 KiB and then `FAIL x` keeps `FAIL x` (commit fc115d5b). Receipts recorded before the change, including atelier-1qkb with `Truncated: yes`, still parse and render (evidence atelier-4dwk, full suite atelier-2c5x).
+
+### Deviations
+None. Record-format change: new failing stream sections add a `SHA-256:` line and optionally `Test summary:` after `Truncated:`; old receipts are not migrated. Reinstall the CLI after merge.
+
+### Decisions
+Cuts are on UTF-8 character boundaries, not line boundaries, and kept text loses trailing whitespace at line ends; see this item's decision note.
+
+### Surprises
+The parser read `Bytes:`/`Truncated:` from any line of the section, including captured text; fields are now read only before the fenced block.
+
+### Open items
+None.

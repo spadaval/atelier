@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:35:54.815453968+00:00"
+status: "done"
 title: "Give --commit and leftover parser errors the shared invalid-value form"
-updated_at: "2026-10-23T14:14:38.271902219+00:00"
+updated_at: "2026-10-23T14:35:54.815453968+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,21 @@ Mission atelier-o3lm validation (evidence atelier-ba8q) found invalid values sti
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. review --commit zzz: 'review commit must be a full Git commit ID'; unknown full SHA leaks raw git merge-base error; prune --retention-days abc and issue list --limit -3 print clap wording (exit 2). parse_limit at main.rs:465 is the model.
+- 2026-10-23 [decision] A well-formed commit the branch does not hold exits 1 with 'commit <sha> is not on this branch ... Next: git log --format=%H'; only malformed values exit 2.
+  Reason: A missing commit is like an unknown record reference, which exits 1; the invalid-value form is for values outside the accepted form.
+
+## Close Reason
+
+`--commit` and `--resolution-commit` reject a malformed value with `Invalid commit 'zzz'. Valid values: full 40- or 64-character commit IDs` (exit 2), and so do `prune --retention-days abc|-3` and `issue list --limit -3`. A well-formed commit the branch does not hold now prints `commit <sha> is not on this branch: Git does not know it, or HEAD does not contain it. Next: git log --format=%H` instead of raw git merge-base output, and a resolution that does not follow the finding's pin names both commits.
+
+### Deviations
+None.
+
+### Decisions
+See the decision note on this item (an unknown commit exits 1, like an unknown reference).
+
+### Surprises
+Negative numbers never reached the value parser: clap read `-3` as a flag. `allow_negative_numbers` fixes that.
+
+### Open items
+None.

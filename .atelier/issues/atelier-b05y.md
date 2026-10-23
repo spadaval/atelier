@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Use one evidence target syntax and a result token in quiet output"
-updated_at: "2026-10-23T14:14:22.951760692+00:00"
+updated_at: "2026-10-23T14:47:59.166253868+00:00"
 ---
 
 ## Goal

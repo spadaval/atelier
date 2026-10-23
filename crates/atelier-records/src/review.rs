@@ -247,6 +247,16 @@ pub fn render_review_record(record: &ReviewRecord) -> Result<String> {
     ))
 }
 
+/// A new record's title, built from its kind, subject and short pin, such
+/// as `finding on atelier-nqgr @fed2d571`, so the body is stored once
+/// (atelier-hulj). Records written before keep the summary's first line.
+fn generated_title(event: &str, relation: &str, subject: &str, commit: &str) -> String {
+    format!(
+        "{event} {relation} {subject} @{}",
+        commit.get(..8).unwrap_or(commit)
+    )
+}
+
 impl RecordStore {
     /// Creates a new immutable event. Never replaces an existing path.
     pub fn create_review(
@@ -263,7 +273,7 @@ impl RecordStore {
             header: RecordHeader {
                 kind: "review".into(),
                 id: self.allocate_record_id()?,
-                title: summary.lines().next().unwrap_or("").into(),
+                title: generated_title(event.name(), "on", target, commit),
                 status: "recorded".into(),
                 labels: Vec::new(),
                 relationships: relationships(target, &event),
@@ -295,7 +305,7 @@ impl RecordStore {
             header: RecordHeader {
                 kind: "review".into(),
                 id: self.allocate_record_id()?,
-                title: summary.lines().next().unwrap_or("").into(),
+                title: generated_title(ReviewEvent::TrivialExemption.name(), "of", base, commit),
                 status: "recorded".into(),
                 labels: Vec::new(),
                 relationships: Relationships::default(),

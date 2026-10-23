@@ -14,10 +14,21 @@ in the body; a broad test run does not establish every acceptance claim.
 
 `atelier evidence record --target issue/<id> --kind <kind>` creates and attaches a new receipt. Manual proof
 requires an explicit `--result` and pins current HEAD; include the observation
-or artifact. Command capture runs the supplied command, records its transcript
-and exit status, pins HEAD, and derives `pass` or `fail` from the exit status.
+or artifact. Command capture runs the supplied command, records its exit status
+and a summary of its output, pins HEAD, and derives `pass` or `fail` from the exit status.
 A command that cannot start records `blocked`; a command that changes HEAD is
 rejected without a receipt. Consult `atelier evidence record --help` for flags.
+
+The receipt's `## Stdout` and `## Stderr` sections give each stream's
+`Bytes:`, its `SHA-256:` and, when the stream printed one, its last test-count
+line as `Test summary:` (nextest's `Summary [...]` or cargo test's
+`test result:`). A passing capture stores nothing more, not the log. A failing
+or blocked capture also keeps the stream's text in a fenced block: all of it up
+to 4,096 bytes, otherwise the first 1,024 and the last 3,072 bytes joined by a
+`… N bytes omitted …` line and marked `Truncated: yes`, so the failure a test
+runner prints last stays in the record. Receipts recorded before this format
+keep the first 4,096 bytes of every stream and have no digest; they still parse
+and are not migrated.
 
 ```text
 atelier evidence record --target issue/<id> --kind validation --result pass "Observed claim"

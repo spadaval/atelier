@@ -816,6 +816,8 @@ mod records_evidence;
 mod reports;
 #[path = "cli_integration/review_request.rs"]
 mod review_request;
+#[path = "cli_integration/review_views.rs"]
+mod review_views;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
 #[path = "cli_integration/unicode.rs"]
