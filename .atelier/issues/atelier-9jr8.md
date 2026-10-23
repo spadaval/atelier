@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T14:43:11.856312190+00:00"
+status: "done"
 title: "Give each failed land check its item, reason and fix command"
-updated_at: "2026-10-23T14:41:17.932429446+00:00"
+updated_at: "2026-10-23T14:43:11.856312190+00:00"
 ---
 
 ## Goal
@@ -62,3 +63,19 @@ The reasons come from `review_gate` (crates/atelier-app/src/review_gate.rs). The
 - 2026-10-23 [decision] review.current's fix is 'atelier review request <owner>', not 'atelier review approve'
   Reason: The author cannot approve their own work; the brief is what the author hands to an independent reviewer
   Rejected: atelier review approve <owner> --identity <reviewer>
+
+## Close Reason
+
+A refused `land` now prints each failed check as one line per record, `⚠ <record> <check>: <cause>. Next: <fix>`, with real IDs, folds a blocker check that repeats another's cause into that line, lists the passes, prints the behind-base and stale-proof notes after them, and ends `land: refused — N checks (…)` naming every failed check; authors are listed once per person and empty or duplicated gate reasons are gone.
+
+### Deviations
+The blocker is shown as an item line (`atelier-ihns todo high Title`), not `[todo]`, because the output contract forbids brackets. The review line keeps the check name (`review.current:`) instead of "needs review", and its fix is `atelier review request <owner>` (decision note). Naming the stale approval it considered (the atelier-36rk part of the example) is left to atelier-imlh (atelier-cisa). `land_invariants_unmet` is no longer printed; the verdict names the checks.
+
+### Decisions
+See the decision notes on atelier-9jr8 (placeholders only for values the command cannot know; review request as the review fix) and on atelier-h1nc (verdict naming every failed check, serde-skipped gaps, output streams).
+
+### Surprises
+A child's done claim fails both its own `blockers.none_open` validator and `blockers.transitive_none_open` for the same blocker as the owner's `blockers.none_open`, so the fold had to cover direct checks on other records too. The Stop hook's reason now carries the same gate lines, since it formats the same error.
+
+### Open items
+Precondition refusals (`land_completion_dirty`, branch mismatch and the rest) still print one code and are counted as one check: atelier-0uaj. Naming the approval considered: atelier-imlh.

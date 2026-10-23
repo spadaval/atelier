@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T14:43:12.136895338+00:00"
+status: "done"
 title: "Report what land checked and the next step when it passes"
-updated_at: "2026-10-23T14:41:18.096653029+00:00"
+updated_at: "2026-10-23T14:43:12.136895338+00:00"
 ---
 
 ## Goal
@@ -49,3 +50,19 @@ crates/atelier-cli/src/commands/session.rs:485-490, 585, and `git::check_base_co
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Pass prints 'Owner: X done. In-progress work can hand off…' (session.rs:376) then 'Landing checks passed…' (:476) then 'land: passed'. The prime reference is already gone. Share the gate renderer with 9jr8.
+
+## Close Reason
+
+A passing `land` now prints `✓ records committed`, the owner's passing checks naming the approval, a count of done claims that hold, and for a done owner `Next: atelier merge <owner>`; an active owner with uncommitted changes gets the first five paths, a count and a pointer to `atelier status`; the base says `No unpushed base commits need review.`; `--quiet` still prints `passed`.
+
+### Deviations
+The checked groups are `✓ records committed`, `✓ N checks pass (…)` and `✓ N done claims hold` rather than separate `✓ review current` lines, since one renderer serves land and merge. The base line changed only its zero case; the record-only count wording is unchanged.
+
+### Decisions
+None beyond atelier-h1nc's decision notes.
+
+### Surprises
+The `prime` reference the issue mentions was already gone; the static owner sentence was the remaining boilerplate.
+
+### Open items
+None.
