@@ -1207,9 +1207,19 @@ impl std::str::FromStr for EvidenceResult {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EvidenceStreamSummary {
+    /// The kept text: empty for a passing capture, the head and tail of a
+    /// failing one joined by an omitted-bytes marker when `truncated`.
     pub summary: String,
     pub bytes: usize,
     pub truncated: bool,
+    /// SHA-256 of the whole stream, hex; absent on receipts recorded before
+    /// atelier-dg3h.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// The last test-count line the stream printed, such as nextest's
+    /// `Summary [...] N tests run: ...` or cargo test's `test result: ...`.
+    #[serde(default)]
+    pub test_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]

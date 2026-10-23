@@ -980,7 +980,8 @@ pub fn render_evidence_record_file(record: &EvidenceRecord) -> Result<String> {
         Some(&record.header.updated_at.to_rfc3339()),
     )?;
     output.push_str("---\n\n");
-    output.push_str(&body);
+    // Exactly one final newline, so `git diff --check` passes (atelier-auca).
+    output.push_str(body.trim_end_matches('\n'));
     output.push('\n');
     Ok(output)
 }
@@ -2079,11 +2080,25 @@ fn push_evidence_stream_section(
     output.push_str(title);
     output.push_str("\n\n");
     output.push_str(&format!("Bytes: {}\n", stream.bytes));
-    output.push_str(&format!(
-        "Truncated: {}\n\n",
-        if stream.truncated { "yes" } else { "no" }
-    ));
-    output.push_str("```text\n");
+    // A passing capture keeps no text (atelier-57wj); receipts recorded
+    // before it carry no digest and always show their fenced text.
+    let keeps_text = stream.sha256.is_none() || !stream.summary.is_empty();
+    if keeps_text {
+        output.push_str(&format!(
+            "Truncated: {}\n",
+            if stream.truncated { "yes" } else { "no" }
+        ));
+    }
+    if let Some(digest) = stream.sha256.as_deref() {
+        output.push_str(&format!("SHA-256: {digest}\n"));
+    }
+    if let Some(line) = stream.test_summary.as_deref() {
+        output.push_str(&format!("Test summary: {line}\n"));
+    }
+    if !keeps_text {
+        return;
+    }
+    output.push_str("\n```text\n");
     if !stream.summary.is_empty() {
         output.push_str(stream.summary.trim_end());
         output.push('\n');
@@ -2180,20 +2195,23 @@ fn first_non_empty_line(content: &str) -> Option<&str> {
 
 fn evidence_stream_from_section(content: &str) -> atelier_core::EvidenceStreamSummary {
     let summary = first_fenced_block(content).unwrap_or("").to_string();
-    let bytes = content
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("Bytes:"))
-        .and_then(|value| value.trim().parse::<usize>().ok())
+    // Fields precede the fence, so captured text cannot pose as one.
+    let field = |name: &str| {
+        content
+            .lines()
+            .take_while(|line| !line.trim_start().starts_with("```"))
+            .find_map(|line| line.trim().strip_prefix(name))
+            .map(str::trim)
+    };
+    let bytes = field("Bytes:")
+        .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(summary.len());
-    let truncated = content
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("Truncated:"))
-        .map(|value| matches!(value.trim(), "yes" | "true"))
-        .unwrap_or(false);
     atelier_core::EvidenceStreamSummary {
         summary,
         bytes,
-        truncated,
+        truncated: field("Truncated:").is_some_and(|value| matches!(value, "yes" | "true")),
+        sha256: field("SHA-256:").map(str::to_string),
+        test_summary: field("Test summary:").map(str::to_string),
     }
 }
 
@@ -2202,6 +2220,8 @@ fn empty_evidence_stream() -> atelier_core::EvidenceStreamSummary {
         summary: String::new(),
         bytes: 0,
         truncated: false,
+        sha256: None,
+        test_summary: None,
     }
 }
 
@@ -2934,6 +2954,7 @@ Legacy evidence summary.
                 bytes: 11,
                 truncated: true,
                 summary: "héllo\n \t".into(),
+                ..empty_evidence_stream()
             },
             stderr: empty_evidence_stream(),
         });
@@ -2957,12 +2978,140 @@ Legacy evidence summary.
         );
         record.summary = transcript;
         let rendered = render_evidence_record_file(&record).unwrap();
-        assert!(rendered.ends_with("```\n\n"));
+        assert!(rendered.ends_with("```\n") && !rendered.ends_with("\n\n"));
         record.data.output = None;
         assert_eq!(
             render_evidence_body(Some(" raw\r\nbody \r"), &record.data),
             " raw\nbody \n"
         );
+    }
+
+    fn evidence_round_trip(record: &EvidenceRecord) -> (String, EvidenceRecord) {
+        let spec = canonical_record_kind("evidence").unwrap();
+        let path = canonical_record_path(spec, &record.header.id).unwrap();
+        let text = render_evidence_record_file(record).unwrap();
+        (
+            text.clone(),
+            parse_evidence_record_file(&text, &path).unwrap(),
+        )
+    }
+
+    /// No line ends in whitespace and the file ends in exactly one newline,
+    /// which is what `git diff --check` asks of a new file.
+    fn assert_diff_check_clean(text: &str) {
+        assert!(text.ends_with('\n') && !text.ends_with("\n\n"), "{text:?}");
+        for line in text.lines() {
+            assert_eq!(line, line.trim_end(), "trailing whitespace in {text:?}");
+        }
+    }
+
+    #[test]
+    fn passing_evidence_streams_keep_size_digest_and_count_not_text() {
+        let mut record = evidence_record("atelier-evps");
+        record.data.command = Some("cargo nextest run".into());
+        record.data.exit_status = Some("0".into());
+        record.data.residual_risks = Vec::new();
+        let stderr = atelier_core::EvidenceStreamSummary {
+            bytes: 80590,
+            sha256: Some("ab".repeat(32)),
+            test_summary: Some("Summary [  20.1s] 894 tests run: 894 passed, 0 skipped".into()),
+            ..empty_evidence_stream()
+        };
+        let stdout = atelier_core::EvidenceStreamSummary {
+            sha256: Some("e3".repeat(32)),
+            ..empty_evidence_stream()
+        };
+        record.data.output = Some(EvidenceOutputSummary {
+            limit_bytes_per_stream: 4096,
+            stdout,
+            stderr,
+        });
+        record.summary = render_evidence_transcript("suite passes", &record.data);
+        assert!(record.summary.ends_with(&format!(
+            "## Stdout\n\nBytes: 0\nSHA-256: {}\n\n## Stderr\n\nBytes: 80590\nSHA-256: {}\nTest summary: Summary [  20.1s] 894 tests run: 894 passed, 0 skipped\n",
+            "e3".repeat(32),
+            "ab".repeat(32)
+        )));
+        assert!(!record.summary.contains("```text"));
+        let (text, parsed) = evidence_round_trip(&record);
+        assert_diff_check_clean(&text);
+        assert_eq!(parsed.data.output, record.data.output);
+        assert_eq!(render_evidence_record_file(&parsed).unwrap(), text);
+    }
+
+    #[test]
+    fn failing_evidence_streams_keep_head_tail_and_digest() {
+        let mut record = evidence_record("atelier-evfl");
+        record.data.result = atelier_core::EvidenceResult::Fail;
+        record.data.command = Some("cargo nextest run".into());
+        record.data.exit_status = Some("100".into());
+        record.data.residual_risks = Vec::new();
+        let stderr = atelier_core::EvidenceStreamSummary {
+            summary: "PASS a\n… 5000 bytes omitted …\nFAIL x".into(),
+            bytes: 9000,
+            truncated: true,
+            sha256: Some("cd".repeat(32)),
+            test_summary: None,
+        };
+        record.data.output = Some(EvidenceOutputSummary {
+            limit_bytes_per_stream: 4096,
+            stdout: atelier_core::EvidenceStreamSummary {
+                sha256: Some("e3".repeat(32)),
+                ..empty_evidence_stream()
+            },
+            stderr,
+        });
+        record.summary = render_evidence_transcript("suite fails", &record.data);
+        assert!(record.summary.ends_with(&format!(
+            "## Stderr\n\nBytes: 9000\nTruncated: yes\nSHA-256: {}\n\n```text\nPASS a\n… 5000 bytes omitted …\nFAIL x\n```\n",
+            "cd".repeat(32)
+        )));
+        let (text, parsed) = evidence_round_trip(&record);
+        assert_diff_check_clean(&text);
+        assert_eq!(parsed.data.output, record.data.output);
+    }
+
+    /// Receipts recorded before atelier-dg3h, copied verbatim from
+    /// `.atelier/evidence/`: a failing capture with `Truncated: yes` streams,
+    /// and a manual receipt with no output sections. They still parse, keep
+    /// their body, and render again without the trailing blank line.
+    #[test]
+    fn evidence_receipts_in_both_old_shapes_still_parse_and_render() {
+        let spec = canonical_record_kind("evidence").unwrap();
+        let truncated = include_str!("../tests/fixtures/evidence/atelier-1qkb.md");
+        let path = canonical_record_path(spec, "atelier-1qkb").unwrap();
+        let record = parse_evidence_record_file(truncated, &path).unwrap();
+        assert_eq!(record.data.result, atelier_core::EvidenceResult::Fail);
+        assert_eq!(record.data.exit_status.as_deref(), Some("100"));
+        let output = record.data.output.as_ref().unwrap();
+        assert_eq!(output.stdout.bytes, 0);
+        assert_eq!(output.stderr.bytes, 80590);
+        assert!(output.stderr.truncated);
+        assert!(output
+            .stderr
+            .summary
+            .ends_with("PASS [   0.012s] ( 29/623) at"));
+        assert_eq!(output.stderr.sha256, None);
+        assert_eq!(output.stderr.test_summary, None);
+        let rendered = render_evidence_record_file(&record).unwrap();
+        assert_eq!(
+            rendered,
+            truncated.trim_end_matches('\n').to_string() + "\n"
+        );
+        assert_eq!(
+            parse_evidence_record_file(&rendered, &path).unwrap().data,
+            record.data
+        );
+
+        let manual = include_str!("../tests/fixtures/evidence/atelier-08n0.md");
+        let path = canonical_record_path(spec, "atelier-08n0").unwrap();
+        let record = parse_evidence_record_file(manual, &path).unwrap();
+        assert_eq!(record.data.output, None);
+        assert_eq!(record.data.command, None);
+        assert!(record
+            .summary
+            .starts_with("S8 PASS (independent-validator-2026-10-15"));
+        assert_eq!(render_evidence_record_file(&record).unwrap(), manual);
     }
 
     #[test]
