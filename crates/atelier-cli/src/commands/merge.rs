@@ -252,7 +252,7 @@ fn base_records(
         .collect::<Vec<_>>();
     if !relevant.is_empty() {
         bail!(
-            "merge_base_records: {base} changed records about {owner} since {branch} left it: {}. The merge commit would carry them onto {base} unchecked. Merge it in with `git merge {base}` on {branch} so the gates judge them, then retry; a clean merge keeps the approval.",
+            "merge_base_records: {base} changed records about {owner} since {branch} left it: {}. The merge commit would carry them onto {base} unchecked. Merge it in with `git merge {base}` on {branch} so the gates judge them, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
             relevant.join(", ")
         );
     }
@@ -343,7 +343,7 @@ fn base_moved(
     match first_code_commit(repo, from, to) {
         Err(error) => error,
         Ok(Some((commit, path))) => named(&commit, &path),
-        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, record fresh proof, then retry; a clean merge keeps the approval.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
+        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
         Ok(None) => RetryOnMovedBase(format!("{base} moved from {} to {} while checks ran, only by records-only commits", crate::human_output::short_commit(from), crate::human_output::short_commit(to))).into(),
     }
 }
@@ -535,7 +535,7 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
                 Ok(Some((commit, path))) => format!("{base} gained {}, which changes {}, not a record.", crate::human_output::short_commit(&commit), path.display()),
                 Err(_) => format!("{base} is not an ancestor of {branch}."),
             };
-            anyhow::anyhow!("merge_diverged: {moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin.")
+            anyhow::anyhow!("merge_diverged: {moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin.")
         })?;
         None
     };

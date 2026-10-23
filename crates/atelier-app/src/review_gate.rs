@@ -377,6 +377,29 @@ fn edge_allowed(
     }
 }
 
+/// A commit after an approval's pin that makes it stale, with the paths a
+/// new review has to look at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaleEdge {
+    pub commit: String,
+    /// The commit's subject line.
+    pub subject: String,
+    /// Set for a merge: whether every commit it brings in is on the base.
+    pub merge: Option<BaseMerge>,
+    /// What a new review has to read: for a merge, the paths it resolved or
+    /// edited by hand and the in-scope records it changed, or all it changed
+    /// when it did neither; for any other commit, what it changed.
+    pub paths: Vec<std::path::PathBuf>,
+    /// The paths a merge resolved or edited beyond Git's own merge.
+    pub by_hand: Vec<std::path::PathBuf>,
+}
+/// Whether a merge brings in only commits already on the base.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BaseMerge {
+    Base,
+    Other,
+}
+
 /// Every commit of the branch (not of the base) after `pin` that makes the approval stale at `end`, oldest
 /// first, each with the paths a new review has to look at; empty while the
 /// approval is current. It applies the rule of [`approval_is_current_to`] to
@@ -391,21 +414,41 @@ pub fn approval_stale_edges(
     ids: &BTreeSet<String>,
     end: &str,
     base: &str,
-) -> Result<Vec<(String, Vec<std::path::PathBuf>)>> {
+) -> Result<Vec<StaleEdge>> {
     let mut stale = Vec::new();
-    // Edges come newest first.
-    for (edge, merge) in work_edges(read, pin, end, base)?.into_iter().rev() {
-        // A commit the base already holds is reviewed there; when a merge
-        // brings it in unaccepted, the merge is what to report.
+    let edges = work_edges(read, pin, end, base)?;
+    // A commit the base already holds is reviewed there; when a merge brings
+    // it in unaccepted, the merge is what to report, even when the merge
+    // itself changes nothing against the branch, such as a conflict
+    // resolved to the branch's side.
+    let mut unaccepted_base = HashSet::new();
+    for (edge, merge) in &edges {
         if ancestor(read, &edge.commit, base)
-            || edge_allowed(read, &edge, merge.as_ref(), ids, pin)?
+            && !edge_allowed(read, edge, merge.as_ref(), ids, pin)?
         {
+            unaccepted_base.insert(edge.commit.clone());
+        }
+    }
+    // Edges come newest first.
+    for (edge, merge) in edges.into_iter().rev() {
+        if ancestor(read, &edge.commit, base) {
             continue;
         }
+        let brings_unaccepted = !edge.sides.is_empty()
+            && !unaccepted_base.is_empty()
+            && read
+                .only_in(&edge.sides, &edge.parent)?
+                .iter()
+                .any(|commit| unaccepted_base.contains(commit));
+        if !brings_unaccepted && edge_allowed(read, &edge, merge.as_ref(), ids, pin)? {
+            continue;
+        }
+        let mut by_hand = Vec::new();
         let paths = if edge.sides.is_empty() {
             edge.paths
         } else {
-            let mut paths = git::hand_resolved_paths(read.repo, &edge.commit)?;
+            by_hand = git::hand_resolved_paths(read.repo, &edge.commit)?;
+            let mut paths = by_hand.clone();
             paths.extend(
                 edge.paths
                     .iter()
@@ -420,7 +463,26 @@ pub fn approval_stale_edges(
                 paths
             }
         };
-        stale.push((edge.commit, paths));
+        let subject = String::from_utf8(git::git_output(
+            read.repo,
+            &["log", "-1", "--format=%s", &edge.commit],
+        )?)?
+        .trim()
+        .to_owned();
+        let merge = if edge.sides.is_empty() {
+            None
+        } else if edge.sides.iter().all(|side| ancestor(read, side, base)) {
+            Some(BaseMerge::Base)
+        } else {
+            Some(BaseMerge::Other)
+        };
+        stale.push(StaleEdge {
+            commit: edge.commit,
+            subject,
+            merge,
+            paths,
+            by_hand,
+        });
     }
     Ok(stale)
 }
@@ -470,45 +532,228 @@ pub fn approval_state(
     owner: &str,
     fork_point: &str,
 ) -> Result<ApprovalState> {
-    Ok(approval_standing(index, read, owner, fork_point)?.0)
+    Ok(approval_standing(index, read, owner, fork_point)?.state)
 }
 
-/// [`approval_state`] with the record it rests on: the current approval or
-/// exemption, or for a stale state the newest stale one, so a view can name
-/// it (atelier-uv5d). `None` while the state is missing.
+/// Why an approval or trivial exemption does not make `review.current` pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotCurrent {
+    /// Its identity matches a Git author of the branch's work.
+    Author,
+    /// It predates the point where the branch left the base, which already
+    /// holds the work since.
+    PredatesFork,
+    /// Commits after its pin changed what it covers, oldest first.
+    Stale(Vec<StaleEdge>),
+}
+
+/// Where the owner's review stands, with the record it rests on and, when
+/// that record does not count, why (atelier-cisa).
+#[derive(Debug)]
+pub struct Standing<'i> {
+    pub state: ApprovalState,
+    /// The current approval or exemption; else the newest stale one; else,
+    /// while the state is missing, the newest approval by an author.
+    pub record: Option<&'i ReviewRecord>,
+    /// Why `record` does not count; `None` while it is current.
+    pub not_current: Option<NotCurrent>,
+    /// The branch's authors, normalized, as independence is judged.
+    pub authors: BTreeSet<String>,
+}
+impl Standing<'_> {
+    /// The authors to show, one per person.
+    pub fn shown_authors(&self) -> Vec<String> {
+        shown_authors(&self.authors)
+    }
+}
+
+/// [`approval_state`] with the record it rests on and why it does not count
+/// (atelier-uv5d, atelier-cisa): the one judgement `review.current`, `merge
+/// --sync` and `review list` explain.
 pub fn approval_standing<'i>(
     index: &'i RecordIndex,
     read: &mut git::ReadContext<'_>,
     owner: &str,
     fork_point: &str,
-) -> Result<(ApprovalState, Option<&'i ReviewRecord>)> {
+) -> Result<Standing<'i>> {
     let ids = scope(index, owner)?;
     let authors = author_identities(read, fork_point, &ids)?;
+    standing(index, read, owner, &ids, authors, fork_point)
+}
+
+fn standing<'i>(
+    index: &'i RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    owner: &str,
+    ids: &BTreeSet<String>,
+    authors: BTreeSet<String>,
+    fork_point: &str,
+) -> Result<Standing<'i>> {
+    let newer = |record: &ReviewRecord, than: Option<&ReviewRecord>| {
+        than.is_none_or(|newest| {
+            (record.header.created_at, &record.header.id)
+                > (newest.header.created_at, &newest.header.id)
+        })
+    };
     let mut stale: Option<&ReviewRecord> = None;
+    let mut by_author: Option<&ReviewRecord> = None;
     for record in index.reviews().filter(|record| record.target == owner) {
         let accepted_identity = match record.event {
             ReviewEvent::TrivialExemption => true,
             ReviewEvent::Approval => independent(record, &authors),
-            _ => false,
+            _ => continue,
         };
         if !accepted_identity {
+            if newer(record, by_author) {
+                by_author = Some(record);
+            }
             continue;
         }
-        if current_on_branch(read, record, &ids, fork_point) {
-            return Ok((ApprovalState::Current, Some(record)));
+        if current_on_branch(read, record, ids, fork_point) {
+            return Ok(Standing {
+                state: ApprovalState::Current,
+                record: Some(record),
+                not_current: None,
+                authors,
+            });
         }
-        if stale.is_none_or(|newest| {
-            (record.header.created_at, &record.header.id)
-                > (newest.header.created_at, &newest.header.id)
-        }) {
+        if newer(record, stale) {
             stale = Some(record);
         }
     }
-    Ok(match stale {
-        Some(record) => (ApprovalState::Stale, Some(record)),
-        None => (ApprovalState::Missing, None),
+    Ok(match (stale, by_author) {
+        (Some(record), _) => {
+            let edges = approval_stale_edges(read, &record.commit, ids, "HEAD", fork_point)?;
+            Standing {
+                state: ApprovalState::Stale,
+                record: Some(record),
+                not_current: Some(if edges.is_empty() {
+                    NotCurrent::PredatesFork
+                } else {
+                    NotCurrent::Stale(edges)
+                }),
+                authors,
+            }
+        }
+        (None, record) => Standing {
+            state: ApprovalState::Missing,
+            record,
+            not_current: record.map(|_| NotCurrent::Author),
+            authors,
+        },
     })
 }
+
+/// `review.current`'s reason when it fails: the approval it considered and
+/// why it does not count, or that there is none.
+fn not_current_reason(standing: &Standing<'_>, ids: &BTreeSet<String>) -> String {
+    const LISTED: usize = 3;
+    let authors = standing.shown_authors();
+    let (Some(record), Some(why)) = (standing.record, &standing.not_current) else {
+        return if authors.is_empty() {
+            "no independent approval or trivial exemption".to_owned()
+        } else {
+            format!(
+                "no independent approval or trivial exemption; authors: {}",
+                authors.join(", ")
+            )
+        };
+    };
+    let name = format!(
+        "{} {} @{}",
+        if record.event == ReviewEvent::TrivialExemption {
+            "trivial exemption"
+        } else {
+            "approval"
+        },
+        record.header.id,
+        short(&record.commit)
+    );
+    let listed = |paths: &[std::path::PathBuf]| {
+        let mut shown = paths
+            .iter()
+            .take(LISTED)
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>();
+        if paths.len() > LISTED {
+            shown.push(format!("{} more", paths.len() - LISTED));
+        }
+        match shown.as_slice() {
+            [] => "nothing".to_owned(),
+            [one] => one.clone(),
+            [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        }
+    };
+    match why {
+        NotCurrent::Author => format!(
+            "{name} by {} is not independent: the identity matches a Git author of the branch (authors: {})",
+            record.identity,
+            authors.join(", ")
+        ),
+        NotCurrent::PredatesFork => format!(
+            "{name} is stale: it predates the point where the branch left the base, which already holds the work since"
+        ),
+        NotCurrent::Stale(edges) => {
+            let first = &edges[0];
+            let cause = match first.merge {
+                Some(kind) => {
+                    let records = first
+                        .paths
+                        .iter()
+                        .filter(|path| in_scope_issue(path, ids))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let by_hand = first
+                        .by_hand
+                        .iter()
+                        .filter(|path| !records.contains(path))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let mut parts = Vec::new();
+                    if !records.is_empty() {
+                        parts.push(format!(
+                            "changed in-scope {} {} beyond status",
+                            if records.len() == 1 { "record" } else { "records" },
+                            listed(&records)
+                        ));
+                    }
+                    if !by_hand.is_empty() {
+                        parts.push(format!("resolved or edited {} by hand", listed(&by_hand)));
+                    }
+                    if parts.is_empty() {
+                        parts.push(format!("changed {}", listed(&first.paths)));
+                    }
+                    format!(
+                        "{} {} {}",
+                        match kind {
+                            BaseMerge::Base => "base merge",
+                            BaseMerge::Other => "merge",
+                        },
+                        short(&first.commit),
+                        parts.join(" and ")
+                    )
+                }
+                None => format!(
+                    "{} \"{}\" changed {}",
+                    short(&first.commit),
+                    first.subject,
+                    listed(&first.paths)
+                ),
+            };
+            let later = match edges.len() - 1 {
+                0 => String::new(),
+                1 => " (and 1 later commit)".to_owned(),
+                n => format!(" (and {n} later commits)"),
+            };
+            format!("{name} is stale: {cause}{later}")
+        }
+    }
+}
+
+fn short(commit: &str) -> &str {
+    &commit[..commit.len().min(8)]
+}
+
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
 /// approval's identity is independent of the branch's own authors up to the
@@ -1119,12 +1364,11 @@ fn evaluate_scope(
                 .find(|record| matches!(record.event, ReviewEvent::Approval))
                 .or(candidates.first())
             {
-                None if authors.is_empty() => {
-                    "no current independent approval or trivial exemption".to_owned()
-                }
-                None => format!(
-                    "no current independent approval or trivial exemption; authors: {}",
-                    shown_authors(&authors).join(", ")
+                // Only the owner's approvals count here, as `standing` judges
+                // them, so it names the one considered and why it does not.
+                None => not_current_reason(
+                    &standing(index, read, owner, &ids, authors.clone(), base_commit)?,
+                    &ids,
                 ),
                 Some(record) if matches!(record.event, ReviewEvent::Approval) => {
                     format!("current independent approval {}", record.header.id)

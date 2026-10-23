@@ -9,10 +9,12 @@ use super::merge::{owned_branch, Owned};
 use crate::commands::git::{resolve, text};
 use anyhow::{bail, Context, Result};
 use atelier_app::{
-    committed_snapshot::CommittedSnapshot, git_freshness as git, record_index::RecordIndex,
-    review_gate,
+    committed_snapshot::CommittedSnapshot,
+    git_freshness as git,
+    record_index::RecordIndex,
+    review_gate::{self, NotCurrent},
 };
-use atelier_core::{count_noun, EvidenceResult, ReviewEvent};
+use atelier_core::{count_noun, EvidenceResult};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -167,7 +169,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
     for receipt in &receipts.rerun {
         // A whole workspace suite can run for minutes: name it before it starts.
         say(format!("  running {}: {}", receipt.target, receipt.command));
-        let summary = format!("{} (rerun after merging {base})", receipt.summary);
+        let summary = rerun_summary(&receipt.summary, &base);
         let rerun = evidence::split_command(&receipt.command).and_then(|command| {
             // Rerun only a command that reads back as the one recorded.
             if evidence::format_command(&command) != receipt.command {
@@ -313,7 +315,7 @@ fn current_receipts(
             receipts.rerun.push(Receipt {
                 target: target.clone(),
                 kind,
-                summary: record.summary.clone(),
+                summary: atelier_records::evidence_summary_text(&record.summary),
                 command,
                 role: record
                     .data
@@ -355,9 +357,9 @@ fn ancestor(repo: &Path, earlier: &str, later: &str) -> bool {
     git::git_output(repo, &["merge-base", "--is-ancestor", earlier, later]).is_ok()
 }
 
-/// Says whether an approval of the owner's scope survived, by the rule the
-/// gates use (`approval_accepted`, `approval_stale_edges`), and when not,
-/// which paths the new review has to read. Returns whether the approval
+/// Says whether the owner's approval survived, judged and explained by
+/// `review_gate::approval_standing` as `review.current` judges it, and when
+/// not, which paths the new review has to read. Returns whether the approval
 /// needs fresh review.
 fn report_approval(
     repo: &Path,
@@ -381,97 +383,84 @@ fn report_approval(
     // `merge`'s `review.current` also requires that the approval not predate
     // where the branch left the base (atelier-ns03); ask it the same way.
     let fork = text(repo, &["merge-base", base_head, &head])?;
-    let mut approvals = index
-        .reviews()
-        .filter(|review| {
-            ids.contains(&review.target)
-                && matches!(
-                    review.event,
-                    ReviewEvent::Approval | ReviewEvent::TrivialExemption
-                )
-        })
-        .collect::<Vec<_>>();
-    approvals.sort_by_key(|review| (review.header.created_at, review.header.id.clone()));
-    let mut stale = Vec::new();
-    let mut kept = Vec::new();
-    let mut predates_fork = None;
-    for review in approvals {
-        if !review_gate::approval_accepted(&index, &mut read, review)? {
-            continue;
+    let standing = review_gate::approval_standing(&index, &mut read, owner, &fork)?;
+    let (Some(review), Some(why)) = (standing.record, &standing.not_current) else {
+        match standing.record {
+            Some(review) => say(format!(
+                "Approval kept: {} still covers the branch.",
+                review.header.id
+            )),
+            None => say(format!(
+                "No independent approval covers {owner}'s scope yet; there is none to keep."
+            )),
         }
-        let edges =
-            review_gate::approval_stale_edges(&mut read, &review.commit, &ids, "HEAD", base_head)?;
-        // Judged per approval, as `review.current` judges each one.
-        if edges.is_empty() && review_gate::current_on_branch(&mut read, review, &ids, &fork) {
-            kept.push(review.header.id.clone());
-        } else if edges.is_empty() {
-            predates_fork = Some(review);
-        } else {
-            stale.push((review, edges));
-        }
-    }
-    if !kept.is_empty() {
-        say(format!(
-            "Approval kept: {} still covers the branch.",
-            kept.join(", ")
-        ));
-        return Ok(false);
-    }
-    if let (Some(review), true) = (predates_fork, stale.is_empty()) {
-        // The base already holds the work after this approval (the branch was
-        // merged there), so no commit on the branch is the one that made it
-        // stale: the approval predates the point the branch left the base.
-        let mut paths = git::changed_paths(repo, &review.commit, &head)?
-            .into_iter()
-            .filter(|path| !git::is_record_path(path))
-            .collect::<Vec<_>>();
-        paths.sort();
-        paths.dedup();
-        say(format!(
-            "Approval needs fresh review: {} predates the point where this branch left the base, which already holds the work since. Review {}, then record a fresh approval:",
-            review.header.id,
-            count_noun(paths.len(), "path"),
-        ));
-        for path in paths.iter().take(LISTED_PATHS) {
-            say(format!("  {}", path.display()));
-        }
-        if paths.len() > LISTED_PATHS {
-            say(format!("  and {} more", paths.len() - LISTED_PATHS));
-        }
-        return Ok(true);
-    }
-    let Some((review, edges)) = stale.pop() else {
-        say(format!(
-            "No accepted approval covers {owner}'s scope yet; there is none to keep."
-        ));
         return Ok(false);
     };
-    let fork = before.and_then(|before| text(repo, &["merge-base", before, base_head]).ok());
-    let was_current = match (before, fork) {
-        (Some(before), Some(fork)) => {
-            let mut earlier = git::ReadContext::from_snapshot(repo, before.to_owned(), &[]);
-            review_gate::approval_is_current_to(&mut earlier, &review.commit, &ids, "HEAD", &fork)
-                .unwrap_or(false)
+    let paths = match why {
+        NotCurrent::Author => {
+            say(format!(
+                "No independent approval covers {owner}'s scope yet: {} by {} is not independent, as the identity matches a Git author of the branch ({}).",
+                review.header.id,
+                review.identity,
+                standing.shown_authors().join(", ")
+            ));
+            return Ok(false);
         }
-        _ => false,
+        NotCurrent::PredatesFork => {
+            // The base already holds the work after this approval (the branch
+            // was merged there), so no commit on the branch is the one that
+            // made it stale: the approval predates the point the branch left
+            // the base.
+            let mut paths = git::changed_paths(repo, &review.commit, &head)?
+                .into_iter()
+                .filter(|path| !git::is_record_path(path))
+                .collect::<Vec<_>>();
+            paths.sort();
+            paths.dedup();
+            say(format!(
+                "Approval needs fresh review: {} predates the point where this branch left the base, which already holds the work since. Review {}, then record a fresh approval:",
+                review.header.id,
+                count_noun(paths.len(), "path"),
+            ));
+            paths
+        }
+        NotCurrent::Stale(edges) => {
+            let fork =
+                before.and_then(|before| text(repo, &["merge-base", before, base_head]).ok());
+            let was_current = match (before, fork) {
+                (Some(before), Some(fork)) => {
+                    let mut earlier = git::ReadContext::from_snapshot(repo, before.to_owned(), &[]);
+                    review_gate::approval_is_current_to(
+                        &mut earlier,
+                        &review.commit,
+                        &ids,
+                        "HEAD",
+                        &fork,
+                    )
+                    .unwrap_or(false)
+                }
+                _ => false,
+            };
+            let mut paths = edges
+                .iter()
+                .flat_map(|edge| edge.paths.iter().cloned())
+                .collect::<Vec<_>>();
+            paths.sort();
+            paths.dedup();
+            say(format!(
+                "Approval needs fresh review: {} first went stale at {} ({}). Review {}, then record a fresh approval:",
+                review.header.id,
+                crate::human_output::short_commit(&edges[0].commit),
+                if was_current {
+                    "it was current before this sync"
+                } else {
+                    "it was already stale before this sync"
+                },
+                count_noun(paths.len(), "path"),
+            ));
+            paths
+        }
     };
-    let mut paths = edges
-        .iter()
-        .flat_map(|(_, paths)| paths.iter().cloned())
-        .collect::<Vec<_>>();
-    paths.sort();
-    paths.dedup();
-    say(format!(
-        "Approval needs fresh review: {} first went stale at {} ({}). Review {}, then record a fresh approval:",
-        review.header.id,
-        crate::human_output::short_commit(&edges[0].0),
-        if was_current {
-            "it was current before this sync"
-        } else {
-            "it was already stale before this sync"
-        },
-        count_noun(paths.len(), "path"),
-    ));
     for path in paths.iter().take(LISTED_PATHS) {
         say(format!("  {}", path.display()));
     }
@@ -479,4 +468,55 @@ fn report_approval(
         say(format!("  and {} more", paths.len() - LISTED_PATHS));
     }
     Ok(true)
+}
+
+/// A rerun receipt's summary: the old receipt's, with one suffix naming the
+/// base merged; a suffix an earlier sync added is replaced, not stacked
+/// (atelier-ytks).
+fn rerun_summary(old: &str, base: &str) -> String {
+    let mut text = old.trim_end();
+    while let Some(at) = text.rfind(" (rerun after merging ") {
+        let suffix = &text[at..];
+        if !suffix.ends_with(')') || suffix.contains('\n') {
+            break;
+        }
+        text = text[..at].trim_end();
+    }
+    // An empty summary's rerun is the bare suffix; a later rerun of that
+    // reads it as empty again.
+    if text.is_empty()
+        || text
+            .strip_prefix("rerun after merging ")
+            .is_some_and(|base| !base.contains(char::is_whitespace))
+    {
+        format!("rerun after merging {base}")
+    } else {
+        format!("{text} (rerun after merging {base})")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rerun_summary;
+
+    #[test]
+    fn a_rerun_summary_names_the_merge_once_and_never_starts_with_a_space() {
+        assert_eq!(
+            rerun_summary("Scenario check", "main"),
+            "Scenario check (rerun after merging main)"
+        );
+        assert_eq!(
+            rerun_summary("Scenario check (rerun after merging main)", "main"),
+            "Scenario check (rerun after merging main)"
+        );
+        assert_eq!(
+            rerun_summary("Scenario check (rerun after merging master)", "main"),
+            "Scenario check (rerun after merging main)"
+        );
+        assert_eq!(rerun_summary("", "main"), "rerun after merging main");
+        assert_eq!(
+            rerun_summary("rerun after merging master", "main"),
+            "rerun after merging main"
+        );
+    }
 }
