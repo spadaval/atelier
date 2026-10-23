@@ -29,9 +29,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T03:51:45.869560247+00:00"
+status: "done"
 title: "Run parallel work through review and merge without churn"
-updated_at: "2026-10-22T23:52:21.585023457+00:00"
+updated_at: "2026-10-23T03:51:45.869560247+00:00"
 ---
 
 ## Outcome
@@ -68,3 +69,20 @@ On 2026-10-22 the human widened this mission to the whole review-and-land cycle.
 - 2026-10-22 [note] 2026-10-22 plan: the human widened this mission and asked for it to run first. Increments: atelier-1ztv (gate agreement: as7i, n642, uw4x, iaas, ss25; S7 and S11), atelier-9g48 (branch readiness in status: ftqn, tciw; S1), atelier-c3kh (merge a moved base: p189, isyf, rcnk, 2yl7, s2ei; S3 and S11), atelier-yim7 (safe push and start: ecah, mvzi, yc4d, mhx0, 81e5; S10), atelier-zuow (record and review tooling: 4ixu, rc8p, tq1j; S8 and S9), and atelier-j8kg (review effort: 1mn2, u6f3, mbrf; backlog, after atelier-1ztv, and atelier-mbrf's rule needs the human). The first five run in parallel on disjoint files; that run is the orchestrated run S6 counts. atelier-7b6e follows atelier-as7i. atelier-ftqn moved here from atelier-4pzj because it blocks S1. Decision for the human: atelier-6mgg (merge_commit default), which blocks atelier-2yl7. Acceptance: atelier-prjr. atelier-w0su stays deferred.
 - 2026-10-22 [note] 2026-10-22: the human decided review keeps one standard for code and prose. Planning text is not exempt, and records stay exempt because requiring an issue to edit issues is recursive. atelier-mbrf was reframed as an owner-free trivial exemption on the base, atelier-1mn2 was superseded, and S8 and S9 were reworded. atelier-6mgg decided: merge_commit is the default when a test check exists.
 - 2026-10-22 [note] 2026-10-22 closeout: low-priority follow-ups atelier-j458 and atelier-efnf were unlinked from this mission and keep their discovered_from sources, so the debrief still lists them as found along the way; atelier-w0su (deferred by the human) was unlinked too. All planned code increments merged: c3kh, 9g48, yim7, zuow, 1ztv, tciw, s2ei, r28p, 7b6e, j8kg and fngz.
+
+## Close Reason
+
+### Outcome
+Parallel work runs through review and merge without catch-up churn. All 11 success criteria are proven by independent acceptance validation (atelier-prjr; S8 re-validated as atelier-sig1 after atelier-aufe). In this mission's own orchestrated run, 11 branches landed with 5 catch-up merges (0.45 per branch, five branches open at once), against 2.25 per branch on 2026-10-17 and 16 on astromech-cmhv. `status` shows each waiting branch's merge readiness; merge_commit is the default with a test check; merge reruns gates when only records moved and `merge --sync` brings the base in; land and merge share one approval rule and merge refuses any done claim land would refuse; approvals survive close-only commits and follow-ups; land --push and start are safe; record commits group; review request writes the brief; trivial changes land on the base with a pinned exemption; land is about 2.9x faster.
+
+### Deviations
+Scope widened on 2026-10-22 by the human from catch-up churn to the whole review-and-land cycle (S7-S11). atelier-1mn2 was superseded and atelier-mbrf reframed when the human decided review keeps one standard for code and prose; the vendored and upstream Agent Factory skill now say so (atelier-aufe, atelier-k4xg). atelier-ftqn moved here from atelier-4pzj. atelier-w0su stayed deferred.
+
+### Decisions
+atelier-6mgg (merge_commit default) and the one-review-standard decision are on this record's notes; increment decisions are on their items (`atelier work decisions atelier-k8h8`).
+
+### Surprises
+Reviews caught land --push pushing to origin/main, record commits sweeping unrelated edits, and three ways merge and land disagreed. A pre-existing notes test failed every evening (UTC versus local date) and blocked merge checks; fixed on the base with the new trivial exemption (deb2ccb0).
+
+### Open items
+atelier-j458 (non-UTF-8 record paths), atelier-efnf (fix-now findings in branch readiness), atelier-3js6 ('just a doc' evaluation scenario), atelier-w0su (integration branches), all unlinked with their sources. Older drift between the vendored, upstream and installed Agent Factory copies. astromech needs an independent approval of the astromech-y296 resolutions before its doctor passes.
