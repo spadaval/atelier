@@ -266,8 +266,8 @@ trusting the base head, under either strategy: the merge commit under
 `merge_commit`, which no checkout holds before it reaches the base, or the
 branch head under `fast_forward_only` (atelier-bu66). For example, if the base
 closed a mission after the fork point and the branch reopens or adds work that
-mission depends on, merge refuses, naming the claim (`merge blocked: <mission>
-work.terminal`, atelier-m4gv). These claims are read at that commit, so a
+mission depends on, merge refuses, naming the claim (`merge: refused — 1
+check (<mission> work.terminal)`, atelier-m4gv). These claims are read at that commit, so a
 claim the base completed and reviewed after the fork point is judged against
 the base commits its reviews pin (atelier-goom). The merge commit reaches the
 base only when every gate passes and the base has not moved during the checks.
@@ -298,8 +298,11 @@ a work branch cannot weaken its own merge policy. See
 
 Merge creates the merge commit under `merge_commit` and no other commit, writes
 no tracker state, and does not push. Git hooks
-are disabled during gated integration and cleanup, with an explicit notice.
-Put required read-only checks in the reviewed base policy's `merge_checks`.
+are disabled during gated integration and cleanup; when the repository has
+hooks of its own, merge says they did not run. Put required read-only checks
+in the reviewed base policy's `merge_checks`. `merge` and `merge --check`
+print failed gates first, each with its fix, and end with a verdict (see
+[gate lines](human-cli-output.md#gate-lines)).
 
 Successful integration deletes the local work branch. If the base has a
 separate checkout, the source checkout becomes detached and the command prints
