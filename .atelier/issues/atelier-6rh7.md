@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:43:11.988896017+00:00"
+status: "done"
 title: "Show failing merge gates first, each with its fix, then a verdict"
-updated_at: "2026-10-23T14:14:37.299258459+00:00"
+updated_at: "2026-10-23T14:43:11.988896017+00:00"
 ---
 
 ## Goal
@@ -48,3 +49,19 @@ In the cross-cutting audit, `merge <id> --check | grep -v ^pass` is the most rep
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. merge.rs:615-642 prints all gates alphabetically; merge --check has no verdict line (ends 'Error: merge blocked: …', merge.rs:709). New since written: claims.reviewed FAIL (merge.rs:598-614) repeats review.current's cause in ~400 chars and reads 'If X is in X's scope'; fold it when causes match. Duplicate reason dedupe review_gate.rs:1072-1087, empty 'completion blockers: ' :1166, 'EXPLICIT TRIVIAL EXEMPTION' :945, per-finding reason :1019. Ignore this body's --json remark: leave --json untouched (ADR 0022).
+
+## Close Reason
+
+`merge --check` and a refused `merge` now print failed gates first, each line ending in one fix command with real IDs, list findings one per line with recommendation and first summary line, collapse resolved fix_now findings that wait on a fresh approval into one line (with exemption-only wording), collapse passes into one line that names the approval `review.current` passed with, and end with `merge: passed` or `merge: refused — N checks (…)`; `--json` keeps its shape.
+
+### Deviations
+The last line is the mission's verdict line (`merge: passed`, `merge: refused — N checks (…)`) rather than `Ready:`/`Blocked: N gates`; a passing check prints `Next: atelier merge <id>` before it. Folded checks (`claims.reviewed`, `merge.merged_tree`, repeated blocker checks) are named on the line that absorbs them and still counted in the verdict. Coded precondition errors now also end with `merge: refused — 1 check (<code>)`, so the verdict is always last.
+
+### Decisions
+See the decision notes on atelier-h1nc (verdict naming every failed check, serde-skipped gaps leaving `--json` reasons as the only JSON change, merge output on stdout as `merge --sync`).
+
+### Surprises
+`claims.reviewed` also fails when the owner's approval is current but its findings are unsettled, because an approval covers a claim only once every earlier finding is settled; it folds into `findings.disposed` then. The duplicate-reason merge in `evaluate_scope` now keeps one reason when every run of a check passed.
+
+### Open items
+The approval `review.current` considered and why it is not current: atelier-imlh (atelier-cisa). `merge_diverged` and other precondition errors with recovery commands: atelier-0uaj.

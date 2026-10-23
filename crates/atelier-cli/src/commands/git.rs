@@ -267,7 +267,7 @@ pub(crate) fn check_base_commits(
         }
     }
     let mut summary = match checked {
-        0 => "Base commits: none unpushed outside recorded review".to_owned(),
+        0 => "No unpushed base commits need review".to_owned(),
         count => format!(
             "Base commits: {} outside review",
             crate::human_output::count_noun(count, "unpushed record-only commit")

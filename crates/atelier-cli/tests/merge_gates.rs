@@ -1,6 +1,8 @@
 //! Boundary scenarios for immutable review records and gated integration.
 use std::{fs, path::Path, process::Command};
 use tempfile::{tempdir, TempDir};
+#[path = "support/next_steps.rs"]
+mod next_steps;
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -220,10 +222,14 @@ fn approval_records_committed_by_author_remain_independent_and_merge_has_no_writ
     let tree = git(fixture.path(), &["rev-parse", "HEAD^{tree}"]);
     let count = git(fixture.path(), &["rev-list", "--count", "--all"]);
     let output = ok(fixture.path(), &["merge", &fixture.id]);
-    assert!(
-        output.contains("current independent approval")
-            && output.contains("No commits or tracker records"),
-        "{output}"
+    // Success says what merging did and the next step, not the gates.
+    assert_eq!(
+        output,
+        format!(
+            "✓ Merged {} into main at {}; branch deleted. Next: atelier land, then git push.\nmerge: passed",
+            fixture.branch,
+            &pin[..8]
+        )
     );
     assert_eq!(git(fixture.path(), &["rev-parse", "HEAD"]), pin);
     assert_eq!(git(fixture.path(), &["rev-parse", "HEAD^{tree}"]), tree);
@@ -487,8 +493,13 @@ fn trivial_exemption_is_explicit_visible_and_pinned() {
         ],
     );
     commit(fixture.path(), "explicit exemption");
-    assert!(ok(fixture.path(), &["merge", &fixture.id, "--check"])
-        .contains("EXPLICIT TRIVIAL EXEMPTION"));
+    let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(checked.contains("review.current via atelier-"), "{checked}");
+    let json = ok(fixture.path(), &["merge", &fixture.id, "--check", "--json"]);
+    assert!(
+        json.contains("\"reason\": \"trivial exemption atelier-"),
+        "{json}"
+    );
     fs::write(fixture.path().join("src.rs"), "new behavior\n").unwrap();
     commit(fixture.path(), "new nontrivial work");
     fixture.refusal("review.current");
@@ -698,9 +709,15 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
         fs::read_to_string(fixture.path().join("src.rs")).unwrap(),
         "fixed after the rebase\n"
     );
-    fixture.refusal("FAIL review.current");
+    fixture.refusal("review.current: no current");
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-    assert!(output.contains("FAIL evidence.attached"), "{output}");
+    assert!(
+        output.contains(&format!(
+            "⚠ {} evidence.attached: expected at least 1 fresh passing evidence record",
+            fixture.id
+        )),
+        "{output}"
+    );
     proof("Proof after recovery");
     fixture.approval("Reviewer");
     ok(fixture.path(), &["merge", &fixture.id]);
@@ -766,7 +783,7 @@ fn git_hooks_are_explicitly_disabled_in_the_final_integration_fence() {
         fs::write(&hook, "#!/bin/sh\nprintf unexpected > hook-side-effect\n").unwrap();
         fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
         let output = ok(fixture.path(), &["merge", &fixture.id]);
-        assert!(output.contains("Git hooks are disabled"));
+        assert!(output.contains("Git hooks did not run"), "{output}");
         assert!(!fixture.path().join("hook-side-effect").exists());
     }
 }
@@ -811,7 +828,7 @@ fn scoped_children_and_open_transitive_blockers_prevent_merge() {
     );
     commit(fixture.path(), "epic done claim");
     let output = ok(fixture.path(), &["merge", &fixture.id]);
-    assert!(output.contains("owner and all scoped work are closed"));
+    assert!(output.contains("✓ Merged"), "{output}");
     let index =
         atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
     assert_eq!(index.require_issue(&child).unwrap().status, "done");
@@ -945,12 +962,12 @@ fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not()
         }
         if case == "clean" {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-            assert!(output.contains("pass review.current"), "{output}");
+            assert!(output.contains("review.current via"), "{output}");
             let head = git(fixture.path(), &["rev-parse", "HEAD"]);
             ok(fixture.path(), &["merge", &fixture.id]);
             assert_eq!(git(fixture.path(), &["rev-parse", "main"]), head);
         } else {
-            fixture.refusal("FAIL review.current");
+            fixture.refusal("review.current: no current");
         }
     }
 }
@@ -1052,9 +1069,9 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
         }
         if case == "union" {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-            assert!(output.contains("pass review.current"), "{output}");
+            assert!(output.contains("review.current via"), "{output}");
         } else {
-            fixture.refusal("FAIL review.current");
+            fixture.refusal("review.current: no current");
         }
     }
 }
@@ -1098,9 +1115,9 @@ fn links_declared_by_new_work_keep_approval_and_edits_to_existing_records_stale_
         }
         if case.contains("new") {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-            assert!(output.contains("pass review.current"), "{case}: {output}");
+            assert!(output.contains("review.current via"), "{case}: {output}");
         } else {
-            fixture.refusal("FAIL review.current");
+            fixture.refusal("review.current: no current");
         }
     }
 }
@@ -1185,12 +1202,12 @@ fn base_merge_resolutions_must_keep_the_blocker_and_child_the_base_added() {
         if case == "keep_blocker" {
             let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert!(
-                output.contains("pass review.current")
-                    && output.contains("FAIL blockers.none_open"),
+                output.contains("review.current via")
+                    && output.contains("blockers.none_open: done but blocked by"),
                 "{output}"
             );
         } else {
-            fixture.refusal("FAIL review.current");
+            fixture.refusal("review.current: no current");
         }
     }
 }
@@ -1246,7 +1263,7 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
     git(fixture.path(), &["switch", "-q", &branch]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
     let (_, output) = cli(fixture.path(), &["merge", &owner, "--check"]);
-    assert!(output.contains("FAIL review.current"), "{output}");
+    assert!(output.contains("review.current: no current"), "{output}");
 }
 
 #[test]
@@ -1275,7 +1292,7 @@ fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
     );
     commit(fixture.path(), "file follow-up and defer after approval");
     let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-    assert!(output.contains("pass review.current"), "{output}");
+    assert!(output.contains("review.current via"), "{output}");
 
     ok(
         fixture.path(),
@@ -1290,7 +1307,7 @@ fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
     );
     // Adding a child edits the owner's children, which is reviewed scope.
     commit(fixture.path(), "new in-scope child after approval");
-    fixture.refusal("FAIL review.current");
+    fixture.refusal("review.current: no current");
 }
 
 #[test]
@@ -1480,8 +1497,9 @@ fn separately_checked_out_clean_base_is_fast_forwarded_and_source_branch_is_clea
     );
     let output = ok(fixture.path(), &["merge", &fixture.id]);
     assert!(
-        output.contains("deleted local work branch")
-            && output.contains("work checkout is detached"),
+        output.contains("branch deleted")
+            && output.contains("work checkout is detached")
+            && output.ends_with("merge: passed"),
         "{output}"
     );
     assert_eq!(git(base.path(), &["rev-parse", "HEAD"]), head);
@@ -2186,11 +2204,16 @@ fn merge_commit_strategy_lands_a_clean_branch_on_a_moved_base_and_land_accepts_i
 
     let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
-        output.contains("pass review.current")
-            && output.contains("pass shell.check")
-            && output.contains("pass merge.merged_tree: merge_checks ran on merged tree")
-            && output.contains("and passed: test -f src.rs"),
+        output.contains("review.current via")
+            && output.contains("shell.check, work.terminal, merge.merged_tree")
+            && output.ends_with("merge: passed"),
         "{output}"
+    );
+    let json = ok(fixture.path(), &["merge", &fixture.id, "--check", "--json"]);
+    assert!(
+        json.contains("merge_checks ran on merged tree")
+            && json.contains("and passed: test -f src.rs"),
+        "{json}"
     );
     assert_eq!(git(fixture.path(), &["rev-parse", "main"]), base);
     assert_eq!(worktrees(fixture.path()), 1);
@@ -2321,10 +2344,11 @@ fn merge_commit_strategy_runs_merge_checks_on_the_merged_tree_and_refuses_a_brok
     let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
     assert!(
         !passed
-            && output.contains("FAIL shell.check")
-            && output.contains("Cargo.lock lacks log needed by tools/Cargo.toml")
-            && output.contains("FAIL merge.merged_tree")
-            && output.contains("merge blocked: shell.check"),
+            && output.contains(&format!(
+                "⚠ {} shell.check: `sh check-lock.sh` failed: Cargo.lock lacks log needed by tools/Cargo.toml (also merge.merged_tree). Next: `atelier merge {} --sync`, then `sh check-lock.sh`",
+                fixture.id, fixture.id
+            ))
+            && output.ends_with("merge: refused — 2 checks (shell.check, merge.merged_tree)\n"),
         "{output}"
     );
     assert_eq!(git(fixture.path(), &["rev-parse", "main"]), base);
@@ -2737,8 +2761,7 @@ fn merge_commit_strategy_proves_the_merged_tree_only_when_every_shell_check_pass
     let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
         !passed
-            && output.contains("FAIL shell.check")
-            && output.contains("FAIL merge.merged_tree")
+            && output.contains(&format!("shell.check: `echo broken; false` failed: broken (also merge.merged_tree). Next: `atelier merge {} --sync`, then `echo broken; false`", fixture.id))
             && !output.contains("and passed:"),
         "{output}"
     );
@@ -2810,8 +2833,9 @@ fn merge_commit_strategy_refuses_a_merge_that_breaks_a_claim_the_base_completed(
     fixture.refusal(&format!("{mission} work.terminal"));
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
-        output.contains(&format!("FAIL work.terminal: open work: {work}"))
-            && output.contains(&format!("merge blocked: {mission} work.terminal")),
+        output.contains(&format!(
+            "⚠ {work} work.terminal: todo, open in {mission}'s scope. Next: `atelier issue transition {work} start`, then `atelier issue transition {work} close --reason \"…\"`"
+        )) && output.ends_with(&format!("merge: refused — 1 check ({mission} work.terminal)\n")),
         "{output}"
     );
     assert_eq!(worktrees(fixture.path()), 1);
@@ -2879,7 +2903,10 @@ fn merge_commit_strategy_accepts_a_sibling_the_base_completed_with_its_own_revie
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
 
     let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-    assert!(output.contains("pass merge.merged_tree"), "{output}");
+    assert!(
+        output.contains("merge.merged_tree") && output.ends_with("merge: passed"),
+        "{output}"
+    );
     assert_eq!(worktrees(fixture.path()), 1);
 }
 
@@ -3015,7 +3042,7 @@ fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() 
         // What the sync reported kept is what the gates accept.
         let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
         assert!(
-            checked.contains("pass review.current"),
+            checked.contains("review.current via"),
             "{strategy}: {checked}"
         );
         // Syncing again has nothing to do.
@@ -3075,7 +3102,7 @@ fn sync_keeps_the_approval_across_a_follow_up_linked_after_it() {
         );
         let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
         assert!(
-            checked.contains("pass review.current"),
+            checked.contains("review.current via"),
             "{strategy}: {checked}"
         );
     }
@@ -3130,7 +3157,7 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
         );
         assert!(out.contains(&format!("{line}\n  src.rs")), "{line}\n{out}");
         let (_, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-        assert!(checked.contains("FAIL review.current"), "{checked}");
+        assert!(checked.contains("review.current: no current"), "{checked}");
     }
 }
 
@@ -3160,7 +3187,10 @@ fn sync_records_a_failing_rerun_and_refuses() {
             .iter()
             .any(|record| record.data.result == atelier_core::EvidenceResult::Fail));
         let (passed, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-        assert!(!passed && checked.contains("FAIL"), "{checked}");
+        assert!(
+            !passed && checked.contains("⚠ ") && checked.contains("evidence.no_newer_failure"),
+            "{checked}"
+        );
     }
 }
 
@@ -3339,4 +3369,209 @@ fn sync_lists_only_the_in_scope_record_a_clean_base_merge_changed() {
         )),
         "{out}"
     );
+}
+
+/// `atelier` output split into its exit status, stdout and stderr.
+fn split(dir: &Path, args: &[&str]) -> (bool, String, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+/// The bw0b case (atelier-6rh7): an approval gone stale and 21 fix_now
+/// findings resolved after it. Failures come first, each with its fix; the
+/// findings that only wait on a fresh approval collapse to one line; the
+/// verdict counts every failed check. A trivial exemption does not count for
+/// a fix_now resolution, and a fresh approval passes with what was checked
+/// and the next step.
+#[test]
+fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_findings() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    fixture.approval("Reviewer");
+    let findings = (1..=21)
+        .map(|n| {
+            ok(
+                fixture.path(),
+                &[
+                    "-q",
+                    "review",
+                    "finding",
+                    &id,
+                    "--identity",
+                    "Reviewer",
+                    "--recommendation",
+                    "fix_now",
+                    &format!("Finding {n}"),
+                ],
+            )
+        })
+        .collect::<Vec<_>>();
+    commit(fixture.path(), "findings");
+    fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
+    commit(fixture.path(), "fix the findings");
+    let fix = git(fixture.path(), &["rev-parse", "HEAD"]);
+    for finding in &findings {
+        ok(
+            fixture.path(),
+            &[
+                "-q",
+                "review",
+                "disposition",
+                finding,
+                "--identity",
+                "Author",
+                "--decision",
+                "fix_now",
+                "--resolution-commit",
+                &fix,
+                "Fixed",
+            ],
+        );
+    }
+    commit(fixture.path(), "dispositions");
+
+    let refusal = format!(
+        "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+         ⚠ {id} findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request {id}\n\
+         ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal, claims.reviewed)\n\
+         merge: refused — 2 checks (review.current, findings.disposed)\n"
+    );
+    let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(!passed && err.is_empty(), "{err}");
+    assert_eq!(out, refusal);
+    assert_eq!(next_steps::assert_fixes_run(fixture.path(), &out), 2);
+    // Quiet keeps stdout empty and says the same on stderr.
+    let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check", "-q"]);
+    assert!(!passed && out.is_empty(), "{out}");
+    assert_eq!(err, refusal);
+    // A refused merge prints the same and integrates nothing.
+    let (passed, out, _) = split(fixture.path(), &["merge", &id]);
+    assert!(!passed);
+    assert_eq!(out, refusal);
+    assert_eq!(
+        git(fixture.path(), &["branch", "--show-current"]),
+        fixture.branch
+    );
+
+    let exemption = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "trivial",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Formatting only",
+        ],
+    );
+    commit(fixture.path(), "exemption");
+    let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(!passed);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} findings.disposed: 21 fix_now findings resolved; a fix_now resolution needs an independent approval, which a trivial exemption is not. Next: atelier review request {id}\n\
+             ✓ 6 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, review.current via {exemption}, work.terminal, claims.reviewed)\n\
+             merge: refused — 1 check (findings.disposed)\n"
+        )
+    );
+
+    // The independent approval is named over the exemption.
+    let approval = fixture.approval("Reviewer");
+    let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(passed);
+    assert_eq!(
+        out,
+        format!(
+            "✓ 7 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, review.current via {approval}, work.terminal, claims.reviewed)\n\
+             Next: atelier merge {id}\n\
+             merge: passed\n"
+        )
+    );
+}
+
+/// Each finding without an accepted disposition is its own line, with its
+/// recommendation, first summary line and the disposition that settles it;
+/// an open child names the transition that closes it (atelier-6rh7).
+#[test]
+fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let finding = fixture.finding();
+    let deferred = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Rename later\n\nThe old name still reads.",
+        ],
+    );
+    let follow_up = ok(fixture.path(), &["-q", "issue", "create", "Rename it"]);
+    // The author's own defer is recorded, with its warning on stderr; quiet
+    // stdout is the ID alone.
+    let (recorded, disposition, warning) = split(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "disposition",
+            &deferred,
+            "--identity",
+            "Author",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &follow_up,
+            "Later",
+        ],
+    );
+    assert!(
+        recorded && warning.contains("identity matches a Git author"),
+        "{warning}"
+    );
+    let disposition = disposition.trim().to_owned();
+    let child = ok(
+        fixture.path(),
+        &["-q", "issue", "create", "Open child", "--parent", &id],
+    );
+    commit(fixture.path(), "findings and an open child");
+    let approval = fixture.approval("Reviewer");
+    let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(!passed);
+    // Findings are listed in ID order; the first names the done claim the
+    // unsettled findings keep the approval from covering.
+    let mut findings = [
+        (finding.clone(), format!("{finding} fix_now finding \"Contract failure in src.rs\" has no disposition"), format!("atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"")),
+        (deferred.clone(), format!("{deferred} defer finding \"Rename later\": defer disposition {disposition} needs acceptance by a non-author"), format!("atelier review request {id}")),
+    ];
+    findings.sort();
+    let [(_, first, first_fix), (_, second, second_fix)] = findings;
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} findings.disposed: {first} (also claims.reviewed). Next: {first_fix}\n\
+             ⚠ {id} findings.disposed: {second}. Next: {second_fix}\n\
+             ⚠ {child} work.terminal: todo, open in {id}'s scope. Next: atelier issue transition {child} supersede --reason \"…\"\n\
+             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, review.current via {approval})\n\
+             merge: refused — 3 checks (findings.disposed, work.terminal, claims.reviewed)\n"
+        )
+    );
+    // Each printed fix runs as printed: the review request, the disposition,
+    // and the transition that retires the open child under its closed owner.
+    assert_eq!(next_steps::assert_fixes_run(fixture.path(), &out), 3);
 }

@@ -72,7 +72,9 @@ install merges.
 
 `land` ends with a verdict line, the last line of its combined output (see
 [verdict line](human-cli-output.md#verdict-line)): `land: passed`, or `land:
-refused — 1 check (<code>)` with a non-zero exit. `land --push` runs the same
+refused — N checks (…)` with a non-zero exit. The Stop hook's block reason,
+and its message on a repeated stop, is one sentence, then the refusal as
+`land` prints it, ending with that verdict. `land --push` runs the same
 checks and, only when they pass, pushes the checked HEAD to the current
 branch's own configured upstream (`branch.<name>.remote` and `.merge`) through
 git, then ends `land: passed, pushed to <remote>/<branch>`. A refusal pushes

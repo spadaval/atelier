@@ -6,6 +6,8 @@ use std::{
     process::{Command, Stdio},
 };
 use tempfile::{tempdir, TempDir};
+#[path = "support/next_steps.rs"]
+mod next_steps;
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .current_dir(dir)
@@ -323,10 +325,12 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
     ok(f.path(), &["issue", "note", &f.id, "Uncommitted handoff"]);
     let result = hook(unrelated.path(), "land", input.clone());
     assert_eq!(result["decision"], "block");
-    assert!(result["reason"]
-        .as_str()
-        .unwrap()
-        .contains("land_records_uncommitted"));
+    let reason = result["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("land_records_uncommitted")
+            && reason.ends_with("\nland: refused — 1 check (land_records_uncommitted)"),
+        "{reason}"
+    );
     let mut repeated = input;
     repeated["stop_hook_active"] = true.into();
     let result = hook(unrelated.path(), "land", repeated);
@@ -1539,7 +1543,7 @@ fn report_parts_bind_new_done_claims_and_leave_earlier_claims_valid() {
     }
     assert!(
         output.contains(&format!(
-            "add a `### Open items` subsection to {newer}'s Close Reason"
+            "add a `### Open items` subsection to the Close Reason in .atelier/issues/{newer}.md, then commit"
         )),
         "{output}"
     );
@@ -1556,7 +1560,7 @@ fn report_parts_bind_new_done_claims_and_leave_earlier_claims_valid() {
         "{output}"
     );
     assert!(
-        !output.contains("required_field.report.deviations\n"),
+        !output.contains("required_field.report.deviations:"),
         "{output}"
     );
 
@@ -3666,7 +3670,7 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
     let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
     if covered {
         assert!(
-            pass && output.contains("pass claims.reviewed"),
+            pass && output.contains("claims.reviewed)"),
             "{label}: {output}"
         );
         ok(f.path(), &["merge", &f.id]);
@@ -3677,12 +3681,14 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
             // Approval stays current (a new issue outside the scope is
             // planning), yet land would refuse the claim, so merge does.
             assert!(
-                output.contains("pass review.current")
+                output.contains("review.current via")
                     && output.contains(&format!(
-                        "FAIL claims.reviewed: commit {} marks {id} done",
+                        "claims.reviewed: commit {} marks {id} done",
                         &close[..8]
                     ))
-                    && output.contains("close it on its own reviewed branch"),
+                    && output.contains(&format!(
+                        "close {id} on its own branch with `atelier start {id}`"
+                    )),
                 "{label}: {output}"
             );
         }
@@ -4804,7 +4810,7 @@ fn base_commit_that_installs_atelier_is_exempt_from_review_coverage() {
     commit(dir.path(), "install Atelier");
     let output = ok(dir.path(), &["land"]);
     assert!(
-        output.contains("Base commits: none unpushed outside recorded review"),
+        output.contains("No unpushed base commits need review"),
         "{output}"
     );
     // Code committed on the base after the install is gated even before the
@@ -5299,7 +5305,7 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     );
     let output = ok(dir.path(), &["land"]);
     assert!(
-        output.contains("Base commits: none unpushed outside recorded review"),
+        output.contains("No unpushed base commits need review"),
         "{output}"
     );
 
@@ -6597,4 +6603,139 @@ fn merge_refuses_a_done_mission_the_branch_gives_open_work() {
         let (pass, output) = cli(f.path(), &["merge", &f.id, "--check"]);
         assert!(!pass && output.contains(&refused), "{strategy}: {output}");
     }
+}
+
+/// A refused land lists each failed check first, one line per record with
+/// its cause and fix, folds a check that repeats another's cause into that
+/// line, lists the passes, and counts every failed check in the verdict
+/// (atelier-9jr8).
+#[test]
+fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Blocked child", "--parent", &id],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &child, &blocker, "--role", "blocked_by"],
+    );
+    commit(f.path(), "plan a blocked child");
+    f.terminal(&child);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Contract failure in code",
+        ],
+    );
+    commit(f.path(), "finding");
+    f.terminal(&id);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
+             ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
+             ✓ records committed\n\
+             ✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
+             land: refused — 5 checks (review.current, blockers.none_open, findings.disposed, {child} blockers.none_open, {child} blockers.transitive_none_open)\n"
+        )
+    );
+    // Every fix it prints runs as printed: review request, start or unlink
+    // the blocker, and the disposition.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out), 4);
+    // The Stop hook reports the same lines after its own sentence, and ends
+    // with the verdict, so no fix command runs into other text.
+    let output = hook(
+        f.path(),
+        "land",
+        serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": false}),
+    );
+    assert_eq!(
+        output["reason"].as_str().unwrap(),
+        format!(
+            "Atelier landing failed. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.\n{}",
+            out.trim_end()
+        )
+    );
+    let output = hook(
+        f.path(),
+        "land",
+        serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": true}),
+    );
+    assert_eq!(
+        output["systemMessage"].as_str().unwrap(),
+        format!(
+            "Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{}",
+            out.trim_end()
+        )
+    );
+}
+
+/// A passing land says what it checked and, for a done owner, what comes
+/// next; an active owner's land names the uncommitted paths (atelier-bvl3).
+#[test]
+fn land_pass_lists_what_it_checked_and_the_next_step() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    for name in ["p1", "p2", "p3", "p4", "p5", "p6"] {
+        fs::write(f.path().join(name), "unfinished\n").unwrap();
+    }
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass);
+    assert_eq!(
+        out,
+        "✓ records committed\n\
+         ✓ 1 check passes (findings.disposed)\n\
+         Unfinished checkout: 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. See `atelier status` before handing off.\n\
+         land: passed\n"
+    );
+    for name in ["p1", "p2", "p3", "p4", "p5", "p6"] {
+        fs::remove_file(f.path().join(name)).unwrap();
+    }
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child", "--parent", &id],
+    );
+    commit(f.path(), "plan a child");
+    f.terminal(&child);
+    f.terminal(&id);
+    let approval = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass);
+    assert_eq!(
+        out,
+        format!(
+            "✓ records committed\n\
+             ✓ 6 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, review.current via {approval}, work.terminal)\n\
+             ✓ 1 done claim holds\n\
+             Next: atelier merge {id}\n\
+             land: passed\n"
+        )
+    );
+    assert_eq!(ok(f.path(), &["land", "-q"]), "passed");
 }

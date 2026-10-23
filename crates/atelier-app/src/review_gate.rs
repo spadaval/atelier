@@ -27,8 +27,56 @@ pub struct GateNode {
     /// uncommitted changes in the checkout (atelier-x3bj).
     #[serde(skip)]
     pub stale_from_checkout: bool,
+    /// What a failed check waits on, one entry per record, so a view can
+    /// name each with its fix; `--json` leaves it out.
+    #[serde(skip)]
+    pub gaps: Vec<Gap>,
+    /// The command that fixes a failed check, when the check names one.
+    #[serde(skip)]
+    pub fix: Option<String>,
 }
-fn gate(owner: &str, check: &str, passed: bool, reason: String, supports: Vec<String>) -> GateNode {
+/// One thing a failed gate waits on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Gap {
+    /// Open work in the owner's scope.
+    Open(String),
+    /// An open blocker.
+    Blocker(String),
+    /// A finding with no disposition.
+    Undisposed(String),
+    /// A fix_now disposition that names no resolution commit.
+    Unresolved {
+        finding: String,
+        disposition: String,
+    },
+    /// A resolved fix_now finding with no independent approval at or after
+    /// its resolution.
+    AwaitingApproval(String),
+    /// A defer or no_action disposition that no non-author accepted.
+    Unaccepted {
+        finding: String,
+        disposition: String,
+    },
+    /// A disposition whose acceptance could not be traced, and why.
+    Untraced {
+        finding: String,
+        disposition: String,
+        error: String,
+    },
+    /// Failing evidence newer than the claim's passing proof.
+    FailingEvidence(String),
+    /// A `shell.check` command that failed, with the last line it printed.
+    FailedCommand { command: String, output: String },
+    /// A done claim, made at `commit`, outside every current approval.
+    UnreviewedClaim { claim: String, commit: String },
+}
+pub fn gate(
+    owner: &str,
+    check: &str,
+    passed: bool,
+    reason: String,
+    supports: Vec<String>,
+) -> GateNode {
     GateNode {
         kind: "workflow_validator",
         id: format!("{owner}/{check}"),
@@ -38,7 +86,112 @@ fn gate(owner: &str, check: &str, passed: bool, reason: String, supports: Vec<St
         reason,
         supports,
         stale_from_checkout: false,
+        gaps: Vec::new(),
+        fix: None,
     }
+}
+impl GateNode {
+    pub fn with_gaps(mut self, gaps: Vec<Gap>) -> Self {
+        self.gaps = gaps;
+        self
+    }
+}
+/// A validator's result as a gate node. Its hint's command, quoted in
+/// backticks, is the node's fix; failed blocker checks name each open
+/// blocker, and failed shell checks their command.
+fn validator_gate(
+    index: &RecordIndex,
+    policy: &WorkflowPolicy,
+    target: &str,
+    check: crate::workflow_validation::ValidatorResult,
+    definition: Option<&crate::workflow_policy::ValidatorDefinition>,
+) -> Result<GateNode> {
+    let gaps = if check.passed {
+        Vec::new()
+    } else {
+        match check.validator.as_str() {
+            "blockers.none_open" => index
+                .get_blockers(target)
+                .into_iter()
+                .filter(|id| {
+                    index
+                        .get_issue(id)
+                        .is_some_and(|issue| policy.status_category(&issue.status) != Some("done"))
+                })
+                .map(Gap::Blocker)
+                .collect(),
+            "blockers.transitive_none_open" => {
+                crate::objective_graph::dependency_closure(index, policy, target)?
+                    .blocking_ids()
+                    .into_iter()
+                    .map(Gap::Blocker)
+                    .collect()
+            }
+            "work.terminal" => crate::objective_graph::issue_descendant_ids(index, target)?
+                .into_iter()
+                .filter(|id| {
+                    index
+                        .get_issue(id)
+                        .is_some_and(|issue| policy.status_category(&issue.status) != Some("done"))
+                })
+                .map(Gap::Open)
+                .collect(),
+            "shell.check" => match definition.and_then(|definition| definition.params.as_ref()) {
+                Some(crate::workflow_policy::ValidatorParams::ShellCheck { command }) => {
+                    vec![Gap::FailedCommand {
+                        command: command.clone(),
+                        output: check
+                            .reason
+                            .lines()
+                            .skip(1)
+                            .filter(|line| !line.trim().is_empty())
+                            .last()
+                            .unwrap_or_default()
+                            .trim()
+                            .to_owned(),
+                    }]
+                }
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        }
+    };
+    let fix = check
+        .help
+        .as_deref()
+        .and_then(|help| help.split('`').nth(1))
+        .map(str::to_owned);
+    let mut node = gate(
+        target,
+        &check.validator,
+        check.passed,
+        check.reason,
+        Vec::new(),
+    )
+    .with_gaps(gaps);
+    node.fix = fix;
+    Ok(node)
+}
+/// The authors to show, one per person: a `name <email>` identity stands for
+/// its name and email alone (atelier-9jr8).
+fn shown_authors(authors: &BTreeSet<String>) -> Vec<String> {
+    let combined = authors
+        .iter()
+        .filter_map(|author| {
+            let (name, email) = author.split_once(" <")?;
+            Some((name.to_owned(), email.trim_end_matches('>').to_owned()))
+        })
+        .collect::<Vec<_>>();
+    authors
+        .iter()
+        .filter(|author| {
+            author.contains(" <")
+                || !combined
+                    .iter()
+                    .any(|(name, email)| *author == name || *author == email)
+        })
+        .cloned()
+        .collect()
 }
 pub fn scope(index: &RecordIndex, owner: &str) -> Result<BTreeSet<String>> {
     let mut ids = crate::objective_graph::issue_descendant_ids(index, owner)?;
@@ -881,17 +1034,20 @@ fn evaluate_scope(
         .collect::<Vec<_>>();
     let mut nodes = Vec::new();
     if complete {
-        nodes.push(gate(
-            owner,
-            "work.terminal",
-            terminal.is_empty(),
-            if terminal.is_empty() {
-                "owner and all scoped work are closed".into()
-            } else {
-                format!("open scoped work: {}", terminal.join(", "))
-            },
-            Vec::new(),
-        ));
+        nodes.push(
+            gate(
+                owner,
+                "work.terminal",
+                terminal.is_empty(),
+                if terminal.is_empty() {
+                    "owner and all scoped work are closed".into()
+                } else {
+                    format!("open scoped work: {}", terminal.join(", "))
+                },
+                Vec::new(),
+            )
+            .with_gaps(terminal.iter().cloned().map(Gap::Open).collect()),
+        );
         let mut open = BTreeSet::new();
         // A superseded child's blockers do not hold its parent (atelier-lq42).
         for id in ids.iter().filter(|id| {
@@ -903,20 +1059,23 @@ fn evaluate_scope(
                 crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids(),
             );
         }
-        nodes.push(gate(
-            owner,
-            "blockers.none_open",
-            open.is_empty(),
-            if open.is_empty() {
-                "no open transitive blockers".into()
-            } else {
-                format!(
-                    "open blockers: {}",
-                    open.into_iter().collect::<Vec<_>>().join(", ")
-                )
-            },
-            Vec::new(),
-        ));
+        nodes.push(
+            gate(
+                owner,
+                "blockers.none_open",
+                open.is_empty(),
+                if open.is_empty() {
+                    "no open transitive blockers".into()
+                } else {
+                    format!(
+                        "open blockers: {}",
+                        open.iter().cloned().collect::<Vec<_>>().join(", ")
+                    )
+                },
+                Vec::new(),
+            )
+            .with_gaps(open.into_iter().map(Gap::Blocker).collect()),
+        );
     }
     let candidates = index
         .reviews()
@@ -955,23 +1114,28 @@ fn evaluate_scope(
             owner,
             "review.current",
             !candidates.is_empty(),
-            if candidates.is_empty() {
-                format!(
-                    "no current independent approval or explicit trivial exemption; authors: {}",
-                    authors.iter().cloned().collect::<Vec<_>>().join(", ")
-                )
-            } else if candidates
+            match candidates
                 .iter()
-                .any(|record| matches!(record.event, ReviewEvent::TrivialExemption))
+                .find(|record| matches!(record.event, ReviewEvent::Approval))
+                .or(candidates.first())
             {
-                "EXPLICIT TRIVIAL EXEMPTION recorded with explanation".into()
-            } else {
-                "current independent approval recorded".into()
+                None if authors.is_empty() => {
+                    "no current independent approval or trivial exemption".to_owned()
+                }
+                None => format!(
+                    "no current independent approval or trivial exemption; authors: {}",
+                    shown_authors(&authors).join(", ")
+                ),
+                Some(record) if matches!(record.event, ReviewEvent::Approval) => {
+                    format!("current independent approval {}", record.header.id)
+                }
+                Some(record) => format!("trivial exemption {}", record.header.id),
             },
             support,
         ));
     }
     let mut unresolved = Vec::new();
+    let mut gaps = Vec::new();
     let mut dispositions = Vec::new();
     let mut approval_valid = BTreeMap::new();
     for finding in index.reviews().filter(|record| {
@@ -982,6 +1146,7 @@ fn evaluate_scope(
         };
         let Some(disposition) = index.latest_disposition(&finding.header.id) else {
             unresolved.push(format!("{} has no disposition", finding.header.id));
+            gaps.push(Gap::Undisposed(finding.header.id.clone()));
             continue;
         };
         dispositions.push(disposition.header.id.clone());
@@ -1037,30 +1202,56 @@ fn evaluate_scope(
             }
         };
         if !accepted {
-            let reason = if *decision == FindingDecision::FixNow {
-                "unresolved FIX NOW: resolution needs fresh independent approval".to_owned()
-            } else if let Some(error) = untraced {
-                format!(
-                    "disposition {} could not be traced to the commit that introduced it: {error}",
-                    disposition.header.id
-                )
-            } else {
-                "disposition needs independent non-author acceptance".to_owned()
+            let (finding_id, disposition_id) =
+                (finding.header.id.clone(), disposition.header.id.clone());
+            let (reason, gap) = match (decision, resolution_commit, untraced) {
+                (FindingDecision::FixNow, Some(_), _) => (
+                    "fix_now resolution needs a fresh independent approval".to_owned(),
+                    Gap::AwaitingApproval(finding_id),
+                ),
+                (FindingDecision::FixNow, None, _) => (
+                    format!("fix_now disposition {disposition_id} names no resolution commit"),
+                    Gap::Unresolved {
+                        finding: finding_id,
+                        disposition: disposition_id,
+                    },
+                ),
+                (_, _, Some(error)) => (
+                    format!(
+                        "disposition {disposition_id} could not be traced to the commit that introduced it: {error}"
+                    ),
+                    Gap::Untraced {
+                        finding: finding_id,
+                        disposition: disposition_id,
+                        error,
+                    },
+                ),
+                _ => (
+                    "disposition needs independent non-author acceptance".to_owned(),
+                    Gap::Unaccepted {
+                        finding: finding_id,
+                        disposition: disposition_id,
+                    },
+                ),
             };
             unresolved.push(format!("{}: {reason}", finding.header.id));
+            gaps.push(gap);
         }
     }
-    nodes.push(gate(
-        owner,
-        "findings.disposed",
-        unresolved.is_empty(),
-        if unresolved.is_empty() {
-            "every finding has an accepted disposition".into()
-        } else {
-            unresolved.join("; ")
-        },
-        dispositions,
-    ));
+    nodes.push(
+        gate(
+            owner,
+            "findings.disposed",
+            unresolved.is_empty(),
+            if unresolved.is_empty() {
+                "every finding has an accepted disposition".into()
+            } else {
+                unresolved.join("; ")
+            },
+            dispositions,
+        )
+        .with_gaps(gaps),
+    );
     nodes.extend(completion_claims(
         index,
         read,
@@ -1082,23 +1273,36 @@ fn evaluate_scope(
     } else {
         Vec::new()
     };
-    nodes.extend(checks.into_iter().map(|check| {
-        gate(
+    // The results come in the order of the policy's merge_checks.
+    for (check, definition) in checks.into_iter().zip(&policy.merge_checks) {
+        nodes.push(validator_gate(
+            index,
+            policy,
             owner,
-            &check.validator,
-            check.passed,
-            check.reason,
-            Vec::new(),
-        )
-    }));
+            check,
+            Some(definition),
+        )?);
+    }
     let mut unique: BTreeMap<String, GateNode> = BTreeMap::new();
     for node in nodes {
         if let Some(existing) = unique.get_mut(&node.id) {
+            // A check that ran twice reports why it failed, once; when every
+            // run passed, the first reason says so.
+            match (existing.passed, node.passed) {
+                (true, false) => existing.reason = node.reason,
+                (false, false) if existing.reason != node.reason => {
+                    existing.reason.push_str(&format!("; {}", node.reason))
+                }
+                _ => {}
+            }
             existing.passed &= node.passed;
             existing.stale_from_checkout |= node.stale_from_checkout;
-            if existing.reason != node.reason {
-                existing.reason.push_str(&format!("; {}", node.reason));
+            for gap in node.gaps {
+                if !existing.gaps.contains(&gap) {
+                    existing.gaps.push(gap);
+                }
             }
+            existing.fix = existing.fix.take().or(node.fix);
             existing.supports.extend(node.supports);
             existing.supports.sort();
             existing.supports.dedup();
@@ -1181,13 +1385,20 @@ fn completion_claims(
         {
             let blockers =
                 crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids();
-            nodes.push(gate(
-                id,
-                "blockers.transitive_none_open",
-                blockers.is_empty(),
-                format!("completion blockers: {}", blockers.join(", ")),
-                Vec::new(),
-            ));
+            nodes.push(
+                gate(
+                    id,
+                    "blockers.transitive_none_open",
+                    blockers.is_empty(),
+                    if blockers.is_empty() {
+                        "no open completion blockers".to_owned()
+                    } else {
+                        format!("open completion blockers: {}", blockers.join(", "))
+                    },
+                    Vec::new(),
+                )
+                .with_gaps(blockers.into_iter().map(Gap::Blocker).collect()),
+            );
         }
     }
     for id in ids {
@@ -1208,8 +1419,9 @@ fn completion_claims(
                 "evidence.no_newer_failure",
                 false,
                 reason,
-                vec![failure.id],
-            );
+                vec![failure.id.clone()],
+            )
+            .with_gaps(vec![Gap::FailingEvidence(failure.id)]);
             node.stale_from_checkout = failure.stale_from_checkout;
             nodes.push(node);
         }
@@ -1288,11 +1500,14 @@ fn completion_claims(
                 !historical,
                 read,
             )?;
-            nodes.extend(
-                checks.into_iter().map(|check| {
-                    gate(id, &check.validator, check.passed, check.reason, Vec::new())
-                }),
-            );
+            for (check, definition) in checks.into_iter().zip(
+                transition
+                    .validators
+                    .iter()
+                    .filter(|definition| !historical || definition.builtin != "git.worktree_clean"),
+            ) {
+                nodes.push(validator_gate(index, policy, id, check, Some(definition))?);
+            }
         }
     }
     Ok(nodes)
