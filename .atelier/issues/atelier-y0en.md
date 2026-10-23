@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T15:49:57.126722399+00:00"
+status: "done"
 title: "Report an invalid workflow policy once"
-updated_at: "2026-10-23T15:47:09.435870121+00:00"
+updated_at: "2026-10-23T15:49:57.126722399+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,19 @@ With an invalid committed `.atelier/workflow.yaml`, `land` and `merge --check` p
   Rejected: git restore --source <last valid> -- .atelier/workflow.yaml
 - 2026-10-23 [decision] main.rs no longer prints the working-policy fallback warnings for land, doctor and merge (merge --sync still does); land keeps a base policy's fallback notes and drops its own candidate's.
   Reason: The gates report the policy they read with their checks, so the same parse error was printed three times.
+
+## Close Reason
+
+An invalid committed policy is reported once by `land` and `merge --check`: one gate line `⚠ <owner> workflow_config_parse_error: .atelier/workflow.yaml: <message>. Next: fix .atelier/workflow.yaml and commit it`, counted in the verdict, while the other gates still run; main.rs no longer prints the working-policy fallback warnings for land, doctor and merge, and land drops its own candidate's fallback notes, keeping a base policy's.
+
+### Deviations
+The Next step is prose: only a person can fix the file.
+
+### Decisions
+See the decision notes on this item.
+
+### Surprises
+Two of the three copies came from main.rs's global diagnostics, not from base_policy.rs callers in land and merge.
+
+### Open items
+None.
