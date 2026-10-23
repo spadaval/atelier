@@ -916,6 +916,176 @@ fn test_mission_unlink_removes_added_work() {
     )));
 }
 
+/// A failing capture keeps the failure its command printed last; a passing
+/// capture keeps its size, digest and test count instead of the log; and
+/// both records pass `git diff --check` (atelier-bphy, atelier-57wj,
+/// atelier-auca).
+#[test]
+fn evidence_capture_keeps_the_failure_tail_and_summarizes_a_pass() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Tail issue", "--issue-type", "task"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let issue_id = issue_id_by_title(dir.path(), "Tail issue");
+    let target = format!("issue/{issue_id}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "failing suite",
+            "--target",
+            &target,
+            "--",
+            "sh",
+            "-c",
+            "i=0; while [ $i -lt 600 ]; do printf 'PASS test_%03d\\n' \"$i\" >&2; i=$((i + 1)); done; printf 'FAIL x\\n' >&2; exit 1",
+        ],
+    );
+    assert!(success, "failing capture record failed: {stderr}");
+    let failing_id = record_id_by_title(dir.path(), "evidence", "failing suite");
+    let failing = read_canonical_record(dir.path(), "evidence", &failing_id);
+    let stderr_section = &failing[failing.find("## Stderr").unwrap()..];
+    assert!(
+        stderr_section.starts_with("## Stderr\n\nBytes: 8407\nTruncated: yes\nSHA-256: "),
+        "{stderr_section}"
+    );
+    assert!(stderr_section.contains("```text\nPASS test_000\n"));
+    assert!(stderr_section.contains(" bytes omitted …\n"));
+    assert!(
+        stderr_section.ends_with("PASS test_599\nFAIL x\n```\n"),
+        "{stderr_section}"
+    );
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "passing suite",
+            "--target",
+            &target,
+            "--",
+            "sh",
+            "-c",
+            "printf 'Compiling x\\n' >&2; printf '     Summary [   1.0s] 3 tests run: 3 passed, 0 skipped\\n' >&2",
+        ],
+    );
+    assert!(success, "passing capture record failed: {stderr}");
+    let passing_id = record_id_by_title(dir.path(), "evidence", "passing suite");
+    let passing = read_canonical_record(dir.path(), "evidence", &passing_id);
+    assert!(!passing.contains("```text"), "{passing}");
+    assert!(
+        !passing[passing.find("## Stdout").unwrap()..].contains("Compiling x"),
+        "{passing}"
+    );
+    assert!(passing.contains(
+        "## Stdout\n\nBytes: 0\nSHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n\n## Stderr\n\nBytes: 68\nSHA-256: "
+    ), "{passing}");
+    assert!(
+        passing.ends_with("\nTest summary: Summary [   1.0s] 3 tests run: 3 passed, 0 skipped\n"),
+        "{passing}"
+    );
+    let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &passing_id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(shown.contains("Stderr: 68 bytes, truncated: no\nSummary [   1.0s] 3 tests run"));
+    assert!(shown.contains("(not kept; passing output is summarized)"));
+
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(args)
+            .output()
+            .expect("failed to run git")
+    };
+    assert!(git(&["add", "-A", ".atelier/evidence"]).status.success());
+    let check = git(&["diff", "--cached", "--check"]);
+    assert!(
+        check.status.success(),
+        "git diff --check: {}",
+        String::from_utf8_lossy(&check.stdout)
+    );
+}
+
+/// Failing output that imitates the record's own Markdown stays in its
+/// stream, and a failing whitespace-only stream is not called a summarized
+/// pass (reviews atelier-yif8, atelier-7yla).
+#[test]
+fn evidence_show_keeps_hostile_and_blank_failing_output_in_its_stream() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Hostile issue", "--issue-type", "task"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let target = format!("issue/{}", issue_id_by_title(dir.path(), "Hostile issue"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "hostile output",
+            "--target",
+            &target,
+            "--",
+            "sh",
+            "-c",
+            "printf 'before\\n## Stderr\\n\\nBytes: 99\\n```\\nafter\\n'; printf 'real stderr\\n' >&2; exit 1",
+        ],
+    );
+    assert!(success, "hostile capture failed: {stderr}");
+    let id = record_id_by_title(dir.path(), "evidence", "hostile output");
+    let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(
+        shown.contains("Stdout: 38 bytes, truncated: no\nbefore\n## Stderr\n\nBytes: 99\n```\nafter\nStderr: 12 bytes, truncated: no\nreal stderr\n"),
+        "{shown}"
+    );
+    assert!(!shown.contains("not kept"), "{shown}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "blank failing output",
+            "--target",
+            &target,
+            "--",
+            "sh",
+            "-c",
+            "printf '  \\n\\n'; exit 1",
+        ],
+    );
+    assert!(success, "blank capture failed: {stderr}");
+    let id = record_id_by_title(dir.path(), "evidence", "blank failing output");
+    let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(
+        shown.contains("Stdout: 4 bytes, truncated: no\n(whitespace only)\n"),
+        "{shown}"
+    );
+    assert!(!shown.contains("not kept"), "{shown}");
+}
+
 #[test]
 fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let dir = tempdir().unwrap();
@@ -974,8 +1144,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(issue_capture.contains("Exit Status: 0"));
     assert!(issue_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
     assert!(issue_capture.contains("Captured:"));
-    assert!(issue_capture.contains("pass stdout"));
-    assert!(issue_capture.contains("pass stderr"));
+    assert!(!issue_capture.contains("\npass stdout\n"));
+    assert!(issue_capture.contains("(not kept; passing output is summarized)"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
     let (success, shown, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &issue_evidence_id]);
@@ -997,8 +1167,9 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let issue_evidence_markdown = read_canonical_record(dir.path(), "evidence", &issue_evidence_id);
     assert!(!issue_evidence_markdown.contains("\noutput:"));
     assert!(issue_evidence_markdown.contains("## Command\n\n```console\nsh -c"));
-    assert!(issue_evidence_markdown.contains("## Stdout\n\nBytes: 12\nTruncated: no"));
-    assert!(issue_evidence_markdown.contains("## Stderr\n\nBytes: 12\nTruncated: no"));
+    assert!(issue_evidence_markdown.contains("## Stdout\n\nBytes: 12\nSHA-256: "));
+    assert!(issue_evidence_markdown.contains("## Stderr\n\nBytes: 12\nSHA-256: "));
+    assert!(!issue_evidence_markdown.contains("\npass stdout\n"));
 
     let (success, record_capture, stderr) = run_atelier(
         dir.path(),
@@ -1196,7 +1367,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     assert!(mission_show.contains("Exit Status: 2"));
     assert!(mission_show.contains(&format!("Target:      issue/{mission_id} (validates)")));
     assert!(mission_show.contains("blocked-line-000"));
-    assert!(!mission_show.contains("blocked-line-349"));
+    assert!(mission_show.contains(" bytes omitted …"));
+    assert!(mission_show.contains("blocked-line-349"));
     assert!(mission_show.contains("Stdout: "));
     assert!(mission_show.contains("truncated: yes"));
 
