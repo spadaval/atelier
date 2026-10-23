@@ -17,9 +17,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T15:49:57.926052075+00:00"
+status: "done"
 title: "Remove the unreachable reopen fix and make the fix helper rerun the gate"
-updated_at: "2026-10-23T15:47:09.589918023+00:00"
+updated_at: "2026-10-23T15:49:57.926052075+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,19 @@ Review findings atelier-s8kw and atelier-oy90 on atelier-h1nc.
 
 - 2026-10-23 [decision] The fix helper commits the .atelier records a fix wrote, then reruns the gate and asserts the failure line (record, check, cause) is gone; read-only fixes skip the rerun.
   Reason: The gates read committed records, as the workflow commits records with the work; committing only .atelier keeps a code fix that failed to clean the checkout from passing.
+
+## Close Reason
+
+`reopen_command` and its doc clause are gone. The verbatim-fix helper now runs only command fixes, commits any records a fix wrote, reruns the gate and asserts the fixed failure line is gone; a new test covers the `--role blocks` unlink and backlog, blocked and review children under a closed owner, and the existing callers pass the gate to rerun.
+
+### Deviations
+None.
+
+### Decisions
+See the decision note on this item.
+
+### Surprises
+The rerun immediately caught that fixes writing records leave them uncommitted, which the gates do not read; the helper commits .atelier records after a fix, as the workflow does.
+
+### Open items
+None.
