@@ -85,12 +85,16 @@ summary. The standing is the one the `evidence.*` gates give it against its
 item: `✓ fresh`, `⚠ stale (code changed in <commit>)` (or `acceptance
 changed in <commit>`, `uncommitted code changes`, `pin not in HEAD's
 history`), `⚠ superseded by newer fail <id>` for a pass, and for a fail
-`⚠ blocks completion` or `superseded by newer pass <id>`. A done item seen
-from anywhere but its own work branch is judged as land and doctor judge a
-claim the base holds, at its close: a pass that nothing between its pin and
+`⚠ blocks completion` or `superseded by newer pass <id>`. A done claim the
+base already holds, outside the checkout owner's scope, is judged as land
+and doctor judge it, at its close: a pass that nothing between its pin and
 the claim commit invalidated reads `✓ held at close <commit>` however much
-code came later. On the item's work branch, and for open work, proof is
-judged at HEAD, as `merge --check` and the close transition judge it. `evidence list`
+code came later. The views decide which claims those are with land's own
+rule: the claim is already in the owner's branch base, or with no owner in
+a parent of HEAD that the base branch contains. Any other item, such as
+open work, the owner's scope, or a claim a sibling branch merged before
+the base did, is judged at HEAD, as `merge --check`, land and the close
+transition judge it. `evidence list`
 writes these rows, and `evidence show` and `evidence record` lead with them
 (see [Evidence Views](#evidence-views)). `status`'s Evidence rows adopt them
 in atelier-d2xe.

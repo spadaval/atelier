@@ -6845,3 +6845,114 @@ fn evidence_views_judge_a_merged_claim_as_land_and_doctor_do() {
         "{listed}"
     );
 }
+
+/// A done claim is judged at its close only once the base holds it, as
+/// land decides: a sibling branch that merged an unmerged owner's work, or
+/// a detached checkout of it, judges the child's proof at HEAD, so a pass a
+/// later code commit staled reads stale there, where land refuses
+/// evidence.attached (atelier-yr1n).
+#[test]
+fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    git(path, &["init", "-qb", "main"]);
+    git(path, &["config", "user.name", "Author"]);
+    git(path, &["config", "user.email", "author@example.test"]);
+    ok(path, &["init", "--slug", "atelier"]);
+    let policy = path.join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy)
+        .unwrap()
+        .replace(
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: fast_forward_only\n",
+        )
+        .replace(
+            "        - blockers.none_open\n",
+            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+        );
+    fs::write(&policy, text).unwrap();
+    commit(path, "require proof");
+    let owner = ok(path, &["-q", "issue", "create", "Owner two"]);
+    let child = ok(
+        path,
+        &["-q", "issue", "create", "Child two", "--parent", &owner],
+    );
+    commit(path, "plan");
+    ok(path, &["start", &owner]);
+    fs::write(path.join("code"), "code\n").unwrap();
+    commit(path, "code");
+    let record = |target: &str| {
+        ok(
+            path,
+            &[
+                "evidence", "record", "--target", target, "--kind", "test", "--", "true",
+            ],
+        );
+    };
+    record(&child);
+    commit(path, "child proof");
+    ok(path, &["issue", "transition", &child, "start"]);
+    ok(
+        path,
+        &["issue", "transition", &child, "close", "--reason", "Done."],
+    );
+    commit(path, "close child");
+    fs::write(path.join("code"), "later code\n").unwrap();
+    commit(path, "later code");
+    record(&owner);
+    commit(path, "owner proof");
+    ok(
+        path,
+        &["issue", "transition", &owner, "close", "--reason", "Done."],
+    );
+    ok(
+        path,
+        &[
+            "review",
+            "approve",
+            &owner,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(path, "close and approve owner");
+    let owner_branch = git(path, &["branch", "--show-current"]);
+
+    let proof = || {
+        ok(path, &["evidence", "list", &child])
+            .lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap()
+            .to_string()
+    };
+    let stale = |proof: &str| proof.starts_with("Proof: ⚠ no fresh pass; newest pass ");
+
+    // A sibling branch that merged the owner's unmerged work.
+    git(path, &["switch", "-q", "main"]);
+    let sibling = ok(path, &["-q", "issue", "create", "Owner four"]);
+    commit(path, "plan sibling");
+    ok(path, &["start", &sibling]);
+    commit(path, "start sibling");
+    git(path, &["merge", "-q", "--no-edit", &owner_branch]);
+    let (landed, land) = cli(path, &["land"]);
+    assert!(
+        !landed && land.contains(&format!("⚠ {child} evidence.attached: ")),
+        "{land}"
+    );
+    let (merged, check) = cli(path, &["merge", &sibling, "--check"]);
+    assert!(
+        !merged && check.contains(&format!("{child} evidence.attached")),
+        "{check}"
+    );
+    assert!(stale(&proof()), "{}", proof());
+
+    // A detached checkout of the owner's tip: land refuses the untraceable
+    // work before judging it, and the view judges the claim at HEAD.
+    git(path, &["checkout", "-q", "--detach", &owner_branch]);
+    let (landed, land) = cli(path, &["land"]);
+    assert!(!landed && land.contains("land_work_untraceable"), "{land}");
+    assert!(stale(&proof()), "{}", proof());
+    let listed = ok(path, &["evidence", "list", &child]);
+    assert!(!listed.contains("held at close"), "{listed}");
+}

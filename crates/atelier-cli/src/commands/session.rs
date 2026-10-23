@@ -226,50 +226,12 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
         "candidate workflow policy is invalid. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier land`",
     )?;
     let id = owner(&index, &branch, requested)?;
-    let base_pin = id
-        .as_ref()
-        .map(|id| -> Result<Option<(String, String)>> {
-            index
-                .require_issue(id)?
-                .workflow_branch
-                .as_ref()
-                .map(|owner| {
-                    let reference = format!("refs/heads/{}", owner.branch_base);
-                    Ok((reference.clone(), git::resolve(repo, &reference)?))
-                })
-                .transpose()
-        })
-        .transpose()?
-        .flatten();
+    let base_pin = base_pin(repo, &index, id.as_deref())?;
     let source = match &base_pin {
         Some((_, commit)) => base_policy::from_captured(&mut read, commit)?,
         None => base_policy::working(repo)?,
     };
-    // A base that has moved on is not the branch's failure: check the work
-    // against where it left the base, and say to merge the base in before
-    // integrating (atelier-qz9x).
-    let mut behind = None;
-    let branch_base = match (&base_pin, &id) {
-        (Some((reference, tip)), Some(id))
-            if git_freshness::git_output(repo, &["merge-base", "--is-ancestor", tip, &head])
-                .is_err() =>
-        {
-            let name = reference.trim_start_matches("refs/heads/");
-            let Ok(fork) = git::text(repo, &["merge-base", tip, &head]) else {
-                bail!(
-                    "land_base_unrelated: {name} shares no history with this checkout, so the work cannot be checked against it; switch to the owner's work branch, or start the work again from {name} with `atelier start {id}`"
-                );
-            };
-            let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?
-                .trim()
-                .parse::<usize>()
-                .with_context(|| format!("git rev-list --count {head}..{tip} printed no count"))?;
-            behind = Some((name.to_owned(), count));
-            Some(fork)
-        }
-        (Some((_, tip)), _) => Some(tip.clone()),
-        (None, _) => None,
-    };
+    let (branch_base, behind) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let behind_note = behind.map(|(base, count)| format!(
         "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
         crate::human_output::count_noun(count, "commit")
@@ -734,6 +696,128 @@ pub(crate) fn merge_claim_nodes(
     )
 }
 
+/// The owner's recorded base branch, as a ref and the commit it names.
+fn base_pin(
+    repo: &Path,
+    index: &RecordIndex,
+    owner: Option<&str>,
+) -> Result<Option<(String, String)>> {
+    let Some(owner) = owner else {
+        return Ok(None);
+    };
+    index
+        .require_issue(owner)?
+        .workflow_branch
+        .as_ref()
+        .map(|branch| {
+            let reference = format!("refs/heads/{}", branch.branch_base);
+            Ok((reference.clone(), git::resolve(repo, &reference)?))
+        })
+        .transpose()
+}
+
+/// A base the work lacks commits from: its name and how many.
+type Behind = Option<(String, usize)>;
+
+/// The commit land checks an owner's work against: its base's tip, or
+/// where the work left a base that has moved on, with the base's name and
+/// how many commits the work lacks. A base that has moved on is not the
+/// branch's failure: check the work against where it left the base, and
+/// say to merge the base in before integrating (atelier-qz9x).
+fn branch_base(
+    repo: &Path,
+    base_pin: Option<&(String, String)>,
+    owner: Option<&str>,
+    head: &str,
+) -> Result<(Option<String>, Behind)> {
+    Ok(match (base_pin, owner) {
+        (Some((reference, tip)), Some(id))
+            if git_freshness::git_output(repo, &["merge-base", "--is-ancestor", tip, head])
+                .is_err() =>
+        {
+            let name = reference.trim_start_matches("refs/heads/");
+            let Ok(fork) = git::text(repo, &["merge-base", tip, head]) else {
+                bail!(
+                    "land_base_unrelated: {name} shares no history with this checkout, so the work cannot be checked against it; switch to the owner's work branch, or start the work again from {name} with `atelier start {id}`"
+                );
+            };
+            let count = git::text(repo, &["rev-list", "--count", &format!("{head}..{tip}")])?
+                .trim()
+                .parse::<usize>()
+                .with_context(|| format!("git rev-list --count {head}..{tip} printed no count"))?;
+            (Some(fork), Some((name.to_owned(), count)))
+        }
+        (Some((_, tip)), _) => (Some(tip.clone()), None),
+        (None, _) => (None, None),
+    })
+}
+
+/// The claims land would judge from this checkout, for views that mark
+/// proof as land does: the commits a done claim must already hold to be
+/// judged as of its close, and the owner's scope, which its own gates judge.
+pub(crate) fn checkout_claim_context(
+    repo: &Path,
+    index: &RecordIndex,
+) -> Result<atelier_app::evidence_freshness::ClaimContext> {
+    let head = git_freshness::head_commit(repo)?;
+    let branch = git::checkout_branch(repo)?.unwrap_or_default();
+    let id = owner(index, &branch, None)?;
+    let base_pin = base_pin(repo, index, id.as_deref())?;
+    let (branch_base, _) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
+    let (_, mut parents) = claim_parents(repo, branch_base.as_deref(), &head)?;
+    if branch_base.is_none() {
+        // Without an owner, land refuses tracker changes the base does not
+        // hold (land_work_untraceable) before it judges any claim, so only a
+        // parent the base already contains holds a claim, as on the base
+        // itself; a detached checkout of unmerged work is judged at HEAD.
+        let base = workflow_policy::load(repo)?.branch_policy.base_branch;
+        if let Ok(tip) = git::resolve(repo, &format!("refs/heads/{base}")) {
+            parents.retain(|parent| {
+                git_freshness::git_output(repo, &["merge-base", "--is-ancestor", parent, &tip])
+                    .is_ok()
+            });
+        }
+    }
+    Ok(atelier_app::evidence_freshness::ClaimContext {
+        parents,
+        owned: id
+            .map(|id| review_gate::scope(index, &id))
+            .transpose()?
+            .unwrap_or_default(),
+    })
+}
+
+/// The commit a claim made now is checked against, and the commits a done
+/// claim outside the owner's scope must already hold to keep its accepted
+/// proof: the branch base when there is one, else every parent of `head`.
+/// Without a branch base, a claim is retained when any parent of HEAD
+/// already has it: a merge tip, such as a branch that merged the base in
+/// last, brings claims in through its other parents (atelier-kqt9).
+fn claim_parents(
+    repo: &Path,
+    branch_base: Option<&str>,
+    head: &str,
+) -> Result<(String, Vec<String>)> {
+    let claim_base = branch_base
+        .map(str::to_owned)
+        .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.to_owned()));
+    let parents = if branch_base.is_some() {
+        vec![claim_base.clone()]
+    } else {
+        let parents = git::text(repo, &["rev-list", "--parents", "-n", "1", head])?
+            .split_whitespace()
+            .skip(1)
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if parents.is_empty() {
+            vec![claim_base.clone()]
+        } else {
+            parents
+        }
+    };
+    Ok((claim_base, parents))
+}
+
 /// Gate nodes for the done claims outside the owner's scope. Claims unchanged
 /// since `trusted` were checked when they reached it and are skipped; with no
 /// trusted point every claim is checked (atelier-37uq).
@@ -749,26 +833,7 @@ fn claim_nodes(
     trusted: Option<&str>,
     touched: &std::collections::BTreeSet<String>,
 ) -> Result<Vec<review_gate::GateNode>> {
-    let claim_base = branch_base
-        .map(str::to_owned)
-        .unwrap_or_else(|| git::resolve(repo, "HEAD^").unwrap_or_else(|_| head.to_owned()));
-    // Without a branch base, a claim is retained when any parent of HEAD
-    // already has it: a merge tip, such as a branch that merged the base in
-    // last, brings claims in through its other parents (atelier-kqt9).
-    let claim_parents = if branch_base.is_some() {
-        vec![claim_base.clone()]
-    } else {
-        let parents = git::text(repo, &["rev-list", "--parents", "-n", "1", head])?
-            .split_whitespace()
-            .skip(1)
-            .map(str::to_owned)
-            .collect::<Vec<_>>();
-        if parents.is_empty() {
-            vec![claim_base.clone()]
-        } else {
-            parents
-        }
-    };
+    let (claim_base, claim_parents) = claim_parents(repo, branch_base, head)?;
     let mut current = std::collections::BTreeSet::new();
     let mut historical =
         std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
@@ -776,13 +841,7 @@ fn claim_nodes(
         if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
             continue;
         }
-        let retained_at = claim_parents.iter().find(|parent| {
-            read.issue_at(parent, &issue.id).ok().is_some_and(|before| {
-                index.issue_record(&issue.id).is_some_and(|after| {
-                    atelier_app::evidence_freshness::completion_claim_matches(&before, after)
-                })
-            })
-        });
+        let retained_at = read.claim_retained_at(index, &claim_parents, &issue.id);
         // Nothing that bears on it changed since the trusted point.
         let unchanged_since_trusted = trusted.is_some() && !touched.contains(&issue.id);
         match retained_at {

@@ -894,6 +894,10 @@ struct ProofMarks<'a> {
     /// Which statuses are done, so a done claim is judged as the gates
     /// judge it; without a readable policy every item is judged at HEAD.
     policy: Option<atelier_workflow::WorkflowPolicy>,
+    /// Which done claims land would judge at their close from this
+    /// checkout; read on first use.
+    claims: Option<Option<atelier_app::evidence_freshness::ClaimContext>>,
+    repo_root: &'a Path,
     items: HashMap<String, ItemProof>,
 }
 
@@ -902,15 +906,21 @@ impl<'a> ProofMarks<'a> {
         Self {
             read: atelier_app::evidence_freshness::EvidenceReadContext::new(repo_root),
             policy: atelier_app::workflow_policy::load(repo_root).ok(),
+            claims: None,
+            repo_root,
             items: HashMap::new(),
         }
     }
 
     fn item(&mut self, index: &RecordIndex, issue_id: &str) -> Result<&ItemProof> {
         if !self.items.contains_key(issue_id) {
-            let proof = self
-                .read
-                .item_proof(index, self.policy.as_ref(), issue_id)?;
+            let repo_root = self.repo_root;
+            let claims = self.claims.get_or_insert_with(|| {
+                super::session::checkout_claim_context(repo_root, index).ok()
+            });
+            let proof =
+                self.read
+                    .item_proof(index, self.policy.as_ref(), claims.as_ref(), issue_id)?;
             self.items.insert(issue_id.to_string(), proof);
         }
         Ok(&self.items[issue_id])

@@ -184,6 +184,36 @@ impl ProofMark {
     }
 }
 
+/// Which done claims the gates judge as of their close, as land and merge
+/// judge the claims outside an owner's scope: those a parent commit already
+/// holds. The owner's own scope is judged at HEAD by its own gates.
+#[derive(Debug, Clone, Default)]
+pub struct ClaimContext {
+    /// The commits a claim must already hold: the branch base, or the
+    /// parents of HEAD.
+    pub parents: Vec<String>,
+    pub owned: std::collections::BTreeSet<String>,
+}
+
+impl EvidenceReadContext<'_> {
+    /// The first of `parents` that already holds `issue_id`'s completion
+    /// claim as `index` states it, so the gates judge the claim's proof as
+    /// of its close.
+    pub fn claim_retained_at<'p>(
+        &mut self,
+        index: &RecordIndex,
+        parents: &'p [String],
+        issue_id: &str,
+    ) -> Option<&'p String> {
+        let after = index.issue_record(issue_id)?;
+        parents.iter().find(|parent| {
+            self.issue_at(parent, issue_id)
+                .ok()
+                .is_some_and(|before| completion_claim_matches(&before, after))
+        })
+    }
+}
+
 /// Every receipt validating one item, newest first, each with its mark, and
 /// the gates' verdict on the item's proof.
 #[derive(Debug)]
@@ -243,52 +273,45 @@ impl EvidenceReadContext<'_> {
     }
 
     /// Whether the gates judge `issue`'s proof as of its close: a done claim
-    /// (not superseded) seen from anywhere but its own work branch, as land
-    /// and doctor judge a claim the base holds. On that branch, and for open
-    /// work, `merge --check` and the close transition judge it at HEAD.
+    /// (not superseded) outside the checkout owner's scope that a parent in
+    /// `claims` already holds, as land and merge decide. Any other item is
+    /// judged at HEAD, as its owner's gates and the close transition do.
     fn judged_at_close(
         &mut self,
         index: &RecordIndex,
         policy: Option<&atelier_workflow::WorkflowPolicy>,
+        claims: Option<&ClaimContext>,
         issue: &CanonicalIssueRecord,
     ) -> bool {
-        let issue = &issue.issue;
-        let done = policy.is_some_and(|policy| {
-            policy
-                .issue_status_is_terminal(&issue.issue_type, &issue.status)
-                .unwrap_or(false)
-        });
-        if !done || issue.status == "superseded" {
+        let (Some(policy), Some(claims)) = (policy, claims) else {
             return false;
-        }
-        let owner = match &issue.workflow_branch {
-            Some(branch) => Some(branch.work_branch.clone()),
-            None => issue
-                .parent_id
-                .as_deref()
-                .and_then(|parent| index.get_issue(parent))
-                .and_then(|parent| parent.workflow_branch)
-                .map(|branch| branch.work_branch),
         };
-        let current = git::git_output(self.repo, &["symbolic-ref", "-q", "--short", "HEAD"])
-            .ok()
-            .map(|branch| String::from_utf8_lossy(&branch).trim().to_owned());
-        owner.is_none() || owner != current
+        let item = &issue.issue;
+        policy
+            .issue_status_is_terminal(&item.issue_type, &item.status)
+            .unwrap_or(false)
+            && item.status != "superseded"
+            && !claims.owned.contains(&item.id)
+            && self
+                .claim_retained_at(index, &claims.parents, &item.id)
+                .is_some()
     }
 
     /// Marks every receipt validating `issue_id`, as the evidence gates
-    /// would count it now. `policy` says which statuses are done; without it
+    /// would count it now. `policy` says which statuses are done and
+    /// `claims` which done claims are judged at their close; without either
     /// every item is judged at HEAD.
     pub fn item_proof(
         &mut self,
         index: &RecordIndex,
         policy: Option<&atelier_workflow::WorkflowPolicy>,
+        claims: Option<&ClaimContext>,
         issue_id: &str,
     ) -> Result<ItemProof> {
         let issue = index
             .issue_record(issue_id)
             .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
-        let at_close = self.judged_at_close(index, policy, issue);
+        let at_close = self.judged_at_close(index, policy, claims, issue);
         let mut records = validating_records(index, issue_id)?;
         records.sort_by(|left, right| {
             (right.data.captured_at, &right.header.id)
