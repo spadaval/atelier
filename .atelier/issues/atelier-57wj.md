@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T14:28:11.028625032+00:00"
+status: "done"
 title: "Store a summary of passing command output in evidence, not the full log"
-updated_at: "2026-10-23T14:26:24.591667455+00:00"
+updated_at: "2026-10-23T14:28:11.028625032+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,19 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 - 2026-10-23 [decision] A passing stream section holds only Bytes:, SHA-256: (whole stream) and an optional 'Test summary:' line, with no Truncated: line and no fenced block; the count line is recognised only as nextest's 'Summary [' or cargo test's 'test result:' (last one wins). Failing streams carry the digest and count line too.
   Reason: Keeps the existing ## Stdout/## Stderr sections so old parsers still read new receipts; the two runners are what this repository records, and an unrecognised runner just has no count line.
   Rejected: A separate ## Output section; a generic count-line heuristic; keeping a short tail on passes
+
+## Close Reason
+
+A passing capture now stores no stream text: each `## Stdout`/`## Stderr` section gives `Bytes:`, the stream's `SHA-256:` and, when recognisable, its last nextest `Summary [...]` or cargo test `test result:` line as `Test summary:`, alongside the existing command, exit status and commit (commit fc115d5b). Receipts without output sections, such as atelier-08n0, still parse and render (evidence atelier-jhqz, full suite atelier-2c5x).
+
+### Deviations
+None. Record-format change; existing pass receipts are not rewritten, per the atelier-rc8j decision. `evidence show` changed only as far as the format forced: it prints the test-count line and `(not kept; passing output is summarized)` for a pass stream; the full view redesign stays with atelier-l7nz.
+
+### Decisions
+Pass sections keep the existing stream headings with no fence or `Truncated:` line, and recognise two runners only; see this item's decision note.
+
+### Surprises
+None.
+
+### Open items
+None.
