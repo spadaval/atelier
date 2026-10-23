@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T16:10:19.896018841+00:00"
+status: "done"
 title: "Print a short confirmation after evidence record"
-updated_at: "2026-10-23T14:47:58.805892167+00:00"
+updated_at: "2026-10-23T16:10:19.896018841+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,25 @@ updated_at: "2026-10-23T14:47:58.805892167+00:00"
 
 - 2026-10-17 [note] From the 2026-10-16 transcript retrospective: because a failing capture exits 0, `atelier evidence record … -- <cmd> && …` chains kept going after a failed test, and in one case the next step's hard-coded summary said the suite passes (atelier repo, nextest exit 100). Decide whether a recorded failing capture should exit nonzero, as distinct from a refused capture.
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done by policy: human-cli-output.md Verdict Line now names evidence record. print_new_record (evidence.rs:761) still prints the full 48-line record, with streams twice. Decided on atelier-rc8j: a recorded fail exits 0 (recording succeeded) and the verdict line names the result; quiet output stays the ID.
+- 2026-10-23 [decision] The confirmation marks the result word (atelier-az3w ✓ pass ...), shows the command on fail lines too, and moves the fail's consequence to the verdict line: evidence record: recorded fail — <item> cannot close or merge until a later pass
+  Reason: Dense Output puts a symbol beside the status word, not before the ID; the verdict is the last line, so | tail -1 reads the consequence, and the line 1 clause would say it twice. newest_failure blocks the done transition as well as merge, so 'cannot merge' alone understated it.
+  Rejected: The Done-when's literal line 1 (⚠ <id> fail ... (exit 1); newer than pass <p>, so <item> cannot merge until a later pass) with a bare verdict
+- 2026-10-23 [decision] A capture that refuses to run (dirty checkout, HEAD changed, bad target) stays an error on stderr with no 'evidence record: refused' verdict line
+  Reason: Capture refusals have no check codes for the verdict line's 'refused — n checks (codes)' form, and the Done when covers recorded results only.
+  Rejected: Printing 'evidence record: refused — <message>' without codes
+
+## Close Reason
+
+`evidence record` now prints one line, `<id> ✓ pass <kind> for issue/<id> @<pin>: <command> (exit 0)`, and ends with the verdict line `evidence record: passed`. A recorded fail exits 0, adds `; newer than pass <id>` when it supersedes one, shows the last 5 lines it kept (stderr first), and ends `evidence record: recorded fail — <item> cannot close or merge until a later pass`. Manual receipts print the same line with their summary; quiet output stays the ID.
+
+### Deviations
+The ✓/⚠ mark sits beside the result word, not before the ID. The fail line shows the command, and the "cannot … until a later pass" clause is in the verdict line, not line 1. It reads "cannot close or merge", not "cannot merge". `evidence show <id>` is now brief, with `--full` for the full view (atelier-o8ni).
+
+### Decisions
+See the decision notes on atelier-3ekh: where the mark and the consequence go, and that capture refusals stay errors with no verdict line.
+
+### Surprises
+The verdict line has to come after `--commit-records`' `Committed …` line, so printing moved from `capture` into `report_new_record`, which runs after the record commit.
+
+### Open items
+Proposed follow-up (not filed): give capture refusals check codes so they can end `evidence record: refused — n checks (codes)`.

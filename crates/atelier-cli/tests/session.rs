@@ -6739,3 +6739,220 @@ fn land_pass_lists_what_it_checked_and_the_next_step() {
     );
     assert_eq!(ok(f.path(), &["land", "-q"]), "passed");
 }
+
+/// A merged done claim's proof reads as land and doctor judge it: after a
+/// later code commit on the base, `evidence list` and `evidence show` mark
+/// the pass held at its close, not stale, while on the work branch the
+/// same pass is judged at HEAD (atelier-2isj). A pass recorded over
+/// uncommitted code says in its verdict that it does not prove the item
+/// yet, as the list then marks it (atelier-g2pl).
+#[test]
+fn evidence_views_judge_a_merged_claim_as_land_and_doctor_do() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let out = ok(
+        f.path(),
+        &[
+            "evidence", "record", "--target", &id, "--kind", "test", "--", "grep", "-q", "tested",
+            "code",
+        ],
+    );
+    assert!(out.ends_with("evidence record: passed"), "{out}");
+    let pass = ok(f.path(), &["-q", "evidence", "list", &id]);
+    commit(f.path(), "proof");
+    f.terminal(&id);
+    let claim = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    let proof_line = |out: &str| {
+        out.lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap()
+            .to_string()
+    };
+    // On its own work branch the claim is judged at HEAD, as merge --check does.
+    let listed = ok(f.path(), &["evidence", "list", &id]);
+    assert_eq!(proof_line(&listed), format!("Proof: ✓ fresh pass {pass}"));
+    ok(f.path(), &["merge", &id]);
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+
+    fs::write(f.path().join("later"), "later base work\n").unwrap();
+    commit(f.path(), "later code on the base");
+    let (pass_land, land) = cli(f.path(), &["land"]);
+    assert!(pass_land, "{land}");
+    let (pass_doctor, doctor) = cli(f.path(), &["doctor"]);
+    assert!(pass_doctor, "{doctor}");
+
+    let short = &claim[..8];
+    let listed = ok(f.path(), &["evidence", "list", &id]);
+    assert!(
+        listed.contains(&format!(" · ✓ held at close {short} · grep -q tested code")),
+        "{listed}"
+    );
+    assert!(!listed.contains("stale"), "{listed}");
+    assert_eq!(
+        proof_line(&listed),
+        format!("Proof: ✓ pass {pass} held at close {short}")
+    );
+    let shown = ok(f.path(), &["evidence", "show", &pass]);
+    assert!(
+        shown
+            .lines()
+            .next()
+            .unwrap()
+            .ends_with(&format!(" · ✓ held at close {short}")),
+        "{shown}"
+    );
+
+    // Open work is judged at HEAD: a pass over uncommitted code is stale,
+    // and its own confirmation says so.
+    let open = ok(f.path(), &["-q", "issue", "create", "Open work"]);
+    commit(f.path(), "plan open work");
+    fs::write(f.path().join("later"), "uncommitted\n").unwrap();
+    let out = ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &open,
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Looked right",
+        ],
+    );
+    assert!(
+        out.ends_with(&format!(
+            "evidence record: recorded pass — ⚠ stale (uncommitted code changes), so it does not prove {open}"
+        )),
+        "{out}"
+    );
+    let listed = ok(f.path(), &["evidence", "list", &open]);
+    assert!(
+        listed.contains(" · ⚠ stale (uncommitted code changes) · "),
+        "{listed}"
+    );
+}
+
+/// A done claim is judged at its close only once the base holds it, as
+/// land decides: a sibling branch that merged an unmerged owner's work, or
+/// a detached checkout of it, judges the child's proof at HEAD, so a pass a
+/// later code commit staled reads stale there, where land refuses
+/// evidence.attached (atelier-yr1n).
+#[test]
+fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    git(path, &["init", "-qb", "main"]);
+    git(path, &["config", "user.name", "Author"]);
+    git(path, &["config", "user.email", "author@example.test"]);
+    ok(path, &["init", "--slug", "atelier"]);
+    let policy = path.join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy)
+        .unwrap()
+        .replace(
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: fast_forward_only\n",
+        )
+        .replace(
+            "        - blockers.none_open\n",
+            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+        );
+    fs::write(&policy, text).unwrap();
+    commit(path, "require proof");
+    let owner = ok(path, &["-q", "issue", "create", "Owner two"]);
+    let child = ok(
+        path,
+        &["-q", "issue", "create", "Child two", "--parent", &owner],
+    );
+    commit(path, "plan");
+    ok(path, &["start", &owner]);
+    fs::write(path.join("code"), "code\n").unwrap();
+    commit(path, "code");
+    let record = |target: &str| {
+        ok(
+            path,
+            &[
+                "evidence", "record", "--target", target, "--kind", "test", "--", "true",
+            ],
+        );
+    };
+    record(&child);
+    commit(path, "child proof");
+    ok(path, &["issue", "transition", &child, "start"]);
+    ok(
+        path,
+        &["issue", "transition", &child, "close", "--reason", "Done."],
+    );
+    commit(path, "close child");
+    fs::write(path.join("code"), "later code\n").unwrap();
+    commit(path, "later code");
+    record(&owner);
+    commit(path, "owner proof");
+    ok(
+        path,
+        &["issue", "transition", &owner, "close", "--reason", "Done."],
+    );
+    ok(
+        path,
+        &[
+            "review",
+            "approve",
+            &owner,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(path, "close and approve owner");
+    let owner_branch = git(path, &["branch", "--show-current"]);
+
+    let proof = || {
+        ok(path, &["evidence", "list", &child])
+            .lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap()
+            .to_string()
+    };
+    let stale = |proof: &str| proof.starts_with("Proof: ⚠ no fresh pass; newest pass ");
+
+    // A sibling branch that merged the owner's unmerged work.
+    git(path, &["switch", "-q", "main"]);
+    let sibling = ok(path, &["-q", "issue", "create", "Owner four"]);
+    commit(path, "plan sibling");
+    ok(path, &["start", &sibling]);
+    commit(path, "start sibling");
+    git(path, &["merge", "-q", "--no-edit", &owner_branch]);
+    let (landed, land) = cli(path, &["land"]);
+    assert!(
+        !landed && land.contains(&format!("⚠ {child} evidence.attached: ")),
+        "{land}"
+    );
+    let (merged, check) = cli(path, &["merge", &sibling, "--check"]);
+    assert!(
+        !merged && check.contains(&format!("{child} evidence.attached")),
+        "{check}"
+    );
+    assert!(stale(&proof()), "{}", proof());
+
+    // A detached checkout of the owner's tip: land refuses the untraceable
+    // work before judging it, and the view judges the claim at HEAD.
+    git(path, &["checkout", "-q", "--detach", &owner_branch]);
+    let (landed, land) = cli(path, &["land"]);
+    assert!(!landed && land.contains("land_work_untraceable"), "{land}");
+    assert!(stale(&proof()), "{}", proof());
+    let listed = ok(path, &["evidence", "list", &child]);
+    assert!(!listed.contains("held at close"), "{listed}");
+}

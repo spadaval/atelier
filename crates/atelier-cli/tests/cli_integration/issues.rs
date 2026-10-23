@@ -2208,8 +2208,8 @@ fn test_first_class_detail_views_read_payloads_from_record_store() {
     assert!(evidence_out.contains("Canonical evidence summary"));
     assert!(evidence_out.starts_with(&format!("{evidence_id} evidence recorded ")));
     assert!(!evidence_out.contains("Status:"));
-    assert!(evidence_out.contains("Kind:        test"));
-    assert!(!evidence_out.contains("Kind:        sqlite"));
+    assert!(evidence_out.contains(" ✓ pass test @"), "{evidence_out}");
+    assert!(!evidence_out.contains("sqlite"));
 
     for args in [
         vec![

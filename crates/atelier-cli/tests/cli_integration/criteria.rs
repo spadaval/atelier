@@ -87,7 +87,7 @@ fn receipts_record_and_show_a_result_per_criterion() {
     );
     let show = ok(dir.path(), &["evidence", "show", &id]);
     assert!(
-        show.contains("Criteria:    pipe-safe pass, quiet-tokens fail"),
+        show.contains("Criteria: pipe-safe pass, quiet-tokens fail"),
         "{show}"
     );
     ok(dir.path(), &["check"]);
@@ -246,7 +246,7 @@ fn captured_receipts_give_each_criterion_the_command_result() {
     )
     .trim()
     .to_string();
-    assert!(ok(dir.path(), &["evidence", "show", &id]).contains("Criteria:    pipe-safe fail"));
+    assert!(ok(dir.path(), &["evidence", "show", &id]).contains("Criteria: pipe-safe fail"));
     let output = refused(
         dir.path(),
         &[

@@ -186,7 +186,6 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
                 role: &receipt.role,
                 command: &command,
                 criteria: &receipt.criteria,
-                quiet: true,
             })
         });
         match rerun {
