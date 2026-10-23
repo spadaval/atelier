@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep the tail of captured command output in evidence"
-updated_at: "2026-10-23T14:14:37.571452093+00:00"
+updated_at: "2026-10-23T14:26:24.506422121+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,6 @@ Command capture keeps only the first 4,096 bytes of stdout and stderr (`OUTPUT_S
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. bounded_stream (evidence.rs:843) keeps bytes[..4096] only; a failing last line is lost. Output lives only in the body Markdown (## Stdout, Bytes:, Truncated:, fenced block); keep 'Truncated: yes' parseable. Record-format change: reinstall after merge.
+- 2026-10-23 [decision] A failing stream over 4,096 bytes keeps its first 1,024 and last 3,072 bytes, cut on UTF-8 character boundaries (not line boundaries), joined by a '… N bytes omitted …' line; kept text loses trailing whitespace at line ends.
+  Reason: Snapping the tail to a line start can drop most of a long final failure line; trailing whitespace inside captured output would make the new record fail git diff --check.
+  Rejected: Cutting at line boundaries; keeping trailing whitespace verbatim

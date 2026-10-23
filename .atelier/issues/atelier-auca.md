@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Stop evidence records ending with a trailing blank line"
-updated_at: "2026-10-23T14:14:37.727140744+00:00"
+updated_at: "2026-10-23T14:26:24.671371050+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,6 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. 533 of 590 receipts end with a blank line: the transcript keeps its final newline (evidence.rs:368 -> lib.rs:2030) and render_evidence_body returns it untrimmed (lib.rs:2013-2016).
+- 2026-10-23 [decision] The evidence codec, not just capture, writes exactly one final newline, so an old receipt rewritten for another reason (such as attach) also loses its trailing blank line; the compatibility fixtures are verbatim copies exempted from whitespace checks in .gitattributes.
+  Reason: Manual and bundle-imported bodies can end in a newline too; one rule in the codec covers every writer, and parse/render stays a fixed point.
+  Rejected: Trimming only the capture transcript, which preserves old bodies byte for byte but leaves other writers able to produce a blank last line
