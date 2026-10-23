@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Evaluate every gate in merge --check even when a precondition fails"
-updated_at: "2026-10-23T14:14:22.282712251+00:00"
+updated_at: "2026-10-23T15:19:35.194141096+00:00"
 ---
 
 ## Goal

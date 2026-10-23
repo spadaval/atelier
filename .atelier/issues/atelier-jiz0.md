@@ -14,9 +14,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Say an event is not a finding when disposition is given its ID"
-updated_at: "2026-10-23T14:48:54.336219134+00:00"
+updated_at: "2026-10-23T15:19:35.824157468+00:00"
 ---
 
 ## Goal

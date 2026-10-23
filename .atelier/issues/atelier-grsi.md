@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Name every uncommitted record and the git command in land_records_uncommitted"
-updated_at: "2026-10-23T14:14:22.579036617+00:00"
+updated_at: "2026-10-23T15:19:35.663465990+00:00"
 ---
 
 ## Goal

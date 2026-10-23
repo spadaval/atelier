@@ -9,6 +9,8 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-3xq4"
+  - kind: "issue"
     id: "atelier-cisa"
   attachments: []
   relates:
@@ -20,9 +22,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Gates name the approval they considered and why it is not current"
-updated_at: "2026-10-23T14:13:48.168654560+00:00"
+updated_at: "2026-10-23T15:19:35.983461707+00:00"
 ---
 
 ## Goal

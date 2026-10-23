@@ -19,9 +19,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Say which approval merge --check considered and why it is not current"
-updated_at: "2026-10-23T14:14:22.208994902+00:00"
+updated_at: "2026-10-23T15:19:34.954041364+00:00"
 ---
 
 ## Goal

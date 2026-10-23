@@ -17,9 +17,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Remove the unreachable reopen fix and make the fix helper rerun the gate"
-updated_at: "2026-10-23T15:17:21.199931065+00:00"
+updated_at: "2026-10-23T15:19:35.903282053+00:00"
 ---
 
 ## Goal
