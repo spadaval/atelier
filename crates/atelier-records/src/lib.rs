@@ -2067,6 +2067,21 @@ pub fn render_evidence_transcript(summary: &str, data: &EvidenceRecordData) -> S
     output
 }
 
+/// The summary an evidence body states. `EvidenceRecord.summary` holds the
+/// whole body so a receipt round-trips; a captured receipt's body is a
+/// transcript whose `## Summary` section is the summary, and any other body
+/// is its own (atelier-3xq4).
+pub fn evidence_summary_text(body: &str) -> String {
+    if !evidence_body_has_transcript_sections(body) {
+        return body.trim().to_owned();
+    }
+    markdown_sections(body)
+        .into_iter()
+        .find(|(title, _)| title == "Summary")
+        .map(|(_, content)| content)
+        .unwrap_or_default()
+}
+
 fn evidence_body_has_transcript_sections(body: &str) -> bool {
     body.lines()
         .any(|line| matches!(line.trim(), "## Command" | "## Stdout" | "## Stderr"))

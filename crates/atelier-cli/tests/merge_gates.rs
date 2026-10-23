@@ -3730,3 +3730,38 @@ fn gates_name_an_approval_whose_identity_matches_a_git_author() {
         "{listed}"
     );
 }
+
+/// A rerun receipt's Summary is the old receipt's Summary text with the
+/// rerun suffix, not the old receipt's whole body (atelier-3xq4).
+#[test]
+fn sync_rerun_receipt_summary_is_the_old_summary_with_the_rerun_suffix() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "test -f src.rs",
+        ("other.rs", "landed\n"),
+    );
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let rerun = index
+        .evidence_records()
+        .into_iter()
+        .find(|record| record.data.agent_identity.as_deref() == Some("atelier merge --sync"))
+        .unwrap_or_else(|| panic!("no rerun receipt: {out}"));
+    let text = fs::read_to_string(
+        fixture
+            .path()
+            .join(format!(".atelier/evidence/{}.md", rerun.header.id)),
+    )
+    .unwrap();
+    let body = text.split_once("\n---\n\n").unwrap().1;
+    assert!(
+        body.starts_with(
+            "## Summary\n\nScenario check (rerun after merging main)\n\n## Command\n\n"
+        ),
+        "{body}"
+    );
+    assert_eq!(body.matches("## Command").count(), 1, "{body}");
+    assert_eq!(body.matches("## Stdout").count(), 1, "{body}");
+}

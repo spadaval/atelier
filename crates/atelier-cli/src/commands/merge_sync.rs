@@ -315,7 +315,7 @@ fn current_receipts(
             receipts.rerun.push(Receipt {
                 target: target.clone(),
                 kind,
-                summary: record.summary.clone(),
+                summary: atelier_records::evidence_summary_text(&record.summary),
                 command,
                 role: record
                     .data

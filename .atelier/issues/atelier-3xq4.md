@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rerun receipts from merge --sync nest the old receipt's whole body in their summary"
-updated_at: "2026-10-23T15:32:26.014908348+00:00"
+updated_at: "2026-10-23T15:33:54.044191107+00:00"
 ---
 
 ## Goal
@@ -30,3 +30,9 @@ A CLI test syncs a branch with a current captured receipt and asserts the rerun 
 ## Context
 
 Seen 2026-10-23 on feature/atelier-h1nc: rerun receipts atelier-7t38 and atelier-w253 (commit 80953e4b) carry atelier-8z2v's whole body in their summary. Check whether `EvidenceRecord.summary` holds the body by design (then take the Summary section) or the parser is wrong since atelier-dg3h.
+
+## Notes
+
+- 2026-10-23 [decision] EvidenceRecord.summary holds the whole body by design; the sync takes the Summary section through atelier_records::evidence_summary_text
+  Reason: render_evidence_record_file writes summary back as the body, so a captured receipt round-trips byte for byte; the parser is right and the sync read the wrong field for a summary.
+  Rejected: Changing the parser to store only the Summary section (breaks round-tripping of every committed receipt)

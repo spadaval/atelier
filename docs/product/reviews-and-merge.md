@@ -241,7 +241,8 @@ or `--json`.
 - **Reruns.** Only command-backed receipts on the owner's scope that were
   current before the sync are rerun: for each item and command, the latest
   receipt, if it passed and nothing it proves had changed. Each rerun records
-  a new receipt with the same command, kind, target and criteria, passing or
+  a new receipt with the same command, kind, target and criteria, and the old
+  receipt's summary followed by `(rerun after merging <base>)`, passing or
   failing; a failing one stays on the record and the verdict is `refused`
   (`sync_rerun_failed`). Each command is printed (`running <item>: <command>`)
   before it starts, since a workspace suite can run for minutes. Manual receipts have no command, so they are named
