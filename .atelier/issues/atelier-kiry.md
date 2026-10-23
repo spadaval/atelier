@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T15:49:55.106397530+00:00"
+status: "done"
 title: "Evaluate every gate in merge --check even when a precondition fails"
-updated_at: "2026-10-23T15:47:08.974587880+00:00"
+updated_at: "2026-10-23T15:49:55.106397530+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,19 @@ Which preconditions can't be turned into gates because evaluating the gates need
   Rejected: Making merge_base_records soft (reran merge_checks on a refused retry)
 - 2026-10-23 [decision] After records or code were dirty at the start, merge skips its post-check clean-checkout fence; the refusal already stands.
   Reason: The fence compares against a clean start, which a dirty start never had, so it could only replace the precondition lines with a bare error.
+
+## Close Reason
+
+`merge --check`, `merge` and `land` report a failed precondition as one more gate line with its shipped code and a runnable fix, then keep evaluating every gate: against HEAD's committed records when the checkout's differ, and from the fork point when the base has moved on, so a diverged branch with an open finding reports merge_diverged, review.current, findings.disposed and claims.reviewed in one run. A real merge still refuses before integrating.
+
+### Deviations
+merge_base_records, merge_conflict, the wrong branch, a mission and an unstarted owner stay hard stops: they print after the preconditions found before them with a `Not checked:` line naming the skipped gates. merge_checkout_dirty became soft too, since the records fallback needed it reported beside them.
+
+### Decisions
+See the decision notes on this item: shipped codes kept as check names; which preconditions are soft; the post-check clean fence skipped after a dirty start.
+
+### Surprises
+Converting a hard stop after soft preconditions needed a `gates_ran` flag, so a fence refusal after the gates ran is not misreported as "Not checked".
+
+### Open items
+None.
