@@ -6791,8 +6791,7 @@ fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
         format!(
             "⚠ {id} land_records_uncommitted: 6 tracker records differ from HEAD: {records} and 1 more; commit them with the work. Next: git add .atelier && git commit -m \"…\"\n\
              ⚠ {id} land_completion_dirty: done, but the checkout has 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`\n\
-             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
-             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n\
              land: refused — 3 checks (land_records_uncommitted, land_completion_dirty, review.current)\n"
         )
     );
@@ -6987,4 +6986,76 @@ fn land_fixes_for_open_children_and_a_blocks_link_clear_their_failures() {
     // The review request, the blocker's start or unlink, and each child's
     // close or supersede.
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 6);
+}
+
+/// A done owner reopened in the checkout only: the gates read HEAD's done
+/// copy, so its lines say so, fix by committing, and no pass is shown for it
+/// (atelier-6ajc).
+#[test]
+fn land_shows_no_pass_for_an_owner_whose_checkout_record_differs() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    set_status(&f, &id, "in_progress");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(!out.contains("✓ "), "{out}");
+    assert!(
+        out.contains(&format!(
+            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n"
+        )),
+        "{out}"
+    );
+    // The records line and the review line both fix by the records commit.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 2);
+}
+
+/// A base the policy does not trust is fixed by recording the policy's base
+/// in the owner's record (atelier-9a6e).
+#[test]
+fn land_base_mismatch_prints_a_runnable_fix() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let id = ok(f.path(), &["-q", "issue", "create", "From another branch"]);
+    commit(f.path(), "plan");
+    git(f.path(), &["switch", "-q", "-c", "other"]);
+    fs::write(f.path().join("other"), "other\n").unwrap();
+    commit(f.path(), "other work");
+    ok(f.path(), &["start", &id]);
+    commit(f.path(), "start from other");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    let path = format!(".atelier/issues/{id}.md");
+    assert!(
+        out.contains(&format!(
+            "⚠ {id} land_base_mismatch: recorded base other disagrees with trusted policy base main. Next: perl -pi -e 's|^  branch_base: \\Qother\\E\\n|  branch_base: main\\n|' {path} && git commit -m \"…\" -- {path}\n"
+        )),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+}
+
+/// An unowned branch that changes an item owned on a local branch is told
+/// to land there, not to start it again (atelier-9a6e).
+#[test]
+fn an_unowned_branch_changing_an_owned_item_points_to_its_branch() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    git(f.path(), &["switch", "-q", "-c", "feature/unowned", "main"]);
+    ok(
+        f.path(),
+        &["issue", "note", &id, "Noted off the owner's branch"],
+    );
+    commit(f.path(), "note on an unowned branch");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!(
+            "{id} is owned on {}. Next: land it there with `git switch {} && atelier land`, or move the tracker changes onto {}\n",
+            f.branch, f.branch, f.branch
+        )),
+        "{out}"
+    );
+    assert!(!out.contains("atelier start"), "{out}");
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
 }

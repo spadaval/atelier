@@ -17,6 +17,36 @@ pub(crate) struct Gates<'a> {
     /// The work branch's owner: its checks are named without a record in the
     /// verdict, and its passes are listed by name.
     pub owner: Option<&'a str>,
+    /// Records the checkout holds differently from HEAD, when the gates read
+    /// HEAD's instead.
+    pub uncommitted: Option<&'a Uncommitted>,
+}
+
+/// The issues whose checkout record differs from HEAD's, and the command
+/// that commits them. A gate judged a committed copy, so a line about one
+/// says so and its fix is that commit, not a move the checkout's copy may
+/// already have made; and no pass is shown for it (atelier-6ajc).
+pub(crate) struct Uncommitted {
+    pub issues: std::collections::BTreeSet<String>,
+    pub fix: String,
+}
+impl Uncommitted {
+    pub fn new(records: &atelier_app::committed_snapshot::RecordsUncommitted) -> Self {
+        Self {
+            issues: records
+                .records
+                .iter()
+                .filter_map(|(path, _)| {
+                    path.strip_prefix(".atelier/issues")
+                        .ok()?
+                        .file_stem()?
+                        .to_str()
+                        .map(str::to_owned)
+                })
+                .collect(),
+            fix: records.commit_command().to_owned(),
+        }
+    }
 }
 
 /// A rendered gate run.
@@ -276,6 +306,12 @@ impl Gates<'_> {
 
     fn is_owner(&self, node: &GateNode) -> bool {
         Some(node.target.as_str()) == self.owner
+    }
+
+    /// Whether the checkout's copy of `id` differs from the one the gates read.
+    fn differs(&self, id: &str) -> bool {
+        self.uncommitted
+            .is_some_and(|uncommitted| uncommitted.issues.contains(id))
     }
 
     /// Whether `check` failed on the owner.
@@ -926,7 +962,14 @@ impl Gates<'_> {
             }
             // A folded check is named on the line about its blocker, or
             // else on its host's first line.
-            for (number, line) in self.lines(&nodes[at], nodes).into_iter().enumerate() {
+            for (number, mut line) in self.lines(&nodes[at], nodes).into_iter().enumerate() {
+                if nodes[at].kind != PRECONDITION && self.differs(&line.record) {
+                    line.cause = format!(
+                        "{}, judged on HEAD's copy; the checkout's differs",
+                        line.cause.trim_end().trim_end_matches('.')
+                    );
+                    line.fix = self.uncommitted.map(|uncommitted| uncommitted.fix.clone());
+                }
                 let also = hosts
                     .iter()
                     .filter(|(folded, host)| {
@@ -943,9 +986,16 @@ impl Gates<'_> {
                 report.failures.push(line.render(&also));
             }
         }
+        // The owner's checks read its whole scope, so none of its passes
+        // stands when a record in it differs from the copy they read.
+        let scope_differs = self.owner.is_some_and(|owner| {
+            self.differs(owner)
+                || atelier_app::review_gate::scope(self.index, owner)
+                    .is_ok_and(|scope| scope.iter().any(|id| self.differs(id)))
+        });
         let owner_passes = nodes
             .iter()
-            .filter(|node| node.passed && self.is_owner(node))
+            .filter(|node| node.passed && self.is_owner(node) && !scope_differs)
             .map(|node| self.pass_label(node))
             .collect::<Vec<_>>();
         if !owner_passes.is_empty() {
@@ -969,6 +1019,7 @@ impl Gates<'_> {
         claims.dedup();
         let holding = claims
             .iter()
+            .filter(|target| !self.differs(target))
             .filter(|target| {
                 nodes
                     .iter()

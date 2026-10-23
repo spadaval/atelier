@@ -10,7 +10,9 @@ const REASON: &str = "Fixed by the gate's printed command.\n\n### Deviations\nNo
 /// A command a fix names, as opposed to an instruction a person carries
 /// out, such as editing a file.
 fn is_command(text: &str) -> bool {
-    text.starts_with("atelier ") || text.starts_with("git ")
+    ["atelier ", "git ", "perl "]
+        .iter()
+        .any(|program| text.starts_with(program))
 }
 
 /// A fix that only reads, such as the reviewer brief or a listing: it

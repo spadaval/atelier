@@ -308,7 +308,10 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   invalid policy (`⚠ <owner> workflow_config_parse_error: .atelier/workflow.yaml:
   <message>. Next: fix .atelier/workflow.yaml and commit it`, printed once; the
   fallback notes for the same file are left out). The gates still run against
-  what can be read, such as HEAD's committed records. One that the gates cannot
+  what can be read, such as HEAD's committed records; a line about a record
+  whose checkout copy differs ends `, judged on HEAD's copy; the checkout's
+  differs` and its fix is the records commit, and the owner's passes are left
+  out while any record in its scope differs (atelier-6ajc). One that the gates cannot
   run past, such as the wrong branch, prints its line after the preconditions
   found before it, then `Not checked: <the gates>; <code> stops <command>
   before them.`, then the verdict:

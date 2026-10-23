@@ -449,6 +449,8 @@ pub(super) struct Owned {
     /// HEAD's committed tracker, which `index` holds, when the checkout's
     /// records differ from it.
     pub committed: Option<tempfile::TempDir>,
+    /// The records that differ, when `committed` holds HEAD's.
+    pub uncommitted: Option<crate::gate_report::Uncommitted>,
 }
 
 /// An item whose work is already on the base: `merge` has nothing to do.
@@ -482,6 +484,7 @@ fn owned(
     let snapshot = committed_snapshot::CommittedSnapshot::new(&head)?;
     // Failed preconditions found before the owner is known.
     let mut found = Vec::<String>::new();
+    let mut uncommitted = None;
     let (index, committed) = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
@@ -497,6 +500,7 @@ fn owned(
                 };
                 match records {
                     Some(records) => {
+                        uncommitted = Some(crate::gate_report::Uncommitted::new(records));
                         found.push(format!(
                             "canonical_snapshot_uncommitted: {}; commit them with the work. Next: {}",
                             records.summary(),
@@ -628,6 +632,7 @@ fn owned(
         owner,
         base,
         committed,
+        uncommitted,
     })
 }
 
@@ -694,6 +699,7 @@ fn merge_gates(
         owner,
         base,
         committed,
+        uncommitted,
     } = owned(issue_ref, Some(preconditions))?;
     let repo = layout.repo_root();
     // Where the records the gates read are: the checkout, or HEAD's when
@@ -900,6 +906,7 @@ fn merge_gates(
         index: tip_index,
         policy: &source.policy,
         owner: Some(owner),
+        uncommitted: uncommitted.as_ref(),
     }
     .report(&nodes);
     // Failures print with the passes; a passing check prints its passes and

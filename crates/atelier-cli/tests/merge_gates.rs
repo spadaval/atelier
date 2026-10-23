@@ -3697,14 +3697,15 @@ fn merge_check_names_every_uncommitted_record_and_path_and_still_runs_the_gates(
             format!("⚠ {id} merge_checkout_dirty: {repo} has 2 uncommitted paths: new.rs, src.rs. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`"),
         ]
     );
-    // The approval of HEAD still holds for the committed records.
+    // The approval of HEAD still holds for the committed records, but no
+    // pass is shown for an owner whose checkout record differs.
     assert!(
         out.ends_with(
             "merge: refused — 2 checks (canonical_snapshot_uncommitted, merge_checkout_dirty)\n"
         ),
         "{out}"
     );
-    assert!(out.contains("review.current via "), "{out}");
+    assert!(!out.contains("✓ "), "{out}");
     assert_eq!(
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
         3
@@ -3993,4 +3994,40 @@ fn sync_reruns_a_legacy_nested_receipt_with_its_real_summary_and_one_suffix() {
         "{body}"
     );
     assert_eq!(body.matches("## Summary").count(), 1, "{body}");
+}
+
+/// With records uncommitted the gates read HEAD's copies, so a line about a
+/// record whose checkout copy differs says so and its fix is the records
+/// commit, not a transition the checkout may already have made; and no pass
+/// is shown for the owner whose scope differs (atelier-6ajc).
+#[test]
+fn a_gate_on_a_record_that_differs_from_head_is_fixed_by_committing_it() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let child = ok(
+        fixture.path(),
+        &["-q", "issue", "create", "Child", "--parent", &id],
+    );
+    commit(fixture.path(), "an open child");
+    fixture.approval("Reviewer");
+    // The child closes in the checkout only.
+    let store = atelier_records::RecordStore::new(fixture.path().join(".atelier"));
+    let mut child_record = store.load_issue_by_id(&child).unwrap();
+    child_record.issue.status = "done".into();
+    child_record.issue.closed_at = Some(chrono::Utc::now());
+    child_record.sections.close_reason = Some("Closed in the checkout.".into());
+    store.write_issue_atomic(&child_record).unwrap();
+    let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(!passed);
+    assert!(
+        out.contains(&format!(
+            "⚠ {child} work.terminal: todo, open in {id}'s scope, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n"
+        )),
+        "{out}"
+    );
+    assert!(!out.contains("✓"), "{out}");
+    assert_eq!(
+        next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
+        2
+    );
 }

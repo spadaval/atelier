@@ -54,14 +54,17 @@ HEAD (the first five, then a count) as modified, new, deleted or staged, with
 records instead; `land_completion_dirty` names a done owner's uncommitted
 paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
 push --include-untracked`); an invalid committed policy is reported once, as
-its `workflow_*` code, and `land_base_mismatch` also lets the gates run
+its `workflow_*` code, and `land_base_mismatch`, whose fix records the
+policy's base in the owner's record and commits it, also lets the gates run
 (atelier-kiry, atelier-grsi, atelier-7ts2, atelier-y0en). `land <id>` away from
 the owner's branch refuses with `land_branch_mismatch: owned on <branch>, not
 on <here>` and `git switch <branch> && atelier land`, finding the branch from
 the local branches' own records when this checkout's do not name it; a done
 owner whose branch is gone says to land the checkout as it is; a mission says
 missions have no branch (`land_mission`, with `atelier work mission <id>`); and
-an item no branch owns names `atelier start <id>` (atelier-ns04). A
+an item no branch owns names `atelier start <id>` (atelier-ns04). An unowned
+branch, or active work, whose item a local branch owns is pointed at that
+branch with `git switch <branch> && atelier land` (atelier-9a6e). A
 precondition that keeps the gates from running prints after the ones found
 before it, with a `Not checked:` line naming the gates it skipped.
 When the base has commits the branch does not, `land` checks the work against

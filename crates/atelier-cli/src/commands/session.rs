@@ -73,7 +73,11 @@ fn check_traceability(
         let work = workflow_policy::resolve_work_branch(policy, index, &issue.id)?;
         let owner = index.require_issue(&work.owner_id)?;
         if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
-            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run `atelier start {}` and commit its records", issue.id, issue.id);
+            // A local branch that owns it is where it lands (atelier-9a6e).
+            if let Some(owned) = git::owning_branches(repo, &work.owner_id)?.first() {
+                bail!("land_work_untraceable: active work {} is owned on {owned}, which this checkout's records do not name. Next: git switch {owned} && atelier land", issue.id);
+            }
+            bail!("land_work_untraceable: active work {} has no recorded existing owner branch. Next: atelier start {}", issue.id, issue.id);
         }
     }
     Ok(())
@@ -490,13 +494,19 @@ fn land_gates(
             );
         }
         if source.policy.branch_policy.base_branch != ownership.branch_base {
+            // The record names the base; recording the policy's base in it
+            // is the fix, committed alone (atelier-9a6e).
+            let (recorded, trusted) = (
+                &ownership.branch_base,
+                &source.policy.branch_policy.base_branch,
+            );
+            let path = format!(".atelier/issues/{id}.md");
             preconditions.fail(
                 "land_base_mismatch",
-                format!(
-                    "recorded base {} disagrees with trusted policy base {}",
-                    ownership.branch_base, source.policy.branch_policy.base_branch
-                ),
-                None,
+                format!("recorded base {recorded} disagrees with trusted policy base {trusted}"),
+                Some(format!(
+                    "perl -pi -e 's|^  branch_base: \\Q{recorded}\\E\\n|  branch_base: {trusted}\\n|' {path} && git commit -m \"…\" -- {path}"
+                )),
             );
         }
         let base = branch_base
@@ -564,6 +574,19 @@ fn land_gates(
                         .filter(|issue| issue.issue_type != "mission")
                         .map(|_| id.to_owned())
                 });
+                // An item a local branch owns lands there.
+                let owned = match &item {
+                    Some(item) => git::owning_branches(repo, item)?
+                        .into_iter()
+                        .find(|owner| *owner != branch)
+                        .map(|owner| (item.clone(), owner)),
+                    None => None,
+                };
+                if let Some((item, owner)) = owned {
+                    bail!(
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; {item} is owned on {owner}. Next: land it there with `git switch {owner} && atelier land`, or move the tracker changes onto {owner}"
+                    );
+                }
                 match item {
                     Some(item) => bail!(
                         "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}. Next: give the work an owner branch with `atelier start {item}`, or move the tracker changes onto one"
@@ -578,10 +601,14 @@ fn land_gates(
     }
     nodes.splice(0..0, std::mem::take(&mut preconditions.failed));
     preconditions.gates_ran = true;
+    let differing = uncommitted
+        .as_ref()
+        .map(|(records, _)| crate::gate_report::Uncommitted::new(records));
     let mut report = crate::gate_report::Gates {
         index: &index,
         policy: &source.policy,
         owner: id.as_deref(),
+        uncommitted: differing.as_ref(),
     }
     .report(&nodes);
     if uncommitted.is_none() {
