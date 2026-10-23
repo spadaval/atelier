@@ -751,6 +751,18 @@ fn validate_schema(root: &Mapping, display_path: &str) -> Result<i64> {
             ),
         ));
     };
+    // A newer Atelier wrote it: the fix is a reinstall (atelier-u4ql).
+    if schema_version > WORKFLOW_SCHEMA_VERSION {
+        return Err(policy_error_with_field(
+            "workflow_config_schema_newer",
+            display_path,
+            "schema_version",
+            format!(
+                "workflow schema_version {schema_version} is newer than the {WORKFLOW_SCHEMA_VERSION} this atelier reads, so the policy needs a newer atelier. Next: {}",
+                atelier_core::reinstall_fix()
+            ),
+        ));
+    }
     if schema_version != WORKFLOW_SCHEMA_VERSION {
         return Err(policy_error_with_field(
             "workflow_config_schema_unsupported",
@@ -1810,6 +1822,32 @@ mod tests {
 
     fn valid_policy() -> &'static str {
         STARTER_POLICY_YAML
+    }
+
+    /// A higher schema_version says to reinstall; a lower one stays
+    /// unsupported (atelier-u4ql).
+    #[test]
+    fn a_newer_policy_needs_a_newer_atelier() {
+        let newer = parse_policy_text(
+            &valid_policy().replace("schema_version: 3", "schema_version: 4"),
+            WORKFLOW_POLICY_PATH,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            newer,
+            format!("error: workflow_config_schema_newer\npath: {WORKFLOW_POLICY_PATH}\nfield: schema_version\nmessage: workflow schema_version 4 is newer than the 3 this atelier reads, so the policy needs a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`")
+        );
+        let older = parse_policy_text(
+            &valid_policy().replace("schema_version: 3", "schema_version: 2"),
+            WORKFLOW_POLICY_PATH,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            older.starts_with("error: workflow_config_schema_unsupported\n"),
+            "{older}"
+        );
     }
 
     fn default_branch_policy() -> &'static str {

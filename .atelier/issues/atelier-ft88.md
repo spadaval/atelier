@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep Stop-hook adapter errors apart from landing failures"
-updated_at: "2026-10-23T17:06:30.271944438+00:00"
+updated_at: "2026-10-23T17:30:59.687739480+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,6 @@ Every real block reads `…then retry.. Fix` with a double period, and ends in s
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Payload errors from read_hook_payload (session.rs:482-495) block as 'Atelier landing failed: …'; refusal text gets a double period and static trailer (session.rs:636). SessionStart bad cwd advises atelier check (status.rs:32-35). Overlaps atelier-467y; same branch.
+- 2026-10-23 [decision] Every read_hook_payload failure, including a cwd that cannot be entered, is a Misconfigured systemMessage at exit 0 for Stop and the same text as SessionStart context; the block reason is land's refusal verbatim with no lead sentence. The repeated-stop systemMessage keeps its one sentence.
+  Reason: The cwd and event come from the hook payload, not the checkout, so no record repair or land fix applies; a lead sentence on the block was the static guidance ADR 0022 removes, and the repeated-stop message is shown to the human, not acted on.
+  Rejected: Treating a bad cwd as a landing failure; dropping the repeated-stop sentence too

@@ -1030,11 +1030,34 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
                 } else {
                     "which rewrites the commits after it: record fresh proof and review for them"
                 };
-                bail!("review_append_only: {} was rewritten, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display());
+                bail!("review_append_only: {} was rewritten, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}{}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display(), merged_work_dropped(read, edge)?);
             }
         }
     }
     Ok(())
+}
+
+/// What leaving out `edge`'s commit also drops when it is a merge: the
+/// rebase replays only the commits after it onto its first parent, so the
+/// work it merged in goes with it (atelier-zegg). Empty for any other commit.
+fn merged_work_dropped(read: &git::ReadContext<'_>, edge: &git::CommitEdge) -> Result<String> {
+    if edge.sides.is_empty() {
+        return Ok(String::new());
+    }
+    let merged = String::from_utf8(git::git_output(
+        read.repo,
+        &[
+            "rev-list",
+            "--count",
+            "--no-merges",
+            &format!("{}~1..{}", edge.commit, edge.commit),
+        ],
+    )?)?;
+    let merged = merged.trim().parse::<usize>().unwrap_or(0);
+    Ok(format!(
+        "; it is a merge, so this also drops the {merged} commit{} it merged in: merge or redo any of that work that should stay",
+        if merged == 1 { "" } else { "s" }
+    ))
 }
 
 /// Historical acceptance is valid only while review events remain append-only.

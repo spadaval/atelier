@@ -1026,6 +1026,7 @@ fn merge_gates(
         return Err(crate::gate_report::GatesRefused {
             report: gates,
             notes: Vec::new(),
+            ran_on: Default::default(),
         }
         .into());
     }

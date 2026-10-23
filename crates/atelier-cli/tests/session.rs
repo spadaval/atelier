@@ -274,6 +274,10 @@ fn done_owner_requires_approval_and_active_failures_can_handoff() {
 }
 
 fn hook(dir: &Path, command: &str, payload: serde_json::Value) -> serde_json::Value {
+    hook_input(dir, command, &serde_json::to_string(&payload).unwrap())
+}
+/// A hook run on `input` as Claude Code would send it, valid JSON or not.
+fn hook_input(dir: &Path, command: &str, input: &str) -> serde_json::Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(dir)
         .args([command, "--hook", "claude"])
@@ -286,7 +290,7 @@ fn hook(dir: &Path, command: &str, payload: serde_json::Value) -> serde_json::Va
         .stdin
         .take()
         .unwrap()
-        .write_all(serde_json::to_string(&payload).unwrap().as_bytes())
+        .write_all(input.as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(
@@ -344,10 +348,10 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
         "status",
         serde_json::json!({"cwd":nested, "hook_event_name":"Stop"}),
     );
-    assert!(invalid["hookSpecificOutput"]["additionalContext"]
-        .as_str()
-        .unwrap()
-        .contains("unavailable"));
+    assert_eq!(
+        invalid["hookSpecificOutput"]["additionalContext"],
+        "Atelier hook misconfigured: expected SessionStart hook payload; check .claude/settings.json"
+    );
     // Adopters' installed hooks still call the deprecated alias.
     let alias = hook(
         unrelated.path(),
@@ -6664,20 +6668,17 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
     // Every fix it prints runs as printed: review request, start or unlink
     // the blocker, and the disposition.
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 4);
-    // The Stop hook reports the same lines after its own sentence, and ends
-    // with the verdict, so no fix command runs into other text.
+    // The Stop hook's reason is the same lines, ending with the verdict, so
+    // no fix command runs into other text.
     let output = hook(
         f.path(),
         "land",
         serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": false}),
     );
-    assert_eq!(
-        output["reason"].as_str().unwrap(),
-        format!(
-            "Atelier landing failed. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.\n{}",
-            out.trim_end()
-        )
-    );
+    // The reason is the refusal verbatim: one recovery step per failure,
+    // and no sentence of its own (atelier-467y, atelier-ft88).
+    assert_eq!(output["decision"], "block");
+    assert_eq!(output["reason"].as_str().unwrap(), out.trim_end());
     let output = hook(
         f.path(),
         "land",
@@ -7189,6 +7190,65 @@ fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
 }
 
+/// When the commit that broke review append-only is a merge, the recovery
+/// that leaves it out also drops the work it merged in, and land says so
+/// (atelier-zegg).
+#[test]
+fn leaving_out_a_merge_that_rewrote_a_review_warns_that_its_work_goes_too() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let approval = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    git(f.path(), &["switch", "-q", "-c", "side"]);
+    fs::write(f.path().join("side-work"), "side work\n").unwrap();
+    commit(f.path(), "side work");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-ff", "--no-commit", "side"]);
+    let path = format!(".atelier/reviews/{approval}.md");
+    git(f.path(), &["rm", "-q", &path]);
+    git(
+        f.path(),
+        &["commit", "-qm", "merge side, deleting the approval"],
+    );
+    let bad = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!(
+            "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (record a successor event for any change); it is a merge, so this also drops the 1 commit it merged in: merge or redo any of that work that should stay. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+        )),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    // The fix does what the warning says: the record is back and the merged
+    // work is gone.
+    git(
+        f.path(),
+        &[
+            "rebase",
+            "-q",
+            "--autostash",
+            "--onto",
+            &format!("{bad}~1"),
+            &bad,
+        ],
+    );
+    assert!(f.path().join(&path).exists());
+    assert!(!f.path().join("side-work").exists());
+}
+
 /// Every fix land prints, run in the order printed, leaves a branch that
 /// lands: the append-only recovery leads and is addressed by commit, so the
 /// records commit after it survives (atelier-61il).
@@ -7245,37 +7305,42 @@ fn printed_fixes_run_in_order_recover_a_committed_review_deletion() {
     ok(f.path(), &["land"]);
 }
 
-/// A rebase or merge stopped on a conflict is reported first, with the
-/// command that abandons it, and no gate reads the half-done state
-/// (atelier-vlhn).
+/// A rebase, merge, cherry-pick or revert stopped on a conflict is reported
+/// first, with the command that abandons it, and no gate reads the
+/// half-done state (atelier-vlhn, atelier-zegg).
 #[test]
 fn an_operation_left_in_progress_is_reported_before_any_gate() {
-    for operation in ["rebase", "merge"] {
+    for operation in ["rebase", "merge", "cherry-pick", "revert"] {
         let f = Fixture::new();
         let id = f.id.clone();
         git(f.path(), &["switch", "-q", "main"]);
         fs::write(f.path().join("code"), "base code\n").unwrap();
         commit(f.path(), "base changes the code");
         git(f.path(), &["switch", "-q", &f.branch]);
+        let target = if operation == "revert" {
+            // Reverting the commit that wrote the code conflicts with a
+            // later change to it.
+            fs::write(f.path().join("code"), "later code\n").unwrap();
+            commit(f.path(), "later code");
+            "HEAD~1"
+        } else {
+            "main"
+        };
         assert!(
-            !cli_git(f.path(), &[operation, "main"]).0,
+            !cli_git(f.path(), &[operation, target]).0,
             "{operation} conflicts"
         );
-        let (finish, abort) = match operation {
-            "rebase" => (
-                "resolve the conflicts and continue with git rebase --continue",
-                "git rebase --abort",
-            ),
-            _ => (
-                "resolve the conflicts and commit the merge",
-                "git merge --abort",
-            ),
+        let abort = format!("git {operation} --abort");
+        let finish = match operation {
+            "merge" => "resolve the conflicts and commit the merge".to_owned(),
+            _ => format!("resolve the conflicts and continue with git {operation} --continue"),
         };
+        let code = operation.replace('-', "_");
         for (gate, code) in [
-            (vec!["land"], format!("land_{operation}_in_progress")),
+            (vec!["land"], format!("land_{code}_in_progress")),
             (
                 vec!["merge", id.as_str(), "--check"],
-                format!("merge_{operation}_in_progress"),
+                format!("merge_{code}_in_progress"),
             ),
         ] {
             let (pass, out) = cli(f.path(), &gate);
@@ -7510,4 +7575,292 @@ fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
     assert!(stale(&proof()), "{}", proof());
     let listed = ok(path, &["evidence", "list", &child]);
     assert!(!listed.contains("held at close"), "{listed}");
+}
+
+/// The Stop payload for `dir`.
+fn stop(dir: &Path) -> serde_json::Value {
+    serde_json::json!({"hook_event_name": "Stop", "cwd": dir, "stop_hook_active": false})
+}
+
+/// A hook payload the adapter cannot use is reported as the hook's
+/// misconfiguration, which does not block a turn, never as a landing
+/// failure; SessionStart says the same (atelier-ft88).
+#[test]
+fn hook_payload_errors_are_reported_apart_from_landing_failures() {
+    let f = Fixture::new();
+    let misconfigured =
+        |error: &str| format!("Atelier hook misconfigured: {error}; check .claude/settings.json");
+    let missing = f.path().join("missing");
+    for (input, error) in [
+        ("not json".to_owned(), "expected ident at line 1 column 2".to_owned()),
+        (
+            serde_json::json!({"hook_event_name": "Stop"}).to_string(),
+            "hook payload requires cwd".to_owned(),
+        ),
+        (
+            serde_json::json!({"hook_event_name": "SessionStart", "cwd": f.path(), "source": "startup"})
+                .to_string(),
+            "expected Stop hook payload".to_owned(),
+        ),
+        (
+            serde_json::json!({"hook_event_name": "Stop", "cwd": missing}).to_string(),
+            format!(
+                "hook payload cwd {}: No such file or directory (os error 2)",
+                missing.display()
+            ),
+        ),
+    ] {
+        assert_eq!(
+            hook_input(f.path(), "land", &input),
+            serde_json::json!({"systemMessage": misconfigured(&error)}),
+            "{input}"
+        );
+    }
+    let context = hook(
+        f.path(),
+        "status",
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": missing, "source": "startup"}),
+    );
+    assert_eq!(
+        context["hookSpecificOutput"]["additionalContext"],
+        misconfigured(&format!(
+            "hook payload cwd {}: No such file or directory (os error 2)",
+            missing.display()
+        ))
+    );
+    // A real failure still blocks, with land's refusal as its reason.
+    f.terminal(&f.id);
+    fs::write(f.path().join("scratch"), "unfinished\n").unwrap();
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+    );
+}
+
+/// On the base, uncommitted records alone are reported without blocking a
+/// turn, while `land` still refuses; on a work branch they block, and on the
+/// base any other failure blocks (atelier-mp6v).
+#[test]
+fn uncommitted_records_alone_block_no_turn_on_the_base() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    ok(
+        f.path(),
+        &["issue", "note", &f.id, "Planning note on the base"],
+    );
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!(
+            "⚠ land_records_uncommitted: 1 tracker record differs from HEAD: .atelier/issues/{}.md (modified)",
+            f.id
+        )) && out.ends_with("land: refused — 1 check (land_records_uncommitted)\n"),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"systemMessage": format!(
+            "Atelier: the base has uncommitted records; land refuses until they are committed, but they do not block a turn.\n{}",
+            out.trim_end()
+        )})
+    );
+    // Another failure on the base blocks: a committed policy that does not
+    // parse, which the gates run past on the last valid one.
+    let policy = f.path().join(".atelier/workflow.yaml");
+    let valid = fs::read_to_string(&policy).unwrap();
+    fs::write(&policy, format!("{valid}garbage: [\n")).unwrap();
+    git(
+        f.path(),
+        &[
+            "commit",
+            "-qm",
+            "broken policy",
+            "--",
+            ".atelier/workflow.yaml",
+        ],
+    );
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && out.ends_with(
+                "land: refused — 2 checks (land_records_uncommitted, workflow_config_parse_error)\n"
+            ),
+        "{out}"
+    );
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+    );
+    // On a work branch, uncommitted records belong with the work: they block.
+    git(f.path(), &["checkout", "-q", "--", "."]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    ok(f.path(), &["issue", "note", &f.id, "Work-branch note"]);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && out.ends_with("land: refused — 1 check (land_records_uncommitted)\n"),
+        "{out}"
+    );
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+    );
+}
+
+/// On the owner's own branch, a refusal whose only failed check is the
+/// owner's missing review is reported without blocking a turn, while `land`
+/// still refuses; with an open finding or any other failure it blocks
+/// (atelier-i80r).
+#[test]
+fn a_pending_review_on_the_owners_branch_blocks_no_turn() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+             ✓ records committed\n\
+             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             land: refused — 1 check (review.current)\n"
+        )
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"systemMessage": format!(
+            "Atelier: {id} awaits an independent review; land refuses until it is approved, but waiting does not block a turn.\n{}",
+            out.trim_end()
+        )})
+    );
+    // Another failure with it blocks: uncommitted code in a done checkout.
+    fs::write(f.path().join("scratch"), "unfinished\n").unwrap();
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && out.contains("land_completion_dirty") && out.contains("review.current"),
+        "{out}"
+    );
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+    );
+    fs::remove_file(f.path().join("scratch")).unwrap();
+    // So does an open finding: the agent has to dispose of it.
+    ok(
+        f.path(),
+        &[
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Contract failure in code",
+        ],
+    );
+    commit(f.path(), "finding");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && out.ends_with("land: refused — 2 checks (review.current, findings.disposed)\n"),
+        "{out}"
+    );
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+    );
+}
+
+/// A record a newer Atelier wrote says to reinstall, in `status`, its
+/// SessionStart context, `land` and the Stop hook, as its one step; like
+/// any record that fails to parse, it carries no code (atelier-u4ql).
+#[test]
+fn a_record_from_a_newer_atelier_says_to_reinstall() {
+    let f = Fixture::new();
+    let path = f.path().join(format!(".atelier/issues/{}.md", f.id));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("schema_version: 2", "schema_version: 3"),
+    )
+    .unwrap();
+    commit(f.path(), "a record from a newer atelier");
+    let newer = format!(
+        ".atelier/issues/{}.md has schema_version 3, and this atelier reads 2, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`",
+        f.id
+    );
+    let (pass, out) = cli(f.path(), &["status"]);
+    assert!(!pass);
+    assert_eq!(out, format!("Error: {newer}\n"));
+    let context = hook(
+        f.path(),
+        "status",
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": f.path(), "source": "startup"}),
+    );
+    assert_eq!(
+        context["hookSpecificOutput"]["additionalContext"],
+        format!("Atelier context unavailable: {newer}")
+    );
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert_eq!(out, format!("Error: {newer}\nland: refused\n"));
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+    );
+}
+
+/// A newer Atelier's workflow policy says to reinstall, as its own failed
+/// check in land, not to edit the policy (atelier-u4ql).
+#[test]
+fn a_policy_from_a_newer_atelier_says_to_reinstall() {
+    let f = Fixture::new();
+    let path = f.path().join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("schema_version: 3", "schema_version: 4"),
+    )
+    .unwrap();
+    commit(f.path(), "a policy from a newer atelier");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.starts_with(&format!(
+            "⚠ {} workflow_config_schema_newer: .atelier/workflow.yaml field schema_version: workflow schema_version 4 is newer than the 3 this atelier reads, so the policy needs a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`\n",
+            f.id
+        )),
+        "{out}"
+    );
+    // Other commands fall back to the last valid policy and say why.
+    let (_, out) = cli(f.path(), &["issue", "list"]);
+    assert!(
+        out.contains("Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`"),
+        "{out}"
+    );
+}
+
+/// A Git failure while land reads the checkout keeps Git's own message: it
+/// is not reported as uncommitted records (atelier-467y).
+#[test]
+fn a_git_failure_during_land_is_not_called_uncommitted_records() {
+    let f = Fixture::new();
+    fs::write(f.path().join(".git/index"), "not an index").unwrap();
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        !out.contains("land_records_uncommitted") && out.contains("index"),
+        "{out}"
+    );
+    let output = hook(f.path(), "land", stop(f.path()));
+    let reason = output["reason"].as_str().unwrap();
+    assert_eq!(output["decision"], "block");
+    assert!(
+        !reason.contains("land_records_uncommitted") && reason.ends_with("land: refused"),
+        "{reason}"
+    );
 }

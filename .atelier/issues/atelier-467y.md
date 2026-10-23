@@ -21,9 +21,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Give land's Stop-hook refusal one code and one recovery step"
-updated_at: "2026-10-23T17:06:30.353505913+00:00"
+updated_at: "2026-10-23T17:30:59.807304833+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,5 @@ Found in review of atelier-91w1:
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed (session.rs:636 trailer); records_uncommitted (session.rs:51-57) labels any error, Git failures included, as land_records_uncommitted.
+- 2026-10-23 [decision] The one-recovery-step rule is met by making the hook reason land's refusal verbatim; the land_records_uncommitted mislabel of other snapshot failures was already gone after atelier-0uaj (records_uncommitted passes other errors through), so this item adds a test (corrupt .git/index) rather than a code change for it.
+  Reason: Re-verified against current code: both read_record_files and the final fence downcast RecordsUncommitted and return any other error unchanged.

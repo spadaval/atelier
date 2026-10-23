@@ -18,6 +18,13 @@ pub struct EvidenceTargetArg {
 pub fn load_repository() -> Result<(PathBuf, RecordIndex)> {
     let state_dir = crate::storage_layout::StorageLayout::discover()?.canonical_dir();
     let index = RecordIndex::load(&state_dir).map_err(|error| {
+        // A record a newer Atelier wrote carries its own fix, a reinstall.
+        if error
+            .chain()
+            .any(|cause| cause.is::<atelier_core::NewerSchema>())
+        {
+            return error;
+        }
         anyhow!("{error:#}\nNext: run `atelier check`, fix every named record file, and rerun.")
     })?;
     Ok((state_dir, index))

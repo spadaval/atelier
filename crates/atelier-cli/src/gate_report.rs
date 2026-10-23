@@ -103,6 +103,38 @@ pub(crate) struct GateReport {
     /// Every failed check as the verdict names it, including those whose
     /// line another failure's line absorbed.
     pub failed: Vec<String>,
+    /// Every failed check by record and code, for a caller that decides on
+    /// them, such as the Stop hook, rather than reading the lines.
+    pub checks: Vec<FailedCheck>,
+}
+
+/// One failed check: the record it is about (empty for none) and its code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FailedCheck {
+    pub record: String,
+    pub check: String,
+}
+impl FailedCheck {
+    fn of(node: &GateNode) -> Self {
+        Self {
+            record: node.target.clone(),
+            check: node.check.clone(),
+        }
+    }
+}
+
+/// Where a gate ran, for a caller whose decision depends on it: the Stop
+/// hook lets some refusals end a turn only on the base or on the owner's own
+/// work branch.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) enum RanOn {
+    /// Somewhere else, or not known.
+    #[default]
+    Other,
+    /// The base branch, with no owner.
+    Base,
+    /// The owner's own work branch.
+    Owner(String),
 }
 
 /// A refusal by failed gates. `land` returns it from its checks, and its
@@ -114,6 +146,7 @@ pub(crate) struct GatesRefused {
     /// Facts that bear on the failures, such as uncommitted changes that make
     /// passing proof stale; printed after the passes.
     pub notes: Vec<String>,
+    pub ran_on: RanOn,
 }
 impl std::fmt::Display for GatesRefused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -263,6 +296,7 @@ pub(crate) fn stopped(nodes: &[GateNode], owner: Option<&str>, skipped: String) 
             blocker: None,
         };
         report.failures.push(line.render(&[]));
+        report.checks.push(FailedCheck::of(node));
         let label = if Some(node.target.as_str()) == owner || node.target.is_empty() {
             node.check.clone()
         } else {
@@ -275,6 +309,7 @@ pub(crate) fn stopped(nodes: &[GateNode], owner: Option<&str>, skipped: String) 
     GatesRefused {
         report,
         notes: vec![skipped],
+        ran_on: RanOn::Other,
     }
 }
 
@@ -989,6 +1024,7 @@ impl Gates<'_> {
             )
         });
         for &at in &order {
+            report.checks.push(FailedCheck::of(&nodes[at]));
             let label = self.label(&nodes[at]);
             if !report.failed.contains(&label) {
                 report.failed.push(label);

@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Report a pending review from the Stop hook instead of failing land"
-updated_at: "2026-10-23T17:06:30.597907417+00:00"
+updated_at: "2026-10-23T17:31:00.168987976+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,6 @@ How the hook knows a review is in flight versus forgotten; a time bound or a 're
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Decided on atelier-rc8j: no new record; the hook treats a refusal as a pending review when it is on the owner's own work branch and every failed check is review.current or claims.reviewed with no open finding; land still exits non-zero.
+- 2026-10-23 [decision] Pending review is applied literally: every failed check must be review.current or claims.reviewed on the owner. A resolved fix_now finding awaiting a fresh approval fails findings.disposed (AwaitingApproval) and so still blocks.
+  Reason: The binding atelier-rc8j decision names only those two checks; extending it to findings.disposed is a mission-level call.
+  Rejected: Treating findings.disposed with only AwaitingApproval gaps as pending (proposed as a follow-up)

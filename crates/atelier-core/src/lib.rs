@@ -62,6 +62,42 @@ impl fmt::Display for InvalidValue {
 
 impl std::error::Error for InvalidValue {}
 
+/// The command that reinstalls Atelier, run in its source checkout: a
+/// record or policy a newer Atelier wrote needs it (atelier-u4ql).
+pub const REINSTALL_COMMAND: &str = "cargo install --path crates/atelier-cli --locked";
+
+/// The fix for a record or policy a newer Atelier wrote, after `Next: `.
+pub fn reinstall_fix() -> String {
+    format!("from Atelier's source checkout, reinstall it with `{REINSTALL_COMMAND}`")
+}
+
+/// A record whose `schema_version` is higher than this binary reads: a
+/// newer Atelier wrote it, so the fix is a reinstall, not an edit. A lower
+/// or unrecognised version is an ordinary invalid record. Like any record
+/// that fails to parse, it carries no code.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NewerSchema {
+    /// The record, as `.atelier/<kind>/<id>.md`.
+    pub path: String,
+    pub found: i64,
+    pub supported: i64,
+}
+
+impl fmt::Display for NewerSchema {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} has schema_version {}, and this atelier reads {}, so records need a newer atelier. Next: {}",
+            self.path,
+            self.found,
+            self.supported,
+            reinstall_fix()
+        )
+    }
+}
+
+impl std::error::Error for NewerSchema {}
+
 pub const ISSUE_PRIORITY_LABELS: &[&str] = &["critical", "high", "medium", "low"];
 
 #[derive(

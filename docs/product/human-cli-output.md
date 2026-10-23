@@ -337,7 +337,9 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   code that differ from HEAD, a base not merged in, a dirty completion, an
   invalid policy (`⚠ <owner> workflow_config_parse_error: .atelier/workflow.yaml:
   <message>. Next: fix .atelier/workflow.yaml and commit it`, printed once; the
-  fallback notes for the same file are left out). The gates still run against
+  fallback notes for the same file are left out; a policy from a newer
+  Atelier, `workflow_config_schema_newer`, takes the reinstall step its message
+  names instead). The gates still run against
   what can be read, such as HEAD's committed records; a line about a record
   whose checkout copy differs, or about the issue an uncommitted review or
   evidence record is about, ends `, judged on HEAD's copy; the checkout's
@@ -651,6 +653,10 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   command that only reports a coded error, as `land` and `merge` report an
   invalid candidate workflow policy as a gate line with its `workflow_*`
   code, adds a recovery step but no code of its own.
+- A record from a newer Atelier, whose `schema_version` is higher than the
+  binary reads, is a record that fails to parse, so it has no code; its one
+  line names the record and both versions, then the reinstall step, with no
+  `Caused by:` lines (see [sessions and hooks](sessions-and-hooks.md#claude-code-hooks)).
 - Every error the list covers states its failure once, then gives one
   recovery step: `<code>: <failure>. Next: <step>`. Errors written before
   this rule switch over in the items that own their gates: `land` and

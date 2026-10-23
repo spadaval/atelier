@@ -17,7 +17,9 @@ There is no SQLite database, domain cache, daemon, or persistent query index.
 ```
 
 Issue and evidence Markdown use `schema_version: 2`. Older canonical versions
-are rejected rather than silently converted. Workflow policy has version 3 and
+are rejected rather than silently converted; a higher version, written by a
+newer Atelier, is reported as needing one, with the reinstall command
+(`workflow_config_schema_newer` for the policy, atelier-u4ql). Workflow policy has version 3 and
 project configuration version 1; these are distinct contracts. Review events
 use `atelier.review` version 1. Only issue, evidence and review are record or
 relationship target kinds. `workflow_validator` names mechanical workflow gate

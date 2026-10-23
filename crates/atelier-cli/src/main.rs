@@ -762,7 +762,12 @@ fn main() -> std::process::ExitCode {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) if error.is::<commands::session::Reported>() => std::process::ExitCode::from(1),
         Err(error) => {
-            eprintln!("Error: {error:?}");
+            // A record a newer Atelier wrote needs a reinstall; the reads
+            // that met it add nothing (atelier-u4ql).
+            match commands::session::newer_schema(&error) {
+                Some(newer) => eprintln!("Error: {newer}"),
+                None => eprintln!("Error: {error:?}"),
+            }
             // An invalid value is a usage error wherever it is checked.
             let invalid_value = error.chain().any(|cause| cause.is::<InvalidValue>());
             std::process::ExitCode::from(if invalid_value { USAGE_ERROR } else { 1 })

@@ -17,9 +17,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Name a cherry-pick or revert in progress, and warn when recovery drops a merge"
-updated_at: "2026-10-23T17:15:36.906288191+00:00"
+updated_at: "2026-10-23T17:31:00.287797459+00:00"
 ---
 
 ## Goal
@@ -33,3 +33,9 @@ Tests: land in a conflicted cherry-pick and a conflicted revert prints the match
 ## Context
 
 Review findings atelier-lkkh and atelier-hf3z on atelier-0uaj.
+
+## Notes
+
+- 2026-10-23 [decision] For an append-only violation in a merge commit, land keeps the rebase fix and adds a warning that it drops the N non-merge commits the merge brought in, to merge or redo; it does not offer a recovery that keeps the side branch. Cherry-pick and revert in progress use codes land_cherry_pick_in_progress / land_revert_in_progress (merge_* from merge).
+  Reason: The commit rev-list names first may be the merge even when a side commit made the rewrite, so no single recovery keeps the side work safely; the issue allows either a warning or a keeping recovery.
+  Rejected: Re-merging the side automatically after the rebase

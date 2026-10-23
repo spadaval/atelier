@@ -29,11 +29,17 @@ const UNASSIGNED_GROUPS_SHOWN: usize = 5;
 pub fn run(hook: bool, quiet: bool, prime: bool) -> Result<()> {
     let note = prime.then_some(PRIME_DEPRECATION);
     if hook {
-        let context = commands::session::read_hook_payload("SessionStart")
-            .and_then(|_| text(false, RenderContext::plain()))
-            .unwrap_or_else(|error| {
-                format!("Atelier context unavailable: {error:#}. Run `atelier check` and repair the named records.")
-            });
+        // The advice follows the failure: the hook's configuration, a
+        // record a newer Atelier wrote, or the records (atelier-ft88).
+        let context = match commands::session::read_hook_payload("SessionStart") {
+            Err(error) => error.to_string(),
+            Ok(_) => text(false, RenderContext::plain()).unwrap_or_else(|error| {
+                match commands::session::newer_schema(&error) {
+                    Some(newer) => format!("Atelier context unavailable: {newer}"),
+                    None => format!("Atelier context unavailable: {error:#}. Run `atelier check` and repair the named records."),
+                }
+            }),
+        };
         let context = match note {
             Some(note) => format!("{note}\n{context}"),
             None => context,

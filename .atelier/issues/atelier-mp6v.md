@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Stop the Stop hook pushing commits on master for uncommitted records alone"
-updated_at: "2026-10-23T14:14:23.249382788+00:00"
+updated_at: "2026-10-23T17:31:00.048369107+00:00"
 ---
 
 ## Goal
@@ -42,3 +42,5 @@ Whether the same relaxation should apply on work branches, where uncommitted rec
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still accurate, but the quoted message is outdated (now 'land_records_uncommitted: … differs from pinned HEAD'). read_record_files aborts land_checked (session.rs ~205) before other checks, so it needs land to report uncommitted records as one failure among all (atelier-0uaj) first. Decided on atelier-rc8j: the relaxation applies on the base only.
+- 2026-10-23 [decision] The hook relaxes only a refusal land returned after its gates ran on the base branch with no owner (GatesRefused.ran_on = Base) whose every failed check code is land_records_uncommitted; a refusal that stopped before the gates always blocks.
+  Reason: Decides from land's structured failed-check list and where land ran, not from text; a stopped refusal has another code by construction, so it cannot be records-only.
