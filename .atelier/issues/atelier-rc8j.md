@@ -77,7 +77,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make every gate end in a verdict, with each failure's cause and fix"
-updated_at: "2026-10-23T14:14:38.349287364+00:00"
+updated_at: "2026-10-23T17:33:34.104097243+00:00"
 ---
 
 ## Outcome
@@ -121,3 +121,6 @@ Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come
   Reason: Receipts are committed proof; rewriting them changes history for ~2 MB of savings that new receipts stop growing anyway.
   Rejected: Migrating old pass receipts.
 - 2026-10-23 [note] 2026-10-23 plan: regroomed all 31 items against master ff7cc896 (dated notes on each). atelier-6wes superseded (done in 1a9d6b9c); the rest still needed, several rescoped. Success criteria unchanged. Increments: atelier-h1nc (S1 verdicts and renderer: 9jr8, 6rh7, bvl3, 2tux), atelier-dg3h (S3 receipt shape: bphy, 57wj, auca), atelier-phfo (S4 review views: h6o4, 3u2u, 093h, jw1n, hulj, uv5d, d8ku) run first in parallel on disjoint files. Then atelier-imlh (S2: cisa) and atelier-0uaj (S1 preconditions: kiry, yrlj, ns04, 7ts2, grsi, y0en) after h1nc, atelier-l7nz (S3 views: 3ekh, o8ni, u0ig, b05y) after dg3h, and atelier-buqu (S5 hook: ft88, 467y, u4ql, mp6v, i80r) after 0uaj. Acceptance and S6 count: atelier-1o56.
+- 2026-10-23 [decision] Pending review (refines the i80r decision): a findings.disposed failure counts as pending review too when every failing finding is a fix_now already resolved by a later commit and waiting only for fresh independent approval.
+  Reason: That state is also waiting on a reviewer, with nothing for the agent to do; it was part of the turns the retrospective counted. Undisposed findings and unresolved fix_now still block.
+  Rejected: Keeping findings.disposed always blocking.
