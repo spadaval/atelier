@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Give each failed land check its item, reason and fix command"
-updated_at: "2026-10-23T14:14:37.183947601+00:00"
+updated_at: "2026-10-23T14:41:01.849512799+00:00"
 ---
 
 ## Goal
@@ -56,3 +56,9 @@ The reasons come from `review_gate` (crates/atelier-app/src/review_gate.rs). The
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. land_invariants_unmet unchanged (session.rs:426-457); verdict always counts 1 check (session.rs:612-619) even with 3 failures; transitive and direct blocker lines both print; review.current lists the same author 3 ways (dedupe by email, review_gate.rs:938, add_author :1279).
+- 2026-10-23 [decision] Fix commands keep a placeholder only for a value the command cannot know: the reviewer identity, a resolution commit, a follow-up issue, reason text ('<identity>', '<commit>', '<issue>', '"…"'); every ID, path and command it knows is real
+  Reason: Guessing an identity or resolution commit would print a wrong command that runs; human-cli-output.md already keeps placeholders where the command cannot know the value
+  Rejected: Filling identity from git config and the resolution from HEAD; printing no fix for findings
+- 2026-10-23 [decision] review.current's fix is 'atelier review request <owner>', not 'atelier review approve'
+  Reason: The author cannot approve their own work; the brief is what the author hands to an independent reviewer
+  Rejected: atelier review approve <owner> --identity <reviewer>
