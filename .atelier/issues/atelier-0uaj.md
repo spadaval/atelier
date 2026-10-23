@@ -4,6 +4,9 @@ id: "atelier-0uaj"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-0uaj
 priority: "P1"
 relationships:
   blocks: []
@@ -34,9 +37,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Evaluate every gate when a precondition fails, with a recovery command"
-updated_at: "2026-10-23T15:19:36.064539697+00:00"
+updated_at: "2026-10-23T15:19:38.227359458+00:00"
 ---
 
 ## Goal
