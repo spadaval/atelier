@@ -22,28 +22,71 @@ pub(crate) struct Gates<'a> {
     pub uncommitted: Option<&'a Uncommitted>,
 }
 
-/// The issues whose checkout record differs from HEAD's, and the command
-/// that commits them. A gate judged a committed copy, so a line about one
-/// says so and its fix is that commit, not a move the checkout's copy may
-/// already have made; and no pass is shown for it (atelier-6ajc).
+/// The issues whose checkout records differ from HEAD's, and the command
+/// that commits them: an issue record itself, or a review or evidence
+/// record about the issue. A gate judged the committed copies, so a line
+/// about one says so and its fix is that commit, not a move the checkout
+/// may already have made, such as an approval it holds; and no pass is
+/// shown for it (atelier-6ajc, atelier-q5uh).
 pub(crate) struct Uncommitted {
     pub issues: std::collections::BTreeSet<String>,
     pub fix: String,
 }
 impl Uncommitted {
-    pub fn new(records: &atelier_app::committed_snapshot::RecordsUncommitted) -> Self {
+    /// `index` holds HEAD's records, which name the issue a removed or
+    /// changed review or evidence record was about; the checkout's copy
+    /// names the one a new or changed record is about.
+    pub fn new(
+        records: &atelier_app::committed_snapshot::RecordsUncommitted,
+        repo: &std::path::Path,
+        index: &RecordIndex,
+    ) -> Self {
+        let mut issues = std::collections::BTreeSet::new();
+        for (path, _) in &records.records {
+            let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            let Ok(relative) = path.strip_prefix(".atelier") else {
+                continue;
+            };
+            let working = std::fs::read_to_string(repo.join(path)).ok();
+            if relative.starts_with("issues") {
+                issues.insert(id.to_owned());
+            } else if relative.starts_with("reviews") {
+                issues.extend(
+                    index
+                        .require_review(id)
+                        .ok()
+                        .map(|review| review.target.clone()),
+                );
+                if let Some(atelier_records::review::ReviewFile::Event(review)) =
+                    working.and_then(|text| {
+                        atelier_records::review::parse_review_file(&text, relative).ok()
+                    })
+                {
+                    issues.insert(review.target);
+                }
+            } else if relative.starts_with("evidence") {
+                let attached = |evidence: &atelier_records::EvidenceRecord| {
+                    evidence
+                        .header
+                        .relationships
+                        .attachments
+                        .iter()
+                        .filter(|link| link.kind == "issue")
+                        .map(|link| link.id.clone())
+                        .collect::<Vec<_>>()
+                };
+                issues.extend(index.evidence(id).map(attached).unwrap_or_default());
+                if let Some(evidence) = working.and_then(|text| {
+                    atelier_records::parse_evidence_record_file(&text, relative).ok()
+                }) {
+                    issues.extend(attached(&evidence));
+                }
+            }
+        }
         Self {
-            issues: records
-                .records
-                .iter()
-                .filter_map(|(path, _)| {
-                    path.strip_prefix(".atelier/issues")
-                        .ok()?
-                        .file_stem()?
-                        .to_str()
-                        .map(str::to_owned)
-                })
-                .collect(),
+            issues,
             fix: records.commit_command().to_owned(),
         }
     }

@@ -7011,28 +7011,39 @@ fn land_shows_no_pass_for_an_owner_whose_checkout_record_differs() {
 }
 
 /// A base the policy does not trust is fixed by recording the policy's base
-/// in the owner's record (atelier-9a6e).
+/// in the owner's record, for any legal branch name (atelier-9a6e,
+/// atelier-hen4).
 #[test]
 fn land_base_mismatch_prints_a_runnable_fix() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "-q", "main"]);
-    let id = ok(f.path(), &["-q", "issue", "create", "From another branch"]);
-    commit(f.path(), "plan");
-    git(f.path(), &["switch", "-q", "-c", "other"]);
-    fs::write(f.path().join("other"), "other\n").unwrap();
-    commit(f.path(), "other work");
-    ok(f.path(), &["start", &id]);
-    commit(f.path(), "start from other");
-    let (pass, out) = cli(f.path(), &["land"]);
-    assert!(!pass);
-    let path = format!(".atelier/issues/{id}.md");
-    assert!(
-        out.contains(&format!(
-            "⚠ {id} land_base_mismatch: recorded base other disagrees with trusted policy base main. Next: perl -pi -e 's|^  branch_base: \\Qother\\E\\n|  branch_base: main\\n|' {path} && git commit -m \"…\" -- {path}\n"
-        )),
-        "{out}"
-    );
-    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    for other in ["other", "a|b", "it$s", "a@b", "q'q"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        let id = ok(f.path(), &["-q", "issue", "create", "From another branch"]);
+        commit(f.path(), "plan");
+        git(f.path(), &["switch", "-q", "-c", other]);
+        fs::write(f.path().join("other"), "other\n").unwrap();
+        commit(f.path(), "other work");
+        ok(f.path(), &["start", &id]);
+        commit(f.path(), "start from another branch");
+        let (pass, out) = cli(f.path(), &["land"]);
+        assert!(!pass);
+        let path = format!(".atelier/issues/{id}.md");
+        let line = out
+            .lines()
+            .find(|line| line.contains("land_base_mismatch"))
+            .unwrap_or_else(|| panic!("{other}: {out}"));
+        assert!(
+            line.starts_with(&format!(
+                "⚠ {id} land_base_mismatch: recorded base {other} disagrees with trusted policy base main. Next: perl -pi -e "
+            )) && line.ends_with(&format!(" {path} && git commit -m \"…\" -- {path}")),
+            "{other}: {out}"
+        );
+        assert_eq!(
+            next_steps::assert_fixes_run(f.path(), &out, &["land"]),
+            1,
+            "{other}"
+        );
+    }
 }
 
 /// An unowned branch that changes an item owned on a local branch is told
@@ -7058,4 +7069,45 @@ fn an_unowned_branch_changing_an_owned_item_points_to_its_branch() {
     );
     assert!(!out.contains("atelier start"), "{out}");
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+}
+
+/// An approval recorded but not committed: the gates read HEAD, which has
+/// none, so the review line says it was judged on HEAD and its fix is the
+/// records commit, not a review request, and no pass is shown
+/// (atelier-q5uh).
+#[test]
+fn an_uncommitted_approval_is_fixed_by_committing_it() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    // `merge` folds the done claim the approval would cover into the line.
+    let judged = format!(
+        "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs"
+    );
+    for gate in [vec!["land"], vec!["merge", id.as_str(), "--check"]] {
+        let (pass, out) = cli(f.path(), &gate);
+        assert!(!pass);
+        let line = out
+            .lines()
+            .find(|line| line.starts_with(&judged))
+            .unwrap_or_else(|| panic!("{gate:?}: {out}"));
+        assert!(
+            line.ends_with(". Next: git add .atelier && git commit -m \"…\""),
+            "{gate:?}: {out}"
+        );
+        assert!(!out.contains("✓ "), "{gate:?}: {out}");
+        assert!(!out.contains("atelier review request"), "{gate:?}: {out}");
+        assert!(next_steps::assert_fixes_run(f.path(), &out, &gate) >= 1);
+    }
 }

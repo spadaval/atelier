@@ -495,18 +495,37 @@ fn land_gates(
         }
         if source.policy.branch_policy.base_branch != ownership.branch_base {
             // The record names the base; recording the policy's base in it
-            // is the fix, committed alone (atelier-9a6e).
+            // is the fix, committed alone (atelier-9a6e). The new line is
+            // the one the record would render, passed to perl as an
+            // argument, so any legal branch name survives the shell and the
+            // pattern (atelier-hen4).
             let (recorded, trusted) = (
                 &ownership.branch_base,
                 &source.policy.branch_policy.base_branch,
             );
             let path = format!(".atelier/issues/{id}.md");
+            let line = index
+                .issue_record(&id)
+                .and_then(|record| {
+                    let mut record = record.clone();
+                    record.issue.workflow_branch.as_mut()?.branch_base = trusted.clone();
+                    atelier_records::render_issue_record(&record).ok()
+                })
+                .and_then(|text| {
+                    text.lines()
+                        .find(|line| line.starts_with("  branch_base: "))
+                        .map(str::to_owned)
+                });
+            let quote = |text: &str| format!("'{}'", text.replace('\'', "'\\''"));
             preconditions.fail(
                 "land_base_mismatch",
                 format!("recorded base {recorded} disagrees with trusted policy base {trusted}"),
-                Some(format!(
-                    "perl -pi -e 's|^  branch_base: \\Q{recorded}\\E\\n|  branch_base: {trusted}\\n|' {path} && git commit -m \"…\" -- {path}"
-                )),
+                line.map(|line| {
+                    format!(
+                        "perl -pi -e 'BEGIN {{ $line = shift }} $done ||= s/^  branch_base: .*\\n/$line\\n/' {} {path} && git commit -m \"…\" -- {path}",
+                        quote(&line)
+                    )
+                }),
             );
         }
         let base = branch_base
@@ -603,7 +622,7 @@ fn land_gates(
     preconditions.gates_ran = true;
     let differing = uncommitted
         .as_ref()
-        .map(|(records, _)| crate::gate_report::Uncommitted::new(records));
+        .map(|(records, _)| crate::gate_report::Uncommitted::new(records, repo, &index));
     let mut report = crate::gate_report::Gates {
         index: &index,
         policy: &source.policy,

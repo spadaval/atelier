@@ -500,7 +500,6 @@ fn owned(
                 };
                 match records {
                     Some(records) => {
-                        uncommitted = Some(crate::gate_report::Uncommitted::new(records));
                         found.push(format!(
                             "canonical_snapshot_uncommitted: {}; commit them with the work. Next: {}",
                             records.summary(),
@@ -512,6 +511,8 @@ fn owned(
                             &head,
                         )?
                         .into_parts();
+                        uncommitted =
+                            Some(crate::gate_report::Uncommitted::new(records, repo, &index));
                         if let Err(error) = snapshot.require_code_clean(repo) {
                             found.push(dirty(&error).ok_or(error)?);
                         }
