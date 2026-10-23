@@ -75,9 +75,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T21:11:03.107815375+00:00"
+status: "done"
 title: "Make every gate end in a verdict, with each failure's cause and fix"
-updated_at: "2026-10-23T21:10:46.231486988+00:00"
+updated_at: "2026-10-23T21:11:03.107815375+00:00"
 ---
 
 ## Outcome
@@ -127,3 +128,20 @@ Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come
 - 2026-10-23 [decision] Close atelier-rc8j with S6 unproven; atelier-p1vz recounts it after about a week of ordinary sessions. The criterion text is unchanged.
   Reason: Human decision on 2026-10-23 after acceptance validation atelier-1o56 proved S1-S5 and found S6's post-landing sample too small (26 runs, mostly reviewer scripts).
   Rejected: Keeping the mission open for the recount; revising S6 first.
+
+## Close Reason
+
+### Outcome
+Every gate ends in a verdict with each failure's cause and fix. `land`, `merge --check` and `merge` list failed checks first, one line each with the record, the cause and a fix using real IDs that tests run verbatim, keep evaluating every gate when a precondition fails, and end with a verdict that counts every failed check; a passing land says what it checked (S1: atelier-h1nc, atelier-0uaj). An approval that does not count is named with why: the commit and path or base merge that staled it, or an author identity (S2: atelier-imlh). Evidence receipts keep the failure tail, summarize passes instead of storing logs, and end cleanly; `evidence record` confirms in one line, `evidence list <item>` filters with freshness marks that agree with the gates, and `evidence show` is brief (S3: atelier-dg3h, atelier-l7nz). `review list <id>` shows approval state and findings under their dispositions, `review show` is brief, recording confirms and warns on an author identity, and titles no longer repeat the body (S4: atelier-phfo). The Stop hook blocks only on failures the agent must act on now (S5: atelier-buqu). S1-S5 are proven by independent acceptance validation atelier-1o56 (receipts atelier-wu4e, atelier-5hce, atelier-iibq, atelier-sf0e, atelier-wink). S6 is unproven: only 26 runs fell after S1-S4 landed, almost all from this mission's reviewers' scratch scripts (receipt atelier-4n58, blocked).
+
+### Deviations
+Closed with S6 unproven by the human's decision on 2026-10-23; atelier-p1vz recounts it after about a week of ordinary sessions. atelier-6wes was superseded at the regroom (done before the mission). Follow-ups added to scope along the way: atelier-jiz0, atelier-3xq4, atelier-r3oy, atelier-zegg. atelier-4urj was unlinked as low priority and keeps its discovered_from source.
+
+### Decisions
+Six decisions on this record's notes (pending-review rule and its refinement, records-only relaxation on the base only, generated review titles, recorded-fail exit status, no rewrite of old receipts, closing with S6 deferred); increment decisions are on their items (`atelier work decisions atelier-rc8j`).
+
+### Surprises
+Review rounds kept finding printed fixes that did not run verbatim or led into worse states (a roleless unlink, start under a closed ancestor, a commit fix that made review records permanently append-only-broken, a reset that dropped a just-made commit), until a test helper ran every printed fix and reran the gate. A `merge --sync` bug nested old receipt bodies in rerun summaries (atelier-3xq4). On the S6 sample, piping looked worse than the 51% pre-mission baseline (61.5%), though the output contract itself recommends `| tail -1` to read the verdict line.
+
+### Open items
+atelier-p1vz (S6 recount). Follow-ups with their sources: atelier-gg0m (hook cwd outside a repository), atelier-wu7t (wrong stale reason), atelier-wir7 (three misleading lines), atelier-e8l6 (inline backtick fence), atelier-x0vs (decisions listed twice), atelier-4urj (one supersession rule). Whether S6 should count `| tail -1` verdict reads is a question for the recount.
