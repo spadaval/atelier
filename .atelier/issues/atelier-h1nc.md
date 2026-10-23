@@ -26,9 +26,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T14:58:30.375043182+00:00"
+status: "done"
 title: "Land and merge --check end in a verdict, failures first with a fix"
-updated_at: "2026-10-23T14:41:01.688405825+00:00"
+updated_at: "2026-10-23T14:58:30.375043182+00:00"
 ---
 
 ## Goal
@@ -58,3 +59,20 @@ Regroom 2026-10-23 (notes on each child) located the code: land renderer `crates
 - 2026-10-23 [decision] merge and merge --check print gate lines and the verdict on stdout (stderr under --quiet), as merge --sync does; land's refusal stays on stderr
   Reason: Each command keeps the stream its refusal already used, so redirects and existing callers keep working
   Rejected: Moving land's refusal to stdout
+
+## Close Reason
+
+### Outcome
+`land`, `merge --check` and `merge` list failed checks first, one line each (`⚠ <record> <check>: <cause>. Next: <fix>`) with a fix that uses real IDs and moves the check toward passing: the workflow's closing transitions for an open item, `atelier start` or an unlink for a blocker, the failing receipt's command, `atelier review request <owner>` for review, and `atelier merge <id> --sync` before a merged-tree check. Same-cause failures fold into one line and still count. Each command ends with a verdict counting every failed check (`land: refused — 5 checks (…)`, `merge: passed`); a passing land lists what it checked and the next step; a successful merge is two lines; the Stop-hook reason carries the same lines and verdict (atelier-9jr8, atelier-6rh7, atelier-bvl3, atelier-2tux). Delivers atelier-rc8j S1 except its precondition clause (atelier-0uaj). Shown by CLI tests asserting exact lines (receipts atelier-8z2v, atelier-qj1d, atelier-49q4, atelier-y0zd and focused receipts on each child); independent adversarial review found exit codes and failed-check sets identical to master across fifteen states.
+
+### Deviations
+Verdicts name the failed checks instead of `land_invariants_unmet`; blockers print as item lines, not `[todo]`. Placeholders remain only for values a person supplies (`<identity>`, `<commit>`, `"…"`). `--json` keys are unchanged; reason strings lost duplicates.
+
+### Decisions
+Decision notes on atelier-h1nc, atelier-9jr8 and atelier-2tux.
+
+### Surprises
+Review found the Stop-hook reason lacked the verdict and glued its trailer onto the last fix (atelier-ooay), a bare transition listing offered as a fix (atelier-5nk6), and a merged-tree check whose fix passed in the work checkout (atelier-yjhx); all fixed in 06272b9d.
+
+### Open items
+Precondition refusals still count one check in the old form (atelier-0uaj); naming the stale approval is atelier-imlh. Proposed: `doctor` prints `Error: ⚠ …`; merge_sync.rs could share the verdict helper; `shell.check` reasons print `exit Some(1)`.
