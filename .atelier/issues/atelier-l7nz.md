@@ -29,9 +29,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T16:27:43.465229895+00:00"
+status: "done"
 title: "Evidence record, list and show: one line, by item, brief"
-updated_at: "2026-10-23T14:47:59.724850814+00:00"
+updated_at: "2026-10-23T16:27:43.465229895+00:00"
 ---
 
 ## Goal
@@ -49,3 +50,20 @@ Children: atelier-3ekh, atelier-o8ni, atelier-u0ig, atelier-b05y. One freshness-
 ## Context
 
 Regroom 2026-10-23 notes. `crates/atelier-cli/src/commands/evidence.rs` (`print_new_record` :761, `print_record_with_targets` :771, `list` :660-727), `crates/atelier-app/src/evidence_freshness.rs:58,190`. Builds on the receipt shape from the earlier evidence increment.
+
+## Close Reason
+
+### Outcome
+`evidence record` confirms in one line with the receipt's result, target, pin and command, adds the failure tail on a fail, and ends with its verdict (`evidence record: passed`, or `recorded fail — <item> cannot close or merge until a later pass`, exit 0) (atelier-3ekh). `evidence list [item]` filters by item, newest first, marks each receipt as the gates judge it (fresh, stale with the commit, superseded, blocks completion, or held at close for a merged claim), takes `--limit` and `--all`, and ends with a `Proof:` line (atelier-u0ig). `evidence show` is brief, with `--full` for the stored record (atelier-o8ni). `attach` and `--target` accept `issue/<id>` and bare IDs, and an unknown `--kind` warns (atelier-b05y). Completes atelier-rc8j S3 with atelier-dg3h; shown by CLI tests in records_evidence.rs and session.rs, including list/gate agreement and a merged claim judged as land and doctor judge it (receipts atelier-ypyf, atelier-4ab7 and focused receipts on each child).
+
+### Deviations
+The mark sits beside the result word. A capture refused before running prints no verdict line yet (no check codes for those refusals). The views share `item_proof`, but the gates keep their own supersession code (follow-up atelier-4urj).
+
+### Decisions
+Decision notes on each child; recorded-fail exit status per atelier-rc8j's decision.
+
+### Surprises
+Review found merged items' passes marked stale while land and doctor accepted them (atelier-2isj), and a manual pass on a dirty checkout confirmed as passed while the list said stale (atelier-g2pl); both fixed in 2148b5a5.
+
+### Open items
+Check codes for capture refusals, so they can end with a refused verdict.
