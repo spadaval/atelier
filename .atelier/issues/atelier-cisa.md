@@ -19,9 +19,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T15:35:23.490948743+00:00"
+status: "done"
 title: "Say which approval merge --check considered and why it is not current"
-updated_at: "2026-10-23T15:32:35.601908114+00:00"
+updated_at: "2026-10-23T15:35:23.490948743+00:00"
 ---
 
 ## Goal
@@ -58,3 +59,19 @@ The real case: a clean `git merge master` into task/atelier-bw0b (master had edi
   Rejected: Keeping approval_accepted in the sync, which could say 'Approval kept' while merge --check refused an author's approval
 - 2026-10-23 [decision] approval_stale_edges reports a merge that brings in base commits the approval does not accept, even when the merge changes nothing against the branch
   Reason: A code conflict resolved to the branch's side made review.current fail while the stale list was empty, so it read as 'predates the fork'; which approvals count is unchanged.
+
+## Close Reason
+
+land, merge and merge --check now name the approval review.current considered and why it does not count: stale by a commit (commit, subject and paths), stale by a base merge (in-scope records it changed beyond status, paths resolved or edited by hand), predating the fork, or recorded by an identity that matches a Git author. merge --sync and review list explain it from the same review_gate::approval_standing, and the four "a clean merge keeps the approval" advice strings and the product docs now state the in-scope-record exception.
+
+### Deviations
+The gate prints one line naming the newest rejected candidate, not one line per rejected candidate as the Done-when example shows. The fix stays `atelier review request <owner>` instead of `atelier review approve <id> --identity "<non-author>"`, because the mission forbids placeholders in fixes. Author identities stay lowercased as independence normalizes them (already one per person since atelier-9jr8).
+
+### Decisions
+See the decision notes on atelier-cisa: one named approval, the review-request fix, merge --sync judging by approval_standing instead of approval_accepted, and approval_stale_edges reporting a merge that brings in unaccepted base commits.
+
+### Surprises
+approval_stale_edges returned nothing for a code conflict resolved to the branch's side, because the merge changed nothing against its first parent while the base commit it brought in staled the approval, so the explanation would have read "predates the fork". It now reports the merge. Which approvals count did not change: the full suite passes unchanged apart from expected-text updates.
+
+### Open items
+None.
