@@ -103,6 +103,41 @@ pub(crate) struct GateReport {
     /// Every failed check as the verdict names it, including those whose
     /// line another failure's line absorbed.
     pub failed: Vec<String>,
+    /// Every failed check by record and code, for a caller that decides on
+    /// them, such as the Stop hook, rather than reading the lines.
+    pub checks: Vec<FailedCheck>,
+}
+
+/// One failed check: the record it is about (empty for none) and its code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FailedCheck {
+    pub record: String,
+    pub check: String,
+    /// What it waits on, per record, as the gate found it.
+    pub gaps: Vec<Gap>,
+}
+impl FailedCheck {
+    fn of(node: &GateNode) -> Self {
+        Self {
+            record: node.target.clone(),
+            check: node.check.clone(),
+            gaps: node.gaps.clone(),
+        }
+    }
+}
+
+/// Where a gate ran, for a caller whose decision depends on it: the Stop
+/// hook lets some refusals end a turn only on the base or on the owner's own
+/// work branch.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) enum RanOn {
+    /// Somewhere else, or not known.
+    #[default]
+    Other,
+    /// The base branch, with no owner.
+    Base,
+    /// The owner's own work branch.
+    Owner(String),
 }
 
 /// A refusal by failed gates. `land` returns it from its checks, and its
@@ -114,6 +149,7 @@ pub(crate) struct GatesRefused {
     /// Facts that bear on the failures, such as uncommitted changes that make
     /// passing proof stale; printed after the passes.
     pub notes: Vec<String>,
+    pub ran_on: RanOn,
 }
 impl std::fmt::Display for GatesRefused {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -229,6 +265,19 @@ pub(crate) fn policy_failure(error: &anyhow::Error) -> Option<(String, String)> 
     Some((code, format!("{place}: {message}")))
 }
 
+/// The cause and fix of an invalid candidate policy's line: an edit, or for
+/// a policy a newer Atelier wrote (`newer`), the reinstall its message
+/// already names, said once (atelier-u4ql).
+pub(crate) fn policy_fix(cause: &str, newer: bool) -> (String, String) {
+    match cause.split_once(". Next: ").filter(|_| newer) {
+        Some((cause, fix)) => (cause.to_owned(), fix.to_owned()),
+        None => (
+            cause.to_owned(),
+            "fix .atelier/workflow.yaml and commit it".to_owned(),
+        ),
+    }
+}
+
 /// A refusal by one of a command's own checks, `<code>: <cause>. Next:
 /// <fix>`, as a precondition node about `target`; `None` when `message`
 /// leads with no code that `is_code` accepts.
@@ -263,6 +312,7 @@ pub(crate) fn stopped(nodes: &[GateNode], owner: Option<&str>, skipped: String) 
             blocker: None,
         };
         report.failures.push(line.render(&[]));
+        report.checks.push(FailedCheck::of(node));
         let label = if Some(node.target.as_str()) == owner || node.target.is_empty() {
             node.check.clone()
         } else {
@@ -275,6 +325,7 @@ pub(crate) fn stopped(nodes: &[GateNode], owner: Option<&str>, skipped: String) 
     GatesRefused {
         report,
         notes: vec![skipped],
+        ran_on: RanOn::Other,
     }
 }
 
@@ -989,6 +1040,7 @@ impl Gates<'_> {
             )
         });
         for &at in &order {
+            report.checks.push(FailedCheck::of(&nodes[at]));
             let label = self.label(&nodes[at]);
             if !report.failed.contains(&label) {
                 report.failed.push(label);

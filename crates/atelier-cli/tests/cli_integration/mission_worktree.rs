@@ -1042,16 +1042,27 @@ fn test_queries_fail_naming_the_invalid_record_file() {
     assert!(success, "issue create failed: {stderr}");
     let schema_issue_id = issue_id_by_title(schema_dir.path(), "Schema drift");
     edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
-        markdown.replace("schema_version: 2", "schema_version: 99")
+        markdown.replace("schema_version: 2", "schema_version: 1")
     });
 
     let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
     assert!(!success, "schema drift should block the query");
     let schema_path = format!(".atelier/issues/{schema_issue_id}.md");
     assert!(
-        stderr.contains(&format!("Unsupported schema_version 99 in {schema_path}"))
+        stderr.contains(&format!("Unsupported schema_version 1 in {schema_path}"))
             && stderr.matches(&schema_path).count() == 1,
         "schema drift diagnostic should name the file once: {stderr}"
+    );
+    // A newer Atelier's record says to reinstall, and nothing else
+    // (atelier-u4ql).
+    edit_canonical_issue(schema_dir.path(), &schema_issue_id, |markdown| {
+        markdown.replace("schema_version: 1", "schema_version: 3")
+    });
+    let (success, _, stderr) = run_atelier(schema_dir.path(), &["issue", "list"]);
+    assert!(!success);
+    assert_eq!(
+        stderr,
+        format!("Error: {schema_path} has schema_version 3, and this atelier reads 2, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`\n")
     );
 
     let malformed_dir = tempdir().unwrap();
@@ -1481,8 +1492,14 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     );
     assert_lint_rejects_issue_edit(
         "Invalid schema version fixture",
+        |markdown, _issue_id| markdown.replace("schema_version: 2", "schema_version: 1"),
+        &["Unsupported schema_version 1"],
+    );
+    // A newer version says to reinstall, not to edit (atelier-u4ql).
+    assert_lint_rejects_issue_edit(
+        "Newer schema version fixture",
         |markdown, _issue_id| markdown.replace("schema_version: 2", "schema_version: 99"),
-        &["Unsupported schema_version 99"],
+        &["has schema_version 99, and this atelier reads 2, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`"],
     );
     assert_lint_rejects_issue_edit(
         "ID path mismatch fixture",

@@ -808,6 +808,14 @@ fn validate_record_front_matter(
         );
     }
     let schema_version = require_i64(front_matter, "schema_version", relative)?;
+    if schema_version > spec.schema_version {
+        return Err(atelier_core::NewerSchema {
+            path: display_state_path(relative),
+            found: schema_version,
+            supported: spec.schema_version,
+        }
+        .into());
+    }
     if schema_version != spec.schema_version {
         bail!(
             "Unsupported schema_version {} in {}; expected {}",
@@ -3797,6 +3805,21 @@ Legacy evidence summary.
         )
         .unwrap_err();
         assert!(old.to_string().contains("schema_version"), "{old}");
+        assert!(!old.is::<atelier_core::NewerSchema>(), "{old}");
+        // A newer version needs a newer atelier, not an edit (atelier-u4ql).
+        let newer = parse_issue_record(
+            &text.replace("schema_version: 2", "schema_version: 3"),
+            &path,
+        )
+        .unwrap_err();
+        assert_eq!(
+            newer.downcast_ref::<atelier_core::NewerSchema>(),
+            Some(&atelier_core::NewerSchema {
+                path: ".atelier/issues/atelier-vers.md".into(),
+                found: 3,
+                supported: 2,
+            })
+        );
         let fields = parse_issue_record(&text.replace("priority:", "fields: {}\npriority:"), &path)
             .unwrap_err();
         assert!(
@@ -3821,6 +3844,12 @@ Legacy evidence summary.
             path
         )
         .is_err());
+        assert!(parse_evidence_record_file(
+            &evidence.replace("schema_version: 2", "schema_version: 3"),
+            path
+        )
+        .unwrap_err()
+        .is::<atelier_core::NewerSchema>());
         assert!(
             parse_evidence_record_file(&evidence.replace("result: \"pass\"\n", ""), path).is_err()
         );

@@ -113,9 +113,10 @@ impl Snapshot {
     }
 }
 
-/// The Git operation a conflict left in progress in this worktree, with the
-/// command that abandons it: a rebase or a merge. Until it ends, HEAD and the
-/// index are mid-operation, so no gate reads them (atelier-vlhn).
+/// The Git operation a conflict left in progress in this worktree, as its
+/// code part and the command that abandons it: a rebase, a merge, a
+/// cherry-pick or a revert. Until it ends, HEAD and the index are
+/// mid-operation, so no gate reads them (atelier-vlhn, atelier-zegg).
 pub(crate) fn operation_in_progress(repo: &Path) -> Result<Option<(&'static str, &'static str)>> {
     let dir = PathBuf::from(text(
         repo,
@@ -126,6 +127,10 @@ pub(crate) fn operation_in_progress(repo: &Path) -> Result<Option<(&'static str,
             Some(("rebase", "git rebase --abort"))
         } else if dir.join("MERGE_HEAD").exists() {
             Some(("merge", "git merge --abort"))
+        } else if dir.join("CHERRY_PICK_HEAD").exists() {
+            Some(("cherry_pick", "git cherry-pick --abort"))
+        } else if dir.join("REVERT_HEAD").exists() {
+            Some(("revert", "git revert --abort"))
         } else {
             None
         },
@@ -134,9 +139,11 @@ pub(crate) fn operation_in_progress(repo: &Path) -> Result<Option<(&'static str,
 
 /// The cause and fix of an operation in progress, after `code: `.
 pub(crate) fn operation_refusal(code: &str, operation: &str, abort: &str) -> anyhow::Error {
-    let finish = match operation {
-        "rebase" => "resolve the conflicts and continue with git rebase --continue",
-        _ => "resolve the conflicts and commit the merge",
+    // Git's own name for it, as its commands spell it.
+    let operation = operation.replace('_', "-");
+    let finish = match operation.as_str() {
+        "merge" => "resolve the conflicts and commit the merge".to_owned(),
+        _ => format!("resolve the conflicts and continue with git {operation} --continue"),
     };
     anyhow::anyhow!("{code}: a {operation} is in progress, so HEAD and the index are mid-{operation}. Next: `{abort}`, or {finish}")
 }

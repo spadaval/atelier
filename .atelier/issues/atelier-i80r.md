@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T17:33:00.474891060+00:00"
+status: "done"
 title: "Report a pending review from the Stop hook instead of failing land"
-updated_at: "2026-10-23T17:06:30.597907417+00:00"
+updated_at: "2026-10-23T17:36:18.007630541+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,23 @@ How the hook knows a review is in flight versus forgotten; a time bound or a 're
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Decided on atelier-rc8j: no new record; the hook treats a refusal as a pending review when it is on the owner's own work branch and every failed check is review.current or claims.reviewed with no open finding; land still exits non-zero.
+- 2026-10-23 [decision] Pending review is applied literally: every failed check must be review.current or claims.reviewed on the owner. A resolved fix_now finding awaiting a fresh approval fails findings.disposed (AwaitingApproval) and so still blocks.
+  Reason: The binding atelier-rc8j decision names only those two checks; extending it to findings.disposed is a mission-level call.
+  Rejected: Treating findings.disposed with only AwaitingApproval gaps as pending (proposed as a follow-up)
+- 2026-10-23 [note] Amends the close reason after the refined atelier-rc8j decision (master f52947c4): findings.disposed now also counts as a pending review when every failing finding's gap is AwaitingApproval (a fix_now resolved by a later commit waiting only for a fresh independent approval), read from the gate's per-finding gaps carried in GateReport.checks, not reason text. Undisposed, unresolved fix_now, and defer/no_action awaiting acceptance still block. Test: a_resolved_fix_now_awaiting_approval_blocks_no_turn. The 'Open items' follow-up in the close reason is resolved by this.
+
+## Close Reason
+
+On the owner's own work branch, when every failed check is the owner's `review.current` (or `claims.reviewed`), the Stop hook returns a systemMessage naming the owner as awaiting an independent review, with land's refusal and its `atelier review request` step; plain land still refuses, and a pending review with another failure or an open finding blocks.
+
+### Deviations
+None.
+
+### Decisions
+See the decision note: the binding definition is applied literally, so a resolved fix_now finding awaiting a fresh approval (findings.disposed, AwaitingApproval) still blocks.
+
+### Surprises
+`claims.reviewed` is produced only by merge, not land, so on land the pending case is review.current alone.
+
+### Open items
+Proposed, not filed: decide on atelier-rc8j whether findings.disposed failing only with AwaitingApproval gaps should also count as a pending review; that window was part of the retrospective's turn cost.

@@ -57,10 +57,14 @@ gates read HEAD's committed records instead. A rewrite already committed
 refuses with `review_append_only`, whose fix leaves that commit out with
 `git rebase --autostash --onto <commit>~1 <commit>`, named by the commit so it
 holds after the other fixes commit, and printed first; below the tip it
-rewrites the later commits (atelier-v4rd, atelier-61il). A rebase or merge
-stopped on a conflict is reported before anything else, as
-`land_rebase_in_progress` or `land_merge_in_progress` (`merge_*` from
-`merge`), with `git rebase --abort` or `git merge --abort` (atelier-vlhn); `land_completion_dirty` names a done owner's uncommitted
+rewrites the later commits (atelier-v4rd, atelier-61il). When that commit is a
+merge, the line also says the rebase drops the commits it merged in, to be
+merged or redone if they should stay (atelier-zegg). A rebase, merge,
+cherry-pick or revert stopped on a conflict is reported before anything else,
+as `land_rebase_in_progress`, `land_merge_in_progress`,
+`land_cherry_pick_in_progress` or `land_revert_in_progress` (`merge_*` from
+`merge`), with `git rebase --abort`, `git merge --abort`, `git cherry-pick
+--abort` or `git revert --abort` (atelier-vlhn, atelier-zegg); `land_completion_dirty` names a done owner's uncommitted
 paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
 push --include-untracked`); an invalid committed policy is reported once, as
 its `workflow_*` code, and `land_base_mismatch`, whose fix records the
@@ -102,9 +106,11 @@ install merges.
 
 `land` ends with a verdict line, the last line of its combined output (see
 [verdict line](human-cli-output.md#verdict-line)): `land: passed`, or `land:
-refused — N checks (…)` with a non-zero exit. The Stop hook's block reason,
-and its message on a repeated stop, is one sentence, then the refusal as
-`land` prints it, ending with that verdict. `land --push` runs the same
+refused — N checks (…)` with a non-zero exit. The Stop hook's block reason
+is the refusal as `land` prints it, ending with that verdict, with no
+sentence of its own, so each failure carries its one recovery step; its
+message on a repeated stop is one sentence, then the same refusal
+(atelier-467y, atelier-ft88). `land --push` runs the same
 checks and, only when they pass, pushes the checked HEAD to the current
 branch's own configured upstream (`branch.<name>.remote` and `.merge`) through
 git, then ends `land: passed, pushed to <remote>/<branch>`. A refusal pushes
@@ -184,7 +190,44 @@ JSON stdin and use its `cwd` to find the checkout. SessionStart returns context
 through `hookSpecificOutput.additionalContext`. A failed Stop returns
 `decision: "block"` and a reason at exit 0. When `stop_hook_active` signals a
 repeated failure, it emits a warning and allows stopping to avoid a loop; plain
-`land` continues to fail until the invariant is fixed. These protocol fields
+`land` continues to fail until the invariant is fixed.
+
+The Stop hook blocks only for a refusal the agent must act on now, judged
+from land's failed checks by code and where land ran; plain `land` still
+refuses, and exits non-zero, in every case. Each case below returns a
+`systemMessage` at exit 0 instead of a block:
+
+- A payload the adapter cannot use, such as input that is not JSON, another
+  event's payload, or a missing or unusable `cwd`, is the hook's
+  misconfiguration, not a landing failure: `Atelier hook misconfigured:
+  <error>; check .claude/settings.json`. SessionStart returns the same text
+  as its context (atelier-ft88).
+- On the base branch, when every failed check is `land_records_uncommitted`,
+  the message says the base has uncommitted records and does not block, then
+  gives land's refusal, which names the records and the commit that commits
+  them (atelier-mp6v). On a work branch uncommitted records belong with the
+  work, so they block; so does any other failure on the base.
+- On the owner's own work branch, when every failed check is the owner's
+  `review.current` or `claims.reviewed`, or its `findings.disposed` where
+  every failing finding is a fix_now that a later commit resolved and that
+  waits only for a fresh independent approval, the review is pending: the
+  message names the owner as awaiting an independent review, then gives
+  land's refusal with its `atelier review request <owner>` step
+  (atelier-i80r). A finding with no disposition, a fix_now with no
+  resolution commit, or a defer or no_action awaiting acceptance blocks, as
+  does any other failure with the review.
+
+A record whose `schema_version` is higher than the installed binary reads was
+written by a newer Atelier. Every command, `status` and its SessionStart
+context, `land` and the Stop hook say so in one line instead of a parse error,
+`<path> has schema_version N, and this atelier reads M, so records need a newer
+atelier`, whose one step reinstalls it from Atelier's source checkout with
+`cargo install --path crates/atelier-cli --locked`. Like any record that fails
+to parse, it carries no code, and `land` ends `land: refused`. A newer
+workflow policy fails `workflow_config_schema_newer` with the same step,
+said once: a command that falls back to the last valid policy notes the
+fallback without also saying to edit the policy. A
+lower version is an invalid record, as before (atelier-u4ql). These protocol fields
 follow the [official Claude Code hooks reference](https://code.claude.com/docs/en/hooks).
 
 Hooks assist handoff; their warning escape does not prove completion. Actual

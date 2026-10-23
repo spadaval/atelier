@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T17:33:00.279904244+00:00"
+status: "done"
 title: "Stop the Stop hook pushing commits on master for uncommitted records alone"
-updated_at: "2026-10-23T14:14:23.249382788+00:00"
+updated_at: "2026-10-23T17:33:00.279904244+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,21 @@ Whether the same relaxation should apply on work branches, where uncommitted rec
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still accurate, but the quoted message is outdated (now 'land_records_uncommitted: … differs from pinned HEAD'). read_record_files aborts land_checked (session.rs ~205) before other checks, so it needs land to report uncommitted records as one failure among all (atelier-0uaj) first. Decided on atelier-rc8j: the relaxation applies on the base only.
+- 2026-10-23 [decision] The hook relaxes only a refusal land returned after its gates ran on the base branch with no owner (GatesRefused.ran_on = Base) whose every failed check code is land_records_uncommitted; a refusal that stopped before the gates always blocks.
+  Reason: Decides from land's structured failed-check list and where land ran, not from text; a stopped refusal has another code by construction, so it cannot be records-only.
+
+## Close Reason
+
+On the base branch, when land's only failed check is `land_records_uncommitted`, the Stop hook returns a systemMessage (exit 0, no block) that says so and carries land's refusal naming the records and their commit; plain land still refuses, any other failure on the base blocks, and uncommitted records on a work branch block.
+
+### Deviations
+None.
+
+### Decisions
+See the decision note: the decision reads land's structured failed-check list (`GateReport.checks`) and where land ran (`GatesRefused.ran_on`), set only after the gates ran.
+
+### Surprises
+A done claim made directly on a base with no upstream is not a land failure there, so the mixed-failure case uses a committed policy that does not parse.
+
+### Open items
+None.

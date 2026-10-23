@@ -273,9 +273,12 @@ fn land_gates(
     };
     let candidate_invalid = match candidate {
         Ok(_) => None,
-        Err(error) => Some(crate::gate_report::policy_failure(&error).with_context(|| {
-            format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml and commit it")
-        })?),
+        Err(error) => Some((
+            crate::gate_report::policy_failure(&error).with_context(|| {
+                format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml and commit it")
+            })?,
+            atelier_workflow::needs_newer_atelier(&error),
+        )),
     };
     let record_failures = |preconditions: &mut crate::gate_report::Preconditions| {
         if let Some((uncommitted, _)) = &uncommitted {
@@ -285,12 +288,9 @@ fn land_gates(
                 Some(uncommitted.commit_command()),
             );
         }
-        if let Some((code, cause)) = &candidate_invalid {
-            preconditions.fail(
-                code,
-                cause.clone(),
-                Some("fix .atelier/workflow.yaml and commit it".to_owned()),
-            );
+        if let Some(((code, cause), newer)) = &candidate_invalid {
+            let (cause, fix) = crate::gate_report::policy_fix(cause, *newer);
+            preconditions.fail(code, cause, Some(fix));
         }
     };
     let id = match owner(&index, &branch, requested) {
@@ -630,8 +630,16 @@ fn land_gates(
                 )
             )
         });
+        let ran_on = match (&id, &ownership) {
+            (Some(id), Some(_)) => crate::gate_report::RanOn::Owner(id.clone()),
+            (None, _) if branch == source.policy.branch_policy.base_branch => {
+                crate::gate_report::RanOn::Base
+            }
+            _ => crate::gate_report::RanOn::Other,
+        };
         return Err(crate::gate_report::GatesRefused {
             report,
+            ran_on,
             notes: lines
                 .into_iter()
                 .filter(|line| line.starts_with("Invalid ") || line.starts_with("Using last valid"))
@@ -664,21 +672,40 @@ fn land_gates(
     Ok((lines.join("\n"), head))
 }
 
-/// Reads a Claude Code hook payload for `event` from stdin and enters its
-/// `cwd`. Returns whether a Stop hook is already active.
-pub(crate) fn read_hook_payload(event: &str) -> Result<bool> {
-    let mut bytes = String::new();
-    std::io::stdin().read_to_string(&mut bytes)?;
-    let payload: Value = serde_json::from_str(&bytes)?;
-    if payload["hook_event_name"] != event {
-        bail!("expected {event} hook payload");
+/// A hook payload the adapter cannot use, such as input that is not JSON,
+/// another event's payload or a missing or unusable `cwd`: the hook is
+/// misconfigured, which is no landing failure (atelier-ft88).
+#[derive(Debug)]
+pub(crate) struct Misconfigured(String);
+impl std::fmt::Display for Misconfigured {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Atelier hook misconfigured: {}; check .claude/settings.json",
+            self.0
+        )
     }
-    std::env::set_current_dir(
-        payload["cwd"]
+}
+impl std::error::Error for Misconfigured {}
+
+/// Reads a Claude Code hook payload for `event` from stdin and enters its
+/// `cwd`. Returns whether a Stop hook is already active; every failure is
+/// [`Misconfigured`].
+pub(crate) fn read_hook_payload(event: &str) -> Result<bool> {
+    let read = || -> Result<bool> {
+        let mut bytes = String::new();
+        std::io::stdin().read_to_string(&mut bytes)?;
+        let payload: Value = serde_json::from_str(&bytes)?;
+        if payload["hook_event_name"] != event {
+            bail!("expected {event} hook payload");
+        }
+        let cwd = payload["cwd"]
             .as_str()
-            .context("hook payload requires cwd")?,
-    )?;
-    Ok(payload["stop_hook_active"].as_bool().unwrap_or(false))
+            .context("hook payload requires cwd")?;
+        std::env::set_current_dir(cwd).with_context(|| format!("hook payload cwd {cwd}"))?;
+        Ok(payload["stop_hook_active"].as_bool().unwrap_or(false))
+    };
+    read().map_err(|error| Misconfigured(format!("{error:#}")).into())
 }
 
 /// The error `land` has already reported with its verdict line; `main` exits
@@ -708,10 +735,14 @@ fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
                 .collect(),
             refused.report.failed.clone(),
         ),
-        None => (
-            vec![format!("Error: {error:?}")],
-            refusal_code(error).into_iter().collect(),
-        ),
+        // The reinstall is the one fix; the reads that met it add nothing.
+        None => match newer_schema(error) {
+            Some(newer) => (vec![format!("Error: {newer}")], Vec::new()),
+            None => (
+                vec![format!("Error: {error:?}")],
+                refusal_code(error).into_iter().collect(),
+            ),
+        },
     };
     let verdict = if failed.is_empty() {
         "land: refused".to_owned()
@@ -719,6 +750,13 @@ fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
         crate::gate_report::verdict("land", &failed)
     };
     (lines, verdict)
+}
+
+/// The record a newer Atelier wrote, when that is why `error` happened.
+pub fn newer_schema(error: &anyhow::Error) -> Option<&atelier_core::NewerSchema> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<atelier_core::NewerSchema>())
 }
 
 /// The leading `land_*` check code of a refusal, if it has one.
@@ -831,27 +869,81 @@ pub fn land(
             }
         }
     }
-    let mut repeated = false;
-    let result = read_hook_payload("Stop").and_then(|active| {
-        repeated = active;
-        land_text(requested, install, false)
-    });
-    let output = match result {
-        Ok(_) => json!({}),
-        // The hook's sentence leads, so the report's fix commands and its
-        // verdict end the message as `land` prints them.
-        Err(error) => {
-            let (lines, verdict) = refusal(&error);
-            let report = format!("{}\n{verdict}", lines.join("\n"));
-            if repeated {
-                json!({"systemMessage": format!("Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{report}")})
-            } else {
-                json!({"decision": "block", "reason": format!("Atelier landing failed. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.\n{report}")})
-            }
-        }
+    let output = match read_hook_payload("Stop") {
+        // Not a landing failure, so it does not hold the turn.
+        Err(error) => json!({"systemMessage": error.to_string()}),
+        Ok(repeated) => match land_text(requested, install, false) {
+            Ok(_) => json!({}),
+            Err(error) => stop_hook_refusal(&error, repeated),
+        },
     };
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+/// The Stop hook's answer to a refused land: the refusal as `land` prints
+/// it, as the reason that blocks the turn. Two refusals leave the agent
+/// nothing to do now, so they are reported without blocking: uncommitted
+/// records alone on the base, and on the owner's own work branch a review
+/// still pending on the owner, including a fresh approval for resolved
+/// fix_now findings. A repeated stop is not blocked again, so the
+/// hook cannot loop. `land` itself still refuses in every case.
+fn stop_hook_refusal(error: &anyhow::Error, repeated: bool) -> Value {
+    let (lines, verdict) = refusal(error);
+    let report = format!("{}\n{verdict}", lines.join("\n"));
+    if let Some(lead) = error
+        .downcast_ref::<crate::gate_report::GatesRefused>()
+        .and_then(nothing_to_do_now)
+    {
+        return json!({"systemMessage": format!("{lead}\n{report}")});
+    }
+    if repeated {
+        json!({"systemMessage": format!("Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{report}")})
+    } else {
+        json!({"decision": "block", "reason": report})
+    }
+}
+
+/// Why a refusal need not block a turn, read from its failed checks by
+/// code and where land ran; `None` for every other refusal.
+fn nothing_to_do_now(refused: &crate::gate_report::GatesRefused) -> Option<String> {
+    use crate::gate_report::RanOn;
+    let checks = &refused.report.checks;
+    if checks.is_empty() {
+        return None;
+    }
+    match &refused.ran_on {
+        // On the base, records are committed when the work is handed off,
+        // not at every turn (atelier-mp6v).
+        RanOn::Base
+            if checks
+                .iter()
+                .all(|check| check.check == "land_records_uncommitted") =>
+        {
+            Some("Atelier: the base has uncommitted records; land refuses until they are committed, but they do not block a turn.".to_owned())
+        }
+        // Only the owner's review is missing: its approval, or a fresh one
+        // for fix_now findings a later commit already resolved. Any other
+        // finding state, or any other failure, blocks (atelier-i80r).
+        RanOn::Owner(owner)
+            if checks.iter().all(|check| {
+                check.record == *owner
+                    && match check.check.as_str() {
+                        "review.current" | "claims.reviewed" => true,
+                        "findings.disposed" => {
+                            !check.gaps.is_empty()
+                                && check.gaps.iter().all(|gap| {
+                                    matches!(gap, atelier_app::review_gate::Gap::AwaitingApproval(_))
+                                })
+                        }
+                        _ => false,
+                    }
+            }) =>
+        {
+            Some(format!("Atelier: {owner} awaits an independent review; land refuses until it is approved, but waiting does not block a turn."))
+        }
+        _ => None,
+    }
 }
 
 /// Lint reads every record, so under a policy that gates on it any record

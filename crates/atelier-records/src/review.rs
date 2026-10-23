@@ -74,6 +74,20 @@ pub enum ReviewFile {
 
 pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
     let (front, body) = split_document(text).context("review needs YAML front matter")?;
+    // A newer Atelier's review can add fields, so its version is read before
+    // the fields this one knows (atelier-u4ql).
+    if let Some(found) = serde_yaml::from_str::<serde_yaml::Value>(front)
+        .ok()
+        .and_then(|value| value.get("schema_version")?.as_i64())
+        .filter(|found| *found > REVIEW_KIND.schema_version)
+    {
+        return Err(atelier_core::NewerSchema {
+            path: display_state_path(relative),
+            found,
+            supported: REVIEW_KIND.schema_version,
+        }
+        .into());
+    }
     let front: Front = serde_yaml::from_str(front)
         .with_context(|| format!("invalid review {}", display_state_path(relative)))?;
     if front.schema != REVIEW_KIND.schema || front.schema_version != REVIEW_KIND.schema_version {
@@ -343,6 +357,30 @@ mod tests {
             "---\nschema: atelier.review\nschema_version: 1\nid: atelier-r001\ntitle: why\n{subject}identity: Author\ncommit: {commit}\ncreated_at: 2026-10-22T00:00:00Z\nevent:\n  event: {event}\n---\n\nwhy\n"
         );
         parse_review_file(&text, Path::new("reviews/atelier-r001.md"))
+    }
+
+    /// A newer review is named as one, even with a field this version does
+    /// not know; a lower version stays an unsupported schema (atelier-u4ql).
+    #[test]
+    fn a_newer_review_needs_a_newer_atelier() {
+        let commit = "a".repeat(40);
+        let text = |version: i64| {
+            format!(
+                "---\nschema: atelier.review\nschema_version: {version}\nid: atelier-r001\ntitle: why\ntarget: atelier-t001\nidentity: Author\ncommit: {commit}\ncreated_at: 2026-10-22T00:00:00Z\nfuture_field: yes\nevent:\n  event: approval\n---\n\nwhy\n"
+            )
+        };
+        let path = Path::new("reviews/atelier-r001.md");
+        let newer = parse_review_file(&text(2), path).unwrap_err();
+        assert_eq!(
+            newer.downcast_ref::<atelier_core::NewerSchema>(),
+            Some(&atelier_core::NewerSchema {
+                path: ".atelier/reviews/atelier-r001.md".into(),
+                found: 2,
+                supported: 1,
+            })
+        );
+        let older = parse_review_file(&text(0), path).unwrap_err();
+        assert!(!older.is::<atelier_core::NewerSchema>(), "{older:#}");
     }
 
     #[test]

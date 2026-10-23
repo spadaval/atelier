@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T17:33:00.085158728+00:00"
+status: "done"
 title: "Say reinstall atelier when records need a newer binary"
-updated_at: "2026-10-23T17:06:30.434286518+00:00"
+updated_at: "2026-10-23T17:33:00.085158728+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,22 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. schema_version check is exact equality (atelier-records lib.rs:811-817, review.rs:79-83); status and hook advise 'atelier check'. Scope to version numbers (higher than supported -> reinstall); an unknown field does not prove a newer binary.
+- 2026-10-23 [decision] A record with a higher schema_version is reported without a code ('<path> has schema_version N, and this atelier reads M, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`'); a higher workflow policy version gets the new workflow_config_schema_newer code with the same step. One phrasing serves every repository, with no detection of whether the checkout is Atelier's source.
+  Reason: human-cli-output.md's error contract gives records that fail to parse no code and allows new codes only in workflow_*; the binary cannot know where an adopter's Atelier source lives, and 'from Atelier's source checkout' is right both here and elsewhere.
+  Rejected: A records_schema_newer code; cargo install --git with the Cargo.toml repository URL (it names another fork than origin); detecting crates/atelier-cli in the repo root
+
+## Close Reason
+
+An issue, evidence or review record whose schema_version is higher than this binary reads now fails as one line, `<path> has schema_version N, and this atelier reads M, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked``, in every command (status, its SessionStart context, land, the Stop hook, issue list, check); a newer workflow policy fails `workflow_config_schema_newer` with the same step, which land uses as the fix. Lower versions keep the existing errors.
+
+### Deviations
+No code: the issue text asked for "records need atelier >= X", but the binary cannot know which release reads a version, and the output contract gives a record that fails to parse no code. Field-level newness is out of scope, per the regroom note.
+
+### Decisions
+See the decision note (no code for records; workflow_* code for policy; one install phrasing for every repository).
+
+### Surprises
+`load_repository` rewrote every load error as a string with an `atelier check` step, losing the error type; it now passes a newer-schema error through. Review front matter is deny_unknown_fields, so its version is read before the strict parse. Two existing tests used schema_version 99 as a generic drift fixture; they now use a lower version and gain the newer case.
+
+### Open items
+None. Other commands that fall back to the last valid policy still say "fix .atelier/workflow.yaml" after the reinstall diagnostic; proposed as a follow-up, not filed.
