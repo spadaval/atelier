@@ -21,9 +21,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T00:07:20.199254652+00:00"
+status: "done"
 title: "State Agent Factory's one review standard for code and prose"
-updated_at: "2026-10-23T00:07:19.850566144+00:00"
+updated_at: "2026-10-23T00:07:20.199254652+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,20 @@ Every statement in .agents/skills/agent-factory/ that limits independent review 
   Reason: The human's 2026-10-22 decision: review keeps one standard for code and prose; only the trivial exemption skips it. The smallest change that removes every code-only limit
   Rejected: A separate review budget for prose (superseded atelier-1mn2)
 - 2026-10-22 [note] Scenario evals in spadaval/.agents evals/agent-factory were not run for this wording change; the change follows a human decision rather than an observed agent failure, and the skill-evaluation method's baseline step would only confirm agents currently skip review on prose. Limit stated for review.
+
+## Close Reason
+
+### Outcome
+The vendored Agent Factory skill states one review standard: every non-trivial change, code or prose, gets independent review, and only the trivial exemption skips it; tracker records follow the tracker's rules. SKILL.md (core rule, scaling table, Independent Review), constitution.md, procedures/orchestrate.md, procedures/implement.md and maintainers/skill-evaluation.md changed. Fixes atelier-k8h8 S8's acceptance failure (atelier-prjr).
+
+### Deviations
+The upstream scenario evals were not run (note on this item).
+
+### Decisions
+Decision note on this item: extend "what needs review" to prose and leave the trivial exemption and code-specific guidance alone.
+
+### Surprises
+None.
+
+### Open items
+Sync upstream with the rest of this mission's skill edits (atelier-k4xg).
