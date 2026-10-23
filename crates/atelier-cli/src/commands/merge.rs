@@ -776,11 +776,9 @@ fn merge_gates(
         let (code, cause) = crate::gate_report::policy_failure(&error).with_context(|| {
             format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier merge {id}`")
         })?;
-        preconditions.fail(
-            &code,
-            cause,
-            Some("fix .atelier/workflow.yaml and commit it".to_owned()),
-        );
+        let (cause, fix) =
+            crate::gate_report::policy_fix(&cause, atelier_workflow::needs_newer_atelier(&error));
+        preconditions.fail(&code, cause, Some(fix));
     }
     index.validate_policy(&source.policy, records_root)?;
     review_gate::append_only(&mut read, &fork_point)?;

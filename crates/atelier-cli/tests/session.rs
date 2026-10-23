@@ -7836,8 +7836,11 @@ fn a_policy_from_a_newer_atelier_says_to_reinstall() {
         )),
         "{out}"
     );
-    // Other commands fall back to the last valid policy and say why.
+    // It says one thing: the reinstall, not also an edit.
+    assert!(!out.contains("fix .atelier/workflow.yaml"), "{out}");
+    // Other commands fall back to the last valid policy and say why, once.
     let (_, out) = cli(f.path(), &["issue", "list"]);
+    assert!(!out.contains("fix .atelier/workflow.yaml"), "{out}");
     assert!(
         out.contains("Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`"),
         "{out}"
@@ -7862,5 +7865,90 @@ fn a_git_failure_during_land_is_not_called_uncommitted_records() {
     assert!(
         !reason.contains("land_records_uncommitted") && reason.ends_with("land: refused"),
         "{reason}"
+    );
+}
+
+/// A fix_now finding a later commit resolved, waiting only for a fresh
+/// independent approval, is a pending review too: the hook reports it
+/// without blocking while land refuses; an undisposed finding with it
+/// blocks (atelier-i80r, atelier-rc8j decision).
+#[test]
+fn a_resolved_fix_now_awaiting_approval_blocks_no_turn() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Contract failure in code",
+        ],
+    );
+    commit(f.path(), "finding");
+    fs::write(f.path().join("code"), "fixed code\n").unwrap();
+    commit(f.path(), "fix the finding");
+    let fix = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &fix,
+            "--identity",
+            "Author",
+            "Fixed",
+        ],
+    );
+    commit(f.path(), "disposition");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && out.ends_with("land: refused — 2 checks (review.current, findings.disposed)\n"),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!(
+            "⚠ {id} findings.disposed: 1 fix_now finding resolved; it needs a fresh approval (see review.current). Next: atelier review request {id}\n"
+        )),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 2);
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"systemMessage": format!(
+            "Atelier: {id} awaits an independent review; land refuses until it is approved, but waiting does not block a turn.\n{}",
+            out.trim_end()
+        )})
+    );
+    // An undisposed finding with it is the agent's to act on: it blocks.
+    ok(
+        f.path(),
+        &[
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "Another failure",
+        ],
+    );
+    commit(f.path(), "second finding");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass && out.contains("has no disposition"), "{out}");
+    assert_eq!(
+        hook(f.path(), "land", stop(f.path())),
+        serde_json::json!({"decision": "block", "reason": out.trim_end()})
     );
 }

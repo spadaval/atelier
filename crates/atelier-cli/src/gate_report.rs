@@ -113,12 +113,15 @@ pub(crate) struct GateReport {
 pub(crate) struct FailedCheck {
     pub record: String,
     pub check: String,
+    /// What it waits on, per record, as the gate found it.
+    pub gaps: Vec<Gap>,
 }
 impl FailedCheck {
     fn of(node: &GateNode) -> Self {
         Self {
             record: node.target.clone(),
             check: node.check.clone(),
+            gaps: node.gaps.clone(),
         }
     }
 }
@@ -260,6 +263,19 @@ pub(crate) fn policy_failure(error: &anyhow::Error) -> Option<(String, String)> 
         }
     }
     Some((code, format!("{place}: {message}")))
+}
+
+/// The cause and fix of an invalid candidate policy's line: an edit, or for
+/// a policy a newer Atelier wrote (`newer`), the reinstall its message
+/// already names, said once (atelier-u4ql).
+pub(crate) fn policy_fix(cause: &str, newer: bool) -> (String, String) {
+    match cause.split_once(". Next: ").filter(|_| newer) {
+        Some((cause, fix)) => (cause.to_owned(), fix.to_owned()),
+        None => (
+            cause.to_owned(),
+            "fix .atelier/workflow.yaml and commit it".to_owned(),
+        ),
+    }
 }
 
 /// A refusal by one of a command's own checks, `<code>: <cause>. Next:

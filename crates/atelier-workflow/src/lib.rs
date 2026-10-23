@@ -427,6 +427,16 @@ impl fmt::Display for WorkflowPolicyError {
 
 impl std::error::Error for WorkflowPolicyError {}
 
+/// Whether `error` is a policy a newer Atelier wrote, whose one fix is the
+/// reinstall its message names, not an edit (atelier-u4ql).
+pub fn needs_newer_atelier(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<WorkflowPolicyError>()
+            .is_some_and(|policy| policy.code == "workflow_config_schema_newer")
+    })
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StatusDefinitionRaw {

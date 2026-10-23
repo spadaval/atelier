@@ -208,11 +208,14 @@ refuses, and exits non-zero, in every case. Each case below returns a
   them (atelier-mp6v). On a work branch uncommitted records belong with the
   work, so they block; so does any other failure on the base.
 - On the owner's own work branch, when every failed check is the owner's
-  `review.current` or `claims.reviewed`, the review is pending: the message
-  names the owner as awaiting an independent review, then gives land's
-  refusal with its `atelier review request <owner>` step (atelier-i80r). An
-  open finding fails `findings.disposed`, so it blocks, as does any other
-  failure with the review.
+  `review.current` or `claims.reviewed`, or its `findings.disposed` where
+  every failing finding is a fix_now that a later commit resolved and that
+  waits only for a fresh independent approval, the review is pending: the
+  message names the owner as awaiting an independent review, then gives
+  land's refusal with its `atelier review request <owner>` step
+  (atelier-i80r). A finding with no disposition, a fix_now with no
+  resolution commit, or a defer or no_action awaiting acceptance blocks, as
+  does any other failure with the review.
 
 A record whose `schema_version` is higher than the installed binary reads was
 written by a newer Atelier. Every command, `status` and its SessionStart
@@ -221,7 +224,9 @@ context, `land` and the Stop hook say so in one line instead of a parse error,
 atelier`, whose one step reinstalls it from Atelier's source checkout with
 `cargo install --path crates/atelier-cli --locked`. Like any record that fails
 to parse, it carries no code, and `land` ends `land: refused`. A newer
-workflow policy fails `workflow_config_schema_newer` with the same step. A
+workflow policy fails `workflow_config_schema_newer` with the same step,
+said once: a command that falls back to the last valid policy notes the
+fallback without also saying to edit the policy. A
 lower version is an invalid record, as before (atelier-u4ql). These protocol fields
 follow the [official Claude Code hooks reference](https://code.claude.com/docs/en/hooks).
 

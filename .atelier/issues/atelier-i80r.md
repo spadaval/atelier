@@ -19,7 +19,7 @@ schema_version: 2
 closed_at: "2026-10-23T17:33:00.474891060+00:00"
 status: "done"
 title: "Report a pending review from the Stop hook instead of failing land"
-updated_at: "2026-10-23T17:33:00.474891060+00:00"
+updated_at: "2026-10-23T17:36:18.007630541+00:00"
 ---
 
 ## Goal
@@ -44,6 +44,7 @@ How the hook knows a review is in flight versus forgotten; a time bound or a 're
 - 2026-10-23 [decision] Pending review is applied literally: every failed check must be review.current or claims.reviewed on the owner. A resolved fix_now finding awaiting a fresh approval fails findings.disposed (AwaitingApproval) and so still blocks.
   Reason: The binding atelier-rc8j decision names only those two checks; extending it to findings.disposed is a mission-level call.
   Rejected: Treating findings.disposed with only AwaitingApproval gaps as pending (proposed as a follow-up)
+- 2026-10-23 [note] Amends the close reason after the refined atelier-rc8j decision (master f52947c4): findings.disposed now also counts as a pending review when every failing finding's gap is AwaitingApproval (a fix_now resolved by a later commit waiting only for a fresh independent approval), read from the gate's per-finding gaps carried in GateReport.checks, not reason text. Undisposed, unresolved fix_now, and defer/no_action awaiting acceptance still block. Test: a_resolved_fix_now_awaiting_approval_blocks_no_turn. The 'Open items' follow-up in the close reason is resolved by this.
 
 ## Close Reason
 

@@ -273,9 +273,12 @@ fn land_gates(
     };
     let candidate_invalid = match candidate {
         Ok(_) => None,
-        Err(error) => Some(crate::gate_report::policy_failure(&error).with_context(|| {
-            format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml and commit it")
-        })?),
+        Err(error) => Some((
+            crate::gate_report::policy_failure(&error).with_context(|| {
+                format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml and commit it")
+            })?,
+            atelier_workflow::needs_newer_atelier(&error),
+        )),
     };
     let record_failures = |preconditions: &mut crate::gate_report::Preconditions| {
         if let Some((uncommitted, _)) = &uncommitted {
@@ -285,16 +288,8 @@ fn land_gates(
                 Some(uncommitted.commit_command()),
             );
         }
-        if let Some((code, cause)) = &candidate_invalid {
-            // A message that names its own fix, as a newer Atelier's policy
-            // does with the reinstall, keeps it; any other is an edit.
-            let (cause, fix) = match cause.split_once(". Next: ") {
-                Some((cause, fix)) => (cause.to_owned(), fix.to_owned()),
-                None => (
-                    cause.clone(),
-                    "fix .atelier/workflow.yaml and commit it".to_owned(),
-                ),
-            };
+        if let Some(((code, cause), newer)) = &candidate_invalid {
+            let (cause, fix) = crate::gate_report::policy_fix(cause, *newer);
             preconditions.fail(code, cause, Some(fix));
         }
     };
@@ -890,7 +885,8 @@ pub fn land(
 /// it, as the reason that blocks the turn. Two refusals leave the agent
 /// nothing to do now, so they are reported without blocking: uncommitted
 /// records alone on the base, and on the owner's own work branch a review
-/// still pending on the owner. A repeated stop is not blocked again, so the
+/// still pending on the owner, including a fresh approval for resolved
+/// fix_now findings. A repeated stop is not blocked again, so the
 /// hook cannot loop. `land` itself still refuses in every case.
 fn stop_hook_refusal(error: &anyhow::Error, repeated: bool) -> Value {
     let (lines, verdict) = refusal(error);
@@ -926,12 +922,22 @@ fn nothing_to_do_now(refused: &crate::gate_report::GatesRefused) -> Option<Strin
         {
             Some("Atelier: the base has uncommitted records; land refuses until they are committed, but they do not block a turn.".to_owned())
         }
-        // Only the owner's review is missing: a finding, or anything else,
-        // fails a check of its own, and that blocks (atelier-i80r).
+        // Only the owner's review is missing: its approval, or a fresh one
+        // for fix_now findings a later commit already resolved. Any other
+        // finding state, or any other failure, blocks (atelier-i80r).
         RanOn::Owner(owner)
             if checks.iter().all(|check| {
                 check.record == *owner
-                    && matches!(check.check.as_str(), "review.current" | "claims.reviewed")
+                    && match check.check.as_str() {
+                        "review.current" | "claims.reviewed" => true,
+                        "findings.disposed" => {
+                            !check.gaps.is_empty()
+                                && check.gaps.iter().all(|gap| {
+                                    matches!(gap, atelier_app::review_gate::Gap::AwaitingApproval(_))
+                                })
+                        }
+                        _ => false,
+                    }
             }) =>
         {
             Some(format!("Atelier: {owner} awaits an independent review; land refuses until it is approved, but waiting does not block a turn."))

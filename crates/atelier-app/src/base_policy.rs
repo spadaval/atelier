@@ -33,7 +33,7 @@ pub fn from_captured(read: &mut git::ReadContext<'_>, commit: &str) -> Result<Po
 fn resolve(read: &mut git::ReadContext<'_>, tip: &str, reference: &str) -> Result<PolicySource> {
     let tip = read.commit_id(&format!("{tip}^{{commit}}"))?;
     let mut diagnostics = Vec::new();
-    match read
+    let newer = match read
         .blob(&tip, Path::new(WORKFLOW_POLICY_PATH))
         .and_then(|text| atelier_workflow::parse_policy_text(&text, WORKFLOW_POLICY_PATH))
     {
@@ -44,8 +44,11 @@ fn resolve(read: &mut git::ReadContext<'_>, tip: &str, reference: &str) -> Resul
                 diagnostics,
             })
         }
-        Err(error) => diagnostics.push(format!("Invalid policy at {tip}: {error:#}")),
-    }
+        Err(error) => {
+            diagnostics.push(format!("Invalid policy at {tip}: {error:#}"));
+            atelier_workflow::needs_newer_atelier(&error)
+        }
+    };
     let history = String::from_utf8(git::git_output(
         read.repo,
         &[
@@ -62,9 +65,7 @@ fn resolve(read: &mut git::ReadContext<'_>, tip: &str, reference: &str) -> Resul
             .and_then(|text| atelier_workflow::parse_policy_text(&text, WORKFLOW_POLICY_PATH));
         match loaded {
             Ok(policy) => {
-                diagnostics.push(format!(
-                    "Using last valid policy from {commit}; fix .atelier/workflow.yaml."
-                ));
+                diagnostics.push(fallback_note(commit, newer));
                 return Ok(PolicySource {
                     policy,
                     commit: commit.to_owned(),
@@ -77,6 +78,17 @@ fn resolve(read: &mut git::ReadContext<'_>, tip: &str, reference: &str) -> Resul
     bail!("No valid policy on {reference}: {}", diagnostics.join("\n"))
 }
 
+/// The note that a fallback policy is in use: with the edit that ends it,
+/// or alone when a newer Atelier wrote the policy, whose diagnostic already
+/// names the reinstall (atelier-u4ql).
+fn fallback_note(commit: &str, newer: bool) -> String {
+    if newer {
+        format!("Using last valid policy from {commit}.")
+    } else {
+        format!("Using last valid policy from {commit}; fix .atelier/workflow.yaml.")
+    }
+}
+
 /// Ordinary commands may read an uncommitted policy; malformed policy falls
 /// back to committed history. Lint and merge-candidate syntax remain strict.
 pub fn working(repo: &Path) -> Result<PolicySource> {
@@ -87,6 +99,7 @@ pub fn working(repo: &Path) -> Result<PolicySource> {
             diagnostics: Vec::new(),
         }),
         Err(error) => {
+            let newer = atelier_workflow::needs_newer_atelier(&error);
             let mut source = from_ref(repo, "HEAD")
                 .map_err(|fallback| anyhow::anyhow!("{error:#}\n{fallback:#}"))?;
             source
@@ -97,10 +110,8 @@ pub fn working(repo: &Path) -> Result<PolicySource> {
                 .iter()
                 .any(|message| message.starts_with("Using last valid"))
             {
-                source.diagnostics.push(format!(
-                    "Using last valid policy from {}; fix .atelier/workflow.yaml.",
-                    source.commit
-                ));
+                let note = fallback_note(&source.commit, newer);
+                source.diagnostics.push(note);
             }
             Ok(source)
         }
