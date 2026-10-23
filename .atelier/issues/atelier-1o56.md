@@ -36,9 +36,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Validate atelier-rc8j acceptance (S1-S6)"
-updated_at: "2026-10-23T14:13:38.186773272+00:00"
+updated_at: "2026-10-23T17:47:19.349175056+00:00"
 ---
 
 ## Goal
