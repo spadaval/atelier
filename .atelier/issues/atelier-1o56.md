@@ -4,6 +4,9 @@ id: "atelier-1o56"
 issue_type: "validation"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: validation/atelier-1o56
 priority: "P1"
 relationships:
   blocks: []
@@ -36,9 +39,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Validate atelier-rc8j acceptance (S1-S6)"
-updated_at: "2026-10-23T17:47:19.349175056+00:00"
+updated_at: "2026-10-23T17:47:19.737961705+00:00"
 ---
 
 ## Goal
