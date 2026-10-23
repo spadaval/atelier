@@ -66,8 +66,16 @@ applied to mission criteria; the row instead says how many code commits
 followed the deciding proof, and the `Criteria:` line counts proven criteria
 whose proof came before later code commits.
 
-Use `atelier evidence show <evidence-id>` and `atelier evidence list` to inspect
-receipts; `list --result fail` filters for a particular explicit result. Use `attach` only when the existing proof also supports another item.
+Use `atelier evidence list <id>` to see an item's receipts, each marked
+fresh, held at close, stale or superseded as the evidence gates judge it
+(a merged done claim at its close, other work at HEAD), ending with the
+item's proof verdict; `--result fail` filters for one explicit result, and
+`--limit`/`--all` set how many rows. `atelier evidence show <evidence-id>` is
+brief, with `--full` for the stored record. `evidence record` confirms in
+one line and ends with its verdict line; a recorded fail exits zero, and its
+verdict names the item it blocks. A `--target` is an issue ID, or
+`issue/<id>` or `evidence/<id>`. Use `attach` only when the existing proof
+also supports another item. See [Human CLI Output](human-cli-output.md#evidence-views).
 Correct a claim by adding a new receipt, not by rewriting a receipt that later
 work may rely on.
 

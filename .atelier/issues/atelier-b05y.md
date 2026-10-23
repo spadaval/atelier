@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T16:10:21.055932700+00:00"
+status: "done"
 title: "Use one evidence target syntax and a result token in quiet output"
-updated_at: "2026-10-23T14:47:59.166253868+00:00"
+updated_at: "2026-10-23T16:10:21.055932700+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,22 @@ Small inconsistencies in the evidence commands:
 
 - 2026-10-17 [note] Retro 2026-10-17: `evidence record --target atelier-sdb0` failed with '--target must use kind/id syntax' while every other command takes a bare id (1w8c, 02:53Z).
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: quiet evidence show prints '<id> <result>'. Drop the quiet 'evidence record -> <id> <result>' clause: the quiet-token table fixes it as the ID. Still: attach rejects issue/<id>; --kind weird accepted silently; stale --target-kind/--target-id errors at evidence.rs:216,283,400,444; bare --target <id> rejected.
+- 2026-10-23 [decision] A bare --target or attach target names an issue; an evidence target still needs evidence/<id>. Known kinds are test and validation, the kinds in use, and those the workflow's evidence.attached gates name
+  Reason: Every other command's bare ID argument names an issue, and the bare form is the one agents tried. Kinds in use plus gate kinds is what 'no gate or filter matches' means.
+  Rejected: Guessing the record kind of a bare ID; a fixed kind list
+
+## Close Reason
+
+`evidence attach <id> issue/<id>` and `evidence attach <id> <issue-id>` work, and the two-argument `issue <id>` form still does. `evidence record --target` takes a bare issue ID. An unknown `--kind` warns on stderr and lists the known kinds (the defaults, the kinds in use and the workflow's gate kinds), then records the receipt. No error names `--target-kind` or `--target-id`. Quiet `evidence show` prints `<id> <result>`, and quiet `evidence record` stays the ID, as the regroom decided.
+
+### Deviations
+The two-argument attach form's bad kind now uses the shared InvalidValue message without clap's "Did you mean 'evidence'?" hint, because the target is a free argument now.
+
+### Decisions
+See the decision note on atelier-b05y: a bare target names an issue, and where the known kinds come from.
+
+### Surprises
+None.
+
+### Open items
+None.

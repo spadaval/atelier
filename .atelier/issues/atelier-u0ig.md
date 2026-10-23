@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T16:10:20.277358514+00:00"
+status: "done"
 title: "Filter evidence list by item and show freshness and a limit"
-updated_at: "2026-10-23T14:47:59.047316469+00:00"
+updated_at: "2026-10-23T16:10:20.277358514+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,25 @@ atelier-sdb0 shows owner evidence freshness in status. atelier-et6q will name cr
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. List has only --result (main.rs:684); fixed limit 20 (evidence.rs:20); count printed 3 times (:660-695); no freshness mark. Use evidence_freshness (evidence_is_fresh :58, newest_failure :190) in one helper shared with o8ni.
+- 2026-10-23 [decision] Marks judge each receipt against its item at HEAD with the fresh rules the close transition and evidence.attached use, so a done item's passes read stale after later code commits
+  Reason: The goal names 'the same freshness logic as the evidence.* gates'; the list answers whether the proof holds now. land's historical rule judges a done claim at its own commit and would need a second mode.
+  Rejected: Judging done items by land's historical rule
+- 2026-10-23 [decision] List rows end with the command for captured receipts and the summary for manual ones, cut at 160 characters with …; a pass's standing carries the ✓/⚠ mark, a fail's ⚠ is on its result
+  Reason: The Done when asks for the full command up to the width limit; showing summary and command both would double long rows. A stale pass then reads '✓ pass ... ⚠ stale (...)', each mark about its own fact.
+  Rejected: Summary plus command on every row; marking only the standing
+
+## Close Reason
+
+`atelier evidence list <id>` (short IDs work) lists the receipts that validate that item, newest first. Each row is marked `✓ fresh`, `⚠ stale (code changed in <commit>)` (or acceptance changed, uncommitted code, pin not in history), `⚠ superseded by newer fail <id>`, `⚠ blocks completion` or `superseded by newer pass <id>`. The marks come from one helper, `EvidenceReadContext::item_proof`, in evidence_freshness, which also serves `evidence show`. The list ends `Proof: …`. `--limit N` and `--all` exist, the count appears only on the omitted-rows line, rows have no `(validates)`, `(none)` or `(command-backed proof)` tokens, and the Next steps repeat the item and result filters.
+
+### Deviations
+The unfiltered list marks each row against its own first item too. Rows show the command for captured receipts and the summary for manual ones, cut at 160 characters.
+
+### Decisions
+See the decision notes on atelier-u0ig: marks use the fresh rule at HEAD, and what each row shows.
+
+### Surprises
+Items that are done and merged show their passes as stale once later code commits land (for example atelier-dg3h on this branch). That is the close gate's rule, not land's historical one, so the verdict reads `⚠ no fresh pass` for finished work.
+
+### Open items
+Proposed follow-up (not filed): decide whether done items should be judged by land's historical rule in this view.

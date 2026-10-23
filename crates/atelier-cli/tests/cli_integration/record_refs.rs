@@ -495,16 +495,18 @@ fn every_invalid_value_takes_the_shared_form_and_exits_2() {
         ),
         (
             vec![
-                "evidence", "record", "--target", "bad", "--kind", "test", "--result", "pass",
+                "evidence", "record", "--target", "issue/", "--kind", "test", "--result", "pass",
                 "proof",
             ],
-            "Invalid target 'bad'. Valid values: issue/<id>, evidence/<id>".into(),
+            "Invalid target 'issue/'. Valid values: <issue-id>, issue/<id>, evidence/<id>".into(),
         ),
         (
             vec!["evidence", "attach", "x", "review", &target],
-            "Invalid target kind 'review'. Valid values: issue, evidence. Did you mean \
-             'evidence'?"
-                .into(),
+            "Invalid target kind 'review'. Valid values: issue, evidence".into(),
+        ),
+        (
+            vec!["evidence", "attach", "x", "review/y"],
+            "Invalid target kind 'review'. Valid values: issue, evidence".into(),
         ),
         (
             vec![

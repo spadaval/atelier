@@ -27,11 +27,24 @@ pub fn resolve_issue_ref(index: &RecordIndex, issue_ref: &str) -> Result<String>
     index.resolve(RecordKind::Issue, issue_ref)
 }
 
-/// Parses `--target <kind>/<id>`; any other shape is an invalid value.
+/// Parses an evidence target: `<kind>/<id>`, or a bare ID, which names an
+/// issue as every other command's ID argument does.
 pub fn parse_evidence_target_arg(target: &str) -> Result<EvidenceTargetArg> {
-    let malformed = || InvalidValue::new("target", target, &["issue/<id>", "evidence/<id>"]);
+    let malformed = || {
+        InvalidValue::new(
+            "target",
+            target,
+            &["<issue-id>", "issue/<id>", "evidence/<id>"],
+        )
+    };
     let Some((kind, id)) = target.split_once('/') else {
-        bail!(malformed());
+        if target.trim().is_empty() {
+            bail!(malformed());
+        }
+        return Ok(EvidenceTargetArg {
+            kind: "issue".to_string(),
+            id: target.to_string(),
+        });
     };
     if kind.trim().is_empty() || id.trim().is_empty() {
         bail!(malformed());
@@ -61,13 +74,18 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn evidence_target_parser_requires_kind_id_syntax() {
+    fn evidence_target_parser_takes_kind_id_or_a_bare_issue_id() {
         let target = parse_evidence_target_arg("issue/atelier-1234").unwrap();
         assert_eq!(target.kind, "issue");
         assert_eq!(target.id, "atelier-1234");
 
-        assert!(parse_evidence_target_arg("atelier-1234").is_err());
+        let bare = parse_evidence_target_arg("atelier-1234").unwrap();
+        assert_eq!(
+            (bare.kind.as_str(), bare.id.as_str()),
+            ("issue", "atelier-1234")
+        );
         assert!(parse_evidence_target_arg("issue/").is_err());
+        assert!(parse_evidence_target_arg("").is_err());
     }
 
     #[test]
