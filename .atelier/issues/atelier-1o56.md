@@ -42,7 +42,7 @@ schema_version: 2
 closed_at: "2026-10-23T17:59:58.678911018+00:00"
 status: "done"
 title: "Validate atelier-rc8j acceptance (S1-S6)"
-updated_at: "2026-10-23T17:59:58.678911018+00:00"
+updated_at: "2026-10-23T18:07:15.964781038+00:00"
 ---
 
 ## Goal
@@ -60,6 +60,7 @@ Mission atelier-rc8j's Success criteria. Transcripts live under `~/.claude/proje
 ## Notes
 
 - 2026-10-23 [result] 2026-10-23 S6 transcript counts (receipt atelier-4n58). Source: Bash tool calls in ~/.claude/projects/-home-supadava-projects-atelier/ (the only matching project dir), main and subagent JSONL, extracted 13:50 -04:00 (latest call 13:48:49); this validator's own transcript contributed none. A run is one tool call invoking the command (atelier, target/*/atelier, or a binary variable such as $A/$B/$NEW); heredoc bodies and quoted strings (grep patterns, docs) are excluded; 'piped' = any pipeline stage after the command is head, grep, sed or tail; 'redirect' = output sent to a file that a later tail/head/grep/sed in the same call reads, counted only when not also piped. Strict window 13:13:22..13:48:49 (after S1's last merge, 0uaj): land 20 runs, 12 piped (60%), 1 redirect; merge --check 0; evidence record 6, 4 piped; review list 0; total 26, 16 piped (61.5%), 17 with redirect (65.4%); 3 transcripts (buqu reviewer 21 runs, buqu implementer 4, orchestrator 1). Per command after its own change: land since h1nc 11:17:22, 97 runs, 67 piped (69.1%), 2 redirect; merge --check since h1nc, 7 runs, 2 piped (28.6%), 1 piped to cut only; evidence record since l7nz 12:42:34, 9 runs, 5 piped (55.6%); review list since phfo 10:45:39, 0 runs. Baseline 2026-10-16..2026-10-22, excluding the 3 CLI-audit transcripts: land 151 runs / 85 piped (56.3%) / 9 redirect; merge --check 15 / 12 (80%) / 1; evidence record 93 / 31 (33.3%) / 6; review list 14 / 12 (85.7%); total 273 / 140 (51.3%), 156 with redirect (57.1%), 62 transcripts. No prompt or brief told agents to pipe (implementer and reviewer briefs checked); post-change runs are almost all this mission's own implementers and reviewers exercising the changed commands in scratch scenario scripts, where '| tail -3' compresses many scenarios and grep asserts one line. Verdict: blocked, sample too small and unrepresentative; at face value above one third. Scripts: ~/.cache/atelier-validate/s6/{extract,classify,report}.py.
+- 2026-10-23 [note] 2026-10-23 follow-ups for the validator's findings: atelier-gg0m (hook cwd outside an Atelier repository blocks the turn), atelier-wu7t (wrong stale reason when the item was uncommitted at the pin), atelier-wir7 (merge_owner_unstarted fix, merge --sync verdict when nothing merged, review show on an author approval). Decisions listed twice is atelier-x0vs.
 
 ## Close Reason
 
