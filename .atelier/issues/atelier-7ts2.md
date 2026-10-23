@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Replace land_completion_dirty's impossible advice with the dirty paths"
-updated_at: "2026-10-23T15:19:35.555902618+00:00"
+updated_at: "2026-10-23T15:47:09.202948615+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,5 @@ Error: land_completion_dirty: a completed owner requires a clean checkout for cu
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed (session.rs:354). Factor the 5-plus-count path lister that exists three times in session.rs (:409-418, :437-446, :174-183).
+- 2026-10-23 [decision] land_completion_dirty offers commit (git add -A && git commit -m "…") or set aside (git stash push --include-untracked), not git restore.
+  Reason: restore cannot remove untracked files and discards work; stash is recoverable and runs verbatim. Reopening a done owner is impossible (no transition leaves done), so that advice is dropped.

@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Name every uncommitted record and the git command in land_records_uncommitted"
-updated_at: "2026-10-23T15:19:35.663465990+00:00"
+updated_at: "2026-10-23T15:47:09.279479452+00:00"
 ---
 
 ## Goal
@@ -45,3 +45,5 @@ The message is built in crates/atelier-cli/src/commands/session.rs:40-43 and 306
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: one code now (session.rs:51-57). Still names only the first path, with 'path, bytes or mode differs from pinned HEAD' (committed_snapshot.rs:244/288).
+- 2026-10-23 [decision] The records fix is git add .atelier && git commit -m "…", or git add .atelier alone when every difference is staged-only (working bytes already match HEAD).
+  Reason: git commit would fail with nothing to commit in the staged-only case; both run verbatim.

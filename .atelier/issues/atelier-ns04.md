@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Point land <id> at the owner's branch, and name unknown IDs"
-updated_at: "2026-10-23T15:19:35.434475216+00:00"
+updated_at: "2026-10-23T15:47:17.794696773+00:00"
 ---
 
 ## Goal
@@ -43,3 +43,6 @@ updated_at: "2026-10-23T15:19:35.434475216+00:00"
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: unknown IDs are named. Still: land X on the base and land <mission> both say 'has no committed branch metadata; run atelier start' (session.rs:341); unowned hints say 'atelier start <id>' (:104,140,403,406,420). Use git::branch_lines_for; mirror merge_mission (merge.rs:415).
+- 2026-10-23 [decision] land <mission> refuses with a new land_mission code and 'Next: atelier work mission <id>', mirroring merge_mission; hints with no derivable ID say 'atelier start and its item's ID' in words rather than a <id> placeholder, and the unowned-branch hint names the first changed issue record's ID.
+  Reason: A land gate may own codes; a fix line must be runnable with real IDs, so where no ID is knowable the hint is prose.
+  Rejected: Reusing land_work_untraceable for missions

@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Say an event is not a finding when disposition is given its ID"
-updated_at: "2026-10-23T15:19:35.824157468+00:00"
+updated_at: "2026-10-23T15:47:09.514001110+00:00"
 ---
 
 ## Goal
@@ -30,3 +30,8 @@ A CLI test: disposition of an approval ID prints `<id> is an approval, not a fin
 ## Context
 
 Hit on 2026-10-23 while dispositioning atelier-dg3h review: the reviewer reported the finding and approval IDs swapped, and the error sent us looking at owners. Code: crates/atelier-cli/src/commands/review.rs disposition path.
+
+## Notes
+
+- 2026-10-23 [decision] The non-finding disposition error carries no code.
+  Reason: Review commands are not among the coded checks in human-cli-output.md, which adds no codes outside its list.
