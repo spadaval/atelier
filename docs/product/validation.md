@@ -67,7 +67,8 @@ followed the deciding proof, and the `Criteria:` line counts proven criteria
 whose proof came before later code commits.
 
 Use `atelier evidence list <id>` to see an item's receipts, each marked
-fresh, stale or superseded as the evidence gates judge it, ending with the
+fresh, held at close, stale or superseded as the evidence gates judge it
+(a merged done claim at its close, other work at HEAD), ending with the
 item's proof verdict; `--result fail` filters for one explicit result, and
 `--limit`/`--all` set how many rows. `atelier evidence show <evidence-id>` is
 brief, with `--full` for the stored record. `evidence record` confirms in

@@ -849,9 +849,25 @@ fn list_filters(item: Option<&str>, result: Option<EvidenceResult>) -> String {
 
 /// The gates' verdict on one item's proof, for the line ending its list.
 fn proof_verdict(proof: &ItemProof) -> String {
-    match (&proof.blocking_fail, &proof.fresh_pass, &proof.newest_pass) {
+    let held = |pass: &str| {
+        proof.receipts.iter().find_map(|(id, mark)| match mark {
+            ProofMark::HeldAtClose(claim) if id == pass => Some(claim.clone()),
+            _ => None,
+        })
+    };
+    match (
+        &proof.blocking_fail,
+        &proof.proving_pass,
+        &proof.newest_pass,
+    ) {
         (Some(fail), _, _) => format!("⚠ newest is fail {fail}"),
-        (None, Some(pass), _) => format!("✓ fresh pass {pass}"),
+        (None, Some(pass), _) => match held(pass) {
+            Some(claim) => format!(
+                "✓ pass {pass} held at close {}",
+                human_output::short_commit(&claim)
+            ),
+            None => format!("✓ fresh pass {pass}"),
+        },
         (None, None, Some(pass)) => format!("⚠ no fresh pass; newest pass {pass} is stale"),
         (None, None, None) => "⚠ no passing proof".to_string(),
     }
@@ -875,6 +891,9 @@ fn bounded_list_text(value: &str) -> String {
 /// item a view asks about.
 struct ProofMarks<'a> {
     read: atelier_app::evidence_freshness::EvidenceReadContext<'a>,
+    /// Which statuses are done, so a done claim is judged as the gates
+    /// judge it; without a readable policy every item is judged at HEAD.
+    policy: Option<atelier_workflow::WorkflowPolicy>,
     items: HashMap<String, ItemProof>,
 }
 
@@ -882,13 +901,16 @@ impl<'a> ProofMarks<'a> {
     fn new(repo_root: &'a Path) -> Self {
         Self {
             read: atelier_app::evidence_freshness::EvidenceReadContext::new(repo_root),
+            policy: atelier_app::workflow_policy::load(repo_root).ok(),
             items: HashMap::new(),
         }
     }
 
     fn item(&mut self, index: &RecordIndex, issue_id: &str) -> Result<&ItemProof> {
         if !self.items.contains_key(issue_id) {
-            let proof = self.read.item_proof(index, issue_id)?;
+            let proof = self
+                .read
+                .item_proof(index, self.policy.as_ref(), issue_id)?;
             self.items.insert(issue_id.to_string(), proof);
         }
         Ok(&self.items[issue_id])
@@ -925,6 +947,9 @@ fn mark_text(result: EvidenceResult, mark: &ProofMark) -> String {
     match mark {
         ProofMark::Fresh if result == EvidenceResult::Pass => "✓ fresh".to_string(),
         ProofMark::Fresh => "fresh".to_string(),
+        ProofMark::HeldAtClose(claim) => {
+            format!("✓ held at close {}", human_output::short_commit(claim))
+        }
         ProofMark::Stale(staleness) => attention(format!("stale ({})", staleness_text(staleness))),
         ProofMark::SupersededByFail(fail) => format!("⚠ superseded by newer fail {fail}"),
         ProofMark::SupersededByPass(pass) => format!("superseded by newer pass {pass}"),
@@ -993,7 +1018,11 @@ fn exit_text(data: &EvidenceRecordData) -> Option<String> {
 /// verdict does; any other result finished recording but leaves the item's
 /// gate unmet, so its line says so in place of `passed`, as `merge --sync`
 /// does.
-fn print_confirmation(index: &RecordIndex, record: &EvidenceRecord) -> Result<String> {
+fn print_confirmation(
+    index: &RecordIndex,
+    repo_root: &Path,
+    record: &EvidenceRecord,
+) -> Result<String> {
     let data = &record.data;
     let id = &record.header.id;
     let targets = receipt_targets(index, id, data)?;
@@ -1027,13 +1056,25 @@ fn print_confirmation(index: &RecordIndex, record: &EvidenceRecord) -> Result<St
             println!("  {line}");
         }
     }
-    Ok(match (data.result, issue) {
-        (EvidenceResult::Pass, _) => crate::gate_report::verdict("evidence record", &[]),
-        (EvidenceResult::Fail, Some(issue)) => format!(
+    // A pass that does not prove its item now, such as one recorded over
+    // uncommitted code, says so, as `evidence list` would mark it.
+    let pass_mark = match (data.result, issue) {
+        (EvidenceResult::Pass, Some(issue)) => ProofMarks::new(repo_root)
+            .mark(index, issue, id)?
+            .filter(|mark| !mark.proves()),
+        _ => None,
+    };
+    Ok(match (data.result, issue, pass_mark) {
+        (EvidenceResult::Pass, Some(issue), Some(mark)) => format!(
+            "evidence record: recorded pass — {}, so it does not prove {issue}",
+            mark_text(data.result, &mark)
+        ),
+        (EvidenceResult::Pass, _, _) => crate::gate_report::verdict("evidence record", &[]),
+        (EvidenceResult::Fail, Some(issue), _) => format!(
             "evidence record: recorded fail — {issue} cannot close or merge until a later pass"
         ),
-        (EvidenceResult::Fail, None) => "evidence record: recorded fail".to_string(),
-        (result, _) => format!(
+        (EvidenceResult::Fail, None, _) => "evidence record: recorded fail".to_string(),
+        (result, _, _) => format!(
             "evidence record: recorded {} — it never counts as a pass",
             result.as_str()
         ),
@@ -1094,8 +1135,11 @@ pub fn report_new_record(record: &EvidenceRecord, group: RecordCommit, quiet: bo
         println!("{}", record.header.id);
         return group.finish(KIND, quiet);
     }
-    let (_, index) = app_use_cases::load_repository()?;
-    let verdict = print_confirmation(&index, record)?;
+    let (state_dir, index) = app_use_cases::load_repository()?;
+    let repo_root = state_dir
+        .parent()
+        .context("state directory has no repository parent")?;
+    let verdict = print_confirmation(&index, repo_root, record)?;
     group.finish(KIND, quiet)?;
     println!("{verdict}");
     Ok(())

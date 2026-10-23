@@ -6739,3 +6739,109 @@ fn land_pass_lists_what_it_checked_and_the_next_step() {
     );
     assert_eq!(ok(f.path(), &["land", "-q"]), "passed");
 }
+
+/// A merged done claim's proof reads as land and doctor judge it: after a
+/// later code commit on the base, `evidence list` and `evidence show` mark
+/// the pass held at its close, not stale, while on the work branch the
+/// same pass is judged at HEAD (atelier-2isj). A pass recorded over
+/// uncommitted code says in its verdict that it does not prove the item
+/// yet, as the list then marks it (atelier-g2pl).
+#[test]
+fn evidence_views_judge_a_merged_claim_as_land_and_doctor_do() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let out = ok(
+        f.path(),
+        &[
+            "evidence", "record", "--target", &id, "--kind", "test", "--", "grep", "-q", "tested",
+            "code",
+        ],
+    );
+    assert!(out.ends_with("evidence record: passed"), "{out}");
+    let pass = ok(f.path(), &["-q", "evidence", "list", &id]);
+    commit(f.path(), "proof");
+    f.terminal(&id);
+    let claim = git(f.path(), &["rev-parse", "HEAD"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    let proof_line = |out: &str| {
+        out.lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap()
+            .to_string()
+    };
+    // On its own work branch the claim is judged at HEAD, as merge --check does.
+    let listed = ok(f.path(), &["evidence", "list", &id]);
+    assert_eq!(proof_line(&listed), format!("Proof: ✓ fresh pass {pass}"));
+    ok(f.path(), &["merge", &id]);
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+
+    fs::write(f.path().join("later"), "later base work\n").unwrap();
+    commit(f.path(), "later code on the base");
+    let (pass_land, land) = cli(f.path(), &["land"]);
+    assert!(pass_land, "{land}");
+    let (pass_doctor, doctor) = cli(f.path(), &["doctor"]);
+    assert!(pass_doctor, "{doctor}");
+
+    let short = &claim[..8];
+    let listed = ok(f.path(), &["evidence", "list", &id]);
+    assert!(
+        listed.contains(&format!(" · ✓ held at close {short} · grep -q tested code")),
+        "{listed}"
+    );
+    assert!(!listed.contains("stale"), "{listed}");
+    assert_eq!(
+        proof_line(&listed),
+        format!("Proof: ✓ pass {pass} held at close {short}")
+    );
+    let shown = ok(f.path(), &["evidence", "show", &pass]);
+    assert!(
+        shown
+            .lines()
+            .next()
+            .unwrap()
+            .ends_with(&format!(" · ✓ held at close {short}")),
+        "{shown}"
+    );
+
+    // Open work is judged at HEAD: a pass over uncommitted code is stale,
+    // and its own confirmation says so.
+    let open = ok(f.path(), &["-q", "issue", "create", "Open work"]);
+    commit(f.path(), "plan open work");
+    fs::write(f.path().join("later"), "uncommitted\n").unwrap();
+    let out = ok(
+        f.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &open,
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Looked right",
+        ],
+    );
+    assert!(
+        out.ends_with(&format!(
+            "evidence record: recorded pass — ⚠ stale (uncommitted code changes), so it does not prove {open}"
+        )),
+        "{out}"
+    );
+    let listed = ok(f.path(), &["evidence", "list", &open]);
+    assert!(
+        listed.contains(" · ⚠ stale (uncommitted code changes) · "),
+        "{listed}"
+    );
+}

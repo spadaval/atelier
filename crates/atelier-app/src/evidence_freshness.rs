@@ -153,6 +153,10 @@ pub enum Staleness {
 pub enum ProofMark {
     /// Nothing since the pin changed what it proves.
     Fresh,
+    /// A pass that still proves a done claim the base already holds, judged
+    /// as land and doctor judge it: nothing between the pin and the claim
+    /// commit (named here) changed what it proves, whatever came after.
+    HeldAtClose(String),
     Stale(Staleness),
     /// A pass that a fail recorded at or after it supersedes; names the
     /// newest such fail.
@@ -163,15 +167,33 @@ pub enum ProofMark {
     BlocksCompletion,
 }
 
+impl ProofMark {
+    /// Whether a pass with this mark counts as proof.
+    pub fn proves(&self) -> bool {
+        matches!(self, Self::Fresh | Self::HeldAtClose(_))
+    }
+
+    /// Keeps a held-at-close mark; a stale one reports `at_head`, the cause
+    /// that already stops it proving at HEAD, when the claim rule found
+    /// nothing more specific.
+    fn or_stale(self, at_head: Staleness) -> Self {
+        match self {
+            Self::Stale(Staleness::NotInHistory) => Self::Stale(at_head),
+            other => other,
+        }
+    }
+}
+
 /// Every receipt validating one item, newest first, each with its mark, and
 /// the gates' verdict on the item's proof.
 #[derive(Debug)]
 pub struct ItemProof {
     pub receipts: Vec<(String, ProofMark)>,
-    /// The newest fail no later fresh pass supersedes; it blocks completion.
+    /// The newest fail no later counting pass supersedes; it blocks
+    /// completion.
     pub blocking_fail: Option<String>,
-    /// The newest pass that counts as proof.
-    pub fresh_pass: Option<String>,
+    /// The newest pass that counts as proof: fresh, or held at close.
+    pub proving_pass: Option<String>,
     /// The newest pass of any standing.
     pub newest_pass: Option<String>,
 }
@@ -195,12 +217,78 @@ impl EvidenceReadContext<'_> {
         Ok((!self.code_clean()?).then_some(Staleness::UncommittedCode))
     }
 
+    /// Whether a pass proves `issue` by the rule land and doctor apply to a
+    /// done claim the base already holds: the pin is in HEAD's history and
+    /// nothing between it and the claim commit changed what it proves. The
+    /// claim commit it was judged to, or why not.
+    fn held_at_close(
+        &mut self,
+        issue: &CanonicalIssueRecord,
+        record: &EvidenceRecord,
+    ) -> Result<std::result::Result<String, Staleness>> {
+        if !self.ancestor(&record.data.commit, "HEAD")? {
+            return Ok(Err(Staleness::NotInHistory));
+        }
+        let Ok(end) = self.claim_endpoint(&issue.issue.id, &record.data.commit) else {
+            return Ok(Err(Staleness::NotInHistory));
+        };
+        let Ok(edges) = self.edges(&record.data.commit, &end) else {
+            return Ok(Err(Staleness::NotInHistory));
+        };
+        Ok(match first_mismatch(self, issue, record, &edges) {
+            Ok(None) => Ok(end),
+            Ok(Some(staleness)) => Err(staleness),
+            Err(_) => Err(Staleness::NotInHistory),
+        })
+    }
+
+    /// Whether the gates judge `issue`'s proof as of its close: a done claim
+    /// (not superseded) seen from anywhere but its own work branch, as land
+    /// and doctor judge a claim the base holds. On that branch, and for open
+    /// work, `merge --check` and the close transition judge it at HEAD.
+    fn judged_at_close(
+        &mut self,
+        index: &RecordIndex,
+        policy: Option<&atelier_workflow::WorkflowPolicy>,
+        issue: &CanonicalIssueRecord,
+    ) -> bool {
+        let issue = &issue.issue;
+        let done = policy.is_some_and(|policy| {
+            policy
+                .issue_status_is_terminal(&issue.issue_type, &issue.status)
+                .unwrap_or(false)
+        });
+        if !done || issue.status == "superseded" {
+            return false;
+        }
+        let owner = match &issue.workflow_branch {
+            Some(branch) => Some(branch.work_branch.clone()),
+            None => issue
+                .parent_id
+                .as_deref()
+                .and_then(|parent| index.get_issue(parent))
+                .and_then(|parent| parent.workflow_branch)
+                .map(|branch| branch.work_branch),
+        };
+        let current = git::git_output(self.repo, &["symbolic-ref", "-q", "--short", "HEAD"])
+            .ok()
+            .map(|branch| String::from_utf8_lossy(&branch).trim().to_owned());
+        owner.is_none() || owner != current
+    }
+
     /// Marks every receipt validating `issue_id`, as the evidence gates
-    /// would count it now.
-    pub fn item_proof(&mut self, index: &RecordIndex, issue_id: &str) -> Result<ItemProof> {
+    /// would count it now. `policy` says which statuses are done; without it
+    /// every item is judged at HEAD.
+    pub fn item_proof(
+        &mut self,
+        index: &RecordIndex,
+        policy: Option<&atelier_workflow::WorkflowPolicy>,
+        issue_id: &str,
+    ) -> Result<ItemProof> {
         let issue = index
             .issue_record(issue_id)
             .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
+        let at_close = self.judged_at_close(index, policy, issue);
         let mut records = validating_records(index, issue_id)?;
         records.sort_by(|left, right| {
             (right.data.captured_at, &right.header.id)
@@ -210,27 +298,35 @@ impl EvidenceReadContext<'_> {
             .iter()
             .find(|record| record.data.result == EvidenceResult::Fail)
             .map(|record| (record.data.captured_at, record.header.id.clone()));
-        let mut staleness = Vec::with_capacity(records.len());
+        // Each receipt's standing before supersession: fresh, held at close,
+        // or stale and why.
+        let mut standing = Vec::with_capacity(records.len());
         for record in &records {
-            staleness.push(self.staleness(issue, record)?);
+            standing.push(match self.staleness(issue, record)? {
+                None => ProofMark::Fresh,
+                Some(stale) if at_close && record.data.result == EvidenceResult::Pass => {
+                    match self.held_at_close(issue, record)? {
+                        Ok(claim) => ProofMark::HeldAtClose(claim),
+                        Err(stale) => ProofMark::Stale(stale),
+                    }
+                    .or_stale(stale)
+                }
+                Some(stale) => ProofMark::Stale(stale),
+            });
         }
         let mut receipts = Vec::with_capacity(records.len());
         let mut fresh_pass: Option<&EvidenceRecord> = None;
-        for (record, stale) in records.iter().zip(&staleness) {
+        for (record, standing) in records.iter().zip(standing) {
             let superseding_fail = newest_fail
                 .as_ref()
                 .filter(|(failed_at, _)| record.data.captured_at <= *failed_at);
-            let mark = match (record.data.result, superseding_fail, stale) {
-                (EvidenceResult::Pass, Some((_, fail)), _) => {
+            let mark = match (record.data.result, superseding_fail) {
+                (EvidenceResult::Pass, Some((_, fail))) => {
                     ProofMark::SupersededByFail(fail.clone())
                 }
-                (_, _, Some(stale)) => ProofMark::Stale(stale.clone()),
-                _ => ProofMark::Fresh,
+                _ => standing,
             };
-            if record.data.result == EvidenceResult::Pass
-                && mark == ProofMark::Fresh
-                && fresh_pass.is_none()
-            {
+            if record.data.result == EvidenceResult::Pass && mark.proves() && fresh_pass.is_none() {
                 fresh_pass = Some(record);
             }
             receipts.push((record.header.id.clone(), mark));
@@ -256,7 +352,7 @@ impl EvidenceReadContext<'_> {
         }
         Ok(ItemProof {
             blocking_fail,
-            fresh_pass: fresh_pass.map(|record| record.header.id.clone()),
+            proving_pass: fresh_pass.map(|record| record.header.id.clone()),
             newest_pass: records
                 .iter()
                 .find(|record| record.data.result == EvidenceResult::Pass)

@@ -84,8 +84,8 @@ what each record contains.
   artifacts, and limits. Use `atelier evidence attach` only to reuse valid
   proof on another item. Correct earlier proof with a new receipt.
 - `atelier evidence list <id>` shows an item's receipts, each marked fresh,
-  stale or superseded as the gates judge it, and ends with its proof
-  verdict; read it instead of searching `.atelier/evidence`.
+  held at close, stale or superseded as the gates judge it, and ends with
+  its proof verdict; read it instead of searching `.atelier/evidence`.
 
 ## Branches, Review, and Integration
 
