@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Filter evidence list by item and show freshness and a limit"
-updated_at: "2026-10-23T14:47:59.047316469+00:00"
+updated_at: "2026-10-23T16:08:35.176233863+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,9 @@ atelier-sdb0 shows owner evidence freshness in status. atelier-et6q will name cr
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. List has only --result (main.rs:684); fixed limit 20 (evidence.rs:20); count printed 3 times (:660-695); no freshness mark. Use evidence_freshness (evidence_is_fresh :58, newest_failure :190) in one helper shared with o8ni.
+- 2026-10-23 [decision] Marks judge each receipt against its item at HEAD with the fresh rules the close transition and evidence.attached use, so a done item's passes read stale after later code commits
+  Reason: The goal names 'the same freshness logic as the evidence.* gates'; the list answers whether the proof holds now. land's historical rule judges a done claim at its own commit and would need a second mode.
+  Rejected: Judging done items by land's historical rule
+- 2026-10-23 [decision] List rows end with the command for captured receipts and the summary for manual ones, cut at 160 characters with …; a pass's standing carries the ✓/⚠ mark, a fail's ⚠ is on its result
+  Reason: The Done when asks for the full command up to the width limit; showing summary and command both would double long rows. A stale pass then reads '✓ pass ... ⚠ stale (...)', each mark about its own fact.
+  Rejected: Summary plus command on every row; marking only the standing

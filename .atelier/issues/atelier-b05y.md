@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Use one evidence target syntax and a result token in quiet output"
-updated_at: "2026-10-23T14:47:59.166253868+00:00"
+updated_at: "2026-10-23T16:08:35.521842967+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,6 @@ Small inconsistencies in the evidence commands:
 
 - 2026-10-17 [note] Retro 2026-10-17: `evidence record --target atelier-sdb0` failed with '--target must use kind/id syntax' while every other command takes a bare id (1w8c, 02:53Z).
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: quiet evidence show prints '<id> <result>'. Drop the quiet 'evidence record -> <id> <result>' clause: the quiet-token table fixes it as the ID. Still: attach rejects issue/<id>; --kind weird accepted silently; stale --target-kind/--target-id errors at evidence.rs:216,283,400,444; bare --target <id> rejected.
+- 2026-10-23 [decision] A bare --target or attach target names an issue; an evidence target still needs evidence/<id>. Known kinds are test and validation, the kinds in use, and those the workflow's evidence.attached gates name
+  Reason: Every other command's bare ID argument names an issue, and the bare form is the one agents tried. Kinds in use plus gate kinds is what 'no gate or filter matches' means.
+  Rejected: Guessing the record kind of a bare ID; a fixed kind list

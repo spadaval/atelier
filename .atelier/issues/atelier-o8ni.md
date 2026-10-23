@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make evidence show brief: one transcript, no empty fields, freshness"
-updated_at: "2026-10-23T14:47:58.928636359+00:00"
+updated_at: "2026-10-23T16:08:34.830587750+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,6 @@ This follows the brief-by-default and `--full` rule that atelier-7u4o sets for `
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: short IDs resolve, quiet show prints '<id> <result>'. Still: output twice (print_record_with_targets :771 then print_output_summary), (none) fields, Created/Updated, no freshness, no --full. Keep 'recorded' in the title line (human-cli-output.md:73).
+- 2026-10-23 [decision] Brief show's title line is '<id> evidence recorded' followed by the receipt line's facts, with no underline; the title moves to a Summary: line when it differs from the command
+  Reason: The regroom note keeps 'recorded' in the title line (human-cli-output.md item order <id> <type> <status>); a long summary no longer sets a 400-character underline.
+  Rejected: Dropping 'evidence recorded' from the brief title
