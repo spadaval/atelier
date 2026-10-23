@@ -4,6 +4,9 @@ id: "atelier-imlh"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-imlh
 priority: "P1"
 relationships:
   blocks: []
@@ -22,9 +25,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Gates name the approval they considered and why it is not current"
-updated_at: "2026-10-23T15:19:35.983461707+00:00"
+updated_at: "2026-10-23T15:19:36.456182898+00:00"
 ---
 
 ## Goal
