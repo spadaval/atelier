@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T15:49:56.720863756+00:00"
+status: "done"
 title: "Give merge errors a recovery command that names the item and branch"
-updated_at: "2026-10-23T15:47:09.127138231+00:00"
+updated_at: "2026-10-23T15:49:56.720863756+00:00"
 ---
 
 ## Goal
@@ -52,3 +53,19 @@ Whether `--check` should evaluate a named work branch from another checkout (for
 - 2026-10-23 [decision] When this checkout's records do not name the owner's branch (as on the base before the work merges), merge and land find it from the local branches' own committed record of the item.
   Reason: The branch's record is the source of truth for its ownership; status reads branches the same way.
   Rejected: Pointing at atelier start, which is wrong for started work
+
+## Close Reason
+
+Merge refusals name the item and branch with a recovery: `⚠ <id> merge_branch_mismatch: owned on <branch>, not on <here>. Next: git switch <branch>` from the base (found from the branch's own record) or any other branch; an unstarted owner gets `atelier start <id>`; and once the work is on the base, `merge` and `merge --check` print `<id> is already merged into <base> (<commit>).` and pass with exit 0.
+
+### Deviations
+Plain `merge` on already merged work also exits 0, not only `--check`.
+
+### Decisions
+See the decision notes on this item.
+
+### Surprises
+None.
+
+### Open items
+The issue's unknown (running `--check` for a branch from another checkout) stays open; merge still requires the work branch checked out.
