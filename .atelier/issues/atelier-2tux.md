@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Trim successful merge output and point to the next step"
-updated_at: "2026-10-23T14:41:01.930681077+00:00"
+updated_at: "2026-10-23T14:41:18.178216434+00:00"
 ---
 
 ## Goal

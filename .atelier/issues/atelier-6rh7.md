@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show failing merge gates first, each with its fix, then a verdict"
-updated_at: "2026-10-23T14:14:37.299258459+00:00"
+updated_at: "2026-10-23T14:41:18.014155464+00:00"
 ---
 
 ## Goal

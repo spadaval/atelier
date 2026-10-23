@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Report what land checked and the next step when it passes"
-updated_at: "2026-10-23T14:14:37.414870698+00:00"
+updated_at: "2026-10-23T14:41:18.096653029+00:00"
 ---
 
 ## Goal

@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Give each failed land check its item, reason and fix command"
-updated_at: "2026-10-23T14:41:01.849512799+00:00"
+updated_at: "2026-10-23T14:41:17.932429446+00:00"
 ---
 
 ## Goal
