@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Keep Stop-hook adapter errors apart from landing failures"
-updated_at: "2026-10-23T14:14:23.025856246+00:00"
+updated_at: "2026-10-23T17:06:30.271944438+00:00"
 ---
 
 ## Goal

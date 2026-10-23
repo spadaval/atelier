@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Say reinstall atelier when records need a newer binary"
-updated_at: "2026-10-23T14:14:23.175367324+00:00"
+updated_at: "2026-10-23T17:06:30.434286518+00:00"
 ---
 
 ## Goal

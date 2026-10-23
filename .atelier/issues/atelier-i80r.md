@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Report a pending review from the Stop hook instead of failing land"
-updated_at: "2026-10-23T14:14:23.323184304+00:00"
+updated_at: "2026-10-23T17:06:30.597907417+00:00"
 ---
 
 ## Goal

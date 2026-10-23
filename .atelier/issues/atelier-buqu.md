@@ -28,9 +28,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Stop hook blocks only on failures the agent must act on now"
-updated_at: "2026-10-23T14:13:49.442270430+00:00"
+updated_at: "2026-10-23T17:06:30.762678897+00:00"
 ---
 
 ## Goal
@@ -48,3 +48,7 @@ Children: atelier-ft88, atelier-467y, atelier-u4ql, atelier-mp6v, atelier-i80r. 
 ## Context
 
 Hook path `crates/atelier-cli/src/commands/session.rs:482-495, 625-641`; schema checks `crates/atelier-records/src/lib.rs:811-817`, `review.rs:79-83`; `docs/product/sessions-and-hooks.md`. Uses the per-check failure list the earlier rc8j land increments produce. Decisions on atelier-rc8j's 2026-10-23 notes define "pending review" and limit the records-only relaxation to the base.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 plan: since this increment was written, atelier-h1nc gave the Stop-hook reason the land lines and verdict on their own lines (the trailer no longer glues onto a fix; part of atelier-467y), and atelier-0uaj made land report preconditions (uncommitted records, dirty completion, operation in progress) as failed checks alongside the gates, so mp6v and i80r can classify the full failure list rather than stopping at the first. atelier-zegg (name cherry-pick/revert in progress; warn when append-only recovery drops a merge) joins after atelier-0uaj merges.

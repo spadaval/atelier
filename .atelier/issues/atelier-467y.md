@@ -21,9 +21,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Give land's Stop-hook refusal one code and one recovery step"
-updated_at: "2026-10-23T14:14:23.101068772+00:00"
+updated_at: "2026-10-23T17:06:30.353505913+00:00"
 ---
 
 ## Goal
