@@ -26,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Evidence record, list and show: one line, by item, brief"
-updated_at: "2026-10-23T14:13:49.016517935+00:00"
+updated_at: "2026-10-23T14:47:59.283581928+00:00"
 ---
 
 ## Goal
