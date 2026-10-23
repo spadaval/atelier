@@ -100,11 +100,11 @@ marked ready, and a mission does not close until review has happened.
 - **Changes after review:** any non-trivial change made after review, whether
   a fix to a finding, a new commit, or a conflict resolution, gets reviewed
   too. The reviewer does not have to be the same one.
-- **Disagreement:** an author who disputes a finding answers with a code fact
+- **Disagreement:** an author who disputes a finding answers with a fact
   or a test, never with confidence, schedule, or severity. The accountable
   agent decides using [Finding Disposition](references/finding-disposition.md).
   An author who is also the accountable agent, whether working alone or as an
-  orchestrator that wrote the code, is not a neutral judge of its own
+  orchestrator that wrote the work, is not a neutral judge of its own
   rebuttal. It either fixes every finding the reviewer recommended as
   `FIX NOW`, or sends its rebuttal back to a reviewer. Any recommended
   `FIX NOW` left unresolved goes at the top of the handoff, and the work is
