@@ -4,6 +4,9 @@ id: "atelier-phfo"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-phfo
 priority: "P1"
 relationships:
   blocks: []
@@ -29,9 +32,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Read review state per item without opening records"
-updated_at: "2026-10-23T14:13:48.084113419+00:00"
+updated_at: "2026-10-23T14:15:02.400982884+00:00"
 ---
 
 ## Goal
