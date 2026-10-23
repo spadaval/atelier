@@ -18,6 +18,8 @@ relationships:
     id: "atelier-mp6v"
   - kind: "issue"
     id: "atelier-u4ql"
+  - kind: "issue"
+    id: "atelier-zegg"
   attachments: []
   relates:
   - kind: "issue"
@@ -30,7 +32,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Stop hook blocks only on failures the agent must act on now"
-updated_at: "2026-10-23T17:06:30.762678897+00:00"
+updated_at: "2026-10-23T17:15:36.778845992+00:00"
 ---
 
 ## Goal

@@ -17,9 +17,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Name a cherry-pick or revert in progress, and warn when recovery drops a merge"
-updated_at: "2026-10-23T17:02:43.991656890+00:00"
+updated_at: "2026-10-23T17:15:36.906288191+00:00"
 ---
 
 ## Goal
