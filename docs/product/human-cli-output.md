@@ -120,10 +120,15 @@ Findings: 21 disposed, 1 open
 On the owner's work branch, while it holds commits the base does not, the
 approval is `✓ current`, `⚠ stale` or `⚠ missing` as `merge`'s
 `review.current` judges it at the branch tip, and a stale approval lists the
-commits that made it stale with the paths a new review has to read. Merged
+commits that made it stale with the paths a new review has to read, from
+the same `review_gate::approval_standing` that explains a failed
+`review.current` in the gates. With no independent approval, the newest
+approval by an author is named:
+`Approval: ⚠ missing — <id> @<pin> by <identity> is not independent: the
+identity matches a Git author of the branch`. Merged
 work is judged on the base as `land` judges history: `✓ accepted on <base>`
 or `⚠ not accepted on <base>`. The views read whichever records the checkout
-has. Why an approval is not current is not shown yet (atelier-cisa). A
+has. A
 finding is open until it has a disposition; its chain lists every
 disposition, the latest last.
 
@@ -156,8 +161,8 @@ task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind
   at the branch head, `⚠ approval stale` when an independent approval or
   trivial exemption exists but later commits changed what it covers (see
   [approval freshness](reviews-and-merge.md#approval-freshness)), and
-  `⚠ not approved` otherwise. The stale cause is not shown yet
-  (atelier-cisa).
+  `⚠ not approved` otherwise. `review list <id>` and `merge <id> --check`
+  name the cause.
 - `behind <n>`: base commits the branch does not have.
 - `proof at head` when every done item in the owner's scope, except
   superseded ones, has fresh passing proof at the branch head; otherwise
@@ -279,18 +284,91 @@ check (land_push_failed), nothing pushed`. It is the last line of the combined
 output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
 command's exit status is the pipe's last command's, so check `$?` before
 acting on it. Each command adopts the line in its own item: `land` prints it since
-atelier-ecah (a refusal counts one check, the one that stopped it, until
-atelier-bvl3 and atelier-9jr8 list every failed check), `merge --sync` since
+atelier-ecah, counting every failed gate check since atelier-9jr8, `merge --sync` since
 atelier-s2ei (`merge: passed`, `merge: synced — approval needs fresh review`, or `merge:
 refused — 1 check (sync_conflict)`),
-`merge` and `merge --check` in atelier-6rh7,
+`merge` and `merge --check` since atelier-6rh7 (`merge: passed`, or `merge:
+refused — 2 checks (review.current, findings.disposed)`),
 `evidence record` since atelier-3ekh (`evidence record: passed`, or
 `evidence record: recorded fail — <item> cannot close or merge until a later
 pass`, which exits zero because recording succeeded; a blocked or
 not-applicable result ends `recorded <result> — it never counts as a pass`;
 a capture that refuses to run still fails with an error and no verdict line),
 `check` in atelier-4t5l, `start` in
-atelier-501y, and `doctor` in atelier-rc8j.
+atelier-501y, and `doctor` in atelier-rc8j. A refusal by a check that stops
+the command before its gates, such as `land_records_uncommitted` or
+`merge_diverged`, prints its error and counts that one check; atelier-0uaj
+evaluates the gates anyway.
+
+### Gate Lines
+
+`land`, `merge` and `merge --check` print their gates through one renderer
+(`crates/atelier-cli/src/gate_report.rs`), so a check reads the same in
+each. Failed checks come first, one line per record, each naming the record,
+the check, the cause and the command that fixes it; then the passes,
+collapsed; then the verdict:
+
+```
+⚠ atelier-43m1 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Fix the findings" changed src/gate.rs (also claims.reviewed). Next: atelier review request atelier-43m1
+⚠ atelier-43m1 findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request atelier-43m1
+⚠ atelier-jb2t blockers.none_open: done but blocked by atelier-ihns todo high Show the between-missions state (also atelier-jb2t blockers.transitive_none_open). Next: start it with `atelier start atelier-ihns`, or drop the link with `atelier issue unlink atelier-jb2t atelier-ihns --role blocked_by` if it is wrong
+✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)
+✓ 2 done claims hold
+merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed, atelier-jb2t blockers.none_open, atelier-jb2t blockers.transitive_none_open)
+```
+
+- `review.current` names the approval it considered and why it does not
+  count: stale by a commit or merge (with paths), predating the branch's
+  fork, or recorded by an identity that matches a Git author (see
+  [approval freshness](reviews-and-merge.md#approval-freshness)).
+- The owner's failures lead, `review.current` first since other lines point
+  to it, then other records' in the order the gates ran. A check on the owner
+  is named bare in the verdict; a check on another record is
+  `<record> <check>`.
+- Each finding, open item and blocker is its own line. Resolved fix_now
+  findings that only wait on a fresh approval share one line; when a trivial
+  exemption carries `review.current`, the line says it does not cover a
+  fix_now resolution.
+- A failure with the same cause as another is folded into that line as
+  `(also <check>, ...)` and still counted in the verdict: a blocker check that
+  repeats the owner's `blockers.none_open`, `claims.reviewed` for a claim in
+  the owner's scope when its review or findings fail, and `merge.merged_tree`
+  when a `shell.check` failed on it.
+- The fix uses the real IDs, paths and commands it knows, and each moves the
+  check toward passing: for an open item in the scope, the workflow's
+  transitions that close it from its status, in order (`--reason "…"` where
+  the policy requires one); under a closed ancestor, which keeps it out of
+  active statuses, transitions that avoid them, such as `supersede`, and the
+  ancestor's reopen transition when its workflow has one; for an open
+  blocker, the transition that closes it in one step, else `atelier start
+  <blocker>` when its workflow lets it start, else the listing of its
+  transitions, said as such, and the `atelier issue unlink` that drops the
+  link if it is wrong, from the record that declares it and with its role
+  (`--role blocked_by`, or `--role blocks` from the blocker); the failing receipt's own
+  command to record proof again; the shell check to rerun, after `atelier
+  merge <owner> --sync` when it failed on the merged tree under
+  `merge_strategy: merge_commit`, which holds the base's changes the work
+  checkout lacks; and `atelier review request <owner>` for what needs an
+  independent reviewer. A fix of more than one command is a sentence with
+  each command in backticks. The refusal tests run every printed fix
+  verbatim in a copy of the fixture and require it to exit 0 and to change
+  the records or checkout unless it only reads. A value only a person can supply, such as the
+  reviewer identity, the resolution commit or the reason text, stays a
+  placeholder (`<identity>`, `<commit>`, `"…"`).
+- The passes are one line for the owner's checks, naming the approval or
+  exemption `review.current` passed with, and a count of the other done
+  claims that hold. The authors `review.current` lists name each person once.
+
+A passing `land` starts with `✓ records committed`, then the passes; a done
+owner ends with `Next: atelier merge <owner>`, and an active owner with
+uncommitted changes names the first five paths and the count, and points to
+`atelier status`. On the base it says `No unpushed base commits need
+review.`, or how many record-only commits it found. `merge --check` passes
+with its passes and `Next: atelier merge <id>`. A successful `merge` prints
+no gate lines, only what it did and the next step:
+`✓ Merged task/atelier-nqgr into master at c24af21a; branch deleted. Next:
+atelier land, then git push.` It notes that Git hooks did not run only when
+the repository has hooks of its own.
 
 ### Mutation Confirmation
 
@@ -536,9 +614,10 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   invalid candidate workflow policy, adds a recovery step but no code.
 - Every error the list covers states its failure once, then gives one
   recovery step: `<code>: <failure>. Next: <step>`. Errors written before
-  this rule switch over in the items that own their gates: atelier-9jr8 for
-  `land`, atelier-6rh7 for `merge`, atelier-oxnw for `start`, and
-  atelier-kset for `check` findings.
+  this rule switch over in the items that own their gates: `land` and
+  `merge` gate failures print as [gate lines](#gate-lines) since atelier-9jr8
+  and atelier-6rh7, and their other checks switch over in atelier-0uaj;
+  atelier-oxnw for `start`, and atelier-kset for `check` findings.
 - Output uses the terms in `CONTEXT.md`: records, check, finding, mission,
   parent. The internal words "lint" and "canonical" appear only inside a
   code, such as `canonical_snapshot_uncommitted`, or a configuration key,

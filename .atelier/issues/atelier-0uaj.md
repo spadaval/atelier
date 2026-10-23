@@ -13,9 +13,13 @@ relationships:
   - kind: "issue"
     id: "atelier-grsi"
   - kind: "issue"
+    id: "atelier-jiz0"
+  - kind: "issue"
     id: "atelier-kiry"
   - kind: "issue"
     id: "atelier-ns04"
+  - kind: "issue"
+    id: "atelier-r3oy"
   - kind: "issue"
     id: "atelier-y0en"
   - kind: "issue"
@@ -30,9 +34,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Evaluate every gate when a precondition fails, with a recovery command"
-updated_at: "2026-10-23T14:13:48.676896053+00:00"
+updated_at: "2026-10-23T15:19:36.064539697+00:00"
 ---
 
 ## Goal

@@ -187,6 +187,21 @@ fn foreign_base_commits_note(
         if owned.is_empty() { "no owner made" } else { "this owner did not make" },
     )))
 }
+/// Up to five of `items`, then how many more: `a, b, c, d, e and 2 more`.
+fn first_five(items: impl IntoIterator<Item = String>) -> String {
+    const SHOWN: usize = 5;
+    let items = items.into_iter().collect::<Vec<_>>();
+    let mut listed = items
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if items.len() > SHOWN {
+        listed.push_str(&format!(" and {} more", items.len() - SHOWN));
+    }
+    listed
+}
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
     land_checked(requested, install, deep).map(|(text, _)| text)
 }
@@ -256,7 +271,7 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
         (None, _) => None,
     };
     let behind_note = behind.map(|(base, count)| format!(
-        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval.",
+        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
         crate::human_output::count_noun(count, "commit")
     ));
     index.validate_policy(&source.policy, repo)?;
@@ -336,7 +351,12 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
     if install && (id.is_some() || branch == source.policy.branch_policy.base_branch) {
         bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base; rerun `atelier land` without --install");
     }
-    if let Some(id) = id {
+    // What land found beyond its checks, after the passes, and the step a
+    // passing land leads to.
+    let mut situation = Vec::new();
+    let mut next = None;
+    if let Some(id) = &id {
+        let id = id.clone();
         let issue = index.require_issue(&id)?;
         let ownership = issue.workflow_branch.as_ref().with_context(|| format!("land_work_untraceable: owner {id} has no committed branch metadata; run `atelier start {id}` and commit the record"))?;
         if ownership.work_branch != branch || ownership.branch_base == branch {
@@ -373,13 +393,20 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
             &id,
             base,
         )?);
-        lines.push(format!("Owner: {id} {}. In-progress work can hand off; completed claims satisfy applicable gates.", issue.status));
-        if !initial_paths.is_empty() {
-            lines.push(format!("Unfinished checkout: {}; hand off these changes honestly. Run atelier status for current findings and proof.", crate::human_output::count_noun(initial_paths.len(), "uncommitted path")));
+        if source
+            .policy
+            .issue_status_is_terminal(&issue.issue_type, &issue.status)?
+        {
+            next = Some(format!("Next: atelier merge {id}"));
+        } else if !initial_paths.is_empty() {
+            situation.push(format!(
+                "Unfinished checkout: {}: {}. See `atelier status` before handing off.",
+                crate::human_output::count_noun(initial_paths.len(), "uncommitted path"),
+                first_five(initial_paths.iter().map(|path| path.display().to_string()))
+            ));
         }
     } else if branch == source.policy.branch_policy.base_branch {
-        lines.push("No work owner on the integration base.".into());
-        lines.push(git::check_base_commits(
+        situation.push(git::check_base_commits(
             repo,
             &index,
             &source.policy,
@@ -396,7 +423,7 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
         // something land infers from the branch's own, editable policy
         // (atelier-bibd).
         match tracker_changes_since(repo, base)? {
-            None if install => lines.push(format!(
+            None if install => situation.push(format!(
                 "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or `git merge --no-ff`), then start further work with `atelier start <id>`."
             )),
             None => bail!(
@@ -406,55 +433,37 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
                 "land_install_invalid: {base} already has a workflow policy, so {label} does not install Atelier; run `atelier start <id>` to give the work an owner branch"
             ),
             Some(changed) if !changed.is_empty() => {
-                const SHOWN: usize = 5;
-                let mut listed = changed
-                    .iter()
-                    .take(SHOWN)
-                    .map(|path| path.display().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                if changed.len() > SHOWN {
-                    listed.push_str(&format!(" and {} more", changed.len() - SHOWN));
-                }
+                let listed = first_five(changed.iter().map(|path| path.display().to_string()));
                 bail!(
                     "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; run `atelier start <id>` to give the work an owner branch, or move the tracker changes onto one"
                 );
             }
-            Some(_) => lines.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
+            Some(_) => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
         }
     }
-    let failed = nodes
-        .iter()
-        .filter(|node| !node.passed)
-        .map(|node| format!("{} {}: {}", node.target, node.check, node.reason))
-        .collect::<Vec<_>>();
-    if !failed.is_empty() {
+    let mut report = crate::gate_report::Gates {
+        index: &index,
+        policy: &source.policy,
+        owner: id.as_deref(),
+    }
+    .report(&nodes);
+    report.passes.insert(0, "✓ records committed".to_owned());
+    if !report.failed.is_empty() {
         // Uncommitted code makes passing proof stale; name it (atelier-749l).
         let stale_proof = nodes
             .iter()
             .any(|node| !node.passed && node.stale_from_checkout);
         let dirty_note = (stale_proof && !initial_paths.is_empty()).then(|| {
-            const SHOWN: usize = 5;
-            let mut listed = initial_paths
-                .iter()
-                .take(SHOWN)
-                .map(|path| path.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            if initial_paths.len() > SHOWN {
-                listed.push_str(&format!(" and {} more", initial_paths.len() - SHOWN));
-            }
-            format!("Uncommitted changes make passing proof stale: {listed}. Commit or remove them, or rerun the check after committing.")
+            format!(
+                "Uncommitted changes make passing proof stale: {}. Commit or remove them, or rerun the check after committing.",
+                first_five(initial_paths.iter().map(|path| path.display().to_string()))
+            )
         });
-        bail!(
-            "land_invariants_unmet:\n{}\nResolve the named checks, commit the records, then rerun `atelier land`.{}",
-            failed.join("\n"),
-            [dirty_note, behind_note]
-                .into_iter()
-                .flatten()
-                .map(|note| format!("\n{note}"))
-                .collect::<String>()
-        );
+        return Err(crate::gate_report::GatesRefused {
+            report,
+            notes: [dirty_note, behind_note].into_iter().flatten().collect(),
+        }
+        .into());
     }
     // Arbitrary policy checks run outside the lock, as in merge. Fence their
     // result against cooperative writers and child commands that changed state.
@@ -473,7 +482,9 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
     {
         bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");
     }
-    lines.push("Landing checks passed. No commits or records created.".into());
+    lines.extend(report.passes);
+    lines.extend(situation);
+    lines.extend(next);
     Ok((lines.join("\n"), head))
 }
 
@@ -504,6 +515,35 @@ impl std::fmt::Display for Reported {
     }
 }
 impl std::error::Error for Reported {}
+
+/// What a refused land reports, and its verdict: failed gates as their own
+/// lines, each with its fix, then the passes and notes; a refusal by a check
+/// that stops land before its gates as an error with its one code.
+fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
+    let (lines, failed) = match error.downcast_ref::<crate::gate_report::GatesRefused>() {
+        Some(refused) => (
+            refused
+                .report
+                .failures
+                .iter()
+                .chain(&refused.report.passes)
+                .chain(&refused.notes)
+                .cloned()
+                .collect(),
+            refused.report.failed.clone(),
+        ),
+        None => (
+            vec![format!("Error: {error:?}")],
+            refusal_code(error).into_iter().collect(),
+        ),
+    };
+    let verdict = if failed.is_empty() {
+        "land: refused".to_owned()
+    } else {
+        crate::gate_report::verdict("land", &failed)
+    };
+    (lines, verdict)
+}
 
 /// The leading `land_*` check code of a refusal, if it has one.
 fn refusal_code(error: &anyhow::Error) -> Option<String> {
@@ -609,15 +649,8 @@ pub fn land(
                 return Ok(());
             }
             Err(error) => {
-                let code = refusal_code(&error);
-                eprintln!("Error: {error:?}");
-                eprintln!(
-                    "{}",
-                    match code.as_deref() {
-                        Some(code) => format!("land: refused — 1 check ({code}){nothing_pushed}"),
-                        None => format!("land: refused{nothing_pushed}"),
-                    }
-                );
+                let (lines, verdict) = refusal(&error);
+                eprintln!("{}\n{verdict}{nothing_pushed}", lines.join("\n"));
                 return Err(Reported.into());
             }
         }
@@ -629,11 +662,16 @@ pub fn land(
     });
     let output = match result {
         Ok(_) => json!({}),
-        Err(error) if repeated => {
-            json!({"systemMessage": format!("Atelier landing still fails: {error:#}. Stopping to avoid a hook loop; unfinished work must be handed off honestly.")})
-        }
+        // The hook's sentence leads, so the report's fix commands and its
+        // verdict end the message as `land` prints them.
         Err(error) => {
-            json!({"decision": "block", "reason": format!("Atelier landing failed: {error:#}. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.")})
+            let (lines, verdict) = refusal(&error);
+            let report = format!("{}\n{verdict}", lines.join("\n"));
+            if repeated {
+                json!({"systemMessage": format!("Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{report}")})
+            } else {
+                json!({"decision": "block", "reason": format!("Atelier landing failed. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.\n{report}")})
+            }
         }
     };
     println!("{}", serde_json::to_string(&output)?);

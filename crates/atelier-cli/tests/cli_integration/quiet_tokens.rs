@@ -404,7 +404,7 @@ fn every_command_prints_its_documented_quiet_token() {
 
     // A failed gate prints nothing on stdout and says why on stderr.
     let refusal = q.refused("merge", &[&owner, "--check"]);
-    assert!(refusal.contains("FAIL"), "{refusal}");
+    assert!(refusal.contains("⚠ "), "{refusal}");
 
     let review = |q: &mut Quiet, command: &str, args: &[&str]| {
         let id = q.ok(command, args);

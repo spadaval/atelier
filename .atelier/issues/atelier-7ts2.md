@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Replace land_completion_dirty's impossible advice with the dirty paths"
-updated_at: "2026-10-23T14:14:22.503462137+00:00"
+updated_at: "2026-10-23T15:19:35.555902618+00:00"
 ---
 
 ## Goal

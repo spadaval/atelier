@@ -252,7 +252,7 @@ fn base_records(
         .collect::<Vec<_>>();
     if !relevant.is_empty() {
         bail!(
-            "merge_base_records: {base} changed records about {owner} since {branch} left it: {}. The merge commit would carry them onto {base} unchecked. Merge it in with `git merge {base}` on {branch} so the gates judge them, then retry; a clean merge keeps the approval.",
+            "merge_base_records: {base} changed records about {owner} since {branch} left it: {}. The merge commit would carry them onto {base} unchecked. Merge it in with `git merge {base}` on {branch} so the gates judge them, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
             relevant.join(", ")
         );
     }
@@ -343,7 +343,7 @@ fn base_moved(
     match first_code_commit(repo, from, to) {
         Err(error) => error,
         Ok(Some((commit, path))) => named(&commit, &path),
-        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, record fresh proof, then retry; a clean merge keeps the approval.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
+        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
         Ok(None) => RetryOnMovedBase(format!("{base} moved from {} to {} while checks ran, only by records-only commits", crate::human_output::short_commit(from), crate::human_output::short_commit(to))).into(),
     }
 }
@@ -366,6 +366,59 @@ fn test_move_base_before_locks(repo: &Path, base: &str) {
 /// moves by records-only commits while checks run is merged again, up to
 /// `MAX_ATTEMPTS` times; any other move refuses.
 pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+    let result = attempts(issue_ref, check_only, json, quiet);
+    // `--json` is a script's format and keeps its errors (ADR 0022).
+    if json {
+        return result;
+    }
+    let say = |line: &str| {
+        if quiet {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
+        }
+    };
+    match result {
+        Ok(()) => {
+            println!("{}", if quiet { "passed" } else { "merge: passed" });
+            Ok(())
+        }
+        Err(error) => {
+            // The gates' lines are printed; a precondition's error is not.
+            let failed = match error.downcast_ref::<crate::gate_report::GatesRefused>() {
+                Some(refused) => refused.report.failed.clone(),
+                None => {
+                    eprintln!("Error: {error:?}");
+                    refusal_code(&error).into_iter().collect()
+                }
+            };
+            say(&if failed.is_empty() {
+                "merge: refused".to_owned()
+            } else {
+                crate::gate_report::verdict("merge", &failed)
+            });
+            Err(super::session::Reported.into())
+        }
+    }
+}
+
+/// The code of a refusal by one of merge's own checks or the record fences
+/// it runs, if it has one.
+fn refusal_code(error: &anyhow::Error) -> Option<String> {
+    let message = error.to_string();
+    let (code, _) = message.split_once(':')?;
+    (code.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+        && (code.starts_with("merge_")
+            || [
+                "canonical_snapshot_uncommitted",
+                "tracked_snapshot_uncommitted",
+                "review_append_only",
+            ]
+            .contains(&code)))
+    .then(|| code.to_owned())
+}
+
+fn attempts(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
     for attempt in 1..=MAX_ATTEMPTS {
         match merge_once(issue_ref, check_only, json, quiet) {
             Err(error) => match error.downcast_ref::<RetryOnMovedBase>() {
@@ -482,7 +535,7 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
                 Ok(Some((commit, path))) => format!("{base} gained {}, which changes {}, not a record.", crate::human_output::short_commit(&commit), path.display()),
                 Err(_) => format!("{base} is not an ancestor of {branch}."),
             };
-            anyhow::anyhow!("merge_diverged: {moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin.")
+            anyhow::anyhow!("merge_diverged: {moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin.")
         })?;
         None
     };
@@ -570,20 +623,17 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
             .collect::<Vec<_>>();
         let passed = !shell.is_empty() && shell.iter().all(|node| node.passed);
         let commands = tree_checks(&source.policy).collect::<Vec<_>>().join("; ");
-        nodes.push(review_gate::GateNode {
-            kind: "workflow_validator",
-            id: format!("{owner}/merge.merged_tree"),
-            target: owner.into(),
-            check: "merge.merged_tree".into(),
+        nodes.push(review_gate::gate(
+            owner,
+            "merge.merged_tree",
             passed,
-            reason: if passed {
+            if passed {
                 format!("merge_checks ran on merged tree {tree} of {branch} into {base} at {base_head} and passed: {commands}; evidence at the branch head does not prove it")
             } else {
                 format!("merged tree {tree} of {branch} into {base} at {base_head} is unproven: not every shell.check passed on it; shell.check names the failure")
             },
-            supports: Vec::new(),
-            stale_from_checkout: false,
-        });
+            Vec::new(),
+        ));
     }
     // Every done claim merging would put on the base must be one `land`
     // there accepts, judged by the same code, so a refusal comes before
@@ -595,38 +645,58 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         tip,
         &base_head,
     )?;
-    nodes.push(review_gate::GateNode {
-        kind: "workflow_validator",
-        id: format!("{owner}/claims.reviewed"),
-        target: owner.into(),
-        check: "claims.reviewed".into(),
-        passed: unreviewed.is_none(),
-        reason: match &unreviewed {
+    let mut claims_reviewed = review_gate::gate(
+        owner,
+        "claims.reviewed",
+        unreviewed.is_none(),
+        match &unreviewed {
             None => "every done claim merging adds is covered by a current accepted approval".into(),
             Some((commit, claim)) => format!(
-                "commit {} marks {claim} done outside every current approval, so `land` on {base} would refuse it with land_base_done_claim. An approval covers a done claim in its scope (the owner and its children) while it is still current at the claim's commit. If {claim} is in {owner}'s scope, record a fresh independent approval of {owner} at or after {}; otherwise leave {claim} open on this branch and close it on its own reviewed branch",
-                &commit[..8.min(commit.len())],
-                &commit[..8.min(commit.len())],
+                "commit {} marks {claim} done outside every current approval, so `land` on {base} would refuse it with land_base_done_claim",
+                crate::human_output::short_commit(commit),
             ),
         },
-        supports: Vec::new(),
-        stale_from_checkout: false,
-    });
+        Vec::new(),
+    );
+    if let Some((commit, claim)) = &unreviewed {
+        // An approval covers a done claim in its scope while it is still
+        // current at the claim's commit.
+        claims_reviewed.fix = Some(if review_gate::scope(tip_index, owner)?.contains(claim) {
+            format!("atelier review request {owner}")
+        } else {
+            format!("edit .atelier/issues/{claim}.md back to its earlier status on this branch, commit, and close {claim} on its own branch with `atelier start {claim}`")
+        });
+        claims_reviewed = claims_reviewed.with_gaps(vec![review_gate::Gap::UnreviewedClaim {
+            claim: claim.clone(),
+            commit: commit.clone(),
+        }]);
+    }
+    nodes.push(claims_reviewed);
+    let gates = crate::gate_report::Gates {
+        index: tip_index,
+        policy: &source.policy,
+        owner: Some(owner),
+    }
+    .report(&nodes);
+    // Failures print with the passes; a passing check prints its passes and
+    // next step, and a passing merge only what it did (atelier-2tux).
     let report = || -> Result<()> {
         if json {
             println!("{}", serde_json::to_string_pretty(&nodes)?);
-        } else if quiet {
-            for node in nodes.iter().filter(|node| !node.passed) {
-                eprintln!("FAIL {}: {}", node.check, node.reason);
+        } else if gates.failed.is_empty() {
+            if check_only && !quiet {
+                for line in &gates.passes {
+                    println!("{line}");
+                }
+                println!("Next: atelier merge {id}");
             }
         } else {
-            for node in &nodes {
-                println!(
-                    "{} {}: {}",
-                    if node.passed { "pass" } else { "FAIL" },
-                    node.check,
-                    node.reason
-                );
+            for line in gates.failures.iter().chain(&gates.passes) {
+                if quiet {
+                    eprintln!("{line}");
+                } else {
+                    println!("{line}");
+                }
             }
         }
         Ok(())
@@ -706,12 +776,16 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         }
     }
     if !failed.is_empty() {
-        bail!("merge blocked: {}", failed.join(", "));
+        if json {
+            bail!("merge blocked: {}", failed.join(", "));
+        }
+        return Err(crate::gate_report::GatesRefused {
+            report: gates,
+            notes: Vec::new(),
+        }
+        .into());
     }
     if check_only {
-        if quiet {
-            println!("passed");
-        }
         return Ok(());
     }
     let landed = match merge {
@@ -724,8 +798,8 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     // A separately checked-out base can be updated without touching it from
     // this worktree. Detach the source so its now-integrated branch can go.
     let target = base_tree.as_deref().unwrap_or(repo);
-    if !quiet {
-        println!("Git hooks are disabled during gated integration and cleanup; put required read-only checks in the base policy's merge_checks.");
+    if !quiet && hooks_configured(repo) {
+        println!("Git hooks did not run: merge integrates with hooks disabled.");
     }
     if base_tree.is_none() {
         git::git_output(repo, &["-c", "core.hooksPath=/dev/null", "switch", base])?;
@@ -784,21 +858,48 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     }
     clean(target)?;
     clean(repo)?;
+    let detached = base_tree.is_some().then(|| format!("The work checkout is detached; when finished, leave it and run `git worktree remove {}` from the base checkout.", repo.display()));
     if quiet {
-        println!("passed");
-        if base_tree.is_some() {
-            eprintln!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
+        if let Some(note) = detached {
+            eprintln!("{note}");
         }
         return Ok(());
     }
-    match &landed {
-        Some(commit) => println!("Merged {branch} into {base} with merge commit {}; deleted local work branch. No other commits or tracker records were created.", crate::human_output::short_commit(commit)),
-        None => println!("Merged {branch} into {base} at {}; deleted local work branch. No commits or tracker records were created.", crate::human_output::short_commit(&head)),
-    }
-    if base_tree.is_some() {
-        println!("The work checkout is detached; when finished, leave it and run git worktree remove {} from the base checkout.", repo.display());
+    println!(
+        "✓ Merged {branch} into {base} {}; branch deleted. Next: atelier land, then git push.",
+        match &landed {
+            Some(commit) => format!(
+                "with merge commit {}",
+                crate::human_output::short_commit(commit)
+            ),
+            None => format!("at {}", crate::human_output::short_commit(&head)),
+        }
+    );
+    if let Some(note) = detached {
+        println!("{note}");
     }
     Ok(())
+}
+
+/// Whether the repository runs Git hooks of its own: a `core.hooksPath`, or
+/// an executable hook in the default hooks directory.
+fn hooks_configured(repo: &Path) -> bool {
+    if text(repo, &["config", "--get", "core.hooksPath"]).is_ok() {
+        return true;
+    }
+    let Ok(dir) = text(repo, &["rev-parse", "--git-path", "hooks"]) else {
+        return false;
+    };
+    std::fs::read_dir(repo.join(dir)).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            !name.to_string_lossy().ends_with(".sample")
+                && entry.metadata().is_ok_and(|metadata| {
+                    use std::os::unix::fs::PermissionsExt;
+                    metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+                })
+        })
+    })
 }
 
 #[cfg(test)]

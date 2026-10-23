@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Give merge errors a recovery command that names the item and branch"
-updated_at: "2026-10-23T14:14:22.355997745+00:00"
+updated_at: "2026-10-23T15:19:35.313228822+00:00"
 ---
 
 ## Goal

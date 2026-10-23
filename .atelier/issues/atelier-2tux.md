@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:43:12.248705002+00:00"
+status: "done"
 title: "Trim successful merge output and point to the next step"
-updated_at: "2026-10-23T14:14:37.493850765+00:00"
+updated_at: "2026-10-23T14:43:12.248705002+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,21 @@ A successful `atelier merge` re-prints every `pass …` gate line. It then print
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Success re-prints 7 pass lines, the static hooks notice (merge.rs:727-729) and 'Merged … No commits or tracker records were created.' (:794-797).
+- 2026-10-23 [decision] Repository hooks are configured when core.hooksPath is set or the hooks directory holds an executable hook that is not a .sample
+  Reason: Matches the hooks Git would run; a fresh git init has only samples, so most merges print no notice
+
+## Close Reason
+
+A successful `merge` now prints `✓ Merged <branch> into <base> at <short>; branch deleted. Next: atelier land, then git push.` (or `with merge commit <short>`), keeps the detached-checkout note, prints no gate lines, mentions disabled hooks only when the repository has hooks of its own, and ends with `merge: passed`.
+
+### Deviations
+The hooks notice reads `Git hooks did not run: merge integrates with hooks disabled.`
+
+### Decisions
+See the decision note on atelier-2tux for what counts as configured hooks.
+
+### Surprises
+None.
+
+### Open items
+None.

@@ -164,6 +164,27 @@ even if it drops one side's change. Review merge drivers like other policy
 (atelier-7hh4). An approval recorded before the work branch left the base, such
 as one on the base itself, never counts for the branch.
 
+When `review.current` fails, it names the approval it considered and why it
+does not count (atelier-cisa): the newest stale independent approval or
+exemption, or else the newest approval whose identity matches a Git author of
+the branch. One function,
+`review_gate::approval_standing`, judges and explains it for `land`, `merge`,
+`merge --check`, `merge --sync` and `review list`:
+
+```text
+⚠ atelier-7l79 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Tweak after approval" changed proof-sample.txt. Next: atelier review request atelier-7l79
+⚠ atelier-bw0b review.current: approval atelier-x16l @e2562bd6 is stale: base merge 4f1e2a3b changed in-scope record .atelier/issues/atelier-bw0b.md beyond status. Next: atelier review request atelier-bw0b
+⚠ atelier-i3ay review.current: approval atelier-q2m8 @4c79d30b by author@example.com is not independent: the identity matches a Git author of the branch (authors: author a <author@example.com>). Next: atelier review request atelier-i3ay
+```
+
+A stale line names the first commit that made the approval stale, with up to
+three paths and `(and <n> later commits)`; a merge reads `base merge <commit>`
+(or `merge <commit>` when it brings in a branch not on the base) with the
+in-scope records it changed beyond status and the paths it resolved or edited
+by hand. An approval that predates the point where the branch left the base
+says so. With no approval at all, the line reads `no independent approval or
+trivial exemption; authors: ...`.
+
 ## Integration
 
 Commit the implementation, proof, branch ownership, and done claim on the work
@@ -193,8 +214,9 @@ Merge uses the base branch's committed policy and its
 include a `shell.check` and `fast_forward_only` otherwise (see [workflow
 configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
 fast-forwards only. If the base has moved on, merge it into the work branch,
-record fresh proof, and renew review only if the merge needed resolving (see
-approval freshness).
+record fresh proof, and renew review only if the merge needed resolving or
+brought in a change to an in-scope record beyond its status (see approval
+freshness).
 
 ### Catching up with `--sync`
 
@@ -219,15 +241,18 @@ or `--json`.
 - **Reruns.** Only command-backed receipts on the owner's scope that were
   current before the sync are rerun: for each item and command, the latest
   receipt, if it passed and nothing it proves had changed. Each rerun records
-  a new receipt with the same command, kind, target and criteria, passing or
+  a new receipt with the same command, kind, target and criteria, and the old
+  receipt's summary followed by `(rerun after merging <base>)`, passing or
   failing; a failing one stays on the record and the verdict is `refused`
   (`sync_rerun_failed`). Each command is printed (`running <item>: <command>`)
   before it starts, since a workspace suite can run for minutes. Manual receipts have no command, so they are named
   and left as recorded.
-- **Approval.** The output says `Approval kept`, by the rule above
-  (`approval_accepted` and `approval_is_current_to`), or `Approval needs fresh
+- **Approval.** The output says `Approval kept`, judged as `review.current`
+  judges it (`review_gate::approval_standing`), or `Approval needs fresh
   review` with the first commit that made it stale and the paths of every stale commit to review,
-  namely the files a merge resolved or edited by hand. A stale approval does
+  namely the files a merge resolved or edited by hand and the in-scope
+  records it changed beyond status. An approval whose identity matches a Git
+  author of the branch is named as not independent. A stale approval does
   not refuse the sync, which exits zero, but the verdict reads `merge: synced
   — approval needs fresh review` instead of `passed`, because `merge --check`
   will refuse until a fresh approval is recorded.
@@ -279,8 +304,8 @@ trusting the base head, under either strategy: the merge commit under
 `merge_commit`, which no checkout holds before it reaches the base, or the
 branch head under `fast_forward_only` (atelier-bu66). For example, if the base
 closed a mission after the fork point and the branch reopens or adds work that
-mission depends on, merge refuses, naming the claim (`merge blocked: <mission>
-work.terminal`, atelier-m4gv). These claims are read at that commit, so a
+mission depends on, merge refuses, naming the claim (`merge: refused — 1
+check (<mission> work.terminal)`, atelier-m4gv). These claims are read at that commit, so a
 claim the base completed and reviewed after the fork point is judged against
 the base commits its reviews pin (atelier-goom). The merge commit reaches the
 base only when every gate passes and the base has not moved during the checks.
@@ -311,8 +336,11 @@ a work branch cannot weaken its own merge policy. See
 
 Merge creates the merge commit under `merge_commit` and no other commit, writes
 no tracker state, and does not push. Git hooks
-are disabled during gated integration and cleanup, with an explicit notice.
-Put required read-only checks in the reviewed base policy's `merge_checks`.
+are disabled during gated integration and cleanup; when the repository has
+hooks of its own, merge says they did not run. Put required read-only checks
+in the reviewed base policy's `merge_checks`. `merge` and `merge --check`
+print failed gates first, each with its fix, and end with a verdict (see
+[gate lines](human-cli-output.md#gate-lines)).
 
 Successful integration deletes the local work branch. If the base has a
 separate checkout, the source checkout becomes detached and the command prints

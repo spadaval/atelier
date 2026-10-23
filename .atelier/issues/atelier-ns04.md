@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Point land <id> at the owner's branch, and name unknown IDs"
-updated_at: "2026-10-23T14:14:22.430204145+00:00"
+updated_at: "2026-10-23T15:19:35.434475216+00:00"
 ---
 
 ## Goal
