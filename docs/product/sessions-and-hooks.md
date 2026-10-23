@@ -46,6 +46,24 @@ approval or full scope completion; report those changes honestly. Its done
 child claims still need their applicable completion checks. A terminal owner
 requires a clean checkout and the full merge gates. An explicit child ID
 resolves its owner; otherwise ownership is inferred from the current branch.
+
+A failed precondition is one more failed check, and land still runs every gate
+it can: `land_records_uncommitted` names every tracker record that differs from
+HEAD (the first five, then a count) as modified, new, deleted or staged, with
+`git add .atelier && git commit -m "…"`, and the gates read HEAD's committed
+records instead; `land_completion_dirty` names a done owner's uncommitted
+paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
+push --include-untracked`); an invalid committed policy is reported once, as
+its `workflow_*` code, and `land_base_mismatch` also lets the gates run
+(atelier-kiry, atelier-grsi, atelier-7ts2, atelier-y0en). `land <id>` away from
+the owner's branch refuses with `land_branch_mismatch: owned on <branch>, not
+on <here>` and `git switch <branch> && atelier land`, finding the branch from
+the local branches' own records when this checkout's do not name it; a done
+owner whose branch is gone says to land the checkout as it is; a mission says
+missions have no branch (`land_mission`, with `atelier work mission <id>`); and
+an item no branch owns names `atelier start <id>` (atelier-ns04). A
+precondition that keeps the gates from running prints after the ones found
+before it, with a `Not checked:` line naming the gates it skipped.
 When the base has commits the branch does not, `land` checks the work against
 the point where it left the base and adds a note to merge the base in (`git
 merge <base>`) and record fresh proof before `atelier merge`, which refuses

@@ -1145,7 +1145,7 @@ pub(crate) fn path_summary(paths: &[String], sample_limit: usize) -> String {
     summary
 }
 
-pub(crate) use atelier_core::count_noun;
+pub(crate) use atelier_core::{count_noun, first_five};
 
 /// Counts of things as one phrase, count first in the order given, leaving
 /// out zeros: `2 open blockers, 1 other link`. Empty when every count is

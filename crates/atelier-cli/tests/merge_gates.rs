@@ -558,7 +558,9 @@ fn invalid_candidate_policy_is_rejected_and_base_fallback_is_visible() {
     fixture.approval("Reviewer");
     fs::write(fixture.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
     commit(fixture.path(), "malformed policy");
-    fixture.refusal("candidate workflow policy is invalid");
+    fixture.refusal(
+        "workflow_config_parse_error: .atelier/workflow.yaml: did not find expected node content",
+    );
     let output = cli(fixture.path(), &["issue", "show", &fixture.id]).1;
     assert!(
         output.contains("Invalid working policy") && output.contains("Using last valid policy"),
@@ -3447,7 +3449,10 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed && err.is_empty(), "{err}");
     assert_eq!(out, refusal);
-    assert_eq!(next_steps::assert_fixes_run(fixture.path(), &out), 2);
+    assert_eq!(
+        next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
+        2
+    );
     // Quiet keeps stdout empty and says the same on stderr.
     let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check", "-q"]);
     assert!(!passed && out.is_empty(), "{out}");
@@ -3573,5 +3578,167 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
     );
     // Each printed fix runs as printed: the review request, the disposition,
     // and the transition that retires the open child under its closed owner.
-    assert_eq!(next_steps::assert_fixes_run(fixture.path(), &out), 3);
+    assert_eq!(
+        next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
+        3
+    );
+}
+
+/// A base the branch has not merged in does not stop `merge --check`: it is
+/// one more failed check with its fix, and the review and claim gates still
+/// run from where the branch left the base. A real merge refuses before
+/// integrating (atelier-kiry).
+#[test]
+fn merge_check_on_a_diverged_base_also_reports_the_review_and_claim_gates() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let finding = fixture.finding();
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("base.rs"), "base code\n").unwrap();
+    commit(fixture.path(), "base code");
+    let moved = git(fixture.path(), &["rev-parse", "--short=8", "HEAD"]);
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    let branch = &fixture.branch;
+    let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(!passed && err.is_empty(), "{err}");
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
+             ⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test> (also claims.reviewed). Next: atelier review request {id}\n\
+             ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in src.rs\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
+             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
+             merge: refused — 4 checks (merge_diverged, review.current, findings.disposed, claims.reviewed)\n"
+        )
+    );
+    assert_eq!(
+        next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
+        3
+    );
+    fixture.refusal("merge_diverged");
+}
+
+/// Records and code that differ from HEAD are each a failed check naming
+/// every path, and the gates run against HEAD's committed records
+/// (atelier-kiry, atelier-grsi).
+#[test]
+fn merge_check_names_every_uncommitted_record_and_path_and_still_runs_the_gates() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    fixture.approval("Reviewer");
+    ok(fixture.path(), &["issue", "note", &id, "Uncommitted note"]);
+    let new = ok(fixture.path(), &["-q", "issue", "create", "Uncommitted"]);
+    fs::write(fixture.path().join("src.rs"), "unreviewed\n").unwrap();
+    fs::write(fixture.path().join("new.rs"), "unreviewed\n").unwrap();
+    let mut records = [(id.clone(), "modified"), (new.clone(), "new")];
+    records.sort();
+    let records = records
+        .iter()
+        .map(|(record, change)| format!(".atelier/issues/{record}.md ({change})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
+    assert!(!passed);
+    let repo = fixture.path().display();
+    let lines = out.lines().collect::<Vec<_>>();
+    assert_eq!(
+        lines[..2],
+        [
+            format!("⚠ {id} canonical_snapshot_uncommitted: 2 tracker records differ from HEAD: {records}; commit them with the work. Next: git add .atelier && git commit -m \"…\""),
+            format!("⚠ {id} merge_checkout_dirty: {repo} has 2 uncommitted paths: new.rs, src.rs. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`"),
+        ]
+    );
+    // The approval of HEAD still holds for the committed records.
+    assert!(
+        out.ends_with(
+            "merge: refused — 2 checks (canonical_snapshot_uncommitted, merge_checkout_dirty)\n"
+        ),
+        "{out}"
+    );
+    assert!(out.contains("review.current via "), "{out}");
+    assert_eq!(
+        next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
+        3
+    );
+    fixture.refusal("canonical_snapshot_uncommitted");
+}
+
+/// Away from the work branch, merge names both branches and the switch;
+/// once the work is on the base, it says so and passes (atelier-yrlj).
+#[test]
+fn merge_names_the_work_branch_and_says_when_the_work_is_already_merged() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let branch = fixture.branch.clone();
+    fixture.approval("Reviewer");
+    let mismatch = |here: &str| {
+        format!(
+            "⚠ {id} merge_branch_mismatch: owned on {branch}, not on {here}. Next: git switch {branch}\n\
+             Not checked: the review, findings, proof, blocker, open-work and done-claim gates; merge_branch_mismatch stops merge before them.\n\
+             merge: refused — 1 check (merge_branch_mismatch)\n"
+        )
+    };
+    // The base's records do not know the branch yet; another branch's do.
+    for here in ["main", "elsewhere"] {
+        if here == "elsewhere" {
+            git(fixture.path(), &["switch", "-q", "-c", here, &branch]);
+        } else {
+            git(fixture.path(), &["switch", "-q", here]);
+        }
+        let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
+        assert!(!passed);
+        assert_eq!(out, mismatch(here));
+        assert_eq!(
+            next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
+            1
+        );
+    }
+    git(fixture.path(), &["switch", "-q", &branch]);
+    ok(fixture.path(), &["merge", &id]);
+    let merged = git(
+        fixture.path(),
+        &[
+            "log",
+            "-1",
+            "--format=%h",
+            "--abbrev=8",
+            "--",
+            &format!(".atelier/issues/{id}.md"),
+        ],
+    );
+    for args in [vec!["merge", &id, "--check"], vec!["merge", &id]] {
+        let (passed, out, _) = split(fixture.path(), &args);
+        assert!(passed, "{out}");
+        assert_eq!(
+            out,
+            format!("{id} is already merged into main ({merged}).\nmerge: passed\n")
+        );
+    }
+}
+
+/// A disposition given an event that is not a finding says what the event
+/// is and where the findings are listed (atelier-jiz0).
+#[test]
+fn disposition_of_an_approval_says_it_is_not_a_finding() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let approval = fixture.approval("Reviewer");
+    let (passed, _, err) = split(
+        fixture.path(),
+        &[
+            "review",
+            "disposition",
+            &approval,
+            "--identity",
+            "Author",
+            "--decision",
+            "no_action",
+            "Not a bug",
+        ],
+    );
+    assert!(!passed);
+    assert_eq!(
+        err,
+        format!("Error: {approval} is an approval, not a finding; a disposition settles a finding. Next: atelier review list {id}\n")
+    );
 }

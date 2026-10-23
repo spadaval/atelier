@@ -265,6 +265,20 @@ pub fn disposition(
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     let finding = index.resolve(RecordKind::Review, finding)?;
     let original = index.require_review(&finding)?;
+    // A swapped ID is the usual cause: say what the event is and where the
+    // findings are listed (atelier-jiz0).
+    if !matches!(original.event, ReviewEvent::Finding { .. }) {
+        let kind = original.event.name().replace('_', " ");
+        let article = if kind.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            "an"
+        } else {
+            "a"
+        };
+        bail!(
+            "{finding} is {article} {kind}, not a finding; a disposition settles a finding. Next: atelier review list {}",
+            original.target
+        );
+    }
     let follow_up = follow_up
         .map(|id| index.resolve(RecordKind::Issue, &id))
         .transpose()?;

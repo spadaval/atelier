@@ -143,7 +143,10 @@ fn rendered_output_uses_context_terms_and_one_code_per_error() {
     fs::write(&other_path, format!("{committed}\nUncommitted line\n")).unwrap();
     let (success, _, stderr) = render(&["land"]);
     assert!(
-        !success && stderr.contains("land_records_uncommitted: .atelier/issues/"),
+        !success
+            && stderr.contains(&format!(
+                "land_records_uncommitted: 1 tracker record differs from HEAD: .atelier/issues/{other}.md (modified)"
+            )),
         "{stderr}"
     );
 
@@ -196,28 +199,40 @@ fn merge_refusals_and_invalid_policy_carry_one_code_and_one_step() {
     let (dir, mission, work) = started_fixture();
     let render = |args: &[&str]| render(dir.path(), args);
 
-    let (success, _, stderr) = render(&["merge", "--check", &mission]);
-    assert!(!success && stderr.contains("merge_mission: "), "{stderr}");
+    let (success, stdout, _) = render(&["merge", "--check", &mission]);
+    assert!(!success && stdout.contains("merge_mission: "), "{stdout}");
     let unstarted = create(dir.path(), &["Unstarted work"]);
     commit_all(dir.path(), "unstarted record");
-    let (success, _, stderr) = render(&["merge", "--check", &unstarted]);
+    let (success, stdout, _) = render(&["merge", "--check", &unstarted]);
     assert!(
-        !success && stderr.contains("merge_owner_unstarted: "),
-        "{stderr}"
+        !success
+            && stdout.contains(&format!(
+                "merge_owner_unstarted: {unstarted} has no work branch. Next: atelier start {unstarted}"
+            )),
+        "{stdout}"
     );
 
     let policy = dir.path().join(".atelier/workflow.yaml");
     let valid = fs::read_to_string(&policy).unwrap();
     fs::write(&policy, format!("{valid}bogus_key: [\n")).unwrap();
     commit_all(dir.path(), "invalid candidate policy");
+    // The invalid policy is one failed check: one line, one code, one step
+    // (atelier-y0en).
     for args in [vec!["land"], vec!["merge", "--check", work.as_str()]] {
-        let (success, _, stderr) = render(&args);
-        let error = error_text(&stderr).unwrap_or_default();
+        let (success, stdout, stderr) = render(&args);
+        let transcript = format!("{stdout}{stderr}");
         assert!(
-            !success && codes(error) == ["workflow_config_parse_error"],
-            "{stderr}"
+            !success && codes(&transcript) == ["workflow_config_parse_error"],
+            "{transcript}"
         );
-        assert!(!stderr.contains("before merging"), "{stderr}");
+        assert_eq!(
+            transcript
+                .matches("did not find expected node content")
+                .count(),
+            1,
+            "{transcript}"
+        );
+        assert!(!transcript.contains("before merging"), "{transcript}");
     }
 }
 

@@ -103,9 +103,43 @@ impl Snapshot {
         let index = RecordIndex::load_structural(&dir.path().join(relative))?;
         Ok(Self { dir, index })
     }
+    /// The extracted tracker's directory, which holds its records while it
+    /// lives, and its records.
+    pub fn into_parts(self) -> (tempfile::TempDir, RecordIndex) {
+        (self.dir, self.index)
+    }
     pub fn root(&self) -> &Path {
         self.dir.path()
     }
+}
+
+/// The local branches whose own committed record of `id` names them as its
+/// work branch: where `id` is owned when this checkout's records say
+/// nothing of it, as on the base before the work merges.
+pub(crate) fn owning_branches(repo: &Path, id: &str) -> Result<Vec<String>> {
+    let path = format!(".atelier/issues/{id}.md");
+    let heads = text(
+        repo,
+        &["for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"],
+    )?;
+    Ok(heads
+        .lines()
+        .filter(|branch| {
+            resolve(repo, &format!("refs/heads/{branch}"))
+                .and_then(|tip| git_freshness::blob(repo, &tip, Path::new(&path)))
+                .ok()
+                .and_then(|blob| {
+                    atelier_records::parse_issue_record(
+                        &blob,
+                        Path::new(&path).strip_prefix(".atelier").ok()?,
+                    )
+                    .ok()
+                })
+                .and_then(|record| record.issue.workflow_branch)
+                .is_some_and(|owner| owner.work_branch == *branch)
+        })
+        .map(str::to_owned)
+        .collect())
 }
 
 /// Gates read custom context link types from the project config,

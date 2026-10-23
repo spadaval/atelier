@@ -383,6 +383,14 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
             println!("{}", if quiet { "passed" } else { "merge: passed" });
             Ok(())
         }
+        // Nothing is left to merge, so nothing refuses (atelier-yrlj).
+        Err(error) if error.is::<AlreadyMerged>() => {
+            if !quiet {
+                println!("{error}");
+            }
+            println!("{}", if quiet { "passed" } else { "merge: passed" });
+            Ok(())
+        }
         Err(error) => {
             // The gates' lines are printed; a precondition's error is not.
             let failed = match error.downcast_ref::<crate::gate_report::GatesRefused>() {
@@ -407,15 +415,8 @@ pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result
 fn refusal_code(error: &anyhow::Error) -> Option<String> {
     let message = error.to_string();
     let (code, _) = message.split_once(':')?;
-    (code.chars().all(|c| c.is_ascii_lowercase() || c == '_')
-        && (code.starts_with("merge_")
-            || [
-                "canonical_snapshot_uncommitted",
-                "tracked_snapshot_uncommitted",
-                "review_append_only",
-            ]
-            .contains(&code)))
-    .then(|| code.to_owned())
+    (code.chars().all(|c| c.is_ascii_lowercase() || c == '_') && is_merge_code(code))
+        .then(|| code.to_owned())
 }
 
 fn attempts(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
@@ -445,9 +446,33 @@ pub(super) struct Owned {
     pub id: String,
     pub owner: String,
     pub base: String,
+    /// HEAD's committed tracker, which `index` holds, when the checkout's
+    /// records differ from it.
+    pub committed: Option<tempfile::TempDir>,
 }
 
+/// An item whose work is already on the base: `merge` has nothing to do.
+#[derive(Debug)]
+pub(super) struct AlreadyMerged(String);
+impl std::fmt::Display for AlreadyMerged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+impl std::error::Error for AlreadyMerged {}
+
+/// The owner's work branch, refusing any checkout but its own clean one.
 pub(super) fn owned_branch(issue_ref: &str) -> Result<Owned> {
+    owned(issue_ref, None)
+}
+
+/// The owner's work branch. With `preconditions`, records or code that
+/// differ from HEAD are failed preconditions instead of refusals, and the
+/// records are read from HEAD's commit, so the gates still run.
+fn owned(
+    issue_ref: &str,
+    mut preconditions: Option<&mut crate::gate_report::Preconditions>,
+) -> Result<Owned> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let head = git::head_commit(repo)?;
@@ -455,27 +480,142 @@ pub(super) fn owned_branch(issue_ref: &str) -> Result<Owned> {
         "merge_detached_head: merge requires a local work branch. Next: check out the work branch, then retry",
     )?;
     let snapshot = committed_snapshot::CommittedSnapshot::new(&head)?;
-    let index = {
+    // Failed preconditions found before the owner is known.
+    let mut found = Vec::<String>::new();
+    let (index, committed) = {
         let _transaction =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
-        snapshot.read_record_files(repo, true)?.0.into_index()?
+        match snapshot.read_record_files(repo, true) {
+            Ok((files, _)) => (files.into_index()?, None),
+            Err(error) if preconditions.is_some() => {
+                let records = error.downcast_ref::<committed_snapshot::RecordsUncommitted>();
+                let dirty = |error: &anyhow::Error| {
+                    let text = format!("{error:#}");
+                    (text.starts_with("merge_checkout_dirty:")
+                        || text.starts_with("tracked_snapshot_uncommitted:"))
+                    .then_some(text)
+                };
+                match records {
+                    Some(records) => {
+                        found.push(format!(
+                            "canonical_snapshot_uncommitted: {}; commit them with the work. Next: {}",
+                            records.summary(),
+                            records.commit_command()
+                        ));
+                        let (dir, index) = crate::commands::git::Snapshot::at(
+                            repo,
+                            &layout.canonical_dir(),
+                            &head,
+                        )?
+                        .into_parts();
+                        if let Err(error) = snapshot.require_code_clean(repo) {
+                            found.push(dirty(&error).ok_or(error)?);
+                        }
+                        (index, Some(dir))
+                    }
+                    None => {
+                        let Some(text) = dirty(&error) else {
+                            return Err(error);
+                        };
+                        found.push(text);
+                        (
+                            snapshot.read_record_files(repo, false)?.0.into_index()?,
+                            None,
+                        )
+                    }
+                }
+            }
+            Err(error) => return Err(error),
+        }
     };
-    let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, issue_ref)?;
-    let issue = index.require_issue(&id)?;
-    let owner = issue.parent_id.clone().unwrap_or_else(|| id.clone());
+    let report_found = |preconditions: &mut Option<&mut crate::gate_report::Preconditions>,
+                        found: &mut Vec<String>| {
+        if let Some(preconditions) = preconditions.as_deref_mut() {
+            let target = preconditions.owner.clone().unwrap_or_default();
+            preconditions.failed.extend(
+                found
+                    .drain(..)
+                    .filter_map(|message| crate::gate_report::coded(&target, &message, |_| true)),
+            );
+        }
+    };
+    let resolved = (|| -> Result<(String, String)> {
+        let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, issue_ref)?;
+        let issue = index.require_issue(&id)?;
+        let owner = issue.parent_id.clone().unwrap_or_else(|| id.clone());
+        index.require_issue(&owner)?;
+        Ok((id, owner))
+    })();
+    let (id, owner) = match resolved {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            report_found(&mut preconditions, &mut found);
+            return Err(error);
+        }
+    };
+    if let Some(preconditions) = preconditions.as_deref_mut() {
+        preconditions.owner = Some(owner.clone());
+    }
+    report_found(&mut preconditions, &mut found);
     let owner_record = index.require_issue(&owner)?;
     if owner_record.issue_type == "mission" {
         bail!("merge_mission: {owner} is a mission, and missions have no work branch. Next: merge one of its issues, listed by `atelier work mission {owner}`");
     }
-    let recorded = owner_record.workflow_branch.as_ref().with_context(|| {
-        format!("merge_owner_unstarted: owner {owner} has no committed branch ownership. Next: run `atelier start {owner}` and commit its metadata")
-    })?;
+    let Some(recorded) = owner_record.workflow_branch.as_ref() else {
+        // The base learns of the branch only when the work merges.
+        match crate::commands::git::owning_branches(repo, &owner)?.first() {
+            Some(owned) => bail!(
+                "merge_branch_mismatch: owned on {owned}, not on {branch}. Next: git switch {owned}"
+            ),
+            None => bail!(
+                "merge_owner_unstarted: {owner} has no work branch. Next: atelier start {owner}"
+            ),
+        }
+    };
     if recorded.work_branch != branch || recorded.branch_base == branch {
-        bail!(
-            "merge_branch_mismatch: expected work branch {} with distinct base {}",
-            recorded.work_branch,
-            recorded.branch_base
-        );
+        let work = &recorded.work_branch;
+        let tip = crate::commands::git::resolve(repo, &format!("refs/heads/{work}")).ok();
+        if recorded.branch_base == branch {
+            // On the base, work already in it has nothing left to merge.
+            let done = base_policy::working(repo).is_ok_and(|source| {
+                source
+                    .policy
+                    .issue_status_is_terminal(&owner_record.issue_type, &owner_record.status)
+                    .unwrap_or(false)
+            });
+            let merged_at = match &tip {
+                Some(tip) => git::git_output(repo, &["merge-base", "--is-ancestor", tip, &head])
+                    .is_ok()
+                    .then(|| tip.clone()),
+                None if done => text(
+                    repo,
+                    &[
+                        "log",
+                        "-1",
+                        "--format=%H",
+                        &head,
+                        "--",
+                        &format!(".atelier/issues/{owner}.md"),
+                    ],
+                )
+                .ok()
+                .filter(|commit| !commit.is_empty()),
+                None => None,
+            };
+            if let Some(commit) = merged_at {
+                return Err(AlreadyMerged(format!(
+                    "{owner} is already merged into {branch} ({}).",
+                    crate::human_output::short_commit(&commit)
+                ))
+                .into());
+            }
+        }
+        if tip.is_some() {
+            bail!(
+                "merge_branch_mismatch: owned on {work}, not on {branch}. Next: git switch {work}"
+            );
+        }
+        bail!("merge_branch_mismatch: owned on {work}, which is not a local branch. Next: git fetch && git switch {work}");
     }
     let base = recorded.branch_base.clone();
     Ok(Owned {
@@ -487,10 +627,63 @@ pub(super) fn owned_branch(issue_ref: &str) -> Result<Owned> {
         id,
         owner,
         base,
+        committed,
     })
 }
 
+/// Whether `code` is one of merge's own checks or the record fences it runs.
+fn is_merge_code(code: &str) -> bool {
+    code.starts_with("merge_")
+        || [
+            "canonical_snapshot_uncommitted",
+            "tracked_snapshot_uncommitted",
+            "review_append_only",
+        ]
+        .contains(&code)
+}
+
+/// One merge attempt. A failed precondition is one more failed check, and
+/// the gates still run against what can be read; one that keeps them from
+/// running prints with the preconditions before it.
 fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+    let mut preconditions = crate::gate_report::Preconditions::default();
+    let result = merge_gates(issue_ref, check_only, json, quiet, &mut preconditions);
+    let Err(error) = result else {
+        return result;
+    };
+    // `--json` keeps its errors, and the gates' own refusal has printed.
+    if json
+        || error.is::<RetryOnMovedBase>()
+        || error.is::<AlreadyMerged>()
+        || error.is::<crate::gate_report::GatesRefused>()
+    {
+        return Err(error);
+    }
+    let error = preconditions.refusal(
+        error,
+        "merge",
+        "the review, findings, proof, blocker, open-work and done-claim gates",
+        is_merge_code,
+    );
+    if let Some(refused) = error.downcast_ref::<crate::gate_report::GatesRefused>() {
+        for line in refused.report.failures.iter().chain(&refused.notes) {
+            if quiet {
+                eprintln!("{line}");
+            } else {
+                println!("{line}");
+            }
+        }
+    }
+    Err(error)
+}
+
+fn merge_gates(
+    issue_ref: &str,
+    check_only: bool,
+    json: bool,
+    quiet: bool,
+    preconditions: &mut crate::gate_report::Preconditions,
+) -> Result<()> {
     let Owned {
         layout,
         head,
@@ -500,8 +693,15 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         id,
         owner,
         base,
-    } = owned_branch(issue_ref)?;
+        committed,
+    } = owned(issue_ref, Some(preconditions))?;
     let repo = layout.repo_root();
+    // Where the records the gates read are: the checkout, or HEAD's when
+    // the checkout's differ.
+    let records_root = committed.as_ref().map_or(repo, |dir| dir.path());
+    // Fencing a clean checkout after the checks means nothing when it was
+    // not clean before them.
+    let dirty = !preconditions.failed.is_empty();
     let owner = owner.as_str();
     let base = &base;
     let base_ref = format!("refs/heads/{base}");
@@ -528,25 +728,44 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         }
         Some(merged_tree(repo, base, &base_head, &branch, &head)?)
     } else {
-        git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).map_err(|_| {
+        // The gates still judge the work from where it left the base.
+        if git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).is_err() {
             let fork = text(repo, &["merge-base", &base_head, &head]).unwrap_or_default();
             let moved = match first_code_commit(repo, &fork, &base_head) {
                 Ok(None) => format!("{base} gained only records-only commits since {branch} left it, but merge_strategy fast_forward_only creates no merge commit."),
                 Ok(Some((commit, path))) => format!("{base} gained {}, which changes {}, not a record.", crate::human_output::short_commit(&commit), path.display()),
                 Err(_) => format!("{base} is not an ancestor of {branch}."),
             };
-            anyhow::anyhow!("merge_diverged: {moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin.")
-        })?;
+            preconditions.fail(
+                "merge_diverged",
+                format!("{moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin."),
+                Some(format!("git merge {base}")),
+            );
+        }
         None
     };
     // Where the branch left the base; the base itself under fast-forward.
     let fork_point = text(repo, &["merge-base", &base_head, &head])?;
     // Candidate syntax is checked only after trusted base resolution, so an
     // invalid branch cannot prevent a visible fallback or become base policy.
-    atelier_workflow::load(repo).with_context(|| {
-        format!("candidate workflow policy is invalid. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier merge {id}`")
-    })?;
-    index.validate_policy(&source.policy, repo)?;
+    // The candidate is HEAD's policy, which is the checkout's when the
+    // records are committed.
+    let candidate = match &committed {
+        None => atelier_workflow::load(repo),
+        Some(_) => git::blob(repo, &head, Path::new(".atelier/workflow.yaml"))
+            .and_then(|text| atelier_workflow::parse_policy_text(&text, ".atelier/workflow.yaml")),
+    };
+    if let Err(error) = candidate {
+        let (code, cause) = crate::gate_report::policy_failure(&error).with_context(|| {
+            format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier merge {id}`")
+        })?;
+        preconditions.fail(
+            &code,
+            cause,
+            Some("fix .atelier/workflow.yaml and commit it".to_owned()),
+        );
+    }
+    index.validate_policy(&source.policy, records_root)?;
     review_gate::append_only(&mut read, &fork_point)?;
     let base_tree = base_checkout(repo, base)?;
     let base_snapshot = base_tree
@@ -559,7 +778,10 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
             .expect("base snapshot")
             .require_clean(path)?;
     }
-    crate::commands::git::require_committed_config(repo, &head, "merge")?;
+    // Uncommitted records already name the project config when it differs.
+    if committed.is_none() {
+        crate::commands::git::require_committed_config(repo, &head, "merge")?;
+    }
     let merge = tree
         .map(|tree| -> Result<_> {
             let commit = merge_commit(
@@ -672,6 +894,8 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
         }]);
     }
     nodes.push(claims_reviewed);
+    nodes.splice(0..0, std::mem::take(&mut preconditions.failed));
+    preconditions.gates_ran = true;
     let gates = crate::gate_report::Gates {
         index: tip_index,
         policy: &source.policy,
@@ -740,7 +964,9 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     }
     report()?;
     // Shell checks cannot authorize a different tree or leave dirty records.
-    snapshot.require_clean(repo)?;
+    if !dirty {
+        snapshot.require_clean(repo)?;
+    }
     if git::head_commit(repo)? != head
         || crate::commands::git::checkout_branch(repo)?.as_deref() != Some(branch.as_str())
         || text(

@@ -1347,6 +1347,29 @@ pub fn count_noun(count: usize, noun: &str) -> String {
     format!("{count} {noun}{}", plural_suffix(count))
 }
 
+/// Up to five of `items` joined by `separator`, then how many more: `a, b,
+/// c, d, e and 2 more`, or with `"; "`, `a; b; c; d; e; and 2 more`. Every
+/// message that lists paths or commits it may not show in full lists them
+/// this way.
+pub fn first_five(items: impl IntoIterator<Item = String>, separator: &str) -> String {
+    const SHOWN: usize = 5;
+    let items = items.into_iter().collect::<Vec<_>>();
+    let mut listed = items
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(separator);
+    if items.len() > SHOWN {
+        listed.push_str(&format!(
+            "{} and {} more",
+            separator.trim_end().trim_end_matches(','),
+            items.len() - SHOWN
+        ));
+    }
+    listed
+}
+
 /// `s` unless `count` is 1, for a noun whose plural adds `s`.
 fn plural_suffix(count: usize) -> &'static str {
     if count == 1 {
