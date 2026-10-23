@@ -711,7 +711,8 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
         fs::read_to_string(fixture.path().join("src.rs")).unwrap(),
         "fixed after the rebase\n"
     );
-    fixture.refusal("review.current: no current");
+    fixture.refusal("is stale: ");
+    fixture.refusal("\"fix after recovery\" changed src.rs");
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
         output.contains(&format!(
@@ -969,7 +970,24 @@ fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not()
             ok(fixture.path(), &["merge", &fixture.id]);
             assert_eq!(git(fixture.path(), &["rev-parse", "main"]), head);
         } else {
-            fixture.refusal("review.current: no current");
+            // The refusal names the approval and the commit that staled it.
+            let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+            let cause = if case == "later_code" {
+                format!(
+                    "{} \"code after the base merge\" changed src.rs",
+                    &head[..8]
+                )
+            } else {
+                format!(
+                    "base merge {} resolved or edited src.rs by hand",
+                    &head[..8]
+                )
+            };
+            fixture.refusal(&stale_line(
+                &fixture,
+                &fixture_approval_id(&fixture),
+                &cause,
+            ));
         }
     }
 }
@@ -1073,7 +1091,8 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert!(output.contains("review.current via"), "{output}");
         } else {
-            fixture.refusal("review.current: no current");
+            fixture.refusal("review.current: approval ");
+            fixture.refusal(" is stale: base merge ");
         }
     }
 }
@@ -1119,7 +1138,7 @@ fn links_declared_by_new_work_keep_approval_and_edits_to_existing_records_stale_
             let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
             assert!(output.contains("review.current via"), "{case}: {output}");
         } else {
-            fixture.refusal("review.current: no current");
+            fixture.refusal("\"link after approval\" changed .atelier/issues/");
         }
     }
 }
@@ -1209,7 +1228,7 @@ fn base_merge_resolutions_must_keep_the_blocker_and_child_the_base_added() {
                 "{output}"
             );
         } else {
-            fixture.refusal("review.current: no current");
+            fixture.refusal(" is stale: base merge ");
         }
     }
 }
@@ -1265,7 +1284,10 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
     git(fixture.path(), &["switch", "-q", &branch]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
     let (_, output) = cli(fixture.path(), &["merge", &owner, "--check"]);
-    assert!(output.contains("review.current: no current"), "{output}");
+    assert!(
+        output.contains("is stale: it predates the point where the branch left the base"),
+        "{output}"
+    );
 }
 
 #[test]
@@ -1309,7 +1331,7 @@ fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
     );
     // Adding a child edits the owner's children, which is reviewed scope.
     commit(fixture.path(), "new in-scope child after approval");
-    fixture.refusal("review.current: no current");
+    fixture.refusal("\"new in-scope child after approval\" changed .atelier/issues/");
 }
 
 #[test]
@@ -2947,6 +2969,17 @@ fn fixture_approval_id(fixture: &Fixture) -> String {
         .clone();
     id
 }
+/// The `review.current` line naming `approval` as stale for `cause`.
+fn stale_line(fixture: &Fixture, approval: &str, cause: &str) -> String {
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let pin = index.require_review(approval).unwrap().commit.clone();
+    format!(
+        "⚠ {id} review.current: approval {approval} @{} is stale: {cause}. Next: atelier review request {id}",
+        &pin[..8],
+        id = fixture.id
+    )
+}
 fn verdict(stdout: &str) -> &str {
     stdout.lines().last().unwrap_or_default()
 }
@@ -3159,7 +3192,18 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
         );
         assert!(out.contains(&format!("{line}\n  src.rs")), "{line}\n{out}");
         let (_, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-        assert!(checked.contains("review.current: no current"), "{checked}");
+        let cause = format!(
+            "base merge {} resolved or edited src.rs by hand",
+            &merge[..8]
+        );
+        assert!(
+            checked.contains(&stale_line(
+                &fixture,
+                &fixture_approval_id(&fixture),
+                &cause
+            )),
+            "{checked}"
+        );
     }
 }
 
@@ -3441,10 +3485,15 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     commit(fixture.path(), "dispositions");
 
     let refusal = format!(
-        "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+        "{}\n\
          ⚠ {id} findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request {id}\n\
          ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal, claims.reviewed)\n\
-         merge: refused — 2 checks (review.current, findings.disposed)\n"
+         merge: refused — 2 checks (review.current, findings.disposed)\n",
+        stale_line(
+            &fixture,
+            &fixture_approval_id(&fixture),
+            &format!("{} \"fix the findings\" changed src.rs", &fix[..8])
+        )
     );
     let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed && err.is_empty(), "{err}");
@@ -3604,8 +3653,8 @@ fn merge_check_on_a_diverged_base_also_reports_the_review_and_claim_gates() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, record fresh proof, then retry; a clean merge keeps the approval. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
-             ⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test> (also claims.reviewed). Next: atelier review request {id}\n\
+            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
+             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test> (also claims.reviewed). Next: atelier review request {id}\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in src.rs\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
              merge: refused — 4 checks (merge_diverged, review.current, findings.disposed, claims.reviewed)\n"
@@ -3741,4 +3790,207 @@ fn disposition_of_an_approval_says_it_is_not_a_finding() {
         err,
         format!("Error: {approval} is an approval, not a finding; a disposition settles a finding. Next: atelier review list {id}\n")
     );
+}
+
+/// What `merge --check`, `land` and `merge --sync` say about one approval
+/// that does not count (atelier-cisa): the check's line from `merge --check`,
+/// asserted to appear in `land` too with every printed fix run, and the sync
+/// report.
+fn approval_explained(fixture: &Fixture, line: &str) -> String {
+    // A done claim the approval does not cover folds into the line.
+    let folded = line.replace(". Next: ", " (also claims.reviewed). Next: ");
+    let shown = |out: &str| out.lines().any(|l| l == line || l == folded);
+    let (passed, out, _) = split(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(!passed && shown(&out), "{line}\n{out}");
+    assert_eq!(
+        next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &fixture.id, "--check"]),
+        1
+    );
+    let (passed, out) = cli(fixture.path(), &["land", &fixture.id]);
+    assert!(!passed && shown(&out), "{line}\n{out}");
+    let (_, out, err) = sync(fixture.path(), &fixture.id);
+    format!("{out}\n{err}")
+}
+
+#[test]
+fn gates_name_the_approval_a_later_commit_staled_and_the_commit() {
+    let fixture = Fixture::new();
+    let approval = fixture.approval("Reviewer");
+    fs::write(fixture.path().join("src.rs"), "tweaked after approval\n").unwrap();
+    commit(fixture.path(), "Tweak after approval");
+    let tweak = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let line = stale_line(
+        &fixture,
+        &approval,
+        &format!("{} \"Tweak after approval\" changed src.rs", &tweak[..8]),
+    );
+    let synced = approval_explained(&fixture, &line);
+    // The sync judges the same approval stale by the same commit.
+    assert!(
+        synced.contains(&format!(
+            "Approval needs fresh review: {approval} first went stale at {} (it was already stale before this sync). Review 1 path, then record a fresh approval:\n  src.rs",
+            &tweak[..8]
+        )),
+        "{synced}"
+    );
+}
+
+#[test]
+fn gates_name_the_base_merge_that_changed_an_in_scope_record_beyond_status() {
+    let fixture = Fixture::new();
+    let approval = fixture.approval("Reviewer");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let record = fixture
+        .path()
+        .join(format!(".atelier/issues/{}.md", fixture.id));
+    let text = fs::read_to_string(&record).unwrap();
+    fs::write(&record, text.replace("Ship change.", "Ship the change.")).unwrap();
+    commit(fixture.path(), "base edits the owner record");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    // Git merges it cleanly, yet the approved record changed beyond status.
+    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    let merge = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let path = format!(".atelier/issues/{}.md", fixture.id);
+    let line = stale_line(
+        &fixture,
+        &approval,
+        &format!(
+            "base merge {} changed in-scope record {path} beyond status",
+            &merge[..8]
+        ),
+    );
+    let synced = approval_explained(&fixture, &line);
+    assert!(
+        synced.contains(&format!(
+            "Approval needs fresh review: {approval} first went stale at {} (it was current before this sync). Review 1 path, then record a fresh approval:\n  {path}",
+            &merge[..8]
+        )),
+        "{synced}"
+    );
+}
+
+#[test]
+fn gates_name_an_approval_whose_identity_matches_a_git_author() {
+    let fixture = Fixture::new();
+    // Recording it warns that it will not count; the ID is the first line.
+    let approval = fixture.approval("Author");
+    let approval = approval.lines().next().unwrap().to_owned();
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let pin = index.require_review(&approval).unwrap().commit.clone();
+    let line = format!(
+        "⚠ {id} review.current: approval {approval} @{} by Author is not independent: the identity matches a Git author of the branch (authors: author <author@example.test>). Next: atelier review request {id}",
+        &pin[..8],
+        id = fixture.id
+    );
+    let synced = approval_explained(&fixture, &line);
+    assert!(
+        synced.contains(&format!(
+            "No independent approval covers {}'s scope yet: {approval} by Author is not independent, as the identity matches a Git author of the branch (author <author@example.test>).",
+            fixture.id
+        )),
+        "{synced}"
+    );
+    let listed = ok(fixture.path(), &["review", "list", &fixture.id]);
+    assert!(
+        listed.contains(&format!(
+            "Approval: ⚠ missing — {approval} @{} by Author is not independent: the identity matches a Git author of the branch",
+            &pin[..8]
+        )),
+        "{listed}"
+    );
+}
+
+/// A rerun receipt's Summary is the old receipt's Summary text with the
+/// rerun suffix, not the old receipt's whole body (atelier-3xq4).
+#[test]
+fn sync_rerun_receipt_summary_is_the_old_summary_with_the_rerun_suffix() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "test -f src.rs",
+        ("other.rs", "landed\n"),
+    );
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let rerun = index
+        .evidence_records()
+        .into_iter()
+        .find(|record| record.data.agent_identity.as_deref() == Some("atelier merge --sync"))
+        .unwrap_or_else(|| panic!("no rerun receipt: {out}"));
+    let text = fs::read_to_string(
+        fixture
+            .path()
+            .join(format!(".atelier/evidence/{}.md", rerun.header.id)),
+    )
+    .unwrap();
+    let body = text.split_once("\n---\n\n").unwrap().1;
+    assert!(
+        body.starts_with(
+            "## Summary\n\nScenario check (rerun after merging main)\n\n## Command\n\n"
+        ),
+        "{body}"
+    );
+    assert_eq!(body.matches("## Command").count(), 1, "{body}");
+    assert_eq!(body.matches("## Stdout").count(), 1, "{body}");
+}
+
+/// A receipt in the shape the sync before atelier-3xq4 left, its Summary
+/// nesting the old body with the suffix at the end, as in atelier-qmti, is
+/// rerun with its real summary and one suffix (atelier-ytks).
+#[test]
+fn sync_reruns_a_legacy_nested_receipt_with_its_real_summary_and_one_suffix() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "test -f src.rs",
+        ("other.rs", "landed\n"),
+    );
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let receipt = index
+        .evidence_records()
+        .into_iter()
+        .find(|record| record.data.command.is_some())
+        .unwrap()
+        .header
+        .id
+        .clone();
+    let file = fixture
+        .path()
+        .join(format!(".atelier/evidence/{receipt}.md"));
+    let text = fs::read_to_string(&file).unwrap();
+    let (front, body) = text.split_once("\n---\n\n").unwrap();
+    fs::write(
+        &file,
+        format!(
+            "{front}\n---\n\n## Summary\n\n{} (rerun after merging main)\n",
+            body.trim_end()
+        ),
+    )
+    .unwrap();
+    commit(fixture.path(), "a receipt in the legacy rerun shape");
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let rerun = index
+        .evidence_records()
+        .into_iter()
+        .find(|record| record.data.agent_identity.as_deref() == Some("atelier merge --sync"))
+        .unwrap_or_else(|| panic!("no rerun receipt: {out}"));
+    let text = fs::read_to_string(
+        fixture
+            .path()
+            .join(format!(".atelier/evidence/{}.md", rerun.header.id)),
+    )
+    .unwrap();
+    let body = text.split_once("\n---\n\n").unwrap().1;
+    assert!(
+        body.starts_with(
+            "## Summary\n\nScenario check (rerun after merging main)\n\n## Command\n\n"
+        ),
+        "{body}"
+    );
+    assert_eq!(body.matches("## Summary").count(), 1, "{body}");
 }

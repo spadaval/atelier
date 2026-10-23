@@ -3889,7 +3889,7 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
         !pass
-            && output.contains("review.current: no current independent approval")
+            && output.contains("review.current: no independent approval or trivial exemption")
             && output.contains("git merge main"),
         "{output}"
     );
@@ -6653,7 +6653,7 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
              ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ records committed\n\
@@ -6791,7 +6791,7 @@ fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
         format!(
             "⚠ {id} land_records_uncommitted: 6 tracker records differ from HEAD: {records} and 1 more; commit them with the work. Next: git add .atelier && git commit -m \"…\"\n\
              ⚠ {id} land_completion_dirty: done, but the checkout has 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`\n\
-             ⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
              ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
              land: refused — 3 checks (land_records_uncommitted, land_completion_dirty, review.current)\n"
         )
@@ -6896,7 +6896,7 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
     fs::write(f.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
     commit(f.path(), "invalid policy");
     let cause = "workflow_config_parse_error: .atelier/workflow.yaml: did not find expected node content at line 2 column 1, while parsing a flow node. Next: fix .atelier/workflow.yaml and commit it";
-    let review = format!("⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}");
+    let review = format!("⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}");
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass);
     assert_eq!(

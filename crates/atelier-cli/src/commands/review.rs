@@ -3,7 +3,7 @@ use crate::commands::git::{resolve, text};
 use crate::human_output::{count_noun, display_timestamp, local_date, short_commit};
 use anyhow::{bail, Result};
 use atelier_app::record_ref::RecordKind;
-use atelier_app::review_gate::{self, ApprovalState};
+use atelier_app::review_gate::{self, ApprovalState, NotCurrent};
 use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
 use atelier_core::{BaseExemption, FindingDecision, ReviewEvent, ReviewRecord};
 use std::collections::BTreeSet;
@@ -444,7 +444,6 @@ enum Judge<'r> {
     Branch {
         read: git::ReadContext<'r>,
         fork: String,
-        base_head: String,
         ids: BTreeSet<String>,
         authors: BTreeSet<String>,
     },
@@ -473,7 +472,6 @@ impl<'r> Judge<'r> {
                 return Ok(Judge::Branch {
                     read,
                     fork,
-                    base_head,
                     ids,
                     authors,
                 });
@@ -535,51 +533,47 @@ fn approval_name(record: &ReviewRecord) -> String {
 }
 
 /// The owner's approval state, from the gates' own functions: on its work
-/// branch `review_gate::approval_standing`, with the commits that made a
-/// stale approval stale from `review_gate::approval_stale_edges`; on the
-/// base, the newest approval `review_gate::approval_accepted` accepts.
+/// branch `review_gate::approval_standing`, which `review.current` also
+/// explains, with the commits that made a stale approval stale or the
+/// author an approval's identity matches; on the base, the newest approval
+/// `review_gate::approval_accepted` accepts.
 fn approval_lines(repo: &Path, index: &RecordIndex, owner: &str) -> Result<Vec<String>> {
     const MISSING: &str = "Approval: ⚠ missing — no independent approval or trivial exemption";
     let mut judge = Judge::new(repo, index, owner)?;
-    let Judge::Branch {
-        read,
-        fork,
-        base_head,
-        ids,
-        ..
-    } = &mut judge
-    else {
+    let Judge::Branch { read, fork, .. } = &mut judge else {
         return base_approval_line(&mut judge, index, owner).map(|line| vec![line]);
     };
     let mut lines = Vec::new();
-    match review_gate::approval_standing(index, read, owner, fork)? {
-        (ApprovalState::Current, Some(record)) => {
+    let standing = review_gate::approval_standing(index, read, owner, fork)?;
+    match (standing.state, standing.record, &standing.not_current) {
+        (ApprovalState::Current, Some(record), _) => {
             lines.push(format!("Approval: ✓ current — {}", approval_name(record)));
         }
-        (ApprovalState::Stale, Some(record)) => {
-            let edges =
-                review_gate::approval_stale_edges(read, &record.commit, ids, "HEAD", base_head)?;
-            if edges.is_empty() {
+        (ApprovalState::Stale, Some(record), Some(NotCurrent::Stale(edges))) => {
+            lines.push(format!(
+                "Approval: ⚠ stale — {}; changed since by {}:",
+                approval_name(record),
+                count_noun(edges.len(), "commit")
+            ));
+            for edge in edges {
                 lines.push(format!(
-                    "Approval: ⚠ stale — {}; it predates the point where the branch left the base",
-                    approval_name(record)
+                    "  {} {}: {}",
+                    short_commit(&edge.commit),
+                    edge.subject,
+                    listed_paths(&edge.paths)
                 ));
-            } else {
-                lines.push(format!(
-                    "Approval: ⚠ stale — {}; changed since by {}:",
-                    approval_name(record),
-                    count_noun(edges.len(), "commit")
-                ));
-                for (commit, paths) in edges {
-                    let subject = text(repo, &["log", "-1", "--format=%s", &commit])?;
-                    lines.push(format!(
-                        "  {} {subject}: {}",
-                        short_commit(&commit),
-                        listed_paths(&paths)
-                    ));
-                }
             }
         }
+        (ApprovalState::Stale, Some(record), _) => {
+            lines.push(format!(
+                "Approval: ⚠ stale — {}; it predates the point where the branch left the base",
+                approval_name(record)
+            ));
+        }
+        (_, Some(record), Some(NotCurrent::Author)) => lines.push(format!(
+            "Approval: ⚠ missing — {} is not independent: the identity matches a Git author of the branch",
+            approval_name(record)
+        )),
         _ => lines.push(MISSING.into()),
     }
     Ok(lines)
