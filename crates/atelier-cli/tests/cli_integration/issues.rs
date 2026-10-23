@@ -2468,7 +2468,8 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
     assert!(!success, "empty note should be rejected");
     assert!(stderr.contains("must not be empty"), "{stderr}");
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    // Notes are dated by the local day (human_output::local_date).
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let record = read_canonical_record(dir.path(), "issues", &issue_id);
     assert!(
         record.contains(&format!(
