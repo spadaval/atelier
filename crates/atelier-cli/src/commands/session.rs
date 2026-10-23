@@ -271,7 +271,7 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
         (None, _) => None,
     };
     let behind_note = behind.map(|(base, count)| format!(
-        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval.",
+        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
         crate::human_output::count_noun(count, "commit")
     ));
     index.validate_policy(&source.policy, repo)?;

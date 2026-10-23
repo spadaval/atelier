@@ -104,10 +104,15 @@ Findings: 21 disposed, 1 open
 On the owner's work branch, while it holds commits the base does not, the
 approval is `✓ current`, `⚠ stale` or `⚠ missing` as `merge`'s
 `review.current` judges it at the branch tip, and a stale approval lists the
-commits that made it stale with the paths a new review has to read. Merged
+commits that made it stale with the paths a new review has to read, from
+the same `review_gate::approval_standing` that explains a failed
+`review.current` in the gates. With no independent approval, the newest
+approval by an author is named:
+`Approval: ⚠ missing — <id> @<pin> by <identity> is not independent: the
+identity matches a Git author of the branch`. Merged
 work is judged on the base as `land` judges history: `✓ accepted on <base>`
 or `⚠ not accepted on <base>`. The views read whichever records the checkout
-has. Why an approval is not current is not shown yet (atelier-cisa). A
+has. A
 finding is open until it has a disposition; its chain lists every
 disposition, the latest last.
 
@@ -140,8 +145,8 @@ task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind
   at the branch head, `⚠ approval stale` when an independent approval or
   trivial exemption exists but later commits changed what it covers (see
   [approval freshness](reviews-and-merge.md#approval-freshness)), and
-  `⚠ not approved` otherwise. The stale cause is not shown yet
-  (atelier-cisa).
+  `⚠ not approved` otherwise. `review list <id>` and `merge <id> --check`
+  name the cause.
 - `behind <n>`: base commits the branch does not have.
 - `proof at head` when every done item in the owner's scope, except
   superseded ones, has fresh passing proof at the branch head; otherwise
@@ -283,7 +288,7 @@ the check, the cause and the command that fixes it; then the passes,
 collapsed; then the verdict:
 
 ```
-⚠ atelier-43m1 review.current: no current independent approval or trivial exemption; authors: sumeet <sumeet@example.com> (also claims.reviewed). Next: atelier review request atelier-43m1
+⚠ atelier-43m1 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Fix the findings" changed src/gate.rs (also claims.reviewed). Next: atelier review request atelier-43m1
 ⚠ atelier-43m1 findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request atelier-43m1
 ⚠ atelier-jb2t blockers.none_open: done but blocked by atelier-ihns todo high Show the between-missions state (also atelier-jb2t blockers.transitive_none_open). Next: start it with `atelier start atelier-ihns`, or drop the link with `atelier issue unlink atelier-jb2t atelier-ihns --role blocked_by` if it is wrong
 ✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)
@@ -291,6 +296,10 @@ collapsed; then the verdict:
 merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed, atelier-jb2t blockers.none_open, atelier-jb2t blockers.transitive_none_open)
 ```
 
+- `review.current` names the approval it considered and why it does not
+  count: stale by a commit or merge (with paths), predating the branch's
+  fork, or recorded by an identity that matches a Git author (see
+  [approval freshness](reviews-and-merge.md#approval-freshness)).
 - The owner's failures lead, `review.current` first since other lines point
   to it, then other records' in the order the gates ran. A check on the owner
   is named bare in the verdict; a check on another record is

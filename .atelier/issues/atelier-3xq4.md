@@ -14,9 +14,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Rerun receipts from merge --sync nest the old receipt's whole body in their summary"
-updated_at: "2026-10-23T15:19:35.075188452+00:00"
+updated_at: "2026-10-23T15:32:26.014908348+00:00"
 ---
 
 ## Goal

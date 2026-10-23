@@ -3887,7 +3887,7 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
         !pass
-            && output.contains("review.current: no current independent approval")
+            && output.contains("review.current: no independent approval or trivial exemption")
             && output.contains("git merge main"),
         "{output}"
     );
@@ -6645,7 +6645,7 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
              ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ records committed\n\
