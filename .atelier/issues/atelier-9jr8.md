@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Give each failed land check its item, reason and fix command"
-updated_at: "2026-10-17T01:10:57.980264087+00:00"
+updated_at: "2026-10-23T14:14:37.183947601+00:00"
 ---
 
 ## Goal
@@ -52,3 +52,7 @@ atelier-43m1 review.current: no current independent approval or explicit trivial
 ## Context
 
 The reasons come from `review_gate` (crates/atelier-app/src/review_gate.rs). The `merge --check` gate-reason item in this mission shares these reasons, so they should be changed once at the source.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. land_invariants_unmet unchanged (session.rs:426-457); verdict always counts 1 check (session.rs:612-619) even with 3 failures; transitive and direct blocker lines both print; review.current lists the same author 3 ways (dedupe by email, review_gate.rs:938, add_author :1279).

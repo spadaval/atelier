@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Say which approval merge --check considered and why it is not current"
-updated_at: "2026-10-17T19:00:36.346655411+00:00"
+updated_at: "2026-10-23T14:14:22.208994902+00:00"
 ---
 
 ## Goal
@@ -46,3 +46,4 @@ The real case: a clean `git merge master` into task/atelier-bw0b (master had edi
 ## Notes
 
 - 2026-10-17 [note] Retro 2026-10-17: o3lm 06:25Z and 07:47Z, merge --check said 'resolution needs fresh independent approval' without naming the fix commit the approval predates; the orchestrator had to rediscover the re-approve step each time.
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done only in merge --sync: merge_sync.rs:362-450 report_approval names the stale approval via approval_stale_edges (review_gate.rs:235). land and merge --check print only 'no current independent approval'. Author-identity rejection is silent everywhere (independent :688; report_approval skips it :399-400). 'A clean merge keeps the approval' is wrong in merge.rs:255,346,485 and session.rs:259 and human-cli-output.md:102.

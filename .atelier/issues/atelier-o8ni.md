@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Make evidence show brief: one transcript, no empty fields, freshness"
-updated_at: "2026-10-17T01:10:57.975261389+00:00"
+updated_at: "2026-10-23T14:14:22.802461530+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,7 @@ updated_at: "2026-10-17T01:10:57.975261389+00:00"
 ## Context
 
 This follows the brief-by-default and `--full` rule that atelier-7u4o sets for `issue show`.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: short IDs resolve, quiet show prints '<id> <result>'. Still: output twice (print_record_with_targets :771 then print_output_summary), (none) fields, Created/Updated, no freshness, no --full. Keep 'recorded' in the title line (human-cli-output.md:73).

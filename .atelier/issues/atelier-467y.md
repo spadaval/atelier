@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Give land's Stop-hook refusal one code and one recovery step"
-updated_at: "2026-10-17T08:21:38.945007213+00:00"
+updated_at: "2026-10-23T14:14:23.101068772+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ Found in review of atelier-91w1:
 - A hook block reason carries exactly one recovery step.
 - Only an uncommitted-record failure is coded `land_records_uncommitted`; other snapshot failures keep their own message.
 - Tests cover a hook refusal and a Git failure during land.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed (session.rs:636 trailer); records_uncommitted (session.rs:51-57) labels any error, Git failures included, as land_records_uncommitted.

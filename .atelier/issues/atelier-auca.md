@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Stop evidence records ending with a trailing blank line"
-updated_at: "2026-10-17T19:00:36.342496349+00:00"
+updated_at: "2026-10-23T14:14:37.727140744+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,7 @@ Records written by `evidence record` end with exactly one newline; `git diff --c
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. 533 of 590 receipts end with a blank line: the transcript keeps its final newline (evidence.rs:368 -> lib.rs:2030) and render_evidence_body returns it untrimmed (lib.rs:2013-2016).

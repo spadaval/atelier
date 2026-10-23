@@ -75,9 +75,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Make every gate end in a verdict, with each failure's cause and fix"
-updated_at: "2026-10-17T01:44:17.482012585+00:00"
+updated_at: "2026-10-23T14:14:38.349287364+00:00"
 ---
 
 ## Outcome
@@ -102,3 +102,22 @@ Evidence keeps the tail of a failing command and can be listed per item. Review 
 ## Background
 
 Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come from that mission's six-surface CLI audit; see atelier-o3lm's Background for the method and the transcript scripts. The output contract (atelier-o3lm S1, atelier-i2qq) and ADR 0022 (atelier-bw0b) govern how output looks. Where an item here rewrites the same renderer as an atelier-o3lm or atelier-1w8c item, it is blocked by that item. The 2026-10-16 transcript retrospective found gate refusals that named no fix to be the most expensive friction after review churn.
+
+## Notes
+
+- 2026-10-23 [decision] Pending review (S5, atelier-i80r): the Stop hook reports instead of blocking when it runs on the owner's own work branch and every failed check is review.current or claims.reviewed with no open finding; land itself still refuses.
+  Reason: Needs no new record, and an agent that has requested review has nothing to do but wait; findings or any other failure still need action now.
+  Rejected: A review-request record (record-format change); the owner's review status (close moves the owner past it).
+- 2026-10-23 [decision] Records-only relaxation (S5, atelier-mp6v) applies on the base branch only.
+  Reason: S5 scopes it to the base; on a work branch, uncommitted records are part of reviewed work and should be committed with it.
+  Rejected: Relaxing it on work branches too.
+- 2026-10-23 [decision] Review titles (S4, atelier-hulj) are generated from event kind, owner and short pin; existing records are not rewritten.
+  Reason: Stops repeating the body without a schema change or a migration.
+  Rejected: Dropping the title (schema change); capping the summary (still repeats it).
+- 2026-10-23 [decision] A recorded fail from evidence record exits 0; its verdict line names the result (S3, atelier-3ekh).
+  Reason: Recording succeeded; the result is data, like merge --sync's 'synced — approval needs fresh review'. The gate that cares (land/merge) refuses on the failure.
+  Rejected: Exit non-zero on a recorded fail.
+- 2026-10-23 [decision] Existing evidence receipts are not rewritten when passing captures change to a summary (S3, atelier-57wj).
+  Reason: Receipts are committed proof; rewriting them changes history for ~2 MB of savings that new receipts stop growing anyway.
+  Rejected: Migrating old pass receipts.
+- 2026-10-23 [note] 2026-10-23 plan: regroomed all 31 items against master ff7cc896 (dated notes on each). atelier-6wes superseded (done in 1a9d6b9c); the rest still needed, several rescoped. Success criteria unchanged. Increments: atelier-h1nc (S1 verdicts and renderer: 9jr8, 6rh7, bvl3, 2tux), atelier-dg3h (S3 receipt shape: bphy, 57wj, auca), atelier-phfo (S4 review views: h6o4, 3u2u, 093h, jw1n, hulj, uv5d, d8ku) run first in parallel on disjoint files. Then atelier-imlh (S2: cisa) and atelier-0uaj (S1 preconditions: kiry, yrlj, ns04, 7ts2, grsi, y0en) after h1nc, atelier-l7nz (S3 views: 3ekh, o8ni, u0ig, b05y) after dg3h, and atelier-buqu (S5 hook: ft88, 467y, u4ql, mp6v, i80r) after 0uaj. Acceptance and S6 count: atelier-1o56.

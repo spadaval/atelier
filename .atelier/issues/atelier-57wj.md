@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Store a summary of passing command output in evidence, not the full log"
-updated_at: "2026-10-17T19:00:36.343067865+00:00"
+updated_at: "2026-10-23T14:14:37.648780001+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,7 @@ A passing `evidence record` stores the command, exit status, commit, a test-coun
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168). Must stay compatible with atelier-bphy (keep the tail of failing output).
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Passes store the same 4 KiB streams as fails (evidence.rs:336, lib.rs:2030); 562 of 590 receipts are passes (2.1 MB). Do not rewrite existing receipts (atelier-dg3h scope). Lands with or after bphy.

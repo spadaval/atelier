@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Report what land checked and the next step when it passes"
-updated_at: "2026-10-17T01:10:57.980572352+00:00"
+updated_at: "2026-10-23T14:14:37.414870698+00:00"
 ---
 
 ## Goal
@@ -45,3 +45,7 @@ Landing checks passed. No commits or records created.
 ## Context
 
 crates/atelier-cli/src/commands/session.rs:485-490, 585, and `git::check_base_commits`. The `prime` reference at session.rs:487 is not in atelier-sdb0's doc sweep list.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Pass prints 'Owner: X done. In-progress work can hand off…' (session.rs:376) then 'Landing checks passed…' (:476) then 'land: passed'. The prime reference is already gone. Share the gate renderer with 9jr8.

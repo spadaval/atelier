@@ -18,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show review list as one readable line per event, in time order"
-updated_at: "2026-10-17T01:10:57.977741388+00:00"
+updated_at: "2026-10-23T14:14:37.804435249+00:00"
 ---
 
 ## Goal
@@ -47,3 +47,7 @@ Each row also repeats the owner given as the filter, prints the whole multi-para
 ## Context
 
 atelier-sdb0 (status shows the owner's reviews) should reuse this renderer. ADR 0022 Decision 3.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: short IDs and unknown IDs now resolve (review.rs:139; drop those claims). Still: rows use {:?} (review.rs:167-170), multi-line summaries spill, ID order not time order, no pin/date, owner column repeated, a known owner with no events prints nothing. Reuse the renderer at status.rs:323 (also {:?}). 'prime/status' is now just status.

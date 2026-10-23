@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Stop the Stop hook pushing commits on master for uncommitted records alone"
-updated_at: "2026-10-16T23:52:05.622714060+00:00"
+updated_at: "2026-10-23T14:14:23.249382788+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,7 @@ On the base branch, when the only failed invariant is uncommitted canonical reco
 ## Unknowns
 
 Whether the same relaxation should apply on work branches, where uncommitted records usually belong with the work in progress.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still accurate, but the quoted message is outdated (now 'land_records_uncommitted: … differs from pinned HEAD'). read_record_files aborts land_checked (session.rs ~205) before other checks, so it needs land to report uncommitted records as one failure among all (atelier-0uaj) first. Decided on atelier-rc8j: the relaxation applies on the base only.

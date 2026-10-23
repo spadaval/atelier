@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Say what review event was recorded and warn on an author identity"
-updated_at: "2026-10-17T01:10:57.977408887+00:00"
+updated_at: "2026-10-23T14:14:37.959182686+00:00"
 ---
 
 ## Goal
@@ -44,3 +44,7 @@ It doesn't say whether the event was a finding or an approval, which owner it ta
 - An approval, or a defer/no_action disposition, whose identity matches a substantive Git author is still recorded but prints `⚠ identity matches a Git author; this will not satisfy review.current` (or `findings.disposed`). Use the same author matching as review_gate.rs.
 - The defer error reads `DEFER requires --follow-up <issue-id>`.
 - `--quiet` still prints only the ID. Tests cover the warning and each kind's line.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Every kind prints 'Review event: … Commit this record…' (review.rs:68); no author warning; defer error doesn't name --follow-up. Use review_gate::author_identities (:645) and make independent (:688) pub rather than copying.

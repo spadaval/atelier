@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Report a pending review from the Stop hook instead of failing land"
-updated_at: "2026-10-17T19:00:36.348998575+00:00"
+updated_at: "2026-10-23T14:14:23.323184304+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,7 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 How the hook knows a review is in flight versus forgotten; a time bound or a 'review requested' record may be needed.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Decided on atelier-rc8j: no new record; the hook treats a refusal as a pending review when it is on the owner's own work branch and every failed check is review.current or claims.reviewed with no open finding; land still exits non-zero.

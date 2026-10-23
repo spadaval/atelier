@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Keep Stop-hook adapter errors apart from landing failures"
-updated_at: "2026-10-17T01:10:57.978702662+00:00"
+updated_at: "2026-10-23T14:14:23.025856246+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,7 @@ Every real block reads `…then retry.. Fix` with a double period, and ends in s
 - The block reason is the land error verbatim, with no double period and no static trailer.
 - SessionStart advice matches the error class.
 - Hook tests cover garbage input, missing `cwd`, the wrong event and a real failure.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Payload errors from read_hook_payload (session.rs:482-495) block as 'Atelier landing failed: …'; refusal text gets a double period and static trailer (session.rs:636). SessionStart bad cwd advises atelier check (status.rs:32-35). Overlaps atelier-467y; same branch.

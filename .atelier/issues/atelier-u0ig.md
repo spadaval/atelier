@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Filter evidence list by item and show freshness and a limit"
-updated_at: "2026-10-17T01:10:57.974957341+00:00"
+updated_at: "2026-10-23T14:14:22.876999368+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ Agents work around it. In astromech, 5 of 6 `evidence list` runs were `| grep <i
 ## Context
 
 atelier-sdb0 shows owner evidence freshness in status. atelier-et6q will name criteria on evidence, and this view should leave room for them.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. List has only --result (main.rs:684); fixed limit 20 (evidence.rs:20); count printed 3 times (:660-695); no freshness mark. Use evidence_freshness (evidence_is_fresh :58, newest_failure :190) in one helper shared with o8ni.

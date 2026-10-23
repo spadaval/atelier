@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show failing merge gates first, each with its fix, then a verdict"
-updated_at: "2026-10-17T01:10:57.976480424+00:00"
+updated_at: "2026-10-23T14:14:37.299258459+00:00"
 ---
 
 ## Goal
@@ -44,3 +44,7 @@ updated_at: "2026-10-17T01:10:57.976480424+00:00"
 ## Context
 
 In the cross-cutting audit, `merge <id> --check | grep -v ^pass` is the most repeated pipe in the transcripts (92 runs), plus 23 runs that grep `FAIL|Error|Merged`. In this repository, 25 of 38 runs were piped. `land`'s `land_invariants_unmet` prints the same gate reasons, so it benefits from the same changes.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. merge.rs:615-642 prints all gates alphabetically; merge --check has no verdict line (ends 'Error: merge blocked: …', merge.rs:709). New since written: claims.reviewed FAIL (merge.rs:598-614) repeats review.current's cause in ~400 chars and reads 'If X is in X's scope'; fold it when causes match. Duplicate reason dedupe review_gate.rs:1072-1087, empty 'completion blockers: ' :1166, 'EXPLICIT TRIVIAL EXEMPTION' :945, per-finding reason :1019. Ignore this body's --json remark: leave --json untouched (ADR 0022).

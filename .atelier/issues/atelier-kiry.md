@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Evaluate every gate in merge --check even when a precondition fails"
-updated_at: "2026-10-17T01:10:57.976180364+00:00"
+updated_at: "2026-10-23T14:14:22.282712251+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,7 @@ updated_at: "2026-10-17T01:10:57.976180364+00:00"
 ## Unknowns
 
 Which preconditions can't be turned into gates because evaluating the gates needs them (for example, no recorded work branch at all).
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed, and S1 also covers land: merge_diverged bails at merge.rs:478-486 before review_gate::evaluate :535; uncommitted records bail in owned_branch :408, branch mismatch :420. Land bails in land_checked session.rs:339-362 (completion_dirty, branch_mismatch, base_mismatch) before evaluate_session. Make both report preconditions as gate failures and keep evaluating.

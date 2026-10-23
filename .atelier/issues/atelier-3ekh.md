@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Print a short confirmation after evidence record"
-updated_at: "2026-10-17T01:36:28.791554342+00:00"
+updated_at: "2026-10-23T14:14:22.729529174+00:00"
 ---
 
 ## Goal
@@ -35,3 +35,4 @@ updated_at: "2026-10-17T01:36:28.791554342+00:00"
 ## Notes
 
 - 2026-10-17 [note] From the 2026-10-16 transcript retrospective: because a failing capture exits 0, `atelier evidence record … -- <cmd> && …` chains kept going after a failed test, and in one case the next step's hard-coded summary said the suite passes (atelier repo, nextest exit 100). Decide whether a recorded failing capture should exit nonzero, as distinct from a refused capture.
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done by policy: human-cli-output.md Verdict Line now names evidence record. print_new_record (evidence.rs:761) still prints the full 48-line record, with streams twice. Decided on atelier-rc8j: a recorded fail exits 0 (recording succeeded) and the verdict line names the result; quiet output stays the ID.

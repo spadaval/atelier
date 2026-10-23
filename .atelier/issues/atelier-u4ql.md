@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Say reinstall atelier when records need a newer binary"
-updated_at: "2026-10-17T19:00:36.340066193+00:00"
+updated_at: "2026-10-23T14:14:23.175367324+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,7 @@ When a record's schema version or field is newer than the running binary support
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. schema_version check is exact equality (atelier-records lib.rs:811-817, review.rs:79-83); status and hook advise 'atelier check'. Scope to version numbers (higher than supported -> reinstall); an unknown field does not prove a newer binary.

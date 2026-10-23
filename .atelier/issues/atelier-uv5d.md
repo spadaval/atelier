@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show review state in review list <id>, with findings under dispositions"
-updated_at: "2026-10-17T01:10:57.978370312+00:00"
+updated_at: "2026-10-23T14:14:38.193124038+00:00"
 ---
 
 ## Goal
@@ -46,3 +46,7 @@ Other events: 3 review accounts (atelier-4dbb, atelier-dgmt, atelier-qdg9)
 ## Context
 
 Depends on the row format from the review-list item. The stale reason comes from the "which approval merge --check considered" item. atelier-sdb0 shows recent reviews in status, and this is the full view behind it. In transcripts, 4 of 5 `review list`/`review show` runs were piped to `head`.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Build from review_gate::approval_state (review_gate.rs:314) and approval_stale_edges (:235), as status does (git.rs:1045); review_request.rs HistoryLine already pairs findings with dispositions. Show stale edges, not atelier-cisa's reason text (later increment atelier-imlh).

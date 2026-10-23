@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-10-23T14:13:50.448046359+00:00"
+status: "superseded"
 title: "Reject or support review targets in evidence attach"
-updated_at: "2026-10-17T07:12:11.979255862+00:00"
+updated_at: "2026-10-23T14:13:50.448046359+00:00"
 ---
 
 ## Goal
@@ -28,3 +29,7 @@ updated_at: "2026-10-17T07:12:11.979255862+00:00"
 
 - `evidence attach` either attaches to a review target or refuses it up front, with a message naming the kinds it accepts.
 - A CLI test covers a review target.
+
+## Close Reason
+
+Done on master before rc8j started: since 1a9d6b9c, evidence attach limits target kinds to issue and evidence and rejects review with the shared invalid-value error, pinned by tests/cli_integration/record_refs.rs:502 (rc8j regroom 2026-10-23).

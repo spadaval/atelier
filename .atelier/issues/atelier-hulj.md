@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Stop review records repeating their body in the title"
-updated_at: "2026-10-17T19:00:36.354527404+00:00"
+updated_at: "2026-10-23T14:14:38.114067759+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,7 @@ New finding, disposition and approval records carry a short title (or none) and 
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Title = summary first line (crates/atelier-records/src/review.rs:266,298); 1147/1149 records repeat the body. Decided on atelier-rc8j: generate the title from event kind, owner and short pin (no schema change); do not rewrite existing records.

@@ -15,9 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Give --commit and leftover parser errors the shared invalid-value form"
-updated_at: "2026-10-17T10:00:37.372029871+00:00"
+updated_at: "2026-10-23T14:14:38.271902219+00:00"
 ---
 
 ## Goal
@@ -30,3 +30,7 @@ Mission atelier-o3lm validation (evidence atelier-ba8q) found invalid values sti
 
 - These use `Invalid <field> '<value>'. Valid values: …` and exit 2; an unknown commit names the commit and one recovery step.
 - Tests cover each.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. review --commit zzz: 'review commit must be a full Git commit ID'; unknown full SHA leaks raw git merge-base error; prune --retention-days abc and issue list --limit -3 print clap wording (exit 2). parse_limit at main.rs:465 is the model.

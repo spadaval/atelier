@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Point land <id> at the owner's branch, and name unknown IDs"
-updated_at: "2026-10-17T01:10:57.979960270+00:00"
+updated_at: "2026-10-23T14:14:22.430204145+00:00"
 ---
 
 ## Goal
@@ -39,3 +39,7 @@ updated_at: "2026-10-17T01:10:57.979960270+00:00"
 ## Context
 
 `owner()` is at crates/atelier-cli/src/commands/session.rs:11-36 and the untraceable messages at 450 and 528-530. Owner branches are found with `git::branch_lines_for` (crates/atelier-cli/src/commands/git.rs:465).
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: unknown IDs are named. Still: land X on the base and land <mission> both say 'has no committed branch metadata; run atelier start' (session.rs:341); unowned hints say 'atelier start <id>' (:104,140,403,406,420). Use git::branch_lines_for; mirror merge_mission (merge.rs:415).

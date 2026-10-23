@@ -16,9 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Make review show a brief Markdown view with short IDs and linked events"
-updated_at: "2026-10-17T01:10:57.978059331+00:00"
+updated_at: "2026-10-23T14:14:37.881870958+00:00"
 ---
 
 ## Goal
@@ -31,3 +31,7 @@ updated_at: "2026-10-17T01:10:57.978059331+00:00"
 - A finding also lists its disposition chain (`→ fix_now atelier-5an0 @cf6d13d9 "Changed to goodbye"`), and a disposition shows the first line of its finding.
 - Short review IDs resolve in `review show` and `review disposition`.
 - No `--json` flag is added. Tests cover a finding with two dispositions and short-ID lookup.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: short IDs resolve in show (review.rs:190) and disposition (:112); drop that bullet. Still prints pretty JSON (review.rs:204).

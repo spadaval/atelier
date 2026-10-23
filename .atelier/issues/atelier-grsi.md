@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Name every uncommitted record and the git command in land_records_uncommitted"
-updated_at: "2026-10-17T01:10:57.980882902+00:00"
+updated_at: "2026-10-23T14:14:22.579036617+00:00"
 ---
 
 ## Goal
@@ -41,3 +41,7 @@ Commit canonical records and policy with the work they describe, then retry.
 ## Context
 
 The message is built in crates/atelier-cli/src/commands/session.rs:40-43 and 306-308, from `CommittedSnapshot::verified_working_paths` and `read_record_files` (crates/atelier-app/src/committed_snapshot.rs). atelier-mp6v changes whether the hook blocks on master. This item changes the message everywhere.
+
+## Notes
+
+- 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: one code now (session.rs:51-57). Still names only the first path, with 'path, bytes or mode differs from pinned HEAD' (committed_snapshot.rs:244/288).
