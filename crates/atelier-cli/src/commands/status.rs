@@ -318,12 +318,7 @@ fn reviews(index: &RecordIndex, scope: &BTreeSet<String>) -> Vec<String> {
     reviews
         .into_iter()
         .take(RECORDS_SHOWN)
-        .map(|review| {
-            format!(
-                "{} for {} — {:?}: {}",
-                review.header.id, review.target, review.event, review.summary
-            )
-        })
+        .map(|review| commands::review::event_row(review, None))
         .collect()
 }
 

@@ -395,6 +395,19 @@ pub enum ReviewEvent {
     TrivialExemption,
 }
 
+impl ReviewEvent {
+    /// The event's stored name, as in the record's `event` field.
+    pub fn name(&self) -> &'static str {
+        match self {
+            ReviewEvent::Review => "review",
+            ReviewEvent::Approval => "approval",
+            ReviewEvent::Finding { .. } => "finding",
+            ReviewEvent::Disposition { .. } => "disposition",
+            ReviewEvent::TrivialExemption => "trivial_exemption",
+        }
+    }
+}
+
 /// Acceptance content is typed by work kind; lifecycle notes are separate.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IssueSections {

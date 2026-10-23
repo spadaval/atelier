@@ -317,9 +317,21 @@ pub fn approval_state(
     owner: &str,
     fork_point: &str,
 ) -> Result<ApprovalState> {
+    Ok(approval_standing(index, read, owner, fork_point)?.0)
+}
+
+/// [`approval_state`] with the record it rests on: the current approval or
+/// exemption, or for a stale state the newest stale one, so a view can name
+/// it (atelier-uv5d). `None` while the state is missing.
+pub fn approval_standing<'i>(
+    index: &'i RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    owner: &str,
+    fork_point: &str,
+) -> Result<(ApprovalState, Option<&'i ReviewRecord>)> {
     let ids = scope(index, owner)?;
     let authors = author_identities(read, fork_point, &ids)?;
-    let mut state = ApprovalState::Missing;
+    let mut stale: Option<&ReviewRecord> = None;
     for record in index.reviews().filter(|record| record.target == owner) {
         let accepted_identity = match record.event {
             ReviewEvent::TrivialExemption => true,
@@ -330,11 +342,19 @@ pub fn approval_state(
             continue;
         }
         if current_on_branch(read, record, &ids, fork_point) {
-            return Ok(ApprovalState::Current);
+            return Ok((ApprovalState::Current, Some(record)));
         }
-        state = ApprovalState::Stale;
+        if stale.is_none_or(|newest| {
+            (record.header.created_at, &record.header.id)
+                > (newest.header.created_at, &newest.header.id)
+        }) {
+            stale = Some(record);
+        }
     }
-    Ok(state)
+    Ok(match stale {
+        Some(record) => (ApprovalState::Stale, Some(record)),
+        None => (ApprovalState::Missing, None),
+    })
 }
 /// Whether an approval or trivial exemption is one `merge` would accept,
 /// judged from history as the base's claim gates judge it (atelier-n90q): an
@@ -685,7 +705,9 @@ fn author_identities_to(
 fn normalize(identity: &str) -> String {
     identity.trim().to_lowercase()
 }
-fn independent(record: &ReviewRecord, authors: &BTreeSet<String>) -> bool {
+/// Whether `record`'s identity is none of `authors`, compared as
+/// `review.current` compares them: trimmed and case-insensitive.
+pub fn independent(record: &ReviewRecord, authors: &BTreeSet<String>) -> bool {
     !authors.contains(&normalize(&record.identity))
 }
 fn ancestor(read: &mut git::ReadContext<'_>, earlier: &str, later: &str) -> bool {
