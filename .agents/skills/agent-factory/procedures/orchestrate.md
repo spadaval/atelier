@@ -59,7 +59,7 @@ For spikes or competing implementations, add the candidate fields from
 
 ## Review and Validation
 
-You arrange review. Every non-trivial code change, including code you wrote
+You arrange review. Every non-trivial change, including work you wrote
 yourself, gets an independent reviewer before it counts as done (see
 [Independent Review](../SKILL.md#independent-review)). Batch reviews per
 slice, per PR, or per increment, whichever keeps the diff reviewable. You have
@@ -172,7 +172,7 @@ Close against demonstrated outcomes, not issue count:
 
 1. Run the proof for each acceptance claim fresh, with independent validation
    where the scaling rules call for it.
-2. Confirm all non-trivial code has been independently reviewed.
+2. Confirm all non-trivial changes have been independently reviewed.
 3. Confirm no debug residue, temporary breakage, or orphaned paths remain,
    and that branches and worktrees created for the work are removed or
    archived.

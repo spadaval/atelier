@@ -105,7 +105,7 @@ something observable.
 | Trivial fix | A one-line typo or formatting fix in a repo with a tracker | Fix, verify, commit. No tracker items, strategy, or reviewer. |
 | Small contained change | A single-session change of about 50 lines | No strategy doc or increments. Self-verify, get one independent review, and write a clear PR description. |
 | No Atelier | The repository does not use Atelier, or the agent cannot run it | Proceed with a plan in the PR or a file. Offer to install Atelier for mission-sized work; do not block on it. |
-| Needless delegation | The orchestrator already holds the context for a small task | Do it directly, and still get independent review of non-trivial code. |
+| Needless delegation | The orchestrator already holds the context for a small task | Do it directly, and still get independent review of non-trivial changes. |
 | Distant certainty | A planner is asked for a complete multi-increment task list | Plan outcomes, and create issues only up to the nearest evidence boundary. |
 | Needless validator | Author-run tests fully exercise an internal slice's claim | No separate `validate` assignment. Review checks the proof. |
 | Worktree per assignment | An orchestrator dispatches three sequential slices and a reviewer | Sequential slices share one checkout, the reviewer reads the diff without a worktree, and closeout removes everything created. |

@@ -51,7 +51,7 @@ Throughout:
 
 ## Review
 
-Non-trivial code goes to an independent reviewer (see
+Non-trivial changes go to an independent reviewer (see
 [Independent Review](../SKILL.md#independent-review)). Under an orchestrator,
 the orchestrator arranges review, so report your review status as
 outstanding. Working alone, spawn a reviewer yourself and give it the diff,
