@@ -4,6 +4,9 @@ id: "atelier-h1nc"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-h1nc
 priority: "P1"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Land and merge --check end in a verdict, failures first with a fix"
-updated_at: "2026-10-23T14:13:47.238229194+00:00"
+updated_at: "2026-10-23T14:14:59.904505948+00:00"
 ---
 
 ## Goal
