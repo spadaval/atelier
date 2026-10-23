@@ -4,6 +4,9 @@ id: "atelier-dg3h"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-dg3h
 priority: "P1"
 relationships:
   blocks: []
@@ -21,9 +24,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Evidence receipts keep the failure tail and summarize passes"
-updated_at: "2026-10-23T14:13:47.492658520+00:00"
+updated_at: "2026-10-23T14:15:01.277523976+00:00"
 ---
 
 ## Goal
