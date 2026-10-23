@@ -1,6 +1,8 @@
 //! Boundary scenarios for immutable review records and gated integration.
 use std::{fs, path::Path, process::Command};
 use tempfile::{tempdir, TempDir};
+#[path = "support/next_steps.rs"]
+mod next_steps;
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -3445,6 +3447,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed && err.is_empty(), "{err}");
     assert_eq!(out, refusal);
+    assert_eq!(next_steps::assert_fixes_run(fixture.path(), &out), 2);
     // Quiet keeps stdout empty and says the same on stderr.
     let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check", "-q"]);
     assert!(!passed && out.is_empty(), "{out}");
@@ -3563,9 +3566,12 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
         format!(
             "⚠ {id} findings.disposed: {first} (also claims.reviewed). Next: {first_fix}\n\
              ⚠ {id} findings.disposed: {second}. Next: {second_fix}\n\
-             ⚠ {child} work.terminal: todo, open in {id}'s scope. Next: `atelier issue transition {child} start`, then `atelier issue transition {child} close --reason \"…\"`\n\
+             ⚠ {child} work.terminal: todo, open in {id}'s scope. Next: atelier issue transition {child} supersede --reason \"…\"\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, review.current via {approval})\n\
              merge: refused — 3 checks (findings.disposed, work.terminal, claims.reviewed)\n"
         )
     );
+    // Each printed fix runs as printed: the review request, the disposition,
+    // and the transition that retires the open child under its closed owner.
+    assert_eq!(next_steps::assert_fixes_run(fixture.path(), &out), 3);
 }

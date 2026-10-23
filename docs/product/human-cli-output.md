@@ -285,7 +285,7 @@ collapsed; then the verdict:
 ```
 ⚠ atelier-43m1 review.current: no current independent approval or trivial exemption; authors: sumeet <sumeet@example.com> (also claims.reviewed). Next: atelier review request atelier-43m1
 ⚠ atelier-43m1 findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request atelier-43m1
-⚠ atelier-jb2t blockers.none_open: done but blocked by atelier-ihns todo high Show the between-missions state (also atelier-jb2t blockers.transitive_none_open). Next: start it with `atelier start atelier-ihns`, or drop the link with `atelier issue unlink atelier-jb2t atelier-ihns` if it is wrong
+⚠ atelier-jb2t blockers.none_open: done but blocked by atelier-ihns todo high Show the between-missions state (also atelier-jb2t blockers.transitive_none_open). Next: start it with `atelier start atelier-ihns`, or drop the link with `atelier issue unlink atelier-jb2t atelier-ihns --role blocked_by` if it is wrong
 ✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)
 ✓ 2 done claims hold
 merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed, atelier-jb2t blockers.none_open, atelier-jb2t blockers.transitive_none_open)
@@ -307,16 +307,22 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
 - The fix uses the real IDs, paths and commands it knows, and each moves the
   check toward passing: for an open item in the scope, the workflow's
   transitions that close it from its status, in order (`--reason "…"` where
-  the policy requires one); for an open blocker, the transition that closes
-  it in one step, else `atelier start <blocker>` when its workflow lets it
-  start, else the listing of its transitions, said as such, and the `atelier
-  issue unlink` that drops the link if it is wrong; the failing receipt's own
+  the policy requires one); under a closed ancestor, which keeps it out of
+  active statuses, transitions that avoid them, such as `supersede`, and the
+  ancestor's reopen transition when its workflow has one; for an open
+  blocker, the transition that closes it in one step, else `atelier start
+  <blocker>` when its workflow lets it start, else the listing of its
+  transitions, said as such, and the `atelier issue unlink` that drops the
+  link if it is wrong, from the record that declares it and with its role
+  (`--role blocked_by`, or `--role blocks` from the blocker); the failing receipt's own
   command to record proof again; the shell check to rerun, after `atelier
   merge <owner> --sync` when it failed on the merged tree under
   `merge_strategy: merge_commit`, which holds the base's changes the work
   checkout lacks; and `atelier review request <owner>` for what needs an
   independent reviewer. A fix of more than one command is a sentence with
-  each command in backticks. A value only a person can supply, such as the
+  each command in backticks. The refusal tests run every printed fix
+  verbatim in a copy of the fixture and require it to exit 0 and to change
+  the records or checkout unless it only reads. A value only a person can supply, such as the
   reviewer identity, the resolution commit or the reason text, stays a
   placeholder (`<identity>`, `<commit>`, `"…"`).
 - The passes are one line for the owner's checks, naming the approval or

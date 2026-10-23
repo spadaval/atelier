@@ -6,6 +6,8 @@ use std::{
     process::{Command, Stdio},
 };
 use tempfile::{tempdir, TempDir};
+#[path = "support/next_steps.rs"]
+mod next_steps;
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .current_dir(dir)
@@ -6644,13 +6646,16 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
         out,
         format!(
             "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
-             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker}` if it is wrong\n\
+             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ records committed\n\
              ✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
              land: refused — 5 checks (review.current, blockers.none_open, findings.disposed, {child} blockers.none_open, {child} blockers.transitive_none_open)\n"
         )
     );
+    // Every fix it prints runs as printed: review request, start or unlink
+    // the blocker, and the disposition.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out), 4);
     // The Stop hook reports the same lines after its own sentence, and ends
     // with the verdict, so no fix command runs into other text.
     let output = hook(

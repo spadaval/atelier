@@ -145,14 +145,18 @@ impl Gates<'_> {
     /// status other than superseded, shortest first: the workflow's own
     /// moves, so no transition name is assumed. `None` when none does within
     /// three steps.
+    ///
+    /// Under a closed ancestor an item cannot enter an active status, so the
+    /// path skips those and may end in superseded, which also closes it.
     fn closing_path(&self, id: &str) -> Option<Vec<String>> {
         let issue = self.index.get_issue(id)?;
         let workflow = self
             .policy
             .workflow_for_issue_type(&issue.issue_type)
             .ok()?;
+        let retired = self.closed_ancestor(id).is_some();
         let closed = |status: &str| {
-            status != "superseded"
+            (retired || status != "superseded")
                 && self
                     .policy
                     .issue_status_is_terminal(&issue.issue_type, status)
@@ -166,7 +170,11 @@ impl Gates<'_> {
                 let mut moves = workflow
                     .transitions
                     .iter()
-                    .filter(|(_, transition)| transition.from.contains(status))
+                    .filter(|(_, transition)| {
+                        transition.from.contains(status)
+                            && !(retired
+                                && self.policy.status_category(&transition.to) == Some("active"))
+                    })
                     .collect::<Vec<_>>();
                 moves.sort_by_key(|(name, _)| name.as_str() != "close");
                 for (name, transition) in moves {
@@ -219,17 +227,69 @@ impl Gates<'_> {
         )
     }
 
+    /// The nearest ancestor of `id` in a closed status, which retires its
+    /// open descendants.
+    fn closed_ancestor(&self, id: &str) -> Option<String> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut parent = self.index.get_issue(id)?.parent_id;
+        while let Some(ancestor) = parent {
+            if !seen.insert(ancestor.clone()) {
+                return None;
+            }
+            let issue = self.index.get_issue(&ancestor)?;
+            if self
+                .policy
+                .issue_status_is_terminal(&issue.issue_type, &issue.status)
+                .unwrap_or(false)
+            {
+                return Some(ancestor);
+            }
+            parent = issue.parent_id;
+        }
+        None
+    }
+
+    /// A transition that takes the closed `id` back to an open status.
+    fn reopen_command(&self, id: &str) -> Option<String> {
+        let issue = self.index.get_issue(id)?;
+        let workflow = self
+            .policy
+            .workflow_for_issue_type(&issue.issue_type)
+            .ok()?;
+        let (name, _) = workflow.transitions.iter().find(|(_, transition)| {
+            transition.from.contains(&issue.status)
+                && !self
+                    .policy
+                    .issue_status_is_terminal(&issue.issue_type, &transition.to)
+                    .unwrap_or(true)
+        })?;
+        Some(self.transition_command(id, name))
+    }
+
     /// The commands that close `id` in its scope, one per transition; the
-    /// listing of its transitions when nothing closes it.
+    /// listing of its transitions when nothing closes it. Under a closed
+    /// ancestor, the alternative when the work is still needed is reopening
+    /// that ancestor, when its workflow can.
     fn settle_command(&self, id: &str) -> String {
-        match self.closing_path(id).as_deref() {
-            Some([name]) => self.transition_command(id, name),
+        let reopen = self
+            .closed_ancestor(id)
+            .and_then(|ancestor| Some((self.reopen_command(&ancestor)?, ancestor)));
+        let steps = match self.closing_path(id) {
+            Some(path) if path.len() == 1 && reopen.is_none() => {
+                return self.transition_command(id, &path[0]);
+            }
             Some(path) => path
                 .iter()
                 .map(|name| format!("`{}`", self.transition_command(id, name)))
                 .collect::<Vec<_>>()
                 .join(", then "),
             None => format!("list its transitions with `atelier issue transition {id}`"),
+        };
+        match reopen {
+            Some((command, ancestor)) => format!(
+                "{steps}, or, if the work is still needed, reopen {ancestor} with `{command}`"
+            ),
+            None => steps,
         }
     }
 
@@ -239,16 +299,17 @@ impl Gates<'_> {
     /// link, naming the record that declares it, if the link is wrong.
     fn blocker_fix(&self, blocked: &str, blocker: &str) -> String {
         let issue = self.index.get_issue(blocker);
-        let startable = issue.as_ref().is_some_and(|issue| {
-            self.policy
-                .workflow_for_issue_type(&issue.issue_type)
-                .is_ok_and(|workflow| {
-                    workflow
-                        .transitions
-                        .get("start")
-                        .is_some_and(|transition| transition.from.contains(&issue.status))
-                })
-        });
+        let startable = self.closed_ancestor(blocker).is_none()
+            && issue.as_ref().is_some_and(|issue| {
+                self.policy
+                    .workflow_for_issue_type(&issue.issue_type)
+                    .is_ok_and(|workflow| {
+                        workflow
+                            .transitions
+                            .get("start")
+                            .is_some_and(|transition| transition.from.contains(&issue.status))
+                    })
+            });
         let (verb, command) = match self.closing_path(blocker).as_deref() {
             Some([name]) => ("close it with", self.transition_command(blocker, name)),
             _ if startable => ("start it with", format!("atelier start {blocker}")),
@@ -262,16 +323,36 @@ impl Gates<'_> {
             declarers
                 .extend(atelier_app::review_gate::scope(self.index, owner).unwrap_or_default());
         }
-        let declarer = declarers.into_iter().find(|id| {
-            self.index
-                .get_blockers(id)
-                .iter()
-                .any(|other| other == blocker)
+        // The link is stored on the record that declares it: `blocked_by`
+        // on the blocked record, or `blocks` on the blocker (atelier-ihss).
+        let declares = |source: &str, target: &str| {
+            let record = self.index.issue_record(source)?;
+            if record.relationships.relates.iter().any(|link| {
+                link.kind == "issue"
+                    && link.relation_type == atelier_records::BLOCKED_BY
+                    && link.id == target
+            }) {
+                return Some(format!(
+                    "atelier issue unlink {source} {target} --role blocked_by"
+                ));
+            }
+            None
+        };
+        let unlink = declarers.into_iter().find_map(|id| {
+            declares(&id, blocker).or_else(|| {
+                self.index
+                    .issue_record(blocker)?
+                    .relationships
+                    .blocks
+                    .iter()
+                    .any(|link| link.id == id)
+                    .then(|| format!("atelier issue unlink {blocker} {id} --role blocks"))
+            })
         });
-        match declarer {
-            Some(declarer) => format!(
-                "{verb} `{command}`, or drop the link with `atelier issue unlink {declarer} {blocker}` if it is wrong"
-            ),
+        match unlink {
+            Some(unlink) => {
+                format!("{verb} `{command}`, or drop the link with `{unlink}` if it is wrong")
+            }
             None if verb == "list its transitions with" => format!("{verb} `{command}`"),
             None => command,
         }
