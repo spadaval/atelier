@@ -929,12 +929,13 @@ fn print_output_summary(data: &EvidenceRecordData) -> Result<()> {
         return Ok(());
     };
     print_heading("Output Summary");
-    print_stream_summary("Stdout", &output.stdout)?;
-    print_stream_summary("Stderr", &output.stderr)?;
+    let passed = data.result == EvidenceResult::Pass;
+    print_stream_summary("Stdout", &output.stdout, passed)?;
+    print_stream_summary("Stderr", &output.stderr, passed)?;
     Ok(())
 }
 
-fn print_stream_summary(name: &str, value: &EvidenceStreamSummary) -> Result<()> {
+fn print_stream_summary(name: &str, value: &EvidenceStreamSummary, passed: bool) -> Result<()> {
     let bytes = value.bytes;
     let truncated = value.truncated;
     println!("{name}: {bytes} bytes, truncated: {}", yes_no(truncated));
@@ -943,9 +944,13 @@ fn print_stream_summary(name: &str, value: &EvidenceStreamSummary) -> Result<()>
     }
     if !value.summary.is_empty() {
         println!("{}", value.summary);
-    } else if bytes > 0 && value.sha256.is_some() {
+    } else if bytes > 0 && value.sha256.is_some() && passed {
         // A passing capture keeps its digest, not its text.
         println!("(not kept; passing output is summarized)");
+    } else if bytes > 0 && value.sha256.is_some() {
+        // A failing capture keeps its text without trailing whitespace, so
+        // only an all-whitespace stream is left empty.
+        println!("(whitespace only)");
     } else {
         println!("(none)");
     }

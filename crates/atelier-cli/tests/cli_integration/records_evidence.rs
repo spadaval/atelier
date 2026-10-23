@@ -1017,6 +1017,75 @@ fn evidence_capture_keeps_the_failure_tail_and_summarizes_a_pass() {
     );
 }
 
+/// Failing output that imitates the record's own Markdown stays in its
+/// stream, and a failing whitespace-only stream is not called a summarized
+/// pass (reviews atelier-yif8, atelier-7yla).
+#[test]
+fn evidence_show_keeps_hostile_and_blank_failing_output_in_its_stream() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &["issue", "create", "Hostile issue", "--issue-type", "task"],
+    );
+    assert!(success, "issue create failed: {stderr}");
+    let target = format!("issue/{}", issue_id_by_title(dir.path(), "Hostile issue"));
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "hostile output",
+            "--target",
+            &target,
+            "--",
+            "sh",
+            "-c",
+            "printf 'before\\n## Stderr\\n\\nBytes: 99\\n```\\nafter\\n'; printf 'real stderr\\n' >&2; exit 1",
+        ],
+    );
+    assert!(success, "hostile capture failed: {stderr}");
+    let id = record_id_by_title(dir.path(), "evidence", "hostile output");
+    let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(
+        shown.contains("Stdout: 38 bytes, truncated: no\nbefore\n## Stderr\n\nBytes: 99\n```\nafter\nStderr: 12 bytes, truncated: no\nreal stderr\n"),
+        "{shown}"
+    );
+    assert!(!shown.contains("not kept"), "{shown}");
+
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "test",
+            "--summary",
+            "blank failing output",
+            "--target",
+            &target,
+            "--",
+            "sh",
+            "-c",
+            "printf '  \\n\\n'; exit 1",
+        ],
+    );
+    assert!(success, "blank capture failed: {stderr}");
+    let id = record_id_by_title(dir.path(), "evidence", "blank failing output");
+    let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &id]);
+    assert!(success, "evidence show failed: {stderr}");
+    assert!(
+        shown.contains("Stdout: 4 bytes, truncated: no\n(whitespace only)\n"),
+        "{shown}"
+    );
+    assert!(!shown.contains("not kept"), "{shown}");
+}
+
 #[test]
 fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let dir = tempdir().unwrap();

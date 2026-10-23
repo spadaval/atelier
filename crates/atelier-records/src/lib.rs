@@ -2034,10 +2034,11 @@ pub fn render_evidence_transcript(summary: &str, data: &EvidenceRecordData) -> S
     output.push_str(summary);
     output.push_str("\n\n");
     if let Some(command) = data.command.as_deref() {
+        let fence = code_fence(command);
         output.push_str("## Command\n\n");
-        output.push_str("```console\n");
+        output.push_str(&format!("{fence}console\n"));
         output.push_str(command.trim_end());
-        output.push_str("\n```\n");
+        output.push_str(&format!("\n{fence}\n"));
         if let Some(exit_status) = data.exit_status.as_deref() {
             output.push_str("\nExit status: ");
             output.push_str(exit_status);
@@ -2098,12 +2099,42 @@ fn push_evidence_stream_section(
     if !keeps_text {
         return;
     }
-    output.push_str("\n```text\n");
+    let fence = code_fence(&stream.summary);
+    output.push_str(&format!("\n{fence}text\n"));
     if !stream.summary.is_empty() {
         output.push_str(stream.summary.trim_end());
         output.push('\n');
     }
-    output.push_str("```\n");
+    output.push_str(&fence);
+    output.push('\n');
+}
+
+/// A backtick fence longer than any backtick run in `text`, so the text
+/// cannot close it (CommonMark fenced code blocks).
+fn code_fence(text: &str) -> String {
+    let longest = text
+        .split(|character| character != '`')
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+    "`".repeat(longest.max(2) + 1)
+}
+
+/// The length of the backtick run opening a fence on `line`, if any.
+fn opening_fence_len(line: &str) -> Option<usize> {
+    let run = line
+        .trim_start()
+        .bytes()
+        .take_while(|&byte| byte == b'`')
+        .count();
+    (run >= 3).then_some(run)
+}
+
+/// Whether `line` closes a fence opened by `open` backticks: only backticks,
+/// at least as many.
+fn closes_fence(line: &str, open: usize) -> bool {
+    let line = line.trim();
+    line.len() >= open && line.bytes().all(|byte| byte == b'`')
 }
 
 fn apply_evidence_body_sections(data: &mut EvidenceRecordData, body: &str) {
@@ -2155,8 +2186,15 @@ fn markdown_sections(body: &str) -> Vec<(String, String)> {
     let mut sections = Vec::new();
     let mut current_title: Option<String> = None;
     let mut current_body = String::new();
+    let mut open_fence = None;
     for line in body.lines() {
-        if let Some(title) = line.strip_prefix("## ") {
+        // A `## ` line inside a fenced block is captured text, not a heading.
+        open_fence = match open_fence {
+            Some(open) if closes_fence(line, open) => None,
+            Some(open) => Some(open),
+            None => opening_fence_len(line),
+        };
+        if let Some(title) = line.strip_prefix("## ").filter(|_| open_fence.is_none()) {
             if let Some(title) = current_title.replace(title.trim().to_string()) {
                 sections.push((title, current_body.trim().to_string()));
                 current_body.clear();
@@ -2172,17 +2210,20 @@ fn markdown_sections(body: &str) -> Vec<(String, String)> {
     sections
 }
 
+/// The text of the first fenced block, closed by a fence at least as long as
+/// its opening one. Receipts before atelier-dg3h always used three backticks.
 fn first_fenced_block(content: &str) -> Option<&str> {
-    let mut fence_start = None;
+    let mut open: Option<(usize, usize)> = None;
     let mut line_start = 0;
     for line in content.split_inclusive('\n') {
         let line_end = line_start + line.len();
         let line_text = line.trim_end_matches('\n');
-        if line_text.trim_start().starts_with("```") {
-            if let Some(start) = fence_start {
+        match open {
+            Some((start, len)) if closes_fence(line_text, len) => {
                 return Some(content[start..line_start].trim_end());
             }
-            fence_start = Some(line_end);
+            Some(_) => {}
+            None => open = opening_fence_len(line_text).map(|len| (line_end, len)),
         }
         line_start = line_end;
     }
@@ -2195,7 +2236,8 @@ fn first_non_empty_line(content: &str) -> Option<&str> {
 
 fn evidence_stream_from_section(content: &str) -> atelier_core::EvidenceStreamSummary {
     let summary = first_fenced_block(content).unwrap_or("").to_string();
-    // Fields precede the fence, so captured text cannot pose as one.
+    // Fields are read only above the fence; captured text sits inside a
+    // fence longer than any backtick run in it and cannot end it early.
     let field = |name: &str| {
         content
             .lines()
@@ -3069,6 +3111,44 @@ Legacy evidence summary.
         let (text, parsed) = evidence_round_trip(&record);
         assert_diff_check_clean(&text);
         assert_eq!(parsed.data.output, record.data.output);
+    }
+
+    /// Captured text that looks like a stream heading, a field and a fence
+    /// stays inside its own stream (review atelier-yif8).
+    #[test]
+    fn captured_headings_fields_and_fences_stay_inside_their_stream() {
+        let mut record = evidence_record("atelier-evfn");
+        record.data.result = atelier_core::EvidenceResult::Fail;
+        record.data.command = Some("sh -c 'printf x'\n## Stdout\n````".into());
+        record.data.exit_status = Some("1".into());
+        record.data.residual_risks = Vec::new();
+        let hostile = atelier_core::EvidenceStreamSummary {
+            summary: "before\n## Stderr\n\nBytes: 99\n```\n`````text\nafter".into(),
+            bytes: 48,
+            truncated: false,
+            sha256: Some("ab".repeat(32)),
+            test_summary: None,
+        };
+        let plain = atelier_core::EvidenceStreamSummary {
+            summary: "real stderr".into(),
+            bytes: 12,
+            truncated: false,
+            sha256: Some("cd".repeat(32)),
+            test_summary: None,
+        };
+        record.data.output = Some(EvidenceOutputSummary {
+            limit_bytes_per_stream: 4096,
+            stdout: hostile,
+            stderr: plain,
+        });
+        record.summary = render_evidence_transcript("hostile output", &record.data);
+        let (text, mut parsed) = evidence_round_trip(&record);
+        assert!(text.contains("\n``````text\nbefore\n"), "{text}");
+        assert_eq!(parsed.data.output, record.data.output);
+        let command = record.data.command.clone();
+        parsed.data.command = None;
+        apply_evidence_body_sections(&mut parsed.data, &parsed.summary);
+        assert_eq!(parsed.data.command, command);
     }
 
     /// Receipts recorded before atelier-dg3h, copied verbatim from
