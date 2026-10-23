@@ -89,8 +89,8 @@ marked ready, and a mission does not close until review has happened.
 - **Who reviews:** someone who did not write the change and does not carry the
   author's reasoning. A fresh subagent qualifies. A different model is a
   bonus, not a requirement. An orchestrator that has read the author's
-  handoff or rationale does not count as independent. Code the orchestrator
-  writes itself needs review like anyone else's.
+  handoff or rationale does not count as independent. Work the orchestrator
+  writes itself, code or prose, needs review like anyone else's.
 - **Who arranges it:** under an orchestrator, the orchestrator dispatches
   reviewers and the author reports its review status. An author working alone
   spawns its own reviewer.

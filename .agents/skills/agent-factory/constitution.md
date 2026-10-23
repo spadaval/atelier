@@ -33,7 +33,7 @@ never exercised the claim, or another agent's assertion is not proof.
 Running a test produces the same result whoever runs it. An agent may and
 should verify its own work by executing it.
 
-Judging the quality of one's own work is different. The agent that wrote code
+Judging the quality of one's own work is different. The agent that wrote the work
 shares the assumptions, blind spots, and sunk cost that shaped it, and will
 tend to find its own reasoning persuasive. Self-review is therefore not review.
 Every non-trivial change, code or prose, is reviewed by an agent or human who
