@@ -4,6 +4,9 @@ id: "atelier-phfo"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-phfo
 priority: "P1"
 relationships:
   blocks: []
@@ -29,9 +32,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:45:38.946961513+00:00"
+status: "done"
 title: "Read review state per item without opening records"
-updated_at: "2026-10-23T14:13:48.084113419+00:00"
+updated_at: "2026-10-23T14:45:38.946961513+00:00"
 ---
 
 ## Goal
@@ -49,3 +53,20 @@ Children: atelier-h6o4 (first; others reuse its row renderer, including `status.
 ## Context
 
 Regroom 2026-10-23 notes on each child. Code: `crates/atelier-cli/src/commands/review.rs` (`list` :139-170 uses `{:?}`, `show` :204 prints JSON, `append` :68), `crates/atelier-records/src/review.rs:266,298` (title = summary). 1147 of 1149 review records have title equal to body.
+
+## Close Reason
+
+### Outcome
+An item's review state reads without opening records. `review list <id>` prints one row per event in time order (kind, pin, identity, date, first summary line), then the approval state (current, stale with the commits and paths that staled it, missing, or accepted on the base) and findings with their disposition chains; a child shows its owner's view; an owner with no events says so (atelier-h6o4, atelier-uv5d, atelier-jw1n). `review show` is a brief Markdown view (atelier-3u2u). Recording an event prints one confirmation line and warns when the identity matches a Git author (atelier-093h). New review titles are generated from kind, owner and pin (atelier-hulj). `--commit`, `--resolution-commit`, `--retention-days` and `--limit` use the shared invalid-value form (atelier-d8ku). Delivers atelier-rc8j S4; shown by CLI tests in review_views.rs (receipt atelier-su46 and focused receipts on each child). Independent review compared `review list` with land and `merge --check` across eleven states and found no disagreement.
+
+### Deviations
+Rows come before the state block, following the increment goal rather than atelier-uv5d's example. `--json` is unchanged.
+
+### Decisions
+Decision notes on atelier-uv5d, atelier-h6o4, atelier-093h, atelier-jw1n, atelier-3u2u, atelier-hulj and atelier-d8ku; title format per atelier-rc8j's decision.
+
+### Surprises
+None material. The author warning is best-effort: from the base checkout there are no branch authors to compare (finding atelier-p28x, no_action).
+
+### Open items
+The reason an approval is not current is atelier-imlh. Mission decisions listed twice in `issue show --full` is atelier-x0vs.

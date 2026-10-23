@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T14:35:52.585690861+00:00"
+status: "done"
 title: "Say what review event was recorded and warn on an author identity"
-updated_at: "2026-10-23T14:14:37.959182686+00:00"
+updated_at: "2026-10-23T14:35:52.585690861+00:00"
 ---
 
 ## Goal
@@ -48,3 +49,24 @@ It doesn't say whether the event was a finding or an approval, which owner it ta
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Every kind prints 'Review event: … Commit this record…' (review.rs:68); no author warning; defer error doesn't name --follow-up. Use review_gate::author_identities (:645) and make independent (:688) pub rather than copying.
+- 2026-10-23 [decision] Review events confirm in one line, '<Kind> <id> [<decision>] on <owner> @<pin8>' plus what a disposition settled or a finding's disposition command, without brackets around decisions.
+  Reason: A new event changes no existing value, so the '<id> <field>: <value>' form has nothing to list; the output contract bars brackets around a decision, so the item's '(fix_now)' example is written 'fix_now'.
+  Rejected: One '<id> <field>: <value>' line per field
+- 2026-10-23 [decision] The author warning is best-effort: when the policy or the base branch cannot be read, no authors are counted and no warning prints; under --quiet it goes to stderr.
+  Reason: It only warns; recording must not newly fail on a read the record does not need, and quiet stdout carries only the ID.
+
+## Close Reason
+
+Each recording command confirms in one line naming the kind, ID, owner and short pin: `Approval <id> on <owner> @<pin>`, `Finding <id> fix_now on ... Dispose: atelier review disposition <id> --identity "..." --decision fix_now --resolution-commit ... "..."`, `Disposition <id> no_action on ...: finding <id> "<first line>", supersedes <id>`. An approval, or a defer/no_action disposition, by a Git author is still recorded and warns `⚠ identity matches a Git author; this will not satisfy review.current` (or `findings.disposed`), using review_gate::author_identities and review_gate::independent. The defer error reads `DEFER requires --follow-up <issue-id>`. `--quiet` still prints only the ID, with the warning on stderr.
+
+### Deviations
+Decisions are not bracketed (`fix_now`, not `(fix_now)`), per the output contract. The old `Commit this record with the work it describes.` reminder is gone. The defer error exits 1, not 2.
+
+### Decisions
+See the decision notes on this item (one-line form; the warning is best-effort and goes to stderr under quiet).
+
+### Surprises
+None.
+
+### Open items
+None.

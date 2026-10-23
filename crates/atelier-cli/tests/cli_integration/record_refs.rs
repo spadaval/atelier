@@ -79,9 +79,10 @@ fn fixture() -> Fixture {
     );
     let evidence = record_id_by_title(dir.path(), "evidence", "reference evidence");
     commit_all(dir.path(), "reference fixture");
-    create(
+    let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
+            "-q",
             "review",
             "record",
             &parent,
@@ -90,7 +91,8 @@ fn fixture() -> Fixture {
             "reference review",
         ],
     );
-    let review = record_id_by_title(dir.path(), "reviews", "reference review");
+    assert!(success, "fixture review failed: {stderr}");
+    let review = stdout.trim().to_owned();
     commit_all(dir.path(), "reference review");
     Fixture {
         dir,

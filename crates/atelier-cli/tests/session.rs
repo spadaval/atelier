@@ -1097,7 +1097,8 @@ fn status_owner_block_shows_base_mission_strategy_and_eight_newest_reviews() {
     assert_eq!(reviews.len(), 8, "{status}");
     for (row, n) in reviews.iter().zip((2..10).rev()) {
         assert!(
-            row.contains(&format!("for {}", f.id)) && row.ends_with(&format!("Checked pass {n}")),
+            row.contains(&format!("  on {}  @", f.id))
+                && row.ends_with(&format!("Checked pass {n}")),
             "{status}"
         );
     }
@@ -3037,14 +3038,17 @@ fn a_base_exemption_covers_exactly_its_commit() {
     let listed = ok(f.path(), &["review", "list"]);
     assert!(
         listed.contains(&format!(
-            "{exemption} TrivialExemption base main {}",
+            "{exemption}  trivial_exemption  of main  @{}  Author  ",
             &typo[..8]
         )),
         "{listed}"
     );
     let shown = ok(f.path(), &["review", "show", &exemption]);
     assert!(
-        shown.contains(&format!("\"commit\": \"{typo}\"")),
+        shown.starts_with(&format!(
+            "{exemption} trivial_exemption of main @{} by Author | ",
+            &typo[..8]
+        )) && shown.contains("\n\nOne-word typo fix in README"),
         "{shown}"
     );
 

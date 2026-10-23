@@ -29,8 +29,21 @@ self-declared and compared with author names and email addresses. `trivial`
 is an explicit visible exemption with a reason, never an implicit fallback.
 It is for a change whose correctness is evident from the diff, code or prose
 alike; it is the only route that skips independent review, and there is no
-lighter standard for some paths or kinds of text. `review list` accepts
-`--json` and can omit the owner to list all events, base exemptions included.
+lighter standard for some paths or kinds of text. `review list <id>` shows
+the events of the issue's branch owner (a child's parent) one row each,
+oldest first, then the owner's approval state and its findings with their
+dispositions; `review show <id>` is a brief view of one event (see
+[review rows](human-cli-output.md#review-rows)). `review list` accepts
+`--json`, which keeps the stored records of the issue alone, and can omit the
+owner to list all events, base exemptions included. Each recording command
+confirms the event in one line and warns when an approval's, or a defer or
+no_action disposition's, identity is a Git author the gates will refuse (see
+[mutation confirmation](human-cli-output.md#mutation-confirmation)). A new
+record's title is generated, as in `finding on atelier-nqgr @fed2d571`, so
+its text is stored once; earlier records keep the text's first line.
+`--commit` and `--resolution-commit` take a full commit ID: anything else is
+an invalid value (exit 2), and a commit the branch does not hold is refused
+with `git log --format=%H` as the recovery step.
 Every command that records an event also takes `--commit-records` and
 `--stage-records`, which commit the records it wrote (alone or grouped with the
 rest of a step); see [Committing records](cli-surface.md#committing-records).
