@@ -989,7 +989,10 @@ fn exit_text(data: &EvidenceRecordData) -> Option<String> {
 
 /// Prints the confirmation of a receipt this command recorded and returns
 /// the verdict line that ends the command's output: one line, and on a
-/// failure the last lines of its output.
+/// failure the last lines of its output. A pass reads as the shared gate
+/// verdict does; any other result finished recording but leaves the item's
+/// gate unmet, so its line says so in place of `passed`, as `merge --sync`
+/// does.
 fn print_confirmation(index: &RecordIndex, record: &EvidenceRecord) -> Result<String> {
     let data = &record.data;
     let id = &record.header.id;
@@ -1025,7 +1028,7 @@ fn print_confirmation(index: &RecordIndex, record: &EvidenceRecord) -> Result<St
         }
     }
     Ok(match (data.result, issue) {
-        (EvidenceResult::Pass, _) => "evidence record: passed".to_string(),
+        (EvidenceResult::Pass, _) => crate::gate_report::verdict("evidence record", &[]),
         (EvidenceResult::Fail, Some(issue)) => format!(
             "evidence record: recorded fail — {issue} cannot close or merge until a later pass"
         ),

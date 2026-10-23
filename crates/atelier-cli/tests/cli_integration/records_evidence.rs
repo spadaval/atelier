@@ -2792,3 +2792,80 @@ fn evidence_attach_takes_the_target_forms_record_takes() {
     assert!(success);
     assert_eq!(out, format!("{id}\n"));
 }
+
+/// `evidence list`'s verdict agrees with the evidence gates the close
+/// transition runs on the same receipts: a newer fail blocks both, a fresh
+/// pass after it clears both, and once a code commit makes that pass stale
+/// the fail blocks both again (atelier-u0ig).
+#[test]
+fn evidence_list_verdict_agrees_with_the_close_gate() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let issue_id = create_task(dir.path(), "Gated issue");
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
+    let record = |summary: &str, command: &str| {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &issue_id,
+                "--kind",
+                "test",
+                "--summary",
+                summary,
+                "--",
+                "sh",
+                "-c",
+                command,
+            ],
+        );
+        assert!(success, "record {summary} failed: {stderr}");
+        record_id_by_title(dir.path(), "evidence", summary)
+    };
+    let verdict = || {
+        let (success, out, stderr) = run_atelier(dir.path(), &["evidence", "list", &issue_id]);
+        assert!(success, "list failed: {stderr}");
+        out.lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap()
+            .to_string()
+    };
+    let close_refusal = || {
+        let (success, out, stderr) =
+            run_atelier_raw(dir.path(), &["issue", "transition", &issue_id, "close"]);
+        assert!(!success, "close has no Close Reason, so it refuses: {out}");
+        stderr
+    };
+
+    let pass = record("first pass", "true");
+    assert_eq!(verdict(), format!("Proof: ✓ fresh pass {pass}"));
+    let refusal = close_refusal();
+    assert!(!refusal.contains("newer failing evidence"), "{refusal}");
+
+    let fail = record("the fail", "exit 1");
+    assert_eq!(verdict(), format!("Proof: ⚠ newest is fail {fail}"));
+    assert!(
+        close_refusal().contains(&format!("newer failing evidence {fail}")),
+        "{}",
+        close_refusal()
+    );
+
+    let second = record("second pass", "true");
+    assert_eq!(verdict(), format!("Proof: ✓ fresh pass {second}"));
+    let refusal = close_refusal();
+    assert!(!refusal.contains("newer failing evidence"), "{refusal}");
+
+    fs::write(dir.path().join("code.txt"), "changed code\n").unwrap();
+    commit_all(dir.path(), "Change code");
+    assert_eq!(verdict(), format!("Proof: ⚠ newest is fail {fail}"));
+    // The later pass no longer proves the claim, so the fail blocks again.
+    let refusal = close_refusal();
+    assert!(
+        refusal.contains(&format!("newer failing evidence {fail}")),
+        "{refusal}"
+    );
+}
