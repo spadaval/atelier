@@ -4,6 +4,9 @@ id: "atelier-l7nz"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-l7nz
 priority: "P2"
 relationships:
   blocks: []
@@ -26,9 +29,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Evidence record, list and show: one line, by item, brief"
-updated_at: "2026-10-23T14:47:59.283581928+00:00"
+updated_at: "2026-10-23T14:47:59.724850814+00:00"
 ---
 
 ## Goal
