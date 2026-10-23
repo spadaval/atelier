@@ -2069,17 +2069,48 @@ pub fn render_evidence_transcript(summary: &str, data: &EvidenceRecordData) -> S
 
 /// The summary an evidence body states. `EvidenceRecord.summary` holds the
 /// whole body so a receipt round-trips; a captured receipt's body is a
-/// transcript whose `## Summary` section is the summary, and any other body
-/// is its own (atelier-3xq4).
+/// transcript whose summary is the text from its `## Summary` heading to its
+/// first `## Command`, stream or risks heading, so a `## ` heading the
+/// summary holds stays in it. Any other body is its own summary
+/// (atelier-3xq4). A rerun receipt the sync recorded before atelier-3xq4
+/// nests the old receipt's whole body in its Summary, which then starts with
+/// another `## Summary` heading; those are skipped to the real text
+/// (atelier-ytks).
 pub fn evidence_summary_text(body: &str) -> String {
     if !evidence_body_has_transcript_sections(body) {
         return body.trim().to_owned();
     }
-    markdown_sections(body)
-        .into_iter()
-        .find(|(title, _)| title == "Summary")
-        .map(|(_, content)| content)
-        .unwrap_or_default()
+    let mut summary = String::new();
+    let mut started = false;
+    let mut open_fence = None;
+    for line in body.lines() {
+        open_fence = match open_fence {
+            Some(open) if closes_fence(line, open) => None,
+            Some(open) => Some(open),
+            None => opening_fence_len(line),
+        };
+        let heading = line
+            .strip_prefix("## ")
+            .filter(|_| open_fence.is_none())
+            .map(str::trim);
+        match heading {
+            Some("Command" | "Stdout" | "Stderr" | "Residual Risks") if started => break,
+            Some("Summary") if !started => started = true,
+            _ if started => {
+                summary.push_str(line);
+                summary.push('\n');
+            }
+            _ => {}
+        }
+    }
+    let mut text = summary.trim();
+    while let Some(rest) = text
+        .strip_prefix("## Summary")
+        .filter(|rest| rest.is_empty() || rest.starts_with('\n'))
+    {
+        text = rest.trim_start();
+    }
+    text.to_owned()
 }
 
 fn evidence_body_has_transcript_sections(body: &str) -> bool {
@@ -2380,6 +2411,37 @@ fn display_state_path(relative_path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// atelier-qmti, copied from `.atelier/evidence/`, is a rerun receipt
+    /// the merge --sync before atelier-3xq4 recorded: its Summary nests the
+    /// old receipt's whole body, so its first `## Summary` section is empty
+    /// (atelier-ytks).
+    #[test]
+    fn evidence_summary_text_reads_the_real_summary_of_a_legacy_nested_rerun_receipt() {
+        let spec = canonical_record_kind("evidence").unwrap();
+        let path = canonical_record_path(spec, "atelier-qmti").unwrap();
+        let record = parse_evidence_record_file(
+            include_str!("../tests/fixtures/evidence/atelier-qmti.md"),
+            &path,
+        )
+        .unwrap();
+        assert_eq!(
+            evidence_summary_text(&record.summary),
+            "atelier-ooay: Stop-hook reason and repeated-stop message are a sentence, then land's refusal lines, ending with the land verdict; a precondition refusal's reason ends with its verdict"
+        );
+    }
+
+    #[test]
+    fn evidence_summary_text_keeps_a_heading_inside_the_summary_and_reads_an_empty_one_as_empty() {
+        let body = "## Summary\n\nFirst part.\n\n## Notes\n\nMore.\n\n## Command\n\n```console\ntrue\n```\n\nExit status: 0\n";
+        assert_eq!(
+            evidence_summary_text(body),
+            "First part.\n\n## Notes\n\nMore."
+        );
+        let empty = "## Summary\n\n## Command\n\n```console\ntrue\n```\n";
+        assert_eq!(evidence_summary_text(empty), "");
+        assert_eq!(evidence_summary_text("A manual note.\n"), "A manual note.");
+    }
+
     use super::*;
     use chrono::TimeZone;
     use tempfile::tempdir;

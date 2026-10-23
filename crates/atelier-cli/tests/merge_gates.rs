@@ -3765,3 +3765,62 @@ fn sync_rerun_receipt_summary_is_the_old_summary_with_the_rerun_suffix() {
     assert_eq!(body.matches("## Command").count(), 1, "{body}");
     assert_eq!(body.matches("## Stdout").count(), 1, "{body}");
 }
+
+/// A receipt in the shape the sync before atelier-3xq4 left, its Summary
+/// nesting the old body with the suffix at the end, as in atelier-qmti, is
+/// rerun with its real summary and one suffix (atelier-ytks).
+#[test]
+fn sync_reruns_a_legacy_nested_receipt_with_its_real_summary_and_one_suffix() {
+    let fixture = synced_fixture(
+        "fast_forward_only",
+        "test -f src.rs",
+        ("other.rs", "landed\n"),
+    );
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let receipt = index
+        .evidence_records()
+        .into_iter()
+        .find(|record| record.data.command.is_some())
+        .unwrap()
+        .header
+        .id
+        .clone();
+    let file = fixture
+        .path()
+        .join(format!(".atelier/evidence/{receipt}.md"));
+    let text = fs::read_to_string(&file).unwrap();
+    let (front, body) = text.split_once("\n---\n\n").unwrap();
+    fs::write(
+        &file,
+        format!(
+            "{front}\n---\n\n## Summary\n\n{} (rerun after merging main)\n",
+            body.trim_end()
+        ),
+    )
+    .unwrap();
+    commit(fixture.path(), "a receipt in the legacy rerun shape");
+    let (passed, out, err) = sync(fixture.path(), &fixture.id);
+    assert!(passed, "{out}\n{err}");
+    let index =
+        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
+    let rerun = index
+        .evidence_records()
+        .into_iter()
+        .find(|record| record.data.agent_identity.as_deref() == Some("atelier merge --sync"))
+        .unwrap_or_else(|| panic!("no rerun receipt: {out}"));
+    let text = fs::read_to_string(
+        fixture
+            .path()
+            .join(format!(".atelier/evidence/{}.md", rerun.header.id)),
+    )
+    .unwrap();
+    let body = text.split_once("\n---\n\n").unwrap().1;
+    assert!(
+        body.starts_with(
+            "## Summary\n\nScenario check (rerun after merging main)\n\n## Command\n\n"
+        ),
+        "{body}"
+    );
+    assert_eq!(body.matches("## Summary").count(), 1, "{body}");
+}

@@ -169,7 +169,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
     for receipt in &receipts.rerun {
         // A whole workspace suite can run for minutes: name it before it starts.
         say(format!("  running {}: {}", receipt.target, receipt.command));
-        let summary = format!("{} (rerun after merging {base})", receipt.summary);
+        let summary = rerun_summary(&receipt.summary, &base);
         let rerun = evidence::split_command(&receipt.command).and_then(|command| {
             // Rerun only a command that reads back as the one recorded.
             if evidence::format_command(&command) != receipt.command {
@@ -468,4 +468,55 @@ fn report_approval(
         say(format!("  and {} more", paths.len() - LISTED_PATHS));
     }
     Ok(true)
+}
+
+/// A rerun receipt's summary: the old receipt's, with one suffix naming the
+/// base merged; a suffix an earlier sync added is replaced, not stacked
+/// (atelier-ytks).
+fn rerun_summary(old: &str, base: &str) -> String {
+    let mut text = old.trim_end();
+    while let Some(at) = text.rfind(" (rerun after merging ") {
+        let suffix = &text[at..];
+        if !suffix.ends_with(')') || suffix.contains('\n') {
+            break;
+        }
+        text = text[..at].trim_end();
+    }
+    // An empty summary's rerun is the bare suffix; a later rerun of that
+    // reads it as empty again.
+    if text.is_empty()
+        || text
+            .strip_prefix("rerun after merging ")
+            .is_some_and(|base| !base.contains(char::is_whitespace))
+    {
+        format!("rerun after merging {base}")
+    } else {
+        format!("{text} (rerun after merging {base})")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rerun_summary;
+
+    #[test]
+    fn a_rerun_summary_names_the_merge_once_and_never_starts_with_a_space() {
+        assert_eq!(
+            rerun_summary("Scenario check", "main"),
+            "Scenario check (rerun after merging main)"
+        );
+        assert_eq!(
+            rerun_summary("Scenario check (rerun after merging main)", "main"),
+            "Scenario check (rerun after merging main)"
+        );
+        assert_eq!(
+            rerun_summary("Scenario check (rerun after merging master)", "main"),
+            "Scenario check (rerun after merging main)"
+        );
+        assert_eq!(rerun_summary("", "main"), "rerun after merging main");
+        assert_eq!(
+            rerun_summary("rerun after merging master", "main"),
+            "rerun after merging main"
+        );
+    }
 }
