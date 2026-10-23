@@ -51,8 +51,9 @@ fn check_records(
 fn records_uncommitted(error: anyhow::Error) -> anyhow::Error {
     match error.downcast_ref::<atelier_app::committed_snapshot::RecordsUncommitted>() {
         Some(uncommitted) => anyhow::anyhow!(
-            "land_records_uncommitted: {}; commit them with the work. Next: {}",
+            "land_records_uncommitted: {}; {}. Next: {}",
             uncommitted.summary(),
+            uncommitted.advice(),
             uncommitted.commit_command()
         ),
         None => error,
@@ -187,9 +188,9 @@ fn foreign_base_commits_note(
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
     land_checked(requested, install, deep).map(|(text, _)| text)
 }
-/// Whether `code` is one of land's own checks.
+/// Whether `code` is one of land's own checks or the record fence it runs.
 fn is_land_code(code: &str) -> bool {
-    code.starts_with("land_")
+    code.starts_with("land_") || code == "review_append_only"
 }
 /// The landing report, and the commit every check ran against. A failed
 /// precondition is one more failed check, and the gates still run against
@@ -273,8 +274,8 @@ fn land_gates(
         if let Some((uncommitted, _)) = &uncommitted {
             preconditions.fail(
                 "land_records_uncommitted",
-                format!("{}; commit them with the work", uncommitted.summary()),
-                Some(uncommitted.commit_command().to_owned()),
+                format!("{}; {}", uncommitted.summary(), uncommitted.advice()),
+                Some(uncommitted.commit_command()),
             );
         }
         if let Some((code, cause)) = &candidate_invalid {
@@ -746,7 +747,7 @@ fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
 fn refusal_code(error: &anyhow::Error) -> Option<String> {
     let message = error.to_string();
     let (code, _) = message.split_once(':')?;
-    (code.starts_with("land_") && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
+    (is_land_code(code) && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
         .then(|| code.to_owned())
 }
 

@@ -87,7 +87,7 @@ impl Uncommitted {
         }
         Self {
             issues,
-            fix: records.commit_command().to_owned(),
+            fix: records.commit_command(),
         }
     }
 }

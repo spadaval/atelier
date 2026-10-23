@@ -7111,3 +7111,81 @@ fn an_uncommitted_approval_is_fixed_by_committing_it() {
         assert!(next_steps::assert_fixes_run(f.path(), &out, &gate) >= 1);
     }
 }
+
+/// A committed review record that was changed or deleted is restored from
+/// HEAD, never committed; once such a commit is on the branch, the fix drops
+/// it: a reset at the tip, a rebase that leaves it out below (atelier-v4rd).
+#[test]
+fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let approval = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    let path = format!(".atelier/reviews/{approval}.md");
+    let note = ok(f.path(), &["-q", "issue", "create", "Uncommitted work"]);
+    for change in ["deleted", "modified"] {
+        let committed = fs::read_to_string(f.path().join(&path)).unwrap();
+        if change == "deleted" {
+            fs::remove_file(f.path().join(&path)).unwrap();
+        } else {
+            fs::write(
+                f.path().join(&path),
+                committed.replace("Reviewed", "Edited"),
+            )
+            .unwrap();
+        }
+        let (pass, out) = cli(f.path(), &["land"]);
+        assert!(!pass);
+        let mut records = [
+            format!("{path} ({change})"),
+            format!(".atelier/issues/{note}.md (new)"),
+        ];
+        records.sort();
+        assert!(
+            out.contains(&format!(
+                "land_records_uncommitted: 2 tracker records differ from HEAD: {}; review records are append-only, so restore the committed ones and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- {path} && git add .atelier && git commit -m \"…\"\n",
+                records.join(", ")
+            )),
+            "{change}: {out}"
+        );
+        assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+        fs::write(f.path().join(&path), committed).unwrap();
+    }
+    fs::remove_file(f.path().join(format!(".atelier/issues/{note}.md"))).unwrap();
+
+    // Committed at the tip, the deletion is dropped with a reset.
+    fs::remove_file(f.path().join(&path)).unwrap();
+    commit(f.path(), "delete the approval");
+    let bad = git(f.path(), &["rev-parse", "HEAD"]);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!(
+            "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}, the branch tip; a later commit cannot undo it, so drop that commit, which brings the record back (record a successor event for any change). Next: git reset --keep HEAD~1\n"
+        )),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    // Below the tip, a rebase leaves it out.
+    fs::write(f.path().join("later"), "later work\n").unwrap();
+    commit(f.path(), "later work");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!("Next: git rebase --onto {bad}~1 {bad}\n")),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+}

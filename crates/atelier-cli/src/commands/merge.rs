@@ -501,8 +501,9 @@ fn owned(
                 match records {
                     Some(records) => {
                         found.push(format!(
-                            "canonical_snapshot_uncommitted: {}; commit them with the work. Next: {}",
+                            "canonical_snapshot_uncommitted: {}; {}. Next: {}",
                             records.summary(),
+                            records.advice(),
                             records.commit_command()
                         ));
                         let (dir, index) = crate::commands::git::Snapshot::at(

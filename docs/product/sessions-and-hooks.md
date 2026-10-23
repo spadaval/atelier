@@ -50,8 +50,13 @@ resolves its owner; otherwise ownership is inferred from the current branch.
 A failed precondition is one more failed check, and land still runs every gate
 it can: `land_records_uncommitted` names every tracker record that differs from
 HEAD (the first five, then a count) as modified, new, deleted or staged, with
-`git add .atelier && git commit -m "…"`, and the gates read HEAD's committed
-records instead; `land_completion_dirty` names a done owner's uncommitted
+`git add .atelier && git commit -m "…"`, except that a committed review record
+that was changed or deleted is restored with `git restore --source=HEAD
+--staged --worktree -- <path>`, since review records are append-only; the
+gates read HEAD's committed records instead. A rewrite already committed
+refuses with `review_append_only`, whose fix drops that commit: `git reset
+--keep HEAD~1` at the tip, or `git rebase --onto <commit>~1 <commit>` below it,
+which rewrites the later commits (atelier-v4rd); `land_completion_dirty` names a done owner's uncommitted
 paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
 push --include-untracked`); an invalid committed policy is reported once, as
 its `workflow_*` code, and `land_base_mismatch`, whose fix records the

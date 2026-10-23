@@ -66,19 +66,51 @@ impl RecordsUncommitted {
             )
         )
     }
-    /// The command that commits them; only staging them again when each one
-    /// differs only in the index, so the working bytes already match HEAD and
-    /// there is nothing to commit.
-    pub fn commit_command(&self) -> &'static str {
-        if self
-            .records
+    /// The command that settles them. Review records are append-only, so a
+    /// committed one that was changed or deleted is restored from HEAD,
+    /// never committed: the check would refuse that commit for good
+    /// (atelier-v4rd). The rest are committed, or only staged again when
+    /// each differs only in the index, so their working bytes already match
+    /// HEAD and there is nothing to commit.
+    /// What to do with them, before the command that does it.
+    pub fn advice(&self) -> &'static str {
+        if self.records.iter().any(|(path, change)| {
+            path.starts_with(".atelier/reviews") && *change != RecordChange::New
+        }) {
+            "review records are append-only, so restore the committed ones and commit the rest with the work"
+        } else {
+            "commit them with the work"
+        }
+    }
+    pub fn commit_command(&self) -> String {
+        let (restore, rest): (Vec<_>, Vec<_>) = self.records.iter().partition(|(path, change)| {
+            path.starts_with(".atelier/reviews") && *change != RecordChange::New
+        });
+        let commit = if rest.is_empty() {
+            None
+        } else if rest
             .iter()
             .all(|(_, change)| *change == RecordChange::Staged)
         {
-            "git add .atelier"
+            Some("git add .atelier".to_owned())
         } else {
-            "git add .atelier && git commit -m \"…\""
-        }
+            Some("git add .atelier && git commit -m \"…\"".to_owned())
+        };
+        let restore = (!restore.is_empty()).then(|| {
+            format!(
+                "git restore --source=HEAD --staged --worktree -- {}",
+                restore
+                    .iter()
+                    .map(|(path, _)| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        });
+        restore
+            .into_iter()
+            .chain(commit)
+            .collect::<Vec<_>>()
+            .join(" && ")
     }
 }
 
