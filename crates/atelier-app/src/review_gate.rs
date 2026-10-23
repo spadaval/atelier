@@ -1004,7 +1004,14 @@ fn work_edges(
 }
 
 /// Enforce immutability from branch creation, not merely after approval.
+///
+/// A later commit cannot undo a rewrite, since every commit in the range is
+/// checked, so the recovery is a rebase that leaves out the commit that made
+/// it, named by its ID so it holds wherever HEAD has moved since, as other
+/// fixes commit (atelier-v4rd, atelier-61il). At the tip it only drops it,
+/// which brings the record back; below, it rewrites the commits after it.
 pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result<()> {
+    let head = read.commit_id("HEAD")?;
     for edge in read.edges(base_commit, "HEAD")?.iter() {
         for path in edge
             .paths
@@ -1017,7 +1024,13 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
                 continue;
             }
             if before.is_some() || after.is_none_or(|(mode, _)| mode != "100644") {
-                bail!("review_append_only: {} was rewritten, deleted or changed mode in {}; append a successor event", path.display(), edge.commit);
+                let commit = &edge.commit;
+                let effect = if *commit == head {
+                    "which brings the record back (record a successor event for any change)"
+                } else {
+                    "which rewrites the commits after it: record fresh proof and review for them"
+                };
+                bail!("review_append_only: {} was rewritten, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display());
             }
         }
     }

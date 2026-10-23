@@ -103,9 +103,71 @@ impl Snapshot {
         let index = RecordIndex::load_structural(&dir.path().join(relative))?;
         Ok(Self { dir, index })
     }
+    /// The extracted tracker's directory, which holds its records while it
+    /// lives, and its records.
+    pub fn into_parts(self) -> (tempfile::TempDir, RecordIndex) {
+        (self.dir, self.index)
+    }
     pub fn root(&self) -> &Path {
         self.dir.path()
     }
+}
+
+/// The Git operation a conflict left in progress in this worktree, with the
+/// command that abandons it: a rebase or a merge. Until it ends, HEAD and the
+/// index are mid-operation, so no gate reads them (atelier-vlhn).
+pub(crate) fn operation_in_progress(repo: &Path) -> Result<Option<(&'static str, &'static str)>> {
+    let dir = PathBuf::from(text(
+        repo,
+        &["rev-parse", "--path-format=absolute", "--git-dir"],
+    )?);
+    Ok(
+        if dir.join("rebase-merge").exists() || dir.join("rebase-apply").exists() {
+            Some(("rebase", "git rebase --abort"))
+        } else if dir.join("MERGE_HEAD").exists() {
+            Some(("merge", "git merge --abort"))
+        } else {
+            None
+        },
+    )
+}
+
+/// The cause and fix of an operation in progress, after `code: `.
+pub(crate) fn operation_refusal(code: &str, operation: &str, abort: &str) -> anyhow::Error {
+    let finish = match operation {
+        "rebase" => "resolve the conflicts and continue with git rebase --continue",
+        _ => "resolve the conflicts and commit the merge",
+    };
+    anyhow::anyhow!("{code}: a {operation} is in progress, so HEAD and the index are mid-{operation}. Next: `{abort}`, or {finish}")
+}
+
+/// The local branches whose own committed record of `id` names them as its
+/// work branch: where `id` is owned when this checkout's records say
+/// nothing of it, as on the base before the work merges.
+pub(crate) fn owning_branches(repo: &Path, id: &str) -> Result<Vec<String>> {
+    let path = format!(".atelier/issues/{id}.md");
+    let heads = text(
+        repo,
+        &["for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"],
+    )?;
+    Ok(heads
+        .lines()
+        .filter(|branch| {
+            resolve(repo, &format!("refs/heads/{branch}"))
+                .and_then(|tip| git_freshness::blob(repo, &tip, Path::new(&path)))
+                .ok()
+                .and_then(|blob| {
+                    atelier_records::parse_issue_record(
+                        &blob,
+                        Path::new(&path).strip_prefix(".atelier").ok()?,
+                    )
+                    .ok()
+                })
+                .and_then(|record| record.issue.workflow_branch)
+                .is_some_and(|owner| owner.work_branch == *branch)
+        })
+        .map(str::to_owned)
+        .collect())
 }
 
 /// Gates read custom context link types from the project config,

@@ -17,6 +17,79 @@ pub(crate) struct Gates<'a> {
     /// The work branch's owner: its checks are named without a record in the
     /// verdict, and its passes are listed by name.
     pub owner: Option<&'a str>,
+    /// Records the checkout holds differently from HEAD, when the gates read
+    /// HEAD's instead.
+    pub uncommitted: Option<&'a Uncommitted>,
+}
+
+/// The issues whose checkout records differ from HEAD's, and the command
+/// that commits them: an issue record itself, or a review or evidence
+/// record about the issue. A gate judged the committed copies, so a line
+/// about one says so and its fix is that commit, not a move the checkout
+/// may already have made, such as an approval it holds; and no pass is
+/// shown for it (atelier-6ajc, atelier-q5uh).
+pub(crate) struct Uncommitted {
+    pub issues: std::collections::BTreeSet<String>,
+    pub fix: String,
+}
+impl Uncommitted {
+    /// `index` holds HEAD's records, which name the issue a removed or
+    /// changed review or evidence record was about; the checkout's copy
+    /// names the one a new or changed record is about.
+    pub fn new(
+        records: &atelier_app::committed_snapshot::RecordsUncommitted,
+        repo: &std::path::Path,
+        index: &RecordIndex,
+    ) -> Self {
+        let mut issues = std::collections::BTreeSet::new();
+        for (path, _) in &records.records {
+            let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                continue;
+            };
+            let Ok(relative) = path.strip_prefix(".atelier") else {
+                continue;
+            };
+            let working = std::fs::read_to_string(repo.join(path)).ok();
+            if relative.starts_with("issues") {
+                issues.insert(id.to_owned());
+            } else if relative.starts_with("reviews") {
+                issues.extend(
+                    index
+                        .require_review(id)
+                        .ok()
+                        .map(|review| review.target.clone()),
+                );
+                if let Some(atelier_records::review::ReviewFile::Event(review)) =
+                    working.and_then(|text| {
+                        atelier_records::review::parse_review_file(&text, relative).ok()
+                    })
+                {
+                    issues.insert(review.target);
+                }
+            } else if relative.starts_with("evidence") {
+                let attached = |evidence: &atelier_records::EvidenceRecord| {
+                    evidence
+                        .header
+                        .relationships
+                        .attachments
+                        .iter()
+                        .filter(|link| link.kind == "issue")
+                        .map(|link| link.id.clone())
+                        .collect::<Vec<_>>()
+                };
+                issues.extend(index.evidence(id).map(attached).unwrap_or_default());
+                if let Some(evidence) = working.and_then(|text| {
+                    atelier_records::parse_evidence_record_file(&text, relative).ok()
+                }) {
+                    issues.extend(attached(&evidence));
+                }
+            }
+        }
+        Self {
+            issues,
+            fix: records.commit_command(),
+        }
+    }
 }
 
 /// A rendered gate run.
@@ -58,6 +131,153 @@ impl std::fmt::Display for GatesRefused {
 }
 impl std::error::Error for GatesRefused {}
 
+/// A failed precondition as a gate node, so it prints and counts like any
+/// other failed check: its shipped code is the check, `target` the record it
+/// is about (the owner, or empty when there is none).
+pub(crate) fn precondition(
+    target: &str,
+    code: &str,
+    cause: impl Into<String>,
+    fix: Option<String>,
+) -> GateNode {
+    let mut node = atelier_app::review_gate::gate(target, code, false, cause.into(), Vec::new());
+    node.kind = PRECONDITION;
+    node.fix = fix;
+    node
+}
+
+/// The kind of a precondition's node; its line leads the failures.
+const PRECONDITION: &str = "precondition";
+
+/// The preconditions a command has found failing so far, so a check that
+/// then stops it before its gates still reports them with its own line.
+#[derive(Default)]
+pub(crate) struct Preconditions {
+    /// The record the failures are about, once known.
+    pub owner: Option<String>,
+    pub failed: Vec<GateNode>,
+    /// Set once the gates have run and their report holds the failures: a
+    /// refusal after that, such as a fence on what the checks changed, is
+    /// reported as it is.
+    pub gates_ran: bool,
+}
+impl Preconditions {
+    pub fn fail(&mut self, code: &str, cause: impl Into<String>, fix: Option<String>) {
+        let target = self.owner.clone().unwrap_or_default();
+        self.failed.push(precondition(&target, code, cause, fix));
+    }
+
+    /// `error` as the command reports it. Failed gates stay as they are. A
+    /// refusal by one of its own checks (`is_code`) that stopped it before
+    /// its gates becomes one more line after the preconditions, with a note
+    /// that names the gates it kept from running, `skipped`. Any other error
+    /// follows the preconditions when there are some.
+    pub fn refusal(
+        self,
+        error: anyhow::Error,
+        command: &str,
+        skipped: &str,
+        is_code: impl Fn(&str) -> bool,
+    ) -> anyhow::Error {
+        if self.gates_ran || error.is::<GatesRefused>() {
+            return error;
+        }
+        let owner = self.owner.as_deref();
+        let mut nodes = self.failed;
+        let stop = coded(owner.unwrap_or_default(), &format!("{error:#}"), is_code);
+        let (stopper, other) = match stop {
+            // The stop leads: its fix comes before the others', which may
+            // depend on it, such as a rebase that a records commit follows.
+            Some(node) => {
+                let code = node.check.clone();
+                nodes.insert(0, node);
+                (code, None)
+            }
+            None if nodes.is_empty() => return error,
+            None => ("an error".to_owned(), Some(format!("Error: {error:?}"))),
+        };
+        let mut refused = stopped(
+            &nodes,
+            owner,
+            format!("Not checked: {skipped}; {stopper} stops {command} before them."),
+        );
+        refused.notes.splice(0..0, other);
+        refused.into()
+    }
+}
+
+/// The code and one-line cause of an invalid workflow policy, from the
+/// field block its error prints: `.atelier/workflow.yaml line 2 column 1:
+/// <message>`. `None` when `error` is not a policy error.
+pub(crate) fn policy_failure(error: &anyhow::Error) -> Option<(String, String)> {
+    let text = format!("{error:#}");
+    let field = |name: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}: ")))
+            .map(str::to_owned)
+    };
+    let code = field("error")?;
+    let message = field("message").unwrap_or_default();
+    let mut place = field("path").unwrap_or_else(|| ".atelier/workflow.yaml".to_owned());
+    for name in ["field", "line", "column"] {
+        // A parser's message names its own line and column.
+        let named = name != "field" && message.contains(&format!(" {name} "));
+        if let Some(value) = field(name).filter(|_| !named) {
+            place.push_str(&format!(" {name} {value}"));
+        }
+    }
+    Some((code, format!("{place}: {message}")))
+}
+
+/// A refusal by one of a command's own checks, `<code>: <cause>. Next:
+/// <fix>`, as a precondition node about `target`; `None` when `message`
+/// leads with no code that `is_code` accepts.
+pub(crate) fn coded(
+    target: &str,
+    message: &str,
+    is_code: impl Fn(&str) -> bool,
+) -> Option<GateNode> {
+    let (code, rest) = message.split_once(": ")?;
+    if !(code.chars().all(|c| c.is_ascii_lowercase() || c == '_') && is_code(code)) {
+        return None;
+    }
+    let rest = rest.split_whitespace().collect::<Vec<_>>().join(" ");
+    let (cause, fix) = match rest.split_once(". Next: ") {
+        Some((cause, fix)) => (cause.to_owned(), Some(fix.to_owned())),
+        None => (rest, None),
+    };
+    Some(precondition(target, code, cause, fix))
+}
+
+/// The report of preconditions alone, when one of them stops the command
+/// before its gates: each failed node as its line, and `skipped`, which
+/// says what was not checked and why.
+pub(crate) fn stopped(nodes: &[GateNode], owner: Option<&str>, skipped: String) -> GatesRefused {
+    let mut report = GateReport::default();
+    for node in nodes.iter().filter(|node| !node.passed) {
+        let line = Line {
+            record: node.target.clone(),
+            check: node.check.clone(),
+            cause: node.reason.lines().next().unwrap_or_default().to_owned(),
+            fix: node.fix.clone(),
+            blocker: None,
+        };
+        report.failures.push(line.render(&[]));
+        let label = if Some(node.target.as_str()) == owner || node.target.is_empty() {
+            node.check.clone()
+        } else {
+            format!("{} {}", node.target, node.check)
+        };
+        if !report.failed.contains(&label) {
+            report.failed.push(label);
+        }
+    }
+    GatesRefused {
+        report,
+        notes: vec![skipped],
+    }
+}
+
 /// `<command>: passed`, or `<command>: refused — N checks (a, b)` naming
 /// every failed check.
 pub(crate) fn verdict(command: &str, failed: &[String]) -> String {
@@ -93,9 +313,15 @@ impl Line {
         }
     }
     fn render(&self, also: &[String]) -> String {
+        // A check about no record, such as uncommitted records on the base,
+        // is named alone.
         let mut text = format!(
-            "⚠ {} {}: {}",
-            self.record,
+            "⚠ {}{}: {}",
+            if self.record.is_empty() {
+                String::new()
+            } else {
+                format!("{} ", self.record)
+            },
             self.check,
             self.cause.trim_end().trim_end_matches('.')
         );
@@ -113,7 +339,10 @@ impl Gates<'_> {
     /// The verdict's name for a node's check: bare for the owner (and for
     /// findings judged across claims), `<record> <check>` otherwise.
     fn label(&self, node: &GateNode) -> String {
-        if Some(node.target.as_str()) == self.owner || node.target == "session" {
+        if Some(node.target.as_str()) == self.owner
+            || node.target == "session"
+            || node.target.is_empty()
+        {
             node.check.clone()
         } else {
             format!("{} {}", node.target, node.check)
@@ -122,6 +351,12 @@ impl Gates<'_> {
 
     fn is_owner(&self, node: &GateNode) -> bool {
         Some(node.target.as_str()) == self.owner
+    }
+
+    /// Whether the checkout's copy of `id` differs from the one the gates read.
+    fn differs(&self, id: &str) -> bool {
+        self.uncommitted
+            .is_some_and(|uncommitted| uncommitted.issues.contains(id))
     }
 
     /// Whether `check` failed on the owner.
@@ -249,47 +484,19 @@ impl Gates<'_> {
         None
     }
 
-    /// A transition that takes the closed `id` back to an open status.
-    fn reopen_command(&self, id: &str) -> Option<String> {
-        let issue = self.index.get_issue(id)?;
-        let workflow = self
-            .policy
-            .workflow_for_issue_type(&issue.issue_type)
-            .ok()?;
-        let (name, _) = workflow.transitions.iter().find(|(_, transition)| {
-            transition.from.contains(&issue.status)
-                && !self
-                    .policy
-                    .issue_status_is_terminal(&issue.issue_type, &transition.to)
-                    .unwrap_or(true)
-        })?;
-        Some(self.transition_command(id, name))
-    }
-
     /// The commands that close `id` in its scope, one per transition; the
-    /// listing of its transitions when nothing closes it. Under a closed
-    /// ancestor, the alternative when the work is still needed is reopening
-    /// that ancestor, when its workflow can.
+    /// listing of its transitions when nothing closes it. A closed ancestor
+    /// is not offered for reopening: policy validation refuses every
+    /// transition out of a done status.
     fn settle_command(&self, id: &str) -> String {
-        let reopen = self
-            .closed_ancestor(id)
-            .and_then(|ancestor| Some((self.reopen_command(&ancestor)?, ancestor)));
-        let steps = match self.closing_path(id) {
-            Some(path) if path.len() == 1 && reopen.is_none() => {
-                return self.transition_command(id, &path[0]);
-            }
+        match self.closing_path(id) {
+            Some(path) if path.len() == 1 => self.transition_command(id, &path[0]),
             Some(path) => path
                 .iter()
                 .map(|name| format!("`{}`", self.transition_command(id, name)))
                 .collect::<Vec<_>>()
                 .join(", then "),
             None => format!("list its transitions with `atelier issue transition {id}`"),
-        };
-        match reopen {
-            Some((command, ancestor)) => format!(
-                "{steps}, or, if the work is still needed, reopen {ancestor} with `{command}`"
-            ),
-            None => steps,
         }
     }
 
@@ -768,7 +975,7 @@ impl Gates<'_> {
 
     pub(crate) fn report(&self, nodes: &[GateNode]) -> GateReport {
         let mut report = GateReport::default();
-        // The owner's failures lead, its review first since other lines
+        // Preconditions lead, then the owner's failures, its review first since other lines
         // point to it, then the other records', each in the order the gates
         // ran.
         let mut order = (0..nodes.len())
@@ -776,6 +983,7 @@ impl Gates<'_> {
             .collect::<Vec<_>>();
         order.sort_by_key(|&at| {
             (
+                nodes[at].kind != PRECONDITION,
                 !self.is_owner(&nodes[at]),
                 nodes[at].check != "review.current",
             )
@@ -799,7 +1007,14 @@ impl Gates<'_> {
             }
             // A folded check is named on the line about its blocker, or
             // else on its host's first line.
-            for (number, line) in self.lines(&nodes[at], nodes).into_iter().enumerate() {
+            for (number, mut line) in self.lines(&nodes[at], nodes).into_iter().enumerate() {
+                if nodes[at].kind != PRECONDITION && self.differs(&line.record) {
+                    line.cause = format!(
+                        "{}, judged on HEAD's copy; the checkout's differs",
+                        line.cause.trim_end().trim_end_matches('.')
+                    );
+                    line.fix = self.uncommitted.map(|uncommitted| uncommitted.fix.clone());
+                }
                 let also = hosts
                     .iter()
                     .filter(|(folded, host)| {
@@ -816,9 +1031,16 @@ impl Gates<'_> {
                 report.failures.push(line.render(&also));
             }
         }
+        // The owner's checks read its whole scope, so none of its passes
+        // stands when a record in it differs from the copy they read.
+        let scope_differs = self.owner.is_some_and(|owner| {
+            self.differs(owner)
+                || atelier_app::review_gate::scope(self.index, owner)
+                    .is_ok_and(|scope| scope.iter().any(|id| self.differs(id)))
+        });
         let owner_passes = nodes
             .iter()
-            .filter(|node| node.passed && self.is_owner(node))
+            .filter(|node| node.passed && self.is_owner(node) && !scope_differs)
             .map(|node| self.pass_label(node))
             .collect::<Vec<_>>();
         if !owner_passes.is_empty() {
@@ -842,6 +1064,7 @@ impl Gates<'_> {
         claims.dedup();
         let holding = claims
             .iter()
+            .filter(|target| !self.differs(target))
             .filter(|target| {
                 nodes
                     .iter()

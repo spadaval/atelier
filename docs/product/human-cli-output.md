@@ -304,10 +304,9 @@ pass`, which exits zero because recording succeeded; a blocked or
 not-applicable result ends `recorded <result> — it never counts as a pass`;
 a capture that refuses to run still fails with an error and no verdict line),
 `check` in atelier-4t5l, `start` in
-atelier-501y, and `doctor` in atelier-rc8j. A refusal by a check that stops
-the command before its gates, such as `land_records_uncommitted` or
-`merge_diverged`, prints its error and counts that one check; atelier-0uaj
-evaluates the gates anyway.
+atelier-501y, and `doctor` in atelier-rc8j. A failed precondition, such as
+`land_records_uncommitted` or `merge_diverged`, is one more failed check in
+the same list, and the gates still run (atelier-0uaj).
 
 ### Gate Lines
 
@@ -330,10 +329,32 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   count: stale by a commit or merge (with paths), predating the branch's
   fork, or recorded by an identity that matches a Git author (see
   [approval freshness](reviews-and-merge.md#approval-freshness)).
-- The owner's failures lead, `review.current` first since other lines point
-  to it, then other records' in the order the gates ran. A check on the owner
-  is named bare in the verdict; a check on another record is
-  `<record> <check>`.
+- Failed preconditions lead, in the order found, then the owner's failures,
+  `review.current` first since other lines point to it, then other records' in
+  the order the gates ran. A check on the owner, or on no record, is named bare
+  in the verdict; a check on another record is `<record> <check>`.
+- A precondition is a check of its own that keeps its shipped code: records or
+  code that differ from HEAD, a base not merged in, a dirty completion, an
+  invalid policy (`⚠ <owner> workflow_config_parse_error: .atelier/workflow.yaml:
+  <message>. Next: fix .atelier/workflow.yaml and commit it`, printed once; the
+  fallback notes for the same file are left out). The gates still run against
+  what can be read, such as HEAD's committed records; a line about a record
+  whose checkout copy differs, or about the issue an uncommitted review or
+  evidence record is about, ends `, judged on HEAD's copy; the checkout's
+  differs` and its fix is the records commit, and the owner's passes are left
+  out while any record in its scope differs (atelier-6ajc, atelier-q5uh). One that the gates cannot
+  run past, such as the wrong branch, prints its line after the preconditions
+  found before it, then `Not checked: <the gates>; <code> stops <command>
+  before them.`, then the verdict:
+
+  ```
+  ⚠ atelier-7b6e land_branch_mismatch: owned on task/atelier-7b6e, not on master. Next: git switch task/atelier-7b6e && atelier land
+  Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_branch_mismatch stops land before them.
+  land: refused — 1 check (land_branch_mismatch)
+  ```
+
+- A list of paths, records or commits names the first five, then `and N
+  more`, through one helper (`first_five` in `atelier-core`).
 - Each finding, open item and blocker is its own line. Resolved fix_now
   findings that only wait on a fresh approval share one line; when a trivial
   exemption carries `review.current`, the line says it does not cover a
@@ -347,8 +368,7 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   check toward passing: for an open item in the scope, the workflow's
   transitions that close it from its status, in order (`--reason "…"` where
   the policy requires one); under a closed ancestor, which keeps it out of
-  active statuses, transitions that avoid them, such as `supersede`, and the
-  ancestor's reopen transition when its workflow has one; for an open
+  active statuses, transitions that avoid them, such as `supersede`; for an open
   blocker, the transition that closes it in one step, else `atelier start
   <blocker>` when its workflow lets it start, else the listing of its
   transitions, said as such, and the `atelier issue unlink` that drops the
@@ -358,10 +378,15 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   merge <owner> --sync` when it failed on the merged tree under
   `merge_strategy: merge_commit`, which holds the base's changes the work
   checkout lacks; and `atelier review request <owner>` for what needs an
-  independent reviewer. A fix of more than one command is a sentence with
+  independent reviewer; for a precondition, the git command that commits or
+  sets aside what is uncommitted, `git merge <base>`, or `git switch
+  <branch>`. A fix of more than one command is a sentence with
   each command in backticks. The refusal tests run every printed fix
   verbatim in a copy of the fixture and require it to exit 0 and to change
-  the records or checkout unless it only reads. A value only a person can supply, such as the
+  the records or checkout unless it only reads; then, with the records it
+  wrote committed, they run the gate again and require the failure it fixes
+  to be gone (atelier-r3oy). A fix only a person can carry out, such as
+  editing an invalid policy, is said in words without a command. A value only a person can supply, such as the
   reviewer identity, the resolution commit or the reason text, stays a
   placeholder (`<identity>`, `<commit>`, `"…"`).
 - The passes are one line for the owner's checks, naming the approval or
@@ -623,13 +648,14 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   own check replaces the inner code with its own. `merge` reports a record
   that differs from HEAD as `canonical_snapshot_uncommitted`, and `land`
   reports the same failure as `land_records_uncommitted`, not as both. A
-  command that only wraps a coded error, as `land` and `merge` wrap an
-  invalid candidate workflow policy, adds a recovery step but no code.
+  command that only reports a coded error, as `land` and `merge` report an
+  invalid candidate workflow policy as a gate line with its `workflow_*`
+  code, adds a recovery step but no code of its own.
 - Every error the list covers states its failure once, then gives one
   recovery step: `<code>: <failure>. Next: <step>`. Errors written before
   this rule switch over in the items that own their gates: `land` and
   `merge` gate failures print as [gate lines](#gate-lines) since atelier-9jr8
-  and atelier-6rh7, and their other checks switch over in atelier-0uaj;
+  and atelier-6rh7, and their other checks since atelier-0uaj;
   atelier-oxnw for `start`, and atelier-kset for `check` findings.
 - Output uses the terms in `CONTEXT.md`: records, check, finding, mission,
   parent. The internal words "lint" and "canonical" appear only inside a

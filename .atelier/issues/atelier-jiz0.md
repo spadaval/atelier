@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T15:49:57.523943975+00:00"
+status: "done"
 title: "Say an event is not a finding when disposition is given its ID"
-updated_at: "2026-10-23T15:19:35.824157468+00:00"
+updated_at: "2026-10-23T15:49:57.523943975+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,24 @@ A CLI test: disposition of an approval ID prints `<id> is an approval, not a fin
 ## Context
 
 Hit on 2026-10-23 while dispositioning atelier-dg3h review: the reviewer reported the finding and approval IDs swapped, and the error sent us looking at owners. Code: crates/atelier-cli/src/commands/review.rs disposition path.
+
+## Notes
+
+- 2026-10-23 [decision] The non-finding disposition error carries no code.
+  Reason: Review commands are not among the coded checks in human-cli-output.md, which adds no codes outside its list.
+
+## Close Reason
+
+`atelier review disposition <id>` given an approval (or any non-finding event) now refuses with `<id> is an approval, not a finding; a disposition settles a finding. Next: atelier review list <owner>`, exit 1.
+
+### Deviations
+None.
+
+### Decisions
+See the decision note on this item (no code on this error).
+
+### Surprises
+The old "must target the finding's owner" check could only fail for a non-finding, since disposition passes the finding's own target.
+
+### Open items
+None.

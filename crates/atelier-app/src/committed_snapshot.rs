@@ -12,13 +12,106 @@ use std::{
 
 type Entries = BTreeMap<PathBuf, (String, String)>;
 
-/// A record whose working bytes, index entry or file mode differs from the
-/// pinned commit. A command that names its own check for this, as `land`
-/// does with `land_records_uncommitted`, replaces the code and recovery step
-/// with its own and keeps `detail`.
+/// How a tracker record differs from the pinned commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordChange {
+    /// Its working bytes or file mode differ.
+    Modified,
+    /// It is not in the commit.
+    New,
+    /// It is in the commit but not in the checkout.
+    Deleted,
+    /// Its index entry differs while its working bytes match.
+    Staged,
+    /// The commit holds it as something other than a regular file.
+    NotRegular,
+}
+impl RecordChange {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Modified => "modified",
+            Self::New => "new",
+            Self::Deleted => "deleted",
+            Self::Staged => "staged",
+            Self::NotRegular => "not a regular file in HEAD",
+        }
+    }
+}
+
+/// The tracker records whose working bytes, index entry or file mode differ
+/// from the pinned commit, every one of them. A command that names its own
+/// check for this, as `land` does with `land_records_uncommitted`, replaces
+/// the code and recovery step with its own and keeps `summary`.
 #[derive(Debug)]
 pub struct RecordsUncommitted {
-    pub detail: String,
+    pub records: Vec<(PathBuf, RecordChange)>,
+}
+impl RecordsUncommitted {
+    /// `2 tracker records differ from HEAD: a (modified), b (new)`, the
+    /// first five, then a count.
+    pub fn summary(&self) -> String {
+        format!(
+            "{} from HEAD: {}",
+            match self.records.len() {
+                1 => "1 tracker record differs".to_owned(),
+                count => format!("{count} tracker records differ"),
+            },
+            atelier_core::first_five(
+                self.records.iter().map(|(path, change)| format!(
+                    "{} ({})",
+                    path.display(),
+                    change.as_str()
+                )),
+                ", "
+            )
+        )
+    }
+    /// The command that settles them. Review records are append-only, so a
+    /// committed one that was changed or deleted is restored from HEAD,
+    /// never committed: the check would refuse that commit for good
+    /// (atelier-v4rd). The rest are committed, or only staged again when
+    /// each differs only in the index, so their working bytes already match
+    /// HEAD and there is nothing to commit.
+    /// What to do with them, before the command that does it.
+    pub fn advice(&self) -> &'static str {
+        if self.records.iter().any(|(path, change)| {
+            path.starts_with(".atelier/reviews") && *change != RecordChange::New
+        }) {
+            "review records are append-only, so restore the committed ones and commit the rest with the work"
+        } else {
+            "commit them with the work"
+        }
+    }
+    pub fn commit_command(&self) -> String {
+        let (restore, rest): (Vec<_>, Vec<_>) = self.records.iter().partition(|(path, change)| {
+            path.starts_with(".atelier/reviews") && *change != RecordChange::New
+        });
+        let commit = if rest.is_empty() {
+            None
+        } else if rest
+            .iter()
+            .all(|(_, change)| *change == RecordChange::Staged)
+        {
+            Some("git add .atelier".to_owned())
+        } else {
+            Some("git add .atelier && git commit -m \"…\"".to_owned())
+        };
+        let restore = (!restore.is_empty()).then(|| {
+            format!(
+                "git restore --source=HEAD --staged --worktree -- {}",
+                restore
+                    .iter()
+                    .map(|(path, _)| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        });
+        restore
+            .into_iter()
+            .chain(commit)
+            .collect::<Vec<_>>()
+            .join(" && ")
+    }
 }
 
 impl std::fmt::Display for RecordsUncommitted {
@@ -26,15 +119,15 @@ impl std::fmt::Display for RecordsUncommitted {
         write!(
             formatter,
             "canonical_snapshot_uncommitted: {}. Next: commit or restore the records, then retry",
-            self.detail
+            self.summary()
         )
     }
 }
 
 impl std::error::Error for RecordsUncommitted {}
 
-fn records_uncommitted<T>(detail: String) -> Result<T> {
-    Err(RecordsUncommitted { detail }.into())
+fn records_uncommitted<T>(records: Vec<(PathBuf, RecordChange)>) -> Result<T> {
+    Err(RecordsUncommitted { records }.into())
 }
 
 fn entries(repo: &Path, commit: &str) -> Result<Entries> {
@@ -180,9 +273,9 @@ impl CommittedSnapshot {
             .into_iter()
             .map(|path| Path::new(".atelier").join(path))
             .collect::<Vec<_>>();
-        require_records_match(&changed)?;
+        require_records_match(repo, &entries, changed)?;
         paths.retain(|path| !canonical(path));
-        let hidden = flagged_paths(repo, &entries, |path| !canonical(path), true)?;
+        let hidden = flagged_paths(repo, &entries, |path| !canonical(path))?;
         if clean {
             require_paths_clean(repo, &paths, hidden)?;
         } else {
@@ -194,31 +287,40 @@ impl CommittedSnapshot {
     }
     pub fn verified_working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
         let entries = entries(repo, &self.commit)?;
-        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         verify_records(repo, &entries)?;
+        self.working_paths(repo)
+    }
+    /// The uncommitted paths outside the tracker, including those Git index
+    /// flags hide, without verifying the records: what a command reports
+    /// beside records it has already found uncommitted.
+    pub fn working_paths(&self, repo: &Path) -> Result<Vec<PathBuf>> {
+        let entries = entries(repo, &self.commit)?;
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         paths.retain(|path| !canonical(path));
-        paths.extend(flagged_paths(
-            repo,
-            &entries,
-            |path| !canonical(path),
-            true,
-        )?);
+        paths.extend(flagged_paths(repo, &entries, |path| !canonical(path))?);
         paths.sort();
         paths.dedup();
         Ok(paths)
     }
     pub fn require_clean(&self, repo: &Path) -> Result<()> {
         let entries = entries(repo, &self.commit)?;
-        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         verify_records(repo, &entries)?;
+        self.require_code_clean(repo)
+    }
+    /// Refuses uncommitted paths outside the tracker, without verifying the
+    /// records.
+    pub fn require_code_clean(&self, repo: &Path) -> Result<()> {
+        let entries = entries(repo, &self.commit)?;
+        let mut paths = crate::git_freshness::working_status_paths(repo)?;
         paths.retain(|path| !canonical(path));
-        let hidden = flagged_paths(repo, &entries, |path| !canonical(path), true)?;
+        let hidden = flagged_paths(repo, &entries, |path| !canonical(path))?;
         require_paths_clean(repo, &paths, hidden)
     }
 }
 
 fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
-    require_records_match(&modified(repo, record_paths(repo, entries)?, entries)?)
+    let changed = modified(repo, record_paths(repo, entries)?, entries)?;
+    require_records_match(repo, entries, changed)
 }
 fn record_paths(repo: &Path, entries: &Entries) -> Result<BTreeSet<PathBuf>> {
     let root = repo.join(".atelier");
@@ -228,28 +330,88 @@ fn record_paths(repo: &Path, entries: &Entries) -> Result<BTreeSet<PathBuf>> {
         .cloned()
         .collect::<BTreeSet<_>>();
     collect(&root, &root, &mut paths)?;
-    for (path, (mode, _)) in entries.iter().filter(|(path, _)| canonical(path)) {
-        if !matches!(mode.as_str(), "100644" | "100755") {
-            return records_uncommitted(format!(
-                "{} is not a regular committed file",
-                path.display()
-            ));
-        }
+    let irregular = entries
+        .iter()
+        .filter(|(path, (mode, _))| {
+            canonical(path) && !matches!(mode.as_str(), "100644" | "100755")
+        })
+        .map(|(path, _)| (path.clone(), RecordChange::NotRegular))
+        .collect::<Vec<_>>();
+    if !irregular.is_empty() {
+        return records_uncommitted(irregular);
     }
     Ok(paths)
 }
-fn require_records_match(paths: &[PathBuf]) -> Result<()> {
-    if let Some(path) = paths.first() {
-        return records_uncommitted(format!(
-            "{} path, bytes or mode differs from pinned HEAD",
-            path.display()
-        ));
+/// Refuses records whose working bytes differ (`changed`) or whose index
+/// entry differs from the pinned commit, naming every one.
+fn require_records_match(repo: &Path, entries: &Entries, changed: Vec<PathBuf>) -> Result<()> {
+    let mut records = changed
+        .into_iter()
+        .map(|path| {
+            let change = if !entries.contains_key(&path) {
+                RecordChange::New
+            } else if fs::symlink_metadata(repo.join(&path)).is_err() {
+                RecordChange::Deleted
+            } else {
+                RecordChange::Modified
+            };
+            (path, change)
+        })
+        .collect::<Vec<_>>();
+    for path in index_mismatches(repo, entries)? {
+        if !records.iter().any(|(listed, _)| *listed == path) {
+            records.push((path, RecordChange::Staged));
+        }
     }
-    Ok(())
+    if records.is_empty() {
+        return Ok(());
+    }
+    records.sort_by(|(left, _), (right, _)| left.cmp(right));
+    records_uncommitted(records)
+}
+/// Records whose index entry differs from the pinned commit, or which the
+/// index lacks.
+fn index_mismatches(repo: &Path, entries: &Entries) -> Result<Vec<PathBuf>> {
+    let output = git_output(repo, &["ls-files", "--stage", "-z"])?;
+    let mut indexed = BTreeSet::new();
+    let mut mismatched = Vec::new();
+    for entry in output
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
+        let text = std::str::from_utf8(entry)?;
+        let (metadata, path) = text.split_once('\t').context("invalid Git index entry")?;
+        let path = Path::new(path);
+        if !canonical(path) {
+            continue;
+        }
+        if !entries.get(path).is_some_and(|(mode, hash)| {
+            metadata
+                .split_whitespace()
+                .eq([mode.as_str(), hash.as_str(), "0"])
+        }) {
+            mismatched.push(path.to_path_buf());
+        }
+        indexed.insert(path.to_path_buf());
+    }
+    mismatched.extend(
+        entries
+            .keys()
+            .filter(|path| canonical(path) && !indexed.contains(*path))
+            .cloned(),
+    );
+    Ok(mismatched)
 }
 fn require_paths_clean(repo: &Path, paths: &[PathBuf], hidden: Vec<PathBuf>) -> Result<()> {
     if !paths.is_empty() {
-        bail!("merge_checkout_dirty: {} has uncommitted changes: {:?}; commit or stash them before retrying", repo.display(), paths);
+        let mut paths = paths.to_vec();
+        paths.sort();
+        bail!(
+            "merge_checkout_dirty: {} has {}: {}. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`",
+            repo.display(),
+            atelier_core::count_noun(paths.len(), "uncommitted path"),
+            atelier_core::first_five(paths.iter().map(|path| path.display().to_string()), ", ")
+        );
     }
     require_hidden_clean(hidden)
 }
@@ -257,16 +419,14 @@ fn require_paths_clean(repo: &Path, paths: &[PathBuf], hidden: Vec<PathBuf>) -> 
 /// Tracked changes hidden by assume-unchanged or skip-worktree index flags.
 /// Unflagged paths are left to Git status, which honours core.filemode.
 pub(crate) fn flagged_modified_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
-    flagged_paths(repo, &entries(repo, commit)?, |_| true, false)
+    flagged_paths(repo, &entries(repo, commit)?, |_| true)
 }
 fn flagged_paths(
     repo: &Path,
     entries: &Entries,
     include: impl Fn(&Path) -> bool,
-    verify_index: bool,
 ) -> Result<Vec<PathBuf>> {
     let output = git_output(repo, &["ls-files", "--stage", "-v", "-z"])?;
-    let mut indexed = BTreeSet::new();
     let mut flagged = BTreeSet::new();
     for entry in output
         .split(|byte| *byte == 0)
@@ -276,31 +436,10 @@ fn flagged_paths(
             bail!("invalid Git index flag entry");
         }
         let text = std::str::from_utf8(&entry[2..])?;
-        let (metadata, path) = text.split_once('\t').context("invalid Git index entry")?;
+        let (_, path) = text.split_once('\t').context("invalid Git index entry")?;
         let path = Path::new(path);
-        if verify_index && canonical(path) {
-            if !entries.get(path).is_some_and(|(mode, hash)| {
-                metadata
-                    .split_whitespace()
-                    .eq([mode.as_str(), hash.as_str(), "0"])
-            }) {
-                return records_uncommitted(format!(
-                    "{} index path, bytes or mode differs from pinned HEAD",
-                    path.display()
-                ));
-            }
-            indexed.insert(path);
-        }
         if (entry[0].is_ascii_lowercase() || entry[0] == b'S') && include(path) {
             flagged.insert(path.to_path_buf());
-        }
-    }
-    if verify_index {
-        if let Some(path) = entries
-            .keys()
-            .find(|path| canonical(path) && !indexed.contains(path.as_path()))
-        {
-            return records_uncommitted(format!("{} is absent from the Git index", path.display()));
         }
     }
     // Unflagged paths follow Git's own status, including core.filemode.
@@ -308,8 +447,15 @@ fn flagged_paths(
 }
 
 fn require_hidden_clean(paths: Vec<PathBuf>) -> Result<()> {
-    if let Some(path) = paths.first() {
-        bail!("tracked_snapshot_uncommitted: {} differs from pinned HEAD despite Git index flags; restore or commit the change before continuing", path.display());
+    if !paths.is_empty() {
+        bail!(
+            "tracked_snapshot_uncommitted: {} from HEAD, hidden by Git index flags: {}; restore or commit the change before continuing",
+            match paths.len() {
+                1 => "1 path differs".to_owned(),
+                count => format!("{count} paths differ"),
+            },
+            atelier_core::first_five(paths.iter().map(|path| path.display().to_string()), ", ")
+        );
     }
     Ok(())
 }
@@ -552,7 +698,7 @@ mod tests {
         git_output(repo.path(), &["add", record]).unwrap();
         fs::write(repo.path().join(record), &bytes).unwrap();
         let error = snapshot.read_record_files(repo.path(), false).unwrap_err();
-        assert!(error.to_string().contains("index path, bytes or mode"));
+        assert!(error.to_string().contains(&format!("{record} (staged)")));
         git_output(repo.path(), &["reset", "-q", "HEAD", "--", record]).unwrap();
         assert_eq!(graph_error(), expected);
         fs::write(repo.path().join("unfinished"), "unfinished code").unwrap();
@@ -790,13 +936,12 @@ mod tests {
             // These live raw verification helpers must bypass clean filters.
             // Native Git status, exercised below, may independently run them.
             verify_records(repo.path(), &entries(repo.path(), &pin).unwrap()).unwrap();
-            flagged_paths(
-                repo.path(),
-                &entries(repo.path(), &pin).unwrap(),
-                |_| false,
-                true,
-            )
-            .unwrap();
+            flagged_paths(repo.path(), &entries(repo.path(), &pin).unwrap(), |_| false).unwrap();
+            assert!(
+                index_mismatches(repo.path(), &entries(repo.path(), &pin).unwrap())
+                    .unwrap()
+                    .is_empty()
+            );
             assert!(!marker.exists());
             snapshot.verified_working_paths(repo.path()).unwrap();
             let path = ".atelier/issues/case-1 \n\t名.data";

@@ -47,14 +47,17 @@ fn check_records(
         .map_err(records_uncommitted)
 }
 /// Land names its own check for records that differ from HEAD: one code,
-/// the failure, and one recovery step.
+/// every record, and one recovery step.
 fn records_uncommitted(error: anyhow::Error) -> anyhow::Error {
-    let failure = match error.downcast_ref::<atelier_app::committed_snapshot::RecordsUncommitted>()
-    {
-        Some(uncommitted) => uncommitted.detail.clone(),
-        None => format!("{error:#}"),
-    };
-    anyhow::anyhow!("land_records_uncommitted: {failure}. Next: commit records and policy with the work they describe, then rerun `atelier land`")
+    match error.downcast_ref::<atelier_app::committed_snapshot::RecordsUncommitted>() {
+        Some(uncommitted) => anyhow::anyhow!(
+            "land_records_uncommitted: {}; {}. Next: {}",
+            uncommitted.summary(),
+            uncommitted.advice(),
+            uncommitted.commit_command()
+        ),
+        None => error,
+    }
 }
 fn check_traceability(
     repo: &Path,
@@ -71,7 +74,11 @@ fn check_traceability(
         let work = workflow_policy::resolve_work_branch(policy, index, &issue.id)?;
         let owner = index.require_issue(&work.owner_id)?;
         if owner.workflow_branch.is_none() || git::work_ref(repo, &work.branch)?.is_none() {
-            bail!("land_work_untraceable: active work {} has no recorded existing owner branch; run `atelier start {}` and commit its records", issue.id, issue.id);
+            // A local branch that owns it is where it lands (atelier-9a6e).
+            if let Some(owned) = git::owning_branches(repo, &work.owner_id)?.first() {
+                bail!("land_work_untraceable: active work {} is owned on {owned}, which this checkout's records do not name. Next: git switch {owned} && atelier land", issue.id);
+            }
+            bail!("land_work_untraceable: active work {} has no recorded existing owner branch. Next: atelier start {}", issue.id, issue.id);
         }
     }
     Ok(())
@@ -101,7 +108,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         })
         .collect::<Vec<_>>();
     if refs.is_empty() {
-        bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base} or run `atelier start <id>`");
+        bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base}, or give the work an owner branch with `atelier start` and its item's ID");
     }
     // No copy of the base has a workflow policy yet, so there are no gates on
     // the base to land through; the caller says whether this is an install.
@@ -137,7 +144,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         });
     }
     changed.map(Some).with_context(|| {
-        format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; run `atelier start <id>` from {base}")
+        format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; start the work from {base} with `atelier start` and its item's ID")
     })
 }
 /// Names the commits the local base holds beyond its upstream that the
@@ -171,73 +178,201 @@ fn foreign_base_commits_note(
     if foreign.is_empty() {
         return Ok(None);
     }
-    const SHOWN: usize = 5;
-    let mut listed = foreign
-        .iter()
-        .take(SHOWN)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("; ");
-    if foreign.len() > SHOWN {
-        listed.push_str(&format!("; and {} more", foreign.len() - SHOWN));
-    }
+    let listed = crate::human_output::first_five(foreign.iter().cloned(), "; ");
     Ok(Some(format!(
         "Warning: {base} is ahead of its upstream with {} that {}: {listed}. Pushing {base} publishes them; confirm they are meant to go out.",
         crate::human_output::count_noun(foreign.len(), "commit"),
         if owned.is_empty() { "no owner made" } else { "this owner did not make" },
     )))
 }
-/// Up to five of `items`, then how many more: `a, b, c, d, e and 2 more`.
-fn first_five(items: impl IntoIterator<Item = String>) -> String {
-    const SHOWN: usize = 5;
-    let items = items.into_iter().collect::<Vec<_>>();
-    let mut listed = items
-        .iter()
-        .take(SHOWN)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join(", ");
-    if items.len() > SHOWN {
-        listed.push_str(&format!(" and {} more", items.len() - SHOWN));
-    }
-    listed
-}
 fn land_text(requested: Option<&str>, install: bool, deep: bool) -> Result<String> {
     land_checked(requested, install, deep).map(|(text, _)| text)
 }
-/// The landing report, and the commit every check ran against.
+/// Whether `code` is one of land's own checks or the record fence it runs.
+fn is_land_code(code: &str) -> bool {
+    code.starts_with("land_") || code == "review_append_only"
+}
+/// The landing report, and the commit every check ran against. A failed
+/// precondition is one more failed check, and the gates still run against
+/// what can be read, such as HEAD's committed records when the checkout's
+/// differ; one that keeps the gates from running is reported with the
+/// preconditions before it.
 fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(String, String)> {
+    let mut preconditions = crate::gate_report::Preconditions::default();
+    land_gates(requested, install, deep, &mut preconditions).map_err(|error| {
+        let skipped = if preconditions.owner.is_some() {
+            "the owner's review, findings, proof, blocker and open-work gates and the done claims"
+        } else {
+            "the base commit and done-claim checks"
+        };
+        preconditions.refusal(error, "land", skipped, is_land_code)
+    })
+}
+fn land_gates(
+    requested: Option<&str>,
+    install: bool,
+    deep: bool,
+    preconditions: &mut crate::gate_report::Preconditions,
+) -> Result<(String, String)> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
-    let (head, branch, snapshot, initial_paths, index) = {
+    if let Some((operation, abort)) = git::operation_in_progress(repo)? {
+        return Err(git::operation_refusal(
+            &format!("land_{operation}_in_progress"),
+            operation,
+            abort,
+        ));
+    }
+    let (head, branch, snapshot, initial_paths, index, uncommitted) = {
         let _lock =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;
         let head = git_freshness::head_commit(repo)?;
         let branch = git::checkout_branch(repo)?.unwrap_or_default();
         let snapshot = atelier_app::committed_snapshot::CommittedSnapshot::new(&head)?;
-        let (files, paths) = snapshot
-            .read_record_files(repo, false)
-            .map_err(records_uncommitted)?;
-        git::require_committed_config(repo, &head, "land")?;
-        (head, branch, snapshot, paths, files.into_index()?)
+        match snapshot.read_record_files(repo, false) {
+            Ok((files, paths)) => {
+                git::require_committed_config(repo, &head, "land")?;
+                let index = files.into_index()?;
+                (head, branch, snapshot, paths, index, None)
+            }
+            // The gates read HEAD's committed records instead, so every
+            // other failure is reported with this one.
+            Err(error) => {
+                let uncommitted =
+                    error.downcast::<atelier_app::committed_snapshot::RecordsUncommitted>()?;
+                let (dir, index) =
+                    git::Snapshot::at(repo, &layout.canonical_dir(), &head)?.into_parts();
+                let paths = snapshot.working_paths(repo)?;
+                (
+                    head,
+                    branch,
+                    snapshot,
+                    paths,
+                    index,
+                    Some((uncommitted, dir)),
+                )
+            }
+        }
     };
+    // Where the records the gates read are: the checkout, or HEAD's when
+    // the checkout's differ.
+    let records_root = uncommitted.as_ref().map_or(repo, |(_, dir)| dir.path());
     let mut read = git_freshness::ReadContext::from_snapshot(repo, head.clone(), &initial_paths);
-    atelier_workflow::load(repo).context(
-        "candidate workflow policy is invalid. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier land`",
-    )?;
-    let id = owner(&index, &branch, requested)?;
+    // The candidate policy is the committed one; it is the working one when
+    // the records are committed.
+    let candidate = match &uncommitted {
+        None => atelier_workflow::load(repo),
+        Some(_) => git_freshness::blob(
+            repo,
+            &head,
+            Path::new(workflow_policy::WORKFLOW_POLICY_PATH),
+        )
+        .and_then(|text| {
+            atelier_workflow::parse_policy_text(&text, workflow_policy::WORKFLOW_POLICY_PATH)
+        }),
+    };
+    let candidate_invalid = match candidate {
+        Ok(_) => None,
+        Err(error) => Some(crate::gate_report::policy_failure(&error).with_context(|| {
+            format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml and commit it")
+        })?),
+    };
+    let record_failures = |preconditions: &mut crate::gate_report::Preconditions| {
+        if let Some((uncommitted, _)) = &uncommitted {
+            preconditions.fail(
+                "land_records_uncommitted",
+                format!("{}; {}", uncommitted.summary(), uncommitted.advice()),
+                Some(uncommitted.commit_command()),
+            );
+        }
+        if let Some((code, cause)) = &candidate_invalid {
+            preconditions.fail(
+                code,
+                cause.clone(),
+                Some("fix .atelier/workflow.yaml and commit it".to_owned()),
+            );
+        }
+    };
+    let id = match owner(&index, &branch, requested) {
+        Ok(id) => id,
+        Err(error) => {
+            record_failures(preconditions);
+            return Err(error);
+        }
+    };
+    preconditions.owner = id.clone();
+    record_failures(preconditions);
+    // The owner's branch is where its gates are read; from anywhere else
+    // they cannot be, so land says where to run instead.
+    let here = if branch.is_empty() {
+        "detached HEAD".to_owned()
+    } else {
+        branch.clone()
+    };
+    let ownership = match &id {
+        Some(id) => {
+            let issue = index.require_issue(id)?;
+            if issue.issue_type == "mission" {
+                bail!("land_mission: a mission, and missions have no branch; land one of its items. Next: atelier work mission {id}");
+            }
+            match &issue.workflow_branch {
+                None => match git::owning_branches(repo, id)?.first() {
+                    Some(owned) => bail!(
+                        "land_branch_mismatch: owned on {owned}, not on {here}. Next: git switch {owned} && atelier land"
+                    ),
+                    None => bail!("land_work_untraceable: {id} has no work branch. Next: atelier start {id}"),
+                },
+                Some(ownership)
+                    if ownership.work_branch != branch || ownership.branch_base == branch =>
+                {
+                    let work = &ownership.work_branch;
+                    if git::resolve(repo, &format!("refs/heads/{work}")).is_ok() {
+                        bail!("land_branch_mismatch: owned on {work}, not on {here}. Next: git switch {work} && atelier land");
+                    }
+                    if base_policy::working(repo)
+                        .ok()
+                        .and_then(|source| {
+                            source
+                                .policy
+                                .issue_status_is_terminal(&issue.issue_type, &issue.status)
+                                .ok()
+                        })
+                        .unwrap_or(false)
+                    {
+                        bail!("land_branch_mismatch: done, and its work branch {work} is gone, so there is nothing of it to land here; land this checkout as it is. Next: atelier land");
+                    }
+                    bail!("land_branch_mismatch: owned on {work}, which is not a local branch. Next: git fetch && git switch {work} && atelier land");
+                }
+                Some(ownership) => Some(ownership.clone()),
+            }
+        }
+        None => None,
+    };
+    // The owner's branch is checked above, so its recorded base is the pin.
     let base_pin = base_pin(repo, &index, id.as_deref())?;
-    let source = match &base_pin {
-        Some((_, commit)) => base_policy::from_captured(&mut read, commit)?,
-        None => base_policy::working(repo)?,
+    let source = match (&base_pin, &uncommitted) {
+        (Some((_, commit)), _) => base_policy::from_captured(&mut read, commit)?,
+        // The working policy is not committed, so HEAD's is the one to use.
+        (None, Some(_)) => base_policy::from_captured(&mut read, &head)?,
+        (None, None) => base_policy::working(repo)?,
     };
     let (branch_base, behind) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let behind_note = behind.map(|(base, count)| format!(
         "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
         crate::human_output::count_noun(count, "commit")
     ));
-    index.validate_policy(&source.policy, repo)?;
-    let mut lines = source.diagnostics;
+    index.validate_policy(&source.policy, records_root)?;
+    // The policy that does not parse is reported once, as its failed check;
+    // the fallback's own notes about it would repeat it. A base policy's
+    // notes are about another commit, so they stay.
+    let mut lines = source
+        .diagnostics
+        .iter()
+        .filter(|line| {
+            candidate_invalid.is_none() || base_pin.is_some() || !line.starts_with("Invalid ")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     check_traceability(repo, &index, &source.policy)?;
     let owned = id
         .as_ref()
@@ -311,35 +446,65 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
         &touched.unwrap_or_default(),
     )?;
     if install && (id.is_some() || branch == source.policy.branch_policy.base_branch) {
-        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base; rerun `atelier land` without --install");
+        bail!("land_install_invalid: --install is for an unowned branch that installs Atelier, not for an owner's branch or the base. Next: atelier land");
     }
     // What land found beyond its checks, after the passes, and the step a
     // passing land leads to.
     let mut situation = Vec::new();
     let mut next = None;
-    if let Some(id) = &id {
+    if let (Some(id), Some(ownership)) = (&id, &ownership) {
         let id = id.clone();
         let issue = index.require_issue(&id)?;
-        let ownership = issue.workflow_branch.as_ref().with_context(|| format!("land_work_untraceable: owner {id} has no committed branch metadata; run `atelier start {id}` and commit the record"))?;
-        if ownership.work_branch != branch || ownership.branch_base == branch {
-            bail!(
-                "land_branch_mismatch: owner {id} requires {} with distinct base {}",
-                ownership.work_branch,
-                ownership.branch_base
+        let done = source
+            .policy
+            .issue_status_is_terminal(&issue.issue_type, &issue.status)?;
+        if done && !initial_paths.is_empty() {
+            preconditions.fail(
+                "land_completion_dirty",
+                format!(
+                    "done, but the checkout has {}: {}",
+                    crate::human_output::count_noun(initial_paths.len(), "uncommitted path"),
+                    crate::human_output::first_five(
+                        initial_paths.iter().map(|path| path.display().to_string()),
+                        ", "
+                    )
+                ),
+                Some("commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`".to_owned()),
             );
         }
-        if source
-            .policy
-            .issue_status_is_terminal(&issue.issue_type, &issue.status)?
-            && !initial_paths.is_empty()
-        {
-            bail!("land_completion_dirty: a completed owner requires a clean checkout for current proof/review; commit or hand off the work as active");
-        }
         if source.policy.branch_policy.base_branch != ownership.branch_base {
-            bail!(
-                "land_base_mismatch: recorded base {} disagrees with trusted policy base {}",
-                ownership.branch_base,
-                source.policy.branch_policy.base_branch
+            // The record names the base; recording the policy's base in it
+            // is the fix, committed alone (atelier-9a6e). The new line is
+            // the one the record would render, passed to perl as an
+            // argument, so any legal branch name survives the shell and the
+            // pattern (atelier-hen4).
+            let (recorded, trusted) = (
+                &ownership.branch_base,
+                &source.policy.branch_policy.base_branch,
+            );
+            let path = format!(".atelier/issues/{id}.md");
+            let line = index
+                .issue_record(&id)
+                .and_then(|record| {
+                    let mut record = record.clone();
+                    record.issue.workflow_branch.as_mut()?.branch_base = trusted.clone();
+                    atelier_records::render_issue_record(&record).ok()
+                })
+                .and_then(|text| {
+                    text.lines()
+                        .find(|line| line.starts_with("  branch_base: "))
+                        .map(str::to_owned)
+                });
+            let quote = |text: &str| format!("'{}'", text.replace('\'', "'\\''"));
+            preconditions.fail(
+                "land_base_mismatch",
+                format!("recorded base {recorded} disagrees with trusted policy base {trusted}"),
+                line.map(|line| {
+                    format!(
+                        "perl -pi -e 'BEGIN {{ $line = shift }} $done ||= s/^  branch_base: .*\\n/$line\\n/' {} {path} && git commit -m \"…\" -- {path}",
+                        quote(&line)
+                    )
+                }),
             );
         }
         let base = branch_base
@@ -355,16 +520,16 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
             &id,
             base,
         )?);
-        if source
-            .policy
-            .issue_status_is_terminal(&issue.issue_type, &issue.status)?
-        {
+        if done {
             next = Some(format!("Next: atelier merge {id}"));
         } else if !initial_paths.is_empty() {
             situation.push(format!(
                 "Unfinished checkout: {}: {}. See `atelier status` before handing off.",
                 crate::human_output::count_noun(initial_paths.len(), "uncommitted path"),
-                first_five(initial_paths.iter().map(|path| path.display().to_string()))
+                crate::human_output::first_five(
+                    initial_paths.iter().map(|path| path.display().to_string()),
+                    ", "
+                )
             ));
         }
     } else if branch == source.policy.branch_policy.base_branch {
@@ -386,44 +551,93 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
         // (atelier-bibd).
         match tracker_changes_since(repo, base)? {
             None if install => situation.push(format!(
-                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or `git merge --no-ff`), then start further work with `atelier start <id>`."
+                "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or `git merge --no-ff`), then start further work on an item with `atelier start`."
             )),
             None => bail!(
-                "land_install_unconfirmed: {base} has no workflow policy yet, so atelier merge cannot gate {label}. If this branch installs Atelier, rerun `atelier land --install`; otherwise run `atelier start <id>` to give the work an owner branch."
+                "land_install_unconfirmed: {base} has no workflow policy yet, so atelier merge cannot gate {label}. If this branch installs Atelier, rerun `atelier land --install`; otherwise give the work an owner branch with `atelier start` and its item's ID."
             ),
             Some(_) if install => bail!(
-                "land_install_invalid: {base} already has a workflow policy, so {label} does not install Atelier; run `atelier start <id>` to give the work an owner branch"
+                "land_install_invalid: {base} already has a workflow policy, so {label} does not install Atelier; give the work an owner branch with `atelier start` and its item's ID"
             ),
             Some(changed) if !changed.is_empty() => {
-                let listed = first_five(changed.iter().map(|path| path.display().to_string()));
-                bail!(
-                    "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; run `atelier start <id>` to give the work an owner branch, or move the tracker changes onto one"
+                let listed = crate::human_output::first_five(
+                    changed.iter().map(|path| path.display().to_string()),
+                    ", ",
                 );
+                // The item whose record the branch changes is the one to own it.
+                let item = changed.iter().find_map(|path| {
+                    let id = path.strip_prefix(".atelier/issues").ok()?.file_stem()?.to_str()?;
+                    index
+                        .get_issue(id)
+                        .filter(|issue| issue.issue_type != "mission")
+                        .map(|_| id.to_owned())
+                });
+                // An item a local branch owns lands there.
+                let owned = match &item {
+                    Some(item) => git::owning_branches(repo, item)?
+                        .into_iter()
+                        .find(|owner| *owner != branch)
+                        .map(|owner| (item.clone(), owner)),
+                    None => None,
+                };
+                if let Some((item, owner)) = owned {
+                    bail!(
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; {item} is owned on {owner}. Next: land it there with `git switch {owner} && atelier land`, or move the tracker changes onto {owner}"
+                    );
+                }
+                match item {
+                    Some(item) => bail!(
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}. Next: give the work an owner branch with `atelier start {item}`, or move the tracker changes onto one"
+                    ),
+                    None => bail!(
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; give the work an owner branch with `atelier start` and its item's ID, or move the tracker changes onto one"
+                    ),
+                }
             }
             Some(_) => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
         }
     }
+    nodes.splice(0..0, std::mem::take(&mut preconditions.failed));
+    preconditions.gates_ran = true;
+    let differing = uncommitted
+        .as_ref()
+        .map(|(records, _)| crate::gate_report::Uncommitted::new(records, repo, &index));
     let mut report = crate::gate_report::Gates {
         index: &index,
         policy: &source.policy,
         owner: id.as_deref(),
+        uncommitted: differing.as_ref(),
     }
     .report(&nodes);
-    report.passes.insert(0, "✓ records committed".to_owned());
+    if uncommitted.is_none() {
+        report.passes.insert(0, "✓ records committed".to_owned());
+    }
     if !report.failed.is_empty() {
-        // Uncommitted code makes passing proof stale; name it (atelier-749l).
+        // Uncommitted code makes passing proof stale; name it (atelier-749l),
+        // unless the dirty completion already does.
         let stale_proof = nodes
             .iter()
             .any(|node| !node.passed && node.stale_from_checkout);
-        let dirty_note = (stale_proof && !initial_paths.is_empty()).then(|| {
+        let dirty_named = nodes
+            .iter()
+            .any(|node| node.check == "land_completion_dirty");
+        let dirty_note = (stale_proof && !dirty_named && !initial_paths.is_empty()).then(|| {
             format!(
                 "Uncommitted changes make passing proof stale: {}. Commit or remove them, or rerun the check after committing.",
-                first_five(initial_paths.iter().map(|path| path.display().to_string()))
+                crate::human_output::first_five(
+                    initial_paths.iter().map(|path| path.display().to_string()),
+                    ", "
+                )
             )
         });
         return Err(crate::gate_report::GatesRefused {
             report,
-            notes: [dirty_note, behind_note].into_iter().flatten().collect(),
+            notes: lines
+                .into_iter()
+                .filter(|line| line.starts_with("Invalid ") || line.starts_with("Using last valid"))
+                .chain(dirty_note)
+                .chain(behind_note)
+                .collect(),
         }
         .into());
     }
@@ -511,7 +725,7 @@ fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
 fn refusal_code(error: &anyhow::Error) -> Option<String> {
     let message = error.to_string();
     let (code, _) = message.split_once(':')?;
-    (code.starts_with("land_") && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
+    (is_land_code(code) && code.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
         .then(|| code.to_owned())
 }
 

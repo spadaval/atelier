@@ -999,7 +999,9 @@ fn done_owner_full_gates_and_invalid_policies_are_checked_without_writes() {
     git(f.path(), &["restore", "code"]);
     fs::write(f.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
     commit(f.path(), "invalid policy");
-    f.refusal("candidate workflow policy is invalid");
+    f.refusal(
+        "workflow_config_parse_error: .atelier/workflow.yaml: did not find expected node content",
+    );
 }
 #[test]
 fn hidden_tracked_record_edits_and_executable_modes_refuse_landing() {
@@ -2135,7 +2137,7 @@ fn staged_canonical_changes_cannot_hide_behind_restored_worktree_bytes() {
         // Land names its own check once, with one recovery step.
         assert!(
             !pass
-                && output.contains("land_records_uncommitted: .atelier/issues/")
+                && output.contains(&format!("land_records_uncommitted: 1 tracker record differs from HEAD: {relative} (staged); commit them with the work. Next: git add .atelier\n"))
                 && !output.contains("canonical_snapshot_uncommitted")
                 && output.matches("Next:").count() == 1,
             "{output}"
@@ -2766,7 +2768,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
         !pass
             && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier tracker files since main")
             && output.contains(&format!(".atelier/issues/{filed}.md"))
-            && output.contains("atelier start <id>"),
+            && output.contains(&format!("Next: give the work an owner branch with `atelier start {filed}`")),
         "{output}"
     );
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
@@ -3917,8 +3919,11 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
 #[test]
 fn land_names_a_base_with_no_shared_history() {
     let f = Fixture::new();
+    // The work branch itself is replaced by history the base does not share.
     git(f.path(), &["checkout", "-q", "--orphan", "unrelated"]);
     commit(f.path(), "the same tree with no shared history");
+    git(f.path(), &["branch", "-D", &f.branch]);
+    git(f.path(), &["branch", "-m", &f.branch]);
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
         !pass
@@ -4765,7 +4770,7 @@ fn an_adopted_repositorys_branch_cannot_pass_as_an_install() {
     commit(dir.path(), "start owned work");
     let (pass, output) = cli(dir.path(), &["land", "--install"]);
     assert!(
-        !pass && output.contains("rerun `atelier land` without --install"),
+        !pass && output.contains("not for an owner's branch or the base. Next: atelier land"),
         "{output}"
     );
 }
@@ -5324,7 +5329,10 @@ fn the_branch_that_installs_atelier_lands_with_guidance_and_merges_without_gates
     commit(dir.path(), "records on an unowned branch");
     let (pass, output) = cli(dir.path(), &["land"]);
     assert!(
-        !pass && output.contains(" and 2 more; run `atelier start <id>`"),
+        !pass
+            && output.contains(
+                " and 2 more. Next: give the work an owner branch with `atelier start adopter-"
+            ),
         "{output}"
     );
 }
@@ -6655,7 +6663,7 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
     );
     // Every fix it prints runs as printed: review request, start or unlink
     // the blocker, and the disposition.
-    assert_eq!(next_steps::assert_fixes_run(f.path(), &out), 4);
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 4);
     // The Stop hook reports the same lines after its own sentence, and ends
     // with the verdict, so no fix command runs into other text.
     let output = hook(
@@ -6738,6 +6746,553 @@ fn land_pass_lists_what_it_checked_and_the_next_step() {
         )
     );
     assert_eq!(ok(f.path(), &["land", "-q"]), "passed");
+}
+
+/// An item's status set directly, as a stored record would hold it.
+fn set_status(f: &Fixture, id: &str, status: &str) {
+    let mut record = f.store().load_issue_by_id(id).unwrap();
+    record.issue.status = status.into();
+    f.store().write_issue_atomic(&record).unwrap();
+}
+
+/// Uncommitted records do not stop land: it names every one with the git
+/// command that commits them, names the dirty paths a completion leaves, and
+/// still runs the gates against HEAD's records, so a missing approval is
+/// reported in the same run (atelier-kiry, atelier-grsi, atelier-7ts2).
+#[test]
+fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    ok(f.path(), &["issue", "note", &id, "Uncommitted note"]);
+    let mut new = (1..=5)
+        .map(|n| ok(f.path(), &["-q", "issue", "create", &format!("New {n}")]))
+        .collect::<Vec<_>>();
+    new.push(id.clone());
+    new.sort();
+    for name in ["p1", "p2", "p3", "p4", "p5", "p6"] {
+        fs::write(f.path().join(name), "unfinished\n").unwrap();
+    }
+    let records = new
+        .iter()
+        .take(5)
+        .map(|record| {
+            format!(
+                ".atelier/issues/{record}.md ({})",
+                if *record == id { "modified" } else { "new" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} land_records_uncommitted: 6 tracker records differ from HEAD: {records} and 1 more; commit them with the work. Next: git add .atelier && git commit -m \"…\"\n\
+             ⚠ {id} land_completion_dirty: done, but the checkout has 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`\n\
+             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n\
+             land: refused — 3 checks (land_records_uncommitted, land_completion_dirty, review.current)\n"
+        )
+    );
+    // Each fix runs as printed and clears its own failure.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 4);
+    // The Stop hook reports the same run.
+    let output = hook(
+        f.path(),
+        "land",
+        serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": false}),
+    );
+    assert!(
+        output["reason"].as_str().unwrap().ends_with(out.trim_end()),
+        "{output}"
+    );
+}
+
+/// `land <id>` away from the owner's branch says where it is owned and how
+/// to land there; a mission says it has no branch; an item no branch owns
+/// names its start (atelier-ns04).
+#[test]
+fn land_with_an_id_points_to_the_owners_branch() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let not_checked = "Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_branch_mismatch stops land before them.";
+    git(f.path(), &["switch", "-q", "main"]);
+    // The base's record of the item says nothing of its branch.
+    let (pass, out) = cli(f.path(), &["land", &id]);
+    assert!(!pass);
+    let mismatch = |here: &str| {
+        format!(
+            "⚠ {id} land_branch_mismatch: owned on {}, not on {here}. Next: git switch {} && atelier land\n{not_checked}\nland: refused — 1 check (land_branch_mismatch)\n",
+            f.branch, f.branch
+        )
+    };
+    assert_eq!(out, mismatch("main"));
+    assert_eq!(
+        next_steps::assert_fixes_run(f.path(), &out, &["land", &id]),
+        1
+    );
+    // Another branch holds the item's own record of its branch.
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["switch", "-q", "-c", "elsewhere"]);
+    let (pass, out) = cli(f.path(), &["land", &id]);
+    assert!(!pass);
+    assert_eq!(out, mismatch("elsewhere"));
+
+    git(f.path(), &["switch", "-q", "main"]);
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "A mission",
+            "--issue-type",
+            "mission",
+        ],
+    );
+    let unstarted = ok(f.path(), &["-q", "issue", "create", "Unstarted"]);
+    commit(f.path(), "plan a mission and unstarted work");
+    let (pass, out) = cli(f.path(), &["land", &mission]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {mission} land_mission: a mission, and missions have no branch; land one of its items. Next: atelier work mission {mission}\n\
+             Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_mission stops land before them.\n\
+             land: refused — 1 check (land_mission)\n"
+        )
+    );
+    assert_eq!(
+        next_steps::assert_fixes_run(f.path(), &out, &["land", &mission]),
+        1
+    );
+    let (pass, out) = cli(f.path(), &["land", &unstarted]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {unstarted} land_work_untraceable: {unstarted} has no work branch. Next: atelier start {unstarted}\n\
+             Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_work_untraceable stops land before them.\n\
+             land: refused — 1 check (land_work_untraceable)\n"
+        )
+    );
+    assert_eq!(
+        next_steps::assert_fixes_run(f.path(), &out, &["land", &unstarted]),
+        1
+    );
+    let (pass, out) = cli(f.path(), &["land", "nope"]);
+    assert!(!pass && out.contains("issue nope not found"), "{out}");
+}
+
+/// An invalid committed policy is one failed check, printed once with one
+/// code and one step, and the other gates still run (atelier-y0en).
+#[test]
+fn land_and_merge_check_report_an_invalid_policy_once() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    fs::write(f.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
+    commit(f.path(), "invalid policy");
+    let cause = "workflow_config_parse_error: .atelier/workflow.yaml: did not find expected node content at line 2 column 1, while parsing a flow node. Next: fix .atelier/workflow.yaml and commit it";
+    let review = format!("⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} {cause}\n{review}\n\
+             ✓ records committed\n\
+             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             land: refused — 2 checks (workflow_config_parse_error, review.current)\n"
+        )
+    );
+    let (pass, out) = cli(f.path(), &["merge", &id, "--check"]);
+    assert!(!pass);
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {id} {cause}\n{} (also claims.reviewed). Next: atelier review request {id}\n\
+             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             merge: refused — 3 checks (workflow_config_parse_error, review.current, claims.reviewed)\n",
+            review.split(". Next: ").next().unwrap()
+        )
+    );
+    // On the base, without an owner, the fallback says which policy ran.
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
+    commit(f.path(), "invalid base policy");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    let fallback = out
+        .lines()
+        .find(|line| line.starts_with("Using last valid policy from "))
+        .unwrap_or_else(|| panic!("{out}"));
+    assert_eq!(
+        out,
+        format!(
+            "⚠ {cause}\n✓ records committed\n{fallback}\nland: refused — 1 check (workflow_config_parse_error)\n"
+        )
+    );
+}
+
+/// Every printed fix for open work under a closed owner and for a blocker
+/// that declares its link with `blocks` runs as printed and clears its own
+/// failure (atelier-r3oy).
+#[test]
+fn land_fixes_for_open_children_and_a_blocks_link_clear_their_failures() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+    ok(
+        f.path(),
+        &["issue", "link", &blocker, &id, "--role", "blocks"],
+    );
+    let mut children = Vec::new();
+    for status in ["backlog", "blocked", "review"] {
+        let child = ok(
+            f.path(),
+            &[
+                "-q",
+                "issue",
+                "create",
+                &format!("A {status} child"),
+                "--parent",
+                &id,
+            ],
+        );
+        set_status(&f, &child, status);
+        children.push(child);
+    }
+    commit(f.path(), "a blocker and open children");
+    f.terminal(&id);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    for (child, status) in children.iter().zip(["backlog", "blocked", "review"]) {
+        assert!(
+            out.contains(&format!(
+                "⚠ {child} work.terminal: {status}, open in {id}'s scope. Next: "
+            )),
+            "{out}"
+        );
+    }
+    assert!(
+        out.contains(&format!(
+            "or drop the link with `atelier issue unlink {blocker} {id} --role blocks` if it is wrong"
+        )),
+        "{out}"
+    );
+    assert!(!out.contains("reopen"), "{out}");
+    // The review request, the blocker's start or unlink, and each child's
+    // close or supersede.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 6);
+}
+
+/// A done owner reopened in the checkout only: the gates read HEAD's done
+/// copy, so its lines say so, fix by committing, and no pass is shown for it
+/// (atelier-6ajc).
+#[test]
+fn land_shows_no_pass_for_an_owner_whose_checkout_record_differs() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    set_status(&f, &id, "in_progress");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(!out.contains("✓ "), "{out}");
+    assert!(
+        out.contains(&format!(
+            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n"
+        )),
+        "{out}"
+    );
+    // The records line and the review line both fix by the records commit.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 2);
+}
+
+/// A base the policy does not trust is fixed by recording the policy's base
+/// in the owner's record, for any legal branch name (atelier-9a6e,
+/// atelier-hen4).
+#[test]
+fn land_base_mismatch_prints_a_runnable_fix() {
+    for other in ["other", "a|b", "it$s", "a@b", "q'q"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        let id = ok(f.path(), &["-q", "issue", "create", "From another branch"]);
+        commit(f.path(), "plan");
+        git(f.path(), &["switch", "-q", "-c", other]);
+        fs::write(f.path().join("other"), "other\n").unwrap();
+        commit(f.path(), "other work");
+        ok(f.path(), &["start", &id]);
+        commit(f.path(), "start from another branch");
+        let (pass, out) = cli(f.path(), &["land"]);
+        assert!(!pass);
+        let path = format!(".atelier/issues/{id}.md");
+        let line = out
+            .lines()
+            .find(|line| line.contains("land_base_mismatch"))
+            .unwrap_or_else(|| panic!("{other}: {out}"));
+        assert!(
+            line.starts_with(&format!(
+                "⚠ {id} land_base_mismatch: recorded base {other} disagrees with trusted policy base main. Next: perl -pi -e "
+            )) && line.ends_with(&format!(" {path} && git commit -m \"…\" -- {path}")),
+            "{other}: {out}"
+        );
+        assert_eq!(
+            next_steps::assert_fixes_run(f.path(), &out, &["land"]),
+            1,
+            "{other}"
+        );
+    }
+}
+
+/// An unowned branch that changes an item owned on a local branch is told
+/// to land there, not to start it again (atelier-9a6e).
+#[test]
+fn an_unowned_branch_changing_an_owned_item_points_to_its_branch() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    git(f.path(), &["switch", "-q", "-c", "feature/unowned", "main"]);
+    ok(
+        f.path(),
+        &["issue", "note", &id, "Noted off the owner's branch"],
+    );
+    commit(f.path(), "note on an unowned branch");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!(
+            "{id} is owned on {}. Next: land it there with `git switch {} && atelier land`, or move the tracker changes onto {}\n",
+            f.branch, f.branch, f.branch
+        )),
+        "{out}"
+    );
+    assert!(!out.contains("atelier start"), "{out}");
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+}
+
+/// An approval recorded but not committed: the gates read HEAD, which has
+/// none, so the review line says it was judged on HEAD and its fix is the
+/// records commit, not a review request, and no pass is shown
+/// (atelier-q5uh).
+#[test]
+fn an_uncommitted_approval_is_fixed_by_committing_it() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    // `merge` folds the done claim the approval would cover into the line.
+    let judged = format!(
+        "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs"
+    );
+    for gate in [vec!["land"], vec!["merge", id.as_str(), "--check"]] {
+        let (pass, out) = cli(f.path(), &gate);
+        assert!(!pass);
+        let line = out
+            .lines()
+            .find(|line| line.starts_with(&judged))
+            .unwrap_or_else(|| panic!("{gate:?}: {out}"));
+        assert!(
+            line.ends_with(". Next: git add .atelier && git commit -m \"…\""),
+            "{gate:?}: {out}"
+        );
+        assert!(!out.contains("✓ "), "{gate:?}: {out}");
+        assert!(!out.contains("atelier review request"), "{gate:?}: {out}");
+        assert!(next_steps::assert_fixes_run(f.path(), &out, &gate) >= 1);
+    }
+}
+
+/// A committed review record that was changed or deleted is restored from
+/// HEAD, never committed; once such a commit is on the branch, the fix drops
+/// it: a reset at the tip, a rebase that leaves it out below (atelier-v4rd).
+#[test]
+fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let approval = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    let path = format!(".atelier/reviews/{approval}.md");
+    let note = ok(f.path(), &["-q", "issue", "create", "Uncommitted work"]);
+    for change in ["deleted", "modified"] {
+        let committed = fs::read_to_string(f.path().join(&path)).unwrap();
+        if change == "deleted" {
+            fs::remove_file(f.path().join(&path)).unwrap();
+        } else {
+            fs::write(
+                f.path().join(&path),
+                committed.replace("Reviewed", "Edited"),
+            )
+            .unwrap();
+        }
+        let (pass, out) = cli(f.path(), &["land"]);
+        assert!(!pass);
+        let mut records = [
+            format!("{path} ({change})"),
+            format!(".atelier/issues/{note}.md (new)"),
+        ];
+        records.sort();
+        assert!(
+            out.contains(&format!(
+                "land_records_uncommitted: 2 tracker records differ from HEAD: {}; review records are append-only, so restore the committed ones and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- {path} && git add .atelier && git commit -m \"…\"\n",
+                records.join(", ")
+            )),
+            "{change}: {out}"
+        );
+        assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+        fs::write(f.path().join(&path), committed).unwrap();
+    }
+    fs::remove_file(f.path().join(format!(".atelier/issues/{note}.md"))).unwrap();
+
+    // Committed, the deletion is left out by a rebase named by the commit,
+    // at the tip and below it.
+    fs::remove_file(f.path().join(&path)).unwrap();
+    commit(f.path(), "delete the approval");
+    let bad = git(f.path(), &["rev-parse", "HEAD"]);
+    let line = format!(
+        "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (record a successor event for any change). Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+    );
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass && out.contains(&line), "{out}");
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    fs::write(f.path().join("later"), "later work\n").unwrap();
+    commit(f.path(), "later work");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    assert!(
+        out.contains(&format!(
+            "which rewrites the commits after it: record fresh proof and review for them. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+        )),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+}
+
+/// Every fix land prints, run in the order printed, leaves a branch that
+/// lands: the append-only recovery leads and is addressed by commit, so the
+/// records commit after it survives (atelier-61il).
+#[test]
+fn printed_fixes_run_in_order_recover_a_committed_review_deletion() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let approval = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    fs::remove_file(f.path().join(format!(".atelier/reviews/{approval}.md"))).unwrap();
+    commit(f.path(), "delete the approval");
+    let follow_up = ok(f.path(), &["-q", "issue", "create", "Follow-up"]);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    let fixes = out
+        .lines()
+        .filter_map(|line| line.split_once(". Next: ").map(|(_, fix)| fix.to_owned()))
+        .collect::<Vec<_>>();
+    assert_eq!(fixes.len(), 2, "{out}");
+    assert!(
+        fixes[0].starts_with("git rebase --autostash --onto "),
+        "{out}"
+    );
+    assert_eq!(fixes[1], "git add .atelier && git commit -m \"…\"", "{out}");
+    for fix in &fixes {
+        let run = Command::new("sh")
+            .current_dir(f.path())
+            .args(["-c", &fix.replace("\"…\"", "\"Follow-up\"")])
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{fix}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+    }
+    assert!(f
+        .path()
+        .join(format!(".atelier/issues/{follow_up}.md"))
+        .exists());
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+    ok(f.path(), &["land"]);
+}
+
+/// A rebase or merge stopped on a conflict is reported first, with the
+/// command that abandons it, and no gate reads the half-done state
+/// (atelier-vlhn).
+#[test]
+fn an_operation_left_in_progress_is_reported_before_any_gate() {
+    for operation in ["rebase", "merge"] {
+        let f = Fixture::new();
+        let id = f.id.clone();
+        git(f.path(), &["switch", "-q", "main"]);
+        fs::write(f.path().join("code"), "base code\n").unwrap();
+        commit(f.path(), "base changes the code");
+        git(f.path(), &["switch", "-q", &f.branch]);
+        assert!(
+            !cli_git(f.path(), &[operation, "main"]).0,
+            "{operation} conflicts"
+        );
+        let (finish, abort) = match operation {
+            "rebase" => (
+                "resolve the conflicts and continue with git rebase --continue",
+                "git rebase --abort",
+            ),
+            _ => (
+                "resolve the conflicts and commit the merge",
+                "git merge --abort",
+            ),
+        };
+        for (gate, code) in [
+            (vec!["land"], format!("land_{operation}_in_progress")),
+            (
+                vec!["merge", id.as_str(), "--check"],
+                format!("merge_{operation}_in_progress"),
+            ),
+        ] {
+            let (pass, out) = cli(f.path(), &gate);
+            assert!(!pass);
+            assert!(
+                out.starts_with(&format!(
+                    "⚠ {code}: a {operation} is in progress, so HEAD and the index are mid-{operation}. Next: `{abort}`, or {finish}\n"
+                )),
+                "{gate:?}: {out}"
+            );
+            assert!(
+                out.ends_with(&format!("refused — 1 check ({code})\n")),
+                "{gate:?}: {out}"
+            );
+            assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &gate), 1);
+        }
+    }
 }
 
 /// A merged done claim's proof reads as land and doctor judge it: after a

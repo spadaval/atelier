@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-23T15:49:56.327755069+00:00"
+status: "done"
 title: "Point land <id> at the owner's branch, and name unknown IDs"
-updated_at: "2026-10-23T15:19:35.434475216+00:00"
+updated_at: "2026-10-23T15:49:56.327755069+00:00"
 ---
 
 ## Goal
@@ -43,3 +44,22 @@ updated_at: "2026-10-23T15:19:35.434475216+00:00"
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: unknown IDs are named. Still: land X on the base and land <mission> both say 'has no committed branch metadata; run atelier start' (session.rs:341); unowned hints say 'atelier start <id>' (:104,140,403,406,420). Use git::branch_lines_for; mirror merge_mission (merge.rs:415).
+- 2026-10-23 [decision] land <mission> refuses with a new land_mission code and 'Next: atelier work mission <id>', mirroring merge_mission; hints with no derivable ID say 'atelier start and its item's ID' in words rather than a <id> placeholder, and the unowned-branch hint names the first changed issue record's ID.
+  Reason: A land gate may own codes; a fix line must be runnable with real IDs, so where no ID is knowable the hint is prose.
+  Rejected: Reusing land_work_untraceable for missions
+
+## Close Reason
+
+`land <id>` away from the owner's branch prints `⚠ <id> land_branch_mismatch: owned on <branch>, not on <here>. Next: git switch <branch> && atelier land`, finding the branch from the local branches' own records when this checkout's do not name it; a mission gets `land_mission` with `atelier work mission <id>`; an item no branch owns gets `atelier start <id>`; unowned-branch hints name the changed item's ID or say it in words. Unknown IDs were already named.
+
+### Deviations
+Message wording differs slightly from the issue: the owner is the line's record, so the cause reads "owned on <branch>, not on <here>". A done owner whose branch is gone says to land the checkout as it is (`atelier land`).
+
+### Decisions
+See the decision note on this item (land_mission code; prose where no ID is knowable).
+
+### Surprises
+`git::branch_lines_for` named in the issue no longer exists; a new `git::owning_branches` reads each local branch's record of the item.
+
+### Open items
+None.

@@ -200,14 +200,31 @@ atelier merge <owner-or-child-id>
 atelier merge <owner-or-child-id> --sync
 ```
 
-Run these from the recorded work branch. Source and any separate base checkout
-must be clean. Canonical record and policy paths, bytes, and modes must match
-committed HEAD, including ignored canonical files; Git index flags such as
-assume-unchanged or skip-worktree cannot hide changed tracked files. Other files
-follow Git status: with `core.filemode=false`, a local execute-bit change is not
-an uncommitted change. Checks
+Run these from the recorded work branch. From anywhere else, `merge` refuses
+with `merge_branch_mismatch`, naming the work branch and `git switch
+<branch>`; on the base, where the records learn of the branch only when the
+work merges, it finds the branch from the local branches' own records. An item
+no branch owns refuses with `merge_owner_unstarted` and `atelier start <id>`.
+Once the work is on the base, `merge` and `merge --check` print `<id> is
+already merged into <base> (<commit>).` and pass (atelier-yrlj). Source and any
+separate base checkout must be clean. Canonical record and policy paths, bytes,
+and modes must match committed HEAD, including ignored canonical files; Git
+index flags such as assume-unchanged or skip-worktree cannot hide changed
+tracked files. Other files follow Git status: with `core.filemode=false`, a
+local execute-bit change is not an uncommitted change. Checks
 cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
+
+A failed precondition does not hide the gates: uncommitted records
+(`canonical_snapshot_uncommitted`, every record named), uncommitted code
+(`merge_checkout_dirty`, every path named), a base the branch has not merged in
+under `fast_forward_only` (`merge_diverged`) and an invalid candidate policy
+(its `workflow_*` code) are each one more failed check with its fix, and the
+gates still run, against HEAD's committed records when the checkout's differ
+and from where the branch left the base. A real merge still refuses before
+integrating. A precondition the gates cannot run past, such as the wrong
+branch or a merge conflict, is reported after the ones found before it, with
+a `Not checked:` line naming the gates it skipped (atelier-kiry).
 
 Merge uses the base branch's committed policy and its
 `branch_policy.merge_strategy`; omitted, it is `merge_commit` when `merge_checks`

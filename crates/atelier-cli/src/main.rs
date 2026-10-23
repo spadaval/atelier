@@ -813,10 +813,17 @@ fn run() -> Result<()> {
     };
     let quiet = cli.quiet;
 
-    // Status renders policy diagnostics in its own page.
+    // Status renders policy diagnostics in its own page, and the gates
+    // (land, doctor, merge) report the policy they read with their checks,
+    // so an invalid policy is reported once.
     if !matches!(
         &cli.command,
-        Commands::Init { .. } | Commands::Status { .. } | Commands::Prime { .. }
+        Commands::Init { .. }
+            | Commands::Status { .. }
+            | Commands::Prime { .. }
+            | Commands::Land { .. }
+            | Commands::Doctor
+            | Commands::Merge { sync: false, .. }
     ) {
         if let Ok(layout) = StorageLayout::discover() {
             if let Ok(source) = atelier_app::base_policy::working(layout.repo_root()) {
