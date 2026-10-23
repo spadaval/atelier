@@ -216,6 +216,13 @@ fn land_gates(
 ) -> Result<(String, String)> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
+    if let Some((operation, abort)) = git::operation_in_progress(repo)? {
+        return Err(git::operation_refusal(
+            &format!("land_{operation}_in_progress"),
+            operation,
+            abort,
+        ));
+    }
     let (head, branch, snapshot, initial_paths, index, uncommitted) = {
         let _lock =
             atelier_records::mutation_lock::CanonicalMutationLock::shared(&layout.canonical_dir())?;

@@ -477,6 +477,15 @@ fn owned(
 ) -> Result<Owned> {
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
+    if preconditions.is_some() {
+        if let Some((operation, abort)) = crate::commands::git::operation_in_progress(repo)? {
+            return Err(crate::commands::git::operation_refusal(
+                &format!("merge_{operation}_in_progress"),
+                operation,
+                abort,
+            ));
+        }
+    }
     let head = git::head_commit(repo)?;
     let branch = crate::commands::git::checkout_branch(repo)?.context(
         "merge_detached_head: merge requires a local work branch. Next: check out the work branch, then retry",

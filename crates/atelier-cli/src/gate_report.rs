@@ -186,9 +186,11 @@ impl Preconditions {
         let mut nodes = self.failed;
         let stop = coded(owner.unwrap_or_default(), &format!("{error:#}"), is_code);
         let (stopper, other) = match stop {
+            // The stop leads: its fix comes before the others', which may
+            // depend on it, such as a rebase that a records commit follows.
             Some(node) => {
                 let code = node.check.clone();
-                nodes.push(node);
+                nodes.insert(0, node);
                 (code, None)
             }
             None if nodes.is_empty() => return error,

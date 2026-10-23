@@ -7165,27 +7165,132 @@ fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
     }
     fs::remove_file(f.path().join(format!(".atelier/issues/{note}.md"))).unwrap();
 
-    // Committed at the tip, the deletion is dropped with a reset.
+    // Committed, the deletion is left out by a rebase named by the commit,
+    // at the tip and below it.
     fs::remove_file(f.path().join(&path)).unwrap();
     commit(f.path(), "delete the approval");
     let bad = git(f.path(), &["rev-parse", "HEAD"]);
-    let (pass, out) = cli(f.path(), &["land"]);
-    assert!(!pass);
-    assert!(
-        out.contains(&format!(
-            "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}, the branch tip; a later commit cannot undo it, so drop that commit, which brings the record back (record a successor event for any change). Next: git reset --keep HEAD~1\n"
-        )),
-        "{out}"
+    let line = format!(
+        "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (record a successor event for any change). Next: git rebase --autostash --onto {bad}~1 {bad}\n"
     );
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass && out.contains(&line), "{out}");
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
-    // Below the tip, a rebase leaves it out.
     fs::write(f.path().join("later"), "later work\n").unwrap();
     commit(f.path(), "later work");
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass);
     assert!(
-        out.contains(&format!("Next: git rebase --onto {bad}~1 {bad}\n")),
+        out.contains(&format!(
+            "which rewrites the commits after it: record fresh proof and review for them. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+        )),
         "{out}"
     );
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+}
+
+/// Every fix land prints, run in the order printed, leaves a branch that
+/// lands: the append-only recovery leads and is addressed by commit, so the
+/// records commit after it survives (atelier-61il).
+#[test]
+fn printed_fixes_run_in_order_recover_a_committed_review_deletion() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    f.terminal(&id);
+    let approval = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed",
+        ],
+    );
+    commit(f.path(), "approval");
+    fs::remove_file(f.path().join(format!(".atelier/reviews/{approval}.md"))).unwrap();
+    commit(f.path(), "delete the approval");
+    let follow_up = ok(f.path(), &["-q", "issue", "create", "Follow-up"]);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(!pass);
+    let fixes = out
+        .lines()
+        .filter_map(|line| line.split_once(". Next: ").map(|(_, fix)| fix.to_owned()))
+        .collect::<Vec<_>>();
+    assert_eq!(fixes.len(), 2, "{out}");
+    assert!(
+        fixes[0].starts_with("git rebase --autostash --onto "),
+        "{out}"
+    );
+    assert_eq!(fixes[1], "git add .atelier && git commit -m \"…\"", "{out}");
+    for fix in &fixes {
+        let run = Command::new("sh")
+            .current_dir(f.path())
+            .args(["-c", &fix.replace("\"…\"", "\"Follow-up\"")])
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{fix}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+    }
+    assert!(f
+        .path()
+        .join(format!(".atelier/issues/{follow_up}.md"))
+        .exists());
+    assert!(git(f.path(), &["status", "--porcelain"]).is_empty());
+    ok(f.path(), &["land"]);
+}
+
+/// A rebase or merge stopped on a conflict is reported first, with the
+/// command that abandons it, and no gate reads the half-done state
+/// (atelier-vlhn).
+#[test]
+fn an_operation_left_in_progress_is_reported_before_any_gate() {
+    for operation in ["rebase", "merge"] {
+        let f = Fixture::new();
+        let id = f.id.clone();
+        git(f.path(), &["switch", "-q", "main"]);
+        fs::write(f.path().join("code"), "base code\n").unwrap();
+        commit(f.path(), "base changes the code");
+        git(f.path(), &["switch", "-q", &f.branch]);
+        assert!(
+            !cli_git(f.path(), &[operation, "main"]).0,
+            "{operation} conflicts"
+        );
+        let (finish, abort) = match operation {
+            "rebase" => (
+                "resolve the conflicts and continue with git rebase --continue",
+                "git rebase --abort",
+            ),
+            _ => (
+                "resolve the conflicts and commit the merge",
+                "git merge --abort",
+            ),
+        };
+        for (gate, code) in [
+            (vec!["land"], format!("land_{operation}_in_progress")),
+            (
+                vec!["merge", id.as_str(), "--check"],
+                format!("merge_{operation}_in_progress"),
+            ),
+        ] {
+            let (pass, out) = cli(f.path(), &gate);
+            assert!(!pass);
+            assert!(
+                out.starts_with(&format!(
+                    "⚠ {code}: a {operation} is in progress, so HEAD and the index are mid-{operation}. Next: `{abort}`, or {finish}\n"
+                )),
+                "{gate:?}: {out}"
+            );
+            assert!(
+                out.ends_with(&format!("refused — 1 check ({code})\n")),
+                "{gate:?}: {out}"
+            );
+            assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &gate), 1);
+        }
+    }
 }

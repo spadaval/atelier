@@ -54,9 +54,13 @@ HEAD (the first five, then a count) as modified, new, deleted or staged, with
 that was changed or deleted is restored with `git restore --source=HEAD
 --staged --worktree -- <path>`, since review records are append-only; the
 gates read HEAD's committed records instead. A rewrite already committed
-refuses with `review_append_only`, whose fix drops that commit: `git reset
---keep HEAD~1` at the tip, or `git rebase --onto <commit>~1 <commit>` below it,
-which rewrites the later commits (atelier-v4rd); `land_completion_dirty` names a done owner's uncommitted
+refuses with `review_append_only`, whose fix leaves that commit out with
+`git rebase --autostash --onto <commit>~1 <commit>`, named by the commit so it
+holds after the other fixes commit, and printed first; below the tip it
+rewrites the later commits (atelier-v4rd, atelier-61il). A rebase or merge
+stopped on a conflict is reported before anything else, as
+`land_rebase_in_progress` or `land_merge_in_progress` (`merge_*` from
+`merge`), with `git rebase --abort` or `git merge --abort` (atelier-vlhn); `land_completion_dirty` names a done owner's uncommitted
 paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
 push --include-untracked`); an invalid committed policy is reported once, as
 its `workflow_*` code, and `land_base_mismatch`, whose fix records the
