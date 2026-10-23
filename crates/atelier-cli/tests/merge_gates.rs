@@ -3519,7 +3519,9 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
         ],
     );
     let follow_up = ok(fixture.path(), &["-q", "issue", "create", "Rename it"]);
-    let disposition = ok(
+    // The author's own defer is recorded, with its warning on stderr; quiet
+    // stdout is the ID alone.
+    let (recorded, disposition, warning) = split(
         fixture.path(),
         &[
             "-q",
@@ -3535,6 +3537,11 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
             "Later",
         ],
     );
+    assert!(
+        recorded && warning.contains("identity matches a Git author"),
+        "{warning}"
+    );
+    let disposition = disposition.trim().to_owned();
     let child = ok(
         fixture.path(),
         &["-q", "issue", "create", "Open child", "--parent", &id],
