@@ -77,7 +77,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make every gate end in a verdict, with each failure's cause and fix"
-updated_at: "2026-10-23T17:33:34.104097243+00:00"
+updated_at: "2026-10-23T21:10:46.231486988+00:00"
 ---
 
 ## Outcome
@@ -124,3 +124,6 @@ Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come
 - 2026-10-23 [decision] Pending review (refines the i80r decision): a findings.disposed failure counts as pending review too when every failing finding is a fix_now already resolved by a later commit and waiting only for fresh independent approval.
   Reason: That state is also waiting on a reviewer, with nothing for the agent to do; it was part of the turns the retrospective counted. Undisposed findings and unresolved fix_now still block.
   Rejected: Keeping findings.disposed always blocking.
+- 2026-10-23 [decision] Close atelier-rc8j with S6 unproven; atelier-p1vz recounts it after about a week of ordinary sessions. The criterion text is unchanged.
+  Reason: Human decision on 2026-10-23 after acceptance validation atelier-1o56 proved S1-S5 and found S6's post-landing sample too small (26 runs, mostly reviewer scripts).
+  Rejected: Keeping the mission open for the recount; revising S6 first.
