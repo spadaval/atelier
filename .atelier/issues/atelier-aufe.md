@@ -4,6 +4,9 @@ id: "atelier-aufe"
 issue_type: "task"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-aufe
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "State Agent Factory's one review standard for code and prose"
-updated_at: "2026-10-23T00:06:54.647091599+00:00"
+updated_at: "2026-10-23T00:06:55.332593838+00:00"
 ---
 
 ## Goal
