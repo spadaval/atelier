@@ -4,6 +4,9 @@ id: "atelier-buqu"
 issue_type: "feature"
 labels:
 - "cli-output"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-buqu
 priority: "P1"
 relationships:
   blocks: []
@@ -30,9 +33,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Stop hook blocks only on failures the agent must act on now"
-updated_at: "2026-10-23T17:15:36.778845992+00:00"
+updated_at: "2026-10-23T17:15:37.497259680+00:00"
 ---
 
 ## Goal
