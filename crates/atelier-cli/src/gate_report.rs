@@ -141,43 +141,139 @@ impl Gates<'_> {
         }
     }
 
-    /// The transition that closes `id` from its status, or the command that
-    /// lists its transitions when none does.
-    fn close_command(&self, id: &str) -> String {
-        let Some(issue) = self.index.get_issue(id) else {
-            return format!("atelier issue show {id}");
-        };
-        let mut closing = self
+    /// The transitions, by name, that take `id` from its status to a closed
+    /// status other than superseded, shortest first: the workflow's own
+    /// moves, so no transition name is assumed. `None` when none does within
+    /// three steps.
+    fn closing_path(&self, id: &str) -> Option<Vec<String>> {
+        let issue = self.index.get_issue(id)?;
+        let workflow = self
             .policy
             .workflow_for_issue_type(&issue.issue_type)
-            .map(|workflow| {
-                workflow
+            .ok()?;
+        let closed = |status: &str| {
+            status != "superseded"
+                && self
+                    .policy
+                    .issue_status_is_terminal(&issue.issue_type, status)
+                    .unwrap_or(false)
+        };
+        let mut paths = vec![(issue.status.clone(), Vec::<String>::new())];
+        for _ in 0..3 {
+            let mut next = Vec::new();
+            for (status, path) in &paths {
+                // `close` first among equals, then the workflow's order.
+                let mut moves = workflow
                     .transitions
                     .iter()
-                    .filter(|(_, transition)| {
-                        transition.from.contains(&issue.status)
-                            && transition.to != "superseded"
-                            && self
-                                .policy
-                                .issue_status_is_terminal(&issue.issue_type, &transition.to)
-                                .unwrap_or(false)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        closing.sort_by_key(|(name, _)| name.as_str() != "close");
-        match closing.first() {
-            Some((name, transition)) => {
-                let reason = transition
-                    .required_fields
-                    .iter()
-                    .any(|field| field == "close_reason" || field.starts_with("report."));
-                format!(
-                    "atelier issue transition {id} {name}{}",
-                    if reason { " --reason \"…\"" } else { "" }
-                )
+                    .filter(|(_, transition)| transition.from.contains(status))
+                    .collect::<Vec<_>>();
+                moves.sort_by_key(|(name, _)| name.as_str() != "close");
+                for (name, transition) in moves {
+                    let mut path = path.clone();
+                    path.push(name.clone());
+                    if closed(&transition.to) {
+                        return Some(path);
+                    }
+                    if !self
+                        .policy
+                        .issue_status_is_terminal(&issue.issue_type, &transition.to)
+                        .unwrap_or(true)
+                        && !paths
+                            .iter()
+                            .chain(&next)
+                            .any(|(seen, _)| *seen == transition.to)
+                    {
+                        next.push((transition.to.clone(), path));
+                    }
+                }
             }
-            None => format!("atelier issue transition {id}"),
+            paths = next;
+        }
+        None
+    }
+
+    /// `atelier issue transition <id> <name>`, with `--reason "…"` when the
+    /// transition requires one.
+    fn transition_command(&self, id: &str, name: &str) -> String {
+        let reason = self
+            .index
+            .get_issue(id)
+            .and_then(|issue| {
+                let workflow = self
+                    .policy
+                    .workflow_for_issue_type(&issue.issue_type)
+                    .ok()?;
+                let transition = workflow.transitions.get(name)?;
+                Some(
+                    transition
+                        .required_fields
+                        .iter()
+                        .any(|field| field == "close_reason" || field.starts_with("report.")),
+                )
+            })
+            .unwrap_or(false);
+        format!(
+            "atelier issue transition {id} {name}{}",
+            if reason { " --reason \"…\"" } else { "" }
+        )
+    }
+
+    /// The commands that close `id` in its scope, one per transition; the
+    /// listing of its transitions when nothing closes it.
+    fn settle_command(&self, id: &str) -> String {
+        match self.closing_path(id).as_deref() {
+            Some([name]) => self.transition_command(id, name),
+            Some(path) => path
+                .iter()
+                .map(|name| format!("`{}`", self.transition_command(id, name)))
+                .collect::<Vec<_>>()
+                .join(", then "),
+            None => format!("list its transitions with `atelier issue transition {id}`"),
+        }
+    }
+
+    /// The fix for an open blocker of `blocked`: close it when one transition
+    /// does, else start its own work with `atelier start`, which applies the
+    /// workflow's `start` transition, else list its transitions; and drop the
+    /// link, naming the record that declares it, if the link is wrong.
+    fn blocker_fix(&self, blocked: &str, blocker: &str) -> String {
+        let issue = self.index.get_issue(blocker);
+        let startable = issue.as_ref().is_some_and(|issue| {
+            self.policy
+                .workflow_for_issue_type(&issue.issue_type)
+                .is_ok_and(|workflow| {
+                    workflow
+                        .transitions
+                        .get("start")
+                        .is_some_and(|transition| transition.from.contains(&issue.status))
+                })
+        });
+        let (verb, command) = match self.closing_path(blocker).as_deref() {
+            Some([name]) => ("close it with", self.transition_command(blocker, name)),
+            _ if startable => ("start it with", format!("atelier start {blocker}")),
+            _ => (
+                "list its transitions with",
+                format!("atelier issue transition {blocker}"),
+            ),
+        };
+        let mut declarers = vec![blocked.to_owned()];
+        if let Some(owner) = self.owner {
+            declarers
+                .extend(atelier_app::review_gate::scope(self.index, owner).unwrap_or_default());
+        }
+        let declarer = declarers.into_iter().find(|id| {
+            self.index
+                .get_blockers(id)
+                .iter()
+                .any(|other| other == blocker)
+        });
+        match declarer {
+            Some(declarer) => format!(
+                "{verb} `{command}`, or drop the link with `atelier issue unlink {declarer} {blocker}` if it is wrong"
+            ),
+            None if verb == "list its transitions with" => format!("{verb} `{command}`"),
+            None => command,
         }
     }
 
@@ -384,6 +480,7 @@ impl Gates<'_> {
     fn lines(&self, node: &GateNode, nodes: &[GateNode]) -> Vec<Line> {
         let target = node.target.as_str();
         let first_line = || node.reason.lines().next().unwrap_or_default().to_owned();
+        let merged_tree = nodes.iter().any(|other| other.check == "merge.merged_tree");
         let lines = match node.check.as_str() {
             "work.terminal" => node
                 .gaps
@@ -402,7 +499,7 @@ impl Gates<'_> {
                             } else {
                                 format!("{status}, open in {target}'s scope")
                             },
-                            Some(self.close_command(id)),
+                            Some(self.settle_command(id)),
                         ))
                     }
                     _ => None,
@@ -427,7 +524,7 @@ impl Gates<'_> {
                                     if done { "done but " } else { "" },
                                     self.item(id)
                                 ),
-                                Some(self.close_command(id)),
+                                Some(self.blocker_fix(target, id)),
                             )
                         }),
                         _ => None,
@@ -466,7 +563,14 @@ impl Gates<'_> {
                         } else {
                             format!("`{command}` failed: {output}")
                         },
-                        Some(command.clone()),
+                        // On the merged tree the check sees the base's
+                        // changes, so the base comes in before rerunning it.
+                        Some(match self.owner.filter(|_| merged_tree) {
+                            Some(owner) => {
+                                format!("`atelier merge {owner} --sync`, then `{command}`")
+                            }
+                            None => command.clone(),
+                        }),
                     )),
                     _ => None,
                 })

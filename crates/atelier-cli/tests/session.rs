@@ -323,10 +323,12 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
     ok(f.path(), &["issue", "note", &f.id, "Uncommitted handoff"]);
     let result = hook(unrelated.path(), "land", input.clone());
     assert_eq!(result["decision"], "block");
-    assert!(result["reason"]
-        .as_str()
-        .unwrap()
-        .contains("land_records_uncommitted"));
+    let reason = result["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("land_records_uncommitted")
+            && reason.ends_with("\nland: refused — 1 check (land_records_uncommitted)"),
+        "{reason}"
+    );
     let mut repeated = input;
     repeated["stop_hook_active"] = true.into();
     let result = hook(unrelated.path(), "land", repeated);
@@ -6638,25 +6640,38 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
         out,
         format!(
             "⚠ {id} review.current: no current independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
-             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: atelier issue transition {blocker}\n\
+             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker}` if it is wrong\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ records committed\n\
              ✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
              land: refused — 5 checks (review.current, blockers.none_open, findings.disposed, {child} blockers.none_open, {child} blockers.transitive_none_open)\n"
         )
     );
-    // The Stop hook reports the same lines.
+    // The Stop hook reports the same lines after its own sentence, and ends
+    // with the verdict, so no fix command runs into other text.
     let output = hook(
         f.path(),
         "land",
         serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": false}),
     );
-    let reason = output["reason"].as_str().unwrap();
-    assert!(
-        reason.contains(&format!(
-            "⚠ {id} blockers.none_open: done but blocked by {blocker}"
-        )),
-        "{reason}"
+    assert_eq!(
+        output["reason"].as_str().unwrap(),
+        format!(
+            "Atelier landing failed. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.\n{}",
+            out.trim_end()
+        )
+    );
+    let output = hook(
+        f.path(),
+        "land",
+        serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": true}),
+    );
+    assert_eq!(
+        output["systemMessage"].as_str().unwrap(),
+        format!(
+            "Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{}",
+            out.trim_end()
+        )
     );
 }
 

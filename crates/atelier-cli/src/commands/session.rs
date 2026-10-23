@@ -516,6 +516,35 @@ impl std::fmt::Display for Reported {
 }
 impl std::error::Error for Reported {}
 
+/// What a refused land reports, and its verdict: failed gates as their own
+/// lines, each with its fix, then the passes and notes; a refusal by a check
+/// that stops land before its gates as an error with its one code.
+fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
+    let (lines, failed) = match error.downcast_ref::<crate::gate_report::GatesRefused>() {
+        Some(refused) => (
+            refused
+                .report
+                .failures
+                .iter()
+                .chain(&refused.report.passes)
+                .chain(&refused.notes)
+                .cloned()
+                .collect(),
+            refused.report.failed.clone(),
+        ),
+        None => (
+            vec![format!("Error: {error:?}")],
+            refusal_code(error).into_iter().collect(),
+        ),
+    };
+    let verdict = if failed.is_empty() {
+        "land: refused".to_owned()
+    } else {
+        crate::gate_report::verdict("land", &failed)
+    };
+    (lines, verdict)
+}
+
 /// The leading `land_*` check code of a refusal, if it has one.
 fn refusal_code(error: &anyhow::Error) -> Option<String> {
     let message = error.to_string();
@@ -620,34 +649,8 @@ pub fn land(
                 return Ok(());
             }
             Err(error) => {
-                // Failed gates print their own lines, each with its fix; a
-                // precondition's refusal prints as an error with one code.
-                let failed = match error.downcast_ref::<crate::gate_report::GatesRefused>() {
-                    Some(refused) => {
-                        for line in refused
-                            .report
-                            .failures
-                            .iter()
-                            .chain(&refused.report.passes)
-                            .chain(&refused.notes)
-                        {
-                            eprintln!("{line}");
-                        }
-                        refused.report.failed.clone()
-                    }
-                    None => {
-                        eprintln!("Error: {error:?}");
-                        refusal_code(&error).into_iter().collect()
-                    }
-                };
-                eprintln!(
-                    "{}{nothing_pushed}",
-                    if failed.is_empty() {
-                        "land: refused".to_owned()
-                    } else {
-                        crate::gate_report::verdict("land", &failed)
-                    }
-                );
+                let (lines, verdict) = refusal(&error);
+                eprintln!("{}\n{verdict}{nothing_pushed}", lines.join("\n"));
                 return Err(Reported.into());
             }
         }
@@ -659,11 +662,16 @@ pub fn land(
     });
     let output = match result {
         Ok(_) => json!({}),
-        Err(error) if repeated => {
-            json!({"systemMessage": format!("Atelier landing still fails: {error:#}. Stopping to avoid a hook loop; unfinished work must be handed off honestly.")})
-        }
+        // The hook's sentence leads, so the report's fix commands and its
+        // verdict end the message as `land` prints them.
         Err(error) => {
-            json!({"decision": "block", "reason": format!("Atelier landing failed: {error:#}. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.")})
+            let (lines, verdict) = refusal(&error);
+            let report = format!("{}\n{verdict}", lines.join("\n"));
+            if repeated {
+                json!({"systemMessage": format!("Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{report}")})
+            } else {
+                json!({"decision": "block", "reason": format!("Atelier landing failed. Fix the named check or hand off unfinished work honestly; Atelier never creates commits.\n{report}")})
+            }
         }
     };
     println!("{}", serde_json::to_string(&output)?);

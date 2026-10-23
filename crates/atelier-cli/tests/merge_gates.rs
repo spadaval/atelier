@@ -2343,8 +2343,8 @@ fn merge_commit_strategy_runs_merge_checks_on_the_merged_tree_and_refuses_a_brok
     assert!(
         !passed
             && output.contains(&format!(
-                "⚠ {} shell.check: `sh check-lock.sh` failed: Cargo.lock lacks log needed by tools/Cargo.toml (also merge.merged_tree). Next: sh check-lock.sh",
-                fixture.id
+                "⚠ {} shell.check: `sh check-lock.sh` failed: Cargo.lock lacks log needed by tools/Cargo.toml (also merge.merged_tree). Next: `atelier merge {} --sync`, then `sh check-lock.sh`",
+                fixture.id, fixture.id
             ))
             && output.ends_with("merge: refused — 2 checks (shell.check, merge.merged_tree)\n"),
         "{output}"
@@ -2759,7 +2759,7 @@ fn merge_commit_strategy_proves_the_merged_tree_only_when_every_shell_check_pass
     let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
         !passed
-            && output.contains("shell.check: `echo broken; false` failed: broken (also merge.merged_tree). Next: echo broken; false")
+            && output.contains(&format!("shell.check: `echo broken; false` failed: broken (also merge.merged_tree). Next: `atelier merge {} --sync`, then `echo broken; false`", fixture.id))
             && !output.contains("and passed:"),
         "{output}"
     );
@@ -2832,7 +2832,7 @@ fn merge_commit_strategy_refuses_a_merge_that_breaks_a_claim_the_base_completed(
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
         output.contains(&format!(
-            "⚠ {work} work.terminal: todo, open in {mission}'s scope. Next: atelier issue transition {work}"
+            "⚠ {work} work.terminal: todo, open in {mission}'s scope. Next: `atelier issue transition {work} start`, then `atelier issue transition {work} close --reason \"…\"`"
         )) && output.ends_with(&format!("merge: refused — 1 check ({mission} work.terminal)\n")),
         "{output}"
     );
@@ -3556,7 +3556,7 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
         format!(
             "⚠ {id} findings.disposed: {first} (also claims.reviewed). Next: {first_fix}\n\
              ⚠ {id} findings.disposed: {second}. Next: {second_fix}\n\
-             ⚠ {child} work.terminal: todo, open in {id}'s scope. Next: atelier issue transition {child}\n\
+             ⚠ {child} work.terminal: todo, open in {id}'s scope. Next: `atelier issue transition {child} start`, then `atelier issue transition {child} close --reason \"…\"`\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, review.current via {approval})\n\
              merge: refused — 3 checks (findings.disposed, work.terminal, claims.reviewed)\n"
         )
