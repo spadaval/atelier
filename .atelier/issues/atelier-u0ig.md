@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T16:10:20.277358514+00:00"
+status: "done"
 title: "Filter evidence list by item and show freshness and a limit"
-updated_at: "2026-10-23T16:08:35.176233863+00:00"
+updated_at: "2026-10-23T16:10:20.277358514+00:00"
 ---
 
 ## Goal
@@ -47,3 +48,19 @@ atelier-sdb0 shows owner evidence freshness in status. atelier-et6q will name cr
 - 2026-10-23 [decision] List rows end with the command for captured receipts and the summary for manual ones, cut at 160 characters with …; a pass's standing carries the ✓/⚠ mark, a fail's ⚠ is on its result
   Reason: The Done when asks for the full command up to the width limit; showing summary and command both would double long rows. A stale pass then reads '✓ pass ... ⚠ stale (...)', each mark about its own fact.
   Rejected: Summary plus command on every row; marking only the standing
+
+## Close Reason
+
+`atelier evidence list <id>` (short IDs work) lists the receipts that validate that item, newest first. Each row is marked `✓ fresh`, `⚠ stale (code changed in <commit>)` (or acceptance changed, uncommitted code, pin not in history), `⚠ superseded by newer fail <id>`, `⚠ blocks completion` or `superseded by newer pass <id>`. The marks come from one helper, `EvidenceReadContext::item_proof`, in evidence_freshness, which also serves `evidence show`. The list ends `Proof: …`. `--limit N` and `--all` exist, the count appears only on the omitted-rows line, rows have no `(validates)`, `(none)` or `(command-backed proof)` tokens, and the Next steps repeat the item and result filters.
+
+### Deviations
+The unfiltered list marks each row against its own first item too. Rows show the command for captured receipts and the summary for manual ones, cut at 160 characters.
+
+### Decisions
+See the decision notes on atelier-u0ig: marks use the fresh rule at HEAD, and what each row shows.
+
+### Surprises
+Items that are done and merged show their passes as stale once later code commits land (for example atelier-dg3h on this branch). That is the close gate's rule, not land's historical one, so the verdict reads `⚠ no fresh pass` for finished work.
+
+### Open items
+Proposed follow-up (not filed): decide whether done items should be judged by land's historical rule in this view.

@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-23T16:10:19.896018841+00:00"
+status: "done"
 title: "Print a short confirmation after evidence record"
-updated_at: "2026-10-23T16:08:34.399758555+00:00"
+updated_at: "2026-10-23T16:10:19.896018841+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,19 @@ updated_at: "2026-10-23T16:08:34.399758555+00:00"
 - 2026-10-23 [decision] A capture that refuses to run (dirty checkout, HEAD changed, bad target) stays an error on stderr with no 'evidence record: refused' verdict line
   Reason: Capture refusals have no check codes for the verdict line's 'refused — n checks (codes)' form, and the Done when covers recorded results only.
   Rejected: Printing 'evidence record: refused — <message>' without codes
+
+## Close Reason
+
+`evidence record` now prints one line, `<id> ✓ pass <kind> for issue/<id> @<pin>: <command> (exit 0)`, and ends with the verdict line `evidence record: passed`. A recorded fail exits 0, adds `; newer than pass <id>` when it supersedes one, shows the last 5 lines it kept (stderr first), and ends `evidence record: recorded fail — <item> cannot close or merge until a later pass`. Manual receipts print the same line with their summary; quiet output stays the ID.
+
+### Deviations
+The ✓/⚠ mark sits beside the result word, not before the ID. The fail line shows the command, and the "cannot … until a later pass" clause is in the verdict line, not line 1. It reads "cannot close or merge", not "cannot merge". `evidence show <id>` is now brief, with `--full` for the full view (atelier-o8ni).
+
+### Decisions
+See the decision notes on atelier-3ekh: where the mark and the consequence go, and that capture refusals stay errors with no verdict line.
+
+### Surprises
+The verdict line has to come after `--commit-records`' `Committed …` line, so printing moved from `capture` into `report_new_record`, which runs after the record commit.
+
+### Open items
+Proposed follow-up (not filed): give capture refusals check codes so they can end `evidence record: refused — n checks (codes)`.
