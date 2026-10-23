@@ -69,10 +69,26 @@ its `Branches` rows use the branch row below), `work missions`, `issue list`, an
 line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
 Subissues and the Mission Rollup or Parent Rollup). So the Current Work row
 and the Owner row in `status` read alike. A record that is not an issue uses
-the same order without a priority, as `evidence show` titles it:
-`atelier-waj0 evidence recorded <title>`. The other evidence views adopt it in
-their own items: `status`'s Evidence rows in atelier-d2xe and
-`evidence list` in atelier-u0ig.
+the same order without a priority, as `evidence show --full` titles it:
+`atelier-waj0 evidence recorded <title>`. The other evidence views write one
+receipt as one line of facts in a fixed order:
+
+```
+atelier-az3w ✓ pass test for issue/atelier-nqgr @be418737 · 2026-10-16 18:21 -04:00 · ✓ fresh · grep -q goodbye proof-sample.txt
+```
+
+The ID, the result marked as a status word is (`✓ pass`, `⚠ fail`,
+`⚠ blocked`, `not-applicable`), the kind, `for` the records it is attached
+to (a role appears only when it is not `validates`), the pinned commit, the
+capture time, its standing, and last the command, or a manual receipt's
+summary. The standing is the one the `evidence.*` gates give it against its
+item: `✓ fresh`, `⚠ stale (code changed in <commit>)` (or `acceptance
+changed in <commit>`, `uncommitted code changes`, `pin not in HEAD's
+history`), `⚠ superseded by newer fail <id>` for a pass, and for a fail
+`⚠ blocks completion` or `superseded by newer pass <id>`. `evidence list`
+writes these rows, and `evidence show` and `evidence record` lead with them
+(see [Evidence Views](#evidence-views)). `status`'s Evidence rows adopt them
+in atelier-d2xe.
 
 ### Review Rows
 
@@ -268,7 +284,12 @@ atelier-bvl3 and atelier-9jr8 list every failed check), `merge --sync` since
 atelier-s2ei (`merge: passed`, `merge: synced — approval needs fresh review`, or `merge:
 refused — 1 check (sync_conflict)`),
 `merge` and `merge --check` in atelier-6rh7,
-`evidence record` in atelier-3ekh, `check` in atelier-4t5l, `start` in
+`evidence record` since atelier-3ekh (`evidence record: passed`, or
+`evidence record: recorded fail — <item> cannot close or merge until a later
+pass`, which exits zero because recording succeeded; a blocked or
+not-applicable result ends `recorded <result> — it never counts as a pass`;
+a capture that refuses to run still fails with an error and no verdict line),
+`check` in atelier-4t5l, `start` in
 atelier-501y, and `doctor` in atelier-rc8j.
 
 ### Mutation Confirmation
@@ -278,8 +299,7 @@ stands, one line per field: `<id> <field>: <value>`, or
 `<id> <field>: <old> → <new>` where the old value helps, as in
 `atelier-43m1 priority: medium → high`. A value that did not change is not
 listed. Each command adopts this in its own item (atelier-7ebi for `issue
-update`, `note` and `link`; atelier-8bve for `issue create`; atelier-3ekh
-for evidence).
+update`, `note` and `link`; atelier-8bve for `issue create`).
 
 A command that adds a review event, which changes no existing value,
 confirms it in one line naming its kind, ID, issue and pinned commit, and
@@ -291,11 +311,51 @@ Finding atelier-45rc fix_now on atelier-nqgr @fed2d571. Dispose: atelier review 
 Disposition atelier-6o75 no_action on atelier-nqgr @c24af21a: finding atelier-rm9e "Name could be better", supersedes atelier-ul3r
 ```
 
+`evidence record` adds a receipt, which also changes no existing value, so
+it confirms in one line too: the receipt's line, then `: <command> (exit
+<n>)` or `: <summary>`, and for a fail `; newer than pass <id>` when it
+supersedes one. A fail or blocked capture adds the last 5 lines of the
+output it kept, stderr first, indented under the line. The verdict line
+follows, after any `--commit-records` line:
+
+```
+atelier-az3w ✓ pass test for issue/atelier-nqgr @be418737: grep -q goodbye proof-sample.txt (exit 0)
+evidence record: passed
+```
+
+An `evidence record` whose `--kind` no receipt, workflow gate or default
+(`test`, `validation`) uses warns on stderr and lists the known kinds, and
+still records the receipt.
+
 An approval, or a defer or no_action disposition, whose identity is one of
 the substantive Git authors `review.current` counts is still recorded, and a
 second line warns `⚠ identity matches a Git author; this will not satisfy
 review.current` (or `findings.disposed`); under `--quiet` the warning goes to
 stderr.
+
+### Evidence Views
+
+`evidence list [<item>]` lists receipts newest first, one row each, at most
+20 unless `--limit <n>` or `--all` says otherwise; leaving rows out ends the
+list with the omitted-rows line below. With an item, it lists the receipts
+validating that item under `Evidence for <item>`, its rows leave that item
+out of `for`, and the list ends with the gates' verdict on the item's proof:
+`Proof: ✓ fresh pass <id>`, `Proof: ⚠ newest is fail <id>`, `Proof: ⚠ no
+fresh pass; newest pass <id> is stale`, or `Proof: ⚠ no passing proof`.
+Without one, each row's standing is judged against its own first item. The
+`Next` steps repeat the item and `--result` filters given.
+
+`evidence show <id>` is brief: the title line `<id> evidence recorded`
+followed by the receipt's facts, capture time and standing; then
+`Summary:` when it differs from the command, `Command: <command> (exit
+<n>)`, and `Criteria:`, `Producer:`, `Path:` and `URI:` only when set; then
+one output excerpt: for a pass, each stream's test-count line; otherwise the
+last 20 lines of the stream that kept text, stderr first. `--full` prints
+every field, `(none)` for an empty one, then the stored record once.
+
+`evidence record --target` and `evidence attach` take one target syntax: an
+issue ID, short or full, or `issue/<id>` or `evidence/<id>`. `attach` also
+keeps its older form, a kind and then the ID.
 
 ### Next Footer
 
@@ -430,7 +490,8 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
   so `issue create --status` lists the statuses new work of the issue's
   type starts in, and `issue transition` lists the transitions out of the
   issue's status, or `none`. A malformed value names the accepted forms:
-  `Invalid target 'bad'. Valid values: issue/<id>, evidence/<id>`. One
+  `Invalid target 'issue/'. Valid values: <issue-id>, issue/<id>,
+  evidence/<id>`. One
   sentence of guidance may follow, such as `Did you mean 'pass'?` for a
   near miss, and a code that shipped before the rule, such as
   `issue_create_status_invalid`, still leads the message.

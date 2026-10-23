@@ -631,7 +631,8 @@ another target.")]
             value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str)
         )]
         result: Option<atelier_core::EvidenceResult>,
-        /// Accountable target using kind/id syntax, for example issue/atelier-1234
+        /// Accountable target: an issue ID, or kind/id such as issue/atelier-1234
+        /// or evidence/atelier-5678
         #[arg(long)]
         target: Option<String>,
         /// Relation to the target
@@ -663,29 +664,49 @@ another target.")]
         #[command(flatten)]
         record_commit: RecordCommitArgs,
     },
-    /// Show an evidence record
+    /// Show an evidence record: its result, standing and output tail
     Show {
         /// Evidence record ID
         id: String,
+        /// Show the stored record and every field
+        #[arg(long)]
+        full: bool,
     },
     /// Reuse an existing evidence record on another target
+    #[command(after_help = "Examples:
+  atelier evidence attach <evidence-id> issue/<issue-id>
+  atelier evidence attach <evidence-id> <issue-id>
+  atelier evidence attach <evidence-id> issue <issue-id>")]
     Attach {
         /// Evidence record ID
         id: String,
-        /// Target record kind
-        #[arg(value_parser = ["issue", "evidence"])]
-        target_kind: String,
-        /// Target record ID
-        target_id: String,
+        /// Target: an issue ID, kind/id such as issue/atelier-1234, or a
+        /// kind (issue or evidence) followed by the ID
+        target: String,
+        /// Target record ID, when TARGET is a kind
+        target_id: Option<String>,
         /// Relation to the target
         #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
         role: String,
     },
-    /// List evidence records, optionally filtering their explicit result
+    /// List evidence records, newest first, with each one's freshness
     List {
+        /// List only the receipts that validate this issue
+        item: Option<String>,
         /// Show only records with this result
         #[arg(long, value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str))]
         result: Option<atelier_core::EvidenceResult>,
+        /// Show at most this many records (default 20)
+        #[arg(
+            long,
+            conflicts_with = "all",
+            allow_negative_numbers = true,
+            value_parser = atelier_app::issue_inventory::parse_limit
+        )]
+        limit: Option<usize>,
+        /// Show every matching record
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -995,6 +1016,7 @@ fn run() -> Result<()> {
                 };
                 if command.is_empty() {
                     let (state_dir, index) = load_repository()?;
+                    commands::evidence::warn_unknown_kind(&index, &state_dir, &evidence_kind);
                     let resolved_target = parsed_target
                         .as_ref()
                         .map(|target| {
@@ -1038,40 +1060,51 @@ fn run() -> Result<()> {
                     }
                     let evidence = atelier_records::RecordStore::new(&state_dir)
                         .load_evidence_by_id(&evidence_id)?;
-                    commands::evidence::print_new_record(&evidence, quiet)?;
-                    group.finish("evidence", quiet)
+                    commands::evidence::report_new_record(&evidence, group, quiet)
                 } else {
+                    // Capture reports its own refusal when the repository
+                    // cannot be read, before it runs anything.
+                    if let Ok((state_dir, index)) = load_repository() {
+                        commands::evidence::warn_unknown_kind(&index, &state_dir, &evidence_kind);
+                    }
                     let command_summary = summary.as_deref().or(summary_text.as_deref());
-                    commands::evidence::capture(commands::evidence::CaptureOptions {
-                        evidence_kind: &evidence_kind,
-                        summary: command_summary,
-                        path: path.as_deref(),
-                        uri: uri.as_deref(),
-                        producer: producer.as_deref(),
-                        target_kind: parsed_target.as_ref().map(|target| target.kind.as_str()),
-                        target_id: parsed_target.as_ref().map(|target| target.id.as_str()),
-                        role: &role,
-                        command: &command,
-                        criteria: &commands::evidence::captured_criteria(&criteria)?,
-                        quiet,
-                    })?;
-                    group.finish("evidence", quiet)
+                    let evidence =
+                        commands::evidence::capture_record(commands::evidence::CaptureOptions {
+                            evidence_kind: &evidence_kind,
+                            summary: command_summary,
+                            path: path.as_deref(),
+                            uri: uri.as_deref(),
+                            producer: producer.as_deref(),
+                            target_kind: parsed_target.as_ref().map(|target| target.kind.as_str()),
+                            target_id: parsed_target.as_ref().map(|target| target.id.as_str()),
+                            role: &role,
+                            command: &command,
+                            criteria: &commands::evidence::captured_criteria(&criteria)?,
+                        })?;
+                    commands::evidence::report_new_record(&evidence, group, quiet)
                 }
             }
-            EvidenceCommands::Show { id } => {
-                let (_, index) = load_repository()?;
-                commands::evidence::show(&index, &id, quiet)
+            EvidenceCommands::Show { id, full } => {
+                let (state_dir, index) = load_repository()?;
+                commands::evidence::show(&index, &repo_root_of(&state_dir), &id, full, quiet)
             }
             EvidenceCommands::Attach {
                 id,
-                target_kind,
+                target,
                 target_id,
                 role,
             } => {
                 let (state_dir, index) = load_repository()?;
-                let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, &id)?;
+                let (target_kind, target_id) = match target_id {
+                    Some(target_id) => (target, target_id),
+                    None => {
+                        let parsed = use_cases::parse_evidence_target_arg(&target)?;
+                        (parsed.kind, parsed.id)
+                    }
+                };
                 let target_id =
                     use_cases::resolve_evidence_target_ref(&index, &target_kind, &target_id)?;
+                let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, &id)?;
                 commands::evidence::attach(
                     &index,
                     &state_dir,
@@ -1082,9 +1115,24 @@ fn run() -> Result<()> {
                     quiet,
                 )
             }
-            EvidenceCommands::List { result } => {
-                let (_, index) = load_repository()?;
-                commands::evidence::list(&index, result, quiet)
+            EvidenceCommands::List {
+                item,
+                result,
+                limit,
+                all,
+            } => {
+                let (state_dir, index) = load_repository()?;
+                commands::evidence::list(
+                    &index,
+                    &repo_root_of(&state_dir),
+                    commands::evidence::ListOptions {
+                        item: item.as_deref(),
+                        result,
+                        limit,
+                        all,
+                        quiet,
+                    },
+                )
             }
         },
 
@@ -1120,6 +1168,14 @@ fn run() -> Result<()> {
             commands::issue::lint(&state_dir, id.as_deref(), quiet)
         }
     }
+}
+
+/// The repository root a records directory belongs to.
+fn repo_root_of(state_dir: &std::path::Path) -> std::path::PathBuf {
+    state_dir
+        .parent()
+        .expect("state directory has a repository root")
+        .to_path_buf()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1396,7 +1452,7 @@ mod help_tests {
 
     #[test]
     fn fixed_values_are_listed_and_others_are_usage_errors() {
-        let cases: [(&[&str], &str); 7] = [
+        let cases: [(&[&str], &str); 6] = [
             (
                 &[
                     "review",
@@ -1437,7 +1493,6 @@ mod help_tests {
                 &["evidence", "attach", "e", "issue", "t", "--role"],
                 "validates",
             ),
-            (&["evidence", "attach", "e", "t"], "issue, evidence"),
         ];
         for (args, values) in cases {
             let args = std::iter::once("atelier")

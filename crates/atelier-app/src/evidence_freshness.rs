@@ -100,14 +100,25 @@ fn evidence_matches_edges(
     record: &EvidenceRecord,
     edges: &[git::CommitEdge],
 ) -> Result<bool> {
+    Ok(first_mismatch(read, issue, record, edges)?.is_none())
+}
+
+/// The first change since the pin that stops `record` proving `issue`, or
+/// `None` when nothing in `edges` (oldest last) does.
+fn first_mismatch(
+    read: &mut EvidenceReadContext<'_>,
+    issue: &CanonicalIssueRecord,
+    record: &EvidenceRecord,
+    edges: &[git::CommitEdge],
+) -> Result<Option<Staleness>> {
     let original = read.issue_at(&record.data.commit, &issue.issue.id)?;
     if !acceptance_matches(&original, issue) {
-        return Ok(false);
+        return Ok(Some(Staleness::AcceptanceChanged));
     }
     let target = Path::new(".atelier").join(issue_record_path(&issue.issue.id));
-    for edge in edges {
+    for edge in edges.iter().rev() {
         if edge.paths.iter().any(|path| !git::is_record_path(path)) {
-            return Ok(false);
+            return Ok(Some(Staleness::CodeChangedIn(edge.commit.clone())));
         }
         if edge.paths.contains(&target)
             && !acceptance_matches(
@@ -115,10 +126,166 @@ fn evidence_matches_edges(
                 &read.issue_at(&edge.commit, &issue.issue.id)?,
             )
         {
-            return Ok(false);
+            return Ok(Some(Staleness::AcceptanceChangedIn(edge.commit.clone())));
         }
     }
-    Ok(true)
+    Ok(None)
+}
+
+/// Why a receipt no longer proves its item at HEAD.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Staleness {
+    /// A commit after the pin changed code or policy.
+    CodeChangedIn(String),
+    /// A commit after the pin changed the item's acceptance.
+    AcceptanceChangedIn(String),
+    /// The item's acceptance differs from its pinned version.
+    AcceptanceChanged,
+    /// The checkout has uncommitted code or policy changes.
+    UncommittedCode,
+    /// The pin is not in HEAD's history, or the item cannot be read there.
+    NotInHistory,
+}
+
+/// How one receipt stands as proof of one item, by the rules the
+/// `evidence.*` gates apply.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProofMark {
+    /// Nothing since the pin changed what it proves.
+    Fresh,
+    Stale(Staleness),
+    /// A pass that a fail recorded at or after it supersedes; names the
+    /// newest such fail.
+    SupersededByFail(String),
+    /// A fail that a later fresh pass supersedes; names the newest such pass.
+    SupersededByPass(String),
+    /// The newest fail, which no later fresh pass supersedes.
+    BlocksCompletion,
+}
+
+/// Every receipt validating one item, newest first, each with its mark, and
+/// the gates' verdict on the item's proof.
+#[derive(Debug)]
+pub struct ItemProof {
+    pub receipts: Vec<(String, ProofMark)>,
+    /// The newest fail no later fresh pass supersedes; it blocks completion.
+    pub blocking_fail: Option<String>,
+    /// The newest pass that counts as proof.
+    pub fresh_pass: Option<String>,
+    /// The newest pass of any standing.
+    pub newest_pass: Option<String>,
+}
+
+impl EvidenceReadContext<'_> {
+    /// Why `record` does not prove `issue` at HEAD, or `None` when it is
+    /// fresh, judged as [`Self::evidence_is_fresh`] judges it.
+    pub fn staleness(
+        &mut self,
+        issue: &CanonicalIssueRecord,
+        record: &EvidenceRecord,
+    ) -> Result<Option<Staleness>> {
+        let Ok(edges) = self.edges(&record.data.commit, "HEAD") else {
+            return Ok(Some(Staleness::NotInHistory));
+        };
+        match first_mismatch(self, issue, record, &edges) {
+            Ok(Some(staleness)) => return Ok(Some(staleness)),
+            Ok(None) => {}
+            Err(_) => return Ok(Some(Staleness::NotInHistory)),
+        }
+        Ok((!self.code_clean()?).then_some(Staleness::UncommittedCode))
+    }
+
+    /// Marks every receipt validating `issue_id`, as the evidence gates
+    /// would count it now.
+    pub fn item_proof(&mut self, index: &RecordIndex, issue_id: &str) -> Result<ItemProof> {
+        let issue = index
+            .issue_record(issue_id)
+            .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
+        let mut records = validating_records(index, issue_id)?;
+        records.sort_by(|left, right| {
+            (right.data.captured_at, &right.header.id)
+                .cmp(&(left.data.captured_at, &left.header.id))
+        });
+        let newest_fail = records
+            .iter()
+            .find(|record| record.data.result == EvidenceResult::Fail)
+            .map(|record| (record.data.captured_at, record.header.id.clone()));
+        let mut staleness = Vec::with_capacity(records.len());
+        for record in &records {
+            staleness.push(self.staleness(issue, record)?);
+        }
+        let mut receipts = Vec::with_capacity(records.len());
+        let mut fresh_pass: Option<&EvidenceRecord> = None;
+        for (record, stale) in records.iter().zip(&staleness) {
+            let superseding_fail = newest_fail
+                .as_ref()
+                .filter(|(failed_at, _)| record.data.captured_at <= *failed_at);
+            let mark = match (record.data.result, superseding_fail, stale) {
+                (EvidenceResult::Pass, Some((_, fail)), _) => {
+                    ProofMark::SupersededByFail(fail.clone())
+                }
+                (_, _, Some(stale)) => ProofMark::Stale(stale.clone()),
+                _ => ProofMark::Fresh,
+            };
+            if record.data.result == EvidenceResult::Pass
+                && mark == ProofMark::Fresh
+                && fresh_pass.is_none()
+            {
+                fresh_pass = Some(record);
+            }
+            receipts.push((record.header.id.clone(), mark));
+        }
+        // A fail is superseded by a fresh pass recorded after it; the newest
+        // fail no such pass supersedes blocks completion.
+        let blocking_fail = newest_fail
+            .filter(|(failed_at, _)| {
+                fresh_pass.is_none_or(|pass| pass.data.captured_at <= *failed_at)
+            })
+            .map(|(_, id)| id);
+        for ((id, mark), record) in receipts.iter_mut().zip(&records) {
+            if record.data.result != EvidenceResult::Fail {
+                continue;
+            }
+            if blocking_fail.as_ref() == Some(id) {
+                *mark = ProofMark::BlocksCompletion;
+            } else if let Some(pass) =
+                fresh_pass.filter(|pass| record.data.captured_at < pass.data.captured_at)
+            {
+                *mark = ProofMark::SupersededByPass(pass.header.id.clone());
+            }
+        }
+        Ok(ItemProof {
+            blocking_fail,
+            fresh_pass: fresh_pass.map(|record| record.header.id.clone()),
+            newest_pass: records
+                .iter()
+                .find(|record| record.data.result == EvidenceResult::Pass)
+                .map(|record| record.header.id.clone()),
+            receipts,
+        })
+    }
+}
+
+/// The evidence records linked to `issue_id` as validating it.
+pub fn validating_records<'a>(
+    index: &'a RecordIndex,
+    issue_id: &str,
+) -> Result<Vec<&'a EvidenceRecord>> {
+    let mut records = Vec::new();
+    for link in index.list_record_links("issue", issue_id)? {
+        if link.relation_type != "validates" {
+            continue;
+        }
+        let evidence_id = if link.source_kind == "evidence" {
+            link.source_id
+        } else if link.target_kind == "evidence" {
+            link.target_id
+        } else {
+            continue;
+        };
+        records.push(index.require_evidence(&evidence_id)?);
+    }
+    Ok(records)
 }
 
 fn evaluate_issue_gate(
@@ -132,23 +299,8 @@ fn evaluate_issue_gate(
     let issue = index
         .issue_record(issue_id)
         .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
-    let mut records = Vec::new();
-    for link in index.list_record_links("issue", issue_id)? {
-        if link.relation_type != "validates" {
-            continue;
-        }
-        let evidence_id = if link.source_kind == "evidence" {
-            link.source_id
-        } else if link.target_kind == "evidence" {
-            link.target_id
-        } else {
-            continue;
-        };
-        let record = index.require_evidence(&evidence_id)?;
-        if kind.is_none_or(|kind| record.data.evidence_type == kind) {
-            records.push(record);
-        }
-    }
+    let mut records = validating_records(index, issue_id)?;
+    records.retain(|record| kind.is_none_or(|kind| record.data.evidence_type == kind));
     records.sort_by_key(|record| (record.data.captured_at, &record.header.id));
     // A new failure supersedes earlier passing proof. Blocked and N/A never count.
     let last_failure = records

@@ -998,8 +998,10 @@ fn evidence_capture_keeps_the_failure_tail_and_summarizes_a_pass() {
     );
     let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &passing_id]);
     assert!(success, "evidence show failed: {stderr}");
-    assert!(shown.contains("Stderr: 68 bytes, truncated: no\nSummary [   1.0s] 3 tests run"));
-    assert!(shown.contains("(not kept; passing output is summarized)"));
+    assert!(
+        shown.contains("\nStderr: Summary [   1.0s] 3 tests run: 3 passed, 0 skipped\n"),
+        "{shown}"
+    );
 
     let git = |args: &[&str]| {
         Command::new("git")
@@ -1052,11 +1054,17 @@ fn evidence_show_keeps_hostile_and_blank_failing_output_in_its_stream() {
     let id = record_id_by_title(dir.path(), "evidence", "hostile output");
     let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &id]);
     assert!(success, "evidence show failed: {stderr}");
+    // The brief view shows stderr, the stream the failure printed to.
     assert!(
-        shown.contains("Stdout: 38 bytes, truncated: no\nbefore\n## Stderr\n\nBytes: 99\n```\nafter\nStderr: 12 bytes, truncated: no\nreal stderr\n"),
+        shown.contains("\nStderr (12 bytes):\n  real stderr\nMore with --full"),
         "{shown}"
     );
-    assert!(!shown.contains("not kept"), "{shown}");
+    let (success, full, stderr) = run_atelier(dir.path(), &["evidence", "show", &id, "--full"]);
+    assert!(success, "evidence show --full failed: {stderr}");
+    assert!(
+        full.contains("```text\nbefore\n## Stderr\n\nBytes: 99\n```\nafter\n````"),
+        "{full}"
+    );
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -1080,10 +1088,9 @@ fn evidence_show_keeps_hostile_and_blank_failing_output_in_its_stream() {
     let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &id]);
     assert!(success, "evidence show failed: {stderr}");
     assert!(
-        shown.contains("Stdout: 4 bytes, truncated: no\n(whitespace only)\n"),
+        shown.contains("\nStdout: 4 bytes, whitespace only\n"),
         "{shown}"
     );
-    assert!(!shown.contains("not kept"), "{shown}");
 }
 
 #[test]
@@ -1139,14 +1146,19 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "issue command record failed: {stderr}");
-    assert!(issue_capture.contains("evidence recorded issue command proof"));
-    assert!(issue_capture.contains("Command:     sh -c"));
-    assert!(issue_capture.contains("Exit Status: 0"));
-    assert!(issue_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
-    assert!(issue_capture.contains("Captured:"));
-    assert!(!issue_capture.contains("\npass stdout\n"));
-    assert!(issue_capture.contains("(not kept; passing output is summarized)"));
     let issue_evidence_id = record_id_by_title(dir.path(), "evidence", "issue command proof");
+    assert!(
+        issue_capture.starts_with(&format!(
+            "{issue_evidence_id} ✓ pass validation for issue/{issue_id} @"
+        )),
+        "{issue_capture}"
+    );
+    assert!(issue_capture.contains(": sh -c "), "{issue_capture}");
+    assert!(
+        issue_capture.ends_with(" (exit 0)\nevidence record: passed\n"),
+        "{issue_capture}"
+    );
+    assert!(!issue_capture.contains("\npass stdout"));
     let (success, shown, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &issue_evidence_id]);
     assert!(success, "evidence query failed: {stderr}");
@@ -1189,11 +1201,11 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "unified command record failed: {stderr}");
-    assert!(record_capture.contains("evidence recorded unified command proof"));
-    assert!(record_capture.contains("Command:     sh -c"));
-    assert!(record_capture.contains("Exit Status: 0"));
-    assert!(record_capture.contains(&format!("Target:      issue/{issue_id} (validates)")));
-    assert!(record_capture.contains("record stdout"));
+    assert!(
+        record_capture.contains(&format!(" ✓ pass validation for issue/{issue_id} @")),
+        "{record_capture}"
+    );
+    assert_eq!(record_capture.lines().count(), 2, "{record_capture}");
 
     let positional_summary = "unified positional manual proof";
     let (success, positional_record_out, stderr) = run_atelier(
@@ -1211,8 +1223,12 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "positional manual record failed: {stderr}");
-    assert!(positional_record_out.contains("evidence recorded unified positional manual proof"));
-    assert!(positional_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    assert!(
+        positional_record_out.contains(&format!(" ✓ pass validation for issue/{issue_id} @")),
+        "{positional_record_out}"
+    );
+    assert!(positional_record_out
+        .ends_with(": unified positional manual proof\nevidence record: passed\n"));
     let positional_evidence_id = record_id_by_title(dir.path(), "evidence", positional_summary);
     let positional_evidence_front_matter =
         canonical_evidence_front_matter(dir.path(), &positional_evidence_id);
@@ -1276,11 +1292,23 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, epic_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &epic_evidence_id]);
     assert!(success, "epic evidence show failed: {stderr}");
-    assert!(epic_show.starts_with(&format!("{epic_evidence_id} evidence recorded ")));
-    assert!(epic_show.contains("Exit Status: 7"));
-    assert!(epic_show.contains(&format!("Target:      issue/{epic_id} (validates)")));
-    assert!(epic_show.contains("failing stdout"));
-    assert!(epic_show.contains("failing stderr"));
+    assert!(epic_show.starts_with(&format!(
+        "{epic_evidence_id} evidence recorded ⚠ fail validation for issue/{epic_id} @"
+    )));
+    assert!(epic_show.contains(" (exit 7)\n"), "{epic_show}");
+    assert!(
+        epic_show.contains("\nStderr (15 bytes):\n  failing stderr\n"),
+        "{epic_show}"
+    );
+    let (success, epic_full, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "show", &epic_evidence_id, "--full"],
+    );
+    assert!(success, "epic evidence show --full failed: {stderr}");
+    assert!(epic_full.contains("Exit Status: 7"));
+    assert!(epic_full.contains(&format!("Target:      issue/{epic_id}\n")));
+    assert!(epic_full.contains("failing stdout"));
+    assert!(epic_full.contains("failing stderr"));
 
     let manual_epic_summary =
         "manual epic contract audit line-by-line classification maps epic outcome lines to proof";
@@ -1312,7 +1340,10 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, manual_epic_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &manual_epic_evidence_id]);
     assert!(success, "manual epic evidence show failed: {stderr}");
-    assert!(manual_epic_show.contains(&format!("Target:      issue/{epic_id} (validates)")));
+    assert!(
+        manual_epic_show.contains(&format!(" ✓ pass validation for issue/{epic_id} @")),
+        "{manual_epic_show}"
+    );
 
     let manual_issue_summary = "unified manual issue proof";
     let (success, manual_record_out, stderr) = run_atelier(
@@ -1331,8 +1362,8 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
         ],
     );
     assert!(success, "unified manual record failed: {stderr}");
-    assert!(manual_record_out.contains("evidence recorded unified manual issue proof"));
-    assert!(manual_record_out.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    assert!(manual_record_out.contains(&format!(" ✓ pass validation for issue/{issue_id} @")));
+    assert!(manual_record_out.contains(": unified manual issue proof\n"));
     let manual_issue_evidence_id = record_id_by_title(dir.path(), "evidence", manual_issue_summary);
     let manual_issue_front_matter =
         canonical_evidence_front_matter(dir.path(), &manual_issue_evidence_id);
@@ -1363,29 +1394,41 @@ fn test_evidence_capture_records_command_metadata_and_attaches_targets() {
     let (success, mission_show, stderr) =
         run_atelier(dir.path(), &["evidence", "show", &mission_evidence_id]);
     assert!(success, "mission evidence show failed: {stderr}");
-    assert!(mission_show.starts_with(&format!("{mission_evidence_id} evidence recorded ")));
-    assert!(mission_show.contains("Exit Status: 2"));
-    assert!(mission_show.contains(&format!("Target:      issue/{mission_id} (validates)")));
-    assert!(mission_show.contains("blocked-line-000"));
-    assert!(mission_show.contains(" bytes omitted …"));
-    assert!(mission_show.contains("blocked-line-349"));
-    assert!(mission_show.contains("Stdout: "));
-    assert!(mission_show.contains("truncated: yes"));
+    assert!(mission_show.starts_with(&format!(
+        "{mission_evidence_id} evidence recorded ⚠ fail validation for issue/{mission_id} @"
+    )));
+    assert!(mission_show.contains(" (exit 2)\n"));
+    let (success, mission_full, stderr) = run_atelier(
+        dir.path(),
+        &["evidence", "show", &mission_evidence_id, "--full"],
+    );
+    assert!(success, "mission evidence show --full failed: {stderr}");
+    assert!(mission_full.contains("blocked-line-000"));
+    assert!(mission_full.contains(" bytes omitted …"));
+    assert!(mission_full.contains("blocked-line-349"));
+    assert!(mission_full.contains("Truncated: yes"));
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
-    assert!(evidence_list.contains(&issue_evidence_id));
-    assert!(evidence_list.contains("Showing:"));
-    assert!(evidence_list.contains("exit 0"));
-    assert!(evidence_list.contains(&format!("target issue/{issue_id}")));
-    assert!(evidence_list.contains("command sh -c"));
-    assert!(evidence_list.contains(&epic_evidence_id));
-    assert!(evidence_list.contains("exit 7"));
-    assert!(evidence_list.contains(&format!("target issue/{epic_id}")));
-    assert!(evidence_list.contains(&manual_epic_evidence_id));
-    assert!(evidence_list.contains(&mission_evidence_id));
-    assert!(evidence_list.contains("exit 2"));
-    assert!(evidence_list.contains(&format!("target issue/{mission_id}")));
+    let row = |id: &str| {
+        evidence_list
+            .lines()
+            .find(|line| line.starts_with(id))
+            .unwrap_or_else(|| panic!("no row for {id}:\n{evidence_list}"))
+    };
+    assert!(row(&issue_evidence_id).starts_with(&format!(
+        "{issue_evidence_id} ✓ pass validation for issue/{issue_id} @"
+    )));
+    assert!(row(&issue_evidence_id).ends_with(" · sh -c 'printf '\"'\"'pass stdout\\n'\"'\"'; printf '\"'\"'pass stderr\\n'\"'\"' >&2'"), "{}", row(&issue_evidence_id));
+    assert!(row(&epic_evidence_id).starts_with(&format!(
+        "{epic_evidence_id} ⚠ fail validation for issue/{epic_id} @"
+    )));
+    assert!(row(&manual_epic_evidence_id).contains(&format!(" for issue/{epic_id} @")));
+    assert!(row(&mission_evidence_id).starts_with(&format!(
+        "{mission_evidence_id} ⚠ fail validation for issue/{mission_id} @"
+    )));
+    assert!(!evidence_list.contains("(validates)"), "{evidence_list}");
+    assert!(!evidence_list.contains("(none)"), "{evidence_list}");
     assert!(evidence_list.contains("Show the newest proof's detail: atelier evidence show "));
     assert!(!evidence_list.contains("<evidence-id>"), "{evidence_list}");
 }
@@ -1663,7 +1706,10 @@ fn test_evidence_capture_postflight_accepts_same_target_material_mutation() {
         record_id_by_title(dir.path(), "evidence", "Proof after same-target mutation");
     let (success, shown, stderr) = run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
     assert!(success, "evidence show failed: {stderr}");
-    assert!(shown.contains(&format!("Target:      issue/{target_id} (validates)")));
+    assert!(
+        shown.contains(&format!(" for issue/{target_id} @")),
+        "{shown}"
+    );
     assert_eq!(
         issue_id_by_title(dir.path(), "Mutated capture target"),
         target_id
@@ -1720,17 +1766,19 @@ fn test_evidence_list_elides_command_transcripts() {
             "--",
             "sh",
             "-c",
-            "printf 'proof transcript line one\\n'; printf 'proof transcript line two\\n'",
+            "printf '%s%s\\n' proof transcript",
         ],
     );
     assert!(success, "evidence record failed: {stderr}");
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
-    assert!(evidence_list.contains("long command proof"));
-    assert!(evidence_list.contains("command sh -c 'printf ..."));
-    assert!(!evidence_list.contains("proof transcript line one"));
-    assert!(!evidence_list.contains("proof transcript line two"));
+    // A row shows the whole command, never its output.
+    assert!(
+        evidence_list.contains(" · sh -c 'printf '\"'\"'%s%s\\n'\"'\"' proof transcript'\n"),
+        "{evidence_list}"
+    );
+    assert!(!evidence_list.contains("prooftranscript"));
     assert!(evidence_list.contains("Show the newest proof's detail: atelier evidence show "));
     assert!(!evidence_list.contains("<evidence-id>"), "{evidence_list}");
 }
@@ -1758,8 +1806,12 @@ fn test_evidence_list_bounds_no_summary_command_capture() {
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
-    assert!(evidence_list.contains("command sh -c 'printf ..."));
-    assert!(evidence_list.contains("(command-backed proof)"));
+    assert!(
+        evidence_list.contains(" · sh -c 'printf proof # xxx"),
+        "{evidence_list}"
+    );
+    assert!(evidence_list.contains("x…\n"), "{evidence_list}");
+    assert!(!evidence_list.contains("(command-backed proof)"));
     assert!(!evidence_list.contains(&"x".repeat(256)));
     assert!(
         evidence_list.len() < 1_024,
@@ -1809,8 +1861,13 @@ fn test_evidence_list_bounds_default_output() {
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
-    assert!(evidence_list.contains("21 total"));
-    assert!(evidence_list.contains("Showing: 20 of 21"));
+    let rows = |list: &str| {
+        list.lines()
+            .filter(|line| line.starts_with("atelier-"))
+            .count()
+    };
+    assert_eq!(rows(&evidence_list), 20, "{evidence_list}");
+    assert!(!evidence_list.contains(" total"), "{evidence_list}");
     assert!(
         evidence_list.contains(&newest_by_timestamp),
         "newest timestamp should be visible despite sorting last by ID:\n{evidence_list}"
@@ -1819,9 +1876,24 @@ fn test_evidence_list_bounds_default_output() {
         !evidence_list.contains(&oldest_by_timestamp),
         "oldest timestamp should be hidden by default limit:\n{evidence_list}"
     );
-    assert!(evidence_list.contains("Omitted: 1 older evidence record hidden by default limit 20"));
-    assert!(evidence_list.contains("Filter by result: atelier evidence list --result <result>"));
-    assert!(evidence_list.contains("List matching IDs: atelier --quiet evidence list"));
+    assert!(evidence_list
+        .contains("  ... 1 more evidence record omitted; see `atelier evidence list --all`\n"));
+    assert!(evidence_list.contains("List failing proof: atelier evidence list --result fail"));
+    assert!(evidence_list.contains("List matching IDs: atelier --quiet evidence list\n"));
+
+    for (args, count) in [
+        (vec!["evidence", "list", "--limit", "3"], 3),
+        (vec!["evidence", "list", "--all"], 21),
+    ] {
+        let (success, list, stderr) = run_atelier(dir.path(), &args);
+        assert!(success, "{args:?} failed: {stderr}");
+        assert_eq!(rows(&list), count, "{args:?}:\n{list}");
+        assert_eq!(list.contains(" omitted; see "), count < 21, "{list}");
+    }
+    let (success, quiet_limited, stderr) =
+        run_atelier(dir.path(), &["--quiet", "evidence", "list", "--limit", "2"]);
+    assert!(success, "quiet limited list failed: {stderr}");
+    assert_eq!(quiet_limited.lines().count(), 2);
 
     let (success, quiet_list, stderr) = run_atelier(dir.path(), &["--quiet", "evidence", "list"]);
     assert!(success, "quiet evidence list failed: {stderr}");
@@ -1939,7 +2011,7 @@ fn test_evidence_relation_role_errors_are_corrective() {
         ],
     );
     assert!(success, "accepted evidence record failed: {stderr}");
-    assert!(record_out.contains(&format!("Target:      issue/{target_id} (validates)")));
+    assert!(record_out.contains(&format!(" ✓ pass validation for issue/{target_id} @")));
     let evidence_id = record_id_by_title(dir.path(), "evidence", "accepted target proof");
 
     let (success, _, stderr) =
@@ -1974,8 +2046,10 @@ fn test_evidence_relation_role_errors_are_corrective() {
 
     let (success, show_out, stderr) = run_atelier(dir.path(), &["evidence", "show", &evidence_id]);
     assert!(success, "evidence show failed: {stderr}");
-    assert!(show_out.contains(&format!("issue/{target_id} (validates)")));
-    assert!(show_out.contains(&format!("issue/{reuse_id} (validates)")));
+    assert!(
+        show_out.contains(&format!(" for issue/{target_id}, issue/{reuse_id} @")),
+        "{show_out}"
+    );
 }
 
 fn assert_corrective_evidence_role_error(stderr: &str) {
@@ -2024,20 +2098,21 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
         success,
         "nonzero command should still record evidence: {stderr}"
     );
-    assert!(stdout.contains("evidence recorded invalid input is rejected"));
-    assert!(stdout.contains("Exit Status: 3"));
-    assert!(stdout.contains(&format!("Target:      issue/{issue_id} (validates)")));
+    assert!(stdout.contains(&format!(" ⚠ fail validation for issue/{issue_id} @")));
+    assert!(stdout.contains(" (exit 3)\n  rejected\n"), "{stdout}");
+    assert!(stdout.ends_with(&format!(
+        "evidence record: recorded fail — {issue_id} cannot close or merge until a later pass\n"
+    )));
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
     assert!(success, "evidence list failed: {stderr}");
     assert!(
         evidence_list
             .lines()
-            .any(|line| line.contains("fail") && line.contains("invalid input is rejected")),
+            .any(|line| line.contains(" ⚠ fail validation ")
+                && line.ends_with(" · sh -c 'printf '\"'\"'rejected\\n'\"'\"'; exit 3'")),
         "{evidence_list}"
     );
-    assert!(evidence_list.contains("exit 3"));
-    assert!(evidence_list.contains("invalid input is rejected"));
 }
 
 #[test]
@@ -2291,4 +2366,429 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
         ),
         "stderr: {stderr}"
     );
+}
+
+fn create_task(dir: &Path, title: &str) -> String {
+    let (success, _, stderr) =
+        run_atelier(dir, &["issue", "create", title, "--issue-type", "task"]);
+    assert!(success, "issue create failed: {stderr}");
+    issue_id_by_title(dir, title)
+}
+
+fn short_head(dir: &Path) -> String {
+    git_rev_parse(dir, "HEAD").trim()[..8].to_string()
+}
+
+/// `evidence record` confirms in one line and ends with its verdict line; a
+/// recorded fail exits 0, shows the last lines of its output, and the
+/// verdict names the item it blocks (atelier-3ekh). An unknown kind warns
+/// and is still recorded (atelier-b05y).
+#[test]
+fn evidence_record_confirms_in_one_line_and_ends_in_its_verdict() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let issue_id = create_task(dir.path(), "Confirmed issue");
+    let short_id = issue_id.trim_start_matches("atelier-").to_string();
+    fs::write(dir.path().join("proof-sample.txt"), "hello goodbye\n").unwrap();
+
+    let (success, out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &short_id,
+            "--kind",
+            "test",
+            "--",
+            "grep",
+            "-q",
+            "goodbye",
+            "proof-sample.txt",
+        ],
+    );
+    assert!(success, "pass capture failed: {stderr}");
+    assert_eq!(stderr, "", "a known kind gives no warning");
+    let pass_id = record_id_by_title(dir.path(), "evidence", "grep -q goodbye proof-sample.txt");
+    let pin = short_head(dir.path());
+    assert_eq!(
+        out,
+        format!(
+            "{pass_id} ✓ pass test for issue/{issue_id} @{pin}: grep -q goodbye proof-sample.txt (exit 0)\nevidence record: passed\n"
+        )
+    );
+
+    let (success, out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{issue_id}"),
+            "--kind",
+            "test",
+            "--summary",
+            "failing check",
+            "--",
+            "sh",
+            "-c",
+            "for i in 1 2 3 4 5 6 7; do echo line$i >&2; done; exit 1",
+        ],
+    );
+    assert!(success, "a recorded fail exits 0: {stderr}");
+    let fail_id = record_id_by_title(dir.path(), "evidence", "failing check");
+    let pin = short_head(dir.path());
+    assert_eq!(
+        out,
+        format!(
+            "{fail_id} ⚠ fail test for issue/{issue_id} @{pin}: sh -c 'for i in 1 2 3 4 5 6 7; do echo line$i >&2; done; exit 1' (exit 1); newer than pass {pass_id}\n  line3\n  line4\n  line5\n  line6\n  line7\nevidence record: recorded fail — {issue_id} cannot close or merge until a later pass\n"
+        )
+    );
+
+    let (success, out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &issue_id,
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "Observed the sample",
+        ],
+    );
+    assert!(success, "manual record failed: {stderr}");
+    let manual_id = record_id_by_title(dir.path(), "evidence", "Observed the sample");
+    let pin = short_head(dir.path());
+    assert_eq!(
+        out,
+        format!(
+            "{manual_id} ✓ pass validation for issue/{issue_id} @{pin}: Observed the sample\nevidence record: passed\n"
+        )
+    );
+
+    // The verdict stays the last line when the command also commits.
+    let (success, out, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &issue_id,
+            "--kind",
+            "weird",
+            "--result",
+            "fail",
+            "--commit-records",
+            "Saw it fail",
+        ],
+    );
+    assert!(success, "manual fail failed: {stderr}");
+    assert_eq!(
+        stderr,
+        "⚠ evidence kind 'weird' is new: no receipt, gate or default uses it, so no gate or filter for another kind matches it. Known kinds: test, validation\n"
+    );
+    let lines = out.lines().collect::<Vec<_>>();
+    assert_eq!(lines.len(), 3, "{out}");
+    assert!(lines[0].contains(" ⚠ fail weird for issue/"), "{out}");
+    assert!(
+        lines[0].ends_with(&format!(": Saw it fail; newer than pass {manual_id}")),
+        "{out}"
+    );
+    assert!(lines[1].starts_with("Committed "), "{out}");
+    assert_eq!(
+        lines[2],
+        format!(
+            "evidence record: recorded fail — {issue_id} cannot close or merge until a later pass"
+        )
+    );
+
+    let (success, out, _) = run_atelier(
+        dir.path(),
+        &[
+            "--quiet", "evidence", "record", "--target", &issue_id, "--kind", "test", "--", "false",
+        ],
+    );
+    assert!(success);
+    assert_eq!(
+        out,
+        format!("{}\n", record_id_by_title(dir.path(), "evidence", "false"))
+    );
+}
+
+/// `evidence list <item>` lists that item's receipts newest first, each
+/// marked as the evidence gates judge it, and ends with the item's proof
+/// verdict (atelier-u0ig).
+#[test]
+fn evidence_list_by_item_marks_each_receipt_as_the_gates_judge_it() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let issue_id = create_task(dir.path(), "Listed issue");
+    let other_id = create_task(dir.path(), "Other issue");
+    let short_id = issue_id.trim_start_matches("atelier-").to_string();
+    let record = |target: &str, summary: &str, command: &str| {
+        let (success, _, stderr) = run_atelier(
+            dir.path(),
+            &[
+                "evidence",
+                "record",
+                "--target",
+                target,
+                "--kind",
+                "test",
+                "--summary",
+                summary,
+                "--",
+                "sh",
+                "-c",
+                command,
+            ],
+        );
+        assert!(success, "record {summary} failed: {stderr}");
+        record_id_by_title(dir.path(), "evidence", summary)
+    };
+    let list = |args: &[&str]| {
+        let mut full = vec!["evidence", "list"];
+        full.extend_from_slice(args);
+        let (success, out, stderr) = run_atelier(dir.path(), &full);
+        assert!(success, "{full:?} failed: {stderr}");
+        out
+    };
+    let rows = |out: &str| -> Vec<String> {
+        out.lines()
+            .filter(|line| line.starts_with("atelier-"))
+            .map(str::to_string)
+            .collect()
+    };
+
+    let first_pass = record(&issue_id, "first pass", "true");
+    let fail = record(&issue_id, "the fail", "exit 1");
+    let other = record(&other_id, "other proof", "true");
+
+    let out = list(&[&short_id]);
+    assert!(
+        out.starts_with(&format!("Evidence for {issue_id}\n")),
+        "{out}"
+    );
+    assert!(!out.contains(&other), "{out}");
+    let shown = rows(&out);
+    assert_eq!(shown.len(), 2, "{out}");
+    assert!(
+        shown[0].starts_with(&format!("{fail} ⚠ fail test @")),
+        "{out}"
+    );
+    assert!(
+        shown[0].ends_with(" · ⚠ blocks completion · sh -c 'exit 1'"),
+        "{out}"
+    );
+    assert!(
+        shown[1].ends_with(&format!(
+            " · ⚠ superseded by newer fail {fail} · sh -c true"
+        )),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!("\nProof: ⚠ newest is fail {fail}\n")),
+        "{out}"
+    );
+
+    let second_pass = record(&issue_id, "second pass", "true");
+    let out = list(&[&issue_id]);
+    let shown = rows(&out);
+    assert!(shown[0].starts_with(&format!("{second_pass} ✓ pass test @")));
+    assert!(shown[0].contains(" · ✓ fresh · "), "{out}");
+    assert!(
+        shown[1].contains(&format!(" · superseded by newer pass {second_pass} · ")),
+        "{out}"
+    );
+    assert!(shown[2].starts_with(&first_pass), "{out}");
+    assert!(
+        out.contains(&format!("\nProof: ✓ fresh pass {second_pass}\n")),
+        "{out}"
+    );
+
+    fs::write(dir.path().join("code.txt"), "changed code\n").unwrap();
+    commit_all(dir.path(), "Change code");
+    let code_commit = short_head(dir.path());
+    let out = list(&[&issue_id]);
+    let shown = rows(&out);
+    assert!(
+        shown[0].contains(&format!(" · ⚠ stale (code changed in {code_commit}) · ")),
+        "{out}"
+    );
+    assert!(shown[1].contains(" · ⚠ blocks completion · "), "{out}");
+    assert!(
+        out.contains(&format!("\nProof: ⚠ newest is fail {fail}\n")),
+        "{out}"
+    );
+
+    let out = list(&[&issue_id, "--limit", "1"]);
+    assert_eq!(rows(&out).len(), 1, "{out}");
+    assert!(out.contains(&format!(
+        "\n  ... 2 more evidence records omitted; see `atelier evidence list {issue_id} --all`\n"
+    )));
+    assert!(out.contains(&format!(
+        "List failing proof: atelier evidence list {issue_id} --result fail\n"
+    )));
+
+    let out = list(&[&issue_id, "--result", "fail"]);
+    assert_eq!(rows(&out).len(), 1, "{out}");
+    assert!(out.contains(&format!(
+        "List matching IDs: atelier --quiet evidence list {issue_id} --result fail\n"
+    )));
+    assert!(!out.contains("List failing proof"), "{out}");
+
+    let (success, quiet, _) = run_atelier(dir.path(), &["--quiet", "evidence", "list", &issue_id]);
+    assert!(success);
+    assert_eq!(quiet, format!("{second_pass}\n{fail}\n{first_pass}\n"));
+
+    // Unfiltered rows are marked against their own item and name it.
+    let out = list(&[]);
+    let row = rows(&out)
+        .into_iter()
+        .find(|row| row.starts_with(&other))
+        .unwrap();
+    assert!(
+        row.starts_with(&format!("{other} ✓ pass test for issue/{other_id} @")),
+        "{row}"
+    );
+    assert!(row.contains(" · ⚠ stale (code changed in "), "{row}");
+}
+
+/// `evidence show` is brief: one title line with the receipt's standing,
+/// the claim and command, and one output excerpt; `--full` prints every
+/// field and the stored record (atelier-o8ni).
+#[test]
+fn evidence_show_is_brief_and_full_prints_the_stored_record() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let issue_id = create_task(dir.path(), "Shown issue");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &issue_id,
+            "--kind",
+            "test",
+            "--summary",
+            "the shown fail",
+            "--",
+            "sh",
+            "-c",
+            "i=1; while [ $i -le 30 ]; do echo line$i >&2; i=$((i + 1)); done; exit 1",
+        ],
+    );
+    assert!(success, "record failed: {stderr}");
+    let id = record_id_by_title(dir.path(), "evidence", "the shown fail");
+    let pin = short_head(dir.path());
+    let short = id.trim_start_matches("atelier-");
+
+    let (success, brief, stderr) = run_atelier(dir.path(), &["evidence", "show", short]);
+    assert!(success, "evidence show failed: {stderr}");
+    let lines = brief.lines().collect::<Vec<_>>();
+    assert!(
+        lines[0].starts_with(&format!(
+            "{id} evidence recorded ⚠ fail test for issue/{issue_id} @{pin} · "
+        )),
+        "{brief}"
+    );
+    assert!(lines[0].ends_with(" · ⚠ blocks completion"), "{brief}");
+    assert_eq!(lines[1], "Summary:  the shown fail");
+    assert_eq!(
+        lines[2],
+        "Command:  sh -c 'i=1; while [ $i -le 30 ]; do echo line$i >&2; i=$((i + 1)); done; exit 1' (exit 1)"
+    );
+    assert_eq!(lines[3], "Stderr (last 20 lines of 201 bytes):");
+    assert_eq!(lines[4], "  line11");
+    assert_eq!(lines[23], "  line30");
+    assert_eq!(
+        lines[24],
+        "More with --full: the stored record and every field"
+    );
+    assert_eq!(lines.len(), 25, "{brief}");
+    for absent in [
+        "(none)",
+        "Created:",
+        "Updated:",
+        "Status:",
+        "Producer:",
+        "line10\n",
+    ] {
+        assert!(!brief.contains(absent), "brief shows {absent}:\n{brief}");
+    }
+
+    let (success, full, stderr) = run_atelier(dir.path(), &["evidence", "show", &id, "--full"]);
+    assert!(success, "evidence show --full failed: {stderr}");
+    assert!(full.starts_with(&format!("{id} evidence recorded the shown fail\n====")));
+    for field in [
+        "Result:      fail\n",
+        "Freshness:   ⚠ blocks completion\n",
+        &format!("Commit:      {pin}\n"),
+        "Exit Status: 1\n",
+        &format!("Target:      issue/{issue_id}\n"),
+        "Producer:    (none)\n",
+        "Created:     ",
+        "Updated:     ",
+        "\nRecord\n------\n## Summary\n\nthe shown fail\n",
+    ] {
+        assert!(full.contains(field), "--full lacks {field:?}:\n{full}");
+    }
+    // The stored transcript is printed once.
+    assert_eq!(full.matches("line30").count(), 1, "{full}");
+}
+
+/// `evidence attach` takes the target forms `evidence record --target`
+/// takes, and keeps its two-argument form (atelier-b05y).
+#[test]
+fn evidence_attach_takes_the_target_forms_record_takes() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let first = create_task(dir.path(), "First target");
+    let second = create_task(dir.path(), "Second target");
+    let third = create_task(dir.path(), "Third target");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "evidence",
+            "record",
+            "--kind",
+            "validation",
+            "--result",
+            "pass",
+            "Reusable proof",
+        ],
+    );
+    assert!(success, "record failed: {stderr}");
+    let id = record_id_by_title(dir.path(), "evidence", "Reusable proof");
+
+    let second_short = second.trim_start_matches("atelier-").to_string();
+    for (args, target) in [
+        (vec![format!("issue/{first}")], &first),
+        (vec![second_short], &second),
+        (vec!["issue".to_string(), third.clone()], &third),
+    ] {
+        let mut full = vec!["evidence".to_string(), "attach".to_string(), id.clone()];
+        full.extend(args);
+        let full = full.iter().map(String::as_str).collect::<Vec<_>>();
+        let (success, out, stderr) = run_atelier(dir.path(), &full);
+        assert!(success, "{full:?} failed: {stderr}");
+        assert_eq!(
+            out,
+            format!("Attached evidence {id} to issue {target} (validates)\n")
+        );
+    }
+    let (success, _, stderr) = run_atelier(dir.path(), &["evidence", "attach", &id, "bogus/x"]);
+    assert!(!success);
+    assert_eq!(
+        stderr,
+        "Error: Invalid target kind 'bogus'. Valid values: issue, evidence\n"
+    );
+
+    let (success, out, _) = run_atelier(dir.path(), &["--quiet", "evidence", "list", &third]);
+    assert!(success);
+    assert_eq!(out, format!("{id}\n"));
 }

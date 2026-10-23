@@ -1,12 +1,14 @@
 use crate::human_output::{print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use super::record_commit::RecordCommit;
 use crate::human_output;
+use atelier_app::evidence_freshness::{ItemProof, ProofMark, Staleness};
 use atelier_app::record_index::RecordIndex;
 use atelier_app::storage_layout::StorageLayout;
 use atelier_app::use_cases as app_use_cases;
@@ -23,7 +25,13 @@ const OUTPUT_HEAD_BYTES: usize = 1024;
 const OUTPUT_TAIL_BYTES: usize = 3072;
 const OUTPUT_SUMMARY_LIMIT_BYTES: usize = OUTPUT_HEAD_BYTES + OUTPUT_TAIL_BYTES;
 const EVIDENCE_LIST_LIMIT: usize = 20;
-const EVIDENCE_LIST_TEXT_LIMIT: usize = 96;
+/// A list row's command or title is cut to this many characters.
+const EVIDENCE_LIST_TEXT_LIMIT: usize = 160;
+/// Output lines a failure's confirmation shows, and `evidence show`.
+const CONFIRMATION_TAIL_LINES: usize = 5;
+const SHOW_TAIL_LINES: usize = 20;
+/// The relation a receipt has to its target unless it names another.
+const DEFAULT_ROLE: &str = "validates";
 
 pub struct CaptureOptions<'a> {
     pub evidence_kind: &'a str,
@@ -37,7 +45,6 @@ pub struct CaptureOptions<'a> {
     pub command: &'a [String],
     /// Criterion slugs; each takes the captured result.
     pub criteria: &'a [String],
-    pub quiet: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +160,52 @@ pub fn manual_criteria(values: &[String]) -> Result<Vec<EvidenceCriterion>> {
         .collect()
 }
 
+/// Kinds every repository knows, as `evidence record --help` names them.
+const DEFAULT_KINDS: [&str; 2] = ["test", "validation"];
+
+/// Warns on stderr when `kind` is one no receipt, workflow gate or default
+/// uses: a typo would make a kind no gate or filter matches. The receipt is
+/// still recorded.
+pub fn warn_unknown_kind(index: &RecordIndex, state_dir: &Path, kind: &str) {
+    let mut known = DEFAULT_KINDS
+        .iter()
+        .map(|kind| kind.to_string())
+        .collect::<BTreeSet<_>>();
+    known.extend(
+        index
+            .evidence_records()
+            .into_iter()
+            .map(|record| record.data.evidence_type.clone()),
+    );
+    if let Some(policy) = state_dir
+        .parent()
+        .and_then(|repo_root| atelier_app::workflow_policy::load(repo_root).ok())
+    {
+        let validators = policy.merge_checks.iter().chain(
+            policy
+                .workflows
+                .values()
+                .flat_map(|workflow| workflow.transitions.values())
+                .flat_map(|transition| transition.validators.iter()),
+        );
+        for validator in validators {
+            if let Some(atelier_workflow::ValidatorParams::EvidenceAttached {
+                kind: Some(kind),
+                ..
+            }) = &validator.params
+            {
+                known.insert(kind.clone());
+            }
+        }
+    }
+    if !known.contains(kind) {
+        eprintln!(
+            "⚠ evidence kind '{kind}' is new: no receipt, gate or default uses it, so no gate or filter for another kind matches it. Known kinds: {}",
+            known.into_iter().collect::<Vec<_>>().join(", ")
+        );
+    }
+}
+
 /// `--criterion <slug>` values for command capture, which derives each
 /// criterion's result from the exit status.
 pub fn captured_criteria(values: &[String]) -> Result<Vec<String>> {
@@ -203,12 +256,6 @@ fn check_criteria(
     }
 }
 
-pub fn capture(options: CaptureOptions<'_>) -> Result<()> {
-    let quiet = options.quiet;
-    let created = capture_record(options)?;
-    print_new_record(&created, quiet)
-}
-
 /// Runs the command and records its receipt, returning the new record.
 pub fn capture_record(options: CaptureOptions<'_>) -> Result<EvidenceRecord> {
     if options.command.is_empty() {
@@ -218,7 +265,7 @@ pub fn capture_record(options: CaptureOptions<'_>) -> Result<EvidenceRecord> {
         (options.target_kind, options.target_id),
         (Some(_), None) | (None, Some(_))
     ) {
-        bail!("--target-kind and --target-id must be supplied together");
+        bail!("an evidence target needs both a kind and an ID");
     }
 
     // Bind and validate the exact repository/target before executing anything.
@@ -288,7 +335,7 @@ pub fn capture_record(options: CaptureOptions<'_>) -> Result<EvidenceRecord> {
             )?,
         ),
         (None, None) => None,
-        _ => bail!("--target-kind and --target-id must be supplied together"),
+        _ => bail!("an evidence target needs both a kind and an ID"),
     };
     let (target, target_identity) = capture_target_and_identity(
         &index,
@@ -405,7 +452,7 @@ fn capture_preflight(options: &CaptureOptions<'_>) -> Result<CaptureBinding> {
             )?,
         ),
         (None, None) => None,
-        _ => bail!("--target-kind and --target-id must be supplied together"),
+        _ => bail!("an evidence target needs both a kind and an ID"),
     };
     let (_, target_identity) = capture_target_and_identity(
         &index,
@@ -449,7 +496,7 @@ fn capture_target_and_identity<'a>(
     let target = match (target_kind, target_id) {
         (Some(kind), Some(id)) => Some(validate_record_ref(index, kind, id, role)?),
         (None, None) => None,
-        _ => bail!("--target-kind and --target-id must be supplied together"),
+        _ => bail!("an evidence target needs both a kind and an ID"),
     };
     let identity = match target.as_ref() {
         Some(target) if target.canonical_kind == "issue" => {
@@ -550,10 +597,34 @@ fn git_dir_identity(repo_root: &Path) -> Result<Option<PathBuf>> {
     Ok(Some(fs::canonicalize(git_dir)?))
 }
 
-pub fn show(index: &RecordIndex, id: &str, quiet: bool) -> Result<()> {
+/// `evidence show`: brief by default, the stored body and every field with
+/// `full`. Quiet output is `<id> <result>`.
+pub fn show(
+    index: &RecordIndex,
+    repo_root: &Path,
+    id: &str,
+    full: bool,
+    quiet: bool,
+) -> Result<()> {
     let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, id)?;
     let record = index.require_evidence(&id)?;
-    print_record(index, record, quiet)
+    if quiet {
+        println!("{id} {}", record.data.result.as_str());
+        return Ok(());
+    }
+    let targets = receipt_targets(index, &id, &record.data)?;
+    let mut marks = ProofMarks::new(repo_root);
+    let mark = match first_issue(&targets) {
+        Some(issue) => marks.mark(index, issue, &id)?,
+        None => None,
+    };
+    let mark = mark.map(|mark| mark_text(record.data.result, &mark));
+    if full {
+        print_full_record(record, &targets, mark.as_deref());
+    } else {
+        print_brief_record(record, &targets, mark.as_deref());
+    }
+    Ok(())
 }
 
 pub fn attach(
@@ -646,97 +717,143 @@ fn validate_record_ref<'a>(
     })
 }
 
-pub fn list(index: &RecordIndex, result: Option<EvidenceResult>, quiet: bool) -> Result<()> {
-    let records = index
-        .evidence_records()
-        .into_iter()
-        .filter(|record| result.is_none_or(|result| record.data.result == result))
-        .collect::<Vec<_>>();
-    if quiet {
-        for record in records {
+/// What `evidence list` shows: one item's receipts or all of them, an
+/// optional result, and how many rows.
+pub struct ListOptions<'a> {
+    pub item: Option<&'a str>,
+    pub result: Option<EvidenceResult>,
+    /// `None` shows the default number of rows, or with `quiet` every one.
+    pub limit: Option<usize>,
+    pub all: bool,
+    pub quiet: bool,
+}
+
+pub fn list(index: &RecordIndex, repo_root: &Path, options: ListOptions<'_>) -> Result<()> {
+    let item = options
+        .item
+        .map(|item| app_use_cases::resolve_issue_ref(index, item))
+        .transpose()?;
+    let mut records = match item.as_deref() {
+        Some(item) => {
+            let mut records = atelier_app::evidence_freshness::validating_records(index, item)?;
+            records.sort_by(|left, right| {
+                (right.data.captured_at, &right.header.id)
+                    .cmp(&(left.data.captured_at, &left.header.id))
+            });
+            records
+        }
+        None => index.evidence_records(),
+    };
+    records.retain(|record| {
+        options
+            .result
+            .is_none_or(|result| record.data.result == result)
+    });
+    let limit = match (options.all, options.limit, options.quiet) {
+        (true, _, _) | (false, None, true) => records.len(),
+        (false, Some(limit), _) => limit,
+        (false, None, false) => EVIDENCE_LIST_LIMIT,
+    };
+    let shown = &records[..limit.min(records.len())];
+    if options.quiet {
+        for record in shown {
             println!("{}", record.header.id);
         }
         return Ok(());
     }
-    if records.is_empty() {
-        print_heading("Evidence");
+    let context = human_output::RenderContext::for_stdout();
+    print_heading(&match item.as_deref() {
+        Some(item) => format!("Evidence for {item}"),
+        None => "Evidence".to_string(),
+    });
+    let mut marks = ProofMarks::new(repo_root);
+    if shown.is_empty() {
         println!("(none)");
-        return Ok(());
     }
-    print_heading("Evidence");
-    println!("{} total", records.len());
-    println!(
-        "Showing: {} of {}",
-        records.len().min(EVIDENCE_LIST_LIMIT),
-        records.len()
-    );
-    for record in records.iter().take(EVIDENCE_LIST_LIMIT) {
-        let data = &record.data;
-        let kind = data.evidence_type.as_str();
-        let command = evidence_list_command(data.command.as_deref());
-        let title = evidence_list_title(&record.header.title, data.command.as_deref());
-        let exit_status = data.exit_status.as_deref().unwrap_or("(none)");
-        let targets = format_targets(index, &record.header.id, data)?;
-        let target = if targets.is_empty() {
-            "(none)".to_string()
-        } else {
-            targets.join(", ")
+    for record in shown {
+        let id = &record.header.id;
+        let mut targets = receipt_targets(index, id, &record.data)?;
+        let mark_issue = match item.as_deref() {
+            Some(item) => Some(item.to_string()),
+            None => first_issue(&targets).map(str::to_string),
         };
+        if let Some(item) = item.as_deref() {
+            // The heading names the item, so its rows do not.
+            targets.retain(|target| !(target.kind == "issue" && target.id == item));
+        }
+        let mut row = format!(
+            "{id} {} · {}",
+            receipt_facts(&record.data, &targets),
+            human_output::display_timestamp(record.data.captured_at)
+        );
+        if let Some(issue) = mark_issue {
+            if let Some(mark) = marks.mark(index, &issue, id)? {
+                row.push_str(&format!(" · {}", mark_text(record.data.result, &mark)));
+            }
+        }
+        let text = match record.data.command.as_deref() {
+            Some(command) => command,
+            None => record.header.title.as_str(),
+        };
+        row.push_str(&format!(" · {}", bounded_list_text(text)));
+        for line in human_output::render_row_wrapped(context, &row) {
+            println!("{line}");
+        }
+    }
+    let filters = list_filters(item.as_deref(), options.result);
+    if records.len() > shown.len() {
         println!(
-            "  {:<14} {:<13} {:<10} exit {} target {} command {} - {}",
-            record.header.id,
-            data.result.as_str(),
-            kind,
-            exit_status,
-            target,
-            command,
-            title
+            "  ... {} omitted; see `atelier evidence list{filters} --all`",
+            crate::human_output::count_noun(records.len() - shown.len(), "more evidence record")
         );
     }
-    if records.len() > EVIDENCE_LIST_LIMIT {
-        println!(
-            "Omitted: {} hidden by default limit {}",
-            crate::human_output::count_noun(
-                records.len() - EVIDENCE_LIST_LIMIT,
-                "older evidence record"
-            ),
-            EVIDENCE_LIST_LIMIT
-        );
+    if let Some(item) = item.as_deref() {
+        let proof = marks.item(index, item)?;
+        println!("Proof: {}", proof_verdict(proof));
     }
-    print_footer([
-        FooterAction::new(
+    let mut actions = Vec::new();
+    if let Some(first) = shown.first() {
+        actions.push(FooterAction::new(
             "Show the newest proof's detail",
-            format!("atelier evidence show {}", records[0].header.id),
-        ),
-        FooterAction::new(
-            "Filter by result",
-            "atelier evidence list --result <result>",
-        ),
-        FooterAction::new("List matching IDs", "atelier --quiet evidence list"),
-    ]);
+            format!("atelier evidence show {}", first.header.id),
+        ));
+    }
+    if options.result.is_none() && !shown.is_empty() {
+        actions.push(FooterAction::new(
+            "List failing proof",
+            format!("atelier evidence list{filters} --result fail"),
+        ));
+    }
+    if !shown.is_empty() {
+        actions.push(FooterAction::new(
+            "List matching IDs",
+            format!("atelier --quiet evidence list{filters}"),
+        ));
+    }
+    print_footer(actions);
     Ok(())
 }
 
-fn evidence_list_command(command: Option<&str>) -> String {
-    let Some(command) = command else {
-        return "(manual)".to_string();
-    };
-    let parts = command.split_whitespace().collect::<Vec<_>>();
-    let raw_summary = parts.iter().take(3).copied().collect::<Vec<_>>().join(" ");
-    let truncated = parts.len() > 3 || raw_summary.chars().count() > EVIDENCE_LIST_TEXT_LIMIT;
-    let summary = bounded_list_text(&raw_summary);
-    if truncated {
-        format!("{summary} ...")
-    } else {
-        summary
+/// The arguments that repeat a list's item and result filters, each after
+/// a space.
+fn list_filters(item: Option<&str>, result: Option<EvidenceResult>) -> String {
+    let mut filters = String::new();
+    if let Some(item) = item {
+        filters.push_str(&format!(" {item}"));
     }
+    if let Some(result) = result {
+        filters.push_str(&format!(" --result {}", result.as_str()));
+    }
+    filters
 }
 
-fn evidence_list_title(title: &str, command: Option<&str>) -> String {
-    if command == Some(title) {
-        "(command-backed proof)".to_string()
-    } else {
-        bounded_list_text(title)
+/// The gates' verdict on one item's proof, for the line ending its list.
+fn proof_verdict(proof: &ItemProof) -> String {
+    match (&proof.blocking_fail, &proof.fresh_pass, &proof.newest_pass) {
+        (Some(fail), _, _) => format!("⚠ newest is fail {fail}"),
+        (None, Some(pass), _) => format!("✓ fresh pass {pass}"),
+        (None, None, Some(pass)) => format!("⚠ no fresh pass; newest pass {pass} is stale"),
+        (None, None, None) => "⚠ no passing proof".to_string(),
     }
 }
 
@@ -747,40 +864,316 @@ fn bounded_list_text(value: &str) -> String {
     }
     let mut output = normalized
         .chars()
-        .take(EVIDENCE_LIST_TEXT_LIMIT - 3)
+        .take(EVIDENCE_LIST_TEXT_LIMIT - 1)
         .collect::<String>();
-    output.push_str("...");
+    output.push('…');
     output
 }
 
-/// Quiet output is `<id> <result>`.
-pub fn print_record(index: &RecordIndex, record: &EvidenceRecord, quiet: bool) -> Result<()> {
-    let data = &record.data;
-    if quiet {
-        println!("{} {}", record.header.id, data.result.as_str());
-        return Ok(());
-    }
-    let targets = format_targets(index, &record.header.id, data)?;
-    print_record_with_targets(record, data, targets)
+/// Freshness marks for receipts, each judged against one item as the
+/// `evidence.*` gates judge it; one read of the repository serves every
+/// item a view asks about.
+struct ProofMarks<'a> {
+    read: atelier_app::evidence_freshness::EvidenceReadContext<'a>,
+    items: HashMap<String, ItemProof>,
 }
 
-/// Prints evidence created in this command, which is absent from the index.
-/// Quiet output is the new record's ID.
-pub fn print_new_record(record: &EvidenceRecord, quiet: bool) -> Result<()> {
+impl<'a> ProofMarks<'a> {
+    fn new(repo_root: &'a Path) -> Self {
+        Self {
+            read: atelier_app::evidence_freshness::EvidenceReadContext::new(repo_root),
+            items: HashMap::new(),
+        }
+    }
+
+    fn item(&mut self, index: &RecordIndex, issue_id: &str) -> Result<&ItemProof> {
+        if !self.items.contains_key(issue_id) {
+            let proof = self.read.item_proof(index, issue_id)?;
+            self.items.insert(issue_id.to_string(), proof);
+        }
+        Ok(&self.items[issue_id])
+    }
+
+    /// The mark of `evidence_id` as proof of `issue_id`, or `None` when it
+    /// does not validate that item.
+    fn mark(
+        &mut self,
+        index: &RecordIndex,
+        issue_id: &str,
+        evidence_id: &str,
+    ) -> Result<Option<ProofMark>> {
+        Ok(self
+            .item(index, issue_id)?
+            .receipts
+            .iter()
+            .find(|(id, _)| id == evidence_id)
+            .map(|(_, mark)| mark.clone()))
+    }
+}
+
+/// A receipt's standing as text. A pass's mark carries ✓ or ⚠, since it
+/// says whether the pass is proof now; a fail, blocked or not-applicable
+/// receipt already carries its own mark on its result.
+fn mark_text(result: EvidenceResult, mark: &ProofMark) -> String {
+    let attention = |text: String| {
+        if result == EvidenceResult::Pass {
+            format!("⚠ {text}")
+        } else {
+            text
+        }
+    };
+    match mark {
+        ProofMark::Fresh if result == EvidenceResult::Pass => "✓ fresh".to_string(),
+        ProofMark::Fresh => "fresh".to_string(),
+        ProofMark::Stale(staleness) => attention(format!("stale ({})", staleness_text(staleness))),
+        ProofMark::SupersededByFail(fail) => format!("⚠ superseded by newer fail {fail}"),
+        ProofMark::SupersededByPass(pass) => format!("superseded by newer pass {pass}"),
+        ProofMark::BlocksCompletion => "⚠ blocks completion".to_string(),
+    }
+}
+
+fn staleness_text(staleness: &Staleness) -> String {
+    match staleness {
+        Staleness::CodeChangedIn(commit) => {
+            format!("code changed in {}", human_output::short_commit(commit))
+        }
+        Staleness::AcceptanceChangedIn(commit) => {
+            format!(
+                "acceptance changed in {}",
+                human_output::short_commit(commit)
+            )
+        }
+        Staleness::AcceptanceChanged => "acceptance changed since the pin".to_string(),
+        Staleness::UncommittedCode => "uncommitted code changes".to_string(),
+        Staleness::NotInHistory => "pin not in HEAD's history".to_string(),
+    }
+}
+
+/// `<result> <kind>[ for <targets>] @<pin>`, the facts every evidence line
+/// leads with.
+fn receipt_facts(data: &EvidenceRecordData, targets: &[ReceiptTarget]) -> String {
+    let mut facts = format!("{} {}", result_token(data.result), data.evidence_type);
+    if !targets.is_empty() {
+        facts.push_str(" for ");
+        facts.push_str(
+            &targets
+                .iter()
+                .map(ReceiptTarget::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+    }
+    facts.push_str(&format!(" @{}", human_output::short_commit(&data.commit)));
+    facts
+}
+
+/// The result word, marked as a status word is: ✓ for a pass, ⚠ for a
+/// result that needs attention.
+fn result_token(result: EvidenceResult) -> String {
+    match result {
+        EvidenceResult::Pass => "✓ pass".to_string(),
+        EvidenceResult::Fail | EvidenceResult::Blocked => format!("⚠ {}", result.as_str()),
+        EvidenceResult::NotApplicable => result.as_str().to_string(),
+    }
+}
+
+/// `exit 1`, or how a command that did not exit ended.
+fn exit_text(data: &EvidenceRecordData) -> Option<String> {
+    let status = data.exit_status.as_deref()?;
+    Some(match status.parse::<i32>() {
+        Ok(code) => format!("exit {code}"),
+        Err(_) if status == "not-started" => "not started".to_string(),
+        Err(_) => status.to_string(),
+    })
+}
+
+/// Prints the confirmation of a receipt this command recorded and returns
+/// the verdict line that ends the command's output: one line, and on a
+/// failure the last lines of its output.
+fn print_confirmation(index: &RecordIndex, record: &EvidenceRecord) -> Result<String> {
+    let data = &record.data;
+    let id = &record.header.id;
+    let targets = receipt_targets(index, id, data)?;
+    let issue = data
+        .target
+        .as_ref()
+        .filter(|target| target.kind == "issue")
+        .map(|target| target.id.as_str());
+    let mut line = format!("{id} {}", receipt_facts(data, &targets));
+    line.push_str(&format!(
+        ": {}",
+        data.command.as_deref().unwrap_or(&record.header.title)
+    ));
+    if let Some(exit) = exit_text(data) {
+        line.push_str(&format!(" ({exit})"));
+    }
+    if data.result == EvidenceResult::Fail {
+        if let Some(pass) = issue
+            .map(|issue| earlier_pass(index, issue, record))
+            .transpose()?
+            .flatten()
+        {
+            line.push_str(&format!("; newer than pass {pass}"));
+        }
+    }
+    for line in human_output::render_row_wrapped(human_output::RenderContext::for_stdout(), &line) {
+        println!("{line}");
+    }
+    if matches!(data.result, EvidenceResult::Fail | EvidenceResult::Blocked) {
+        for line in output_tail(data, CONFIRMATION_TAIL_LINES) {
+            println!("  {line}");
+        }
+    }
+    Ok(match (data.result, issue) {
+        (EvidenceResult::Pass, _) => "evidence record: passed".to_string(),
+        (EvidenceResult::Fail, Some(issue)) => format!(
+            "evidence record: recorded fail — {issue} cannot close or merge until a later pass"
+        ),
+        (EvidenceResult::Fail, None) => "evidence record: recorded fail".to_string(),
+        (result, _) => format!(
+            "evidence record: recorded {} — it never counts as a pass",
+            result.as_str()
+        ),
+    })
+}
+
+/// The newest pass validating `issue` that was captured before `record`.
+fn earlier_pass(
+    index: &RecordIndex,
+    issue: &str,
+    record: &EvidenceRecord,
+) -> Result<Option<String>> {
+    Ok(
+        atelier_app::evidence_freshness::validating_records(index, issue)?
+            .into_iter()
+            .filter(|other| {
+                other.data.result == EvidenceResult::Pass
+                    && other.data.captured_at < record.data.captured_at
+            })
+            .max_by(|left, right| {
+                (left.data.captured_at, &left.header.id)
+                    .cmp(&(right.data.captured_at, &right.header.id))
+            })
+            .map(|pass| pass.header.id.clone()),
+    )
+}
+
+/// The stream a failure shows: stderr when it kept any text, else stdout
+/// when it did, else whichever printed more.
+fn excerpt_stream(output: &EvidenceOutputSummary) -> (&'static str, &EvidenceStreamSummary) {
+    let has_text = |stream: &EvidenceStreamSummary| !stream.summary.trim().is_empty();
+    let stdout = if has_text(&output.stderr) {
+        false
+    } else {
+        has_text(&output.stdout) || output.stdout.bytes > output.stderr.bytes
+    };
+    if stdout {
+        ("Stdout", &output.stdout)
+    } else {
+        ("Stderr", &output.stderr)
+    }
+}
+
+/// The last `count` lines of the kept text of the stream a failure shows.
+fn output_tail(data: &EvidenceRecordData, count: usize) -> Vec<&str> {
+    let Some(output) = data.output.as_ref() else {
+        return Vec::new();
+    };
+    let lines = excerpt_stream(output).1.summary.lines().collect::<Vec<_>>();
+    lines[lines.len().saturating_sub(count)..].to_vec()
+}
+
+/// Reports a receipt this command recorded: its ID under `quiet`, otherwise
+/// a confirmation, then the records' commit when one was asked for, then
+/// the verdict line.
+pub fn report_new_record(record: &EvidenceRecord, group: RecordCommit, quiet: bool) -> Result<()> {
     if quiet {
         println!("{}", record.header.id);
-        return Ok(());
+        return group.finish(KIND, quiet);
     }
-    let data = &record.data;
-    let targets = format_data_target(data).into_iter().collect();
-    print_record_with_targets(record, data, targets)
+    let (_, index) = app_use_cases::load_repository()?;
+    let verdict = print_confirmation(&index, record)?;
+    group.finish(KIND, quiet)?;
+    println!("{verdict}");
+    Ok(())
 }
 
-fn print_record_with_targets(
-    record: &EvidenceRecord,
-    data: &EvidenceRecordData,
-    targets: Vec<String>,
-) -> Result<()> {
+/// The brief `evidence show`: a title line with the receipt's facts and
+/// standing, the claim and command, the fields that are set, and one
+/// output excerpt.
+fn print_brief_record(record: &EvidenceRecord, targets: &[ReceiptTarget], mark: Option<&str>) {
+    let data = &record.data;
+    let mut title = format!(
+        "{} evidence {} {} · {}",
+        record.header.id,
+        record.header.status,
+        receipt_facts(data, targets),
+        human_output::display_timestamp(data.captured_at)
+    );
+    if let Some(mark) = mark {
+        title.push_str(&format!(" · {mark}"));
+    }
+    println!("{title}");
+    let command = data
+        .command
+        .as_deref()
+        .map(|command| match exit_text(data) {
+            Some(exit) => format!("{command} ({exit})"),
+            None => command.to_string(),
+        });
+    let summary = (data.command.as_deref() != Some(record.header.title.as_str()))
+        .then_some(record.header.title.as_str());
+    let criteria = criteria_text(data);
+    let producer = data.producer.as_deref().or(data.agent_identity.as_deref());
+    for (label, value) in [
+        ("Summary:", summary),
+        ("Command:", command.as_deref()),
+        ("Criteria:", criteria.as_deref()),
+        ("Producer:", producer),
+        ("Path:", data.path.as_deref()),
+        ("URI:", data.uri.as_deref()),
+    ] {
+        if let Some(value) = value {
+            println!("{label:<9} {value}");
+        }
+    }
+    if let Some(output) = data.output.as_ref() {
+        if matches!(data.result, EvidenceResult::Pass) {
+            for (name, stream) in [("Stdout", &output.stdout), ("Stderr", &output.stderr)] {
+                if let Some(line) = stream.test_summary.as_deref() {
+                    println!("{name}: {line}");
+                }
+            }
+        } else {
+            let (name, stream) = excerpt_stream(output);
+            let tail = output_tail(data, SHOW_TAIL_LINES);
+            let kept = stream.summary.lines().count();
+            let shown = if tail.len() < kept {
+                format!("last {} lines of {} bytes", tail.len(), stream.bytes)
+            } else {
+                format!("{} bytes", stream.bytes)
+            };
+            if tail.is_empty() {
+                let empty = if stream.bytes > 0 {
+                    "whitespace only"
+                } else {
+                    "no output"
+                };
+                println!("{name}: {shown}, {empty}");
+            } else {
+                println!("{name} ({shown}):");
+                for line in tail {
+                    println!("  {line}");
+                }
+            }
+        }
+    }
+    println!("More with --full: the stored record and every field");
+}
+
+/// `evidence show --full`: every field, then the stored record body.
+fn print_full_record(record: &EvidenceRecord, targets: &[ReceiptTarget], mark: Option<&str>) {
+    let data = &record.data;
     // The title line names the record kind and status, so no line repeats
     // them.
     println!(
@@ -790,58 +1183,58 @@ fn print_record_with_targets(
             record.header.id, record.header.status, record.header.title
         ))
     );
+    let target = targets
+        .iter()
+        .map(ReceiptTarget::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
     let captured = human_output::display_timestamp(data.captured_at);
-    for (label, value) in [
-        ("Result:", data.result.as_str()),
-        ("Commit:", human_output::short_commit(&data.commit)),
-        ("Kind:", data.evidence_type.as_str()),
-        ("Captured:", captured.as_str()),
-    ] {
-        println!("{label:<12} {value}");
-    }
-    let target = (!targets.is_empty()).then(|| targets.join(", "));
-    let criteria = (!data.criteria.is_empty()).then(|| {
-        data.criteria
-            .iter()
-            .map(|criterion| format!("{} {}", criterion.slug, criterion.result.as_str()))
-            .collect::<Vec<_>>()
-            .join(", ")
-    });
-    for (label, value) in [
-        ("Command:", data.command.as_deref()),
-        ("Exit Status:", data.exit_status.as_deref()),
-        ("Target:", target.as_deref()),
-        ("Criteria:", criteria.as_deref()),
-    ] {
-        if let Some(value) = value {
-            println!("{label:<12} {value}");
-        }
-    }
     let created = human_output::display_timestamp(record.header.created_at);
     let updated = human_output::display_timestamp(record.header.updated_at);
+    let none = |value: Option<&str>| value.unwrap_or("(none)").to_string();
     for (label, value) in [
+        ("Result:", data.result.as_str().to_string()),
+        ("Freshness:", none(mark)),
+        (
+            "Commit:",
+            human_output::short_commit(&data.commit).to_string(),
+        ),
+        ("Kind:", data.evidence_type.clone()),
+        ("Captured:", captured),
+        ("Command:", none(data.command.as_deref())),
+        ("Exit Status:", none(data.exit_status.as_deref())),
+        (
+            "Target:",
+            none((!target.is_empty()).then_some(target.as_str())),
+        ),
+        ("Criteria:", none(criteria_text(data).as_deref())),
         (
             "Producer:",
-            data.producer
-                .as_deref()
-                .or(data.agent_identity.as_deref())
-                .unwrap_or("(none)"),
+            none(data.producer.as_deref().or(data.agent_identity.as_deref())),
         ),
-        ("Path:", data.path.as_deref().unwrap_or("(none)")),
-        ("URI:", data.uri.as_deref().unwrap_or("(none)")),
-        ("Created:", created.as_str()),
-        ("Updated:", updated.as_str()),
+        ("Path:", none(data.path.as_deref())),
+        ("URI:", none(data.uri.as_deref())),
+        ("Created:", created),
+        ("Updated:", updated),
     ] {
         println!("{label:<12} {value}");
     }
-    print_heading("Summary");
+    print_heading("Record");
     if record.summary.is_empty() {
         println!("(none)");
     } else {
         println!("{}", record.summary);
     }
-    print_output_summary(data)?;
-    Ok(())
+}
+
+fn criteria_text(data: &EvidenceRecordData) -> Option<String> {
+    (!data.criteria.is_empty()).then(|| {
+        data.criteria
+            .iter()
+            .map(|criterion| format!("{} {}", criterion.slug, criterion.result.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    })
 }
 
 fn print_heading(title: &str) {
@@ -924,73 +1317,64 @@ struct TargetRef<'a> {
     role: &'a str,
 }
 
-fn print_output_summary(data: &EvidenceRecordData) -> Result<()> {
-    let Some(output) = data.output.as_ref() else {
-        return Ok(());
-    };
-    print_heading("Output Summary");
-    let passed = data.result == EvidenceResult::Pass;
-    print_stream_summary("Stdout", &output.stdout, passed)?;
-    print_stream_summary("Stderr", &output.stderr, passed)?;
-    Ok(())
+/// A record a receipt is attached to. It reads `issue/<id>`, adding the
+/// role only when it is not the default `validates`.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ReceiptTarget {
+    kind: String,
+    id: String,
+    role: String,
 }
 
-fn print_stream_summary(name: &str, value: &EvidenceStreamSummary, passed: bool) -> Result<()> {
-    let bytes = value.bytes;
-    let truncated = value.truncated;
-    println!("{name}: {bytes} bytes, truncated: {}", yes_no(truncated));
-    if let Some(line) = value.test_summary.as_deref() {
-        println!("{line}");
-    }
-    if !value.summary.is_empty() {
-        println!("{}", value.summary);
-    } else if bytes > 0 && value.sha256.is_some() && passed {
-        // A passing capture keeps its digest, not its text.
-        println!("(not kept; passing output is summarized)");
-    } else if bytes > 0 && value.sha256.is_some() {
-        // A failing capture keeps its text without trailing whitespace, so
-        // only an all-whitespace stream is left empty.
-        println!("(whitespace only)");
-    } else {
-        println!("(none)");
-    }
-    Ok(())
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
+impl std::fmt::Display for ReceiptTarget {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}/{}", self.kind, self.id)?;
+        if self.role != DEFAULT_ROLE {
+            write!(formatter, " ({})", self.role)?;
+        }
+        Ok(())
     }
 }
 
-fn format_targets(
+/// The receipt's recorded target first, then every other record it is
+/// attached to.
+fn receipt_targets(
     index: &RecordIndex,
     evidence_id: &str,
     data: &EvidenceRecordData,
-) -> Result<Vec<String>> {
-    let mut targets = BTreeSet::new();
-    if let Some(target) = format_data_target(data) {
-        targets.insert(target);
+) -> Result<Vec<ReceiptTarget>> {
+    let mut targets = Vec::new();
+    if let Some(target) = data.target.as_ref() {
+        targets.push(ReceiptTarget {
+            kind: target.kind.clone(),
+            id: target.id.clone(),
+            role: target.role.clone(),
+        });
     }
+    let mut linked = BTreeSet::new();
     for link in index.list_record_links(KIND, evidence_id)? {
         if let Some((kind, id, role)) = evidence_link_target(&link, evidence_id) {
-            let kind = display_target_kind(index, kind, id)?;
-            targets.insert(format!("{kind}/{id} ({role})"));
+            linked.insert(ReceiptTarget {
+                kind: kind.to_string(),
+                id: id.to_string(),
+                role: role.to_string(),
+            });
         }
     }
-    Ok(targets.into_iter().collect())
+    for target in &targets {
+        linked.remove(target);
+    }
+    targets.extend(linked);
+    Ok(targets)
 }
 
-fn format_data_target(data: &EvidenceRecordData) -> Option<String> {
-    let target = data.target.as_ref()?;
-    Some(format!(
-        "{}/{id} ({})",
-        target.kind,
-        target.role,
-        id = target.id
-    ))
+/// The first issue among a receipt's targets, which its freshness mark is
+/// judged against.
+fn first_issue(targets: &[ReceiptTarget]) -> Option<&str> {
+    targets
+        .iter()
+        .find(|target| target.kind == "issue" && target.role == DEFAULT_ROLE)
+        .map(|target| target.id.as_str())
 }
 
 fn evidence_link_target<'a>(
@@ -1004,10 +1388,6 @@ fn evidence_link_target<'a>(
     } else {
         None
     }
-}
-
-fn display_target_kind(_index: &RecordIndex, kind: &str, _id: &str) -> Result<String> {
-    Ok(kind.to_string())
 }
 
 pub fn format_command(args: &[String]) -> String {

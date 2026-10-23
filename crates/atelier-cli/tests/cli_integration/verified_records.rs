@@ -97,7 +97,7 @@ fn manual_proof_requires_explicit_result_and_full_commit() {
     }
     let (ok, list, error) = run_atelier_raw(dir.path(), &["evidence", "list", "--result", "fail"]);
     assert!(
-        ok && list.contains("1 total") && list.contains("fail"),
+        ok && list.matches(" ⚠ fail validation ").count() == 1,
         "{list} {error}"
     );
     manual(dir.path(), &id, "pass", "Fresh explicit pass");

@@ -600,7 +600,10 @@ fn attach_evidence(
     );
     assert!(success, "evidence record failed: {stderr}");
     assert!(
-        evidence_out.contains(" evidence recorded "),
+        evidence_out
+            .lines()
+            .last()
+            .is_some_and(|line| line.starts_with("evidence record: ")),
         "{evidence_out}"
     );
 
