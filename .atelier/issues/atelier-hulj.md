@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Stop review records repeating their body in the title"
-updated_at: "2026-10-23T14:14:38.114067759+00:00"
+updated_at: "2026-10-23T14:32:24.016203099+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,5 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Title = summary first line (crates/atelier-records/src/review.rs:266,298); 1147/1149 records repeat the body. Decided on atelier-rc8j: generate the title from event kind, owner and short pin (no schema change); do not rewrite existing records.
+- 2026-10-23 [decision] Generated titles read '<event> on <owner> @<pin8>', and a base exemption's '<event> of <base> @<pin8>'; ReviewEvent::name in atelier-core gives the stored name to records and CLI.
+  Reason: Follows the mission decision (kind, owner, short pin) and keeps the records crate free of CLI code.

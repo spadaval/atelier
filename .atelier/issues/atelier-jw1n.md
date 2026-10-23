@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "List a child's reviews recorded against its branch owner"
-updated_at: "2026-10-23T14:14:38.034326093+00:00"
+updated_at: "2026-10-23T14:32:23.702788260+00:00"
 ---
 
 ## Goal
@@ -32,3 +32,6 @@ Reviews are recorded against the branch owner, so `review list <child-id>` print
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. review list <child> prints nothing, exit 0. review_request.rs gather maps child->parent; status uses review_gate::scope.
+- 2026-10-23 [decision] review list <child> shows the owner's full view after the line '<child> is reviewed with its branch owner <owner>.'; a child that has its own branch ownership is its own owner.
+  Reason: Reviews are recorded against the branch owner; showing them saves a second command.
+  Rejected: Only pointing to atelier review list <owner>

@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Give --commit and leftover parser errors the shared invalid-value form"
-updated_at: "2026-10-23T14:14:38.271902219+00:00"
+updated_at: "2026-10-23T14:32:24.333450912+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,5 @@ Mission atelier-o3lm validation (evidence atelier-ba8q) found invalid values sti
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. review --commit zzz: 'review commit must be a full Git commit ID'; unknown full SHA leaks raw git merge-base error; prune --retention-days abc and issue list --limit -3 print clap wording (exit 2). parse_limit at main.rs:465 is the model.
+- 2026-10-23 [decision] A well-formed commit the branch does not hold exits 1 with 'commit <sha> is not on this branch ... Next: git log --format=%H'; only malformed values exit 2.
+  Reason: A missing commit is like an unknown record reference, which exits 1; the invalid-value form is for values outside the accepted form.

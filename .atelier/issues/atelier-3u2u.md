@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make review show a brief Markdown view with short IDs and linked events"
-updated_at: "2026-10-23T14:14:37.881870958+00:00"
+updated_at: "2026-10-23T14:32:24.656791230+00:00"
 ---
 
 ## Goal
@@ -35,3 +35,5 @@ updated_at: "2026-10-23T14:14:37.881870958+00:00"
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: partly done: short IDs resolve in show (review.rs:190) and disposition (:112); drop that bullet. Still prints pretty JSON (review.rs:204).
+- 2026-10-23 [decision] review show judges an approval or exemption alone: on the work branch '✓ current' when its identity is independent and review_gate::current_on_branch holds, else '⚠ not current'; on the base approval_accepted's '✓ accepted on <base>' or '⚠ not accepted on <base>'.
+  Reason: Same judges as review list's state block; the reason it is not current belongs to atelier-imlh.

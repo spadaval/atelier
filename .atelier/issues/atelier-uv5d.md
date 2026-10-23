@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Show review state in review list <id>, with findings under dispositions"
-updated_at: "2026-10-23T14:14:38.193124038+00:00"
+updated_at: "2026-10-23T14:32:22.119918765+00:00"
 ---
 
 ## Goal
@@ -50,3 +50,12 @@ Depends on the row format from the review-list item. The stale reason comes from
 ## Notes
 
 - 2026-10-23 [note] 2026-10-23 regroom against master ff7cc896: still needed. Build from review_gate::approval_state (review_gate.rs:314) and approval_stale_edges (:235), as status does (git.rs:1045); review_request.rs HistoryLine already pairs findings with dispositions. Show stale edges, not atelier-cisa's reason text (later increment atelier-imlh).
+- 2026-10-23 [decision] The approval state is judged on the owner's work branch while it holds commits the base does not (review_gate::approval_standing, a new wrapper approval_state now delegates to, plus approval_stale_edges); otherwise, as for merged work, it is the newest approval review_gate::approval_accepted accepts on the base.
+  Reason: approval_state on the base reports every merged approval as stale, because the fork point is HEAD there; approval_accepted is land's judgement of history.
+  Rejected: approval_state everywhere; judging against HEAD of whatever branch is checked out
+- 2026-10-23 [decision] Findings are counted disposed or open, open meaning no disposition, and marked ⚠ only when open; the view does not claim findings.disposed would accept a disposition.
+  Reason: Acceptance needs the gate's full findings.disposed logic (approval pins, author identities, history); reimplementing it would copy gate code, and why a gate refuses belongs to atelier-imlh.
+  Rejected: A 'resolved' count claiming gate acceptance
+- 2026-10-23 [decision] review list <id> prints the event rows first, then the Approval line and the findings tree; there is no 'Other events' summary line.
+  Reason: The increment Goal orders rows then state, and the rows already list every non-finding event.
+  Rejected: Replacing the rows with the state block when an ID is given
