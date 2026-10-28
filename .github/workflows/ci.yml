@@ -10,8 +10,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# setup-rust-toolchain sets RUST_BACKTRACE, which appends backtraces to the
+# error output that tests compare exactly.
+env:
+  RUST_BACKTRACE: 0
 
 jobs:
   test:

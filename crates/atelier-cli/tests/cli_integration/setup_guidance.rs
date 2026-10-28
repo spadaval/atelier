@@ -633,7 +633,7 @@ fn test_prune_protects_missing_locked_worktree_and_branch_without_inspecting_pat
         assert!(
             stdout.contains(&format!(
                 "protected worktree {} - locked worktree",
-                worktree.display()
+                dir.path().canonicalize().unwrap().join(branch).display()
             )),
             "{stdout}"
         );

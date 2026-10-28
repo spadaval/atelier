@@ -165,7 +165,8 @@ fn captured_checkout_refs_preserve_head_tags_aliases_and_base_worktrees() {
         fixture.path(),
         &["symbolic-ref", "HEAD", "refs/heads/alias"],
     );
-    #[cfg(unix)]
+    // APFS refuses non-UTF-8 file names.
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         use std::os::unix::ffi::OsStringExt;
         let name = std::ffi::OsString::from_vec(vec![0xff]);
@@ -3688,7 +3689,8 @@ fn merge_check_names_every_uncommitted_record_and_path_and_still_runs_the_gates(
         .join(", ");
     let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed);
-    let repo = fixture.path().display();
+    let repo = fixture.path().canonicalize().unwrap();
+    let repo = repo.display();
     let lines = out.lines().collect::<Vec<_>>();
     assert_eq!(
         lines[..2],

@@ -23,3 +23,8 @@ slow-timeout = { period = "30s", terminate-after = 4 }
 
 [test-groups.extended-property]
 max-threads = 1
+
+# Runs 32 merge-and-land cases in turn; macOS runners take over a minute.
+[[profile.default.overrides]]
+filter = "test(=a_close_after_approval_is_covered_by_merge_and_land_alike)"
+slow-timeout = { period = "30s", terminate-after = 6 }
