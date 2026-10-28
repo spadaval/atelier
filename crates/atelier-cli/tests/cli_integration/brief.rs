@@ -219,6 +219,8 @@ fn brief_html_holds_the_same_facts_as_the_markdown() {
     assert_eq!(
         path,
         dir.path()
+            .canonicalize()
+            .unwrap()
             .join(format!(".atelier/runtime/reviews/{}-brief.html", p.mission))
     );
     let html = fs::read_to_string(path).unwrap();

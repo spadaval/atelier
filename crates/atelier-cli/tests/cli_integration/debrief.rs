@@ -413,6 +413,8 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     assert_eq!(
         path,
         dir.path()
+            .canonicalize()
+            .unwrap()
             .join(format!(".atelier/runtime/reviews/{}-debrief.html", m.id))
     );
     assert_eq!(

@@ -610,6 +610,8 @@ fn test_prune_protects_missing_locked_worktree_and_branch_without_inspecting_pat
     commit_all(dir.path(), "locked worktree prune fixture");
     let branch = "locked-worktree";
     let worktree = dir.path().join(branch);
+    // Git and Atelier print resolved paths; macOS TMPDIR is a symlink.
+    let resolved = dir.path().canonicalize().unwrap().join(branch);
     for args in [
         vec!["worktree", "add", "-b", branch, worktree.to_str().unwrap()],
         vec!["worktree", "lock", worktree.to_str().unwrap()],
@@ -633,7 +635,7 @@ fn test_prune_protects_missing_locked_worktree_and_branch_without_inspecting_pat
         assert!(
             stdout.contains(&format!(
                 "protected worktree {} - locked worktree",
-                worktree.display()
+                resolved.display()
             )),
             "{stdout}"
         );
@@ -659,7 +661,7 @@ fn test_prune_protects_missing_locked_worktree_and_branch_without_inspecting_pat
     assert!(registrations.status.success());
     let registrations = String::from_utf8(registrations.stdout).unwrap();
     assert!(
-        registrations.contains(&format!("worktree {}", worktree.display()))
+        registrations.contains(&format!("worktree {}", resolved.display()))
             && registrations.contains("locked"),
         "apply removed locked registration:\n{registrations}"
     );

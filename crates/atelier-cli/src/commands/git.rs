@@ -1257,7 +1257,8 @@ mod tests {
         assert_eq!(git_freshness::head_commit(repo.path()).unwrap(), original);
         assert!(resolve(repo.path(), "refs/heads/broken").is_err());
         fs::remove_file(repo.path().join(".git/refs/heads/broken")).unwrap();
-        #[cfg(unix)]
+        // APFS refuses non-UTF-8 file names.
+        #[cfg(all(unix, not(target_os = "macos")))]
         {
             use std::os::unix::ffi::OsStringExt;
             let opaque = repo
