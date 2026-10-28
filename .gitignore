@@ -1,4 +1,7 @@
 /target/
+# The release workflow writes it before building, which would mark the
+# version dirty (crates/atelier-cli/build.rs).
+/dist-manifest.json
 .env
 
 # Atelier project state under .atelier/ is tracked intentionally.
