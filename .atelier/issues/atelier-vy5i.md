@@ -2,8 +2,10 @@
 created_at: "2026-10-28T00:35:18.197859557+00:00"
 id: "atelier-vy5i"
 issue_type: "task"
-labels:
-- "needs-human"
+labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-vy5i
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Cut Atelier's first GitHub release"
-updated_at: "2026-10-28T01:52:30.868205383+00:00"
+updated_at: "2026-10-28T04:26:06.877807755+00:00"
 ---
 
 ## Goal
@@ -34,3 +36,7 @@ Before the tag is pushed, the tagged commit is on `master` and its CI run passed
 ## Context
 
 Strategy Authority: pushing a release tag comes back to the human. The tag must equal the workspace version (`dist plan --tag=v<x>` refuses a mismatch). The release-workflow CI-gate gap was found in review of atelier-7v9q (finding R1).
+
+## Notes
+
+- 2026-10-28 [note] 2026-10-28 [decision] Sumeet chose v0.3.0 for the first release and authorized pushing the tag: 0.2.0 has been the version since before the Markdown-record rebuild, so older source builds also report it.
