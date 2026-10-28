@@ -3,6 +3,9 @@ created_at: "2026-10-28T04:31:55.316654389+00:00"
 id: "atelier-gddg"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-gddg
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Push v0.3.0 on a green master commit and confirm the release published"
-updated_at: "2026-10-28T04:31:55.316654389+00:00"
+updated_at: "2026-10-28T15:59:30.344232435+00:00"
 ---
 
 ## Goal
