@@ -5909,7 +5909,8 @@ fn land_ends_with_a_verdict_line_and_push_follows_only_a_pass() {
         "land: refused — 1 check (land_records_uncommitted), nothing pushed"
     );
     assert_eq!(tip(remote.path(), &f.branch), before);
-    let piped = Command::new("sh")
+    // pipefail is not POSIX; older dash (ubuntu-24.04's sh) rejects it.
+    let piped = Command::new("bash")
         .args(["-c", "set -o pipefail; \"$0\" land --push 2>&1 | tail -1"])
         .arg(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(f.path())
