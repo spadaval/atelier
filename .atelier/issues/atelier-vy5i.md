@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Cut Atelier's first GitHub release"
-updated_at: "2026-10-28T00:35:18.197859557+00:00"
+updated_at: "2026-10-28T01:52:30.868205383+00:00"
 ---
 
 ## Goal
@@ -29,8 +29,8 @@ Choose the first release's version, bump the workspace version if needed, and pu
 
 ## Done when
 
-The GitHub Release for the tag exists with all four archives, checksums and the shell installer, and its release workflow run passed.
+Before the tag is pushed, the tagged commit is on `master` and its CI run passed, since the release workflow publishes whether or not CI passed. Afterwards, the GitHub Release for the tag exists with all four archives, checksums and the shell installer, and its release workflow run passed.
 
 ## Context
 
-Strategy Authority: pushing a release tag comes back to the human.
+Strategy Authority: pushing a release tag comes back to the human. The tag must equal the workspace version (`dist plan --tag=v<x>` refuses a mismatch). The release-workflow CI-gate gap was found in review of atelier-7v9q (finding R1).
