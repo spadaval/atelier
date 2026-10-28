@@ -3,6 +3,9 @@ created_at: "2026-10-28T00:35:17.889723554+00:00"
 id: "atelier-7v9q"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-7v9q
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Publish tagged releases with dist: Linux and macOS archives, checksums, shell installer"
-updated_at: "2026-10-28T00:35:17.889723554+00:00"
+updated_at: "2026-10-28T01:26:19.539111113+00:00"
 ---
 
 ## Goal
