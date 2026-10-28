@@ -44,7 +44,8 @@ rebuilt model.
 
 ## Command References
 
-- Installed CLI: `atelier` (`cargo install --path crates/atelier-cli`)
+- Installed CLI: `atelier` (`cargo install --path crates/atelier-cli --locked`
+  in this checkout; elsewhere the release installer in `README.md`)
 - Local debug binary: `target/debug/atelier`
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`

@@ -3,6 +3,9 @@ created_at: "2026-10-28T00:35:18.044404302+00:00"
 id: "atelier-5tl2"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-5tl2
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Name the release installer wherever Atelier tells users how to install or upgrade"
-updated_at: "2026-10-28T00:35:18.044404302+00:00"
+updated_at: "2026-10-28T02:02:31.563818724+00:00"
 ---
 
 ## Goal

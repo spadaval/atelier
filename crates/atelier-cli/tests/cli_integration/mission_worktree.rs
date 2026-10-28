@@ -1062,7 +1062,7 @@ fn test_queries_fail_naming_the_invalid_record_file() {
     assert!(!success);
     assert_eq!(
         stderr,
-        format!("Error: {schema_path} has schema_version 3, and this atelier reads 2, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`\n")
+        format!("Error: {schema_path} has schema_version 3, and this atelier reads 2, so records need a newer atelier. Next: upgrade to the latest release with `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`, or from Atelier's source checkout run `cargo install --path crates/atelier-cli --locked`\n")
     );
 
     let malformed_dir = tempdir().unwrap();
@@ -1499,7 +1499,7 @@ fn test_lint_has_stable_diagnostics_for_hard_invalid_markdown_records() {
     assert_lint_rejects_issue_edit(
         "Newer schema version fixture",
         |markdown, _issue_id| markdown.replace("schema_version: 2", "schema_version: 99"),
-        &["has schema_version 99, and this atelier reads 2, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`"],
+        &["has schema_version 99, and this atelier reads 2, so records need a newer atelier. Next: upgrade to the latest release with `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`, or from Atelier's source checkout run `cargo install --path crates/atelier-cli --locked`"],
     );
     assert_lint_rejects_issue_edit(
         "ID path mismatch fixture",

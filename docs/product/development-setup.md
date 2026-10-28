@@ -25,9 +25,11 @@ failure, and concurrency paths. Normal release builds contain no fault-injection
 environment hooks.
 
 Use `target/debug/atelier` to validate repository CLI changes. The installed
-`atelier` (`cargo install --path crates/atelier-cli`) runs this repository's
-Claude Code hooks; it can lag `master`, so reinstall after merging changes to
-session commands. No external service, provider credential, `.env`, or
+`atelier` runs this repository's Claude Code hooks. Here, install it from the
+checkout with `cargo install --path crates/atelier-cli --locked`; it can lag
+`master`, so reinstall after merging changes to session commands. Elsewhere,
+the release installer in the [README](../../README.md#install) installs and
+upgrades it. No external service, provider credential, `.env`, or
 devcontainer is required.
 
 Atelier reads no logging configuration; the former `--log-level`,

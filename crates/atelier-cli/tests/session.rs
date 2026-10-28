@@ -7792,7 +7792,7 @@ fn a_record_from_a_newer_atelier_says_to_reinstall() {
     .unwrap();
     commit(f.path(), "a record from a newer atelier");
     let newer = format!(
-        ".atelier/issues/{}.md has schema_version 3, and this atelier reads 2, so records need a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`",
+        ".atelier/issues/{}.md has schema_version 3, and this atelier reads 2, so records need a newer atelier. Next: upgrade to the latest release with `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`, or from Atelier's source checkout run `cargo install --path crates/atelier-cli --locked`",
         f.id
     );
     let (pass, out) = cli(f.path(), &["status"]);
@@ -7833,7 +7833,7 @@ fn a_policy_from_a_newer_atelier_says_to_reinstall() {
     assert!(!pass);
     assert!(
         out.starts_with(&format!(
-            "⚠ {} workflow_config_schema_newer: .atelier/workflow.yaml field schema_version: workflow schema_version 4 is newer than the 3 this atelier reads, so the policy needs a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`\n",
+            "⚠ {} workflow_config_schema_newer: .atelier/workflow.yaml field schema_version: workflow schema_version 4 is newer than the 3 this atelier reads, so the policy needs a newer atelier. Next: upgrade to the latest release with `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`, or from Atelier's source checkout run `cargo install --path crates/atelier-cli --locked`\n",
             f.id
         )),
         "{out}"
@@ -7844,7 +7844,7 @@ fn a_policy_from_a_newer_atelier_says_to_reinstall() {
     let (_, out) = cli(f.path(), &["issue", "list"]);
     assert!(!out.contains("fix .atelier/workflow.yaml"), "{out}");
     assert!(
-        out.contains("Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`"),
+        out.contains("Next: upgrade to the latest release with `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`, or from Atelier's source checkout run `cargo install --path crates/atelier-cli --locked`"),
         "{out}"
     );
 }
