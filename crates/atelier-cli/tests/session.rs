@@ -5915,8 +5915,9 @@ fn land_ends_with_a_verdict_line_and_push_follows_only_a_pass() {
         .current_dir(f.path())
         .output()
         .unwrap();
-    assert!(!piped.status.success());
-    assert!(String::from_utf8_lossy(&piped.stdout).starts_with("land: refused"));
+    let last = String::from_utf8_lossy(&piped.stdout);
+    assert!(!piped.status.success(), "{last}");
+    assert!(last.starts_with("land: refused"), "{last}");
 }
 
 #[test]
