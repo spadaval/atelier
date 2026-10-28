@@ -3,6 +3,9 @@ created_at: "2026-10-28T00:35:17.734076855+00:00"
 id: "atelier-lnwf"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-lnwf
 priority: "P2"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Run the repository's validation commands in GitHub Actions on Linux and macOS"
-updated_at: "2026-10-28T00:35:17.734076855+00:00"
+updated_at: "2026-10-28T00:35:44.144825046+00:00"
 ---
 
 ## Goal

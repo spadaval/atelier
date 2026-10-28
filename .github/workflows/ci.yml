@@ -1,0 +1,52 @@
+# Runs the validation commands from AGENTS.md on the platforms releases ship.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The toolchain and components come from rust-toolchain.toml.
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: warn
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      # Tests create repositories and commits.
+      - run: |
+          git config --global user.name "Atelier CI"
+          git config --global user.email "ci@atelier.invalid"
+      - run: cargo fmt -- --check
+      - run: cargo build -p atelier-cli
+      - run: target/debug/atelier check
+      - run: cargo nextest run
+      - run: cargo nextest run --features test-hooks
+      - name: git diff --check
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
+            echo "No base commit to compare against."
+          else
+            git diff --check "$BASE" HEAD
+          fi
