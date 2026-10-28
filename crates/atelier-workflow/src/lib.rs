@@ -1846,7 +1846,7 @@ mod tests {
         .to_string();
         assert_eq!(
             newer,
-            format!("error: workflow_config_schema_newer\npath: {WORKFLOW_POLICY_PATH}\nfield: schema_version\nmessage: workflow schema_version 4 is newer than the 3 this atelier reads, so the policy needs a newer atelier. Next: from Atelier's source checkout, reinstall it with `cargo install --path crates/atelier-cli --locked`")
+            format!("error: workflow_config_schema_newer\npath: {WORKFLOW_POLICY_PATH}\nfield: schema_version\nmessage: workflow schema_version 4 is newer than the 3 this atelier reads, so the policy needs a newer atelier. Next: upgrade to the latest release with `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`, or from Atelier's source checkout run `cargo install --path crates/atelier-cli --locked`")
         );
         let older = parse_policy_text(
             &valid_policy().replace("schema_version: 3", "schema_version: 2"),

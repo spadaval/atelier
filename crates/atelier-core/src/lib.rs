@@ -62,13 +62,19 @@ impl fmt::Display for InvalidValue {
 
 impl std::error::Error for InvalidValue {}
 
+/// The command that installs or upgrades to the latest Atelier release
+/// (atelier-5tl2).
+pub const INSTALL_COMMAND: &str = "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh";
+
 /// The command that reinstalls Atelier, run in its source checkout: a
 /// record or policy a newer Atelier wrote needs it (atelier-u4ql).
 pub const REINSTALL_COMMAND: &str = "cargo install --path crates/atelier-cli --locked";
 
 /// The fix for a record or policy a newer Atelier wrote, after `Next: `.
 pub fn reinstall_fix() -> String {
-    format!("from Atelier's source checkout, reinstall it with `{REINSTALL_COMMAND}`")
+    format!(
+        "upgrade to the latest release with `{INSTALL_COMMAND}`, or from Atelier's source checkout run `{REINSTALL_COMMAND}`"
+    )
 }
 
 /// A record whose `schema_version` is higher than this binary reads: a

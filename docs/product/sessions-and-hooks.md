@@ -221,8 +221,9 @@ A record whose `schema_version` is higher than the installed binary reads was
 written by a newer Atelier. Every command, `status` and its SessionStart
 context, `land` and the Stop hook say so in one line instead of a parse error,
 `<path> has schema_version N, and this atelier reads M, so records need a newer
-atelier`, whose one step reinstalls it from Atelier's source checkout with
-`cargo install --path crates/atelier-cli --locked`. Like any record that fails
+atelier`, whose one step upgrades to the latest release with the installer
+one-liner from the [README](../../README.md#install), or from Atelier's source
+checkout runs `cargo install --path crates/atelier-cli --locked`. Like any record that fails
 to parse, it carries no code, and `land` ends `land: refused`. A newer
 workflow policy fails `workflow_config_schema_newer` with the same step,
 said once: a command that falls back to the last valid policy notes the
