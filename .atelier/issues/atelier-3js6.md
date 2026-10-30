@@ -15,9 +15,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-10-30T06:41:06.901819130+00:00"
+status: "superseded"
 title: "Add a 'just a doc' pressure scenario to Agent Factory's skill evaluation"
-updated_at: "2026-10-23T00:10:58.567803052+00:00"
+updated_at: "2026-10-30T06:41:06.901819130+00:00"
 ---
 
 ## Goal
@@ -27,3 +28,7 @@ After atelier-aufe the skill requires independent review of non-trivial prose, b
 ## Done when
 
 A pressure scenario with that rationalization exists in the skill evaluation fixtures and upstream evals, run with and without the aufe wording as the method describes, with results recorded.
+
+## Close Reason
+
+The 'It's just docs' pressure scenario is in the skill's maintainers/skill-evaluation.md (spadaval/.agents a2c1050, row "It's just docs"). Skill evaluation work belongs to spadaval/.agents (ADR 0023); no run with and without the wording is recorded here.

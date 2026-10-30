@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Show open fix-now findings in branch readiness and cover the remaining readiness cases"
-updated_at: "2026-10-22T22:30:14.044062479+00:00"
+updated_at: "2026-10-30T06:40:25.713236166+00:00"
 ---
 
 ## Goal
