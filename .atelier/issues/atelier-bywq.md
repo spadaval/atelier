@@ -28,7 +28,7 @@ On the base branch, `atelier issue update <id>` and `atelier issue note <id>` su
 
 ## Done when
 
-An integration test starts an owner on its work branch, commits the start there, switches to the base and runs `issue update <id> --priority high`, `issue note <id> "x"` and a transition: each still applies, exits 0, and prints one warning naming the owning branch and saying the edit belongs on that branch. The same commands on an item no open branch owns print no warning.
+An integration test starts an owner on its work branch, commits the start there, switches to the base and runs `issue update <id> --priority high`, `issue note <id> "x"` and `issue transition <id> block`: each still applies, exits 0, and prints one warning naming the owning branch and saying the edit belongs on that branch. The same commands on an item no open branch owns print no warning.
 
 ## Scope
 
@@ -36,5 +36,5 @@ Issue mutation commands run on the base branch. Work branches and records-only p
 
 ## Context
 
-- Sibling atelier-9pa6 warns when a done transition runs on the base; share the warning path.
+- Sibling atelier-9pa6 owns done transitions on the base and has not settled refuse versus warn; this item covers the other commands. Share the warning path.
 - Open branches and their owners are already listed by `status` (Branches) and computed as in-flight marks (atelier-3i7x).

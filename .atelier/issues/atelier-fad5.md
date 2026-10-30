@@ -26,7 +26,7 @@ After a gated merge, agents still chain commands to publish it: `merge` ends `Ne
 ## Done when
 
 Integration tests with a bare origin show:
-- `merge <id> --push` on an approved branch moves origin's base to the merge commit and ends `merge: passed, pushed to origin/<base>`, exit 0;
+- `merge <id> --push` on an approved branch moves origin's base to the integrated commit and ends `merge: passed, pushed to origin/<base>`, exit 0;
 - with a refused gate, origin's base is unchanged, the verdict says nothing was pushed, and the exit status is non-zero;
 - when the integration succeeds but the push fails, the exit status is non-zero and the verdict says the merge happened locally and nothing was pushed.
 A plain `merge` success line names `--push` in its Next. No file under docs/ recommends piping a gate's output to read its verdict (`git grep -n "tail -1" docs/` shows no such advice). A receipt on atelier-ll3p judges criterion one-command-publish with a captured run of these tests.
