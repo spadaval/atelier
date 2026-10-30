@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-30T06:25:48.677013319+00:00"
+status: "done"
 title: "Stop vendoring the Agent Factory skill; agents load the installed copy"
-updated_at: "2026-10-30T06:19:54.610942129+00:00"
+updated_at: "2026-10-30T06:25:48.677013319+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,19 @@ Docs, ADRs, AGENTS.md, the active r6bt strategy's guidance line, and `review_req
   Reason: With no vendored copy, Atelier cannot know where a reader's skill is installed; a repository path it does not contain would mislead, and the brief already carries the requirements and range
   Rejected: Point at ~/.agents/skills/agent-factory, which ties the CLI to one install layout
   Rejected: Always name Agent Factory's review procedure, which is wrong in repositories without the skill
+
+## Close Reason
+
+The repository no longer vendors Agent Factory: `.agents/skills/agent-factory` is removed, ADR 0023 supersedes ADR 0020 decision 2, AGENTS.md and the docs point at the installed skill or `spadaval/.agents`, and `atelier review request` no longer names the vendored review procedure.
+
+### Deviations
+Open issues atelier-0xcr, atelier-fb1i and atelier-pg2b also cited the vendored path; review finding atelier-ul8r had them repointed at the canonical skill. Closed records and the superseded adaptive-missions strategy keep their historical paths.
+
+### Decisions
+See this item's decision note on the review brief's procedure line.
+
+### Surprises
+The local spadaval/.agents checkout is several commits ahead of GitHub (bee1476 and later are unpushed), so the new GitHub links show an older skill until it is pushed.
+
+### Open items
+None in this repository. Pushing spadaval/.agents is for the thread that owns that work.
