@@ -15,8 +15,9 @@ Date: 2026-06-08
 
 - Repository cutover: commit `f64201d` (`Dogfood Atelier as live tracker`).
 - Agent Factory tracker binding update: commit `db372b0` and external skill
-  edits that now live in the repository-owned copy at
-  `.agents/skills/agent-factory`.
+  edits, then kept in a repository-owned copy at
+  `.agents/skills/agent-factory` (removed by ADR 0023; the skill's one copy is
+  `spadaval/.agents`).
 - Workflow validation: commit `32fedc6` and
   `docs/architecture/quality/agent-factory-atelier-validation.md`.
 - Purge policy: Beads archive data was deleted after successful import,

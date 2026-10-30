@@ -2,7 +2,7 @@
 
 Committed Atelier records are this repository's coordination source of truth.
 [AGENTS.md](../../AGENTS.md) routes durable guidance; use
-[Agent Factory](../../.agents/skills/agent-factory/SKILL.md) for process and
+[Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md) for process and
 [development setup](development-setup.md) for tools.
 
 Commit `.atelier/` changes with the implementation they describe. Keep work on

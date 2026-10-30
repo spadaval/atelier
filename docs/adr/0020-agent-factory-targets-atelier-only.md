@@ -6,7 +6,9 @@ Accepted (2026-10-15, human-directed).
 
 Builds on [ADR 0019](0019-verified-repo-native-tracker.md). Decision 3 amended
 by [ADR 0022](0022-status-orients-and-output-is-dense.md): session context
-comes from `status`.
+comes from `status`. Decision 2 superseded by
+[ADR 0023](0023-agent-factory-is-not-vendored.md): this repository no longer
+vendors the skill.
 
 ## Context
 
