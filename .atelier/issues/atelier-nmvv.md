@@ -36,4 +36,4 @@ The one supersession function atelier-4urj introduces, which this item is blocke
 
 ## Design
 
-Refuse rather than warn: a measured fail is the strongest evidence the tracker holds, and an assertion is the weakest, so the gate keeps the order. A captured fail is cleared only by a newer captured pass of the same command string; kind does not matter. No override flag. An item whose check can no longer be run closes only by revising its Done when (shown by atelier-r9hb) or by the `supersede` transition, both visible in review.
+Refuse rather than warn: a measured fail is the strongest evidence the tracker holds, and an assertion is the weakest, so the gate keeps the order. A captured fail is cleared only by a newer captured pass of the same command string; kind does not matter. No override flag. An item whose check can no longer be run, or whose failing receipt captured the wrong command, cannot reach done: it is superseded (with a reason) and replaced by an item with a runnable check. Failures never expire (crates/atelier-app/src/evidence_freshness.rs), so editing a Done when does not clear one.
