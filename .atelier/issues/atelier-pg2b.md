@@ -21,11 +21,11 @@ updated_at: "2026-10-28T02:06:44.271780469+00:00"
 
 ## Goal
 
-`.agents/skills/agent-factory/procedures/install.md` step 1 says to confirm `atelier` is on `PATH` but not how to get it. An agent adopting Atelier in another repository is who the release installer is for.
+Agent Factory's `skills/agent-factory/procedures/install.md` (in spadaval/.agents, the skill's one copy per ADR 0023) step 1 says to confirm `atelier` is on `PATH` but not how to get it. An agent adopting Atelier in another repository is who the release installer is for.
 
 ## Done when
 
-The step says to install it with the release installer from Atelier's README when it is missing, and the skill's evaluation (`.agents/skills/agent-factory/maintainers/skill-evaluation.md`) is followed for the wording change.
+The step says to install it with the release installer from Atelier's README when it is missing, and the skill's evaluation (`skills/agent-factory/maintainers/skill-evaluation.md`) is followed for the wording change. The change is committed in spadaval/.agents, not in this repository.
 
 ## Context
 
