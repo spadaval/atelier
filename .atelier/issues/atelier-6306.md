@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-30T06:52:43.236463131+00:00"
+status: "done"
 title: "Remove one-way decision notes"
-updated_at: "2026-10-30T06:52:23.609301229+00:00"
+updated_at: "2026-10-30T06:52:43.236463131+00:00"
 ---
 
 ## Question
@@ -28,3 +29,7 @@ Should Atelier keep the `--one-way` mark on decision notes? Mission atelier-r6bt
 ## Decision
 
 Remove one-way decision notes. Agent Factory and Atelier ship as a pair (ADR 0020), and the human asks for one way to do a thing; a record is already the home for costly choices, with its own review and supersession. No other Atelier repository on this host uses the mark (astromech, astromech-atelier, astromech-orch, cosplay-studio and worldcrafter have none), so the six notes here are migrated to plain decision notes and no read compatibility is kept. Decided 2026-10-30 by the planning agent at the human's request to decide; it revises atelier-r6bt's strategy, whose lines on one-way decisions change in the removal work, atelier-w5hx.
+
+## Close Reason
+
+Remove one-way decision notes; a costly-to-reverse choice is a decision record. Work: atelier-w5hx.
