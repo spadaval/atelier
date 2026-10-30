@@ -30,4 +30,4 @@ The brief's finding placeholder reads `"<path:line> <problem, impact, suggested 
 
 ## Context
 
-Skill output format: `skills/agent-factory/procedures/review.md`, Output, in spadaval/.agents (ADR 0023). Sibling atelier-abdp also changes this brief (round number); whichever lands second merges the other's text.
+Skill output format: `skills/agent-factory/procedures/review.md`, Output, in spadaval/.agents (ADR 0023). Related atelier-abdp also changes this brief (round number); whichever lands second merges the other's text.

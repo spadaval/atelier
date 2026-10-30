@@ -23,12 +23,12 @@ Should Atelier keep the `--one-way` mark on decision notes? Mission atelier-r6bt
 
 ## Options
 
-- **Remove one-way notes.** Drop `--one-way` and the `[decision one-way]` tag; decision records lead the decision views. One way to record a costly choice. Costs a migration of the six existing one-way notes (atelier-fip8, ho7o, sfsq, all closed) and edits to the r6bt strategy and product docs.
+- **Remove one-way notes.** Drop `--one-way` and the `[decision one-way]` tag; decision records lead the decision views. One way to record a costly choice. Costs a migration of the four existing one-way notes (two in atelier-fip8, one each in ho7o and sfsq, all closed) and edits to the r6bt strategy and product docs.
 - **Keep them.** No work, but Atelier keeps a second way to record a costly choice that the process tells agents not to use, and the two drift.
 
 ## Decision
 
-Remove one-way decision notes. Agent Factory and Atelier ship as a pair (ADR 0020), and the human asks for one way to do a thing; a record is already the home for costly choices, with its own review and supersession. No other Atelier repository on this host uses the mark (astromech, astromech-atelier, astromech-orch, cosplay-studio and worldcrafter have none), so the six notes here are migrated to plain decision notes and no read compatibility is kept. Decided 2026-10-30 by the planning agent at the human's request to decide; it revises atelier-r6bt's strategy, whose lines on one-way decisions change in the removal work, atelier-w5hx.
+Remove one-way decision notes. Agent Factory and Atelier ship as a pair (ADR 0020), and the human asks for one way to do a thing; a record is already the home for costly choices, with its own review and supersession. No other Atelier repository on this host uses the mark (astromech, astromech-atelier, astromech-orch, cosplay-studio and worldcrafter have none), so the four notes here are migrated to plain decision notes and no read compatibility is kept. Decided 2026-10-30 by the planning agent at the human's request to decide; it revises atelier-r6bt's strategy, whose lines on one-way decisions change in the removal work, atelier-w5hx.
 
 ## Close Reason
 

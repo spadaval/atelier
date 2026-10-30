@@ -25,7 +25,7 @@ updated_at: "2026-10-30T06:52:06.059708538+00:00"
 
 ## Done when
 
-Integration tests with a bare origin: an unreviewed non-record commit pushed to the base passes plain `land` (unchanged behaviour) but `land --since <previous head>` refuses with `land_base_unreviewed` naming it; a range holding only record commits, gated merge commits and trivially exempted commits passes. `.github/workflows/` runs `atelier land --since <before>` on pushes to master, and a run on a branch pushed with an unreviewed commit is shown failing (link in the receipt).
+Integration tests with a bare origin: an unreviewed non-record commit pushed to the base passes plain `land` (unchanged behaviour) but `land --since <previous head>` refuses with `land_base_unreviewed` naming it; a range holding only record commits, gated merge commits and trivially exempted commits passes. The CI job runs `atelier land --since <before>` on pushes to master and also accepts a `since` input under `workflow_dispatch`; a dispatched run on a scratch branch whose range holds an unreviewed commit is shown failing, and one on master passing (run links in the receipt). A receipt on atelier-ll3p judges criterion slipped-push-caught with those runs.
 
 ## Scope
 
@@ -33,5 +33,6 @@ Integration tests with a bare origin: an unreviewed non-record commit pushed to 
 
 ## Unknowns
 
+- `BaseReviews::new(..., &upstream)` (git.rs:229) also takes the upstream as its boundary; `--since` replaces both uses.
 - CI checks out a detached HEAD; `land --since` may need to accept one on the base commit.
 - A first push or force push has no usable previous head (`github.event.before` is all zeros or unreachable); decide whether CI then checks from the last gated merge or skips with a visible note.

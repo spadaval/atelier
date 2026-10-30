@@ -28,16 +28,12 @@ A failed measurement can be passed by assertion. Checked on master 2f1eea77 in a
 
 ## Done when
 
-Tests show, on one item: a captured fail followed by a newer manual pass leaves the item's proof failing in `evidence list` (naming the captured fail and saying a manual pass cannot clear it), and `close` and `merge --check` refuse with a Next line that reruns the check with `evidence record ... -- <command>`; the same fail followed by a newer captured pass clears it; a manual fail followed by a manual pass still clears as today. Reverting the rule makes the first test fail.
+Tests show, on one item: a captured fail of command C followed by a newer manual pass leaves the item's proof failing in `evidence list` (naming the captured fail and saying only a newer pass of the same command clears it), and `close` and `merge --check` refuse with a Next line that reruns C with `evidence record ... -- C`; the same fail followed by a newer captured pass of a different command (`-- true`) still refuses; a newer captured pass of C clears it; a manual fail followed by a manual pass still clears as today. Reverting the rule makes the first two tests fail. A receipt on atelier-ll3p judges criterion no-pass-by-assertion with a captured run of these tests.
 
 ## Scope
 
 The one supersession function atelier-4urj introduces, which this item is blocked by, and docs/product/validation.md. Manual receipts stay valid proof where no captured receipt has failed.
 
-## Unknowns
-
-Whether "a newer captured pass" must match the failing receipt's kind or command, or any captured pass on the item counts. Decide when 4urj has settled how gates filter by kind.
-
 ## Design
 
-Refuse rather than warn: a measured fail is the strongest evidence the tracker holds, and an assertion is the weakest, so the gate keeps the order. No override flag. A check that truly cannot be rerun is the human's call, made as a decision record, not a receipt.
+Refuse rather than warn: a measured fail is the strongest evidence the tracker holds, and an assertion is the weakest, so the gate keeps the order. A captured fail is cleared only by a newer captured pass of the same command string; kind does not matter. No override flag. An item whose check can no longer be run closes only by revising its Done when (shown by atelier-r9hb) or by the `supersede` transition, both visible in review.

@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-10-30T06:57:40.029851357+00:00"
+status: "superseded"
 title: "Cap the one-way decisions in the brief decision view"
-updated_at: "2026-10-17T18:58:40.742588912+00:00"
+updated_at: "2026-10-30T06:57:40.029851357+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ updated_at: "2026-10-17T18:58:40.742588912+00:00"
 ## Done when
 
 The brief form shows at most the newest few one-way decisions and a `+N more` line naming `atelier issue show <id> --full`, as status already caps reviews and evidence, shown by a CLI test with more one-way decisions than the cap.
+
+## Close Reason
+
+Folded into atelier-w5hx, which removes one-way notes and caps the brief decision view at three decision records (decision atelier-6306).

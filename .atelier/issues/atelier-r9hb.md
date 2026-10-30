@@ -12,7 +12,7 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Show a Done when edited after a finding or failing receipt"
+title: "Show a Done when edited after the item was started"
 updated_at: "2026-10-30T06:40:25.029767683+00:00"
 ---
 
