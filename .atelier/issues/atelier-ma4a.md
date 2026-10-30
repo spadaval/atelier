@@ -27,7 +27,7 @@ updated_at: "2026-10-30T06:40:25.715333306+00:00"
 
 ## Goal
 
-A reader deciding whether an owner is ready can see how its review went: how many rounds it took, whether a fix-now finding is still open, and whether its Done when changed after a finding or failing receipt. Today none of these appear in branch readiness, the review request brief or the debrief.
+A reader deciding whether an owner is ready can see how its review went: how many rounds it took, whether a fix-now finding is still open, and whether its Done when changed after the item was started. Today none of these appear in branch readiness, the review request brief or the debrief.
 
 ## Done when
 

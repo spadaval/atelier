@@ -25,7 +25,7 @@ Source: /home/supadava/.t3/scratch/2026-10-30-the-agent-factory-skill-has-0de9a4
 
 ## Question
 
-Should Atelier connect an approval or finding to a dispatched review, so that an approval recorded under a reviewer's label for a head no reviewer saw is visible? Identity is self-declared and compared only with Git author names and emails (docs/product/reviews-and-merge.md). On this host every agent commits as the human, so any other string passes: the 2026-10-15 to 10-29 sessions show invented identities (`claude2`, "orchestrator (not a code author)"), an orchestrator re-pinning approvals under the reviewer's label ("approval re-pinned … substance as in …"), and authors accepting defer or no_action on their own findings under a new label. The skill now says who may decide; this asks what the tool should show.
+Should Atelier connect an approval or finding to a dispatched review, so that an approval recorded under a reviewer's label for a head no reviewer saw is visible? Identity is self-declared and compared only with Git author names and emails (docs/product/reviews-and-merge.md). On this host every agent commits as the human, so any other string passes: the 2026-10-15 to 10-29 sessions show invented identities (`claude2`, "orchestrator (not a code author)"), an orchestrator re-pinning approvals under the reviewer's label ("approval re-pinned … substance as in …"), and authors accepting defer or no_action on their own findings under a new label. Building eval fixtures on 2026-10-30 confirmed the disposition side: `review disposition --identity` accepts any reviewer name, so an agent can record a defer as a reviewer it never dispatched. The skill now says who may decide; this asks what the tool should show.
 
 ## Options
 
