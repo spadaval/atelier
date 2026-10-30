@@ -16,7 +16,6 @@ use atelier_records::IssueSectionName;
 const SUMMARY_LIMIT: usize = 300;
 /// Receipts listed, newest first.
 const PROOF_LIMIT: usize = 8;
-const REVIEW_PROCEDURE: &str = ".agents/skills/agent-factory/procedures/review.md";
 
 /// Commits to review, from `from` (exclusive) to the brief's head.
 #[derive(Debug, PartialEq)]
@@ -73,7 +72,6 @@ pub struct Facts {
     pub proof: Vec<Receipt>,
     pub checks: Vec<String>,
     pub rules: Option<String>,
-    pub procedure: bool,
     pub identity: Option<String>,
 }
 
@@ -325,7 +323,6 @@ fn gather(
         proof,
         checks,
         rules,
-        procedure: repo.join(REVIEW_PROCEDURE).is_file(),
         identity: identity.map(str::to_owned),
     })
 }
@@ -368,11 +365,7 @@ pub fn render(facts: &Facts) -> String {
         "# Review request: {} {} {} {}\n\n",
         owner.id, facts.issue_type, owner.status, owner.title
     ));
-    out.push_str("You are an independent reviewer. You did not write this code. Judge it against the requirements below, not the author's intent");
-    if facts.procedure {
-        out.push_str(&format!(", following `{REVIEW_PROCEDURE}`"));
-    }
-    out.push_str(".\n\n");
+    out.push_str("You are an independent reviewer. You did not write this code. Judge it against the requirements below, not the author's intent.\n\n");
 
     out.push_str("## Range\n\n");
     let whole_label = match &facts.since {
@@ -583,7 +576,6 @@ mod tests {
             }],
             checks: vec!["cargo test".into()],
             rules: Some("Use the repo's scratch directory.\n".into()),
-            procedure: true,
             identity: Some("Independent reviewer".into()),
         }
     }
@@ -593,7 +585,7 @@ mod tests {
         let expected = "\
 # Review request: atelier-own1 feature review Do the thing
 
-You are an independent reviewer. You did not write this code. Judge it against the requirements below, not the author's intent, following `.agents/skills/agent-factory/procedures/review.md`.
+You are an independent reviewer. You did not write this code. Judge it against the requirements below, not the author's intent.
 
 ## Range
 

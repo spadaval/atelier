@@ -47,7 +47,7 @@ Deferred by Sumeet (2026-10-16): an advanced feature, planned now and built late
 2. `atelier start` for missions (integration branch and record) and for work started from a mission branch.
 3. `land` and `atelier merge` accept a recorded mission integration base for work that advances that mission; base-commit checks on mission branches.
 4. `atelier merge <mission>` into the default branch, with the gates above.
-5. Labels in `prime`/`status`, docs (reviews-and-merge, work-model, sessions-and-hooks), and an Agent Factory skill resync: its "Atelier Limits" section says integration branches are unsupported (ADR 0020).
+5. Labels in `prime`/`status`, docs (reviews-and-merge, work-model, sessions-and-hooks), and an Agent Factory skill update in spadaval/.agents (ADR 0023): its "Atelier Limits" section says integration branches are unsupported (ADR 0020).
 
 ### Open questions
 

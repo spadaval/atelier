@@ -23,7 +23,7 @@ updated_at: "2026-10-17T01:10:57.969557562+00:00"
 
 ## Goal
 
-`atelier bundle preview --help` and `apply --help` show `<INPUT>` and `--yes` with no description. Nothing names the schema, its required envelope (`schema: "atelier.bundle"`, `schema_version: 2`, `title`, `resources`), the issue fields, or an example. The contract exists only in docs/spec/bundle/schema.md inside the Atelier repository. Adopters such as astromech have no copy, and the Agent Factory reference (.agents/skills/agent-factory/references/atelier.md:51) only says to run preview before apply. ADR 0022 Decision 2 puts usage guidance in `atelier help`.
+`atelier bundle preview --help` and `apply --help` show `<INPUT>` and `--yes` with no description. Nothing names the schema, its required envelope (`schema: "atelier.bundle"`, `schema_version: 2`, `title`, `resources`), the issue fields, or an example. The contract exists only in docs/spec/bundle/schema.md inside the Atelier repository. Adopters such as astromech have no copy, and the Agent Factory skill's Atelier reference (`skills/agent-factory/references/atelier.md` in spadaval/.agents, Managing Records) only says to run preview before apply. ADR 0022 Decision 2 puts usage guidance in `atelier help`.
 
 ## Done when
 

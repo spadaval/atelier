@@ -3,7 +3,7 @@
 Atelier parses tracked Markdown records on every command. Records are the source
 of truth for current work; Git is the source of truth for branch ancestry,
 integration, and history. See [storage](../architecture/markdown-first-record-store.md)
-for the on-disk contract and [Agent Factory record templates](../../.agents/skills/agent-factory/references/tracker-records.md)
+for the on-disk contract and [Agent Factory record templates](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/references/tracker-records.md)
 for authoring guidance.
 
 ## Records and relationships

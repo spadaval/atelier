@@ -14,7 +14,9 @@ rebuilt model.
 
 ## Process Sources
 
-- Agent Factory skill: `.agents/skills/agent-factory/SKILL.md`
+- Agent Factory skill: the installed copy (`~/.agents/skills/agent-factory`,
+  loaded as `/agent-factory`). This repository does not vendor it; its one
+  source is `spadaval/.agents` ([ADR 0023](docs/adr/0023-agent-factory-is-not-vendored.md)).
 - Tracker state: `.atelier/` (records are committed with the code they
   describe)
 - Start a session with `atelier status`; before handoff commit canonical

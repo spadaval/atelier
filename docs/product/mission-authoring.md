@@ -1,7 +1,7 @@
 # Mission Authoring
 
-[Agent Factory](../../.agents/skills/agent-factory/SKILL.md) owns planning.
-Its [tracker-record templates](../../.agents/skills/agent-factory/references/tracker-records.md)
+[Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md) owns planning.
+Its [tracker-record templates](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/references/tracker-records.md)
 are the authoring reference. Atelier validates the resulting records and graph.
 
 A mission is a front door to a strategy, not a second strategy or a status table.

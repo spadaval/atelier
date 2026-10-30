@@ -127,8 +127,8 @@ and `debrief`, without `brief`.
   mission adds no mandatory approval gate (ADR 0018 keeps Atelier from
   becoming a plan-approval system).
 - **Process changes ship with the tool.** Agent Factory's handoff and tracker
-  guidance in `.agents/skills/agent-factory/` is updated alongside the
-  commands that enforce it.
+  guidance in its canonical copy (`spadaval/.agents`, ADR 0023) is updated
+  alongside the commands that enforce it.
 - When completeness and cost to the writer conflict, keep capture cheap. A
   short decision entry an agent actually writes beats a complete one it
   skips. When completeness and accuracy conflict in a view, accuracy wins.

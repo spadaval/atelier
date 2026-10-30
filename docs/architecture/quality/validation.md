@@ -1,6 +1,6 @@
 # Validation and Review
 
-[Agent Factory](../../../.agents/skills/agent-factory/SKILL.md) owns the process
+[Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md) owns the process
 for author proof, independent review, validation, finding disposition, and
 handoff. Atelier supplies durable receipts and mechanical invariant checks.
 
