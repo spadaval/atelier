@@ -28,7 +28,7 @@ With a YAML error in one record (atelier-wtnp, `status: todo: bad`) and an `adva
 ## Done when
 
 - That two-fault fixture reports both problems in one run. If graph checks cannot run safely, check instead prints `Graph checks skipped: fix the records above first`.
-- references/atelier.md:114 states the actual behaviour. Agent Factory is vendored, so the edit goes upstream per ADR 0020.
+- The Administration section of `skills/agent-factory/references/atelier.md` states the actual behaviour. That edit is committed in spadaval/.agents, the skill's one copy (ADR 0023).
 - A test covers the two-fault fixture.
 
 ## Context

@@ -53,7 +53,7 @@ Docs, ADRs, AGENTS.md, the active r6bt strategy's guidance line, and `review_req
 The repository no longer vendors Agent Factory: `.agents/skills/agent-factory` is removed, ADR 0023 supersedes ADR 0020 decision 2, AGENTS.md and the docs point at the installed skill or `spadaval/.agents`, and `atelier review request` no longer names the vendored review procedure.
 
 ### Deviations
-Open issues atelier-0xcr, atelier-fb1i and atelier-pg2b also cited the vendored path; review finding atelier-ul8r had them repointed at the canonical skill. Closed records and the superseded adaptive-missions strategy keep their historical paths.
+Open issues atelier-0xcr, atelier-fb1i, atelier-pg2b and atelier-w0su also cited the vendored path or assumed a vendored copy; review findings atelier-ul8r and atelier-vo71 had them repointed at the canonical skill. Closed records and the superseded adaptive-missions strategy keep their historical paths.
 
 ### Decisions
 See this item's decision note on the review brief's procedure line.
