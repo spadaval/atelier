@@ -21,7 +21,7 @@ updated_at: "2026-10-30T06:52:06.059708538+00:00"
 
 ## Goal
 
-`land` on the base checks only `rev-list <tip> --not <upstream>` (crates/atelier-cli/src/commands/git.rs:230), so once an unreviewed commit is pushed, past a gate whose refusal was masked by `| tail` or a `;` chain, nothing ever checks it again (incident 1620b534 on 2026-10-17 was found only because an agent noticed). Add `atelier land --since <commit>` that applies land's base rules to `<commit>..HEAD` instead of the unpushed range, and run it in this repository's CI on each push to master with the push's previous head, so a slipped push turns CI red within minutes.
+`land` on the base checks only `rev-list <tip> --not <upstream>` (crates/atelier-cli/src/commands/git.rs:230), so once an unreviewed commit is pushed, past a gate whose refusal was masked by `| tail` or a `;` chain, nothing ever checks it again (incident 1620b534 on 2026-10-17 was found only because an agent noticed). Add `atelier land --since <commit>` that applies land's base rules to `<commit>..HEAD` instead of the unpushed range, and run it in this repository's CI on each push to master with the push's previous head, so a slipped push turns CI red within minutes. The red run is a notice, not a block: the commit is already on the base, and the fix is a reviewed follow-up or an after-the-fact `review trivial --base`.
 
 ## Done when
 

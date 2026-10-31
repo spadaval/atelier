@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-31T00:04:51.688766956+00:00"
+status: "done"
 title: "Tie review events to the review that produced them?"
-updated_at: "2026-10-30T06:40:37.260576853+00:00"
+updated_at: "2026-10-31T00:04:51.688766956+00:00"
 ---
 
 ## Context
@@ -38,3 +39,11 @@ Atelier is not access control. It trusts agents and nudges them toward the right
 - **Leave it entirely to the skill.** No product work; the non-author check stays unable to catch an honest mistake.
 
 Recommendation: roles as a naming convention, which the human proposed on 2026-10-30, with the display added if the shortcuts persist. No role-based gates.
+
+## Decision
+
+Roles as a naming convention, decided by the human on 2026-10-30. A delegation states the agent's role and identity, written `<role>/<instance>` with roles taken from Agent Factory's subskills. Atelier keeps no list of roles and has no role-based gates; `--identity` stays free text and self-declared. `atelier start --identity` records who implemented the work and the existing non-author check compares against it, so an honest slip is caught. Existing review records keep their labels. Work: atelier-jzh9. The display of who recorded what is added later only if the shortcuts persist.
+
+## Close Reason
+
+Roles as a naming convention with no role gates, by the human's direction; work is atelier-jzh9.
