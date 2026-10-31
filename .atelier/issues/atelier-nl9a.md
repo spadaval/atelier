@@ -34,5 +34,6 @@ Integration tests with a bare origin: an unreviewed non-record commit pushed to 
 ## Unknowns
 
 - `BaseReviews::new(..., &upstream)` (git.rs:229) also takes the upstream as its boundary; `--since` replaces both uses.
+- Base rules run only when the branch is the base, and an unowned branch without the base ref stops at `land_work_untraceable`, so `--since` must bypass that checkout rule for the scratch-branch proof.
 - CI checks out a detached HEAD; `land --since` may need to accept one on the base commit.
 - A first push or force push has no usable previous head (`github.event.before` is all zeros or unreachable); decide whether CI then checks from the last gated merge or skips with a visible note.
