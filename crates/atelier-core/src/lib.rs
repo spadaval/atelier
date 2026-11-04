@@ -878,7 +878,14 @@ impl DecisionNote {
         let mut rejected: Vec<String> = Vec::new();
         // Lines after a label continue it until the next label.
         let mut in_reason = false;
-        for line in note.text.lines() {
+        for (number, line) in note.text.lines().enumerate() {
+            if number > 0 {
+                if let Some(label) = misspelled_label(line) {
+                    return Err(format!(
+                        "has a line starting `{label}`, a misspelled `{DECISION_REASON_LABEL}` or `{DECISION_REJECTED_LABEL}` label; correct it, or reword the line so it does not start with a label"
+                    ));
+                }
+            }
             if let Some(value) = line.strip_prefix(DECISION_REASON_LABEL) {
                 if reason.is_some() {
                     return Err("has more than one Reason: line".to_string());
@@ -931,6 +938,38 @@ impl DecisionNote {
                 .collect(),
         })
     }
+}
+
+/// A continuation line's leading `Word:` when it is near, but not exactly, a
+/// decision note label: another case, or within two edits (atelier-juyb).
+/// Such a line would otherwise fold silently into the text before it.
+fn misspelled_label(line: &str) -> Option<&str> {
+    let (word, _) = line.split_once(':')?;
+    if word.is_empty() || !word.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let label = &line[..=word.len()];
+    let near = |target: &str| {
+        let target = target.trim_end_matches(':');
+        edit_distance(&word.to_ascii_lowercase(), &target.to_ascii_lowercase()) <= 2
+    };
+    let exact = label == DECISION_REASON_LABEL || label == DECISION_REJECTED_LABEL;
+    (!exact && (near(DECISION_REASON_LABEL) || near(DECISION_REJECTED_LABEL))).then_some(label)
+}
+
+/// Levenshtein distance between two ASCII words.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b = b.as_bytes();
+    let mut previous = (0..=b.len()).collect::<Vec<_>>();
+    for (i, ca) in a.bytes().enumerate() {
+        let mut current = vec![i + 1];
+        for (j, cb) in b.iter().enumerate() {
+            let substitution = previous[j] + usize::from(ca != *cb);
+            current.push(substitution.min(previous[j + 1] + 1).min(current[j] + 1));
+        }
+        previous = current;
+    }
+    previous[b.len()]
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1510,6 +1549,24 @@ mod tests {
             defect("- 2026-10-18 [decision] X\n  Reason: Y\n  Reason: Z").contains("more than one")
         );
         assert!(defect("- 2026-10-18 [decision] X\n  Reason: Y\n  Rejected:").contains("empty"));
+        for label in ["Rejectd:", "Reasons:", "reason:", "REJECTED:", "Raeson:"] {
+            assert!(
+                defect(&format!(
+                    "- 2026-10-18 [decision] X\n  Reason: Y\n  {label} Z"
+                ))
+                .contains(&format!("starting `{label}`")),
+                "{label}"
+            );
+        }
+        // Other words with a colon, and labels on the choice line, are text.
+        for line in ["Note: Z", "See: Z", "Risk: Z", "12: Z", "Reason : Z"] {
+            assert!(
+                sections_with_notes(&format!("- 2026-10-18 [decision] X\n  Reason: Y\n  {line}"))
+                    .decision_notes()[0]
+                    .is_ok(),
+                "{line}"
+            );
+        }
         assert!(sections_with_notes("- 2026-10-18 [decisions] X")
             .decision_notes()
             .is_empty());

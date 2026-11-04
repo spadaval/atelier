@@ -83,7 +83,9 @@ Decisions made inside a work item are decision notes, not records:
 is a decision record, not a note (decision atelier-6306). The note stores the
 choice on its first line and indented `Reason:` and `Rejected:` lines, tagged
 `[decision]`. `check` refuses a decision note without a choice or a reason,
-or with any other tag. `work decisions <mission>` lists the decisions across
+with any other tag, or with a line after the first that starts with a
+misspelled label (`Rejectd:`, `reason:`), which would otherwise fold silently
+into the text before it. `work decisions <mission>` lists the decisions across
 a mission's scope: current decision records (decided and not superseded)
 first, then decision notes, then open decision records, which are proposals
 and not yet in force, then superseded records.

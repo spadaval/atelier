@@ -634,3 +634,31 @@ fn the_brief_decision_view_caps_decision_records_at_three() {
         "{full}"
     );
 }
+
+#[test]
+fn check_refuses_misspelled_decision_note_labels() {
+    let dir = tempdir().unwrap();
+    let (_, work, _, _) = mission_fixture(dir.path());
+    edit_canonical_issue(dir.path(), &work, |markdown| {
+        format!(
+            "{}\n\n## Notes\n\n- 2026-10-18 [decision] Use X\n  Reason: Y\n  Rejectd: Z\n- 2026-10-18 [decision] Use V\n  reason: W\n- 2026-10-18 [decision] Fine\n  Reason: R\n  Note: a plain line\n",
+            markdown.trim_end()
+        )
+    });
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["check"]);
+    assert!(!success, "{stdout}");
+    let output = format!("{stdout}{stderr}");
+    assert!(
+        output.contains(&format!(
+            "{work}: Decision note 1 (2026-10-18) has a line starting `Rejectd:`, a misspelled `Reason:` or `Rejected:` label"
+        )),
+        "{output}"
+    );
+    assert!(
+        output.contains(&format!(
+            "{work}: Decision note 2 (2026-10-18) has a line starting `reason:`"
+        )),
+        "{output}"
+    );
+    assert!(!output.contains("Decision note 3"), "{output}");
+}
