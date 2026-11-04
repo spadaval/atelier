@@ -3,6 +3,9 @@ created_at: "2026-11-04T23:12:48.493454620+00:00"
 id: "atelier-r0fj"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-r0fj
 priority: "P3"
 relationships:
   blocks: []
@@ -22,9 +25,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make the debrief and brief report history and next steps accurately"
-updated_at: "2026-11-04T23:16:56.176592410+00:00"
+updated_at: "2026-11-04T23:18:15.186816250+00:00"
 ---
 
 ## Goal
