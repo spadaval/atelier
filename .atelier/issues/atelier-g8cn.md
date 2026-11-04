@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-04T22:08:19.372344919+00:00"
+status: "done"
 title: "Release v0.3.1 with static musl Linux builds"
-updated_at: "2026-11-04T21:56:17.388444622+00:00"
+updated_at: "2026-11-04T22:08:19.372344919+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,19 @@ Publish v0.3.1 so the shell installer works on Linux hosts with glibc older than
 
 - Workspace version is 0.3.1, Cargo.lock matches, and CHANGELOG has a 0.3.1 entry.
 - A v0.3.1 tag on a green master commit publishes a GitHub Release with gnu and musl Linux archives, macOS archives, checksums and the shell installer.
+
+## Close Reason
+
+Bumped the workspace to 0.3.1 (Cargo.toml, Cargo.lock for all five crates) and added a CHANGELOG 0.3.1 entry for the static musl Linux builds from atelier-vo0z. `dist plan --tag v0.3.1` announces 0.3.1 with gnu and musl Linux archives, both macOS archives, checksums and the shell installer. PR #16 CI green on Linux and macOS, including the dist PR upload run for all six targets; nextest 947/947, test-hooks 953/953 (reviewer atelier-div0).
+
+### Deviations
+None.
+
+### Decisions
+Left the Agent Factory unvendoring (8b058ae2) out of the changelog; it is internal to the repository.
+
+### Surprises
+None.
+
+### Open items
+Tagging v0.3.1 happens after this merges and master's CI passes; the publish result is recorded as a note on this item.
