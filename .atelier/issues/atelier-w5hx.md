@@ -20,9 +20,10 @@ relationships:
     type: "supersedes"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-04T23:27:22.622665104+00:00"
+status: "done"
 title: "Remove one-way decision notes and migrate the existing ones"
-updated_at: "2026-11-04T23:26:43.882022258+00:00"
+updated_at: "2026-11-04T23:27:22.622665104+00:00"
 ---
 
 ## Goal
@@ -54,3 +55,23 @@ Decision record linked as `implements`. Skill rule: `skills/agent-factory/refere
   Rejected: spelling the flag indirectly in a test to dodge the grep
 - 2026-11-04 [decision] Remove the debrief's anchor_of helper and the dec-link style with the sidebar section
   Reason: The one-way sidebar index was their only user; leaving them would be dead code
+
+## Close Reason
+
+One-way decision notes are gone: `issue note` has no `--one-way` flag and passing it is a usage error, `[decision one-way]` is an unknown tag that `check` refuses, and the four existing one-way notes (atelier-fip8 twice, atelier-ho7o, atelier-sfsq) now read `[decision]`. `work decisions` lists decision records first, then notes. The brief decision view in `status` and `issue show` lists up to three current decision records, then the omitted-rows line pointing at `issue show --full`, which covers atelier-y8xw's cap. The debrief has no one-way section, sidebar entry or style, and the grep over crates and docs/product prints nothing.
+
+### Deviations
+
+The brief view's overflow line uses the output contract's omitted-rows form (`... N more decision records omitted; see ...`) rather than a bare `+N more`. The flag's usage error is proven by a captured command, not a committed test, because a test naming the flag would break the Done when's grep. The strategy's dated change entry is its `last_changed` front matter, the only change log strategies have. S1's one-way wording changed along with S4 and S6.
+
+### Decisions
+
+Recorded as decision notes on this item: the omitted-rows line, newest-first ordering of brief records by close time, the captured-command proof, and removing the now-unused `anchor_of` helper and `dec-link` style.
+
+### Surprises
+
+`work decisions -q` also changed order: it now prints the items holding current records before the items holding notes.
+
+### Open items
+
+The full `cargo nextest run` and the test-hooks suite run in CI on the pull request; only the focused tests ran locally. With no decision records bearing on an item, the brief view prints only the count, so a reader sees no decision notes there; `issue show --full` lists them.
