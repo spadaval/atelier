@@ -40,6 +40,8 @@ Keep dated historical material distinct from current guidance.
 
 Use [Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md) for planning,
 review, validation, and handoff. Non-trivial executable changes require
-independent review before local merge. Agents may push reviewed work, including
-`master` after a gated merge; force-pushing `master` or deleting remote branches
-requires the human, as recorded in [AGENTS.md](../../../AGENTS.md).
+independent review before local merge, and a branch that changes more than
+tracker records also needs a passing CI run on its pull request first.
+Agents may push reviewed work, including `master` after a gated merge;
+force-pushing `master` or deleting remote branches requires the human, as
+recorded in [AGENTS.md](../../../AGENTS.md).

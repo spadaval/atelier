@@ -31,6 +31,15 @@ rebuilt model.
 
 - Agents may merge independently reviewed work into `master` locally without
   asking. Unreviewed non-trivial changes never reach `master`.
+- A branch that changes anything besides tracker records (`.atelier/issues`,
+  `reviews`, `evidence`; the workflow policy and config count as code) merges
+  only after CI has passed on its latest code: push the work branch, open a
+  pull request, wait for the CI workflow to pass, then run `atelier merge` and
+  push `master`. Record-only commits after that run, such as approvals, need
+  no new run; a code change does, including `atelier merge --sync` bringing in
+  code from `master`. Record-only branches skip the pull request. The
+  `scripts/merge-ci-passed.sh` merge check enforces this, so `atelier merge`
+  runs no test suite on this host.
 - Agents may push reviewed work, including `master` after a gated merge,
   without asking. Never force-push `master` or delete remote branches without
   the human.
@@ -53,3 +62,7 @@ rebuilt model.
 - Rust tests: `cargo nextest run`
 - Failure-path tests: `cargo nextest run --features test-hooks`
 - Whitespace check: `git diff --check`
+- Locally, run formatting and the tests that cover your change
+  (`cargo nextest run -p <crate>` or a filter). The full suite, with and
+  without `test-hooks`, on Linux and macOS, runs in CI on the pull request
+  (`.github/workflows/ci.yml`), and that run gates the merge.
