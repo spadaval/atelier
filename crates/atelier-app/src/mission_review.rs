@@ -1056,16 +1056,18 @@ fn events(
             event: Event::Started,
         });
     }
-    for entry in work {
-        events.push(TimedEvent {
-            at: entry.closed_at,
-            event: Event::Delivered(entry.id.clone()),
-        });
-    }
+    // Work joins the scope before it can be delivered, so at one time its
+    // addition comes first.
     for id in added {
         events.push(TimedEvent {
             at: added_at.get(id).copied(),
             event: Event::Added(id.clone()),
+        });
+    }
+    for entry in work {
+        events.push(TimedEvent {
+            at: entry.closed_at,
+            event: Event::Delivered(entry.id.clone()),
         });
     }
     // Follow-ups a delivered item's review filed are told in its entry.

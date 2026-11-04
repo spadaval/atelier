@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Order the debrief timeline by one clock"
-updated_at: "2026-11-04T23:12:51.028084818+00:00"
+updated_at: "2026-11-04T23:28:08.765529171+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,10 @@ A fixture where a child is closed on its parent's branch and merged later shows 
 ## Context
 
 crates/atelier-app/src/mission_review.rs `events`; crates/atelier-app/src/record_history.rs `mission_timeline` (first-parent walk). The nexd decision to show close times rather than start times explains why record times are used for delivery.
+
+## Notes
+
+- 2026-11-04 [decision] Date work added to the scope by the record clock delivery uses: the linking record's updated_at in the first commit that held the link among the commits its first-parent version brought in, no earlier than the mission's start; keep the start and close at their commits
+  Reason: Delivery is a record time (nexd), so the addition must be one too; a merge brings in the branch's commits, where the link was written; the start and close are made on the base, where the commit and record clocks agree, and clamping to the start keeps 'added after the start' true on the page
+- 2026-11-04 [decision] At one time, list an addition before deliveries
+  Reason: A child linked and closed in one commit has equal record times, and an item joins the scope before it can be delivered

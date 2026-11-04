@@ -1568,3 +1568,59 @@ fn a_debrief_from_a_branch_that_merged_the_base_keeps_the_base_history() {
     git(dir.path(), &["switch", "-q", "main"]);
     assert_eq!(branch_counts, ok(dir.path(), &["debrief", &mission, "-q"]));
 }
+
+#[test]
+fn a_child_closed_on_its_parents_branch_is_added_before_it_is_delivered() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    git(dir.path(), &["switch", "-q", "-c", "feature"]);
+    ok(dir.path(), &["issue", "transition", &planned, "start"]);
+    let child = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--parent",
+            &planned,
+            "--body",
+            "## Goal\n\nG\n\n## Done when\n\nD",
+            "Child",
+        ],
+    )
+    .trim()
+    .to_string();
+    commit_all(dir.path(), "add a child on the branch");
+    ok(dir.path(), &["issue", "transition", &child, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &child,
+            "close",
+            "--reason",
+            "Done on the branch.",
+        ],
+    );
+    commit_all(dir.path(), "close the child on the branch");
+    // The merge, which first links the child on the base's line, comes
+    // after the child's close.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    git(dir.path(), &["switch", "-q", "main"]);
+    git(
+        dir.path(),
+        &["merge", "-q", "--no-ff", "--no-edit", "feature"],
+    );
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let did = section(&page, "What We Did");
+    let at = |needle: &str| {
+        did.lines()
+            .position(|line| line.contains(needle))
+            .unwrap_or_else(|| panic!("no `{needle}`: {page}"))
+    };
+    assert!(
+        at(&format!("added {child}")) < at(&format!("delivered {child}")),
+        "{page}"
+    );
+}
