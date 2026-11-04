@@ -3,6 +3,9 @@ created_at: "2026-11-04T23:12:48.381558151+00:00"
 id: "atelier-2bjz"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-2bjz
 priority: "P3"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make decision records the one way to record a costly choice"
-updated_at: "2026-11-04T23:12:49.314751271+00:00"
+updated_at: "2026-11-04T23:18:13.478619588+00:00"
 ---
 
 ## Goal
