@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.1] - 2026-11-04
+
+### Fixed
+- The shell installer works on Linux hosts with glibc older than 2.35 (such
+  as RHEL 9). Releases now include static musl archives for x86_64 and
+  aarch64 Linux, which the installer picks when the system glibc is too old
+  for the glibc builds.
+
 ## [0.3.0] - 2026-10-28
 
 The first published release. Atelier is a verified, repo-native work tracker:
