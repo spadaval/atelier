@@ -23,9 +23,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-04T23:16:24.348290534+00:00"
+status: "done"
 title: "Validate release distribution against S1–S4"
-updated_at: "2026-11-04T23:12:48.453631084+00:00"
+updated_at: "2026-11-04T23:16:24.348290534+00:00"
 ---
 
 ## Goal
@@ -58,3 +59,19 @@ Strategy: `docs/strategies/release-distribution.md`. Linux release binaries are 
   for c in crates/*/Cargo.toml; do grep -q 'repository.workspace = true' "$c" || { echo "missing repository in $c"; exit 1; }; done; echo "all crates inherit repository"
   grep -q 'Markdown records under `.atelier/`' CHANGELOG.md && grep -q 'replaces the' CHANGELOG.md && echo "CHANGELOG: describes Markdown-record model, SQLite only as replaced"
   ```
+
+## Close Reason
+
+S1–S4 each pass with a fresh receipt from the independent validator: S1 atelier-tum4, S2 atelier-edle, S3 atelier-owp3 (published v0.3.0 installer then the v0.3.1 one-liner in a clean HOME with no Rust on PATH, upgrade confirmed), S4 atelier-veqw.
+
+### Deviations
+S1's failing run is a real CI failure (the atelier-cej5 macOS timeout in runs 41144966277 and 40725124384) rather than a deliberately broken commit; ci.yml is unchanged since, and each gate is its own step without continue-on-error.
+
+### Decisions
+None.
+
+### Surprises
+v0.3.1 published during the validation, so S3 tested the upgrade 0.3.0 to 0.3.1.
+
+### Open items
+Proof limits, recorded on the receipts: only x86_64 glibc Linux was installed and run; the installer's musl fallback for glibc older than 2.35, aarch64 Linux and macOS were checked by file type and embedded version only. Switching PR runs to `pr-run-mode = "plan"` is atelier-l7gl.
