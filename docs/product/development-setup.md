@@ -19,6 +19,11 @@ target/debug/atelier check
 git diff --check
 ```
 
+Day to day, run formatting and the tests that cover your change
+(`cargo nextest run -p <crate>` or a filter). The full suites, with and without
+`test-hooks`, on Linux and macOS, run in CI on the pull request, and that run
+gates the merge (see [AGENTS.md](../../AGENTS.md)).
+
 The default test run excludes injected failure hooks. Run
 `cargo nextest run --features test-hooks` when checking rollback, cleanup
 failure, and concurrency paths. Normal release builds contain no fault-injection

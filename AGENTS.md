@@ -31,13 +31,15 @@ rebuilt model.
 
 - Agents may merge independently reviewed work into `master` locally without
   asking. Unreviewed non-trivial changes never reach `master`.
-- A branch that changes anything besides `.atelier/` records merges only after
-  CI has passed on it: push the work branch, open a pull request, wait for the
-  CI workflow to pass on the pull request's latest commit, then run
-  `atelier merge` and push `master`. Changes after that run, including
-  `atelier merge --sync`, need a new passing run. Record-only changes skip the
-  pull request. The `scripts/merge-ci-passed.sh` merge check enforces this, so
-  `atelier merge` runs no test suite on this host.
+- A branch that changes anything besides tracker records (`.atelier/issues`,
+  `reviews`, `evidence`; the workflow policy and config count as code) merges
+  only after CI has passed on its latest code: push the work branch, open a
+  pull request, wait for the CI workflow to pass, then run `atelier merge` and
+  push `master`. Record-only commits after that run, such as approvals, need
+  no new run; a code change does, including `atelier merge --sync` bringing in
+  code from `master`. Record-only branches skip the pull request. The
+  `scripts/merge-ci-passed.sh` merge check enforces this, so `atelier merge`
+  runs no test suite on this host.
 - Agents may push reviewed work, including `master` after a gated merge,
   without asking. Never force-push `master` or delete remote branches without
   the human.

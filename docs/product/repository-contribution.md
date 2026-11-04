@@ -10,7 +10,7 @@ reviewable branches. Non-trivial executable changes require independent review
 before local integration into `master`. Agents may integrate reviewed work
 locally and push it, including `master` after a gated merge, under repository
 policy; force-pushing `master` or deleting remote branches requires the human.
-A branch that changes more than `.atelier/` records also needs a passing CI
+A branch that changes more than tracker records also needs a passing CI
 run on its pull request before it merges; record-only changes land without
 one ([AGENTS.md](../../AGENTS.md)).
 
