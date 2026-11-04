@@ -3,6 +3,9 @@ created_at: "2026-10-28T00:35:18.353803239+00:00"
 id: "atelier-g6a1"
 issue_type: "validation"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: validation/atelier-g6a1
 priority: "P2"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Validate release distribution against S1–S4"
-updated_at: "2026-10-28T01:52:41.987204350+00:00"
+updated_at: "2026-11-04T23:09:20.821743441+00:00"
 ---
 
 ## Goal
