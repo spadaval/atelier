@@ -13,10 +13,10 @@ its plan before work starts.
 report: the problem, what the mission set out to do, what it did, and where
 it stands. Both forms follow the same order:
 
-- **Status:** a one-line verdict: criteria proven, how many calls need the
-  human, how much is left and how much was found along the way.
+- **Status:** a one-line verdict: criteria proven (if any), how many calls
+  need the human, how much is left and how much was found along the way.
 - **The problem:** the strategy's Why section, or the mission's Background.
-- **What we set out to do:** the mission's Outcome, its success criteria, and
+- **What we set out to do:** the mission's Outcome, any success criteria, and
   the planned work: items linked to the mission by its start and not filed by
   review, in filing order, children under their parent.
 - **What we did:** one timeline, oldest first. Each done item appears when it
@@ -96,7 +96,7 @@ every item, criterion mark, and decision in one appears in the other.
 
 `atelier brief <mission>` reviews the plan, so the human can approve or
 change it while changes are cheap. It shows the mission line, Outcome and
-strategy; each success criterion; the scope, one item line each with its
+strategy; each success criterion, if it has any; the scope, one item line each with its
 size (`| size M`, from the `size-*` label), open blockers and needs-human
 cue, children under their parent; the blocked items; the Unknowns of each
 open item; open human decisions (open decision records and needs-human work
