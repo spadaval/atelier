@@ -3,6 +3,9 @@ created_at: "2026-11-04T23:10:44.782876931+00:00"
 id: "atelier-l7gl"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-l7gl
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Plan release builds on pull requests instead of building all six targets"
-updated_at: "2026-11-04T23:16:55.953985838+00:00"
+updated_at: "2026-11-04T23:35:43.147630779+00:00"
 ---
 
 ## Goal
@@ -33,3 +36,8 @@ Stop every pull request from building all six release targets. `dist-workspace.t
 ## Context
 
 Requested by Sumeet on 2026-11-04 as a follow-up to the release validation atelier-g6a1, which used the PR upload runs as S2 evidence; do it after that validation. Rewording S2 changes a success criterion; that request is the human authority for it. The strategy's Authority section lets the orchestrator change `dist` settings.
+
+## Notes
+
+- 2026-11-04 [decision] Accept dist's generated release.yml without the rust-cache step
+  Reason: dist only adds the cache in upload mode; tag runs can read only default-branch caches, which no release job writes once PRs stop building, so the cache would never hit
