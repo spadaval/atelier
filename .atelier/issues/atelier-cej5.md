@@ -3,6 +3,9 @@ created_at: "2026-11-04T23:08:01.784702835+00:00"
 id: "atelier-cej5"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-cej5
 priority: "P1"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep path_log's date-order parity test inside nextest's timeout on macOS"
-updated_at: "2026-11-04T23:08:01.784702835+00:00"
+updated_at: "2026-11-04T23:08:16.521942425+00:00"
 ---
 
 ## Goal
