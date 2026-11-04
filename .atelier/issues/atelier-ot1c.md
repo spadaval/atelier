@@ -3,6 +3,9 @@ created_at: "2026-11-04T22:34:51.888718794+00:00"
 id: "atelier-ot1c"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-ot1c
 priority: "P1"
 relationships:
   blocks: []
@@ -11,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Gate merges of code into master on a passing pull request CI run"
-updated_at: "2026-11-04T22:34:51.888718794+00:00"
+updated_at: "2026-11-04T22:34:55.184400529+00:00"
 ---
 
 ## Goal

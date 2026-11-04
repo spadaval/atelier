@@ -31,6 +31,12 @@ rebuilt model.
 
 - Agents may merge independently reviewed work into `master` locally without
   asking. Unreviewed non-trivial changes never reach `master`.
+- A branch that changes anything besides `.atelier/` records merges only after
+  CI has passed on it: push the work branch, open a pull request, wait for the
+  CI workflow to pass on the pull request's latest commit, then run
+  `atelier merge` and push `master`. Changes after that run, including
+  `atelier merge --sync`, need a new passing run. Record-only changes skip the
+  pull request.
 - Agents may push reviewed work, including `master` after a gated merge,
   without asking. Never force-push `master` or delete remote branches without
   the human.
@@ -53,3 +59,7 @@ rebuilt model.
 - Rust tests: `cargo nextest run`
 - Failure-path tests: `cargo nextest run --features test-hooks`
 - Whitespace check: `git diff --check`
+- Locally, run formatting and the tests that cover your change
+  (`cargo nextest run -p <crate>` or a filter). The full suite, with and
+  without `test-hooks`, on Linux and macOS, runs in CI on the pull request
+  (`.github/workflows/ci.yml`), and that run gates the merge.
