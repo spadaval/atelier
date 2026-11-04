@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Offer plan approval in the brief footer only when none is recorded"
-updated_at: "2026-11-04T23:12:51.142605756+00:00"
+updated_at: "2026-11-04T23:31:18.512768552+00:00"
 ---
 
 ## Goal
@@ -30,3 +30,8 @@ The brief's Next footer suggests recording a plan approval even after one exists
 ## Done when
 
 With an approval recorded, `atelier brief` offers a different next step, shown by a CLI test.
+
+## Notes
+
+- 2026-11-04 [decision] After an approval, offer 'atelier issue transition <mission>' while the mission is in its workflow's initial status, else 'atelier work ready'; the HTML footer names the same step
+  Reason: Listing the transitions works under any policy, where naming 'ready' would assume the starter workflow; once the mission has left draft the next move is its ready work
