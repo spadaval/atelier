@@ -1485,3 +1485,86 @@ fn a_base_exemption_made_while_the_mission_ran_is_on_its_timeline() {
         "{html}"
     );
 }
+
+/// The debrief's start, its derived deviations and its counts.
+fn history_facts(page: &str) -> String {
+    let started = page
+        .lines()
+        .find(|line| line.starts_with("Started       : "))
+        .unwrap_or_else(|| panic!("no start: {page}"));
+    format!("{started}\n{}", deviations(page))
+}
+
+#[test]
+fn a_debrief_from_a_branch_that_merged_the_base_keeps_the_base_history() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let mission = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nO\n\n## Success criteria\n\n- fast: Fast.",
+            "Mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    let reopened = item(dir.path(), "Reopened");
+    ok(dir.path(), &["issue", "link", "-q", &reopened, &mission]);
+    commit_all(dir.path(), "plan");
+    // The work branch leaves before the mission starts.
+    git(dir.path(), &["switch", "-q", "-c", "feature"]);
+    fs::write(dir.path().join("code.txt"), "branch work\n").unwrap();
+    commit_all(dir.path(), "branch work");
+    git(dir.path(), &["switch", "-q", "main"]);
+    ok(dir.path(), &["issue", "transition", &mission, "ready"]);
+    commit_all(dir.path(), "start");
+    let late = item(dir.path(), "Added late");
+    ok(dir.path(), &["issue", "link", "-q", &late, &mission]);
+    commit_all(dir.path(), "add scope after the start");
+    ok(dir.path(), &["issue", "transition", &reopened, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &reopened,
+            "close",
+            "--reason",
+            "First claim.",
+        ],
+    );
+    commit_all(dir.path(), "close too early");
+    edit_canonical_issue(dir.path(), &reopened, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "in_progress")
+    });
+    commit_all(dir.path(), "reopen");
+    let on_base = ok(dir.path(), &["debrief", &mission]);
+    let base_facts = history_facts(&on_base);
+    assert!(
+        base_facts.contains(&format!(
+            "{late} task todo Added late | added after the start"
+        )),
+        "{on_base}"
+    );
+    assert!(base_facts.contains("Reopened on"), "{on_base}");
+
+    // A second later, the branch merges the base in: every base commit
+    // since the branch left reaches the branch's first-parent line at once.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    git(dir.path(), &["switch", "-q", "feature"]);
+    git(dir.path(), &["merge", "-q", "--no-ff", "--no-edit", "main"]);
+    fs::write(dir.path().join("code.txt"), "more branch work\n").unwrap();
+    commit_all(dir.path(), "branch work after the merge");
+    let on_branch = ok(dir.path(), &["debrief", &mission]);
+    assert_eq!(history_facts(&on_branch), base_facts, "{on_branch}");
+    let branch_counts = ok(dir.path(), &["debrief", &mission, "-q"]);
+    git(dir.path(), &["switch", "-q", "main"]);
+    assert_eq!(branch_counts, ok(dir.path(), &["debrief", &mission, "-q"]));
+}

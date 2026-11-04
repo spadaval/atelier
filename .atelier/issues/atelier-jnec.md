@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Keep the debrief's history when HEAD is a work branch that merged the base"
-updated_at: "2026-11-04T23:12:50.913216641+00:00"
+updated_at: "2026-11-04T23:24:46.564844109+00:00"
 ---
 
 ## Goal
@@ -30,3 +30,10 @@ updated_at: "2026-11-04T23:12:50.913216641+00:00"
 ## Done when
 
 A debrief run from a work branch that merged the base reports the same start and deviations as one run from the base (walk the base's first-parent line, then the branch's own), shown by a CLI fixture.
+
+## Notes
+
+- 2026-11-04 [decision] Take the base from the workflow policy's base_branch and walk its first-parent line only up to the merge base with HEAD, then HEAD's own line (fork..HEAD); with no such branch, or on the base, walk HEAD alone as before
+  Reason: The debrief describes HEAD, so base commits HEAD lacks stay out; the policy's base is what every debrief shares, and a missing ref keeps fixtures and detached checkouts working
+- 2026-11-04 [decision] Keep the branch's own commits from before its merge of the base in the walk, after the base line
+  Reason: They hold the branch's own record changes, which the merge's first-parent diff does not repeat; dropping them would lose those changes, and a stale state only misleads when the base and the branch both changed one record before the merge

@@ -11,12 +11,12 @@ use anyhow::Result;
 use atelier_records::{issue_record_path, CanonicalIssueRecord};
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::git_freshness::ReadContext;
+use crate::git_freshness::{git_output, ReadContext};
 use crate::workflow_policy::WorkflowPolicy;
 
 /// One committed version of an issue record; `record` is `None` where the
 /// commit deleted the file or left it unreadable. `position` orders versions
-/// along HEAD's first-parent history.
+/// along the walk [`issue_histories`] makes.
 #[derive(Debug, Clone)]
 pub struct RecordVersion {
     pub position: usize,
@@ -41,9 +41,13 @@ impl RecordHistory {
 /// records, read as that commit left it. A merge counts as the change it
 /// made to its first parent, so work merged from a branch appears when it
 /// reached this history, and branch-local states never interleave by date.
-/// Empty without a commit to read.
+/// When HEAD is a work branch off `base`, the base's first-parent line up to
+/// the newest base commit HEAD holds comes first, then the branch's own
+/// line, so merging the base in does not fold the base's history into one
+/// merge (atelier-jnec). Empty without a commit to read.
 pub fn issue_histories(
     read: &mut ReadContext<'_>,
+    base: Option<&str>,
     ids: &BTreeSet<String>,
 ) -> Result<RecordHistory> {
     let mut history = RecordHistory::default();
@@ -62,18 +66,21 @@ pub fn issue_histories(
                 .into_owned()
         })
         .collect::<Vec<_>>();
-    let mut args = vec![
-        "log",
-        "--reverse",
-        "--first-parent",
-        "--diff-merges=first-parent",
-        "--format=%x00%H %ct",
-        "--name-only",
-        head.as_str(),
-        "--",
-    ];
-    args.extend(paths.iter().map(String::as_str));
-    let output = read.history(&args)?;
+    let mut output = String::new();
+    for line in first_parent_lines(read, &head, base) {
+        let mut args = vec![
+            "log",
+            "--reverse",
+            "--first-parent",
+            "--diff-merges=first-parent",
+            "--format=%x00%H %ct",
+            "--name-only",
+            line.as_str(),
+            "--",
+        ];
+        args.extend(paths.iter().map(String::as_str));
+        output.push_str(&read.history(&args)?);
+    }
     let entries = output.split('\0').filter(|entry| !entry.trim().is_empty());
     for (position, entry) in entries.enumerate() {
         let mut lines = entry.lines();
@@ -111,6 +118,33 @@ pub fn issue_histories(
         }
     }
     Ok(history)
+}
+
+/// The revisions whose first-parent lines make up HEAD's history: HEAD
+/// alone on the base or without one, otherwise the base's line up to its
+/// newest commit HEAD holds, then the commits only HEAD's line has.
+fn first_parent_lines(read: &ReadContext<'_>, head: &str, base: Option<&str>) -> Vec<String> {
+    let commit = |args: &[&str]| {
+        git_output(read.repo, args)
+            .ok()
+            .and_then(|output| String::from_utf8(output).ok())
+            .map(|output| output.trim().to_string())
+            .filter(|output| !output.is_empty())
+    };
+    let fork = base
+        .and_then(|base| {
+            commit(&[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{base}^{{commit}}"),
+            ])
+        })
+        .and_then(|base| commit(&["merge-base", head, &base]));
+    match fork {
+        Some(fork) if fork != head => vec![fork.clone(), format!("{fork}..{head}")],
+        _ => vec![head.to_string()],
+    }
 }
 
 /// A version in the retired epic shape, read as the parent issue it became,
@@ -174,7 +208,8 @@ pub fn mission_timeline(
 ) -> Result<MissionTimeline> {
     let mut ids = scope.clone();
     ids.insert(mission_id.to_string());
-    let history = issue_histories(read, &ids)?;
+    let base = policy.map(|policy| policy.branch_policy.base_branch.as_str());
+    let history = issue_histories(read, base, &ids)?;
     let mission = history.of(mission_id);
     let started = mission
         .iter()
