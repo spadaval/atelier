@@ -7,7 +7,7 @@ use atelier_core::{DecisionNote, Issue};
 
 use crate::objective_graph::{mission_issue_ids, mission_objective_kind};
 use crate::record_index::RecordIndex;
-use crate::workflow_policy::WorkflowPolicy;
+use crate::workflow_policy::{status_is_done, WorkflowPolicy};
 
 /// The link role a newer decision record uses to replace an older one.
 pub const SUPERSEDES: &str = "supersedes";
@@ -247,5 +247,5 @@ pub fn record_decision(
 fn decided(policy: Option<&WorkflowPolicy>, issue: &Issue) -> bool {
     issue.issue_type == "decision"
         && issue.status != "superseded"
-        && policy.and_then(|policy| policy.status_category(&issue.status)) == Some("done")
+        && status_is_done(policy, &issue.status)
 }

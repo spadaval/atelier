@@ -543,3 +543,35 @@ fn issue_show_lists_the_current_decisions_bearing_on_an_item() {
     .to_string();
     assert!(!ok(dir.path(), &["issue", "show", &lone]).contains("Decisions"));
 }
+
+#[test]
+fn done_decision_records_are_decided_without_a_workflow_policy() {
+    let dir = tempdir().unwrap();
+    let (mission, _, old, new) = mission_fixture(dir.path());
+    ok(
+        dir.path(),
+        &["issue", "link", "-q", &new, &old, "--role", "supersedes"],
+    );
+    for id in [&old, &new] {
+        ok(
+            dir.path(),
+            &["issue", "transition", id, "decide", "--reason", "Chosen"],
+        );
+    }
+    fs::remove_file(dir.path().join(".atelier/workflow.yaml")).unwrap();
+
+    let view = ok(dir.path(), &["work", "decisions", &mission]);
+    assert!(!view.contains("Open Decision Records"), "{view}");
+    let records = view.find("Decision Records").expect(&view);
+    let superseded = view.find("Superseded Decisions").expect(&view);
+    assert!(
+        view[records..superseded].contains(&format!("{new} ")),
+        "{view}"
+    );
+    assert!(
+        view[superseded..].contains(&format!("{old} ")),
+        "a decided newer record supersedes the older one: {view}"
+    );
+    let quiet = ok(dir.path(), &["work", "decisions", &mission, "-q"]);
+    assert_eq!(quiet.trim(), new, "{quiet}");
+}
