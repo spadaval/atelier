@@ -4,6 +4,9 @@ id: "atelier-43m1"
 issue_type: "task"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-43m1
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-04T23:10:17.930506294+00:00"
+status: "done"
 title: "Define Close Reason's expected content in work-model.md"
-updated_at: "2026-10-17T00:33:55.956122067+00:00"
+updated_at: "2026-11-04T23:10:17.930506294+00:00"
 ---
 
 ## Goal
@@ -35,3 +39,19 @@ Committed on master in 1620b534 by human direction on 2026-10-17 (prose-only doc
 ## Notes
 
 - 2026-10-17 [handoff] 2026-10-17: the doc edit is already on master (1620b534, trivial exemption atelier-36rk). Nothing left to write; the item exists so the base commit is covered. Close it from a work branch when convenient, since done claims may not be made on master.
+
+## Close Reason
+
+docs/product/work-model.md defines Close Reason as one or two sentences giving the observable result against Done when, or for `supersede` why the work will not happen, and puts test names, measurements and review status in evidence and review records. The text landed on master in 1620b534 (trivial exemption atelier-36rk) and is still there at docs/product/work-model.md:18-22.
+
+### Deviations
+No new edit: the documentation change predates this item's close, so the close only records it.
+
+### Decisions
+None.
+
+### Surprises
+None.
+
+### Open items
+None.
