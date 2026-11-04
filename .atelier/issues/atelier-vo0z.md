@@ -3,6 +3,9 @@ created_at: "2026-11-04T21:42:37.746303104+00:00"
 id: "atelier-vo0z"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-vo0z
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Publish static musl Linux builds so the installer works on glibc older than 2.35"
-updated_at: "2026-11-04T21:42:37.746303104+00:00"
+updated_at: "2026-11-04T21:42:41.232168707+00:00"
 ---
 
 ## Goal
