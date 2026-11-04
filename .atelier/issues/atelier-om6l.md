@@ -49,10 +49,6 @@ Read side and rendering in `crates/atelier-cli/src/commands/work.rs` (ScopedWork
 
 Extends atelier-fdxj (backlog: ranking ready work by unblock count), which this does not replace. Astromech transcripts show `atelier work mission astromech-7q0z | head -60` followed by `issue show` on blockers (2 sessions). Fixture: scratch clone with mission atelier-j76w; parent atelier-qhnh (children s47h active, 9t9q blocked_by s47h, 1gc5 blocked_by 9vdd); qhnh blocked_by decision atelier-spvd (needs a human); chain 5hp9 <- fhep <- il31 <- ubti (ubti ready, low, no mission); 9vdd advances superseded mission atelier-ba3h.
 
-## Unknowns
-
-The human asked whether a dedicated "what do I do to get this mission moving" view would be better; the auditor recommends making it this section of `work mission` (the view people already open, so no extra command, with per-chain detail under `--blocked`) rather than a new command or a per-item tree that repeats shared blockers, but the human decides.
-
 ## Notes
 
 - 2026-11-04 [decision] Show what holds a mission up as a Waiting on section of work mission, with per-chain detail under --blocked; no new command
