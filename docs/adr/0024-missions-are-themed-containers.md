@@ -63,8 +63,9 @@ sections. Atelier does not restate it.
   that the mission's work cannot reach, are revised or moved to their own
   backlog items when those missions are next planned; closed missions and
   strategies under `docs/strategies` stay as they were written.
-- A linked strategy with no Success Criteria heading is still reported as a
-  criteria problem by mission views; that lookup is unchanged here.
+- A mission whose linked strategy has no Success Criteria heading has no
+  criteria, so mission views no longer report the missing heading as a
+  problem. Malformed bullets under a heading that exists are still reported.
 - Atelier cannot check that a criterion is achievable. That stays a planning
   and review judgment, made against Agent Factory's guidance when a mission
   moves to `ready`.

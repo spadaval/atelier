@@ -363,3 +363,68 @@ fn mission_without_criteria_is_valid_and_its_views_omit_criteria() {
         );
     }
 }
+
+/// A linked strategy with no Success Criteria heading means the mission has
+/// no criteria (ADR 0024), so no view reports the missing heading; malformed
+/// bullets under a heading that exists are still reported.
+#[test]
+fn strategy_without_criteria_heading_means_no_criteria() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    fs::create_dir_all(dir.path().join("docs/strategies")).unwrap();
+    fs::write(
+        dir.path().join("docs/strategies/plain.md"),
+        "# Outcome\n\nWidgets are consistent.\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("docs/strategies/malformed.md"),
+        "# Outcome\n\nO.\n\n# Success Criteria\n\n- **S1 e2e.** The scenario passes.\n",
+    )
+    .unwrap();
+    let mission = |strategy: &str, title: &str| {
+        create(
+            dir.path(),
+            &[
+                "--issue-type",
+                "mission",
+                "--strategy",
+                strategy,
+                "--body",
+                "Widgets are consistent.",
+                title,
+            ],
+        )
+    };
+    let plain = mission("docs/strategies/plain.md", "Plain mission");
+    let malformed = mission("docs/strategies/malformed.md", "Malformed mission");
+    ok(dir.path(), &["check"]);
+
+    for args in [
+        vec!["brief", plain.as_str()],
+        vec!["work", "mission", plain.as_str()],
+        vec!["debrief", plain.as_str()],
+    ] {
+        let text = ok(dir.path(), &args);
+        assert!(
+            !text.to_lowercase().contains("criteri") && !text.contains('⚠'),
+            "{args:?}: {text}"
+        );
+    }
+    let html =
+        fs::read_to_string(ok(dir.path(), &["brief", &plain, "--html", "-q"]).trim()).unwrap();
+    assert!(!html.to_lowercase().contains("criteri"), "{html}");
+
+    for args in [
+        vec!["brief", malformed.as_str()],
+        vec!["work", "mission", malformed.as_str()],
+    ] {
+        let text = ok(dir.path(), &args);
+        assert!(
+            text.contains("Success Criteria")
+                && text.contains("does not start with a criterion slug"),
+            "{args:?}: {text}"
+        );
+    }
+}
