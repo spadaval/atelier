@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Warn in status when land would fail"
-updated_at: "2026-10-17T01:10:57.982742072+00:00"
+updated_at: "2026-11-04T23:03:34.590048106+00:00"
 ---
 
 ## Goal
@@ -39,3 +39,9 @@ Status showed `[ahead 1]` or a dirty path and suggested ready work. The agent le
 ## Unknowns
 
 - Cost. Land took about 0.46 s on this repository after atelier-37uq. Decide whether status runs the full `land_text` (crates/atelier-cli/src/commands/session.rs:297) or a cheap subset (records committed, base commits, owner claims), and whether `--quiet` skips it.
+
+## Notes
+
+- 2026-11-04 [decision] status warns using a cheap subset of land's checks (records committed, base commits, owner claims), not the full land run
+  Reason: status runs at every session start; the full land took about 0.46 s here and grows with the tracker
+  Rejected: Running the full land_text on every status

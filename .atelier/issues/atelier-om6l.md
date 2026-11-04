@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Show what holds a mission up in a Waiting on section of work mission"
-updated_at: "2026-10-17T01:10:57.988066400+00:00"
+updated_at: "2026-11-04T23:03:34.466372868+00:00"
 ---
 
 ## Goal
@@ -52,3 +52,9 @@ Extends atelier-fdxj (backlog: ranking ready work by unblock count), which this 
 ## Unknowns
 
 The human asked whether a dedicated "what do I do to get this mission moving" view would be better; the auditor recommends making it this section of `work mission` (the view people already open, so no extra command, with per-chain detail under `--blocked`) rather than a new command or a per-item tree that repeats shared blockers, but the human decides.
+
+## Notes
+
+- 2026-11-04 [decision] Show what holds a mission up as a Waiting on section of work mission, with per-chain detail under --blocked; no new command
+  Reason: It is the view people already open, and a separate command or per-item tree would repeat shared blockers
+  Rejected: A dedicated 'what do I do to get this mission moving' command

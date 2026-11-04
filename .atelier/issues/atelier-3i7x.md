@@ -11,16 +11,16 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-4pzj"
+    id: "atelier-l63c"
     type: "advances"
   - kind: "review"
     id: "atelier-iigf"
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "backlog"
 title: "Compute in-flight marks without snapshotting each branch's tracker"
-updated_at: "2026-10-17T03:12:59.504595810+00:00"
+updated_at: "2026-11-04T23:03:23.171906482+00:00"
 ---
 
 ## Goal
