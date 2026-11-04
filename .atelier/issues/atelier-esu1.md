@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+status: "review"
 title: "Treat a human's request for a specific release as approval to push its tag"
-updated_at: "2026-11-04T23:19:17.096847341+00:00"
+updated_at: "2026-11-04T23:19:26.906407890+00:00"
 ---
 
 ## Goal
