@@ -4606,6 +4606,7 @@ fn test_issue_options_do_what_their_help_says() {
         "--body",
         "## Outcome\n\nShipped.\n\n## Success criteria\n\nS1.",
     ]);
+    // Success criteria are optional (ADR 0024), so a revision may drop them.
     let (success, _, stderr) = run_atelier(
         dir.path(),
         &[
@@ -4616,9 +4617,11 @@ fn test_issue_options_do_what_their_help_says() {
             "## Outcome\n\nNo criteria any more.",
         ],
     );
+    assert!(success, "{stderr}");
+    let revised = fs::read_to_string(canonical_issue_path(dir.path(), &mission)).unwrap();
     assert!(
-        !success && stderr.contains("Mission requires Success criteria"),
-        "{stderr}"
+        revised.contains("No criteria any more.") && !revised.contains("Success criteria"),
+        "{revised}"
     );
     let huge = format!("## Goal\n\n{}\n\n## Done when\n\nD.", "x".repeat(70 * 1024));
     let (success, _, stderr) =
@@ -5298,7 +5301,6 @@ fn test_bundles_update_existing_records_and_report_client_ref_ids() {
         (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","issue_type":"bug"}}"###), "cannot change"),
         (format!(r###"{{"client_ref":"a","operation":"update","id":"{first}","labels":["x"]}},{{"client_ref":"a2","operation":"update","id":"{}","labels":["y"]}}"###, &first[first.len() - 4..]), "more than once"),
         (format!(r###"{{"client_ref":"m","title":"Mission","issue_type":"mission","body":"## Outcome\n\nShip.","strategy":{{"path":"docs/missing.md"}}}}"###), "does not exist"),
-        (format!(r###"{{"client_ref":"m","title":"Mission","issue_type":"mission","body":"## Outcome\n\nShip."}}"###), "Mission requires Success criteria"),
         (r###"{"client_ref":"a","operation":"update","title":"No id","body":"## Goal\n\nG.\n\n## Done when\n\nD."}"###.to_string(), "needs the id"),
     ] {
         fs::write(

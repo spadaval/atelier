@@ -290,3 +290,76 @@ fn brief_says_no_plan_approval_in_both_forms_when_only_other_events_exist() {
         );
     }
 }
+
+/// A mission is a themed container whose success criteria are optional
+/// (ADR 0024): one with only an Outcome and no strategy passes `check`,
+/// becomes ready, and every mission view leaves criteria out rather than
+/// showing a placeholder or an empty section.
+#[test]
+fn mission_without_criteria_is_valid_and_its_views_omit_criteria() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let mission = create(
+        dir.path(),
+        &[
+            "--issue-type",
+            "mission",
+            "--body",
+            "Make the widgets consistent.",
+            "Themed mission",
+        ],
+    );
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &mission)).unwrap();
+    assert!(
+        record.contains("## Outcome\n\nMake the widgets consistent.")
+            && !record.contains("Success criteria"),
+        "{record}"
+    );
+    let item = create(
+        dir.path(),
+        &[
+            "--body",
+            "## Goal\n\nFix A.\n\n## Done when\n\nA matches.",
+            "Widget A",
+        ],
+    );
+    ok(
+        dir.path(),
+        &["issue", "link", &item, &mission, "--role", "advances"],
+    );
+    ok(dir.path(), &["check"]);
+    ok(dir.path(), &["check", &mission]);
+    ok(dir.path(), &["issue", "transition", &mission, "ready"]);
+
+    let brief = ok(dir.path(), &["brief", &mission]);
+    let work = ok(dir.path(), &["work", "mission", &mission]);
+    ok(dir.path(), &["issue", "transition", &item, "start"]);
+    ok(
+        dir.path(),
+        &["issue", "transition", &item, "close", "--reason", "Done A."],
+    );
+    let debrief = ok(dir.path(), &["debrief", &mission]);
+    let brief_html =
+        fs::read_to_string(ok(dir.path(), &["brief", &mission, "--html", "-q"]).trim()).unwrap();
+    let debrief_html =
+        fs::read_to_string(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim()).unwrap();
+    for (view, text) in [
+        ("brief", &brief),
+        ("work mission", &work),
+        ("debrief", &debrief),
+        ("brief --html", &brief_html),
+        ("debrief --html", &debrief_html),
+    ] {
+        // `work mission` lists the work, not the Outcome.
+        assert!(
+            text.contains(&item)
+                && (view == "work mission" || text.contains("Make the widgets consistent.")),
+            "{view}: {text}"
+        );
+        assert!(
+            !text.to_lowercase().contains("criteri") && !text.contains("not specified"),
+            "{view} mentions criteria: {text}"
+        );
+    }
+}
