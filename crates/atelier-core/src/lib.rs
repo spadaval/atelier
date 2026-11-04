@@ -756,9 +756,9 @@ pub const ISSUE_NOTE_KINDS: &[&str] = &[
 ];
 
 /// The note kind for a decision made inside a work item (atelier-fip8). Its
-/// tag is `[decision]`, or `[decision one-way]` when it cannot be reversed.
+/// tag is `[decision]`; a choice that is costly to reverse is a decision
+/// record instead (atelier-6306).
 pub const DECISION_NOTE_KIND: &str = "decision";
-pub const ONE_WAY_MARK: &str = "one-way";
 const DECISION_REASON_LABEL: &str = "Reason:";
 const DECISION_REJECTED_LABEL: &str = "Rejected:";
 
@@ -810,29 +810,19 @@ fn note_bullet(line: &str) -> Option<IssueNote> {
 }
 
 /// A decision note: the choice and the reason are required, rejected
-/// alternatives are optional, and a decision is reversible unless one-way.
+/// alternatives are optional.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DecisionNote {
     pub date: String,
     pub choice: String,
     pub reason: String,
     pub rejected: Vec<String>,
-    pub one_way: bool,
 }
 
 impl DecisionNote {
     /// The note tag and text `append_note` stores for a decision.
-    pub fn note_parts(
-        choice: &str,
-        reason: &str,
-        rejected: &[String],
-        one_way: bool,
-    ) -> (String, String) {
-        let tag = if one_way {
-            format!("{DECISION_NOTE_KIND} {ONE_WAY_MARK}")
-        } else {
-            DECISION_NOTE_KIND.to_string()
-        };
+    pub fn note_parts(choice: &str, reason: &str, rejected: &[String]) -> (String, String) {
+        let tag = DECISION_NOTE_KIND.to_string();
         let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
         let mut text = format!("{}\n{DECISION_REASON_LABEL} {}", flat(choice), flat(reason));
         for alternative in rejected {
@@ -850,7 +840,6 @@ impl DecisionNote {
         choice: &str,
         reason: &str,
         rejected: &[String],
-        one_way: bool,
     ) -> Result<(String, String), String> {
         let starts_with_label = |text: &str| {
             let text = text.trim_start();
@@ -861,7 +850,7 @@ impl DecisionNote {
                 "the choice and rejected alternatives must not start with `{DECISION_REASON_LABEL}` or `{DECISION_REJECTED_LABEL}`"
             ));
         }
-        let (tag, text) = Self::note_parts(choice, reason, rejected, one_way);
+        let (tag, text) = Self::note_parts(choice, reason, rejected);
         let note = IssueNote {
             date: String::new(),
             tag: tag.clone(),
@@ -881,16 +870,9 @@ impl DecisionNote {
     }
 
     fn parse(note: &IssueNote) -> Result<Self, String> {
-        let one_way = match note.tag.split_whitespace().collect::<Vec<_>>()[..] {
-            [_] => false,
-            [_, ONE_WAY_MARK] => true,
-            _ => {
-                return Err(format!(
-                    "tag [{}] is not [decision] or [decision one-way]",
-                    note.tag
-                ))
-            }
-        };
+        if note.tag != DECISION_NOTE_KIND {
+            return Err(format!("tag [{}] is not [decision]", note.tag));
+        }
         let mut choice = Vec::new();
         let mut reason: Option<Vec<&str>> = None;
         let mut rejected: Vec<String> = Vec::new();
@@ -947,7 +929,6 @@ impl DecisionNote {
                 .into_iter()
                 .map(|value| value.trim().to_string())
                 .collect(),
-            one_way,
         })
     }
 }
@@ -1477,12 +1458,11 @@ mod tests {
             "Store the report in Close Reason",
             "Close Reason is\nexempt from approval freshness",
             &["a new Report section".into(), "a sidecar".into()],
-            true,
         );
         sections.append_note(NaiveDate::from_ymd_opt(2026, 10, 18).unwrap(), &tag, &text);
         assert_eq!(
             sections.notes.as_deref().unwrap(),
-            "- 2026-10-17 [handoff] Earlier\n- 2026-10-18 [decision one-way] Store the report in Close Reason\n  Reason: Close Reason is exempt from approval freshness\n  Rejected: a new Report section\n  Rejected: a sidecar"
+            "- 2026-10-17 [handoff] Earlier\n- 2026-10-18 [decision] Store the report in Close Reason\n  Reason: Close Reason is exempt from approval freshness\n  Rejected: a new Report section\n  Rejected: a sidecar"
         );
         assert_eq!(
             sections.decision_notes(),
@@ -1491,7 +1471,6 @@ mod tests {
                 choice: "Store the report in Close Reason".into(),
                 reason: "Close Reason is exempt from approval freshness".into(),
                 rejected: vec!["a new Report section".into(), "a sidecar".into()],
-                one_way: true,
             })]
         );
     }
@@ -1511,7 +1490,6 @@ mod tests {
             sections_with_notes("- 2026-10-18 [decision] Use X\n  Reason: Y\n  because Z")
                 .decision_notes();
         assert_eq!(decisions[0].as_ref().unwrap().reason, "Y because Z");
-        assert!(!decisions[0].as_ref().unwrap().one_way);
     }
 
     #[test]

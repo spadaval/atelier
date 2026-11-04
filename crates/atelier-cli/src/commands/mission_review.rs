@@ -118,19 +118,18 @@ fn deviation_count(view: &Debrief) -> usize {
         + view.dropped.len()
 }
 
-/// The decisions recorded on one issue, one-way first, and its malformed
+/// The decisions recorded on one issue, and its malformed
 /// decision notes.
 fn decisions_on<'a>(
     view: &'a Debrief,
     id: &str,
 ) -> (Vec<&'a NoteDecision>, Vec<&'a MalformedDecision>) {
-    let mut notes = view
+    let notes = view
         .decisions
         .notes
         .iter()
         .filter(|note| note.issue_id == id)
         .collect::<Vec<_>>();
-    notes.sort_by_key(|note| !note.decision.one_way);
     let malformed = view
         .decisions
         .malformed
@@ -142,14 +141,8 @@ fn decisions_on<'a>(
 
 fn decision_text(note: &NoteDecision) -> String {
     format!(
-        "{}{} | because {}",
-        if note.decision.one_way {
-            "one-way: "
-        } else {
-            ""
-        },
-        note.decision.choice,
-        note.decision.reason
+        "{} | because {}",
+        note.decision.choice, note.decision.reason
     )
 }
 
@@ -175,24 +168,6 @@ fn decision_lines(view: &Debrief, id: &str, context: RenderContext) -> Vec<Strin
         }
     }
     lines
-}
-
-/// The page's anchor for an issue: its timeline entry, its row, the asks,
-/// or the mission's intent.
-fn anchor_of<'a>(view: &'a Debrief, id: &'a str) -> &'a str {
-    if id == view.mission.id {
-        "intent"
-    } else if let Some(entry) = view.entry_holding(id) {
-        &entry.id
-    } else if view
-        .asks
-        .iter()
-        .any(|ask| matches!(ask, Ask::Decision(asked) | Ask::NeedsHuman(asked) if asked == id))
-    {
-        "review"
-    } else {
-        id
-    }
 }
 
 fn mission_line(view: &Debrief) -> String {
@@ -1130,30 +1105,6 @@ fn render_html(view: &Debrief) -> String {
     let total = view.criteria.proofs.len();
     let proven = view.proven();
     let percent = |part: usize, whole: usize| if whole == 0 { 0 } else { part * 100 / whole };
-    // Every one-way decision, in timeline order first, each linked to where
-    // the page shows it.
-    let mut one_way = view
-        .work
-        .iter()
-        .flat_map(|entry| {
-            entry
-                .decisions
-                .iter()
-                .filter(|note| note.decision.one_way)
-                .map(move |note| (entry.id.as_str(), note))
-        })
-        .collect::<Vec<_>>();
-    for note in view
-        .decisions
-        .notes
-        .iter()
-        .filter(|note| note.decision.one_way)
-    {
-        if !one_way.iter().any(|(_, shown)| *shown == note) {
-            one_way.push((anchor_of(view, &note.issue_id), note));
-        }
-    }
-
     // Sidebar.
     let mut side = format!("<h1>{}</h1>", escape(&mission.title));
     side.push_str(&format!(
@@ -1235,17 +1186,6 @@ fn render_html(view: &Debrief) -> String {
                     escape(view.title_of(child))
                 ));
             }
-        }
-    }
-    if !one_way.is_empty() {
-        side.push_str("<div class=\"g\">One-way decisions</div>");
-        for (entry, note) in &one_way {
-            side.push_str(&format!(
-                "<a class=\"dec-link\" href=\"#{}\" title=\"{}\"><span class=\"label\">{}</span></a>",
-                escape(entry),
-                escape(&note.decision.choice),
-                escape(&note.decision.choice)
-            ));
         }
     }
     side.push_str("</nav>");
@@ -1865,9 +1805,7 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
             .iter()
             .map(|change| format!("<p>{}</p>", change_html(view, change))),
     );
-    let notable = !changed.is_empty()
-        || !entry.malformed.is_empty()
-        || entry.decisions.iter().any(|note| note.decision.one_way);
+    let notable = !changed.is_empty() || !entry.malformed.is_empty();
     if !changed.is_empty() {
         fact(
             "Changed",
@@ -1975,7 +1913,7 @@ fn changes_html(view: &Debrief, changes: &[Change]) -> String {
         .collect()
 }
 
-/// Decisions as a list: one-way ones flagged, each with its reason, then
+/// Decisions as a list, each with its reason, then
 /// malformed notes. Empty when there are none.
 fn decision_list_html(
     view: &Debrief,
@@ -1989,12 +1927,7 @@ fn decision_list_html(
         .iter()
         .map(|note| {
             format!(
-                "<li>{}{} <span class=\"r\">{}</span></li>",
-                if note.decision.one_way {
-                    "<span class=\"oneway\">one-way</span>"
-                } else {
-                    ""
-                },
+                "<li>{} <span class=\"r\">{}</span></li>",
                 rich_inline(view, &note.decision.choice),
                 rich_inline(view, &note.decision.reason)
             )

@@ -365,8 +365,8 @@ enum WorkCommands {
         #[arg(long)]
         all: bool,
     },
-    /// Show the decisions across a mission's scope: one-way decision notes
-    /// first, then decision records, then reversible notes
+    /// Show the decisions across a mission's scope: decision records first,
+    /// then decision notes
     Decisions {
         /// Mission ID
         id: String,
@@ -553,9 +553,6 @@ enum IssueCommands {
         /// An alternative the decision rejected; repeat for several
         #[arg(long)]
         rejected: Vec<String>,
-        /// Mark the decision one-way: it cannot be reversed cheaply
-        #[arg(long)]
-        one_way: bool,
     },
 
     /// Add a typed link from one issue to another

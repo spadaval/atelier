@@ -79,14 +79,14 @@ to appear in the debrief, and takes one only if the mission must finish it.
 
 Decisions made inside a work item are decision notes, not records:
 `issue note <id> --kind decision "<choice>" --reason "<why>"`, with optional
-`--rejected "<alternative>"` (repeatable) and `--one-way` for a decision that
-cannot be reversed cheaply. The note stores the choice on its first line and
-indented `Reason:` and `Rejected:` lines, tagged `[decision]` or
-`[decision one-way]`. `check` refuses a decision note without a choice or a
-reason. `work decisions <mission>` lists the decisions across a mission's
-scope: one-way notes first, then current decision records (decided and not
-superseded), then reversible notes, then open decision records, which are
-proposals and not yet in force, then superseded records.
+`--rejected "<alternative>"` (repeatable). A choice that is costly to reverse
+is a decision record, not a note (decision atelier-6306). The note stores the
+choice on its first line and indented `Reason:` and `Rejected:` lines, tagged
+`[decision]`. `check` refuses a decision note without a choice or a reason,
+or with any other tag. `work decisions <mission>` lists the decisions across
+a mission's scope: current decision records (decided and not superseded)
+first, then decision notes, then open decision records, which are proposals
+and not yet in force, then superseded records.
 
 Backlog conventions (decision atelier-ermg, under atelier-b7hb):
 

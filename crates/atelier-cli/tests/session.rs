@@ -1683,7 +1683,6 @@ fn status_shows_the_owner_decisions_in_brief() {
             "Keep the format",
             "--reason",
             "Readers rely on it",
-            "--one-way",
         ],
     );
     ok(
@@ -1701,19 +1700,11 @@ fn status_shows_the_owner_decisions_in_brief() {
     );
     let (pass, output) = cli(f.path(), &["status"]);
     assert!(pass, "{output}");
+    assert!(output.contains("Decisions: 2 current\n"), "{output}");
     assert!(
-        output.contains(
-            "Decisions: 2 current, 1 one-way:
-"
-        ),
-        "{output}"
+        !output.contains("Keep the format |") && !output.contains("Name it plainly |"),
+        "the brief lists decision records, not notes: {output}"
     );
-    assert!(
-        output.contains(&format!("  {} ", f.id))
-            && output.contains("Keep the format | because Readers rely on it"),
-        "{output}"
-    );
-    assert!(!output.contains("Name it plainly |"), "{output}");
 }
 
 #[test]

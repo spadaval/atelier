@@ -69,17 +69,10 @@ pub enum DecisionRow<'a> {
 }
 
 impl Decisions {
-    /// The decision log in its fixed order, empty groups left out: one-way
-    /// notes, current records, reversible notes, open records, superseded
-    /// records, and malformed notes. Every view of a log uses this order.
+    /// The decision log in its fixed order, empty groups left out: current
+    /// records, notes, open records, superseded records, and malformed
+    /// notes. Every view of a log uses this order.
     pub fn groups(&self) -> Vec<(&'static str, Vec<DecisionRow<'_>>)> {
-        let notes = |one_way: bool| {
-            self.notes
-                .iter()
-                .filter(|note| note.decision.one_way == one_way)
-                .map(DecisionRow::Note)
-                .collect::<Vec<_>>()
-        };
         let records = |keep: &dyn Fn(&RecordDecision) -> bool| {
             self.records
                 .iter()
@@ -88,9 +81,11 @@ impl Decisions {
                 .collect::<Vec<_>>()
         };
         [
-            ("One-way Decisions", notes(true)),
             ("Decision Records", records(&|record| record.is_current())),
-            ("Reversible Decisions", notes(false)),
+            (
+                "Decision Notes",
+                self.notes.iter().map(DecisionRow::Note).collect(),
+            ),
             (
                 "Open Decision Records",
                 records(&|record| !record.decided && !record.is_superseded()),
@@ -107,12 +102,6 @@ impl Decisions {
         .into_iter()
         .filter(|(_, rows)| !rows.is_empty())
         .collect()
-    }
-
-    /// One-way notes, then reversible ones, each in record order.
-    pub fn notes_one_way_first(&self) -> impl Iterator<Item = &NoteDecision> {
-        let one_way = self.notes.iter().filter(|note| note.decision.one_way);
-        one_way.chain(self.notes.iter().filter(|note| !note.decision.one_way))
     }
 }
 

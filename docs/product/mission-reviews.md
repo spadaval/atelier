@@ -23,7 +23,7 @@ it stands. Both forms follow the same order:
   closed, with its outcome, children, what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn,
   failing newest proof, a trivial exemption), what surprised the
-  implementer, the decisions made in it (one-way first), any decision record
+  implementer, the decisions made in it, any decision record
   cues (its ADR, the records it replaces), how review went and who approved
   it, and the follow-ups its review filed. Beside them, at their times: the
   mission's start and close, work added to the scope, work filed other than
@@ -63,13 +63,13 @@ it stands. Both forms follow the same order:
 
 Decisions appear where they were made: in a delivered item's timeline
 entry, beside an open, dropped or asked item, and, for decisions on the
-mission itself, under what it set out to do. The page's sidebar indexes the
-one-way decisions; `atelier work decisions <mission>` lists the whole log.
+mission itself, under what it set out to do. `atelier work decisions
+<mission>` lists the whole log.
 
 The Markdown form keeps record IDs, for agents. `--html` writes the same
 review to `.atelier/runtime/reviews/<mission>-debrief.html` and prints its
 path. The page has a persistent sidebar with progress, navigation, the
-delivered items and the one-way decisions, and a time rail beside the
+delivered items, and a time rail beside the
 timeline. Every issue it names, including IDs mentioned in record text, is a
 chip with its ID, title and status; hovering or focusing it opens a card with
 its type, summary, outcome and parent. Review events and receipts are chips

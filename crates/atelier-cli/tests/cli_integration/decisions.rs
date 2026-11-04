@@ -71,9 +71,13 @@ fn mission_fixture(dir: &Path) -> (String, String, String, String) {
 }
 
 #[test]
-fn decision_notes_record_choice_reason_rejected_and_one_way() {
+fn decision_notes_record_choice_reason_and_rejected() {
     let dir = tempdir().unwrap();
-    let (mission, work, _, _) = mission_fixture(dir.path());
+    let (mission, work, old, _) = mission_fixture(dir.path());
+    ok(
+        dir.path(),
+        &["issue", "transition", &old, "decide", "--reason", "Chosen"],
+    );
     ok(
         dir.path(),
         &[
@@ -89,7 +93,6 @@ fn decision_notes_record_choice_reason_rejected_and_one_way() {
             "a Report section",
             "--rejected",
             "a sidecar file",
-            "--one-way",
         ],
     );
     ok(
@@ -107,7 +110,7 @@ fn decision_notes_record_choice_reason_rejected_and_one_way() {
     );
     let record = read_canonical_record(dir.path(), "issues", &work);
     assert!(
-        record.contains("[decision one-way] Keep the report in Close Reason\n  Reason: It is already exempt from approval freshness\n  Rejected: a Report section\n  Rejected: a sidecar file\n"),
+        record.contains("[decision] Keep the report in Close Reason\n  Reason: It is already exempt from approval freshness\n  Rejected: a Report section\n  Rejected: a sidecar file\n"),
         "{record}"
     );
     assert!(
@@ -117,18 +120,22 @@ fn decision_notes_record_choice_reason_rejected_and_one_way() {
     ok(dir.path(), &["check"]);
 
     let view = ok(dir.path(), &["work", "decisions", &mission]);
-    let one_way = view.find("One-way Decisions").expect(&view);
-    let reversible = view.find("Reversible Decisions").expect(&view);
-    assert!(one_way < reversible, "{view}");
+    let records = view.find("\nDecision Records\n").expect(&view);
+    let notes = view.find("\nDecision Notes\n").expect(&view);
+    assert!(records < notes, "records lead the log: {view}");
     assert!(
-        view.contains(&format!(
+        view[records..notes].contains(&format!("{old} ✓ done")),
+        "{view}"
+    );
+    assert!(
+        view[notes..].contains(&format!(
             "{work} {} Keep the report in Close Reason | because It is already exempt from approval freshness | rejected a Report section; a sidecar file",
             &record[record.find("- 20").unwrap() + 2..record.find("- 20").unwrap() + 12]
         )),
         "{view}"
     );
     assert!(
-        view[reversible..].contains("Name parts with ### | because Records allow it"),
+        view[notes..].contains("Name parts with ### | because Records allow it"),
         "{view}"
     );
 }
@@ -152,11 +159,7 @@ fn decision_notes_refuse_missing_reasons_and_stray_flags() {
         ],
     );
     assert!(stderr.contains("needs its reason"), "{stderr}");
-    for flags in [
-        &["--reason", "why"][..],
-        &["--rejected", "x"],
-        &["--one-way"],
-    ] {
+    for flags in [&["--reason", "why"][..], &["--rejected", "x"]] {
         let mut args = vec!["issue", "note", &work, "plain"];
         args.extend_from_slice(flags);
         let stderr = refused(dir.path(), &args);
@@ -165,6 +168,7 @@ fn decision_notes_refuse_missing_reasons_and_stray_flags() {
             "{stderr}"
         );
     }
+
     assert!(!read_canonical_record(dir.path(), "issues", &work).contains("## Notes"));
 }
 
@@ -191,7 +195,9 @@ fn check_refuses_malformed_decision_notes() {
         "{output}"
     );
     assert!(
-        output.contains(&format!("{work}: Decision note 3 (2026-10-18) tag [decision maybe] is not [decision] or [decision one-way]")),
+        output.contains(&format!(
+            "{work}: Decision note 3 (2026-10-18) tag [decision maybe] is not [decision]"
+        )),
         "{output}"
     );
     let mission = issue_id_by_title(dir.path(), "Mission");
@@ -262,8 +268,8 @@ fn long_decision_rows_continue_past_the_rows() {
         &[("COLUMNS", "50")],
     );
     assert!(success, "{stderr}");
-    let reversible = view.find("Reversible Decisions").expect(&view);
-    let rows = view[reversible..]
+    let notes = view.find("Decision Notes").expect(&view);
+    let rows = view[notes..]
         .lines()
         .skip(2)
         .take_while(|line| !line.is_empty())
@@ -417,7 +423,7 @@ fn work_decisions_refuses_items_that_are_not_missions() {
     let view = ok(dir.path(), &["work", "decisions", &mission]);
     assert!(view.contains("Decision Records"), "{view}");
     assert!(
-        !view.contains("One-way Decisions"),
+        !view.contains("Decision Notes"),
         "empty sections are left out: {view}"
     );
 }
@@ -454,19 +460,18 @@ fn issue_show_lists_the_current_decisions_bearing_on_an_item() {
     .trim()
     .to_string();
     ok(dir.path(), &["issue", "link", "-q", &unrelated, &mission]);
-    let decide = |id: &str, choice: &str, one_way: bool| {
-        let mut args = vec![
-            "issue", "note", id, "--kind", "decision", choice, "--reason", "because",
-        ];
-        if one_way {
-            args.push("--one-way");
-        }
-        ok(dir.path(), &args);
+    let decide = |id: &str, choice: &str| {
+        ok(
+            dir.path(),
+            &[
+                "issue", "note", id, "--kind", "decision", choice, "--reason", "because",
+            ],
+        );
     };
-    decide(&work, "Item choice", false);
-    decide(&parent, "Parent choice", true);
-    decide(&mission, "Mission choice", false);
-    decide(&unrelated, "Sibling choice", false);
+    decide(&work, "Item choice");
+    decide(&parent, "Parent choice");
+    decide(&mission, "Mission choice");
+    decide(&unrelated, "Sibling choice");
     // The old record is decided, then superseded by a decided newer one;
     // only the newer one is current.
     ok(
@@ -484,17 +489,14 @@ fn issue_show_lists_the_current_decisions_bearing_on_an_item() {
 
     let brief = ok(dir.path(), &["issue", "show", &work]);
     assert!(
-        brief.contains("Decisions: 4 current, 1 one-way:\n"),
+        brief.contains(&format!(
+            "Decisions: 4 current:\n  {new} ✓ done medium New decision"
+        )),
         "{brief}"
     );
     assert!(
-        brief.contains(&format!("\n  {parent} "))
-            && brief.contains("Parent choice | because because"),
-        "{brief}"
-    );
-    assert!(
-        !brief.contains("Item choice"),
-        "brief shows only one-way rows: {brief}"
+        !brief.contains("Item choice") && !brief.contains("Parent choice"),
+        "brief shows only decision records: {brief}"
     );
 
     let full = ok(dir.path(), &["issue", "show", &work, "--full"]);
@@ -504,11 +506,11 @@ fn issue_show_lists_the_current_decisions_bearing_on_an_item() {
         .take_while(|line| !line.is_empty())
         .collect::<Vec<_>>();
     assert_eq!(rows.len(), 4, "{full}");
-    assert!(rows[0].contains("Parent choice"), "one-way first: {full}");
     assert!(
-        rows[1].starts_with(&format!("{new} ✓ done medium New decision")),
-        "{full}"
+        rows[0].starts_with(&format!("{new} ✓ done medium New decision")),
+        "records first: {full}"
     );
+    assert!(rows[1].contains("Item choice"), "then notes: {full}");
     assert!(
         section.contains("Item choice") && section.contains("Mission choice"),
         "{full}"
@@ -525,7 +527,7 @@ fn issue_show_lists_the_current_decisions_bearing_on_an_item() {
     // An item with no decisions shows no Decisions line.
     let quiet = ok(dir.path(), &["issue", "show", &old]);
     assert!(
-        quiet.contains("Decisions: 2 current\n"),
+        quiet.contains(&format!("Decisions: 2 current:\n  {new} ")),
         "the mission's note and the newer record bear on it: {quiet}"
     );
     let lone = ok(
@@ -574,4 +576,61 @@ fn done_decision_records_are_decided_without_a_workflow_policy() {
     );
     let quiet = ok(dir.path(), &["work", "decisions", &mission, "-q"]);
     assert_eq!(quiet.trim(), new, "{quiet}");
+}
+
+#[test]
+fn the_brief_decision_view_caps_decision_records_at_three() {
+    let dir = tempdir().unwrap();
+    let (mission, work, old, new) = mission_fixture(dir.path());
+    let mut records = vec![old, new];
+    for title in ["Third", "Fourth", "Fifth"] {
+        let id = ok(
+            dir.path(),
+            &[
+                "issue",
+                "create",
+                "-q",
+                "--issue-type",
+                "decision",
+                "--body",
+                "## Question\n\nWhich?\n\n## Decision\n\nThis one.",
+                title,
+            ],
+        )
+        .trim()
+        .to_string();
+        ok(dir.path(), &["issue", "link", "-q", &id, &mission]);
+        records.push(id);
+    }
+    for id in &records {
+        ok(
+            dir.path(),
+            &["issue", "transition", id, "decide", "--reason", "Chosen"],
+        );
+    }
+
+    let brief = ok(dir.path(), &["issue", "show", &work]);
+    let lines = brief
+        .lines()
+        .skip_while(|line| !line.starts_with("Decisions:"))
+        .collect::<Vec<_>>();
+    assert_eq!(lines[0], "Decisions: 5 current:", "{brief}");
+    assert!(
+        lines[1..4]
+            .iter()
+            .all(|line| line.starts_with("  atelier-")),
+        "{brief}"
+    );
+    assert_eq!(
+        lines[4],
+        format!("  ... 2 more decision records omitted; see `atelier issue show {work} --full`"),
+        "{brief}"
+    );
+    let full = ok(dir.path(), &["issue", "show", &work, "--full"]);
+    assert!(
+        records
+            .iter()
+            .all(|id| full.contains(&format!("{id} ✓ done"))),
+        "{full}"
+    );
 }

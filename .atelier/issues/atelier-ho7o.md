@@ -44,7 +44,7 @@ The decision record atelier-et6q holds the rules. Evidence record shape: docs/pr
 
 ## Notes
 
-- 2026-10-17 [decision one-way] Store a receipt's criteria as a front-matter list of slug and result pairs, slug first
+- 2026-10-17 [decision] Store a receipt's criteria as a front-matter list of slug and result pairs, slug first
   Reason: One validation run can pass some criteria and fail others, as et6q decided, and older binaries ignore the unknown key
   Rejected: a criteria body section
 - 2026-10-17 [decision] For command capture, a bare --criterion <slug> takes the command's result and slug=result is refused

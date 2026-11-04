@@ -20,9 +20,9 @@ relationships:
     type: "supersedes"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Remove one-way decision notes and migrate the existing ones"
-updated_at: "2026-11-04T23:12:50.682008802+00:00"
+updated_at: "2026-11-04T23:26:43.882022258+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,17 @@ crates/atelier-core (note tag and parser), atelier-app decisions.rs and mission_
 ## Context
 
 Decision record linked as `implements`. Skill rule: `skills/agent-factory/references/tracker-records.md`, Decision Notes, in spadaval/.agents.
+
+## Notes
+
+- 2026-11-04 [decision] The brief decision view ends with the standard omitted-rows line, ... N more decision records omitted; see `atelier issue show <id> --full`
+  Reason: human-cli-output.md requires that form for any list that leaves rows out; it carries the +N more count and names issue show --full as the Done when asks
+  Rejected: a bare +N more line
+- 2026-11-04 [decision] The brief view lists the newest decided records first, by close time
+  Reason: The newest choices are the likeliest to bear on current work, as atelier-y8xw asked for the newest few
+  Rejected: record order (item, parent, mission, then scope by id)
+- 2026-11-04 [decision] Prove the removed flag is a usage error with a captured command, not a committed test
+  Reason: The Done when also requires git grep for the mark over crates to print nothing, and a test naming the flag would itself match; clap refuses unknown flags generically
+  Rejected: spelling the flag indirectly in a test to dodge the grep
+- 2026-11-04 [decision] Remove the debrief's anchor_of helper and the dec-link style with the sidebar section
+  Reason: The one-way sidebar index was their only user; leaving them would be dead code
