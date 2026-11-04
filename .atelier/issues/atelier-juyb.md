@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-04T23:30:23.390293428+00:00"
+status: "done"
 title: "Refuse misspelled field lines in decision notes"
-updated_at: "2026-11-04T23:29:12.585811580+00:00"
+updated_at: "2026-11-04T23:30:23.390293428+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,23 @@ A decision note line such as `Rejectd: x` passes `check` and is folded into the 
   Reason: Catches typos and case slips while leaving ordinary prose lines such as Note: or Risk: alone; the check is a nudge, so a rare false refusal is fixed by rewording
   Rejected: refusing any Word: continuation line
   Rejected: documenting that misspellings are allowed
+
+## Close Reason
+
+`check` now refuses a decision note with a line after the first that starts with a misspelled `Reason:` or `Rejected:` label, such as `Rejectd:` or `reason:`, naming the label, instead of folding it into the reason text; ordinary prose lines such as `Note:` still pass. A CLI test shows it.
+
+### Deviations
+
+None.
+
+### Decisions
+
+The near-miss rule (same word ignoring case, or within two edits, but not the exact label) is a decision note on this item.
+
+### Surprises
+
+Before the change, a misspelled `reason:` line on a note with no real reason was reported as "has no reason", which pointed away from the typo; the misspelled-label finding now comes first.
+
+### Open items
+
+None. The repository's own records pass the stricter `check`.
