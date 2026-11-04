@@ -102,10 +102,12 @@ every item, criterion mark, and decision in one appears in the other.
 ## Brief
 
 `atelier brief <mission>` reviews the plan, so the human can approve or
-change it while changes are cheap. It shows the mission line, Outcome and
-strategy; each success criterion; the scope, one item line each with its
-size (`| size M`, from the `size-*` label), open blockers and needs-human
-cue, children under their parent; the blocked items; the Unknowns of each
+change it while changes are cheap. It shows the mission line; the Outcome,
+from the linked strategy's Outcome section, or from the mission record when
+it has no strategy or the strategy has no such section; the strategy path;
+each success criterion; the scope, one item line each with its size
+(`| size M`, from the `size-*` label), open blockers and needs-human cue,
+children under their parent; the blocked items; the Unknowns of each
 open item; open human decisions (open decision records and needs-human work
 in scope); the strategy's Risks and Unknowns section; and review events on
 the mission. `--html` writes `.atelier/runtime/reviews/<mission>-brief.html`

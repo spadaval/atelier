@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show the strategy's outcome in the mission brief"
-updated_at: "2026-11-04T23:16:56.066603283+00:00"
+updated_at: "2026-11-04T23:31:35.958207095+00:00"
 ---
 
 ## Goal

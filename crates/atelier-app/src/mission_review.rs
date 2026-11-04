@@ -1322,6 +1322,7 @@ pub struct BriefItem {
 pub struct Brief {
     pub mission: Issue,
     pub status_category: Option<String>,
+    /// The strategy's Outcome section, or the mission's Outcome.
     pub outcome: String,
     pub strategy: Option<String>,
     pub generated_from: Option<String>,
@@ -1401,20 +1402,30 @@ pub fn brief(
         .filter(|item| item.issue.issue_type == "decision" || item.needs_human)
         .map(|item| item.issue.clone())
         .collect();
-    let risks = mission.strategy.as_ref().and_then(|strategy| {
-        std::fs::read_to_string(read.repo.join(&strategy.path))
-            .ok()
-            .and_then(|text| atelier_core::markdown_section(&text, "risks and unknowns"))
+    let strategy_text = mission
+        .strategy
+        .as_ref()
+        .and_then(|strategy| std::fs::read_to_string(read.repo.join(&strategy.path)).ok());
+    let strategy_section = |name: &str| {
+        strategy_text
+            .as_deref()
+            .and_then(|text| atelier_core::markdown_section(text, name))
             .map(|section| section.trim().to_string())
             .filter(|section| !section.is_empty())
-    });
-    Ok(Brief {
-        status_category: category(&mission),
-        outcome: record
+    };
+    let risks = strategy_section("risks and unknowns");
+    // The strategy's Outcome, as S5 names it, or the mission's own
+    // (atelier-0a52).
+    let outcome = strategy_section("outcome").unwrap_or_else(|| {
+        record
             .sections
             .section(IssueSectionName::Outcome)
             .unwrap_or_default()
-            .to_string(),
+            .to_string()
+    });
+    Ok(Brief {
+        status_category: category(&mission),
+        outcome,
         strategy: mission
             .strategy
             .as_ref()
