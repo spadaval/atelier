@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Offer plan approval in the brief footer only when none is recorded"
-updated_at: "2026-10-17T20:10:21.682260002+00:00"
+updated_at: "2026-11-04T23:12:51.142605756+00:00"
 ---
 
 ## Goal

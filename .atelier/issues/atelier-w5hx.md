@@ -20,9 +20,9 @@ relationships:
     type: "supersedes"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Remove one-way decision notes and migrate the existing ones"
-updated_at: "2026-10-30T06:52:24.678869557+00:00"
+updated_at: "2026-11-04T23:12:50.682008802+00:00"
 ---
 
 ## Goal

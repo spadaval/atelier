@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Order the debrief timeline by one clock"
-updated_at: "2026-10-18T07:07:54.292074500+00:00"
+updated_at: "2026-11-04T23:12:51.028084818+00:00"
 ---
 
 ## Goal

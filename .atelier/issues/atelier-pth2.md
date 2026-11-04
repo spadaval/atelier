@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Remove the read-time criteria mission helper and its stale comments"
-updated_at: "2026-10-17T19:04:44.537094232+00:00"
+updated_at: "2026-11-04T23:12:51.595915335+00:00"
 ---
 
 ## Goal

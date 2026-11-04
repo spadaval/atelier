@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Keep the debrief's history when HEAD is a work branch that merged the base"
-updated_at: "2026-10-17T19:45:46.135278410+00:00"
+updated_at: "2026-11-04T23:12:50.913216641+00:00"
 ---
 
 ## Goal

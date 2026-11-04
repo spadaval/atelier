@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Clear or confirm a reused Close Reason when a reopened item closes again"
-updated_at: "2026-10-17T18:14:22.478074553+00:00"
+updated_at: "2026-11-04T23:12:51.371676105+00:00"
 ---
 
 ## Goal

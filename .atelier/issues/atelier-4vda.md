@@ -24,9 +24,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Tighten and document the report-part exemption for earlier claims"
-updated_at: "2026-10-17T18:27:30.799634465+00:00"
+updated_at: "2026-11-04T23:12:51.484403285+00:00"
 ---
 
 ## Goal

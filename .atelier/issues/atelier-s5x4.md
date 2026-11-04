@@ -18,9 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Count done decision records as decided when the repository has no workflow policy"
-updated_at: "2026-10-17T17:51:42.072219114+00:00"
+updated_at: "2026-11-04T23:12:50.546249734+00:00"
 ---
 
 ## Goal
