@@ -3,6 +3,9 @@ created_at: "2026-11-04T21:56:17.001274292+00:00"
 id: "atelier-g8cn"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-g8cn
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Release v0.3.1 with static musl Linux builds"
-updated_at: "2026-11-04T21:56:17.001274292+00:00"
+updated_at: "2026-11-04T21:56:17.388444622+00:00"
 ---
 
 ## Goal
