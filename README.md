@@ -5,7 +5,7 @@ workflows.
 
 ## Install
 
-On Linux (x86_64 or aarch64, glibc 2.35 or newer) or macOS, install or upgrade
+On Linux (x86_64 or aarch64) or macOS, install or upgrade
 to the latest release with:
 
 ```bash
