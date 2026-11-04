@@ -36,7 +36,8 @@ rebuilt model.
   CI workflow to pass on the pull request's latest commit, then run
   `atelier merge` and push `master`. Changes after that run, including
   `atelier merge --sync`, need a new passing run. Record-only changes skip the
-  pull request.
+  pull request. The `scripts/merge-ci-passed.sh` merge check enforces this, so
+  `atelier merge` runs no test suite on this host.
 - Agents may push reviewed work, including `master` after a gated merge,
   without asking. Never force-push `master` or delete remote branches without
   the human.
