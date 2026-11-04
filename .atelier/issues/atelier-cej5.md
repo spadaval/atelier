@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-04T23:34:25.081529066+00:00"
+status: "done"
 title: "Keep path_log's date-order parity test inside nextest's timeout on macOS"
-updated_at: "2026-11-04T23:08:16.521942425+00:00"
+updated_at: "2026-11-04T23:34:25.081529066+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,19 @@ The two date steps run as separate tests, each doing the work of one `assert_par
 ## Context
 
 Diagnosis (CI logs of both failed runs, plus passing macOS runs): the test is not hanging. It runs the `branchy` history and `assert_parity` twice (commit-date steps -60 and 0); `assert_parity` spawns one `git log` per start commit × path spec × listing × reverse, a few thousand processes per call. Passing macOS runs take 48.6s and 51.0s for this test, against 22-24s for `matches_git_over_merges_octopus_and_criss_cross`, which does the same work once. Locally (Linux) 7.6s vs 3.8s. Under the parallel load of the full suite the doubled workload crosses 60s.
+
+## Close Reason
+
+The date-order parity test is now two tests, `matches_git_when_dates_run_backwards` and `matches_git_when_dates_tie`, each one `assert_parity` over `branchy`; on PR #18's macOS CI they took 19-24s each, in line with their siblings, with nextest's timeout unchanged.
+
+### Deviations
+None.
+
+### Decisions
+Split the work rather than raise the timeout or reduce the parity coverage: the cause was a doubled, deterministic workload of `git log` processes, not a hang.
+
+### Surprises
+The test was never close to flaky in the usual sense: passing macOS runs already took 48-51s of the 60s budget.
+
+### Open items
+None. Each parity test still spawns thousands of git processes; if macOS runners slow further the siblings could approach the limit too.
