@@ -26,9 +26,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-05T05:18:11.675287493+00:00"
+status: "done"
 title: "Make mission plans and outcomes reviewable by humans and agents"
-updated_at: "2026-11-05T04:23:26.469326363+00:00"
+updated_at: "2026-11-05T05:18:11.675287493+00:00"
 ---
 
 ## Outcome
@@ -48,3 +49,19 @@ Atelier captures proof and review well but almost none of the reasoning: at the 
 - 2026-10-17 [result] 2026-10-17: all increments merged (fip8, sfsq, ho7o with stsa, 1mk4, rx22, acrt). Independent validation passed S1-S6 and S8 on master 0edf25bb (receipts atelier-syrp, qkk8, 8ctc, 9mk4, n3o5, 82x5, ms6z). S7 waits on the human's review of a real HTML debrief (atelier-lfs7); the mission stays open until then.
 - 2026-11-04 [note] 2026-11-04 handoff: every item but atelier-lfs7 (S7, human) is done. Acceptance validation at 0a2ec1a7 passed S1-S3, S5, S6, S8 and failed S4 (atelier-obcr): (1) done children's reports were missing, fixed by atelier-ov97; (2) the debrief has no separate decision log with decision records first, by design since atelier-8bil, which left to the human whether timeline decisions satisfy S4. Needs Sumeet: reword S4 or ask for the log back; then S4 needs a fresh receipt.
 - 2026-11-04 [human] 2026-11-04 Sumeet: S4 reworded to match the debrief's design (each decision shown where it was made, done children's reports included; work decisions lists the whole log). S7 moved from human to independent agent review of atelier-vt8q's debrief (atelier-lfs7). Human review comes after agent review and after merge, judges taste rather than detail, and gates nothing; Sumeet may still read the page once the mission closes.
+
+## Close Reason
+
+Implementers record typed decision notes and an implementer report in Close Reason, decision records link ADRs and supersede earlier ones, `status` and `issue show` surface current decisions, `work mission` marks each criterion from evidence, and `atelier brief` and `atelier debrief` render a mission's plan and outcome as dense Markdown and a self-contained HTML page. All eight criteria are proven: S1-S3, S5, S6 and S8 by independent validation at 0a2ec1a7 (atelier-5pz3, m265, hvtl, 7izq, hkm6, rbc1), S4 at 7518f516 (atelier-bdbd) and S7 by an independent agent review of atelier-vt8q's debrief at 7518f516 (atelier-btnc). The eight code commits after the 0a2ec1a7 receipts change only the debrief and its page (atelier-ov97, atelier-mgl0): decision notes, Close Reason, decision records, brief, status, issue show and work mission criterion parsing are untouched, and CI passed the full suite on them.
+
+### Deviations
+On 2026-11-04 Sumeet reworded S4 to match the debrief's design (each decision shown where it was made) and moved S7 from a human judgement to an agent review followed by his non-blocking read (atelier-3km4); the candidate became atelier-vt8q (atelier-s2r4 supersedes atelier-9y66). The first S4 and S7 reviews failed (atelier-dn84, atelier-g8sg), adding atelier-mgl0 to the scope.
+
+### Decisions
+Decision records atelier-et6q, atelier-6306 and atelier-s2r4, and the item decision notes (`atelier work decisions atelier-r6bt`).
+
+### Surprises
+Agent review of the debrief page found accuracy and accessibility defects that the earlier human read of an orientation debrief had not: a planned item counted as filed by review, criteria cut to their first sentence, a report part never shown, and AA contrast failures in both palettes.
+
+### Open items
+Sumeet's read of the vt8q page (atelier-3km4). Debrief follow-ups in the backlog: 930x, j79t, idx3, okfy, wg6p, k7vp, r8om, les9, ztuq, 1hbk, lozn, rdsa, g21n, j0b9 and cagr.
