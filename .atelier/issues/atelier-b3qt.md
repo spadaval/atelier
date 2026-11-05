@@ -45,7 +45,7 @@ crates/atelier-app/src/mission_review.rs `events`; crates/atelier-app/src/record
 
 ## Close Reason
 
-The timeline now uses the record clock for work added to the scope, the same clock delivery uses. `mission_timeline` still decides "added after the start" by first-parent position. It then dates each addition from the first commit that held the link, among the commits that the joining first-parent commit brought in (for a merge, the merged branch's commits). The date is the holding record's `updated_at` in that commit, never earlier than the mission's start. When the times are equal, the addition is listed before deliveries. The start and close still use their commits' times. The new CLI fixture `a_child_closed_on_its_parents_branch_is_added_before_it_is_delivered` failed before the change, with the child added after its delivery, and passes now. docs/product/mission-reviews.md says which clock each event uses.
+The timeline now uses the record clock for work added to the scope, the same clock delivery uses. `mission_timeline` still decides "added after the start" by first-parent position. It then dates each addition from the first commit that held the link, among the commits that the joining first-parent commit brought in (for a merge, the merged branch's commits; for a work branch's entry commit, the branch's commits since the fork). The date is the holding record's `updated_at` in that commit, never earlier than the mission's start. When the times are equal, the addition is listed before deliveries. The start and close still use their commits' times. Two CLI fixtures cover this: `a_child_closed_on_its_parents_branch_is_added_before_it_is_delivered` (the branch merges into the base) and `a_child_closed_on_a_branch_before_it_merges_the_base_is_added_first` (the branch merges the base in first, debriefed from the branch). Each failed before its fix, with the child added after its delivery, and both pass now. docs/product/mission-reviews.md says which clock each event uses.
 
 ### Deviations
 None.
@@ -54,7 +54,7 @@ None.
 Two decision notes on this item: which clock dates an addition (with the clamp to the start), and that at equal times an addition comes before deliveries.
 
 ### Surprises
-A link written on a branch before the mission started, and merged after the start, would have been dated before "started the mission" while still labelled added after the start. The clamp to the start time covers this.
+A link written on a branch before the mission started, and merged after the start, would have been dated before "started the mission" while still labelled added after the start. The clamp to the start time covers this. Review finding atelier-a5vf showed that atelier-jnec's entry commit, which stands for its change from the fork, was searched only from its first parent. Versions now carry the commit their change counts from.
 
 ### Open items
 None.
