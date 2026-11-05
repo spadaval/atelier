@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "review"
+closed_at: "2026-11-05T00:22:52.831287844+00:00"
+status: "done"
 title: "Treat a human's request for a specific release as approval to push its tag"
-updated_at: "2026-11-04T23:19:26.906407890+00:00"
+updated_at: "2026-11-05T00:22:52.831287844+00:00"
 ---
 
 ## Goal
@@ -29,3 +30,19 @@ The release strategy's Authority section says pushing a release tag comes back t
 ## Done when
 
 - docs/strategies/release-distribution.md Authority says a human's request for a specific release authorizes pushing its tag once master CI passes on the release commit; other tag pushes still come back to the human.
+
+## Close Reason
+
+The Authority section of docs/strategies/release-distribution.md now says a human's request for a specific release authorizes pushing its tag once master CI passes on the release commit, and the agent reports the published release instead of leaving the tag as an open item. Other tag pushes, the first release's version, new platforms or channels, and secrets still come back to the human. Independently approved (atelier-64zi, no findings); PR #19 CI green on Linux and macOS.
+
+### Deviations
+None.
+
+### Decisions
+Did not add a `last_changed` entry to the strategy front matter, so the approved commit stays as reviewed.
+
+### Surprises
+atelier-l7gl merged edits to the same strategy file and closed mission atelier-vt8q while this was in review; the merge was clean and required a second sync and CI run.
+
+### Open items
+None.
