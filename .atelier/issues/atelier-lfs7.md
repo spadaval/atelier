@@ -27,9 +27,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-05T05:17:34.428683436+00:00"
+status: "done"
 title: "Agent-review a real mission's HTML debrief"
-updated_at: "2026-11-05T04:30:15.192390634+00:00"
+updated_at: "2026-11-05T05:17:34.428683436+00:00"
 ---
 
 ## Goal
@@ -50,3 +51,19 @@ The reviewer gets the generated page, docs/product/mission-reviews.md (what the 
 
 - 2026-11-04 [note] 2026-11-04 handoff: debriefs generated at 711abe6f for the human: atelier-vt8q (closed today, every item reported) and atelier-1w8c (atelier-9y66's choice, superseded into atelier-4pzj), at .atelier/runtime/reviews/<id>-debrief.html. Waiting on Sumeet to pick the mission (keeping 1w8c or switching to vt8q changes 9y66) and to judge the page; no pass recorded for him.
 - 2026-11-04 [note] The 2026-11-04 handoff above is superseded: Sumeet moved S7 to agent review the same day (atelier-s2r4); his read is atelier-3km4.
+
+## Close Reason
+
+An independent agent review judged atelier-vt8q's HTML debrief at 7518f516 complete and accurate for post-mission review, with AA contrast in both palettes (receipt atelier-btnc); S7 is proven.
+
+### Deviations
+S7 moved from a human judgement to an agent review followed by a non-blocking human read (atelier-3km4), by Sumeet's direction; the candidate became atelier-vt8q (atelier-s2r4 supersedes 9y66). The first review failed the page, so the work grew to fix it in atelier-mgl0 before a second review passed it.
+
+### Decisions
+Recorded in atelier-s2r4 and the r6bt human note of 2026-11-04.
+
+### Surprises
+The first agent review found defects a human read would likely have missed: a planned item counted as filed by review, criteria cut to one sentence, and AA contrast failures in both palettes.
+
+### Open items
+Sumeet's read of the page is atelier-3km4. The review's remaining findings are backlog follow-ups 930x, j79t, idx3, okfy, wg6p, k7vp, r8om, les9, ztuq, 1hbk, lozn, rdsa and g21n.
