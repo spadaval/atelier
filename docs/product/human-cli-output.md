@@ -713,7 +713,7 @@ brief view gives one line per fact and leaves out empty facts:
   line of its Close Reason>` instead, as `--full`'s Transition Readiness
   does;
 - the two lead sections of the record's body shape: Goal and Done when for
-  work items, Outcome and Success criteria for missions, and Question and
+  work items, Outcome and Success criteria (when present) for missions, and Question and
   Decision for decisions. These say what the item is for and what finishes
   it. A one-line section follows its label, and a longer one is indented
   under it;

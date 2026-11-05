@@ -31,8 +31,9 @@ pub struct MissionCriteria {
 }
 
 /// Reads a mission's criteria from its strategy, or from its own Success
-/// criteria section when it links none. An unreadable strategy, or one with
-/// no Success Criteria heading, is a problem, not an error.
+/// criteria section when it links none. A strategy with no Success Criteria
+/// heading has no criteria, since criteria are optional (ADR 0024); an
+/// unreadable strategy is a problem, not an error.
 pub fn mission_criteria(
     index: &RecordIndex,
     repo_root: &Path,
@@ -47,7 +48,7 @@ pub fn mission_criteria(
         let parse = match std::fs::read_to_string(repo_root.join(&path)) {
             Ok(text) => match strategy_criteria_section(&text) {
                 Some(section) => parse_criteria(&section),
-                None => problem(format!("strategy {path} has no Success Criteria heading")),
+                None => CriteriaParse::default(),
             },
             Err(error) => problem(format!("strategy {path} cannot be read: {error}")),
         };

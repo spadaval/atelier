@@ -31,7 +31,9 @@ mechanical guards at the point of action. The governing decision is
 
 ## Work and proof
 
-A mission links its governing strategy and success criteria. An issue is an
+A mission is a themed container for related work, with an outcome and, when
+it needs them, a governing strategy and success criteria its own work can
+meet. An issue is an
 executable slice, with a goal and observable done condition; an issue with
 children is a parent, an increment that is one branch and review boundary. Native links
 represent mission membership, hierarchy, blockers, and proof attachments.

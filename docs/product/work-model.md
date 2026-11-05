@@ -9,7 +9,12 @@ for authoring guidance.
 ## Records and relationships
 
 Missions and work items are issue records with distinct `issue_type` values. A
-mission links a strategy file and states an Outcome and Success criteria. Work
+mission is a themed container: its Outcome says why its items belong
+together, and it may link a strategy file. Success criteria are optional, and
+any criterion must be something the mission's own work can make true and an
+agent can check when the mission closes
+([ADR 0024](../adr/0024-missions-are-themed-containers.md); Agent Factory's
+[Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission)). Work
 items (task, feature, bug, spike, validation, or any type the policy declares)
 state Goal and Done when, with optional Scope, Context, Unknowns, and Design.
 Missions and work items may also carry an optional Background section: the

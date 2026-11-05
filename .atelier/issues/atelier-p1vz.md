@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-05T00:42:23.699322153+00:00"
+status: "superseded"
 title: "Recount atelier-rc8j S6 on a week of ordinary sessions"
-updated_at: "2026-10-23T21:10:46.076326942+00:00"
+updated_at: "2026-11-05T00:42:23.699322153+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ After at least a week of ordinary sessions on a binary at or after master 5abb36
 ## Context
 
 Method and scripts: /home/supadava/.cache/atelier-validate/s6/ (extract.py, classify.py, report.py) and the S6 note and receipt atelier-4n58 on atelier-1o56. Transcripts: ~/.claude/projects/-home-supadava-projects-atelier*/ including subagent transcripts. Exclude runs whose brief told agents to pipe.
+
+## Close Reason
+
+Dropped under ADR 0024: transcript-count checks are not something a mission's work can make true, and the one real count (atelier-1o56) was dominated by the mission's own reviewers, so a recount would not tell us whether the views improved.

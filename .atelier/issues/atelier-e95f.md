@@ -11,9 +11,6 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-l63c"
-    type: "advances"
-  - kind: "issue"
     id: "atelier-o3lm"
     type: "related"
 schema: "atelier.issue"
@@ -47,6 +44,5 @@ Blocked by atelier-i2qq, which writes the shared item-line contract this format 
 
 ## Unknowns
 
-- Whether demand survives the view fixes. Re-count the piped atelier commands in transcripts (the method atelier-bw0b used) after missions atelier-1w8c, atelier-4pzj and atelier-o3lm land. If agents no longer reshape output, close this as superseded.
 - Whether definitions belong in `.atelier/config.toml` or in their own records.
 - The field vocabulary, and how a view names a mission or a parent.

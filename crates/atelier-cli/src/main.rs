@@ -398,8 +398,8 @@ enum IssueCommands {
         title: String,
         /// Markdown body with the type's `## ` sections: Goal and Done when
         /// (optionally Scope, Context, Unknowns, Design, Background) for work
-        /// items; Outcome for missions, plus Success criteria without a
-        /// strategy, optionally Background; Question (optionally Options,
+        /// items; Outcome for missions (optionally Success criteria,
+        /// Background); Question (optionally Options,
         /// Decision, Context, Background) for decisions. Plain text becomes
         /// the Goal, Outcome, or Question
         #[arg(long)]
