@@ -1661,3 +1661,57 @@ fn a_child_closed_on_its_parents_branch_is_added_before_it_is_delivered() {
         "{page}"
     );
 }
+
+#[test]
+fn a_child_closed_on_a_branch_before_it_merges_the_base_is_added_first() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    git(dir.path(), &["switch", "-q", "-c", "feature"]);
+    let child = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--parent",
+            &planned,
+            "--body",
+            "## Goal\n\nG\n\n## Done when\n\nD",
+            "Child",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "transition", &child, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &child,
+            "close",
+            "--reason",
+            "Done on the branch.",
+        ],
+    );
+    commit_all(dir.path(), "add and close a child on the branch");
+    git(dir.path(), &["switch", "-q", "main"]);
+    fs::write(dir.path().join("code.txt"), "base work\n").unwrap();
+    commit_all(dir.path(), "base work");
+    // The branch merges the base a second later, so the merge that first
+    // holds the fork comes after the child's close.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    git(dir.path(), &["switch", "-q", "feature"]);
+    git(dir.path(), &["merge", "-q", "--no-ff", "--no-edit", "main"]);
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let did = section(&page, "What We Did");
+    let at = |needle: &str| {
+        did.lines()
+            .position(|line| line.contains(needle))
+            .unwrap_or_else(|| panic!("no `{needle}`: {page}"))
+    };
+    assert!(
+        at(&format!("added {child}")) < at(&format!("delivered {child}")),
+        "{page}"
+    );
+}

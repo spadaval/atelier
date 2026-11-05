@@ -21,6 +21,9 @@ use crate::workflow_policy::WorkflowPolicy;
 pub struct RecordVersion {
     pub position: usize,
     pub commit: String,
+    /// The commit this version's change is counted from, when it is not
+    /// `commit`'s first parent: the fork, for the branch's entry commit.
+    pub since: Option<String>,
     pub time: DateTime<Utc>,
     pub record: Option<CanonicalIssueRecord>,
 }
@@ -73,8 +76,12 @@ pub fn issue_histories(
     let entries = output.split('\0').filter(|entry| !entry.trim().is_empty());
     for (position, entry) in entries.enumerate() {
         let mut lines = entry.lines();
-        let Some((commit, seconds)) = lines.next().and_then(|line| line.split_once(' ')) else {
+        let Some((commit, rest)) = lines.next().and_then(|line| line.split_once(' ')) else {
             continue;
+        };
+        let (seconds, since) = match rest.split_once(' ') {
+            Some((seconds, since)) => (seconds, Some(since.trim().to_string())),
+            None => (rest, None),
         };
         let time = seconds
             .trim()
@@ -101,6 +108,7 @@ pub fn issue_histories(
                 .push(RecordVersion {
                     position,
                     commit: commit.to_string(),
+                    since: since.clone(),
                     time,
                     record,
                 });
@@ -156,7 +164,7 @@ fn walk(
     let changed = read.history(&args)?;
     if !changed.trim().is_empty() {
         let seconds = read.history(&["log", "-1", "--format=%ct", &entry])?;
-        output.push_str(&format!("\0{entry} {}\n{changed}", seconds.trim()));
+        output.push_str(&format!("\0{entry} {} {fork}\n{changed}", seconds.trim()));
     }
     output.push_str(&log(read, &format!("{entry}..{head}"))?);
     Ok(output)
@@ -204,6 +212,8 @@ fn retired_epic_at(
 pub struct Moment {
     pub position: usize,
     pub commit: String,
+    /// As on [`RecordVersion`].
+    pub since: Option<String>,
     pub time: DateTime<Utc>,
 }
 
@@ -212,6 +222,7 @@ impl From<&RecordVersion> for Moment {
         Self {
             position: version.position,
             commit: version.commit.clone(),
+            since: version.since.clone(),
             time: version.time,
         }
     }
@@ -393,16 +404,22 @@ impl Link<'_> {
 
 /// When the link was written, by the record's own clock, as delivery is
 /// dated: the holder's `updated_at` in the first commit that held it among
-/// those `joined` brought in. A merge brings in its other parents' commits,
-/// so a link written on a branch is dated when it was written there, not
-/// when the branch merged. `None` when no such commit holds it.
+/// those `joined` brought in: the commits since its first parent, or since
+/// the fork for the branch's entry commit (atelier-a5vf). A merge brings in
+/// its other parents' commits, so a link written on a branch is dated when
+/// it was written there, not when the branch merged. `None` when no such
+/// commit holds it.
 fn written_at(
     read: &mut ReadContext<'_>,
     joined: &Moment,
     link: Link<'_>,
 ) -> Result<Option<DateTime<Utc>>> {
-    let range = match read.first_parent(&joined.commit)? {
-        Some(parent) => format!("{parent}..{}", joined.commit),
+    let since = match &joined.since {
+        Some(since) => Some(since.clone()),
+        None => read.first_parent(&joined.commit)?,
+    };
+    let range = match since {
+        Some(since) => format!("{since}..{}", joined.commit),
         None => joined.commit.clone(),
     };
     let path = Path::new(".atelier")
