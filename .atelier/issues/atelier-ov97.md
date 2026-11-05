@@ -3,6 +3,9 @@ created_at: "2026-11-05T02:21:07.690164399+00:00"
 id: "atelier-ov97"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-ov97
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show each done child's report in the debrief"
-updated_at: "2026-11-05T02:21:07.690164399+00:00"
+updated_at: "2026-11-05T02:21:11.933869708+00:00"
 ---
 
 ## Goal
