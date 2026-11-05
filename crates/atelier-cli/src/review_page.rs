@@ -162,7 +162,7 @@ aside h1{font-size:14.5px;line-height:1.4;margin:0 0 10px}
 nav{margin-top:18px;font-size:13px}
 nav .g{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:16px 6px 4px}
 nav a{text-decoration:none;display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:6px;color:var(--fg)}
-nav a:hover{background:var(--line);text-decoration:none}
+nav a:hover{background:var(--code);text-decoration:none}
 nav a.sub{padding-left:24px;color:var(--muted)}
 nav a.ask-link{color:var(--warn);font-weight:600}
 nav .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -353,7 +353,8 @@ mod tests {
             for text in [
                 "fg", "muted", "faint", "done", "active", "todo", "back", "warn", "link",
             ] {
-                for surface in ["bg", "side", "chip", "pop"] {
+                // `code` is also the nav hover background.
+                for surface in ["bg", "side", "chip", "pop", "code"] {
                     let contrast = ratio(palette[text], palette[surface]);
                     assert!(
                         contrast >= 4.5,

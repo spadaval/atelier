@@ -1036,6 +1036,40 @@ fn deferring_a_finding_to_planned_work_keeps_it_planned() {
             "Release covers it",
         ],
     );
+    // A follow-up the review files a moment before recording its finding is
+    // still filed by review.
+    let edge = item(dir, "Edge case");
+    let later = ok(
+        dir,
+        &[
+            "review",
+            "finding",
+            &build,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Edge case",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(
+        dir,
+        &[
+            "review",
+            "disposition",
+            &later,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &edge,
+            "Filed",
+        ],
+    );
     commit_all(dir, "defer to planned work");
 
     let page = ok(dir, &["debrief", &mission]);
@@ -1045,7 +1079,13 @@ fn deferring_a_finding_to_planned_work_keeps_it_planned() {
         "{page}"
     );
     assert!(!page.contains(&format!("Filed: {release}")), "{page}");
-    assert!(!page.contains("Found Along The Way"), "{page}");
+    assert!(page.contains(&format!("Filed: {edge}")), "{page}");
+    let found = &page[page.find("Found Along The Way").expect(&page)..];
+    assert!(
+        found.contains(&format!("{edge}")) && found.contains(&format!("from review of {build}")),
+        "{page}"
+    );
+    assert!(!found.contains(&release), "{page}");
     assert!(page.contains("Planned: 1 of 2 items done"), "{page}");
     // The plan states each criterion in full, continuation lines included.
     assert!(
