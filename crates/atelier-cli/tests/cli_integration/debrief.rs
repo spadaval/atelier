@@ -1700,3 +1700,99 @@ fn a_child_closed_on_a_branch_before_it_merges_the_base_is_added_first() {
         "{page}"
     );
 }
+
+#[test]
+fn a_done_childs_report_sits_with_its_child_line() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let child = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--parent",
+            &planned,
+            "--body",
+            "## Goal\n\nG\n\n## Done when\n\nD",
+            "Child",
+        ],
+    )
+    .trim()
+    .to_string();
+    let close = |id: &str, report: &str| {
+        let file = dir.path().join("report.md");
+        fs::write(&file, report).unwrap();
+        ok(dir.path(), &["issue", "transition", id, "start"]);
+        ok(
+            dir.path(),
+            &[
+                "issue",
+                "transition",
+                id,
+                "close",
+                "--reason-file",
+                file.to_str().unwrap(),
+            ],
+        );
+        fs::remove_file(file).unwrap();
+    };
+    close(
+        &child,
+        "Child rendered the page.\n\n### Deviations\nAdded a warmup step.\n\n### Decisions\nNone.\n\n### Surprises\nMemoised fonts.\n\n### Open items\nFont cache size.",
+    );
+    close(
+        &planned,
+        "Parent shipped.\n\n### Deviations\nNone.\n\n### Decisions\nNone.\n\n### Surprises\nNone.\n\n### Open items\nNone.",
+    );
+    commit_all(dir.path(), "close the child and its parent");
+
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let did = section(&page, "What We Did");
+    let child_line = format!("  └ {child} task ✓ done Child");
+    let at = |needle: &str| {
+        did.lines()
+            .position(|line| line == needle)
+            .unwrap_or_else(|| panic!("no `{needle}`: {page}"))
+    };
+    let first = at(&child_line);
+    for (offset, fact) in [
+        "    Outcome: Child rendered the page.",
+        "    Changed: Added a warmup step.",
+        "    Surprised by: Memoised fonts.",
+        "    Left open: Font cache size.",
+    ]
+    .iter()
+    .enumerate()
+    {
+        assert_eq!(at(fact), first + 1 + offset, "{page}");
+    }
+    assert_eq!(page.matches("Memoised fonts.").count(), 1, "{page}");
+    assert!(
+        section(&page, "Plan vs Actual").contains(&format!("Changed course: {planned}")),
+        "{page}"
+    );
+
+    let path = PathBuf::from(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    // The parent's timeline entry, up to the next one.
+    let entry = html
+        .split(&format!("<div class=\"entry\" id=\"{planned}\">"))
+        .nth(1)
+        .and_then(|rest| rest.split("<div class=\"entry").next())
+        .unwrap_or_else(|| panic!("no entry for {planned}: {html}"));
+    let child_at = entry
+        .find(&format!("<span class=\"k\">{child}</span>"))
+        .unwrap_or_else(|| panic!("no child chip: {entry}"));
+    for text in [
+        "Child rendered the page.",
+        "Added a warmup step.",
+        "Memoised fonts.",
+        "Font cache size.",
+    ] {
+        assert!(
+            entry[child_at..].contains(&format!("<p>{text}</p>")),
+            "no `{text}` after the child chip: {entry}"
+        );
+    }
+}

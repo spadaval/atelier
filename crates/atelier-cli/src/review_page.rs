@@ -201,6 +201,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0}
 .card .m{display:block;color:var(--muted);font-size:11.5px}
 .card .s{display:block;margin-top:5px}.card i{font-style:normal;font-weight:600;color:var(--muted)}
 ul.chips{list-style:none;padding:0;margin:4px 0}ul.chips li{margin:4px 0}ul.chips li.kid{padding-left:22px}
+ul.chips li>.fact{margin-left:22px}
 .claim{display:grid;grid-template-columns:44px minmax(0,1fr);gap:2px 10px;padding:3px 0}
 .claim .s,.crit .s{font-weight:600;font-size:12.5px;color:var(--muted)}
 .ask{display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--line)}

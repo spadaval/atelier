@@ -124,7 +124,7 @@ pub struct WorkEntry {
     pub report: Option<CloseReport>,
     /// The criteria it delivers.
     pub criteria: Vec<String>,
-    pub children: Vec<String>,
+    pub children: Vec<WorkChild>,
     pub added_after_start: bool,
     pub changes: Vec<Change>,
     /// Decision notes on the item and its children, in record order.
@@ -134,6 +134,14 @@ pub struct WorkEntry {
     pub review: ReviewSummary,
     /// Follow-ups its review deferred findings to.
     pub follow_ups: Vec<String>,
+}
+
+/// A child of a done item, shown under it.
+#[derive(Debug, Clone)]
+pub struct WorkChild {
+    pub id: String,
+    /// The child's own implementer report, when the child is done.
+    pub report: Option<CloseReport>,
 }
 
 /// Work in scope that is not done, or that was dropped.
@@ -302,7 +310,7 @@ impl Debrief {
     pub fn entry_holding(&self, id: &str) -> Option<&WorkEntry> {
         self.work
             .iter()
-            .find(|entry| entry.id == id || entry.children.iter().any(|child| child == id))
+            .find(|entry| entry.id == id || entry.children.iter().any(|child| child.id == id))
     }
 
     pub fn proven(&self) -> usize {
@@ -596,7 +604,17 @@ pub fn debrief(
                 .as_deref()
                 .map(CloseReport::parse),
             criteria: criteria_delivered,
-            children: kids,
+            children: kids
+                .iter()
+                .map(|kid| WorkChild {
+                    id: kid.clone(),
+                    report: index
+                        .issue_record(kid)
+                        .filter(|child| done(&child.issue))
+                        .and_then(|child| child.sections.close_reason.as_deref())
+                        .map(CloseReport::parse),
+                })
+                .collect(),
             added_after_start: added_at.contains_key(id),
             changes,
             decisions: notes,
@@ -1072,7 +1090,9 @@ fn events(
     // Follow-ups a delivered item's review filed are told in its entry.
     let delivered = work
         .iter()
-        .flat_map(|entry| std::iter::once(&entry.id).chain(&entry.children))
+        .flat_map(|entry| {
+            std::iter::once(&entry.id).chain(entry.children.iter().map(|child| &child.id))
+        })
         .collect::<BTreeSet<_>>();
     for entry in found {
         if entry

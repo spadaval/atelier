@@ -73,7 +73,9 @@ fn quiet_counts(view: &Debrief) -> String {
     let items = view
         .work
         .iter()
-        .flat_map(|entry| std::iter::once(&entry.id).chain(&entry.children))
+        .flat_map(|entry| {
+            std::iter::once(&entry.id).chain(entry.children.iter().map(|child| &child.id))
+        })
         .chain(
             view.left
                 .iter()
@@ -105,7 +107,10 @@ fn deviation_count(view: &Debrief) -> usize {
     view.work
         .iter()
         .map(|entry| {
-            entry.changes.len() + usize::from(reported(entry, ReportPart::Deviations).is_some())
+            entry.changes.len()
+                + reports(entry)
+                    .filter(|report| reported(*report, ReportPart::Deviations).is_some())
+                    .count()
         })
         .sum::<usize>()
         + view
@@ -244,8 +249,8 @@ fn write_review_page(
 }
 
 /// A report part with something to say: present, and not just "None".
-fn reported(entry: &WorkEntry, part: ReportPart) -> Option<&str> {
-    entry.report.as_ref()?.part(part).filter(|text| {
+fn reported(report: Option<&CloseReport>, part: ReportPart) -> Option<&str> {
+    report?.part(part).filter(|text| {
         !matches!(
             text.trim()
                 .trim_end_matches('.')
@@ -256,17 +261,22 @@ fn reported(entry: &WorkEntry, part: ReportPart) -> Option<&str> {
     })
 }
 
-fn outcome(entry: &WorkEntry) -> &str {
-    entry
-        .report
-        .as_ref()
-        .map(|report: &CloseReport| report.outcome.as_str())
+fn outcome(report: Option<&CloseReport>) -> &str {
+    report
+        .map(|report| report.outcome.as_str())
         .unwrap_or_default()
 }
 
-/// Whether the entry departed from its plan.
+/// The entry's report, then each done child's.
+fn reports(entry: &WorkEntry) -> impl Iterator<Item = Option<&CloseReport>> {
+    std::iter::once(entry.report.as_ref())
+        .chain(entry.children.iter().map(|child| child.report.as_ref()))
+}
+
+/// Whether the entry, or a child shown in it, departed from its plan.
 fn changed_course(entry: &WorkEntry) -> bool {
-    !entry.changes.is_empty() || reported(entry, ReportPart::Deviations).is_some()
+    !entry.changes.is_empty()
+        || reports(entry).any(|report| reported(report, ReportPart::Deviations).is_some())
 }
 
 fn criterion_word(mark: CriterionMark) -> &'static str {
@@ -870,6 +880,30 @@ fn render_markdown(view: &Debrief, context: RenderContext) -> Vec<Vec<String>> {
     ]
 }
 
+/// A done child's report as labelled facts: its Outcome, then its non-empty
+/// Deviations, Surprises and, when review filed no follow-ups for the entry,
+/// Open items.
+fn report_facts(report: Option<&CloseReport>, open_items: bool) -> Vec<(&'static str, &str)> {
+    let mut facts = Vec::new();
+    let outcome = outcome(report);
+    if !outcome.is_empty() {
+        facts.push(("Outcome", outcome));
+    }
+    for (label, part) in [
+        ("Changed", ReportPart::Deviations),
+        ("Surprised by", ReportPart::Surprises),
+        ("Left open", ReportPart::OpenItems),
+    ] {
+        if part == ReportPart::OpenItems && !open_items {
+            continue;
+        }
+        if let Some(text) = reported(report, part) {
+            facts.push((label, text));
+        }
+    }
+    facts
+}
+
 /// A delivered item in the Markdown timeline, with its facts indented.
 fn delivered_lines(
     view: &Debrief,
@@ -902,27 +936,33 @@ fn delivered_lines(
         head.push_str(" | added after the start");
     }
     lines.extend(render_row_wrapped(context, &head));
-    let mut fact = |label: &str, text: &str| {
+    let mut indented = |indent: &str, label: &str, text: &str| {
         let line = if label == "└" {
             format!("└ {}", flat(text))
         } else {
             format!("{label}: {}", flat(text))
         };
         for line in render_row_wrapped(context, &line) {
-            lines.push(format!("  {line}"));
+            lines.push(format!("{indent}{line}"));
         }
     };
-    fact("Outcome", outcome(entry));
+    indented("  ", "Outcome", outcome(entry.report.as_ref()));
+    // Each child's own report sits under its line, so it is not read as the
+    // parent's.
     for child in &entry.children {
-        fact("└", &item(child));
+        indented("  ", "└", &item(&child.id));
+        for (label, text) in report_facts(child.report.as_ref(), entry.follow_ups.is_empty()) {
+            indented("    ", label, text);
+        }
     }
-    if let Some(text) = reported(entry, ReportPart::Deviations) {
+    let mut fact = |label: &str, text: &str| indented("  ", label, text);
+    if let Some(text) = reported(entry.report.as_ref(), ReportPart::Deviations) {
         fact("Changed", text);
     }
     for change in &entry.changes {
         fact("Changed", &change_text(change));
     }
-    if let Some(text) = reported(entry, ReportPart::Surprises) {
+    if let Some(text) = reported(entry.report.as_ref(), ReportPart::Surprises) {
         fact("Surprised by", text);
     }
     for note in &entry.decisions {
@@ -951,7 +991,7 @@ fn delivered_lines(
         fact("Filed", &item(follow_up));
     }
     if entry.follow_ups.is_empty() {
-        if let Some(text) = reported(entry, ReportPart::OpenItems) {
+        if let Some(text) = reported(entry.report.as_ref(), ReportPart::OpenItems) {
             fact("Left open", text);
         }
     }
@@ -1208,7 +1248,7 @@ fn render_html(view: &Debrief) -> String {
                 escape(&entry.id),
                 escape(view.title_of(&entry.id))
             ));
-            for child in &entry.children {
+            for child in entry.children.iter().map(|child| &child.id) {
                 side.push_str(&format!(
                     "<a class=\"sub\" href=\"#{}\"><span class=\"dot {}\"></span><span class=\"label\">{}</span></a>",
                     escape(&entry.id),
@@ -1826,7 +1866,7 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
         ));
     };
     let mut changed = Vec::new();
-    if let Some(text) = reported(entry, ReportPart::Deviations) {
+    if let Some(text) = reported(entry.report.as_ref(), ReportPart::Deviations) {
         changed.push(rich(view, text));
     }
     changed.extend(
@@ -1835,14 +1875,14 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
             .iter()
             .map(|change| format!("<p>{}</p>", change_html(view, change))),
     );
-    let notable = !changed.is_empty() || !entry.malformed.is_empty();
+    let notable = changed_course(entry) || !entry.malformed.is_empty();
     if !changed.is_empty() {
         fact(
             "Changed",
             format!("<div class=\"changed\">{}</div>", changed.join("")),
         );
     }
-    if let Some(text) = reported(entry, ReportPart::Surprises) {
+    if let Some(text) = reported(entry.report.as_ref(), ReportPart::Surprises) {
         fact("Surprised by", rich(view, text));
     }
     if !entry.decisions.is_empty() || !entry.malformed.is_empty() {
@@ -1882,7 +1922,7 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
                     .collect::<String>()
             ),
         );
-    } else if let Some(text) = reported(entry, ReportPart::OpenItems) {
+    } else if let Some(text) = reported(entry.report.as_ref(), ReportPart::OpenItems) {
         fact("Left open", rich(view, text));
     }
     let children = if entry.children.is_empty() {
@@ -1893,7 +1933,25 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
             entry
                 .children
                 .iter()
-                .map(|child| format!("<li>{}</li>", chip(view, child, 72)))
+                .map(|child| {
+                    // The child's own report, under its chip.
+                    let facts = report_facts(child.report.as_ref(), entry.follow_ups.is_empty())
+                        .into_iter()
+                        .map(|(label, text)| {
+                            let body = rich(view, text);
+                            let body = if label == "Changed" {
+                                format!("<div class=\"changed\">{body}</div>")
+                            } else {
+                                body
+                            };
+                            format!(
+                                "<div class=\"fact\"><span>{}</span><div>{body}</div></div>",
+                                escape(label)
+                            )
+                        })
+                        .collect::<String>();
+                    format!("<li>{}{facts}</li>", chip(view, &child.id, 72))
+                })
                 .collect::<String>()
         )
     };
@@ -1909,7 +1967,7 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
         time_rail(entry.closed_at),
         escape(view.title_of(&entry.id)),
         meta.join(" · "),
-        rich(view, outcome(entry))
+        rich(view, outcome(entry.report.as_ref()))
     )
 }
 
