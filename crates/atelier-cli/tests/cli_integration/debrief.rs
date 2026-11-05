@@ -507,10 +507,9 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     let notes = markdown
         .lines()
         .filter_map(|line| line.trim().strip_prefix("Decided: "))
-        .map(|line| {
-            let (choice, reason) = line.split_once(" | because ").unwrap();
-            (choice.to_string(), reason.to_string())
-        })
+        // A report's own Decisions part has no reason; notes do.
+        .filter_map(|line| line.split_once(" | because "))
+        .map(|(choice, reason)| (choice.to_string(), reason.to_string()))
         .collect::<Vec<_>>();
     assert_eq!(notes.len(), 2, "{markdown}");
     let entry = &html[html.find(&format!("id=\"{}\"", m.shipped)).expect(&html)..];
@@ -527,6 +526,7 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     for part in [
         "Shipped the parser.",
         "Used a manual parser.",
+        "See the decision note.",
         "Not needed after the parser change.",
         "Follow up the edge case",
         "Typo fix only",
@@ -1739,11 +1739,11 @@ fn a_done_childs_report_sits_with_its_child_line() {
     };
     close(
         &child,
-        "Child rendered the page.\n\n### Deviations\nAdded a warmup step.\n\n### Decisions\nNone.\n\n### Surprises\nMemoised fonts.\n\n### Open items\nFont cache size.",
+        "Child rendered the page.\n\n### Deviations\nAdded a warmup step.\n\n### Decisions\nChose woff2 over ttf.\n\n### Surprises\nMemoised fonts.\n\n### Open items\nFont cache size.",
     );
     close(
         &planned,
-        "Parent shipped.\n\n### Deviations\nNone.\n\n### Decisions\nNone.\n\n### Surprises\nNone.\n\n### Open items\nNone.",
+        "Parent shipped.\n\n### Deviations\nNone.\n\n### Decisions\nKept the old cache.\n\n### Surprises\nNone.\n\n### Open items\nNone.",
     );
     commit_all(dir.path(), "close the child and its parent");
 
@@ -1760,6 +1760,7 @@ fn a_done_childs_report_sits_with_its_child_line() {
         "    Outcome: Child rendered the page.",
         "    Changed: Added a warmup step.",
         "    Surprised by: Memoised fonts.",
+        "    Decided: Chose woff2 over ttf.",
         "    Left open: Font cache size.",
     ]
     .iter()
@@ -1768,6 +1769,10 @@ fn a_done_childs_report_sits_with_its_child_line() {
         assert_eq!(at(fact), first + 1 + offset, "{page}");
     }
     assert_eq!(page.matches("Memoised fonts.").count(), 1, "{page}");
+    // The parent's own report decision sits in its entry, not the child's.
+    let parent_decided = at("  Decided: Kept the old cache.");
+    assert!(parent_decided > first + 5, "{page}");
+    assert_eq!(page.matches("Chose woff2 over ttf.").count(), 1, "{page}");
     assert!(
         section(&page, "Plan vs Actual").contains(&format!("Changed course: {planned}")),
         "{page}"
@@ -1788,6 +1793,7 @@ fn a_done_childs_report_sits_with_its_child_line() {
         "Child rendered the page.",
         "Added a warmup step.",
         "Memoised fonts.",
+        "Chose woff2 over ttf.",
         "Font cache size.",
     ] {
         assert!(
@@ -1795,4 +1801,10 @@ fn a_done_childs_report_sits_with_its_child_line() {
             "no `{text}` after the child chip: {entry}"
         );
     }
+    // The parent's own report decision follows its children's list.
+    let children_end = child_at + entry[child_at..].find("</ul>").unwrap();
+    assert!(
+        entry[children_end..].contains("<p>Kept the old cache.</p>"),
+        "no parent decision after the children: {entry}"
+    );
 }

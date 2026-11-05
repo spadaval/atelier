@@ -881,8 +881,8 @@ fn render_markdown(view: &Debrief, context: RenderContext) -> Vec<Vec<String>> {
 }
 
 /// A done child's report as labelled facts: its Outcome, then its non-empty
-/// Deviations, Surprises and, when review filed no follow-ups for the entry,
-/// Open items.
+/// Deviations, Surprises, Decisions and, when review filed no follow-ups for
+/// the entry, Open items.
 fn report_facts(report: Option<&CloseReport>, open_items: bool) -> Vec<(&'static str, &str)> {
     let mut facts = Vec::new();
     let outcome = outcome(report);
@@ -892,6 +892,7 @@ fn report_facts(report: Option<&CloseReport>, open_items: bool) -> Vec<(&'static
     for (label, part) in [
         ("Changed", ReportPart::Deviations),
         ("Surprised by", ReportPart::Surprises),
+        ("Decided", ReportPart::Decisions),
         ("Left open", ReportPart::OpenItems),
     ] {
         if part == ReportPart::OpenItems && !open_items {
@@ -964,6 +965,10 @@ fn delivered_lines(
     }
     if let Some(text) = reported(entry.report.as_ref(), ReportPart::Surprises) {
         fact("Surprised by", text);
+    }
+    // The report's own Decisions part, then the decision notes it may point at.
+    if let Some(text) = reported(entry.report.as_ref(), ReportPart::Decisions) {
+        fact("Decided", text);
     }
     for note in &entry.decisions {
         fact("Decided", &decision_text(note));
@@ -1885,10 +1890,17 @@ fn work_entry_html(view: &Debrief, entry: &WorkEntry) -> String {
     if let Some(text) = reported(entry.report.as_ref(), ReportPart::Surprises) {
         fact("Surprised by", rich(view, text));
     }
+    // The report's own Decisions part, then the decision notes it may point at.
+    let mut decided = reported(entry.report.as_ref(), ReportPart::Decisions)
+        .map(|text| rich(view, text))
+        .unwrap_or_default();
     if !entry.decisions.is_empty() || !entry.malformed.is_empty() {
         let notes = entry.decisions.iter().collect::<Vec<_>>();
         let malformed = entry.malformed.iter().collect::<Vec<_>>();
-        fact("Decided", decision_list_html(view, &notes, &malformed));
+        decided.push_str(&decision_list_html(view, &notes, &malformed));
+    }
+    if !decided.is_empty() {
+        fact("Decided", decided);
     }
     if let Some(record) = view
         .decisions

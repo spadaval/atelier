@@ -4,6 +4,9 @@ id: "atelier-mgl0"
 issue_type: "bug"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-mgl0
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show the report's Decisions part in the debrief"
-updated_at: "2026-11-05T04:30:29.919889687+00:00"
+updated_at: "2026-11-05T04:30:37.210222565+00:00"
 ---
 
 ## Goal
