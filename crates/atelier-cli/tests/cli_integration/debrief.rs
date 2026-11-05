@@ -1039,6 +1039,8 @@ fn deferring_a_finding_to_planned_work_keeps_it_planned() {
     // A follow-up the review files a moment before recording its finding is
     // still filed by review.
     let edge = item(dir, "Edge case");
+    // Linked to the mission after its start, so in scope but not planned.
+    ok(dir, &["issue", "link", "-q", &edge, &mission]);
     let later = ok(
         dir,
         &[

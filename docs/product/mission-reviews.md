@@ -19,7 +19,7 @@ it stands. Both forms follow the same order:
 - **What we set out to do:** the mission's Outcome, each success criterion in
   full, and the planned work: items linked to the mission by its start and
   not filed by review, in filing order, children under their parent. A
-  finding deferred to work that already existed does not file it.
+  finding deferred to planned work does not file it.
 - **What we did:** one timeline, oldest first. Each done item appears when it
   closed, with its outcome, its children, each with its own report under
   its line (its outcome and any Deviations, Surprises, Decisions and, unless
