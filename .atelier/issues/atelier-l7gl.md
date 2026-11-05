@@ -3,6 +3,9 @@ created_at: "2026-11-04T23:10:44.782876931+00:00"
 id: "atelier-l7gl"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-l7gl
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-05T00:19:47.779398843+00:00"
+status: "done"
 title: "Plan release builds on pull requests instead of building all six targets"
-updated_at: "2026-11-04T23:16:55.953985838+00:00"
+updated_at: "2026-11-05T00:19:47.779398843+00:00"
 ---
 
 ## Goal
@@ -33,3 +37,24 @@ Stop every pull request from building all six release targets. `dist-workspace.t
 ## Context
 
 Requested by Sumeet on 2026-11-04 as a follow-up to the release validation atelier-g6a1, which used the PR upload runs as S2 evidence; do it after that validation. Rewording S2 changes a success criterion; that request is the human authority for it. The strategy's Authority section lets the orchestrator change `dist` settings.
+
+## Notes
+
+- 2026-11-04 [decision] Accept dist's generated release.yml without the rust-cache step
+  Reason: dist only adds the cache in upload mode; tag runs can read only default-branch caches, which no release job writes once PRs stop building, so the cache would never hit
+
+## Close Reason
+
+Pull requests now only plan the release: `pr-run-mode = "plan"`, release.yml regenerated unedited by dist 0.33.1, and PR #23's Release run ran only the plan job; S2 of the release strategy says so, under Sumeet's 2026-11-04 request.
+
+### Deviations
+None.
+
+### Decisions
+Accepted dist's generated workflow without the rust-cache step (decision note): the cache would never hit on tag runs.
+
+### Surprises
+dist drops the build cache outside upload mode.
+
+### Open items
+The plan-mode workflow's build and publish jobs first run on the next tag push.
