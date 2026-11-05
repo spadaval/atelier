@@ -172,6 +172,13 @@ fn brief_markdown_shows_the_plan_and_its_approval() {
         "{page}"
     );
     assert!(page.contains("No plan approval recorded."), "{page}");
+    assert!(
+        page.contains(&format!(
+            "Record the human's plan approval: atelier review approve {}",
+            p.mission
+        )),
+        "{page}"
+    );
     assert_eq!(
         ok(dir.path(), &["brief", &p.mission, "-q"]).trim(),
         "criteria=1 items=4 blocked=1 unknowns=1 human_decisions=2 approvals=0"
@@ -190,6 +197,21 @@ fn brief_markdown_shows_the_plan_and_its_approval() {
     );
     let page = ok(dir.path(), &["brief", &p.mission]);
     assert!(!page.contains("No plan approval recorded."), "{page}");
+    // With the plan approved, the next step moves the draft plan on.
+    assert!(!page.contains("atelier review approve"), "{page}");
+    assert!(
+        page.contains(&format!(
+            "Move the approved plan on: atelier issue transition {}\n",
+            p.mission
+        )),
+        "{page}"
+    );
+    ok(dir.path(), &["issue", "transition", &p.mission, "ready"]);
+    let page = ok(dir.path(), &["brief", &p.mission]);
+    assert!(
+        page.contains("List the work ready to start: atelier work ready\n"),
+        "{page}"
+    );
     assert!(
         page.contains("by Human at") && page.contains("| Plan approved as written"),
         "{page}"
@@ -263,6 +285,14 @@ fn brief_html_holds_the_same_facts_as_the_markdown() {
         .unwrap();
     assert!(html.contains(approval), "{approval}");
     assert!(!html.contains("No plan approval recorded."));
+    assert!(
+        !html.contains("atelier review approve")
+            && html.contains(&format!(
+                "Next: move the approved plan on: atelier issue transition {}.",
+                p.mission
+            )),
+        "{html}"
+    );
 }
 
 #[test]
@@ -285,10 +315,70 @@ fn brief_says_no_plan_approval_in_both_forms_when_only_other_events_exist() {
     let html = fs::read_to_string(path).unwrap();
     for form in [&markdown, &html] {
         assert!(
-            form.contains("Looked at the plan") && form.contains("No plan approval recorded."),
+            form.contains("Looked at the plan")
+                && form.contains("No plan approval recorded.")
+                && form.contains(&format!("atelier review approve {}", p.mission)),
             "{form}"
         );
     }
+}
+
+#[test]
+fn brief_shows_the_strategy_outcome_and_falls_back_to_the_mission_outcome() {
+    let dir = tempdir().unwrap();
+    let p = plan(dir.path());
+    let strategy = dir.path().join("docs/strategies/plan.md");
+    fs::write(
+        &strategy,
+        "# Outcome\n\nThe strategy says plans are <approved>.\n\n# Success Criteria\n\n- plan-shown: The brief shows the plan.\n",
+    )
+    .unwrap();
+    let both = |dir: &Path| {
+        let markdown = ok(dir, &["brief", &p.mission]);
+        let path = PathBuf::from(ok(dir, &["brief", &p.mission, "--html", "-q"]).trim());
+        (markdown, fs::read_to_string(path).unwrap())
+    };
+    let (markdown, html) = both(dir.path());
+    assert!(
+        markdown.contains("Outcome       : The strategy says plans are <approved>.\n")
+            && !markdown.contains("Plans are <reviewable>."),
+        "{markdown}"
+    );
+    assert!(
+        html.contains("The strategy says plans are &lt;approved&gt;.")
+            && !html.contains("Plans are &lt;reviewable&gt;."),
+        "{html}"
+    );
+
+    // A strategy without an Outcome section leaves the mission's.
+    fs::write(
+        &strategy,
+        "# Success Criteria\n\n- plan-shown: The brief shows the plan.\n",
+    )
+    .unwrap();
+    let (markdown, html) = both(dir.path());
+    assert!(
+        markdown.contains("Outcome       : Plans are <reviewable>.\n"),
+        "{markdown}"
+    );
+    assert!(html.contains("Plans are &lt;reviewable&gt;."), "{html}");
+
+    // So does a mission with no strategy.
+    let bare = create(
+        dir.path(),
+        &[
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nNo strategy here.",
+            "Bare mission",
+        ],
+    );
+    let markdown = ok(dir.path(), &["brief", &bare]);
+    assert!(
+        markdown.contains("Outcome       : No strategy here.\n"),
+        "{markdown}"
+    );
 }
 
 /// A mission is a themed container whose success criteria are optional

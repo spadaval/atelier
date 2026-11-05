@@ -83,11 +83,20 @@ is never committed; regenerate it when the records change.
 
 Every fact is derived from records and Git: one history query walks HEAD's
 first-parent history over the mission's issue records, reading a merge as
-the change it made to the base, and finds the mission's start (its first
+the change it made to its first parent. On a work branch, it walks the base
+branch's first-parent line up to the newest base commit the branch holds,
+then the branch's own line from the first commit that holds that base
+commit, counting that commit as its change from the base commit (so earlier
+branch changes arrive with it). A branch that merged the base in reports
+the same history as the base. It finds the mission's start (its first
 version out of `draft`), its close, when each item was first linked to it
 (on either record, and for a child when its parent first listed it), and
 done claims later withdrawn. Versions in the retired epic shape are read as
-the parent issues they became. Nothing new is stored. Dates are local.
+the parent issues they became. The timeline dates work by the records' own
+clock: a delivery when the item closed, and work added to the scope when
+the record that links it was written, even on a branch that merged later,
+but not before the mission's start. The start and close are the commits
+that made them. Nothing new is stored. Dates are local.
 
 The Markdown and HTML forms come from one view model, and a test checks that
 every item, criterion mark, and decision in one appears in the other.
@@ -95,12 +104,14 @@ every item, criterion mark, and decision in one appears in the other.
 ## Brief
 
 `atelier brief <mission>` reviews the plan, so the human can approve or
-change it while changes are cheap. It shows the mission line, Outcome and
-strategy; each success criterion, if it has any; the scope, one item line each with its
-size (`| size M`, from the `size-*` label), open blockers and needs-human
-cue, children under their parent; the blocked items; the Unknowns of each
-open item; open human decisions (open decision records and needs-human work
-in scope); the strategy's Risks and Unknowns section; and review events on
+change it while changes are cheap. It shows the mission line; the Outcome,
+from the linked strategy's Outcome section, or from the mission record when
+it has no strategy or the strategy has no such section; the strategy path;
+each success criterion, if it has any; the scope, one item line each with
+its size (`| size M`, from the `size-*` label), open blockers and
+needs-human cue, children under their parent; the blocked items; the
+Unknowns of each open item; open human decisions (open decision records and
+needs-human work in scope); the strategy's Risks and Unknowns section; and review events on
 the mission. `--html` writes `.atelier/runtime/reviews/<mission>-brief.html`
 with the same facts, under the same rules as the debrief page.
 
@@ -109,4 +120,8 @@ A plan approval is an ordinary review event on the mission:
 brief and the debrief both show it; without one, both forms of the brief say
 no plan approval is recorded. Any approval event on the mission counts, so a
 later approval of the debrief also reads as approval in a brief generated
-after it. Atelier adds no approval gate (ADR 0018).
+after it. Atelier adds no approval gate (ADR 0018). The brief's next step,
+in the Markdown footer and the HTML page's footer, is recording that
+approval until one exists; then it is `atelier issue transition <mission>`
+while the mission is still in its initial status, and `atelier work ready`
+after.
