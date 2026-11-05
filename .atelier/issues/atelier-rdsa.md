@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Tidy debrief Results and validation links"
-updated_at: "2026-11-05T05:17:15.686356292+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Nits: Results proof chips show only the receipt ID without its kind; each timeli
 
 ## Done when
 
-Each nit is fixed or consciously kept, and the debrief of atelier-vt8q reflects it.
+Each nit is fixed or consciously kept (with the reason in the Close Reason), and a CLI fixture that reproduces the fixed nits shows them fixed in the HTML debrief. (Rewritten 2026-11-05: atelier-vt8q's records become prunable after 2026-11-11.)
 
 ## Context
 

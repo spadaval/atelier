@@ -36,4 +36,4 @@ updated_at: "2026-11-05T06:02:29.983449290+00:00"
 
 ## Close Reason
 
-Already fixed on master c48378b8: wrong-kind work mission and work parent errors name the right view (crates/atelier-cli/src/commands/work.rs:334-374), pinned by tests in tests/cli_integration/record_refs.rs:323-370. Found by the 2026-11-05 currency check during the mission regroup.
+Already fixed on master c48378b8: wrong-kind work mission and work parent errors name the right view (crates/atelier-cli/src/commands/work.rs:334-374), pinned by tests in crates/atelier-cli/tests/cli_integration/record_refs.rs:323-370. Found by the 2026-11-05 currency check during the mission regroup.

@@ -12,13 +12,16 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-31l2"
+    type: "supersedes"
+  - kind: "issue"
     id: "atelier-4pzj"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Order work-view rows with the shared blocker-first order"
-updated_at: "2026-11-05T06:03:04.102700+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Goal
@@ -34,6 +37,7 @@ updated_at: "2026-11-05T06:03:04.102700+00:00"
 - `work blocked` and `work all` print blocked rows in the same order.
 - A test with chain ubti → il31 → fhep → 5hp9 asserts that order in `work blocked` and `work mission`.
 - A test pins the order of a mixed `--all` list in `work mission` and `work parent` (from atelier-31l2).
+- A test with more than 20 ready items shows every row in `work ready` (from atelier-8zxh).
 
 ## Scope
 

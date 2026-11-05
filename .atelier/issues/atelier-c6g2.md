@@ -8,7 +8,13 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-avx0"
+    type: "blocked_by"
+  - kind: "issue"
+    id: "atelier-fb1i"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

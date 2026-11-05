@@ -12,7 +12,7 @@ relationships:
   relates:
   - kind: "issue"
     id: "atelier-cagr"
-    type: "related"
+    type: "supersedes"
   - kind: "issue"
     id: "atelier-gg6b"
     type: "advances"

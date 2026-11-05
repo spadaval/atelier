@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Tidy small debrief inaccuracies from the S7 review"
-updated_at: "2026-11-05T04:40:11.289744306+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Nits from the S7 review: the mission chip card's Outcome shows raw '### Outcome'
 
 ## Done when
 
-The debrief of atelier-vt8q no longer shows the problem, and a fixture test covers it.
+A CLI fixture that reproduces the case in a scratch repository shows the problem fixed in both the Markdown and HTML debrief. (Rewritten 2026-11-05: atelier-vt8q's records become prunable after 2026-11-11, so its debrief cannot stay the check.)
 
 ## Context
 

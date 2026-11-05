@@ -47,7 +47,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Let agents write tracker records safely, one at a time, by section or as a bundle"
-updated_at: "2026-11-05T06:03:04.102700+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Outcome
@@ -57,10 +57,10 @@ An agent can create and change tracker records without shell quoting: one at a t
 ## Success criteria
 
 - refuse-then-confirm: for `issue create`, `update`, `note`, `link`, `unlink`, `transition` and `bundle apply`, a table-driven CLI test shows that invalid input writes nothing, exits non-zero and names the field at fault, and that valid input prints the resulting values.
-- S6: Claude Code transcripts recorded after S1-S5 land show `issue show` and `issue list` piped through head, grep, sed or tail in under a third of runs. Shown by a dated note with the counts. (Pending the human: proposed for removal under ADR 0024, because it is a post-ship measurement and `issue show` and `issue list` now belong to atelier-l63c.)
+- S6: Claude Code transcripts recorded after S1-S5 land (the former `issue show`/`list` and record-writing criteria) show `issue show` and `issue list` piped through head, grep, sed or tail in under a third of runs. Shown by a dated note with the counts.
 
 ## Background
 
-Regrouped on 2026-11-05 at the human's direction: missions are organised by outcome, not by the command surface or the audit that found their items. This mission now holds record writing. It took the bundle items from atelier-2mky (atelier-guew, atelier-x3ru, atelier-z6vj, atelier-dpvz, atelier-6esg, atelier-h0nt, atelier-woul, atelier-vsh8, atelier-0cal, atelier-0xcr, atelier-1oez) and atelier-hat4. Its `issue show`/`list` items moved to atelier-l63c, and its `start` items to atelier-4pzj. The former S1-S5 restated their items and were replaced under ADR 0024 by refuse-then-confirm. The open question atelier-o3lm left, a Markdown input format for records, moved here from atelier-2mky with the bundle items: it decides atelier-rz2l.
+Regrouped on 2026-11-05 at the human's direction: missions are organised by outcome, not by the command surface or the audit that found their items. This mission now holds record writing. It took the bundle items from atelier-2mky (atelier-guew, atelier-x3ru, atelier-z6vj, atelier-dpvz, atelier-6esg, atelier-h0nt, atelier-woul, atelier-vsh8, atelier-0cal, atelier-0xcr, atelier-1oez), and the unassigned atelier-hat4. Its `issue show`/`list` items moved to atelier-l63c, and its `start` items to atelier-4pzj. The former S1-S5 restated their items and were replaced under ADR 0024 by refuse-then-confirm. S6 is kept until Sumeet decides it: it is a post-ship measurement, which ADR 0024 keeps out of missions, and its S1-S5 meant the `issue show`/`list` items (now atelier-l63c's) and the record-writing items still here. The open question atelier-o3lm left, a Markdown input format for records, moved here from atelier-2mky with the bundle items: it decides atelier-rz2l.
 
-Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come from that mission's six-surface CLI audit; see atelier-o3lm's Background for the method and the transcript scripts. Section edits (atelier-cj54) and record import (atelier-rz2l) come from the 2026-10-16 transcript retrospective. Agents also edit records directly; that stays supported for bulk work. Text search (atelier-fpxc) was deferred out of atelier-1w8c. The output contract (atelier-o3lm S1, atelier-i2qq) and ADR 0022 (atelier-bw0b) govern how output looks. Brief `issue show` with several IDs is atelier-1w8c's atelier-7u4o; S1 builds on it.
+Split out of atelier-o3lm on 2026-10-16 at the human's direction. Its items come from that mission's six-surface CLI audit; see atelier-o3lm's Background for the method and the transcript scripts. Section edits (atelier-cj54) and record import (atelier-rz2l) come from the 2026-10-16 transcript retrospective. Agents also edit records directly; that stays supported for bulk work. The output contract (atelier-o3lm S1, atelier-i2qq) and ADR 0022 (atelier-bw0b) govern how output looks.

@@ -9,9 +9,6 @@ relationships:
   children: []
   attachments: []
   relates:
-  - kind: "issue"
-    id: "atelier-j79t"
-    type: "supersedes"
   - kind: "review"
     id: "atelier-dswi"
     type: "discovered_from"

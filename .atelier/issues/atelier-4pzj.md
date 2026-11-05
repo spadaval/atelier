@@ -56,16 +56,16 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Let agents tell which work they can start, what holds the rest up, and what to do next"
-updated_at: "2026-11-05T06:03:04.102700+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Outcome
 
-An agent or the human can tell from `status`, the `work` views and `start` which work can be taken now, what holds the rest up, and what to do next. `start` takes what those views offer as ready, and refuses anything else in one line that names the blocker or the reason.
+An agent or the human can tell from `status`, the `work` views and `start` which work can be taken now, what holds the rest up, and what to do next. `start` takes what those views offer as ready, and refuses anything else with one line per blocker or reason.
 
 ## Success criteria
 
-- ready-means-startable: in a fixture repository with in-mission, cross-mission and unassigned blockers, parked items, and an item in flight on another branch, every ready row `status` and `work ready` show without an in-flight mark is accepted by `start`; every item `start` refuses is either not offered as ready or carries the mark that explains why; and a refusal for a blocker names the same blocker that `work blocked` and `issue list` show. Shown by one scenario test.
+- ready-means-startable: in a fixture repository with in-mission, cross-mission and unassigned blockers, parked items, and an item in flight on another branch, every ready row `status` and `work ready` show without a mark is accepted by `start`; every item `start` refuses is either not offered as ready or carries the mark that explains why; and a refusal for a blocker names the same blocker that `work blocked` and `issue list` show. Shown by one scenario test.
 
 ## Background
 

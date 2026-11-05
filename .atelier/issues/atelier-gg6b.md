@@ -14,7 +14,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Let a reviewer do post-mission review from the debrief alone"
-updated_at: "2026-11-05T06:02:30.751439270+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Outcome
@@ -23,7 +23,7 @@ A reviewer can do post-mission review from the debrief alone. Every report, rece
 
 ## Success criteria
 
-- debrief-agent-review: at this mission's close, an independent agent review of the debrief of the most recently closed mission, generated from its records, leaves no fix-now finding open about a mismatch with the records or a part the debrief rules call for. Shown by a review record and a validation receipt naming the commit the debrief was generated from.
+- debrief-agent-review: at this mission's close, an independent agent review of the debrief of a mission named when this mission is made ready (one that closed with at least ten items, done children with reports, and a validation run), generated from its records, leaves no fix-now finding open about a mismatch with the records or a part the debrief rules call for. Shown by a review record and a validation receipt naming the commit the debrief was generated from.
 
 ## Background
 

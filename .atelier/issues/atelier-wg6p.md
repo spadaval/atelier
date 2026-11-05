@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Don't turn record mentions inside paths and branch names into chips"
-updated_at: "2026-11-05T04:40:10.556389088+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Chips split paths and branch names: '~/.cache/[atelier-g6a1]/s4-check.sh', 'task
 
 ## Done when
 
-The debrief of atelier-vt8q no longer shows the problem, and a fixture test covers it.
+A CLI fixture that reproduces the case in a scratch repository shows the problem fixed in both the Markdown and HTML debrief. (Rewritten 2026-11-05: atelier-vt8q's records become prunable after 2026-11-11, so its debrief cannot stay the check.)
 
 ## Context
 
