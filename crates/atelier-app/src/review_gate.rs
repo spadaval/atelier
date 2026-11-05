@@ -1593,19 +1593,19 @@ fn evaluate_scope(
     Ok(unique.into_values().collect())
 }
 
-/// Whether the issue's current done claim was made while the base's policy
-/// did not require `field` on any transition into its status. The policy is
-/// the base's at the point where the claim's commit and the base last met,
-/// never the branch's own, so a branch cannot weaken the policy around a
-/// claim. An uncommitted claim, or one whose earlier policy cannot be read,
-/// answers to the current policy.
-fn claimed_before_required(
+/// The fields the base's policy required on transitions into the issue's
+/// status when its current done claim was made. The policy is the base's at
+/// the point where the claim's commit and `base_commit` last met, never the
+/// branch's own, so a branch cannot weaken the policy around a claim; for a
+/// claim `base_commit` already holds, that is the commit that made it.
+/// `None` for an uncommitted claim, or one whose earlier policy cannot be
+/// read: it answers to the current policy.
+fn fields_required_when_claimed(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     base_commit: &str,
     id: &str,
-    field: &str,
-) -> Result<bool> {
+) -> Result<Option<BTreeSet<String>>> {
     let current = index
         .issue_record(id)
         .context("closed issue record missing")?;
@@ -1624,25 +1624,27 @@ fn claimed_before_required(
         }
     }
     let Some(commit) = introduced else {
-        return Ok(false);
+        return Ok(None);
     };
     let Ok(base) = git::git_output(read.repo, &["merge-base", &commit, base_commit]) else {
-        return Ok(false);
+        return Ok(None);
     };
     let base = String::from_utf8(base)?.trim().to_string();
     let Ok(then) = crate::base_policy::from_captured(read, &base) else {
-        return Ok(false);
+        return Ok(None);
     };
-    let then = then.policy;
     let issue = &current.issue;
-    let Ok(workflow) = then.workflow_for_issue_type(&issue.issue_type) else {
-        return Ok(false);
+    let Ok(workflow) = then.policy.workflow_for_issue_type(&issue.issue_type) else {
+        return Ok(None);
     };
-    Ok(!workflow
-        .transitions
-        .values()
-        .filter(|transition| transition.to == issue.status)
-        .any(|transition| transition.required_fields.iter().any(|f| f == field)))
+    Ok(Some(
+        workflow
+            .transitions
+            .values()
+            .filter(|transition| transition.to == issue.status)
+            .flat_map(|transition| transition.required_fields.iter().cloned())
+            .collect(),
+    ))
 }
 
 /// Validate committed terminal claims without imposing session choreography.
@@ -1708,6 +1710,7 @@ fn completion_claims(
     }
     // Terminal records can also be edited directly; retain the trusted
     // policy's completion checks when evaluating their committed claims.
+    let mut then_required = BTreeMap::<String, Option<BTreeSet<String>>>::new();
     for id in ids {
         let issue = index.require_issue(id)?;
         if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
@@ -1731,22 +1734,30 @@ fn completion_claims(
             for field in &transition.required_fields {
                 let present = match field.as_str() {
                     "close_reason" => !report.outcome.is_empty(),
-                    // A claim the base already holds was checked against the
-                    // policy of its day, so a report part the policy came to
-                    // require later does not unsettle it (atelier-sfsq). Nor
-                    // does it unsettle a claim committed while the policy
-                    // beside it did not require the part, such as a child
-                    // closed on its parent's branch before the base changed.
+                    // A report part the policy came to require after a claim
+                    // was made does not unsettle it (atelier-sfsq): neither a
+                    // claim the base already holds nor a child closed on its
+                    // parent's branch before the base's policy changed. A
+                    // held claim is judged by the policy of the commit that
+                    // made it, not skipped, so a claim one commit back on a
+                    // base with no upstream still needs its parts
+                    // (atelier-uxrs).
                     field if atelier_core::ReportPart::from_field(field).is_some() => {
-                        if historical {
-                            continue;
-                        }
                         let present = atelier_core::ReportPart::from_field(field)
                             .and_then(|part| report.part(part))
                             .is_some();
-                        if !present && claimed_before_required(index, read, base_commit, id, field)?
-                        {
-                            continue;
+                        if !present {
+                            if !then_required.contains_key(id) {
+                                let fields =
+                                    fields_required_when_claimed(index, read, base_commit, id)?;
+                                then_required.insert(id.clone(), fields);
+                            }
+                            if then_required[id]
+                                .as_ref()
+                                .is_some_and(|fields| !fields.contains(field))
+                            {
+                                continue;
+                            }
                         }
                         present
                     }

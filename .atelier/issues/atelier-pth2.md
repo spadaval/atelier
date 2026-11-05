@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-05T01:23:49.044698841+00:00"
+status: "done"
 title: "Remove the read-time criteria mission helper and its stale comments"
-updated_at: "2026-11-04T23:12:51.595915335+00:00"
+updated_at: "2026-11-05T01:23:49.044698841+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,19 @@ After atelier-ho7o stored each receipt's criteria mission, `criteria::criteria_m
 ## Done when
 
 The unused helper is gone and both comments say the stored `criteria_mission` decides; the build has no dead-code warning.
+
+## Close Reason
+
+The unused `criteria::criteria_mission` is gone, and the doc comments on `MissionProof.orphaned` and lint.rs `criteria_findings` now say the receipt's stored `criteria_mission` decides; the workspace builds with no warnings.
+
+### Deviations
+None.
+
+### Decisions
+None.
+
+### Surprises
+None. The recent master changes to criteria.rs and lint.rs had left both stale comments in place.
+
+### Open items
+None.

@@ -35,15 +35,31 @@ paragraph stays the Outcome described above. The report's other parts are
 requires with the `report.deviations`, `report.decisions`,
 `report.surprises` and `report.open_items` required fields. A required part
 must be present and non-empty; write `None.` when there is nothing to report.
+This repository's policy requires all four parts on the work `close`
+transition; `supersede` needs only the Outcome. Like the rest of Close
+Reason, the report can be written after approval without making the approval
+stale.
 The close transition reads Close Reason from the record body when it is
-already written there, or from `--reason-file <file>`; `--reason` replaces
-the Outcome and keeps the parts. `land` and `merge` check a required part
-only on a done claim committed beside a policy that required it, so done
-records from before the policy required a part stay valid, including a
-child closed on its parent's branch before the base's policy changed. Like the rest of Close Reason, the report can be written after
-approval without making the approval stale. This repository's policy
-requires all four parts on the work `close` transition; `supersede` needs
-only the Outcome.
+already written there, and then prints the Outcome it kept, or from
+`--reason-file <file>`. `--reason` replaces the Outcome and keeps the parts
+when the transition requires a report; on a transition that requires none,
+such as `supersede`, it replaces the whole Close Reason, so a report written
+for a close does not linger (atelier-ypks). No transition leaves a done
+status, so an item reopens only by an edit to its status, which keeps its
+old Close Reason; a later close with no flag prints the Outcome it kept.
+
+`land` and `merge` check a required part against the base's policy at the
+merge-base of the base and the commit that made the done claim, never the
+branch's own policy. A claim made while that policy did not require the part
+stays valid: a done record from before the policy required it, or a child
+closed on its parent's branch before the base's policy changed. A claim the
+base, or HEAD's parent on a base with no upstream, already holds is judged
+the same way, by the policy of the commit that made it, so it is checked
+rather than skipped (atelier-uxrs). The rule reads only history, which is
+its limit (atelier-u0i3): a branch can still skip parts by making its claim
+on a side branch that left the base before the policy required them and
+merging that branch in. Nothing in the history tells that claim from a child
+honestly closed before the policy changed, so review has to catch it.
 
 Priority has two spellings for four values: records store `P0`, `P1`, `P2`
 and `P3`, which views print as `critical`, `high`, `medium` and `low`. The
