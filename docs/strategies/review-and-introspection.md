@@ -1,7 +1,7 @@
 ---
 status: active
 mission: atelier-r6bt
-last_changed: "2026-11-04: one-way decision notes removed from S1, S4 and S6 by decision atelier-6306 (a costly-to-reverse choice is a decision record); earlier, 2026-10-17: active; Sumeet directed implementation after ADR 0022 was accepted and atelier-et6q decided"
+last_changed: "2026-11-04: Sumeet reworded S4 to show each decision where it was made, and moved S7 to an agent review of atelier-vt8q's debrief followed by his non-blocking read (atelier-s2r4); earlier that day, one-way decision notes removed from S1, S4 and S6 by decision atelier-6306 (a costly-to-reverse choice is a decision record); earlier, 2026-10-17: active; Sumeet directed implementation after ADR 0022 was accepted and atelier-et6q decided"
 ---
 
 # Why
@@ -55,8 +55,8 @@ and `debrief`, without `brief`.
 - S4: `atelier debrief <mission>` produces a review containing: the outcome
   against each success criterion with linked proof (named as S3 decides),
   each item's report, done children's included, each decision where it was
-  made (in the item's timeline entry, beside open or dropped work, or under
-  the mission's own plan), derived deviations (scope added
+  made (in the item's timeline entry, beside open, dropped or asked work,
+  or under the mission's own plan), derived deviations (scope added
   after the mission started, scope dropped, deferred findings, non-pass or
   stale evidence, trivial exemptions, reopened items), and follow-ups.
   `atelier work decisions <mission>` lists the whole decision log.
@@ -76,17 +76,18 @@ and `debrief`, without `brief`.
   all.
   Shown by CLI tests.
 - S7: A real mission run after S1 and S2 land produces an HTML debrief that
-  an independent agent reviewer, given only the page and the repository's
-  records, judges complete and accurate for post-mission review: every
-  item, report, decision, criterion mark and receipt it shows matches the
-  records, nothing the debrief rules call for is missing, and the page
+  an independent agent reviewer, given the page, the repository's records
+  and the debrief rules in `docs/product/mission-reviews.md`, judges
+  complete and accurate for post-mission review: every item, report,
+  decision, criterion mark and receipt it shows matches the records, nothing
+  those rules call for is missing, and the page
   passes an accessibility check in both palettes. The candidate is the
   release distribution mission atelier-vt8q, which closed with every item
   reported. Shown by a validation receipt naming the commit the debrief was
   generated from, with its findings dispositioned. The human then reads
-  the page (atelier-3km4); that read follows the agent review and the
-  mission's close, and a problem it finds reopens S7 rather than holding the
-  close.
+  the page (atelier-3km4) for taste; that read follows the agent review and
+  the mission's close and holds nothing. It files follow-ups, and reopens S7
+  only if it shows the page is inaccurate or incomplete.
 - S8: `work mission` shows each success criterion with a proven, unproven,
   or failing mark derived from linked evidence, using the same criterion
   parsing and proof naming as S4 (atelier-stsa). Shown by CLI tests.

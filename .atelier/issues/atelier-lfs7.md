@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Agent-review a real mission's HTML debrief"
-updated_at: "2026-11-05T04:23:56.735636836+00:00"
+updated_at: "2026-11-05T04:30:15.192390634+00:00"
 ---
 
 ## Goal
@@ -42,10 +42,11 @@ A validation receipt against atelier-r6bt names S7 and the commit the debrief wa
 
 ## Context
 
-On 2026-11-04 Sumeet moved S7 from human to agent review: agent review is cheaper and less blocking, so it comes first, and it is better at attention to detail, corner cases and disciplined rule checks such as accessibility. Sumeet still reads the page afterwards (atelier-3km4): human review follows agent review, comes after merge and the mission's close, and does not hold the close. This also settles atelier-9y66's open choice: the candidate is atelier-vt8q, which closed with every item reported.
+On 2026-11-04 Sumeet moved S7 from human to agent review: agent review is cheaper and less blocking, so it comes first, and it is better at attention to detail, corner cases and disciplined rule checks such as accessibility. Sumeet still reads the page afterwards (atelier-3km4): human review follows agent review, comes after merge and the mission's close, and does not hold the close. Decision atelier-s2r4 supersedes atelier-9y66: the candidate is atelier-vt8q, which closed with every item reported.
 
 The reviewer gets the generated page, docs/product/mission-reviews.md (what the debrief must show), and read access to the records. It checks that every item, report (done children's included), decision, criterion mark and receipt on the page matches the records; that nothing the debrief rules call for is missing; that a reader can do post-mission review without running more commands; and accessibility in both palettes (contrast, headings, keyboard access to chips and cards).
 
 ## Notes
 
 - 2026-11-04 [note] 2026-11-04 handoff: debriefs generated at 711abe6f for the human: atelier-vt8q (closed today, every item reported) and atelier-1w8c (atelier-9y66's choice, superseded into atelier-4pzj), at .atelier/runtime/reviews/<id>-debrief.html. Waiting on Sumeet to pick the mission (keeping 1w8c or switching to vt8q changes 9y66) and to judge the page; no pass recorded for him.
+- 2026-11-04 [note] The 2026-11-04 handoff above is superseded: Sumeet moved S7 to agent review the same day (atelier-s2r4); his read is atelier-3km4.

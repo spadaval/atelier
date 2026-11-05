@@ -27,8 +27,8 @@ Human read of the mission debrief that S7 of docs/strategies/review-and-introspe
 
 ## Done when
 
-Sumeet has read the page and given direction, recorded as a review event naming the commit the page was generated from, with any changes filed as issues.
+Sumeet has read the page and given direction, recorded as a review event on atelier-r6bt naming the commit the page was generated from, with any changes filed as issues.
 
 ## Context
 
-Runs after the agent review and after r6bt closes; it does not gate the close. A problem found here reopens S7 or files follow-ups. The page is functional rather than designed, so the read is about whether it serves review, not visual polish.
+Runs after the agent review and after r6bt closes; it does not gate the close. It files follow-ups, and reopens S7 only if it shows the page is inaccurate or incomplete. The page is functional rather than designed, so the read is about whether it serves review, not visual polish.
