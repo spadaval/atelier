@@ -83,9 +83,10 @@ and `debrief`, without `brief`.
   passes an accessibility check in both palettes. The candidate is the
   release distribution mission atelier-vt8q, which closed with every item
   reported. Shown by a validation receipt naming the commit the debrief was
-  generated from, with its findings dispositioned. A human reads the page
-  for taste after the mission closes; that review is welcome but gates
-  nothing.
+  generated from, with its findings dispositioned. The human then reads
+  the page (atelier-3km4); that read follows the agent review and the
+  mission's close, and a problem it finds reopens S7 rather than holding the
+  close.
 - S8: `work mission` shows each success criterion with a proven, unproven,
   or failing mark derived from linked evidence, using the same criterion
   parsing and proof naming as S4 (atelier-stsa). Shown by CLI tests.

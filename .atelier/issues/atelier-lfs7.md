@@ -4,6 +4,9 @@ id: "atelier-lfs7"
 issue_type: "validation"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: validation/atelier-lfs7
 priority: "P2"
 relationships:
   blocks: []
@@ -24,9 +27,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Agent-review a real mission's HTML debrief"
-updated_at: "2026-11-05T02:41:03.395157678+00:00"
+updated_at: "2026-11-05T04:23:56.735636836+00:00"
 ---
 
 ## Goal
@@ -39,7 +42,7 @@ A validation receipt against atelier-r6bt names S7 and the commit the debrief wa
 
 ## Context
 
-On 2026-11-04 Sumeet moved S7 from human to agent review: agent review is cheaper and less blocking, so it comes first, and it is better at attention to detail, corner cases and disciplined rule checks such as accessibility. Human review judges taste and happens after merge and after the mission closes; it gates nothing. This also settles atelier-9y66's open choice: the candidate is atelier-vt8q, which closed with every item reported.
+On 2026-11-04 Sumeet moved S7 from human to agent review: agent review is cheaper and less blocking, so it comes first, and it is better at attention to detail, corner cases and disciplined rule checks such as accessibility. Sumeet still reads the page afterwards (atelier-3km4): human review follows agent review, comes after merge and the mission's close, and does not hold the close. This also settles atelier-9y66's open choice: the candidate is atelier-vt8q, which closed with every item reported.
 
 The reviewer gets the generated page, docs/product/mission-reviews.md (what the debrief must show), and read access to the records. It checks that every item, report (done children's included), decision, criterion mark and receipt on the page matches the records; that nothing the debrief rules call for is missing; that a reader can do post-mission review without running more commands; and accessibility in both palettes (contrast, headings, keyboard access to chips and cards).
 
