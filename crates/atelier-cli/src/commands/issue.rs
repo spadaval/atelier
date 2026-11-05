@@ -133,6 +133,8 @@ fn render_issue_brief(
     lines.extend(decision_record_lines(index, workflow_policy, issue)?);
     lines.extend(crate::human_output::decision_brief_lines(
         crate::human_output::RenderContext::for_stdout(),
+        workflow_policy,
+        id,
         &atelier_app::decisions::item_decisions(index, workflow_policy, id)?,
     ));
     push_brief_rows(
@@ -1432,7 +1434,6 @@ pub fn update_lifecycle(
 pub struct DecisionFlags<'a> {
     pub reason: Option<&'a str>,
     pub rejected: &'a [String],
-    pub one_way: bool,
 }
 
 /// Append a dated note to the issue record's Notes section.
@@ -1464,11 +1465,11 @@ pub fn append_note(
         {
             bail!("--rejected must name an alternative");
         }
-        DecisionNote::checked_note_parts(text, reason, decision.rejected, decision.one_way)
+        DecisionNote::checked_note_parts(text, reason, decision.rejected)
             .map_err(|defect| anyhow!("Cannot record this decision: {defect}"))?
     } else {
-        if decision.reason.is_some() || !decision.rejected.is_empty() || decision.one_way {
-            bail!("--reason, --rejected and --one-way apply only to `--kind decision`");
+        if decision.reason.is_some() || !decision.rejected.is_empty() {
+            bail!("--reason and --rejected apply only to `--kind decision`");
         }
         (kind.to_string(), text.to_string())
     };

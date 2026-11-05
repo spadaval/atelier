@@ -214,13 +214,17 @@ rows.
 `issue show` and `status` list the current decisions bearing on an item:
 the decision notes on the item, its parent and its mission, and the decided,
 unsuperseded decision records in its mission's scope. The brief form, in
-`issue show` and `status`, is a count with the one-way decisions beneath it;
-`issue show --full` adds a Decisions section with all of them, one-way notes
-first, then decision records, then reversible notes:
+`issue show` and `status`, is a count with the newest decided records beneath
+it, at most three, then the omitted-rows line; `issue show --full` adds a
+Decisions section with all of them, decision records first, then decision
+notes:
 
 ```
-Decisions: 4 current, 1 one-way:
-  atelier-x 2026-10-17 Keep the format | because Readers rely on it
+Decisions: 6 current:
+  atelier-x ✓ done medium Keep one format
+  atelier-y ✓ done medium Store criteria on receipts
+  atelier-z ✓ done medium Remove one mark
+  ... 1 more decision record omitted; see `atelier issue show atelier-w --full`
 ```
 
 ### Commits and Timestamps

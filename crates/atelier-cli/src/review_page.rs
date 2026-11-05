@@ -165,7 +165,6 @@ nav a{display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:6px;
 nav a:hover{background:var(--line);text-decoration:none}
 nav a.sub{padding-left:24px;color:var(--muted)}
 nav a.ask-link{color:var(--warn);font-weight:600}
-nav a.dec-link{color:var(--muted);font-size:12.5px}
 nav .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 nav .n{margin-left:auto;color:var(--faint);font-size:12px}
 .dot{width:9px;height:9px;border-radius:50%;flex:none;border:2px solid currentColor;display:inline-block}
@@ -237,7 +236,6 @@ ul.decs{margin:4px 0 2px;font-size:13.5px}
 section>.fact{padding:8px 0;border-bottom:1px solid var(--line)}section>.fact:last-child{border-bottom:0}
 .changed{color:var(--warn)}
 .note-line{display:block;font-size:12.5px}
-.oneway{font-size:11px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:0 5px;margin-right:5px}
 details.more summary{cursor:pointer;color:var(--link);font-size:12.5px;list-style:none;margin-top:2px}
 details.more summary::-webkit-details-marker{display:none}
 details.more[open] summary{margin-bottom:4px}

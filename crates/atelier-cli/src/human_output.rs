@@ -513,58 +513,62 @@ pub(crate) fn decision_sections(
         .collect()
 }
 
-/// The brief form of an item's current decisions: a count, then the one-way
-/// decisions, the ones a reader must not reverse casually. Empty when there
-/// are none.
+/// Decision records the brief decision view lists before leaving the rest
+/// to `issue show --full`.
+const BRIEF_DECISION_RECORDS: usize = 3;
+
+/// The brief form of an item's current decisions: a count, then the newest
+/// decided records, the costly-to-reverse choices (atelier-6306), at most
+/// [`BRIEF_DECISION_RECORDS`] of them. Empty when there are none.
 pub(crate) fn decision_brief_lines(
     context: RenderContext,
+    policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
+    issue_id: &str,
     decisions: &atelier_app::decisions::Decisions,
 ) -> Vec<String> {
     let total = decisions.notes.len() + decisions.records.len();
     if total == 0 {
         return Vec::new();
     }
-    let one_way = decisions
-        .notes
-        .iter()
-        .filter(|note| note.decision.one_way)
-        .collect::<Vec<_>>();
-    let mut lines = vec![if one_way.is_empty() {
-        format!("Decisions: {total} current")
-    } else {
-        format!("Decisions: {total} current, {} one-way:", one_way.len())
-    }];
+    if decisions.records.is_empty() {
+        return vec![format!("Decisions: {total} current")];
+    }
+    let mut records = decisions.records.iter().collect::<Vec<_>>();
+    records.sort_by(|a, b| (b.issue.closed_at, &b.issue.id).cmp(&(a.issue.closed_at, &a.issue.id)));
+    let mut lines = vec![format!("Decisions: {total} current:")];
     lines.extend(
-        one_way
-            .into_iter()
-            .flat_map(|note| decision_note_rows(context, note))
+        records
+            .iter()
+            .take(BRIEF_DECISION_RECORDS)
+            .flat_map(|record| decision_record_rows(context, policy, record))
             .map(|row| format!("  {row}")),
     );
+    let omitted = records.len().saturating_sub(BRIEF_DECISION_RECORDS);
+    if omitted > 0 {
+        lines.push(format!(
+            "  ... {} omitted; see `atelier issue show {issue_id} --full`",
+            count_noun(omitted, "more decision record")
+        ));
+    }
     lines
 }
 
-/// Every current decision, one-way notes first, then decision records, then
-/// reversible notes.
+/// Every current decision: decision records, then decision notes.
 pub(crate) fn decision_full_rows(
     context: RenderContext,
     policy: Option<&atelier_app::workflow_policy::WorkflowPolicy>,
     decisions: &atelier_app::decisions::Decisions,
 ) -> Vec<String> {
-    let notes = |one_way: bool| {
-        decisions
-            .notes
-            .iter()
-            .filter(move |note| note.decision.one_way == one_way)
-            .flat_map(move |note| decision_note_rows(context, note))
-    };
-    notes(true)
+    decisions
+        .records
+        .iter()
+        .flat_map(|record| decision_record_rows(context, policy, record))
         .chain(
             decisions
-                .records
+                .notes
                 .iter()
-                .flat_map(|record| decision_record_rows(context, policy, record)),
+                .flat_map(|note| decision_note_rows(context, note)),
         )
-        .chain(notes(false))
         .collect()
 }
 

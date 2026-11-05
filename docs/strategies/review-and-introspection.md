@@ -1,7 +1,7 @@
 ---
 status: active
 mission: atelier-r6bt
-last_changed: "2026-10-17: active; Sumeet directed implementation after ADR 0022 was accepted and atelier-et6q decided"
+last_changed: "2026-11-04: one-way decision notes removed from S1, S4 and S6 by decision atelier-6306 (a costly-to-reverse choice is a decision record); earlier, 2026-10-17: active; Sumeet directed implementation after ADR 0022 was accepted and atelier-et6q decided"
 ---
 
 # Why
@@ -37,8 +37,9 @@ and `debrief`, without `brief`.
 
 - S1: An agent can record a decision made inside a work item as a typed
   note. The choice and the reason are required; rejected alternatives are
-  optional; a decision is reversible unless marked one-way. `check` refuses
-  malformed entries, and one-way decisions can be listed across a mission.
+  optional. `check` refuses malformed entries, and decisions can be listed
+  across a mission. A choice that is costly to reverse is a decision record,
+  not a note (atelier-6306).
   Shown by CLI integration tests.
 - S2: The implementer report is the Close Reason, extended. Close Reason
   stays the required Outcome: one or two sentences giving the observable
@@ -54,7 +55,7 @@ and `debrief`, without `brief`.
 - S4: `atelier debrief <mission>` produces a review containing: the outcome
   against each success criterion with linked proof (named as S3 decides),
   each item's report, the
-  decision log with one-way decisions first, derived deviations (scope added
+  decision log with decision records first, derived deviations (scope added
   after the mission started, scope dropped, deferred findings, non-pass or
   stale evidence, trivial exemptions, reopened items), and follow-ups.
   Derived facts come from records and Git, not new stored state. It prints
@@ -69,7 +70,8 @@ and `debrief`, without `brief`.
   test.
 - S6: `status` and `issue show` surface the current decisions that bear on
   the item being worked, through its parent and mission: the brief view shows
-  the count and the one-way decisions, and the full view shows them all.
+  the count and up to three decision records, and the full view shows them
+  all.
   Shown by CLI tests.
 - S7: A real mission run after S1 and S2 land produces an HTML debrief that
   the human, opening it in T3 Code, judges good enough for post-mission

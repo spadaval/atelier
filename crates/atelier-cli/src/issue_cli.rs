@@ -147,14 +147,12 @@ pub(crate) fn dispatch(action: super::IssueCommands, quiet: bool) -> Result<()> 
             kind,
             reason,
             rejected,
-            one_way,
         } => {
             let (state_dir, index) = load_repository()?;
             let id = commands::issue::resolve_id(&index, &id)?;
             let decision = commands::issue::DecisionFlags {
                 reason: reason.as_deref(),
                 rejected: &rejected,
-                one_way,
             };
             commands::issue::append_note(&state_dir, &id, &kind, &text, decision, quiet)
         }

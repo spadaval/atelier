@@ -756,9 +756,9 @@ pub const ISSUE_NOTE_KINDS: &[&str] = &[
 ];
 
 /// The note kind for a decision made inside a work item (atelier-fip8). Its
-/// tag is `[decision]`, or `[decision one-way]` when it cannot be reversed.
+/// tag is `[decision]`; a choice that is costly to reverse is a decision
+/// record instead (atelier-6306).
 pub const DECISION_NOTE_KIND: &str = "decision";
-pub const ONE_WAY_MARK: &str = "one-way";
 const DECISION_REASON_LABEL: &str = "Reason:";
 const DECISION_REJECTED_LABEL: &str = "Rejected:";
 
@@ -810,29 +810,19 @@ fn note_bullet(line: &str) -> Option<IssueNote> {
 }
 
 /// A decision note: the choice and the reason are required, rejected
-/// alternatives are optional, and a decision is reversible unless one-way.
+/// alternatives are optional.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DecisionNote {
     pub date: String,
     pub choice: String,
     pub reason: String,
     pub rejected: Vec<String>,
-    pub one_way: bool,
 }
 
 impl DecisionNote {
     /// The note tag and text `append_note` stores for a decision.
-    pub fn note_parts(
-        choice: &str,
-        reason: &str,
-        rejected: &[String],
-        one_way: bool,
-    ) -> (String, String) {
-        let tag = if one_way {
-            format!("{DECISION_NOTE_KIND} {ONE_WAY_MARK}")
-        } else {
-            DECISION_NOTE_KIND.to_string()
-        };
+    pub fn note_parts(choice: &str, reason: &str, rejected: &[String]) -> (String, String) {
+        let tag = DECISION_NOTE_KIND.to_string();
         let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
         let mut text = format!("{}\n{DECISION_REASON_LABEL} {}", flat(choice), flat(reason));
         for alternative in rejected {
@@ -850,7 +840,6 @@ impl DecisionNote {
         choice: &str,
         reason: &str,
         rejected: &[String],
-        one_way: bool,
     ) -> Result<(String, String), String> {
         let starts_with_label = |text: &str| {
             let text = text.trim_start();
@@ -861,7 +850,7 @@ impl DecisionNote {
                 "the choice and rejected alternatives must not start with `{DECISION_REASON_LABEL}` or `{DECISION_REJECTED_LABEL}`"
             ));
         }
-        let (tag, text) = Self::note_parts(choice, reason, rejected, one_way);
+        let (tag, text) = Self::note_parts(choice, reason, rejected);
         let note = IssueNote {
             date: String::new(),
             tag: tag.clone(),
@@ -881,22 +870,22 @@ impl DecisionNote {
     }
 
     fn parse(note: &IssueNote) -> Result<Self, String> {
-        let one_way = match note.tag.split_whitespace().collect::<Vec<_>>()[..] {
-            [_] => false,
-            [_, ONE_WAY_MARK] => true,
-            _ => {
-                return Err(format!(
-                    "tag [{}] is not [decision] or [decision one-way]",
-                    note.tag
-                ))
-            }
-        };
+        if note.tag != DECISION_NOTE_KIND {
+            return Err(format!("tag [{}] is not [decision]", note.tag));
+        }
         let mut choice = Vec::new();
         let mut reason: Option<Vec<&str>> = None;
         let mut rejected: Vec<String> = Vec::new();
         // Lines after a label continue it until the next label.
         let mut in_reason = false;
-        for line in note.text.lines() {
+        for (number, line) in note.text.lines().enumerate() {
+            if number > 0 {
+                if let Some(label) = misspelled_label(line) {
+                    return Err(format!(
+                        "has a line starting `{label}`, a misspelled `{DECISION_REASON_LABEL}` or `{DECISION_REJECTED_LABEL}` label; correct it, or reword the line so it does not start with a label"
+                    ));
+                }
+            }
             if let Some(value) = line.strip_prefix(DECISION_REASON_LABEL) {
                 if reason.is_some() {
                     return Err("has more than one Reason: line".to_string());
@@ -947,8 +936,46 @@ impl DecisionNote {
                 .into_iter()
                 .map(|value| value.trim().to_string())
                 .collect(),
-            one_way,
         })
+    }
+}
+
+/// A continuation line's leading `Word:` when it is near, but not exactly, a
+/// decision note label (atelier-juyb): ignoring case, it starts with the
+/// label's first letter and is one insertion, deletion, substitution or
+/// adjacent transposition away, or the same word (atelier-nu4k). Such a line
+/// would otherwise fold silently into the text before it. Ordinary words two
+/// edits away (`Person:`, `Selected:`) or differing in the first letter
+/// (`Season:`) are text.
+fn misspelled_label(line: &str) -> Option<&str> {
+    let (word, _) = line.split_once(':')?;
+    if word.is_empty() || !word.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let label = &line[..=word.len()];
+    let word = word.to_ascii_lowercase();
+    let near = |target: &str| {
+        let target = target.trim_end_matches(':').to_ascii_lowercase();
+        word.as_bytes()[0] == target.as_bytes()[0] && one_edit_apart(&word, &target)
+    };
+    let exact = label == DECISION_REASON_LABEL || label == DECISION_REJECTED_LABEL;
+    (!exact && (near(DECISION_REASON_LABEL) || near(DECISION_REJECTED_LABEL))).then_some(label)
+}
+
+/// Whether two ASCII words are equal or one insertion, deletion,
+/// substitution or adjacent transposition apart.
+fn one_edit_apart(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let prefix = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    let (a, b) = (&a[prefix..], &b[prefix..]);
+    match (a.len(), b.len()) {
+        (0, 0) | (1, 0) | (0, 1) => true,
+        (m, n) if m == n => {
+            a[1..] == b[1..] || (m >= 2 && a[0] == b[1] && a[1] == b[0] && a[2..] == b[2..])
+        }
+        (m, n) if m == n + 1 => a[1..] == *b,
+        (m, n) if m + 1 == n => *a == b[1..],
+        _ => false,
     }
 }
 
@@ -1477,12 +1504,11 @@ mod tests {
             "Store the report in Close Reason",
             "Close Reason is\nexempt from approval freshness",
             &["a new Report section".into(), "a sidecar".into()],
-            true,
         );
         sections.append_note(NaiveDate::from_ymd_opt(2026, 10, 18).unwrap(), &tag, &text);
         assert_eq!(
             sections.notes.as_deref().unwrap(),
-            "- 2026-10-17 [handoff] Earlier\n- 2026-10-18 [decision one-way] Store the report in Close Reason\n  Reason: Close Reason is exempt from approval freshness\n  Rejected: a new Report section\n  Rejected: a sidecar"
+            "- 2026-10-17 [handoff] Earlier\n- 2026-10-18 [decision] Store the report in Close Reason\n  Reason: Close Reason is exempt from approval freshness\n  Rejected: a new Report section\n  Rejected: a sidecar"
         );
         assert_eq!(
             sections.decision_notes(),
@@ -1491,7 +1517,6 @@ mod tests {
                 choice: "Store the report in Close Reason".into(),
                 reason: "Close Reason is exempt from approval freshness".into(),
                 rejected: vec!["a new Report section".into(), "a sidecar".into()],
-                one_way: true,
             })]
         );
     }
@@ -1511,7 +1536,6 @@ mod tests {
             sections_with_notes("- 2026-10-18 [decision] Use X\n  Reason: Y\n  because Z")
                 .decision_notes();
         assert_eq!(decisions[0].as_ref().unwrap().reason, "Y because Z");
-        assert!(!decisions[0].as_ref().unwrap().one_way);
     }
 
     #[test]
@@ -1532,6 +1556,39 @@ mod tests {
             defect("- 2026-10-18 [decision] X\n  Reason: Y\n  Reason: Z").contains("more than one")
         );
         assert!(defect("- 2026-10-18 [decision] X\n  Reason: Y\n  Rejected:").contains("empty"));
+        for label in ["Rejectd:", "Reasons:", "reason:", "REJECTED:", "Raeson:"] {
+            assert!(
+                defect(&format!(
+                    "- 2026-10-18 [decision] X\n  Reason: Y\n  {label} Z"
+                ))
+                .contains(&format!("starting `{label}`")),
+                "{label}"
+            );
+        }
+        // Other words with a colon, and labels on the choice line, are text.
+        // Ordinary words near a label are text too (atelier-nu4k).
+        for line in [
+            "Note: Z",
+            "See: Z",
+            "Risk: Z",
+            "12: Z",
+            "Reason : Z",
+            "Person: Z",
+            "Region: Z",
+            "Lesson: Z",
+            "Season: Z",
+            "Treason: Z",
+            "Selected: Z",
+            "Detected: Z",
+            "Rejects: Z",
+        ] {
+            assert!(
+                sections_with_notes(&format!("- 2026-10-18 [decision] X\n  Reason: Y\n  {line}"))
+                    .decision_notes()[0]
+                    .is_ok(),
+                "{line}"
+            );
+        }
         assert!(sections_with_notes("- 2026-10-18 [decisions] X")
             .decision_notes()
             .is_empty());

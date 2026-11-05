@@ -46,7 +46,7 @@ How land tells a claim made before the policy required a part from a new one. Th
 
 ## Notes
 
-- 2026-10-17 [decision one-way] Store the report as ### Deviations, ### Decisions, ### Surprises and ### Open items subsections of Close Reason
+- 2026-10-17 [decision] Store the report as ### Deviations, ### Decisions, ### Surprises and ### Open items subsections of Close Reason
   Reason: Close Reason is already exempt from approval freshness and checked by land, so the report inherits both without new record shape
   Rejected: a separate Report section
   Rejected: typed report notes

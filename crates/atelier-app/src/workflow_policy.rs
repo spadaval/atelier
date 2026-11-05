@@ -11,6 +11,15 @@ pub use atelier_workflow::{
     WORKFLOW_POLICY_PATH,
 };
 
+/// Whether a status is in the done category. Without a workflow policy the
+/// status name stands in for its category, so `done` is done (atelier-s5x4).
+pub fn status_is_done(policy: Option<&WorkflowPolicy>, status: &str) -> bool {
+    match policy {
+        Some(policy) => policy.status_category(status) == Some("done"),
+        None => status == "done",
+    }
+}
+
 /// An issue type argument the workflow does not declare.
 pub fn invalid_issue_type(policy: &WorkflowPolicy, issue_type: &str) -> InvalidValue {
     let valid = policy.issue_types.keys().collect::<Vec<_>>();

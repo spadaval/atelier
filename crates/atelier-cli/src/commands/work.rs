@@ -860,8 +860,8 @@ fn first_sentence(text: &str) -> &str {
 }
 
 /// `work decisions <mission>`: the decisions made across a mission's scope.
-/// One-way decision notes lead, then current decision records and
-/// reversible notes; open and superseded records and malformed notes follow.
+/// Current decision records lead, then decision notes; open and superseded
+/// records and malformed notes follow.
 pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<()> {
     let id = crate::commands::issue::resolve_id(index, mission_ref)?;
     let mission = index.require_issue(&id)?;
@@ -877,15 +877,11 @@ pub fn decisions(index: &RecordIndex, mission_ref: &str, quiet: bool) -> Result<
         // The items holding current decisions, each once.
         let mut ids: Vec<&String> = Vec::new();
         let current = decisions
-            .notes_one_way_first()
-            .map(|note| &note.issue_id)
-            .chain(
-                decisions
-                    .records
-                    .iter()
-                    .filter(|record| record.is_current())
-                    .map(|record| &record.issue.id),
-            );
+            .records
+            .iter()
+            .filter(|record| record.is_current())
+            .map(|record| &record.issue.id)
+            .chain(decisions.notes.iter().map(|note| &note.issue_id));
         for id in current {
             if !ids.contains(&id) {
                 println!("{id}");
