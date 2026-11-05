@@ -42,9 +42,12 @@ impl RecordHistory {
 /// made to its first parent, so work merged from a branch appears when it
 /// reached this history, and branch-local states never interleave by date.
 /// When HEAD is a work branch off `base`, the base's first-parent line up to
-/// the newest base commit HEAD holds comes first, then the branch's own
-/// line, so merging the base in does not fold the base's history into one
-/// merge (atelier-jnec). Empty without a commit to read.
+/// the newest base commit HEAD holds (the fork) comes first, so merging the
+/// base in does not fold the base's history into one merge (atelier-jnec).
+/// The branch's line follows from the first commit that holds the fork,
+/// counted as its change from the fork: branch commits from before it read
+/// records as they were before the base's newer versions, so their changes
+/// arrive with it instead. Empty without a commit to read.
 pub fn issue_histories(
     read: &mut ReadContext<'_>,
     base: Option<&str>,
@@ -66,21 +69,7 @@ pub fn issue_histories(
                 .into_owned()
         })
         .collect::<Vec<_>>();
-    let mut output = String::new();
-    for line in first_parent_lines(read, &head, base) {
-        let mut args = vec![
-            "log",
-            "--reverse",
-            "--first-parent",
-            "--diff-merges=first-parent",
-            "--format=%x00%H %ct",
-            "--name-only",
-            line.as_str(),
-            "--",
-        ];
-        args.extend(paths.iter().map(String::as_str));
-        output.push_str(&read.history(&args)?);
-    }
+    let output = walk(read, &head, base, &paths)?;
     let entries = output.split('\0').filter(|entry| !entry.trim().is_empty());
     for (position, entry) in entries.enumerate() {
         let mut lines = entry.lines();
@@ -120,10 +109,62 @@ pub fn issue_histories(
     Ok(history)
 }
 
-/// The revisions whose first-parent lines make up HEAD's history: HEAD
-/// alone on the base or without one, otherwise the base's line up to its
-/// newest commit HEAD holds, then the commits only HEAD's line has.
-fn first_parent_lines(read: &ReadContext<'_>, head: &str, base: Option<&str>) -> Vec<String> {
+/// `git log` output, oldest first, of the commits that make up HEAD's
+/// history of `paths`, as [`issue_histories`] describes it.
+fn walk(
+    read: &mut ReadContext<'_>,
+    head: &str,
+    base: Option<&str>,
+    paths: &[String],
+) -> Result<String> {
+    let log = |read: &mut ReadContext<'_>, revisions: &str| {
+        let mut args = vec![
+            "log",
+            "--reverse",
+            "--first-parent",
+            "--diff-merges=first-parent",
+            "--format=%x00%H %ct",
+            "--name-only",
+            revisions,
+            "--",
+        ];
+        args.extend(paths.iter().map(String::as_str));
+        read.history(&args)
+    };
+    let Some(fork) = fork(read, head, base) else {
+        return log(read, head);
+    };
+    let mut output = log(read, &fork)?;
+    let line = read.history(&[
+        "rev-list",
+        "--reverse",
+        "--first-parent",
+        &format!("{fork}..{head}"),
+    ])?;
+    let mut entry = None;
+    for commit in line.lines().filter(|line| !line.trim().is_empty()) {
+        if read.ancestor(&fork, commit)? {
+            entry = Some(commit.to_string());
+            break;
+        }
+    }
+    let Some(entry) = entry else {
+        return Ok(output);
+    };
+    let mut args = vec!["diff", "--name-only", fork.as_str(), entry.as_str(), "--"];
+    args.extend(paths.iter().map(String::as_str));
+    let changed = read.history(&args)?;
+    if !changed.trim().is_empty() {
+        let seconds = read.history(&["log", "-1", "--format=%ct", &entry])?;
+        output.push_str(&format!("\0{entry} {}\n{changed}", seconds.trim()));
+    }
+    output.push_str(&log(read, &format!("{entry}..{head}"))?);
+    Ok(output)
+}
+
+/// The newest base commit HEAD holds, when HEAD is not on the base's line:
+/// `None` on the base, behind it, or without a base branch.
+fn fork(read: &ReadContext<'_>, head: &str, base: Option<&str>) -> Option<String> {
     let commit = |args: &[&str]| {
         git_output(read.repo, args)
             .ok()
@@ -131,20 +172,13 @@ fn first_parent_lines(read: &ReadContext<'_>, head: &str, base: Option<&str>) ->
             .map(|output| output.trim().to_string())
             .filter(|output| !output.is_empty())
     };
-    let fork = base
-        .and_then(|base| {
-            commit(&[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                &format!("refs/heads/{base}^{{commit}}"),
-            ])
-        })
-        .and_then(|base| commit(&["merge-base", head, &base]));
-    match fork {
-        Some(fork) if fork != head => vec![fork.clone(), format!("{fork}..{head}")],
-        _ => vec![head.to_string()],
-    }
+    let base = commit(&[
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        &format!("refs/heads/{}^{{commit}}", base?),
+    ])?;
+    commit(&["merge-base", head, &base]).filter(|fork| fork != head)
 }
 
 /// A version in the retired epic shape, read as the parent issue it became,

@@ -1516,13 +1516,34 @@ fn a_debrief_from_a_branch_that_merged_the_base_keeps_the_base_history() {
     .trim()
     .to_string();
     let reopened = item(dir.path(), "Reopened");
-    ok(dir.path(), &["issue", "link", "-q", &reopened, &mission]);
+    let shipped = item(dir.path(), "Shipped");
+    for id in [&reopened, &shipped] {
+        ok(dir.path(), &["issue", "link", "-q", id, &mission]);
+    }
     commit_all(dir.path(), "plan");
-    // The work branch leaves before the mission starts.
+    // The work branch leaves before the mission starts, and touches a scope
+    // record before it merges the base.
     git(dir.path(), &["switch", "-q", "-c", "feature"]);
     fs::write(dir.path().join("code.txt"), "branch work\n").unwrap();
+    ok(
+        dir.path(),
+        &["issue", "update", &shipped, "--label", "touched"],
+    );
     commit_all(dir.path(), "branch work");
     git(dir.path(), &["switch", "-q", "main"]);
+    ok(dir.path(), &["issue", "transition", &shipped, "start"]);
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &shipped,
+            "close",
+            "--reason",
+            "Shipped.",
+        ],
+    );
+    commit_all(dir.path(), "ship on the base");
     ok(dir.path(), &["issue", "transition", &mission, "ready"]);
     commit_all(dir.path(), "start");
     let late = item(dir.path(), "Added late");
@@ -1554,12 +1575,28 @@ fn a_debrief_from_a_branch_that_merged_the_base_keeps_the_base_history() {
         "{on_base}"
     );
     assert!(base_facts.contains("Reopened on"), "{on_base}");
+    assert_eq!(base_facts.matches("Reopened on").count(), 1, "{on_base}");
+    assert!(
+        base_facts.contains(&format!("delivered {shipped} task ✓ done Shipped")),
+        "{on_base}"
+    );
 
     // A second later, the branch merges the base in: every base commit
     // since the branch left reaches the branch's first-parent line at once.
     std::thread::sleep(std::time::Duration::from_millis(1100));
     git(dir.path(), &["switch", "-q", "feature"]);
-    git(dir.path(), &["merge", "-q", "--no-ff", "--no-edit", "main"]);
+    git(
+        dir.path(),
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "--no-edit",
+            "-X",
+            "theirs",
+            "main",
+        ],
+    );
     fs::write(dir.path().join("code.txt"), "more branch work\n").unwrap();
     commit_all(dir.path(), "branch work after the merge");
     let on_branch = ok(dir.path(), &["debrief", &mission]);

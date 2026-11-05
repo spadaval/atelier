@@ -85,8 +85,10 @@ Every fact is derived from records and Git: one history query walks HEAD's
 first-parent history over the mission's issue records, reading a merge as
 the change it made to its first parent. On a work branch, it walks the base
 branch's first-parent line up to the newest base commit the branch holds,
-then the branch's own line, so a branch that merged the base in reports the
-same history as the base. It finds the mission's start (its first
+then the branch's own line from the first commit that holds that base
+commit, counting that commit as its change from the base commit (so earlier
+branch changes arrive with it). A branch that merged the base in reports
+the same history as the base. It finds the mission's start (its first
 version out of `draft`), its close, when each item was first linked to it
 (on either record, and for a child when its parent first listed it), and
 done claims later withdrawn. Versions in the retired epic shape are read as
