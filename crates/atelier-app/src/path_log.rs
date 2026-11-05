@@ -517,14 +517,23 @@ mod tests {
         assert_parity(repo.path(), &scope_groups());
     }
 
+    // One test per date step: each `assert_parity` over `branchy` spawns
+    // thousands of `git log` processes, which takes over 20s on macOS CI.
+    fn assert_parity_with_date_step(step: i64) {
+        let mut repo = Repo::new();
+        repo.step = step;
+        branchy(&mut repo);
+        assert_parity(repo.path(), &scope_groups());
+    }
+
     #[test]
-    fn matches_git_when_dates_run_backwards_or_tie() {
-        for step in [-60, 0] {
-            let mut repo = Repo::new();
-            repo.step = step;
-            branchy(&mut repo);
-            assert_parity(repo.path(), &scope_groups());
-        }
+    fn matches_git_when_dates_run_backwards() {
+        assert_parity_with_date_step(-60);
+    }
+
+    #[test]
+    fn matches_git_when_dates_tie() {
+        assert_parity_with_date_step(0);
     }
 
     #[test]

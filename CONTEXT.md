@@ -6,8 +6,8 @@ Use these terms for the verified repo-native tracker defined by
 | Term | Meaning |
 | --- | --- |
 | Record | Tracked Markdown with typed YAML front matter and a human-readable body under `.atelier/`. |
-| Mission | An issue of type `mission` that links strategy and success criteria; its execution scope uses `advances` links. |
-| Strategy | Ordinary Markdown owning intent, success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
+| Mission | An issue of type `mission`: a themed container whose Outcome says why its work belongs together, optionally with a strategy and success criteria; its execution scope uses `advances` links. |
+| Strategy | Ordinary Markdown owning intent, any success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
 | Issue | One accountable slice; work items have `Goal` and `Done when` sections. |
 | Parent | Any work item with direct children, one level deep; it owns their branch and closes after them. Replaced the epic type (atelier-9vq3). |
 | Validation item | Work dedicated to independently checking referenced acceptance claims. |

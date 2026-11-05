@@ -91,15 +91,10 @@ fn migrate_default_issue_workflow(dir: &Path) {
 
 fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
     edit_canonical_issue(dir, mission_id, |markdown| {
-        markdown
-            .replace(
-                "Success criteria were not specified.",
-                "The mission scenario demonstrates its acceptance claims.",
-            )
-            .replace(
-                "Goal was not specified.",
-                "Coordinate an observable increment of tracker work.",
-            )
+        markdown.replace(
+            "Goal was not specified.",
+            "Coordinate an observable increment of tracker work.",
+        )
     });
     let (success, _, stderr) = run_atelier(dir, &["issue", "transition", mission_id, "ready"]);
     assert!(success, "mission ready transition failed: {stderr}");

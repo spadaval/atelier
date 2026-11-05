@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use atelier_records::{issue_record_path, CanonicalIssueRecord, IssueSectionName};
+use atelier_records::{issue_record_path, CanonicalIssueRecord};
 
 use crate::record_index::{read_record_files, RecordIndex};
 use crate::record_ref::{match_id, not_found, wrong_kind, RecordKind};
@@ -232,25 +232,10 @@ pub fn issue_findings<'a>(
                 )));
             }
         }
-        if issue.issue_type == "mission"
-            && issue.strategy.is_none()
-            && record
-                .sections
-                .section(IssueSectionName::SuccessCriteria)
-                .is_none()
-        {
-            findings.push(finding(
-                "Mission requires Success criteria or a linked strategy".to_string(),
-            ));
-        }
         if !scoped {
             continue;
         }
-        let mut required = record.sections.required_names();
-        if issue.issue_type == "mission" && issue.strategy.is_none() {
-            required.push(IssueSectionName::SuccessCriteria);
-        }
-        for name in required {
+        for name in record.sections.required_names() {
             if record.sections.section(name).is_none_or(|value| {
                 value.trim().ends_with("was not specified.")
                     || value.trim().ends_with("were not specified.")
@@ -266,9 +251,10 @@ pub fn issue_findings<'a>(
 }
 
 /// Receipts that name mission criteria (atelier-et6q): each named criterion
-/// must be one the target's mission defines, so a typo or a renamed slug is
-/// never silent. Scoped to one issue, only receipts targeting it, or for a
-/// mission, receipts targeting it or an item in its scope.
+/// must be one the receipt's stored `criteria_mission` defines, so a typo or
+/// a renamed slug is never silent. Scoped to one issue, only receipts
+/// targeting it or stored against it as their mission; for a mission, also
+/// receipts targeting an item in its scope.
 fn criteria_findings(
     state_dir: &Path,
     repo_root: &Path,

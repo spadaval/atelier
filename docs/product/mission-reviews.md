@@ -13,17 +13,17 @@ its plan before work starts.
 report: the problem, what the mission set out to do, what it did, and where
 it stands. Both forms follow the same order:
 
-- **Status:** a one-line verdict: criteria proven, how many calls need the
-  human, how much is left and how much was found along the way.
+- **Status:** a one-line verdict: criteria proven (if any), how many calls
+  need the human, how much is left and how much was found along the way.
 - **The problem:** the strategy's Why section, or the mission's Background.
-- **What we set out to do:** the mission's Outcome, its success criteria, and
+- **What we set out to do:** the mission's Outcome, any success criteria, and
   the planned work: items linked to the mission by its start and not filed by
   review, in filing order, children under their parent.
 - **What we did:** one timeline, oldest first. Each done item appears when it
   closed, with its outcome, children, what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn,
   failing newest proof, a trivial exemption), what surprised the
-  implementer, the decisions made in it (one-way first), any decision record
+  implementer, the decisions made in it, any decision record
   cues (its ADR, the records it replaces), how review went and who approved
   it, and the follow-ups its review filed. Beside them, at their times: the
   mission's start and close, work added to the scope, work filed other than
@@ -63,13 +63,13 @@ it stands. Both forms follow the same order:
 
 Decisions appear where they were made: in a delivered item's timeline
 entry, beside an open, dropped or asked item, and, for decisions on the
-mission itself, under what it set out to do. The page's sidebar indexes the
-one-way decisions; `atelier work decisions <mission>` lists the whole log.
+mission itself, under what it set out to do. `atelier work decisions
+<mission>` lists the whole log.
 
 The Markdown form keeps record IDs, for agents. `--html` writes the same
 review to `.atelier/runtime/reviews/<mission>-debrief.html` and prints its
 path. The page has a persistent sidebar with progress, navigation, the
-delivered items and the one-way decisions, and a time rail beside the
+delivered items, and a time rail beside the
 timeline. Every issue it names, including IDs mentioned in record text, is a
 chip with its ID, title and status; hovering or focusing it opens a card with
 its type, summary, outcome and parent. Review events and receipts are chips
@@ -107,11 +107,11 @@ every item, criterion mark, and decision in one appears in the other.
 change it while changes are cheap. It shows the mission line; the Outcome,
 from the linked strategy's Outcome section, or from the mission record when
 it has no strategy or the strategy has no such section; the strategy path;
-each success criterion; the scope, one item line each with its size
-(`| size M`, from the `size-*` label), open blockers and needs-human cue,
-children under their parent; the blocked items; the Unknowns of each
-open item; open human decisions (open decision records and needs-human work
-in scope); the strategy's Risks and Unknowns section; and review events on
+each success criterion, if it has any; the scope, one item line each with
+its size (`| size M`, from the `size-*` label), open blockers and
+needs-human cue, children under their parent; the blocked items; the
+Unknowns of each open item; open human decisions (open decision records and
+needs-human work in scope); the strategy's Risks and Unknowns section; and review events on
 the mission. `--html` writes `.atelier/runtime/reviews/<mission>-brief.html`
 with the same facts, under the same rules as the debrief page.
 

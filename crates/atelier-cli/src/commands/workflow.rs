@@ -49,12 +49,15 @@ pub struct CloseReasonInput<'a> {
 }
 
 /// The Close Reason a transition checks and stores (atelier-sfsq): a
-/// `--reason-file`'s whole text, a `--reason` Outcome over the report parts
-/// the record already holds, or, with neither, the record's own Close
-/// Reason, so a report written in the record body needs no flag.
+/// `--reason-file`'s whole text, a `--reason` Outcome, or, with neither, the
+/// record's own Close Reason, so a report written in the record body needs
+/// no flag. A `--reason` Outcome keeps the report parts the record already
+/// holds only when the transition requires a report; a supersede drops a
+/// report written for a close (atelier-ypks).
 fn effective_close_reason(
     existing: Option<&str>,
     input: CloseReasonInput<'_>,
+    keeps_report: bool,
 ) -> Result<Option<String>> {
     let existing = existing.map(str::trim).filter(|text| !text.is_empty());
     Ok(match (input.reason, input.reason_file) {
@@ -64,12 +67,20 @@ fn effective_close_reason(
                 .with_context(|| format!("cannot read --reason-file {}", path.display()))?;
             Some(text.trim().to_string())
         }
-        (Some(outcome), None) => Some(match existing {
+        (Some(outcome), None) => Some(match existing.filter(|_| keeps_report) {
             Some(existing) => atelier_core::CloseReport::with_outcome(existing, outcome),
             None => outcome.trim().to_string(),
         }),
         (None, None) => existing.map(str::to_string),
     })
+}
+
+/// Whether the transition requires any implementer report part.
+fn requires_report(transition: &TransitionDefinition) -> bool {
+    transition
+        .required_fields
+        .iter()
+        .any(|field| atelier_core::ReportPart::from_field(field).is_some())
 }
 
 /// Applies a workflow transition: checks required fields and read-only
@@ -83,18 +94,6 @@ pub fn transition_issue(
     quiet: bool,
 ) -> Result<()> {
     let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
-    let existing = index
-        .issue_record(&issue_id)
-        .and_then(|record| record.sections.close_reason.as_deref());
-    let close_reason = effective_close_reason(existing, reason)?;
-    let close_reason = close_reason.as_deref();
-    if let Some(reason) = close_reason {
-        atelier_records::validate_issue_section_text(
-            &issue_id,
-            atelier_records::IssueSectionName::CloseReason,
-            reason,
-        )?;
-    }
     let repo_root = repo_root()?;
     let source = atelier_app::workflow_policy::action_policy(&repo_root, index, &issue_id)?;
     for diagnostic in source.diagnostics {
@@ -105,6 +104,20 @@ pub fn transition_issue(
     ensure_transitionable_status(&policy, &before)?;
     let transition = resolve_issue_transition(&policy, &before, transition_name)?;
     ensure_transition_available(&before, transition_name, transition)?;
+    let existing = index
+        .issue_record(&issue_id)
+        .and_then(|record| record.sections.close_reason.as_deref());
+    let close_reason = effective_close_reason(existing, reason, requires_report(transition))?;
+    let close_reason = close_reason.as_deref();
+    if let Some(reason) = close_reason {
+        atelier_records::validate_issue_section_text(
+            &issue_id,
+            atelier_records::IssueSectionName::CloseReason,
+            reason,
+        )?;
+    }
+    let closing = policy.status_category(&transition.to) == Some("done");
+    let reused = reason.reason.is_none() && reason.reason_file.is_none();
     ensure_transition_allowed(
         index,
         &policy,
@@ -123,11 +136,21 @@ pub fn transition_issue(
         return Ok(());
     }
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
+    if let Some(outcome) = close_reason
+        .filter(|_| closing && reused)
+        .map(|text| atelier_core::CloseReport::parse(text).outcome)
+    {
+        // Policy lets no transition leave a done status, so an item reopens
+        // only by a hand edit that keeps its old Close Reason. Say which one
+        // this close stored (atelier-ypks).
+        let first = outcome.lines().next().unwrap_or_default();
+        println!("Close Reason: kept from the record: {first}");
+    }
     let mut next = vec![FooterAction::new(
         "Inspect this issue",
         format!("atelier issue show {}", before.id),
     )];
-    if policy.status_category(&transition.to) == Some("done") {
+    if closing {
         next.extend(handoff_steps(index, &before)?);
     } else {
         next.push(FooterAction::new(

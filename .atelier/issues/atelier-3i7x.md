@@ -10,9 +10,6 @@ relationships:
   children: []
   attachments: []
   relates:
-  - kind: "issue"
-    id: "atelier-l63c"
-    type: "advances"
   - kind: "review"
     id: "atelier-iigf"
     type: "discovered_from"

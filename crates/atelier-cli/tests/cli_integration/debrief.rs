@@ -93,7 +93,6 @@ fn mission(dir: &Path) -> Mission {
             "No dependency",
             "--rejected",
             "a regex crate",
-            "--one-way",
         ],
     );
     ok(
@@ -284,12 +283,7 @@ fn debrief_markdown_reads_as_an_after_action_report() {
             .unwrap_or_else(|| panic!("no {title}: {page}"))
     });
     assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "{page}");
-    for gone in [
-        "Open Work",
-        "One-way Decisions",
-        "Reversible Decisions",
-        "Mission Reviews",
-    ] {
+    for gone in ["Open Work", "Decision Notes", "Mission Reviews"] {
         assert!(!page.contains(&format!("\n{gone}\n")), "{gone}: {page}");
     }
 
@@ -322,7 +316,7 @@ fn debrief_markdown_reads_as_an_after_action_report() {
     )));
     for fact in [
         "  Changed: Used a manual parser.",
-        "  Decided: one-way: Parse by hand | because No dependency",
+        "  Decided: Parse by hand | because No dependency",
         "  Decided: Name it plainly | because Short",
         "  Review: Not approved; 1 finding: 1 deferred.",
     ] {
@@ -330,8 +324,8 @@ fn debrief_markdown_reads_as_an_after_action_report() {
     }
     assert!(did.contains(&format!("  Filed: {} task", m.follow_up)));
     assert!(
-        at("one-way: Parse by hand") < at("Name it plainly"),
-        "one-way first: {page}"
+        at("Parse by hand") < at("Name it plainly"),
+        "in record order: {page}"
     );
     assert!(
         !did.contains("Surprised by"),
@@ -508,17 +502,14 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
             "{slug} is {mark} in the Markdown: {row}"
         );
     }
-    // Each decision, with its reason, where it was made, one-way first; the
-    // sidebar indexes the one-way ones.
+    // Each decision, with its reason, where it was made, in record order;
+    // the sidebar indexes none of them (atelier-6306).
     let notes = markdown
         .lines()
         .filter_map(|line| line.trim().strip_prefix("Decided: "))
         .map(|line| {
             let (choice, reason) = line.split_once(" | because ").unwrap();
-            (
-                choice.trim_start_matches("one-way: ").to_string(),
-                reason.to_string(),
-            )
+            (choice.to_string(), reason.to_string())
         })
         .collect::<Vec<_>>();
     assert_eq!(notes.len(), 2, "{markdown}");
@@ -529,13 +520,10 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
             "{choice}"
         );
     }
-    let one_way = entry.find("one-way</span>Parse by hand").expect(entry);
-    let reversible = entry.find("Name it plainly").expect(entry);
-    assert!(one_way < reversible, "one-way first: {entry}");
-    assert!(html.contains(&format!(
-        "<a class=\"dec-link\" href=\"#{}\" title=\"Parse by hand\">",
-        m.shipped
-    )));
+    let first = entry.find("<li>Parse by hand").expect(entry);
+    let second = entry.find("Name it plainly").expect(entry);
+    assert!(first < second, "in record order: {entry}");
+    assert!(!html.contains("dec-link"), "{html}");
     for part in [
         "Shipped the parser.",
         "Used a manual parser.",
@@ -1337,17 +1325,16 @@ fn added_work_parked_in_backlog_is_found_and_taken_on_work_is_left() {
 fn decisions_off_the_timeline_results_and_record_text_keep_their_place() {
     let dir = tempdir().unwrap();
     let (mission, planned) = started(dir.path());
-    let note = |id: &str, choice: &str, one_way: bool| {
-        let mut args = vec![
-            "issue", "note", id, "--kind", "decision", choice, "--reason", "Because",
-        ];
-        if one_way {
-            args.push("--one-way");
-        }
-        ok(dir.path(), &args);
+    let note = |id: &str, choice: &str| {
+        ok(
+            dir.path(),
+            &[
+                "issue", "note", id, "--kind", "decision", choice, "--reason", "Because",
+            ],
+        );
     };
-    note(&mission, "Keep one format for the mission", true);
-    note(&planned, "Start <b>small</b>", false);
+    note(&mission, "Keep one format for the mission");
+    note(&planned, "Start <b>small</b>");
     ok(
         dir.path(),
         &[
@@ -1400,7 +1387,7 @@ fn decisions_off_the_timeline_results_and_record_text_keep_their_place() {
         .next()
         .unwrap();
     assert!(
-        intent.contains("  Decided: one-way: Keep one format for the mission | because Because"),
+        intent.contains("  Decided: Keep one format for the mission | because Because"),
         "{page}"
     );
     let left = page
@@ -1424,12 +1411,10 @@ fn decisions_off_the_timeline_results_and_record_text_keep_their_place() {
     let intent = &html[html.find("id=\"intent\"").unwrap()..html.find("id=\"did\"").unwrap()];
     assert!(
         intent.contains("<h4>Decided for the mission</h4>")
-            && intent.contains("one-way</span>Keep one format for the mission"),
+            && intent.contains("<li>Keep one format for the mission"),
         "{intent}"
     );
-    assert!(html.contains(
-        "<a class=\"dec-link\" href=\"#intent\" title=\"Keep one format for the mission\">"
-    ));
+    assert!(!html.contains("dec-link"), "{html}");
     let row = &html[html.find(&format!("id=\"{planned}\"")).expect(&html)..];
     assert!(row.contains("Start &lt;b&gt;small&lt;/b&gt;"), "{row}");
     assert!(

@@ -24,9 +24,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-05T01:23:48.449838626+00:00"
+status: "done"
 title: "Tighten and document the report-part exemption for earlier claims"
-updated_at: "2026-11-04T23:12:51.484403285+00:00"
+updated_at: "2026-11-05T01:23:48.449838626+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,26 @@ Tighten and document the exemption that keeps done claims made before a policy r
 ## Done when
 
 work-model.md states the rule and its limit as implemented, and a session test shows the no-upstream base case checks report parts.
+
+## Notes
+
+- 2026-11-04 [decision] A held claim's report parts are judged by the base policy at the commit that made the claim, the same rule as current claims, instead of by the policy at the parent that holds it
+  Reason: The parent's policy would refuse every pre-policy claim the base holds once the base requires parts, breaking the exemption; with the parent as base_commit the merge-base is the introducing commit, so one rule covers both
+- 2026-11-04 [decision] Document the side-branch merge-base hole as a limit; keep the exemption on work branches
+  Reason: Directed by the human via the orchestrator; no history-based rule tells such a claim from a child honestly closed before the policy
+
+## Close Reason
+
+`land` and `merge` now judge a held done claim's report parts by the base's policy at the commit that made the claim, the same rule as current claims, instead of skipping them, so a claim one commit back on a base with no upstream is checked (new session test). docs/product/work-model.md states the merge-base rule and its side-branch limit, and reviews-and-merge.md documents the limit for reviewers.
+
+### Deviations
+None. Per the human's direction the side-branch hole (atelier-u0i3) is documented as a limit; the exemption on work branches stays.
+
+### Decisions
+Held claims use the policy at the claim's introducing commit, not the policy at the parent that holds it, which would refuse every pre-policy claim the base holds (decision note). The policy-at-claim lookup is computed once per claim rather than once per missing part.
+
+### Surprises
+None.
+
+### Open items
+None.

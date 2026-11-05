@@ -127,7 +127,7 @@ pub struct WorkEntry {
     pub children: Vec<String>,
     pub added_after_start: bool,
     pub changes: Vec<Change>,
-    /// Decision notes on the item and its children, one-way first.
+    /// Decision notes on the item and its children, in record order.
     pub decisions: Vec<NoteDecision>,
     /// Decision notes on the item and its children that `check` refuses.
     pub malformed: Vec<MalformedDecision>,
@@ -581,7 +581,6 @@ pub fn debrief(
                 }
             }
         }
-        notes.sort_by_key(|note| !note.decision.one_way);
         let criteria_delivered = delivered_by
             .iter()
             .filter(|(_, by)| by.iter().any(|by| members.contains(by)))

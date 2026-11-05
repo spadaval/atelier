@@ -67,7 +67,7 @@ atelier issue create "Noticed while working" --discovered-from <issue-review-or-
 atelier issue link <parent-id> <mission-id> --role advances
 atelier issue link <blocked-id> <blocker-id> --role blocked_by
 atelier issue note <id> "Handoff detail" --kind handoff
-atelier issue note <id> "Chosen approach" --kind decision --reason "Why" [--rejected "Alternative"] [--one-way]
+atelier issue note <id> "Chosen approach" --kind decision --reason "Why" [--rejected "Alternative"]
 atelier issue transition <id> close --reason "Acceptance shown"
 ```
 

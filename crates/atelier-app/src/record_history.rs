@@ -12,7 +12,7 @@ use atelier_records::{issue_record_path, CanonicalIssueRecord};
 use chrono::{DateTime, TimeZone, Utc};
 
 use crate::git_freshness::{git_output, ReadContext};
-use crate::workflow_policy::WorkflowPolicy;
+use crate::workflow_policy::{status_is_done, WorkflowPolicy};
 
 /// One committed version of an issue record; `record` is `None` where the
 /// commit deleted the file or left it unreadable. `position` orders versions
@@ -267,9 +267,7 @@ pub fn mission_timeline<'a>(
                 .is_some_and(|record| record.issue.status != "draft")
         })
         .map(Moment::from);
-    let done = |record: &CanonicalIssueRecord| {
-        policy.and_then(|policy| policy.status_category(&record.issue.status)) == Some("done")
-    };
+    let done = |record: &CanonicalIssueRecord| status_is_done(policy, &record.issue.status);
     // Walking back from the newest version, the oldest of the trailing run
     // of done versions made the current claim.
     let closed = mission

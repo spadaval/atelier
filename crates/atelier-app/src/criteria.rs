@@ -31,8 +31,9 @@ pub struct MissionCriteria {
 }
 
 /// Reads a mission's criteria from its strategy, or from its own Success
-/// criteria section when it links none. An unreadable strategy, or one with
-/// no Success Criteria heading, is a problem, not an error.
+/// criteria section when it links none. A strategy with no Success Criteria
+/// heading has no criteria, since criteria are optional (ADR 0024); an
+/// unreadable strategy is a problem, not an error.
 pub fn mission_criteria(
     index: &RecordIndex,
     repo_root: &Path,
@@ -47,7 +48,7 @@ pub fn mission_criteria(
         let parse = match std::fs::read_to_string(repo_root.join(&path)) {
             Ok(text) => match strategy_criteria_section(&text) {
                 Some(section) => parse_criteria(&section),
-                None => problem(format!("strategy {path} has no Success Criteria heading")),
+                None => CriteriaParse::default(),
             },
             Err(error) => problem(format!("strategy {path} cannot be read: {error}")),
         };
@@ -92,17 +93,6 @@ pub fn missions_for(index: &RecordIndex, issue_id: &str) -> Result<Vec<String>> 
     }
     missions.sort();
     Ok(missions)
-}
-
-/// The one mission whose criteria a receipt on `issue_id` names: the issue
-/// itself when it is a mission, else the single mission whose scope holds
-/// it. An item in several missions has none, so proof never counts toward
-/// a mission it was not meant for; record such criteria on the mission.
-pub fn criteria_mission(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
-    Ok(match missions_for(index, issue_id)?.as_slice() {
-        [mission] => Some(mission.clone()),
-        _ => None,
-    })
 }
 
 /// The mission a new receipt's criteria belong to, or what is wrong with
@@ -218,8 +208,8 @@ impl CriterionProof {
 pub struct MissionProof {
     pub criteria: MissionCriteria,
     pub proofs: Vec<CriterionProof>,
-    /// Receipts in the mission's scope that name a criterion it does not
-    /// define, as `(evidence id, slug)`.
+    /// Receipts whose stored `criteria_mission` is this mission that name a
+    /// criterion it does not define, as `(evidence id, slug)`.
     pub orphaned: Vec<(String, String)>,
 }
 

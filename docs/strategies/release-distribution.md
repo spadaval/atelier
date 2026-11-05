@@ -1,6 +1,6 @@
 ---
 status: active
-last_changed: "2026-10-27: drafted; Sumeet directed filing and executing the mission"
+last_changed: "2026-11-04: S2 now has pull requests plan the release instead of building every target (Sumeet's request, atelier-l7gl); 2026-10-27: drafted; Sumeet directed filing and executing the mission"
 ---
 
 # Why
@@ -33,10 +33,11 @@ request, before the first tag is cut.
   branch, plus a run that fails on a deliberately broken commit.
 - S2: Pushing a `v<version>` tag publishes a GitHub Release with archives
   for x86_64 and aarch64 Linux and aarch64 and x86_64 macOS, their
-  checksums, and a shell installer. A pull request touching the release
-  setup builds the same artifacts without publishing. Shown by a PR run that
-  uploads artifacts, and an archive from it whose `atelier --version`
-  reports the tagged version and commit.
+  checksums, and a shell installer. A pull request plans the release
+  (`dist plan`) without building, uploading or publishing artifacts. Shown
+  by a tag run that publishes the release, an archive from it whose
+  `atelier --version` reports the tagged version and commit, and a PR run
+  that runs only the plan job.
 - S3: On a machine with no Rust toolchain, the installer one-liner installs
   `atelier` onto `PATH`, and rerunning it upgrades an older install. Shown
   by running the published installer in a clean `HOME`.
@@ -75,7 +76,10 @@ GitHub-hosted runners.
 
 The orchestrator may change the increment breakdown, the CI layout, `dist`
 settings and the targets within Linux and macOS, and may push work branches
-to run CI. Pushing a release tag, choosing the first release's version,
+to run CI. When the human asks for a specific release, that request
+authorizes pushing its tag: push it once master CI passes on the release
+commit, and report the published release rather than leaving the tag as an
+open item. Any other release tag, choosing the first release's version,
 adding a platform or distribution channel, or adding repository secrets
 comes back to the human.
 

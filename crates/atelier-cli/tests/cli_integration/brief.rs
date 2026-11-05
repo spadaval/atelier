@@ -380,3 +380,141 @@ fn brief_shows_the_strategy_outcome_and_falls_back_to_the_mission_outcome() {
         "{markdown}"
     );
 }
+
+/// A mission is a themed container whose success criteria are optional
+/// (ADR 0024): one with only an Outcome and no strategy passes `check`,
+/// becomes ready, and every mission view leaves criteria out rather than
+/// showing a placeholder or an empty section.
+#[test]
+fn mission_without_criteria_is_valid_and_its_views_omit_criteria() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let mission = create(
+        dir.path(),
+        &[
+            "--issue-type",
+            "mission",
+            "--body",
+            "Make the widgets consistent.",
+            "Themed mission",
+        ],
+    );
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), &mission)).unwrap();
+    assert!(
+        record.contains("## Outcome\n\nMake the widgets consistent.")
+            && !record.contains("Success criteria"),
+        "{record}"
+    );
+    let item = create(
+        dir.path(),
+        &[
+            "--body",
+            "## Goal\n\nFix A.\n\n## Done when\n\nA matches.",
+            "Widget A",
+        ],
+    );
+    ok(
+        dir.path(),
+        &["issue", "link", &item, &mission, "--role", "advances"],
+    );
+    ok(dir.path(), &["check"]);
+    ok(dir.path(), &["check", &mission]);
+    ok(dir.path(), &["issue", "transition", &mission, "ready"]);
+
+    let brief = ok(dir.path(), &["brief", &mission]);
+    let work = ok(dir.path(), &["work", "mission", &mission]);
+    ok(dir.path(), &["issue", "transition", &item, "start"]);
+    ok(
+        dir.path(),
+        &["issue", "transition", &item, "close", "--reason", "Done A."],
+    );
+    let debrief = ok(dir.path(), &["debrief", &mission]);
+    let brief_html =
+        fs::read_to_string(ok(dir.path(), &["brief", &mission, "--html", "-q"]).trim()).unwrap();
+    let debrief_html =
+        fs::read_to_string(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim()).unwrap();
+    for (view, text) in [
+        ("brief", &brief),
+        ("work mission", &work),
+        ("debrief", &debrief),
+        ("brief --html", &brief_html),
+        ("debrief --html", &debrief_html),
+    ] {
+        // `work mission` lists the work, not the Outcome.
+        assert!(
+            text.contains(&item)
+                && (view == "work mission" || text.contains("Make the widgets consistent.")),
+            "{view}: {text}"
+        );
+        assert!(
+            !text.to_lowercase().contains("criteri") && !text.contains("not specified"),
+            "{view} mentions criteria: {text}"
+        );
+    }
+}
+
+/// A linked strategy with no Success Criteria heading means the mission has
+/// no criteria (ADR 0024), so no view reports the missing heading; malformed
+/// bullets under a heading that exists are still reported.
+#[test]
+fn strategy_without_criteria_heading_means_no_criteria() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    fs::create_dir_all(dir.path().join("docs/strategies")).unwrap();
+    fs::write(
+        dir.path().join("docs/strategies/plain.md"),
+        "# Outcome\n\nWidgets are consistent.\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("docs/strategies/malformed.md"),
+        "# Outcome\n\nO.\n\n# Success Criteria\n\n- **S1 e2e.** The scenario passes.\n",
+    )
+    .unwrap();
+    let mission = |strategy: &str, title: &str| {
+        create(
+            dir.path(),
+            &[
+                "--issue-type",
+                "mission",
+                "--strategy",
+                strategy,
+                "--body",
+                "Widgets are consistent.",
+                title,
+            ],
+        )
+    };
+    let plain = mission("docs/strategies/plain.md", "Plain mission");
+    let malformed = mission("docs/strategies/malformed.md", "Malformed mission");
+    ok(dir.path(), &["check"]);
+
+    for args in [
+        vec!["brief", plain.as_str()],
+        vec!["work", "mission", plain.as_str()],
+        vec!["debrief", plain.as_str()],
+    ] {
+        let text = ok(dir.path(), &args);
+        assert!(
+            !text.to_lowercase().contains("criteri") && !text.contains('⚠'),
+            "{args:?}: {text}"
+        );
+    }
+    let html =
+        fs::read_to_string(ok(dir.path(), &["brief", &plain, "--html", "-q"]).trim()).unwrap();
+    assert!(!html.to_lowercase().contains("criteri"), "{html}");
+
+    for args in [
+        vec!["brief", malformed.as_str()],
+        vec!["work", "mission", malformed.as_str()],
+    ] {
+        let text = ok(dir.path(), &args);
+        assert!(
+            text.contains("Success Criteria")
+                && text.contains("does not start with a criterion slug"),
+            "{args:?}: {text}"
+        );
+    }
+}

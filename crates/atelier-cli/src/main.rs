@@ -365,8 +365,8 @@ enum WorkCommands {
         #[arg(long)]
         all: bool,
     },
-    /// Show the decisions across a mission's scope: one-way decision notes
-    /// first, then decision records, then reversible notes
+    /// Show the decisions across a mission's scope: decision records first,
+    /// then decision notes
     Decisions {
         /// Mission ID
         id: String,
@@ -398,8 +398,8 @@ enum IssueCommands {
         title: String,
         /// Markdown body with the type's `## ` sections: Goal and Done when
         /// (optionally Scope, Context, Unknowns, Design, Background) for work
-        /// items; Outcome for missions, plus Success criteria without a
-        /// strategy, optionally Background; Question (optionally Options,
+        /// items; Outcome for missions (optionally Success criteria,
+        /// Background); Question (optionally Options,
         /// Decision, Context, Background) for decisions. Plain text becomes
         /// the Goal, Outcome, or Question
         #[arg(long)]
@@ -553,9 +553,6 @@ enum IssueCommands {
         /// An alternative the decision rejected; repeat for several
         #[arg(long)]
         rejected: Vec<String>,
-        /// Mark the decision one-way: it cannot be reversed cheaply
-        #[arg(long)]
-        one_way: bool,
     },
 
     /// Add a typed link from one issue to another

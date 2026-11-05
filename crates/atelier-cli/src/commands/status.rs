@@ -300,6 +300,8 @@ impl Owner {
             work,
             decisions: crate::human_output::decision_brief_lines(
                 RenderContext::plain(),
+                Some(policy),
+                id,
                 &atelier_app::decisions::item_decisions(index, Some(policy), id)?,
             ),
             reviews: reviews(index, &scope),

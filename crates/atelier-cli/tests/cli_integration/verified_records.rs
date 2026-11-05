@@ -380,32 +380,26 @@ fn public_bundle_fixtures_preview_and_apply_current_record_contract() {
 }
 
 #[test]
-fn objective_readiness_requires_agent_factory_acceptance_content() {
+fn objective_readiness_accepts_a_mission_with_only_an_outcome() {
+    // Success criteria are optional (ADR 0024): an Outcome is enough to ready a mission.
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
-    for (kind, heading) in [("mission", "Success criteria")] {
-        let (ok, _, error) = run_atelier_raw(
-            dir.path(),
-            &[
-                "issue",
-                "create",
-                kind,
-                "--issue-type",
-                kind,
-                "--body",
-                "## Outcome\n\nObservable increment.",
-            ],
-        );
-        assert!(ok, "{error}");
-        let id = issue_id_by_title(dir.path(), kind);
-        let (ok, _, error) = run_atelier_raw(dir.path(), &["issue", "transition", &id, "ready"]);
-        assert!(!ok && error.contains(heading), "{error}");
-        edit_canonical_issue(dir.path(), &id, |markdown| {
-            format!("{markdown}\n## {heading}\n\nThe focused acceptance scenario passes.\n")
-        });
-        let (ok, _, error) = run_atelier_raw(dir.path(), &["issue", "transition", &id, "ready"]);
-        assert!(ok, "{error}");
-    }
+    let (ok, _, error) = run_atelier_raw(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "mission",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nObservable increment.",
+        ],
+    );
+    assert!(ok, "{error}");
+    let id = issue_id_by_title(dir.path(), "mission");
+    let (ok, _, error) = run_atelier_raw(dir.path(), &["issue", "transition", &id, "ready"]);
+    assert!(ok, "{error}");
 }
 
 fn freshness_git(dir: &Path, args: &[&str]) {
