@@ -144,14 +144,14 @@ pub(crate) fn review_document(title: &str, sidebar: &str, main: &str) -> String 
 }
 
 const REVIEW_STYLE: &str = r#"
-:root{--bg:#fafaf8;--side:#f1f0ec;--fg:#1c1c1a;--muted:#6a6963;--faint:#9d9b93;--line:#e6e5e0;--code:#efeee9;--pop:#ffffff;--chip:#f3f2ee;
---done:#2f7d4f;--active:#2457a5;--todo:#9a7b10;--back:#8a8982;--warn:#a05f00;--warn-bg:#fdf3e1;--done-bg:#e4f2e9;--todo-bg:#f6efd6;--link:#1f4f99}
-@media (prefers-color-scheme: dark){:root{--bg:#151514;--side:#1a1a18;--fg:#e8e7e2;--muted:#a3a29b;--faint:#74736c;--line:#2b2a27;--code:#262522;--pop:#232320;--chip:#21211f;
---done:#7fd1a3;--active:#8fb4f2;--todo:#e5cf73;--back:#8a8982;--warn:#f0c46b;--warn-bg:#2f2610;--done-bg:#173527;--todo-bg:#2f2a12;--link:#9dbdf4}}
+:root{--bg:#fafaf8;--side:#f1f0ec;--fg:#1c1c1a;--muted:#6a6963;--faint:#6d6c65;--line:#e6e5e0;--code:#efeee9;--pop:#ffffff;--chip:#f3f2ee;
+--done:#2a7149;--active:#2457a5;--todo:#7a6100;--back:#6d6c65;--warn:#985a00;--warn-bg:#fdf3e1;--done-bg:#e4f2e9;--todo-bg:#f6efd6;--link:#1f4f99}
+@media (prefers-color-scheme: dark){:root{--bg:#151514;--side:#1a1a18;--fg:#e8e7e2;--muted:#a3a29b;--faint:#908f87;--line:#2b2a27;--code:#262522;--pop:#232320;--chip:#21211f;
+--done:#7fd1a3;--active:#8fb4f2;--todo:#e5cf73;--back:#908f87;--warn:#f0c46b;--warn-bg:#2f2610;--done-bg:#173527;--todo-bg:#2f2a12;--link:#9dbdf4}}
 *{box-sizing:border-box}
 html{scroll-padding-top:20px}
 body{margin:0;background:var(--bg);color:var(--fg);font:14.5px/1.6 system-ui,-apple-system,"Segoe UI",Ubuntu,Cantarell,"Noto Sans","DejaVu Sans","Liberation Sans",Arial,sans-serif}
-a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+a{color:var(--link);text-decoration:underline;text-underline-offset:2px}
 code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px}
 .k,.s{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .layout{display:grid;grid-template-columns:248px minmax(0,1fr)}
@@ -161,7 +161,7 @@ aside h1{font-size:14.5px;line-height:1.4;margin:0 0 10px}
 .bar{height:5px;border-radius:3px;background:var(--line);overflow:hidden}.bar span{display:block;height:100%;background:var(--done)}
 nav{margin-top:18px;font-size:13px}
 nav .g{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:16px 6px 4px}
-nav a{display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:6px;color:var(--fg)}
+nav a{text-decoration:none;display:flex;align-items:center;gap:8px;padding:3px 6px;border-radius:6px;color:var(--fg)}
 nav a:hover{background:var(--line);text-decoration:none}
 nav a.sub{padding-left:24px;color:var(--muted)}
 nav a.ask-link{color:var(--warn);font-weight:600}
@@ -176,7 +176,7 @@ h2{font-size:23px;line-height:1.3;margin:0 0 6px}
 .props{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;font-size:13px;color:var(--muted);margin:0 0 10px}
 .lozenge{font-size:11.5px;font-weight:650;padding:1px 7px;border-radius:4px}
 .lozenge.done{color:var(--done);background:var(--done-bg)}.lozenge.todo{color:var(--todo);background:var(--todo-bg)}
-.verdict{font-size:15.5px;margin:4px 0 0}.verdict a{color:var(--fg);border-bottom:1px solid var(--line)}.verdict a:hover{text-decoration:none;border-color:var(--fg)}
+.verdict{font-size:15.5px;margin:4px 0 0}.verdict a{text-decoration:none;color:var(--fg);border-bottom:1px solid var(--line)}.verdict a:hover{text-decoration:none;border-color:var(--fg)}
 .verdict .sep{color:var(--faint);margin:0 4px}
 .lede{font-size:15.5px;max-width:76ch;margin:0 0 8px}
 section{margin:38px 0 0}
@@ -189,7 +189,7 @@ ul{margin:4px 0;padding-left:18px}li{margin:2px 0}
 .status.done,.st.done{color:var(--done)}.status.todo,.st.todo{color:var(--todo)}.status.warn,.st.warn{color:var(--warn)}
 .st.active{color:var(--active)}.st.back{color:var(--back)}
 .chip{position:relative;color:var(--fg);display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--chip);font-size:12.5px;line-height:1.6;white-space:nowrap;vertical-align:baseline;cursor:default;outline:none}
-.chip:hover,.chip:focus{border-color:var(--faint)}
+.chip:hover,.chip:focus{border-color:var(--faint)}.chip:focus-visible{outline:2px solid var(--link);outline-offset:1px}
 .chip .dot{width:8px;height:8px}
 .chip .k{font-size:11.5px;color:var(--muted)}
 .chip .t{overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -310,5 +310,68 @@ mod tests {
             !html.contains("<script") && !html.contains("http"),
             "no scripts or external resources"
         );
+    }
+    /// The review page's text colours meet WCAG AA (4.5:1) on every surface
+    /// they sit on, in both palettes.
+    #[test]
+    fn review_page_text_meets_aa_contrast_in_both_palettes() {
+        fn tokens(block: &str) -> std::collections::BTreeMap<&str, &str> {
+            block
+                .split(';')
+                .filter_map(|decl| decl.trim().trim_start_matches(":root{").split_once(':'))
+                .filter_map(|(name, value)| {
+                    Some((
+                        name.trim().strip_prefix("--")?,
+                        value.trim().trim_end_matches('}'),
+                    ))
+                })
+                .collect()
+        }
+        fn luminance(hex: &str) -> f64 {
+            let hex = hex.trim_start_matches('#');
+            let channel = |i: usize| {
+                let c = f64::from(u8::from_str_radix(&hex[i..i + 2], 16).unwrap()) / 255.0;
+                if c <= 0.03928 {
+                    c / 12.92
+                } else {
+                    ((c + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+        }
+        let ratio = |a: &str, b: &str| {
+            let (a, b) = (luminance(a), luminance(b));
+            (a.max(b) + 0.05) / (a.min(b) + 0.05)
+        };
+        let (light, dark) = REVIEW_STYLE
+            .split_once("@media (prefers-color-scheme: dark)")
+            .unwrap();
+        let light = &light[light.find(":root{").unwrap()..];
+        let dark = &dark[dark.find(":root{").unwrap()..dark.find("}}").unwrap()];
+        for (name, block) in [("light", light), ("dark", dark)] {
+            let palette = tokens(block);
+            for text in [
+                "fg", "muted", "faint", "done", "active", "todo", "back", "warn", "link",
+            ] {
+                for surface in ["bg", "side", "chip", "pop"] {
+                    let contrast = ratio(palette[text], palette[surface]);
+                    assert!(
+                        contrast >= 4.5,
+                        "{name}: --{text} on --{surface} is {contrast:.2}:1"
+                    );
+                }
+            }
+            for (text, surface) in [
+                ("done", "done-bg"),
+                ("todo", "todo-bg"),
+                ("warn", "warn-bg"),
+            ] {
+                let contrast = ratio(palette[text], palette[surface]);
+                assert!(
+                    contrast >= 4.5,
+                    "{name}: --{text} on --{surface} is {contrast:.2}:1"
+                );
+            }
+        }
     }
 }

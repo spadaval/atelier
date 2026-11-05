@@ -437,6 +437,12 @@ fn criterion_text(view: &Debrief, slug: &str) -> String {
         .unwrap_or_default()
 }
 
+/// A criterion's whole text on one line: the plan states it in full, since a
+/// reader judges each mark against all of it.
+fn full_text(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// The open item that will prove a criterion without proof.
 fn awaited_by<'a>(view: &'a Debrief, slug: &str) -> Option<&'a str> {
     view.validation
@@ -567,7 +573,7 @@ fn render_markdown(view: &Debrief, context: RenderContext) -> Vec<Vec<String>> {
             intent.extend(wrap(format!(
                 "{} {}",
                 proof.criterion.slug,
-                first_sentence(&proof.criterion.text)
+                full_text(&proof.criterion.text)
             )));
         }
         for problem in &view.criteria.criteria.parse.problems {
@@ -1344,7 +1350,7 @@ fn render_html(view: &Debrief) -> String {
             intent.push_str(&format!(
                 "<div class=\"claim\"><span class=\"s\">{}</span><span>{}</span></div>",
                 escape(&proof.criterion.slug),
-                rich_inline(view, &first_sentence(&proof.criterion.text))
+                rich_inline(view, &full_text(&proof.criterion.text))
             ));
         }
         for problem in &view.criteria.criteria.parse.problems {

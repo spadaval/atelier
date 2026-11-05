@@ -16,16 +16,18 @@ it stands. Both forms follow the same order:
 - **Status:** a one-line verdict: criteria proven (if any), how many calls
   need the human, how much is left and how much was found along the way.
 - **The problem:** the strategy's Why section, or the mission's Background.
-- **What we set out to do:** the mission's Outcome, any success criteria, and
-  the planned work: items linked to the mission by its start and not filed by
-  review, in filing order, children under their parent.
+- **What we set out to do:** the mission's Outcome, each success criterion in
+  full, and the planned work: items linked to the mission by its start and
+  not filed by review, in filing order, children under their parent. A
+  finding deferred to work that already existed does not file it.
 - **What we did:** one timeline, oldest first. Each done item appears when it
   closed, with its outcome, its children, each with its own report under
-  its line (its outcome and any Deviations, Surprises and, unless review
-  filed follow-ups, Open items), what changed from the plan (the
+  its line (its outcome and any Deviations, Surprises, Decisions and, unless
+  review filed follow-ups, Open items), what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn,
   failing newest proof, a trivial exemption), what surprised the
-  implementer, the decisions made in it, any decision record
+  implementer, the decisions made in it (the report's Decisions part, then
+  its decision notes), any decision record
   cues (its ADR, the records it replaces), how review went and who approved
   it, and the follow-ups its review filed. Beside them, at their times: the
   mission's start and close, work added to the scope, work filed other than

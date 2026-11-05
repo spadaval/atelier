@@ -375,6 +375,7 @@ pub fn debrief(
     let mut follow_ups_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut trivial: BTreeMap<String, String> = BTreeMap::new();
     let mut findings: BTreeMap<String, String> = BTreeMap::new();
+    let mut finding_at: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
     // Each finding's latest disposition, with where it was deferred to.
     #[allow(clippy::type_complexity)]
     let mut dispositions: BTreeMap<
@@ -404,6 +405,7 @@ pub fn debrief(
             }
             ReviewEvent::Finding { .. } => {
                 findings.insert(review.header.id.clone(), review.target.clone());
+                finding_at.insert(review.header.id.clone(), review.header.created_at);
             }
             ReviewEvent::Disposition {
                 finding,
@@ -429,8 +431,18 @@ pub fn debrief(
             ReviewEvent::Review => {}
         }
     }
-    for (_, decision, follow_up, target) in dispositions.values() {
+    for (finding, (_, decision, follow_up, target)) in &dispositions {
         if let (FindingDecision::Defer, Some(follow_up)) = (decision, follow_up) {
+            // Deferring to work that existed before the finding does not
+            // file it: planned work stays planned.
+            let created = index
+                .issue_record(follow_up)
+                .map(|record| record.issue.created_at);
+            if let (Some(created), Some(found)) = (created, finding_at.get(finding)) {
+                if created < *found {
+                    continue;
+                }
+            }
             follow_up_source
                 .entry(follow_up.clone())
                 .or_insert_with(|| target.clone());

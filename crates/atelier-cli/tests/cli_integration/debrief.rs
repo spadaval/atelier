@@ -971,6 +971,97 @@ fn planned_work_counts_only_what_was_linked_by_the_start() {
 }
 
 #[test]
+fn deferring_a_finding_to_planned_work_keeps_it_planned() {
+    let dir = tempdir().unwrap();
+    let dir = dir.path();
+    init_atelier(dir);
+    init_git_repo(dir);
+    let mission = ok(
+        dir,
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nO\n\n## Success criteria\n\n- fast: Fast.\n  Shown by a benchmark.",
+            "Mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    let build = item(dir, "Build");
+    let release = item(dir, "Release");
+    for id in [&build, &release] {
+        ok(dir, &["issue", "link", "-q", id, &mission]);
+    }
+    commit_all(dir, "plan");
+    ok(dir, &["issue", "transition", &mission, "ready"]);
+    commit_all(dir, "start");
+    ok(dir, &["issue", "transition", &build, "start"]);
+    ok(
+        dir,
+        &["issue", "transition", &build, "close", "--reason", "Built."],
+    );
+    commit_all(dir, "close build");
+    let finding = ok(
+        dir,
+        &[
+            "review",
+            "finding",
+            &build,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Check at release",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(
+        dir,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &release,
+            "Release covers it",
+        ],
+    );
+    commit_all(dir, "defer to planned work");
+
+    let page = ok(dir, &["debrief", &mission]);
+    let planned = section(&page, "Planned Work");
+    assert!(
+        planned.contains(&build) && planned.contains(&release),
+        "{page}"
+    );
+    assert!(!page.contains(&format!("Filed: {release}")), "{page}");
+    assert!(!page.contains("Found Along The Way"), "{page}");
+    assert!(page.contains("Planned: 1 of 2 items done"), "{page}");
+    // The plan states each criterion in full, continuation lines included.
+    assert!(
+        page.contains("\nfast Fast. Shown by a benchmark.\n"),
+        "{page}"
+    );
+    let path = PathBuf::from(ok(dir, &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(html.contains("Fast. Shown by a benchmark."), "{html}");
+    assert!(
+        html.contains("<span>Planned work done</span><span>1 of 2</span>"),
+        "{html}"
+    );
+}
+
+#[test]
 fn follow_ups_come_from_a_finding_latest_disposition_and_from_the_mission() {
     let dir = tempdir().unwrap();
     let (mission, planned) = started(dir.path());
