@@ -3,7 +3,6 @@ created_at: "2026-10-17T17:25:59.636065900+00:00"
 id: "atelier-lfs7"
 issue_type: "validation"
 labels:
-- "needs-human"
 - "review"
 priority: "P2"
 relationships:
@@ -26,25 +25,23 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
-title: "Validate a real mission's HTML debrief with the human"
+title: "Agent-review a real mission's HTML debrief"
 updated_at: "2026-11-05T02:41:03.395157678+00:00"
 ---
 
 ## Goal
 
-S7 of docs/strategies/review-and-introspection.md: a real mission that ran with decision capture and reports switched on produces an HTML debrief that the human judges good enough for post-mission review.
+S7 of docs/strategies/review-and-introspection.md: an independent agent reviewer judges the HTML debrief of atelier-vt8q complete and accurate for post-mission review.
 
 ## Done when
 
-The human opens the debrief in T3 Code and records a review event naming the commit it was generated from.
+A validation receipt against atelier-r6bt names S7 and the commit the debrief was generated from, and its findings are dispositioned.
 
 ## Context
 
-Waits for atelier-2bjz and atelier-r0fj, which change the debrief page the human judges.
+On 2026-11-04 Sumeet moved S7 from human to agent review: agent review is cheaper and less blocking, so it comes first, and it is better at attention to detail, corner cases and disciplined rule checks such as accessibility. Human review judges taste and happens after merge and after the mission closes; it gates nothing. This also settles atelier-9y66's open choice: the candidate is atelier-vt8q, which closed with every item reported.
 
-## Unknowns
-
-Which mission. atelier-9y66 kept the orientation mission atelier-1w8c, and the human judged its debrief "reasonably good" on 2026-10-22 without a review event; 1w8c has since been superseded into atelier-4pzj. atelier-vt8q (release distribution) closes with every item reported under the Close Reason report, so it is a fresh candidate; judging it instead changes 9y66's choice and needs the human.
+The reviewer gets the generated page, docs/product/mission-reviews.md (what the debrief must show), and read access to the records. It checks that every item, report (done children's included), decision, criterion mark and receipt on the page matches the records; that nothing the debrief rules call for is missing; that a reader can do post-mission review without running more commands; and accessibility in both palettes (contrast, headings, keyboard access to chips and cards).
 
 ## Notes
 

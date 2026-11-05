@@ -54,10 +54,12 @@ and `debrief`, without `brief`.
   decision. Views show which decisions are current. Shown by CLI tests.
 - S4: `atelier debrief <mission>` produces a review containing: the outcome
   against each success criterion with linked proof (named as S3 decides),
-  each item's report, the
-  decision log with decision records first, derived deviations (scope added
+  each item's report, done children's included, each decision where it was
+  made (in the item's timeline entry, beside open or dropped work, or under
+  the mission's own plan), derived deviations (scope added
   after the mission started, scope dropped, deferred findings, non-pass or
   stale evidence, trivial exemptions, reopened items), and follow-ups.
+  `atelier work decisions <mission>` lists the whole decision log.
   Derived facts come from records and Git, not new stored state. It prints
   dense Markdown by default and writes a self-contained HTML page on request,
   both from one view model. Shown by fixture tests of both forms and by a run
@@ -74,11 +76,16 @@ and `debrief`, without `brief`.
   all.
   Shown by CLI tests.
 - S7: A real mission run after S1 and S2 land produces an HTML debrief that
-  the human, opening it in T3 Code, judges good enough for post-mission
-  review without asking the agent to run more commands. The candidate is the
-  orientation mission (ADR 0022 follow-ups), run with decision capture and
-  reports switched on. Shown by human review, recorded as a review event
-  that names the commit the debrief was generated from.
+  an independent agent reviewer, given only the page and the repository's
+  records, judges complete and accurate for post-mission review: every
+  item, report, decision, criterion mark and receipt it shows matches the
+  records, nothing the debrief rules call for is missing, and the page
+  passes an accessibility check in both palettes. The candidate is the
+  release distribution mission atelier-vt8q, which closed with every item
+  reported. Shown by a validation receipt naming the commit the debrief was
+  generated from, with its findings dispositioned. A human reads the page
+  for taste after the mission closes; that review is welcome but gates
+  nothing.
 - S8: `work mission` shows each success criterion with a proven, unproven,
   or failing mark derived from linked evidence, using the same criterion
   parsing and proof naming as S4 (atelier-stsa). Shown by CLI tests.
