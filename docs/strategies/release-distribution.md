@@ -76,7 +76,10 @@ GitHub-hosted runners.
 
 The orchestrator may change the increment breakdown, the CI layout, `dist`
 settings and the targets within Linux and macOS, and may push work branches
-to run CI. Pushing a release tag, choosing the first release's version,
+to run CI. When the human asks for a specific release, that request
+authorizes pushing its tag: push it once master CI passes on the release
+commit, and report the published release rather than leaving the tag as an
+open item. Any other release tag, choosing the first release's version,
 adding a platform or distribution channel, or adding repository secrets
 comes back to the human.
 
