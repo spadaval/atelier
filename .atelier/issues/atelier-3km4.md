@@ -31,4 +31,4 @@ Sumeet has read the page and given direction, recorded as a review event on atel
 
 ## Context
 
-Runs after the agent review and after r6bt closes; it does not gate the close. It files follow-ups, and reopens S7 only if it shows the page is inaccurate or incomplete. The page is functional rather than designed, so the read is about whether it serves review, not visual polish.
+Runs after the agent review and after r6bt closes; it does not gate the close. It files follow-ups, and reopens S7 only if it shows the page is inaccurate or incomplete. The page is functional rather than designed, so the read is a taste judgement of whether it serves review, not of visual polish.
