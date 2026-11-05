@@ -66,4 +66,4 @@ Recorded in atelier-s2r4 and the r6bt human note of 2026-11-04.
 The first agent review found defects a human read would likely have missed: a planned item counted as filed by review, criteria cut to one sentence, and AA contrast failures in both palettes.
 
 ### Open items
-Sumeet's read of the page is atelier-3km4. The review's remaining findings are backlog follow-ups 930x, j79t, idx3, okfy, wg6p, k7vp, r8om, les9, ztuq, 1hbk, lozn and rdsa.
+Sumeet's read of the page is atelier-3km4. The review's remaining findings are backlog follow-ups 930x, j79t, idx3, okfy, wg6p, k7vp, r8om, les9, ztuq, 1hbk, lozn, rdsa and g21n.
