@@ -431,6 +431,12 @@ pub fn debrief(
     }
     for (_, decision, follow_up, target) in dispositions.values() {
         if let (FindingDecision::Defer, Some(follow_up)) = (decision, follow_up) {
+            // Deferring a finding to planned work does not file that work:
+            // it stays planned. Work the review filed, even a moment before
+            // recording the finding, is not planned.
+            if scope.contains(follow_up) && !added_at.contains_key(follow_up) {
+                continue;
+            }
             follow_up_source
                 .entry(follow_up.clone())
                 .or_insert_with(|| target.clone());

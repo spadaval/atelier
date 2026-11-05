@@ -28,7 +28,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Make mission plans and outcomes reviewable by humans and agents"
-updated_at: "2026-11-05T02:41:03.575344826+00:00"
+updated_at: "2026-11-05T04:23:26.469326363+00:00"
 ---
 
 ## Outcome
@@ -47,3 +47,4 @@ Atelier captures proof and review well but almost none of the reasoning: at the 
 - 2026-10-17 [plan] 2026-10-17: Sumeet directed implementation. Increments: atelier-fip8 (S1, S3), atelier-sfsq (S2), atelier-ho7o (et6q criteria and receipts) then atelier-stsa (S8), atelier-1mk4 (S6), atelier-rx22 (S4), atelier-acrt (S5), atelier-lfs7 (S7, validation). S7's named candidate atelier-1w8c had 5 of 7 items done before capture could land, so S7 may need a different mission (human's call).
 - 2026-10-17 [result] 2026-10-17: all increments merged (fip8, sfsq, ho7o with stsa, 1mk4, rx22, acrt). Independent validation passed S1-S6 and S8 on master 0edf25bb (receipts atelier-syrp, qkk8, 8ctc, 9mk4, n3o5, 82x5, ms6z). S7 waits on the human's review of a real HTML debrief (atelier-lfs7); the mission stays open until then.
 - 2026-11-04 [note] 2026-11-04 handoff: every item but atelier-lfs7 (S7, human) is done. Acceptance validation at 0a2ec1a7 passed S1-S3, S5, S6, S8 and failed S4 (atelier-obcr): (1) done children's reports were missing, fixed by atelier-ov97; (2) the debrief has no separate decision log with decision records first, by design since atelier-8bil, which left to the human whether timeline decisions satisfy S4. Needs Sumeet: reword S4 or ask for the log back; then S4 needs a fresh receipt.
+- 2026-11-04 [human] 2026-11-04 Sumeet: S4 reworded to match the debrief's design (each decision shown where it was made, done children's reports included; work decisions lists the whole log). S7 moved from human to independent agent review of atelier-vt8q's debrief (atelier-lfs7). Human review comes after agent review and after merge, judges taste rather than detail, and gates nothing; Sumeet may still read the page once the mission closes.

@@ -507,10 +507,9 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     let notes = markdown
         .lines()
         .filter_map(|line| line.trim().strip_prefix("Decided: "))
-        .map(|line| {
-            let (choice, reason) = line.split_once(" | because ").unwrap();
-            (choice.to_string(), reason.to_string())
-        })
+        // A report's own Decisions part has no reason; notes do.
+        .filter_map(|line| line.split_once(" | because "))
+        .map(|(choice, reason)| (choice.to_string(), reason.to_string()))
         .collect::<Vec<_>>();
     assert_eq!(notes.len(), 2, "{markdown}");
     let entry = &html[html.find(&format!("id=\"{}\"", m.shipped)).expect(&html)..];
@@ -527,6 +526,7 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
     for part in [
         "Shipped the parser.",
         "Used a manual parser.",
+        "See the decision note.",
         "Not needed after the parser change.",
         "Follow up the edge case",
         "Typo fix only",
@@ -966,6 +966,139 @@ fn planned_work_counts_only_what_was_linked_by_the_start() {
     let html = fs::read_to_string(path).unwrap();
     assert!(
         html.contains("<span>Planned work done</span><span>0 of 1</span>"),
+        "{html}"
+    );
+}
+
+#[test]
+fn deferring_a_finding_to_planned_work_keeps_it_planned() {
+    let dir = tempdir().unwrap();
+    let dir = dir.path();
+    init_atelier(dir);
+    init_git_repo(dir);
+    let mission = ok(
+        dir,
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nO\n\n## Success criteria\n\n- fast: Fast.\n  Shown by a benchmark.",
+            "Mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    let build = item(dir, "Build");
+    let release = item(dir, "Release");
+    for id in [&build, &release] {
+        ok(dir, &["issue", "link", "-q", id, &mission]);
+    }
+    commit_all(dir, "plan");
+    ok(dir, &["issue", "transition", &mission, "ready"]);
+    commit_all(dir, "start");
+    ok(dir, &["issue", "transition", &build, "start"]);
+    ok(
+        dir,
+        &["issue", "transition", &build, "close", "--reason", "Built."],
+    );
+    commit_all(dir, "close build");
+    let finding = ok(
+        dir,
+        &[
+            "review",
+            "finding",
+            &build,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Check at release",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(
+        dir,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &release,
+            "Release covers it",
+        ],
+    );
+    // A follow-up the review files a moment before recording its finding is
+    // still filed by review.
+    let edge = item(dir, "Edge case");
+    // Linked to the mission after its start, so in scope but not planned.
+    ok(dir, &["issue", "link", "-q", &edge, &mission]);
+    let later = ok(
+        dir,
+        &[
+            "review",
+            "finding",
+            &build,
+            "-q",
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "Edge case",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(
+        dir,
+        &[
+            "review",
+            "disposition",
+            &later,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "defer",
+            "--follow-up",
+            &edge,
+            "Filed",
+        ],
+    );
+    commit_all(dir, "defer to planned work");
+
+    let page = ok(dir, &["debrief", &mission]);
+    let planned = section(&page, "Planned Work");
+    assert!(
+        planned.contains(&build) && planned.contains(&release),
+        "{page}"
+    );
+    assert!(!page.contains(&format!("Filed: {release}")), "{page}");
+    assert!(page.contains(&format!("Filed: {edge}")), "{page}");
+    let found = &page[page.find("Found Along The Way").expect(&page)..];
+    assert!(
+        found.contains(&format!("{edge}")) && found.contains(&format!("from review of {build}")),
+        "{page}"
+    );
+    assert!(!found.contains(&release), "{page}");
+    assert!(page.contains("Planned: 1 of 2 items done"), "{page}");
+    // The plan states each criterion in full, continuation lines included.
+    assert!(
+        page.contains("\nfast Fast. Shown by a benchmark.\n"),
+        "{page}"
+    );
+    let path = PathBuf::from(ok(dir, &["debrief", &mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(html.contains("Fast. Shown by a benchmark."), "{html}");
+    assert!(
+        html.contains("<span>Planned work done</span><span>1 of 2</span>"),
         "{html}"
     );
 }
@@ -1739,11 +1872,11 @@ fn a_done_childs_report_sits_with_its_child_line() {
     };
     close(
         &child,
-        "Child rendered the page.\n\n### Deviations\nAdded a warmup step.\n\n### Decisions\nNone.\n\n### Surprises\nMemoised fonts.\n\n### Open items\nFont cache size.",
+        "Child rendered the page.\n\n### Deviations\nAdded a warmup step.\n\n### Decisions\nChose woff2 over ttf.\n\n### Surprises\nMemoised fonts.\n\n### Open items\nFont cache size.",
     );
     close(
         &planned,
-        "Parent shipped.\n\n### Deviations\nNone.\n\n### Decisions\nNone.\n\n### Surprises\nNone.\n\n### Open items\nNone.",
+        "Parent shipped.\n\n### Deviations\nNone.\n\n### Decisions\nKept the old cache.\n\n### Surprises\nNone.\n\n### Open items\nNone.",
     );
     commit_all(dir.path(), "close the child and its parent");
 
@@ -1760,6 +1893,7 @@ fn a_done_childs_report_sits_with_its_child_line() {
         "    Outcome: Child rendered the page.",
         "    Changed: Added a warmup step.",
         "    Surprised by: Memoised fonts.",
+        "    Decided: Chose woff2 over ttf.",
         "    Left open: Font cache size.",
     ]
     .iter()
@@ -1768,6 +1902,10 @@ fn a_done_childs_report_sits_with_its_child_line() {
         assert_eq!(at(fact), first + 1 + offset, "{page}");
     }
     assert_eq!(page.matches("Memoised fonts.").count(), 1, "{page}");
+    // The parent's own report decision sits in its entry, not the child's.
+    let parent_decided = at("  Decided: Kept the old cache.");
+    assert!(parent_decided > first + 5, "{page}");
+    assert_eq!(page.matches("Chose woff2 over ttf.").count(), 1, "{page}");
     assert!(
         section(&page, "Plan vs Actual").contains(&format!("Changed course: {planned}")),
         "{page}"
@@ -1788,6 +1926,7 @@ fn a_done_childs_report_sits_with_its_child_line() {
         "Child rendered the page.",
         "Added a warmup step.",
         "Memoised fonts.",
+        "Chose woff2 over ttf.",
         "Font cache size.",
     ] {
         assert!(
@@ -1795,4 +1934,10 @@ fn a_done_childs_report_sits_with_its_child_line() {
             "no `{text}` after the child chip: {entry}"
         );
     }
+    // The parent's own report decision follows its children's list.
+    let children_end = child_at + entry[child_at..].find("</ul>").unwrap();
+    assert!(
+        entry[children_end..].contains("<p>Kept the old cache.</p>"),
+        "no parent decision after the children: {entry}"
+    );
 }
