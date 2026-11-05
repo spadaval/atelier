@@ -14,13 +14,16 @@ relationships:
     id: "atelier-cagr"
     type: "related"
   - kind: "issue"
+    id: "atelier-gg6b"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-lfs7"
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Keep an item's Open items in the debrief when review filed follow-ups"
-updated_at: "2026-11-05T04:40:10.011847246+00:00"
+updated_at: "2026-11-05T06:03:04.102700+00:00"
 ---
 
 ## Goal
@@ -29,7 +32,8 @@ Open items are dropped whenever review filed follow-ups for the entry, but the t
 
 ## Done when
 
-The debrief of atelier-vt8q no longer shows the problem, and a fixture test covers it.
+- A debrief entry shows its Open items alongside Filed follow-ups, or the rule for hiding them is decided again and written in docs/product/mission-reviews.md.
+- A CLI fixture covers it in both forms, including atelier-cagr's case: a follow-up filed on one child leaves a sibling's Open items visible.
 
 ## Context
 

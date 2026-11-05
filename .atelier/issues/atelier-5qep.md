@@ -12,7 +12,7 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-uf97"
+    id: "atelier-l63c"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2

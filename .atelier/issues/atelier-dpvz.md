@@ -11,7 +11,7 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-2mky"
+    id: "atelier-uf97"
     type: "advances"
   - kind: "review"
     id: "atelier-asxi"

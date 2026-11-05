@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Order work-view rows with the shared blocker-first order"
-updated_at: "2026-10-17T01:10:57.983995411+00:00"
+updated_at: "2026-11-05T06:03:04.102700+00:00"
 ---
 
 ## Goal
@@ -33,6 +33,7 @@ updated_at: "2026-10-17T01:10:57.983995411+00:00"
 - Every work view passes its chosen rows through `ordered_work_indices`.
 - `work blocked` and `work all` print blocked rows in the same order.
 - A test with chain ubti → il31 → fhep → 5hp9 asserts that order in `work blocked` and `work mission`.
+- A test pins the order of a mixed `--all` list in `work mission` and `work parent` (from atelier-31l2).
 
 ## Scope
 

@@ -15,7 +15,7 @@ relationships:
     id: "atelier-ihss"
     type: "related"
   - kind: "issue"
-    id: "atelier-uf97"
+    id: "atelier-l63c"
     type: "advances"
   - kind: "review"
     id: "atelier-3ewf"

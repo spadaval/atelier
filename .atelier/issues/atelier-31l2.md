@@ -13,14 +13,18 @@ relationships:
   - kind: "issue"
     id: "atelier-4pzj"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-5qes"
+    type: "supersedes"
   - kind: "review"
     id: "atelier-tltm"
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-05T06:02:30.277149475+00:00"
+status: "superseded"
 title: "Order work mission and work parent rows by the shared work order"
-updated_at: "2026-10-17T08:41:50.273867789+00:00"
+updated_at: "2026-11-05T06:02:30.277149475+00:00"
 ---
 
 ## Goal
@@ -35,3 +39,7 @@ updated_at: "2026-10-17T08:41:50.273867789+00:00"
 ## Notes
 
 - 2026-10-17 [note] atelier-ksx6 (merged 7e3339d8) now lists work mission and work parent rows in the shared work order, parent row first, and its session test pins the order of ready items. Check the remaining Done when (a CLI test pinning a mixed --all list) before closing or superseding this.
+
+## Close Reason
+
+Ordering is applied (work.rs:543-548, atelier-ksx6); only a test pinning the mixed --all order of work mission and work parent remained, and atelier-5qes's Done when now carries it.

@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add a since-commit digest of a mission for orchestrator wake-ups"
-updated_at: "2026-10-17T19:00:36.351780477+00:00"
+updated_at: "2026-11-05T06:03:04.102700+00:00"
 ---
 
 ## Goal
@@ -27,7 +27,7 @@ o3lm had 75 subagent-completion wake-ups and each re-read a ~400k-token context;
 
 ## Done when
 
-`atelier work mission <id> --since <commit>` prints only what changed: items started, closed, reviewed, merged, new findings and follow-ups, and what is next. The Agent Factory skill tells orchestrators to use it and to ask subagents for short reports. A rendering test covers it.
+`atelier work mission <id> --since <commit>` prints only what changed: items started, closed, reviewed, merged, new findings and follow-ups, and what is next. A rendering test covers it.
 
 ## Context
 

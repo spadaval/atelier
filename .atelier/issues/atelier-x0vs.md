@@ -10,6 +10,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-l63c"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-phfo"
     type: "discovered_from"
 schema: "atelier.issue"

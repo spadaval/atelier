@@ -9,10 +9,7 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "atelier-uf97"
-    type: "advances"
+  relates: []
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

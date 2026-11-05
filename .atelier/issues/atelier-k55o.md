@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Refuse to create work items without a real Done when"
-updated_at: "2026-10-17T01:10:57.961551559+00:00"
+updated_at: "2026-11-05T06:03:04.102700+00:00"
 ---
 
 ## Goal
@@ -27,7 +27,7 @@ updated_at: "2026-10-17T01:10:57.961551559+00:00"
 
 ## Done when
 
-- `issue create` refuses a work item without a real Goal and Done when (a mission without Outcome and Success criteria, a decision without Question). The error names the missing section and shows an example `--body`. Records created in `backlog` may be exempt only if the error/warning says so explicitly.
+- `issue create` refuses a work item without a real Goal and Done when (a mission without Outcome, a decision without Question; Success criteria are optional under ADR 0024). The error names the missing section and shows an example `--body`. Records created in `backlog` may be exempt only if the error/warning says so explicitly.
 - Whole-repo `atelier check` reports placeholder acceptance sections on todo/active records, not only `check <id>`.
 - `atelier start` refuses a record whose acceptance sections are placeholders.
 - CLI tests cover create with no body, with plain text, and with full sections, plus `check` and `start` on a placeholder record.

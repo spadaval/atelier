@@ -12,6 +12,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-gg6b"
+    type: "related"
+  - kind: "issue"
     id: "atelier-lfs7"
     type: "discovered_from"
 schema: "atelier.issue"

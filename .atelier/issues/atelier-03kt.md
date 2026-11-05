@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-05T06:02:29.983449290+00:00"
+status: "superseded"
 title: "Point wrong-kind work mission and work parent errors at the right view"
-updated_at: "2026-10-17T01:10:57.988372301+00:00"
+updated_at: "2026-11-05T06:02:29.983449290+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ updated_at: "2026-10-17T01:10:57.988372301+00:00"
 - `work parent <mission>` says `atelier-j76w is a mission; use atelier work mission atelier-j76w`.
 - `work mission <issue>` suggests `atelier work mission <mission>` for each mission the issue advances, and `atelier work parent <id>` when it has children.
 - Tests cover all three cases.
+
+## Close Reason
+
+Already fixed on master c48378b8: wrong-kind work mission and work parent errors name the right view (crates/atelier-cli/src/commands/work.rs:334-374), pinned by tests in tests/cli_integration/record_refs.rs:323-370. Found by the 2026-11-05 currency check during the mission regroup.
