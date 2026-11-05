@@ -25,9 +25,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-05T02:01:07.967834848+00:00"
+status: "done"
 title: "Make the debrief and brief report history and next steps accurately"
-updated_at: "2026-11-04T23:18:15.186816250+00:00"
+updated_at: "2026-11-05T02:01:07.967834848+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,19 @@ Every child is terminal with its own Done when met and proven, and one independe
 ## Context
 
 Runs in parallel with atelier-2bjz, whose atelier-w5hx also edits crates/atelier-cli/src/commands/mission_review.rs, crates/atelier-app/src/mission_review.rs and docs/product/mission-reviews.md (one-way decision ordering and output). Whichever branch lands second runs `atelier merge --sync`, resolves those files, and needs a fresh CI run and review of the resolution.
+
+## Close Reason
+
+The debrief and brief now report history and next steps accurately: a debrief from a work branch that merged the base reports the base's start and deviations (atelier-jnec), the timeline dates additions and deliveries by one clock, including on such branches (atelier-b3qt), the brief offers plan approval only until one is recorded (atelier-mg7w), and the brief shows the strategy's Outcome (atelier-0a52).
+
+### Deviations
+Two review rounds (atelier-uev7, atelier-a5vf) reshaped jnec's walk: the branch's line is entered at its first commit holding the fork, and each version carries the commit its change counts from. mg7w also fixed the HTML footer.
+
+### Decisions
+On the children (`atelier work decisions atelier-r6bt`).
+
+### Surprises
+Walking the branch's own line from the fork reordered record states and moved link dates; both were caught only by review fixtures with branch record edits before the base merge.
+
+### Open items
+By design, a branch's own record changes before its last base merge count as one change; the base is read from the local base branch and falls back to the old walk if it is missing.
