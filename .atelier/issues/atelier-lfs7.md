@@ -27,7 +27,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Validate a real mission's HTML debrief with the human"
-updated_at: "2026-11-04T23:16:56.641533855+00:00"
+updated_at: "2026-11-05T02:41:03.395157678+00:00"
 ---
 
 ## Goal
@@ -45,3 +45,7 @@ Waits for atelier-2bjz and atelier-r0fj, which change the debrief page the human
 ## Unknowns
 
 Which mission. atelier-9y66 kept the orientation mission atelier-1w8c, and the human judged its debrief "reasonably good" on 2026-10-22 without a review event; 1w8c has since been superseded into atelier-4pzj. atelier-vt8q (release distribution) closes with every item reported under the Close Reason report, so it is a fresh candidate; judging it instead changes 9y66's choice and needs the human.
+
+## Notes
+
+- 2026-11-04 [note] 2026-11-04 handoff: debriefs generated at 711abe6f for the human: atelier-vt8q (closed today, every item reported) and atelier-1w8c (atelier-9y66's choice, superseded into atelier-4pzj), at .atelier/runtime/reviews/<id>-debrief.html. Waiting on Sumeet to pick the mission (keeping 1w8c or switching to vt8q changes 9y66) and to judge the page; no pass recorded for him.
