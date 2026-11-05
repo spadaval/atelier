@@ -11,6 +11,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-cagr"
+    type: "related"
+  - kind: "issue"
     id: "atelier-lfs7"
     type: "discovered_from"
 schema: "atelier.issue"
