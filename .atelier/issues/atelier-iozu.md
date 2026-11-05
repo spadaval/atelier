@@ -3,6 +3,9 @@ created_at: "2026-11-04T23:12:48.603623032+00:00"
 id: "atelier-iozu"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-iozu
 priority: "P3"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Settle Close Reason and report-part follow-ups"
-updated_at: "2026-11-04T23:12:50.182644022+00:00"
+updated_at: "2026-11-05T01:15:51.813095344+00:00"
 ---
 
 ## Goal
