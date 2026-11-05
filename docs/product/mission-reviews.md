@@ -20,7 +20,9 @@ it stands. Both forms follow the same order:
   the planned work: items linked to the mission by its start and not filed by
   review, in filing order, children under their parent.
 - **What we did:** one timeline, oldest first. Each done item appears when it
-  closed, with its outcome, children, what changed from the plan (the
+  closed, with its outcome, its children, each with its own report under
+  its line (its outcome and any Deviations, Surprises and, unless review
+  filed follow-ups, Open items), what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn,
   failing newest proof, a trivial exemption), what surprised the
   implementer, the decisions made in it, any decision record
@@ -46,7 +48,9 @@ it stands. Both forms follow the same order:
   criteria, results and summary, and, while one of its receipts still decides
   a criterion, the code commits since and the work delivered after it. Then
   the criteria still awaiting proof.
-- **Plan vs actual:** planned work done, the items that changed course, work
+- **Plan vs actual:** planned work done, the items that changed course (an
+  item changes course with its children: their derived facts and reported
+  Deviations count as its own), work
   added after the start, dropped work with why, and how much was found.
 - **Needs your review:** open decision records and open `needs-human` work
   in scope, failing criteria, and criteria without passing proof that no such
