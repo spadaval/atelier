@@ -2248,12 +2248,18 @@ fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
         "<div class=\"outcome\">{}</div><div class=\"tiles\">",
         prose(&view.outcome)
     ));
-    body.push_str(&tile(
-        view.criteria.parse.criteria.len(),
-        "success criteria",
-        "the claims the mission must show",
-        Tone::Neutral,
-    ));
+    // Success criteria are optional (ADR 0024): a mission without any shows
+    // no criteria tile, link or section rather than an empty one.
+    let has_criteria =
+        !view.criteria.parse.criteria.is_empty() || !view.criteria.parse.problems.is_empty();
+    if has_criteria {
+        body.push_str(&tile(
+            view.criteria.parse.criteria.len(),
+            "success criteria",
+            "the claims the mission must show",
+            Tone::Neutral,
+        ));
+    }
     body.push_str(&tile(
         view.items.len(),
         "items in scope",
@@ -2287,7 +2293,11 @@ fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
             Tone::Warn
         },
     ));
-    body.push_str("</div><nav class=\"toc\"><a href=\"#criteria\">Criteria</a><a href=\"#scope\">Scope</a><a href=\"#unknowns\">Unknowns</a><a href=\"#decisions\">Human decisions</a><a href=\"#risks\">Risks</a><a href=\"#reviews\">Reviews</a></nav></header>");
+    body.push_str("</div><nav class=\"toc\">");
+    if has_criteria {
+        body.push_str("<a href=\"#criteria\">Criteria</a>");
+    }
+    body.push_str("<a href=\"#scope\">Scope</a><a href=\"#unknowns\">Unknowns</a><a href=\"#decisions\">Human decisions</a><a href=\"#risks\">Risks</a><a href=\"#reviews\">Reviews</a></nav></header>");
 
     let mut criteria =
         String::from("<table><thead><tr><th>Criterion</th><th>Claim</th></tr></thead><tbody>");
@@ -2306,10 +2316,9 @@ fn render_brief_html(view: &atelier_app::mission_review::Brief) -> String {
             escape(problem)
         ));
     }
-    if view.criteria.parse.criteria.is_empty() && view.criteria.parse.problems.is_empty() {
-        criteria = "<p class=\"muted\">None defined.</p>".to_string();
+    if has_criteria {
+        body.push_str(&section("criteria", "Success Criteria", &criteria));
     }
-    body.push_str(&section("criteria", "Success Criteria", &criteria));
 
     let mut scope = String::from("<table><thead><tr><th>Item</th><th>Status</th><th>Size</th><th>Title</th><th>Blocked by</th></tr></thead><tbody>");
     for item in &view.items {

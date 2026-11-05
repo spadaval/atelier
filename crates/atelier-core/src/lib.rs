@@ -988,9 +988,9 @@ impl IssueSections {
                 "Goal was not specified."
             })
             .to_string();
-        let proof =
-            (issue_type == "mission").then(|| "Success criteria were not specified.".to_string());
-        let body = IssueBody::for_type(issue_type, goal, proof, None);
+        // A mission's success criteria are optional (ADR 0024), so a new
+        // mission gets no placeholder for them.
+        let body = IssueBody::for_type(issue_type, goal, None, None);
         Self {
             body,
             notes: None,
@@ -1654,10 +1654,14 @@ mod tests {
             Some("Goal was not specified.")
         );
         assert_eq!(parent.section(IssueSectionName::Unknowns), None);
-        let mission = IssueSections::for_type("mission", None);
-        assert_eq!(
-            mission.section(IssueSectionName::SuccessCriteria),
-            Some("Success criteria were not specified.")
+        let mission = IssueSections::for_type("mission", Some("Ship the theme."));
+        assert_eq!(mission.section(IssueSectionName::SuccessCriteria), None);
+        assert!(
+            mission
+                .section_states()
+                .iter()
+                .all(|state| !state.required || !state.empty),
+            "a mission with only an Outcome has every required section"
         );
 
         let mut sections = IssueSections::for_type("task", Some("  Keep intent.  "));
