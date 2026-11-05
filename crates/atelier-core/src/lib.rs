@@ -941,35 +941,42 @@ impl DecisionNote {
 }
 
 /// A continuation line's leading `Word:` when it is near, but not exactly, a
-/// decision note label: another case, or within two edits (atelier-juyb).
-/// Such a line would otherwise fold silently into the text before it.
+/// decision note label (atelier-juyb): ignoring case, it starts with the
+/// label's first letter and is one insertion, deletion, substitution or
+/// adjacent transposition away, or the same word (atelier-nu4k). Such a line
+/// would otherwise fold silently into the text before it. Ordinary words two
+/// edits away (`Person:`, `Selected:`) or differing in the first letter
+/// (`Season:`) are text.
 fn misspelled_label(line: &str) -> Option<&str> {
     let (word, _) = line.split_once(':')?;
     if word.is_empty() || !word.chars().all(|c| c.is_ascii_alphabetic()) {
         return None;
     }
     let label = &line[..=word.len()];
+    let word = word.to_ascii_lowercase();
     let near = |target: &str| {
-        let target = target.trim_end_matches(':');
-        edit_distance(&word.to_ascii_lowercase(), &target.to_ascii_lowercase()) <= 2
+        let target = target.trim_end_matches(':').to_ascii_lowercase();
+        word.as_bytes()[0] == target.as_bytes()[0] && one_edit_apart(&word, &target)
     };
     let exact = label == DECISION_REASON_LABEL || label == DECISION_REJECTED_LABEL;
     (!exact && (near(DECISION_REASON_LABEL) || near(DECISION_REJECTED_LABEL))).then_some(label)
 }
 
-/// Levenshtein distance between two ASCII words.
-fn edit_distance(a: &str, b: &str) -> usize {
-    let b = b.as_bytes();
-    let mut previous = (0..=b.len()).collect::<Vec<_>>();
-    for (i, ca) in a.bytes().enumerate() {
-        let mut current = vec![i + 1];
-        for (j, cb) in b.iter().enumerate() {
-            let substitution = previous[j] + usize::from(ca != *cb);
-            current.push(substitution.min(previous[j + 1] + 1).min(current[j] + 1));
+/// Whether two ASCII words are equal or one insertion, deletion,
+/// substitution or adjacent transposition apart.
+fn one_edit_apart(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let prefix = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    let (a, b) = (&a[prefix..], &b[prefix..]);
+    match (a.len(), b.len()) {
+        (0, 0) | (1, 0) | (0, 1) => true,
+        (m, n) if m == n => {
+            a[1..] == b[1..] || (m >= 2 && a[0] == b[1] && a[1] == b[0] && a[2..] == b[2..])
         }
-        previous = current;
+        (m, n) if m == n + 1 => a[1..] == *b,
+        (m, n) if m + 1 == n => *a == b[1..],
+        _ => false,
     }
-    previous[b.len()]
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1559,7 +1566,22 @@ mod tests {
             );
         }
         // Other words with a colon, and labels on the choice line, are text.
-        for line in ["Note: Z", "See: Z", "Risk: Z", "12: Z", "Reason : Z"] {
+        // Ordinary words near a label are text too (atelier-nu4k).
+        for line in [
+            "Note: Z",
+            "See: Z",
+            "Risk: Z",
+            "12: Z",
+            "Reason : Z",
+            "Person: Z",
+            "Region: Z",
+            "Lesson: Z",
+            "Season: Z",
+            "Treason: Z",
+            "Selected: Z",
+            "Detected: Z",
+            "Rejects: Z",
+        ] {
             assert!(
                 sections_with_notes(&format!("- 2026-10-18 [decision] X\n  Reason: Y\n  {line}"))
                     .decision_notes()[0]

@@ -21,7 +21,7 @@ schema_version: 2
 closed_at: "2026-11-04T23:30:23.390293428+00:00"
 status: "done"
 title: "Refuse misspelled field lines in decision notes"
-updated_at: "2026-11-04T23:30:23.390293428+00:00"
+updated_at: "2026-11-05T00:09:41.548358140+00:00"
 ---
 
 ## Goal
@@ -38,6 +38,9 @@ A decision note line such as `Rejectd: x` passes `check` and is folded into the 
   Reason: Catches typos and case slips while leaving ordinary prose lines such as Note: or Risk: alone; the check is a nudge, so a rare false refusal is fixed by rewording
   Rejected: refusing any Word: continuation line
   Rejected: documenting that misspellings are allowed
+- 2026-11-04 [decision] Narrow the misspelled-label rule: ignoring case, the word starts with the label's first letter and is at most one insertion, deletion, substitution or adjacent transposition from Reason or Rejected, and is not the exact label
+  Reason: Review finding atelier-nu4k: two Levenshtein edits refused ordinary words such as Person:, Region:, Lesson:, Selected: and Detected:, and distance 1 alone still refuses Season:; the narrowed rule still catches Rejectd, Reasons, Raeson, reason and REJECTED
+  Rejected: a case-insensitive exact match only, which misses Rejectd and Raeson
 
 ## Close Reason
 
@@ -49,7 +52,7 @@ None.
 
 ### Decisions
 
-The near-miss rule (same word ignoring case, or within two edits, but not the exact label) is a decision note on this item.
+The near-miss rule is a decision note on this item; review finding atelier-nu4k narrowed it from two edits to one edit with the same first letter, recorded in a later note.
 
 ### Surprises
 
