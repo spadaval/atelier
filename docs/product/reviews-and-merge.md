@@ -193,6 +193,15 @@ transitive blockers. Evidence must satisfy the base policy's completion checks;
 a newer failure blocks success. Review must have current independent approval
 or an explicit trivial exemption and accepted finding dispositions.
 
+The implementer report parts a done claim needs come from the base's policy
+where the claim's commit last met the base, so a claim made before the policy
+required a part stays valid (see [the work model](work-model.md)). That rule
+reads only history: a claim made on a side branch that left the base before
+the policy changed, then merged into the work branch, passes without the
+parts, and nothing in the history tells it from a child closed honestly
+before the change (atelier-u0i3). A reviewer who sees a done claim without a
+report the base's policy now requires should ask where it was made.
+
 ```text
 atelier merge <owner-or-child-id> --check
 atelier merge <owner-or-child-id> --check --json

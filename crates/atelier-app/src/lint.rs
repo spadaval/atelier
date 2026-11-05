@@ -251,9 +251,10 @@ pub fn issue_findings<'a>(
 }
 
 /// Receipts that name mission criteria (atelier-et6q): each named criterion
-/// must be one the target's mission defines, so a typo or a renamed slug is
-/// never silent. Scoped to one issue, only receipts targeting it, or for a
-/// mission, receipts targeting it or an item in its scope.
+/// must be one the receipt's stored `criteria_mission` defines, so a typo or
+/// a renamed slug is never silent. Scoped to one issue, only receipts
+/// targeting it or stored against it as their mission; for a mission, also
+/// receipts targeting an item in its scope.
 fn criteria_findings(
     state_dir: &Path,
     repo_root: &Path,

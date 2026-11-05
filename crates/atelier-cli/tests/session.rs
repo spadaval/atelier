@@ -1668,6 +1668,33 @@ fn a_branch_cannot_weaken_the_policy_around_a_claim_to_skip_the_report() {
 }
 
 #[test]
+fn report_parts_bind_a_claim_one_commit_back_on_a_base_with_no_upstream() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    let earlier = ok(f.path(), &["-q", "issue", "create", "Earlier claim"]);
+    f.terminal(&earlier);
+    require_report(f.path());
+    commit(f.path(), "require the implementer report");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(pass, "{output}");
+
+    // With no upstream to trust, land judges a claim one commit back as
+    // held by HEAD's parent, and checks its parts against the policy of the
+    // commit that made it (atelier-uxrs).
+    let newer = ok(f.path(), &["-q", "issue", "create", "Newer claim"]);
+    f.terminal(&newer);
+    ok(f.path(), &["-q", "issue", "create", "Later record"]);
+    commit(f.path(), "a later record");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(!pass, "{output}");
+    assert!(
+        output.contains("required_field.report.deviations") && output.contains(&newer),
+        "{output}"
+    );
+    assert!(!output.contains(&earlier), "{output}");
+}
+
+#[test]
 fn status_shows_the_owner_decisions_in_brief() {
     let f = Fixture::new();
     let (_, output) = cli(f.path(), &["status"]);

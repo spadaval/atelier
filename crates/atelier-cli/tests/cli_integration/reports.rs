@@ -260,3 +260,64 @@ fn reason_and_reason_file_conflict_and_supersede_needs_only_the_outcome() {
     );
     assert_eq!(close_reason(dir.path(), &id), "Not needed after all.");
 }
+
+#[test]
+fn a_reclose_with_no_flag_says_which_close_reason_it_kept() {
+    let dir = tempdir().unwrap();
+    let id = started_item(dir.path());
+    let file = dir.path().join("report.md");
+    fs::write(&file, FULL_REPORT).unwrap();
+    let output = ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &id,
+            "close",
+            "--reason-file",
+            file.to_str().unwrap(),
+        ],
+    );
+    assert!(!output.contains("Close Reason:"), "{output}");
+
+    // No transition leaves done, so an item reopens only by a hand edit that
+    // keeps the old Close Reason; the next close names the one it kept.
+    edit_canonical_issue(dir.path(), &id, |markdown| {
+        replace_front_matter_scalar(&markdown, "status", "in_progress")
+            .lines()
+            .filter(|line| !line.starts_with("closed_at: "))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    });
+    let output = ok(dir.path(), &["issue", "transition", &id, "close"]);
+    assert!(
+        output.contains("Close Reason: kept from the record: Shipped the view.\n"),
+        "{output}"
+    );
+    assert_eq!(close_reason(dir.path(), &id), FULL_REPORT);
+}
+
+#[test]
+fn supersede_reason_drops_a_report_written_for_a_close() {
+    let dir = tempdir().unwrap();
+    let id = started_item(dir.path());
+    edit_canonical_issue(dir.path(), &id, |markdown| {
+        format!(
+            "{}\n\n## Close Reason\n\n{FULL_REPORT}\n",
+            markdown.trim_end()
+        )
+    });
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &id,
+            "supersede",
+            "--reason",
+            "Not needed after all.",
+        ],
+    );
+    assert_eq!(close_reason(dir.path(), &id), "Not needed after all.");
+}
