@@ -47,7 +47,7 @@ workflows:
       ready:
         from: [draft]
         to: todo
-        description: The outcome, immediate work, and proof route are clear enough to execute.
+        description: Meets Agent Factory's ready-mission standard (procedures/plan.md, Ready Missions); success criteria are optional (ADR 0024).
         validators:
         - issue.sections_parseable
       start:

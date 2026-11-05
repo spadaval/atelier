@@ -154,10 +154,7 @@ fn issue_sections_parseable(
     let record = index
         .issue_record(issue_id)
         .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
-    let mut required = record.sections.required_names();
-    if record.issue.issue_type == "mission" && record.issue.strategy.is_none() {
-        required.push(atelier_core::IssueSectionName::SuccessCriteria);
-    }
+    let required = record.sections.required_names();
     let invalid = required
         .iter()
         .filter(|name| {

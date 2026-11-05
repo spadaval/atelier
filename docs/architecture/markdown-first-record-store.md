@@ -47,8 +47,8 @@ from before atelier-ihss may hold a link on both records; the index reads it
 as one edge.
 
 Work item bodies require Goal and Done when; Scope, Context, Unknowns,
-Design, and Background are optional. Missions carry Outcome and Success
-criteria or link strategy, with optional Background. Shared Notes and Close
+Design, and Background are optional. Missions carry an Outcome, with
+optional Success criteria, Background, and strategy link. Shared Notes and Close
 Reason preserve handoffs and terminal reasoning. See
 [authoring](../product/mission-authoring.md) for the process-owned templates.
 
