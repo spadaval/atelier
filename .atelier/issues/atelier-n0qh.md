@@ -34,7 +34,7 @@ Each Done when check is checked before merge unless marked for after merge, with
 
 ## Done when
 
-Provisional: the proof-timing scenario test passes; the review request brief lists each after-merge check with its reason and stand-in and says when a reason is missing, and Agent Factory's review text tells the reviewer to flag any that could have run before merge; moving a check to after merge once the item has started is shown to the reviewer through atelier-r9hb; closing a mission with open validation warns and names it unless the validation is carried to another item; agent-facing text in Atelier and Agent Factory says post-merge validation is only what cannot be checked before the merge; no new refusal and no per-check evidence gate; an ADR records the model.
+Provisional: the proof-timing scenario test passes; the review request brief lists each after-merge check with its reason and stand-in and says when a reason is missing, and Agent Factory's review text tells the reviewer to flag any that could have run before merge; moving a check to after merge once the item has started is shown to the reviewer through atelier-r9hb; closing a mission with open validation warns and names it unless the validation is carried to another item; agent-facing text in Atelier and Agent Factory says post-merge validation is only what cannot be checked before the merge, and that a failed validation files a follow-up bug (`issue create --discovered-from`) rather than reopening the item; no new refusal and no per-check evidence gate; an ADR records the model.
 
 ## Unknowns
 
