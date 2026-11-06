@@ -56,21 +56,23 @@ Strategy: docs/strategies/lighter-workflow.md (criterion lifecycle-cost). The re
   5-6. Second and third findings: chosen. They pin the same head and could share commit 4.
 
   After the fix:
-  7. fix_now disposition: chosen. Pinning forces it after the fix commit it names, but it could share a commit with the later records.
+  7. fix_now disposition: forced by pinning and gate ordering. It names the fix commit, so it comes after it; it is the author's record, so (with the reviewer in its own checkout) it reaches the reviewer through an author commit before the reviewer accepts and approves; and it cannot ride with the follow-up issue's commit, which the scenario fixes as exactly that issue's records.
   8. Follow-up issue: chosen by the scenario (issue create plus one commit); it could ride with the defer disposition that names it.
-  9-10. Author defer and no_action dispositions: chosen.
+  9-10. Author defer and no_action dispositions: chosen; they could share commit 7.
   11-12. Reviewer acceptances: chosen; new review events do not stale an approval, so they could ride with the approval commit.
   13. Approval: forced by pinning (it names the head) and gate ordering (approval before merge).
 
-  Forced: 3 (2, 4, 13). Fixed by the scenario: 2 (1, 8). Chosen: 8.
+  Forced: 4 (2, 4, 7, 13). Fixed by the scenario: 2 (1, 8). Chosen: 7.
 
-  Reachability: at most half the baseline is at most 6 commits (half of 13 is 6.5). The floor under this scenario is 5 (3 forced plus 2 fixed by the scenario), so the target is reachable, with one commit to spare. Getting there takes product batching in at least two places: the review round down to one commit (findings 4-6) and the post-fix records down to the follow-up issue plus the approval (7, 9-13 into one), which gives 6; folding the receipt and close into one gives 5. atelier-hwxm alone cuts review files to 1 but not commits, since its disposition and acceptance updates are still separate commands that each commit. The cut rests on atelier-5822 committing the records of one actor's sitting together while each command still uses --commit-records as the brief says. If 5822 finds it cannot batch the post-fix records, the target is not reachable (with every other batching but none after the fix, the best case is 1 + 1 + 1 + 7 = 10); Sumeet would then need to restate lifecycle-cost, for example as "record-only commits are at most the scenario floor plus one per actor hand-off (here 5 + 2 = 7)". No rewrite is proposed now, since the target is reachable.
+  Reachability: at most half the baseline is at most 6 commits (half of 13 is 6.5). The floor under this scenario is 6 (4 forced plus 2 fixed by the scenario), so the target is reachable with no commit to spare. Getting there takes all three batchings: the receipt and close in one commit (2-3), the review round in one (4-6), and the post-fix records in one commit per actor, the author's dispositions (7, 9-10) and the reviewer's acceptances with the approval (11-13). That gives start, receipt and close, findings, follow-up issue, author dispositions, reviewer acceptances and approval: 6. Missing any one of the three batchings gives 7 or more. atelier-hwxm alone cuts review files to 1 but not commits, since its disposition and acceptance updates are still separate commands that each commit. The cut rests on atelier-5822 committing the records of one actor's sitting together while each command still uses --commit-records as the brief says. If 5822 cannot batch some of these, the target is not reachable (with no batching after the fix the best case is 1 + 1 + 1 + 7 = 10); Sumeet would then need to restate lifecycle-cost, for example as "record-only commits are at most the scenario's floor of 6, measured by atelier-5fus, plus one (7)", or as a count named per segment. No rewrite is proposed now, since the target is reachable.
+
+  Correction (2026-11-06, finding atelier-idld): an earlier version of this note classified 7 as chosen and gave a floor of 5 with one commit to spare. That applied the reviewer-to-author hand-off to finding 4 but not the author-to-reviewer hand-off after the fix.
 
   Outside the scenario conventions the strict floor is 1 (the approval): the start, receipt, close, findings and author dispositions could all ride with code commits when author and reviewer share a checkout.
 
 ## Close Reason
 
-The lifecycle-cost scenario now runs as a test (crates/atelier-cli/tests/lifecycle_cost.rs) and asserts today's baseline: 13 record-only commits on the work branch, and 2, 3 and 3 review files about the fix_now, defer and no_action findings. The baseline is receipt atelier-cqv2, and the classification and reachability of "at most half" are in this item's result note: 3 commits are forced, 2 are fixed by the scenario, 8 are chosen, so the target (at most 6) is reachable only if atelier-5822 batches both the review round and the post-fix records.
+The lifecycle-cost scenario now runs as a test (crates/atelier-cli/tests/lifecycle_cost.rs) and asserts today's baseline: 13 record-only commits on the work branch, and 2, 3 and 3 review files about the fix_now, defer and no_action findings. The baseline is receipt atelier-cqv2, and the classification and reachability of "at most half" are in this item's result note: 4 commits are forced, 2 are fixed by the scenario, 7 are chosen, so the target (at most 6) is reachable with no commit to spare, and only if atelier-5822 batches the receipt with the close, the review round, and the post-fix records per actor.
 
 ### Deviations
 - The scenario has one implementation commit between start and the receipt, which the strategy does not list but its review and fix steps assume.
@@ -86,4 +88,4 @@ None beyond how the scenario reads, listed above. Today's rules decide the rest:
 - `measurement` is not a known evidence kind (`evidence record` warns and accepts it; known kinds include benchmark and validation).
 
 ### Open items
-- Whether "at most half" holds depends on atelier-5822 being able to batch the post-fix records; if it cannot, the note gives a possible rewrite for Sumeet.
+- Whether "at most half" holds depends on atelier-5822 achieving all three batchings; if it cannot, the note gives a possible rewrite for Sumeet.
