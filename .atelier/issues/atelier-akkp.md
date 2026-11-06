@@ -29,4 +29,4 @@ A note on this issue gives the same counts as docs/strategies/lighter-workflow.m
 
 ## Context
 
-Pick this up three or more weeks after the release containing atelier-n4mj's changes has been adopted in atelier, astromech, demiurge, cosplay-studio or life-on-rails. It is outside the mission because it waits on calendar time and adoption. The original counts came from a temporary script; atelier-5fus's and the status-count item's receipts record reusable methods.
+Pick this up three or more weeks after the release containing atelier-n4mj's changes has been adopted in atelier, astromech, demiurge, cosplay-studio or life-on-rails. It is outside the mission because it waits on calendar time and adoption. The original counts came from a temporary script; atelier-5fus's and atelier-rkxm's receipts record reusable methods. The raw record-only share includes planning commits, which the mission does not target, so also count the record-only commits per merged work branch, which is what the mission's lifecycle-cost scenario measures.

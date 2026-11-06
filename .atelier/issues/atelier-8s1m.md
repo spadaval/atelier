@@ -33,11 +33,11 @@ updated_at: "2026-11-06T22:08:52.543267636+00:00"
 
 ## Goal
 
-An independent reviewer confirming a fix_now at or after its resolution commit has reviewed that fix. The review that raised the findings, plus a confirmation of every fix_now, counts as approval of the commit it pinned plus the resolution commits. A fresh approval of the whole head is needed only for commits no confirmed resolution covers, or for a finding the reviewer marks as needing re-review.
+An independent reviewer confirming a fix_now at or after its resolution commit has reviewed that fix. A review that raises fix_now findings may approve its pinned commit on condition that they are fixed; a review without that verdict is not an approval. A conditional approval plus a confirmation of every fix_now counts as approval of the pinned commit plus the resolution commits. A fresh approval of the whole head is needed only for commits no confirmed resolution covers, or for a finding the reviewer marks as needing re-review.
 
 ## Done when
 
-Provisional: in the lifecycle scenario a fixed finding needs no approval of the head beyond the reviewer's confirmation; an author-recorded fix_now with no independent confirmation is still refused; a confirmation by an author identity is refused by the same non-author check as approval (and atelier-jzh9's implementer check, if it has landed); a commit beyond the confirmed resolutions still needs a fresh approval; a finding marked for re-review still requires a fresh approval; approval-freshness docs state the rule in fewer words than today; Agent Factory review text in ~/projects/agents-skills says the re-check satisfies its "changes after review" rule; an ADR records the replaced rule.
+Provisional: in the lifecycle scenario a fixed finding needs no approval of the head beyond the reviewer's confirmation; an author-recorded fix_now with no independent confirmation is still refused; a review that raised findings without a conditional approval is not an approval, even once every fix_now is confirmed; a confirmation by an author identity is refused by the same non-author check as approval (and atelier-jzh9's implementer check, if it has landed); a commit beyond the confirmed resolutions still needs a fresh approval; a finding marked for re-review still requires a fresh approval; approval-freshness docs state the rule in fewer words than today; Agent Factory review text in ~/projects/agents-skills says the re-check satisfies its "changes after review" rule; an ADR records the replaced rule.
 
 ## Unknowns
 

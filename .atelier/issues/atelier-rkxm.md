@@ -26,7 +26,7 @@ Give the mission the facts that its after-merge model (atelier-n0qh) and the sta
 ## Done when
 
 - A note on this issue gives, per repository, a table of each status and each issue type in that repository's `.atelier/workflow.yaml`: records currently in it on the base, and records that passed through it in git history on any branch (counted from the record files' history, `git log --all -p -- .atelier/issues`).
-- The same note names, for each status and type, the gates or commands in Atelier's code that read it (file:line), or says none do.
+- The same note names, for each status and type, what in Atelier reads it: a gate or command in the code (file:line), or a policy key such as `done_statuses` or a transition that refers to it. Code mostly reads statuses by policy category rather than by name, so "none" needs both checked.
 - An evidence receipt on this issue records the command or script used, so the counts can be rerun; a script, if any, is committed under `scripts/` or kept in the receipt itself.
 
 ## Scope
