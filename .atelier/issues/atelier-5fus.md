@@ -3,6 +3,9 @@ created_at: "2026-11-06T21:26:18.219762489+00:00"
 id: "atelier-5fus"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-5fus
 priority: "P2"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Measure the bookkeeping of one standard lifecycle"
-updated_at: "2026-11-06T22:08:52.222907064+00:00"
+updated_at: "2026-11-06T23:42:36.494539297+00:00"
 ---
 
 ## Goal
