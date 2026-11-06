@@ -25,7 +25,7 @@ Give demiurge and cosplay-studio a test of the merged tree. They have no CI and 
 
 ## Done when
 
-Each repository's `.atelier/workflow.yaml` has a `merge_checks` `shell.check` that runs its test suite on the merged tree (with `merge_strategy: merge_commit`), and one `atelier merge` there shows the check running and a failing suite refusing the merge.
+Each repository's `.atelier/workflow.yaml` has a `merge_checks` `shell.check` that runs its test suite on the tree that lands, under the repository's current merge strategy, and one `atelier merge` there shows the check running and a failing suite refusing the merge.
 
 ## Context
 
