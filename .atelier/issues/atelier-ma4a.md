@@ -11,8 +11,6 @@ relationships:
     id: "atelier-abdp"
   - kind: "issue"
     id: "atelier-efnf"
-  - kind: "issue"
-    id: "atelier-r9hb"
   attachments: []
   relates:
   - kind: "issue"
@@ -22,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Show a work item's review history where it is judged"
-updated_at: "2026-10-30T06:40:25.715333306+00:00"
+updated_at: "2026-11-06T23:57:40.039104054+00:00"
 ---
 
 ## Goal

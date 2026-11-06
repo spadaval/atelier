@@ -8,12 +8,15 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "atelier-ll3p"
+    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show a Done when edited after the item was started"
-updated_at: "2026-10-30T06:40:25.029767683+00:00"
+updated_at: "2026-11-06T23:57:40.575515296+00:00"
 ---
 
 ## Goal
@@ -35,3 +38,7 @@ Record history from Git: crates/atelier-app/src/record_history.rs (`issue_histor
 ## Design
 
 Surface, do not refuse. A Done when is sometimes rightly corrected after a finding, and refusing would need an override or a human-only record, which ADR 0018 keeps Atelier from becoming. The line gives the reviewer and the debrief reader the fact to judge.
+
+## Notes
+
+- 2026-11-06 [note] Taken out from under atelier-ma4a on 2026-11-06 so it can be started and merged on its own branch: atelier-n0qh (mission atelier-n4mj) is blocked by it, and atelier-ll3p is still a draft and has not scheduled it. docs/strategies/lighter-workflow.md (Risks) lets atelier-n4mj's orchestrator do r9hb as that mission's work while leaving it in atelier-ll3p; it still advances atelier-ll3p, and atelier-ma4a's Done when covers its remaining children.
