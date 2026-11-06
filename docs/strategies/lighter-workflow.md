@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 last_changed: "2026-11-06: on Sumeet's direction, dropped the fix re-check cut (atelier-8s1m), turned the after-merge refusals into things shown, and added evidence that records only what nothing else records (after an evidence audit); earlier that day, planning review fixes; created that day from Sumeet's direction (LoR thread 'Launcher usability vs Smart Launcher')"
 ---
 
