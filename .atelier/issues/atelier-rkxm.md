@@ -3,6 +3,9 @@ created_at: "2026-11-06T22:08:25.195127217+00:00"
 id: "atelier-rkxm"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-rkxm
 priority: "P2"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Count how repositories use each status and issue type"
-updated_at: "2026-11-06T22:08:25.195127217+00:00"
+updated_at: "2026-11-06T23:42:37.958529755+00:00"
 ---
 
 ## Goal
