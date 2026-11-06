@@ -3,6 +3,9 @@ created_at: "2026-10-30T06:40:25.029767683+00:00"
 id: "atelier-r9hb"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-r9hb
 priority: "P2"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show a Done when edited after the item was started"
-updated_at: "2026-11-06T23:57:40.575515296+00:00"
+updated_at: "2026-11-06T23:58:19.920545580+00:00"
 ---
 
 ## Goal
