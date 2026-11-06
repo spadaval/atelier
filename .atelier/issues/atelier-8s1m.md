@@ -26,9 +26,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-06T23:09:15.332629669+00:00"
+status: "superseded"
 title: "A fix re-check counts as the review of that fix"
-updated_at: "2026-11-06T22:08:52.543267636+00:00"
+updated_at: "2026-11-06T23:09:15.332629669+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,7 @@ Provisional: in the lifecycle scenario, with the review giving a conditional app
 ## Unknowns
 
 Whether scoping review to the fix lets problems through; judged from findings during the mission, and if so taken to Sumeet. Whether a confirmation pinned at a resolution commit counts as a new review round for atelier-abdp.
+
+## Close Reason
+
+Dropped on Sumeet's direction (2026-11-06): re-reviewing a fix is cheap, since the same reviewer can review the fix's diff and approve the head, and replacing that approval with a scoped confirmation needed new rules (confirmation acts, conditional approvals) to stay safe. Fixes stay re-reviewed as today; atelier-hwxm's docs work says the re-review may cover only the fix's diff. See docs/strategies/lighter-workflow.md, Shape.
