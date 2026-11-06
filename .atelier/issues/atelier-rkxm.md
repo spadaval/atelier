@@ -154,24 +154,24 @@ Strategy: docs/strategies/lighter-workflow.md (Shape, "Statuses and types follow
 
   ### What in Atelier reads each one (at 05f01d83, production code only, `#[cfg(test)]` excluded)
 
-  The policy is the same in all four repositories, so this holds for each. Policy keys come first, then code that names the value; code otherwise reads statuses by category (`status_category`, crates/atelier-workflow/src/lib.rs:318) or by `done_statuses` (`issue_status_is_terminal`, lib.rs:324, 22 call sites).
+  The policy is the same in all four repositories, so this holds for each. Policy keys come first, then code that names the value; code otherwise reads statuses by category (`status_category`, crates/atelier-workflow/src/lib.rs:318) or by `done_statuses` (`issue_status_is_terminal`, lib.rs:324, 20 production call sites).
 
   | status (category) | policy | code that names it |
   |---|---|---|
-  | draft (todo) | objective `initial_status`; `ready` and `supersede` from | record_history.rs:267 (a mission has started at its first non-draft version); cli mission_review.rs:465, 1030 (debrief label and dot); epic_migration.rs:31 (legacy epic draft) |
+  | draft (todo) | objective `initial_status`; `ready` and `supersede` from | record_history.rs:267 (a mission has started at its first non-draft version); cli mission_review.rs:465, 1030 (debrief label and dot); epic_migration.rs:31 (legacy epic draft); passed as the migrated draft status at evidence_freshness.rs:53, record_history.rs:204, cli git.rs:559 |
   | backlog (todo) | work `plan` from, `defer` to, `supersede` from | cli migrate.rs:78-80 (epic migration target); cli mission_review.rs:1030. Parked because no transition reaches the active category (`can_enter_active`, lib.rs:356, used at work_classification.rs:237) |
-  | todo (todo) | work and decision `initial_status`; `ready`/`plan` to; `start`, `block`, `defer`, `decide` from | only as the no-policy fallback: work_classification.rs:239, 252; bundle.rs:749 |
-  | in_progress (active) | `start` to; `block`, `request_review`, `close`, `supersede` from | record_index.rs:1072 (mission dependency check, together with legacy status "ready"); otherwise category `active` |
-  | blocked (blocked) | `block` to; `start`, `decide`, `supersede` from | none by name; the only status in category `blocked`, read by category (work_classification.rs:234, cli mission_review.rs:1016, 1029, human_output.rs:776, 1009). The other `"blocked"` literals are bucket, evidence-result or category names |
+  | todo (todo) | work and decision `initial_status`; `ready`/`plan` to; `start`, `block`, `defer`, `decide` from; `supersede` from in all three workflows | only as the no-policy fallback: work_classification.rs:239, 252; bundle.rs:749 |
+  | in_progress (active) | `start` and `revise` to; `block`, `request_review`, `close`, `supersede` from | record_index.rs:1072 (mission dependency check, together with legacy status "ready"); otherwise category `active` |
+  | blocked (blocked) | `block` to; `start`, `decide`, `defer` (work), `supersede` from | none by name; the only status in category `blocked`, read by category (work_classification.rs:234, cli mission_review.rs:1016, 1029, human_output.rs:776, 1009). The other `"blocked"` literals are bucket, evidence-result or category names |
   | review (active) | `request_review` to; `revise`, `close`, `block` from | none; every production `"review"` literal is the review record kind. Category `active` only |
-  | done (done) | `close`/`decide` to; in every `done_statuses` | workflow_policy.rs:19 (no-policy fallback only); category `done` drives the validators (review_gate.rs:119, 135; workflow_validation.rs:228) |
+  | done (done) | `close`/`decide` to; in every `done_statuses` (policy validation requires every `done_statuses` entry to be in category `done`, crates/atelier-workflow/src/lib.rs:1441) | workflow_policy.rs:19 (no-policy fallback only); category `done` drives the validators (review_gate.rs:119, 135; workflow_validation.rs:228) |
   | superseded (done) | `supersede` to; in every `done_statuses` | excluded from "done" claims by name: mission_review.rs:342, 656, 668, 687, 719; decisions.rs:52, 238; review_gate.rs:1337, 1666, 1689; cli git.rs:575 (base_done_claims), 1119; evidence_freshness.rs:293; gate_report.rs:445; cli workflow.rs:305; cli mission_review.rs:1014, 1025 |
 
   | type | policy | code that names it |
   |---|---|---|
   | mission | objective `applies_to` | about 60 lines, e.g. workflow_policy.rs:69, 96, 110, 130, 181; criteria.rs:84, 89, 141; record_index.rs:941, 1071; objective_graph.rs:312, 324, 339; lint.rs:268, 324, 341; mission_overview.rs:58, 74, 128; decisions.rs:130; issue_read.rs:98; cli git.rs:574; cli issue.rs:1092 |
   | decision | decision `applies_to` | workflow_policy.rs:187 (no work branch); work_classification.rs:224 (waits on the human); mission_review.rs:502, 734, 960, 1427; decisions.rs:151, 193, 237; core lib.rs:1012, 1033, 1095; records lib.rs:758 (Decision body); cli issue.rs:283, 1092, 1219, 1342; cli git.rs:574; prune.rs:945; cli mission_review.rs:347 |
-  | task | work `applies_to` | issue_cli.rs:28 (default `--type`) only |
+  | task | work `applies_to` | issue_cli.rs:28 (default `--type`); cli bundle.rs:1650 (default type on bundle import); record_history.rs:204 (epic-migration target when reading historical records) |
   | bug, feature, spike, validation | work `applies_to` | none. `feature` appears only as the epic-migration default (cli main.rs:325 `migrate epics --to`, cli git.rs:559); `"validation"` literals are the evidence kind |
 
   ### Surprises
