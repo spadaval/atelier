@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-06T23:51:04.707094722+00:00"
+status: "done"
 title: "Count how repositories use each status and issue type"
-updated_at: "2026-11-06T23:49:39.396759738+00:00"
+updated_at: "2026-11-06T23:51:10.661590811+00:00"
 ---
 
 ## Goal
@@ -183,3 +184,23 @@ Strategy: docs/strategies/lighter-workflow.md (Shape, "Statuses and types follow
   - Legacy values survive in history: atelier's pre-rebuild statuses `closed`, `open`, `validation`, `ready`, `publish_review` and types `epic`, `closeout`; `epic` in astromech and cosplay-studio. record_index.rs:1072 still matches status `ready`, which no current policy declares.
   - Method: plain `git log --all -p` undercounts astromech, because rename detection hides the status lines of 300 records whose ids were regenerated on 2026-10-15 (c5766703, 2470d281); the script reads every blob and merges renames. astromech also has a stray `.atelier/issues/pey5.md` (id astromech-pey5), counted once by id.
   - The reflog covers only this clone: cosplay-studio has 16 recorded tips against records since July, so its `tips` column undercounts.
+- 2026-11-06 [decision] Count from every issue-record blob reachable from the refs, merging git-detected renames, and measure 'at rest on the base' by the base tip and the base reflog's tips
+  Reason: git log -p rename detection hides 300 regenerated astromech records, and with fast_forward_only merges the base's first-parent line includes work-branch commits
+  Rejected: parse git log --all -p status lines
+  Rejected: use base first-parent history as the at-rest measure
+
+## Close Reason
+
+The 2026-11-06 result note on this issue gives, for atelier, astromech, demiurge and cosplay-studio, each policy status and issue type with its record counts at rest on the base and across history on any branch, and what in Atelier reads each one; receipt atelier-8oxm holds the script that reruns the counts.
+
+### Deviations
+The counts read every issue-record blob reachable from the refs (`git log -m --root --raw`, then `git cat-file`) rather than parsing `git log --all -p` as Done when suggests, because rename detection in `-p` hides status lines of 300 regenerated astromech records. A `-p --no-renames` cross-check matched the script exactly except one stray astromech file (`pey5.md`, id astromech-pey5). The tables add three columns Done when did not ask for: base reflog tips, base first-parent history, and `--all` including T3 Code checkpoint refs (refs/t3/*) apart from branches. The script lives in the receipt, not under `scripts/`, so this branch stays record-only.
+
+### Decisions
+"At rest on the base" is measured two ways: the base tip now, and every tip the local base ref has had per its reflog, since with `fast_forward_only` (astromech, demiurge, cosplay-studio) the first-parent line includes work-branch commits. Renamed record files (git -M) count once under their newest id.
+
+### Surprises
+`blocked` was never used outside atelier, `review` never in demiurge and once in cosplay-studio, `superseded` never in cosplay-studio. `in_progress`, `review` and `blocked` almost never sit at rest on a base. Every type has records in every repository, but `bug`, `feature`, `spike` and `validation` are read by no code beyond the work workflow's `applies_to`. `review` and `blocked` are never read by name; statuses are mostly read by category, while `superseded` is named in 17 places. record_index.rs:1072 still matches a status `ready` that no policy declares. All four policies keep the starter's statuses, types and transitions unchanged.
+
+### Open items
+The reflog covers only this clone (cosplay-studio: 16 tips against records since July), so the tips column is a lower bound there. Counts change as refs move (atelier `done` on branches went 1163 to 1164 during this work as atelier-5fus closed); the note uses the run recorded in atelier-8oxm. Code readers were found by grepping production source for each name and checking the context of each hit, not by tracing every caller of `status_category` and `issue_status_is_terminal`.
