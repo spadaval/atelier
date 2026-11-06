@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-06T23:49:16.260175134+00:00"
+status: "done"
 title: "Measure the bookkeeping of one standard lifecycle"
-updated_at: "2026-11-06T23:48:52.058392639+00:00"
+updated_at: "2026-11-06T23:49:16.260175134+00:00"
 ---
 
 ## Goal
@@ -66,3 +67,23 @@ Strategy: docs/strategies/lighter-workflow.md (criterion lifecycle-cost). The re
   Reachability: at most half the baseline is at most 6 commits (half of 13 is 6.5). The floor under this scenario is 5 (3 forced plus 2 fixed by the scenario), so the target is reachable, with one commit to spare. Getting there takes product batching in at least two places: the review round down to one commit (findings 4-6) and the post-fix records down to the follow-up issue plus the approval (7, 9-13 into one), which gives 6; folding the receipt and close into one gives 5. atelier-hwxm alone cuts review files to 1 but not commits, since its disposition and acceptance updates are still separate commands that each commit. The cut rests on atelier-5822 committing the records of one actor's sitting together while each command still uses --commit-records as the brief says. If 5822 finds it cannot batch the post-fix records, the target is not reachable (with every other batching but none after the fix, the best case is 1 + 1 + 1 + 7 = 10); Sumeet would then need to restate lifecycle-cost, for example as "record-only commits are at most the scenario floor plus one per actor hand-off (here 5 + 2 = 7)". No rewrite is proposed now, since the target is reachable.
 
   Outside the scenario conventions the strict floor is 1 (the approval): the start, receipt, close, findings and author dispositions could all ride with code commits when author and reviewer share a checkout.
+
+## Close Reason
+
+The lifecycle-cost scenario now runs as a test (crates/atelier-cli/tests/lifecycle_cost.rs) and asserts today's baseline: 13 record-only commits on the work branch, and 2, 3 and 3 review files about the fix_now, defer and no_action findings. The baseline is receipt atelier-cqv2, and the classification and reachability of "at most half" are in this item's result note: 3 commits are forced, 2 are fixed by the scenario, 8 are chosen, so the target (at most 6) is reachable only if atelier-5822 batches both the review round and the post-fix records.
+
+### Deviations
+- The scenario has one implementation commit between start and the receipt, which the strategy does not list but its review and fix steps assume.
+- The follow-up issue for the defer finding is created on the work branch, followed by one commit of its records, as the strategy says for `issue create`; this puts it among the 13.
+- The git and atelier runners (git, cli, ok, commit) moved from merge_gates.rs into tests/support/cli.rs, which both tests include.
+
+### Decisions
+None beyond how the scenario reads, listed above. Today's rules decide the rest: the reviewer accepts a defer or no_action by recording the same decision, which supersedes the author's; findings and the approval pin the head with `--commit`, as the review request brief does.
+
+### Surprises
+- The starter policy has no shell check, so merge fast-forwards and adds no merge commit.
+- atelier-hwxm alone will not reduce commits: its disposition and acceptance updates are still separate commands that each commit.
+- `measurement` is not a known evidence kind (`evidence record` warns and accepts it; known kinds include benchmark and validation).
+
+### Open items
+- Whether "at most half" holds depends on atelier-5822 being able to batch the post-fix records; if it cannot, the note gives a possible rewrite for Sumeet.
