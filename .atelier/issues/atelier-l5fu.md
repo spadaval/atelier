@@ -55,7 +55,7 @@ The canary results and the parent-directory behaviour are in this item's Goal. T
 
 ## Report
 
-All five Done when lines hold, on spadaval/.agents branch `atelier-l5fu`, head **d4db367**. The branch has two commits on main `ac7c85c`: `e2c5094` (harness, grader, fixtures, README) and `d4db367` (results file). It is committed only, not pushed or merged.
+All five Done when lines hold, on spadaval/.agents branch `atelier-l5fu`, head **e1eea38**. The branch has three commits on main `ac7c85c`: `e2c5094` (harness, grader, fixtures, README), `d4db367` (results file) and `e1eea38` (fixes for review findings atelier-c4vx, atelier-njt9 and atelier-87vf). It is committed only, not pushed or merged.
 
 - **Line 1:** work directories go under `--work-root`, default `/var/tmp/af-evals`. The harness refuses a root inside `$HOME` (`run.py: error: --work-root /home/supadava/.cache/af-evals/work is inside $HOME ...`, exit 2). Every init event of the 24 matrix runs shows its working directory under `/var/tmp/af-evals`. Transcripts, `result.json` and `results.jsonl` stay in `--out`, and each run directory links its work directory as `work`.
 - **Line 2:** every run passes `--settings` with `claudeMdExcludes` for each instruction path above its working directory.
@@ -66,6 +66,8 @@ All five Done when lines hold, on spadaval/.agents branch `atelier-l5fu`, head *
   4. Marker removed, backstop still disabled: passed.
   5. Work root under `$HOME` with the backstop disabled, the old layout: aborted, naming `/home/supadava/.claude/CLAUDE.md`.
   6. The same root with the backstop on: passed.
+
+  `e1eea38` fixes the canary's verdict. The directory name no longer carries the token, and the own-file check matches the heading text, so a reply that only prints a path inside the repository fails (atelier-c4vx). Every absolute path a reply names outside the repository now counts as foreign, after stripping Markdown emphasis and expanding `~` (atelier-njt9). `harness/test_run.py` checks these with fixed replies in place of Claude Code. Against `d4db367`, its path-only, bold-path and `~/` replies all passed the canary; at `e1eea38` all three abort, and a correct reply still passes. One real canary through `run.py` at `e1eea38` passed and was followed by a trivial-typo smoke run, which also passed (`~/.cache/af-evals/runs/l5fu-canary-check/`). The canary there replied `.../20261107-163756-canary-6dc19760/repo/AGENTS.md | Isolation canary 1181368e`. The six cases above and both matrix canaries ran on `d4db367`'s verdict. Every passing reply among them quoted the heading text (`# Isolation canary <token>`), and the two aborted ones named only the foreign file. The new verdict therefore gives the same results on all eight transcripts.
 - **Line 4:** `done-when-rewrite/test_grade.py` covers both grader fixes with four fixtures, and all four pass at `e2c5094`. Against main's grader, the receipt-less fresh-proof fixture failed ("marked done or merged without fresh passing proof") and the deferred-FIX-NOW fixture wrongly passed. The stale-proof fixture fails under both graders, and the new-low-finding defer passes under both. The fixed grader also passes the four kept 11-07 runs it used to fail: `qj9d-baseline` opus `6edf`, sonnet `2413` and `cb29`, and `qj9d-new` sonnet `0995`.
 - **Line 5:** `evals/agent-factory/results/2026-11-07-clean-baseline.md` records the clean runs under `~/.cache/af-evals/runs/l5fu-clean/`. Both canaries passed, I read every `final.md`, and I read the transcripts as that file says.
 
@@ -97,10 +99,11 @@ These are the three decision notes of 2026-11-07 above.
 
 ### Open items
 
-- **Review:** independent review of the agents-skills branch at `d4db367` is outstanding. So are the item's review records and the no-ff merge into main.
+- **Review:** the independent review at `d4db367` recorded atelier-c4vx (fix_now), atelier-njt9 and atelier-87vf (both defer), all fixed in `e1eea38`. Re-review of `e1eea38`, dispositions for the two defer findings, and the no-ff merge into main are outstanding. The second decision note's "unguessable" claim holds only from `e1eea38`. Before it, the token was also in the canary's directory name.
+- **Work-directory ageing:** the README now says the system may age out `/var/tmp`, as systemd-tmpfiles does here after 30 days, and points to `--work-root` for work directories that should last. The harness does not copy a failed run's grader inputs into `--out`.
 - **Older results files** (`2026-10-30-baseline.md`, `2026-11-07-skill-cut.md`) still carry no warning; only the new file says they were contaminated. A one-line pointer in each would be a small follow-up.
 - **Shared host state:** parallel refused-land-push runs share port 8080 and `/tmp`. One reviewer ran `pkill -f "python3 server.py"`. No grade changed, but the scenario needs its own port per run. This predates this item.
-- **Canary depends on the model:** the canary trusts Haiku's listing. Its random-token positive control guards against a made-up answer, and a wrong listing aborts rather than passes. It answered correctly in all 2 matrix runs and 6 proof runs here, and in about 12 probe runs.
+- **Canary depends on the model:** the canary trusts Haiku's listing. Its random-token positive control guards against a made-up answer, and a wrong listing, or any stray path outside the repository, aborts rather than passes. It answered correctly in all 3 harness runs and 6 proof runs here, and in about 12 probe runs.
 - **Version-pinned names:** `INSTRUCTION_NAMES` follows Claude Code 2.1.318. A later version that loads other names would get past the backstop, though the canary would catch it.
 - **Auto-memory directories:** each run still creates an empty auto-memory directory under `~/.claude/projects/` (26 today). It is harmless and predates this item.
 - **Cleanup:** the agents-skills worktree is at `~/projects/agents-skills-wt/atelier-l5fu`, and `/var/tmp/af-evals` is empty. The probe and test directories are removed.
