@@ -243,6 +243,18 @@ pub fn run(
     } else if record_branch {
         writes.push(owner);
     }
+    // The records start writes pass the rules `atelier check` applies,
+    // checked against the records they join (atelier-ilba).
+    let changes = writes
+        .iter()
+        .map(|record| -> Result<_> {
+            Ok(atelier_records::guard::Change {
+                path: atelier_records::issue_record_path(&record.issue.id),
+                text: Some(atelier_records::render_issue_record(record)?),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    atelier_app::record_guard::check_changes(&view_root.join(".atelier"), &changes)?;
     // Stage the entire issue directory, so owner + child install as one
     // rollback-protected transaction under the command's exclusive lock.
     let staged = if writes.is_empty() {
@@ -254,7 +266,7 @@ pub fn run(
         std::fs::create_dir_all(&runtime)?;
         let stage = tempfile::tempdir_in(&runtime)?;
         bundle::copy_dir_recursive(&source, &stage.path().join("issues"))?;
-        let store = atelier_records::RecordStore::new(stage.path());
+        let store = atelier_records::RecordStore::staging(stage.path());
         for record in &writes {
             store.write_issue_atomic(record)?;
         }

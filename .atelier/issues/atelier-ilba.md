@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:00.583737629+00:00"
 id: "atelier-ilba"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-ilba
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Refuse an invalid record when it is written, and let authors fix their own"
-updated_at: "2026-11-07T06:05:08.500208172+00:00"
+updated_at: "2026-11-07T06:18:37.560592348+00:00"
 ---
 
 ## Goal

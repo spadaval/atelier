@@ -754,15 +754,174 @@ fn work_edges(
         .collect())
 }
 
-/// Enforce immutability from branch creation, not merely after approval.
+/// How a review record stood when a change to it joined the base.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Held {
+    /// The base held it.
+    OnBase,
+    /// It was committed before the change, and the base takes each commit
+    /// by itself or cannot be read, so it is final once committed.
+    Committed,
+}
+
+/// Where review records stop being correctable: the policy's base branch
+/// (atelier-ilba). Until a review record reaches the base, any agent on the
+/// branch may edit or delete it; once it is there, it stays as it is apart
+/// from a finding's disposition. Each change is judged against the base as
+/// it stood where the change joined it, so a correction made on a branch is
+/// not refused after it merges.
+pub struct ReviewBase {
+    name: String,
+    /// The base branch's tip, when it resolves.
+    tip: Option<String>,
+    /// Whether the base takes work by fast-forward, which leaves no trace
+    /// of where a commit joined it.
+    fast_forward: bool,
+    /// The base's first-parent line from its tip, each commit with its
+    /// distance from the tip, read when first needed.
+    line: Option<std::collections::HashMap<String, usize>>,
+}
+
+impl ReviewBase {
+    pub fn new(repo: &Path, branch: &atelier_workflow::BranchLifecycleConfig) -> Self {
+        let tip = git::git_output(
+            repo,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{}^{{commit}}", branch.base_branch),
+            ],
+        )
+        .ok()
+        .map(|out| String::from_utf8_lossy(&out).trim().to_owned())
+        .filter(|tip| !tip.is_empty());
+        Self {
+            name: branch.base_branch.clone(),
+            tip,
+            fast_forward: branch.merge_strategy == atelier_workflow::MergeStrategy::FastForwardOnly,
+            line: None,
+        }
+    }
+
+    /// The base branch's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// How `path` stood on the base when `commit`'s change joined it, or,
+    /// for a commit not on the base yet, stands on it now; `None` when it
+    /// was not there:
+    ///
+    /// - A commit a merge brought into the base joined it at that merge,
+    ///   which held the base as the merge's first parent.
+    /// - A commit on the base's first-parent line joined it by itself, at
+    ///   its own first parent.
+    /// - A commit not on the base yet is judged against the base's tip.
+    ///
+    /// Under `fast_forward_only`, history does not show where a
+    /// fast-forward began, and a commit not on the base yet will join it by
+    /// itself, so every commit is judged at its own first parent: a review
+    /// record is final once committed, as before records could be
+    /// corrected. So is every commit without a base branch to read.
+    pub fn held(
+        &mut self,
+        read: &mut git::ReadContext<'_>,
+        commit: &str,
+        path: &Path,
+    ) -> Result<Option<Held>> {
+        let (before, held) = match self.tip.clone() {
+            Some(tip) if !self.fast_forward => {
+                if read.ancestor(commit, &tip)? {
+                    let joined = self.joined_at(read, commit, &tip)?;
+                    (read.first_parent(&joined)?, Held::OnBase)
+                } else {
+                    (Some(tip), Held::OnBase)
+                }
+            }
+            _ => (read.first_parent(commit)?, Held::Committed),
+        };
+        Ok(match before {
+            Some(before) if read.entry(&before, path)?.is_some() => Some(held),
+            _ => None,
+        })
+    }
+
+    /// Whether a review record is final once committed, as [`Self::held`]
+    /// judges every commit under `fast_forward_only` or without a base.
+    pub fn final_once_committed(&self) -> bool {
+        self.fast_forward || self.tip.is_none()
+    }
+
+    /// Whether a change to `path` in the checkout, once committed, changes a
+    /// record [`Self::held`] would find on the base: whether the base's tip
+    /// holds it, or HEAD when a review record is final once committed.
+    pub fn holds_uncommitted(&self, repo: &Path, path: &Path) -> bool {
+        let at = match &self.tip {
+            Some(tip) if !self.final_once_committed() => tip.as_str(),
+            _ => "HEAD",
+        };
+        git::git_output(
+            repo,
+            &["cat-file", "-e", &format!("{at}:{}", path.display())],
+        )
+        .is_ok()
+    }
+
+    /// The commit on the base's first-parent line that brought `commit` in:
+    /// `commit` itself when it is on that line, else the oldest one there
+    /// that descends from it, the merge that took it in.
+    fn joined_at(
+        &mut self,
+        read: &mut git::ReadContext<'_>,
+        commit: &str,
+        tip: &str,
+    ) -> Result<String> {
+        let commit = read.commit_id(commit)?;
+        if self.line.is_none() {
+            let listed = git::git_output(read.repo, &["rev-list", "--first-parent", tip])?;
+            self.line = Some(
+                String::from_utf8(listed)?
+                    .lines()
+                    .enumerate()
+                    .map(|(distance, commit)| (commit.to_owned(), distance))
+                    .collect(),
+            );
+        }
+        let line = self.line.as_ref().expect("first-parent line read");
+        if line.contains_key(&commit) {
+            return Ok(commit);
+        }
+        let descendants = String::from_utf8(git::git_output(
+            read.repo,
+            &["rev-list", "--ancestry-path", &format!("{commit}..{tip}")],
+        )?)?;
+        descendants
+            .lines()
+            .filter_map(|descendant| line.get(descendant).map(|distance| (distance, descendant)))
+            .max_by_key(|(distance, _)| **distance)
+            .map(|(_, merge)| merge.to_owned())
+            .with_context(|| format!("no commit on the base's first-parent line holds {commit}"))
+    }
+}
+
+/// Keeps review records on the base as they are, apart from a finding's
+/// disposition, and lets any other review record be corrected or deleted
+/// (atelier-ilba). Every commit from `base_commit` to HEAD is checked, each
+/// against the base as it stood where the commit joined it ([`ReviewBase`]).
 ///
 /// A later commit cannot undo a rewrite, since every commit in the range is
 /// checked, so the recovery is a rebase that leaves out the commit that made
 /// it, named by its ID so it holds wherever HEAD has moved since, as other
 /// fixes commit (atelier-v4rd, atelier-61il). At the tip it only drops it,
 /// which brings the record back; below, it rewrites the commits after it.
-pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result<()> {
+pub fn append_only(
+    read: &mut git::ReadContext<'_>,
+    base_commit: &str,
+    branch: &atelier_workflow::BranchLifecycleConfig,
+) -> Result<()> {
     let head = read.commit_id("HEAD")?;
+    let mut base = ReviewBase::new(read.repo, branch);
     for edge in read.edges(base_commit, "HEAD")?.iter() {
         for path in edge
             .paths
@@ -775,6 +934,17 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
                 continue;
             }
             if !review_change_allowed(read, edge, path, &before, &after)? {
+                // A record not yet on the base may change in any way that
+                // leaves it a regular file, or go. Adding one is judged as
+                // before.
+                let regular = after.as_ref().is_none_or(|(mode, _)| mode == "100644");
+                let held = match before {
+                    Some(_) => base.held(read, &edge.commit, path)?,
+                    None => Some(Held::Committed),
+                };
+                if regular && held.is_none() {
+                    continue;
+                }
                 let commit = &edge.commit;
                 if let Some(side) = merged_migration(read, edge, path, &after)? {
                     let rewrites = if *commit == head {
@@ -789,7 +959,15 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
                 } else {
                     "which rewrites the commits after it: get them reviewed again"
                 };
-                bail!("review_append_only: {} was rewritten beyond a finding's disposition, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}{}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display(), merged_work_dropped(read, edge)?);
+                let change = match held {
+                    Some(Held::OnBase) => format!(
+                        "was on {} already when {commit} rewrote it beyond a finding's disposition, deleted it or changed its mode; a review record stays as it is once it reaches {}, and a later commit cannot undo that",
+                        base.name(),
+                        base.name()
+                    ),
+                    _ => format!("was rewritten beyond a finding's disposition, deleted or changed mode in {commit}; a later commit cannot undo it"),
+                };
+                bail!("review_append_only: {} {change}, so leave that commit out of the branch, {effect}{}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display(), merged_work_dropped(read, edge)?);
             }
         }
     }
@@ -845,11 +1023,14 @@ fn merged_work_dropped(read: &git::ReadContext<'_>, edge: &git::CommitEdge) -> R
     ))
 }
 
-/// Historical acceptance is valid only while review events remain
-/// append-only, apart from findings' dispositions.
+/// Historical acceptance is valid only while review events on the base
+/// remain append-only, apart from findings' dispositions ([`append_only`]).
 /// The check starts before the first commit to add a review event, which
 /// may be a merge that resolved one into being (atelier-as7i).
-pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
+pub fn append_only_history(
+    read: &mut git::ReadContext<'_>,
+    branch: &atelier_workflow::BranchLifecycleConfig,
+) -> Result<()> {
     let head = read.pinned("HEAD")?;
     let history = read.path_log(&PathLog {
         start: head,
@@ -877,7 +1058,7 @@ pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
             first.to_owned()
         }
     };
-    append_only(read, &pin)
+    append_only(read, &pin, branch)
 }
 
 /// The authors of the work on a branch since `base_commit`, against whom
@@ -1633,24 +1814,33 @@ fn scope_queries(index: &RecordIndex, target: &str, event: &str) -> Result<(Path
     Ok((history, updates))
 }
 /// Whether an approval's identity is independent of the work's authors at
-/// the commit that introduced it, which must still hold it unchanged.
+/// the commit that set it as it reads now: the oldest commit since which its
+/// file has held these bytes, which is the commit that added it unless it
+/// was corrected before it reached the base (atelier-ilba). `merge`'s
+/// `review.current` reads it as it reads now too, so the two agree.
 fn original_independent(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     record: &ReviewRecord,
 ) -> Result<bool> {
-    let event_path = format!(".atelier/reviews/{}.md", record.header.id);
+    let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
     let head = read.pinned("HEAD")?;
-    let introduced = read.path_log(&introduced_query(&head, &record.header.id))?;
-    let event = introduced.first().context("review event history missing")?;
-    let path = Path::new(&event_path);
-    if read.entry(event, path)? != read.entry("HEAD", path)? {
-        bail!(
-            "review_append_only: {} differs from its original event",
-            record.header.id
-        );
+    let held = read.entry(&head, &path)?;
+    let changes = read.path_log(&PathLog {
+        start: head.clone(),
+        paths: vec![path.display().to_string()],
+        listing: Listing::Changes,
+        reverse: false,
+    })?;
+    let mut set_at = None;
+    for commit in changes.iter() {
+        if read.entry(commit, &path)? != held {
+            break;
+        }
+        set_at = Some(commit.clone());
     }
-    independent_at(index, read, &record.target, &record.identity, event)
+    let set_at = set_at.context("review event history missing")?;
+    independent_at(index, read, &record.target, &record.identity, &set_at)
 }
 /// Whether a finding's disposition was set by an identity independent of
 /// the work's authors, judged at the commit that set it rather than at any

@@ -1,5 +1,7 @@
-//! Markdown review event codec and creation. Events are append-only, except
-//! that a finding's disposition is set in place (ADR 0025).
+//! Markdown review event codec and creation. Commands only add events, apart
+//! from setting a finding's disposition in place (ADR 0025); a record can be
+//! corrected by hand until it reaches the base, and `review_gate` keeps it as
+//! it is there (ADR 0028).
 use crate::{
     attachment_relationship, canonical_record_path, display_state_path,
     mutation_lock::CanonicalMutationLock, record_kinds::REVIEW_KIND, split_document,
@@ -12,7 +14,7 @@ use atelier_core::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path};
+use std::path::Path;
 
 /// The first schema version, whose findings carried no disposition and whose
 /// dispositions were separate `disposition` events.
@@ -630,17 +632,14 @@ impl RecordStore {
         ) {
             bail!("{id} is not a separate disposition event");
         }
-        fs::remove_file(self.state_dir.join(&relative))?;
-        crate::written::note(&self.state_dir.join(&relative));
-        Ok(())
+        self.remove(&relative)
     }
 
     fn publish_review(&self, id: &str, text: String) -> Result<()> {
         let relative = canonical_record_path(&REVIEW_KIND, id)?;
-        fs::create_dir_all(self.state_dir.join("reviews"))?;
         // The shared writer publishes complete bytes atomically. Exclusive lock
         // and a pre-existing path check prevent cooperative record replacement.
-        if self.state_dir.join(&relative).symlink_metadata().is_ok() {
+        if self.exists(&relative) {
             bail!("review already exists: {}", relative.display());
         }
         self.write_atomic(&relative, text)

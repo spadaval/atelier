@@ -29,9 +29,10 @@
 - Keep read-only checks separate from explicit Git mutation commands.
 - Never create commits in Atelier. Commit records with related implementation.
 - Derive integration from Git; do not persist a competing merge state.
-- Keep evidence honest and commit-bound, reviews append-only (a finding's
-  disposition is the one field set in place, ADR 0025), and merge gates
-  governed by the base branch's reviewed policy.
+- Keep evidence honest and commit-bound, reviews append-only once on the base
+  (a finding's disposition is the one field set in place, ADR 0025; before the
+  base they can be corrected, ADR 0028), every record write checked before it
+  lands, and merge gates governed by the base branch's reviewed policy.
 
 ## Documentation and process
 

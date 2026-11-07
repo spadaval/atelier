@@ -36,15 +36,29 @@ pub struct RecordFiles {
     /// One error per unreadable, unparsable, or unsupported file, in path
     /// order. Each error names the file.
     pub errors: Vec<RecordFileError>,
+    /// The state directory the files were read from, whose repository
+    /// explains a reference to a missing record.
+    pub state_dir: Option<PathBuf>,
 }
 impl RecordFiles {
     pub fn into_index(self) -> Result<RecordIndex> {
         if let Some(error) = self.errors.into_iter().next() {
             return Err(error.error);
         }
-        RecordIndex::from_records(self.issues, self.evidence, self.reviews)?
+        let repo_root = self
+            .state_dir
+            .as_deref()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf);
+        let mut index = RecordIndex::from_records(self.issues, self.evidence, self.reviews)
+            .map_err(|error| match &repo_root {
+                Some(repo_root) => explain_missing_reference(repo_root, error),
+                None => error,
+            })?
             .with_base_exemptions(self.base_exemptions)?
-            .with_retired_dispositions(self.retired_dispositions)
+            .with_retired_dispositions(self.retired_dispositions)?;
+        index.repo_root = repo_root;
+        Ok(index)
     }
 }
 
@@ -67,6 +81,41 @@ pub fn read_record_files(state_dir: &Path) -> Result<RecordFiles> {
     read_record_paths(state_dir, paths, &|_| Ok((true, None))).map(|(files, _)| files)
 }
 
+/// [`read_record_files`] as `changes` would leave the files: each change's
+/// text read in place of the file's, and a removed file left out.
+pub(crate) fn read_changed_record_files(
+    state_dir: &Path,
+    changes: &[atelier_records::guard::Change],
+) -> Result<RecordFiles> {
+    let mut paths = Vec::new();
+    if state_dir.is_dir() {
+        collect_files(state_dir, state_dir, &mut paths)?;
+    }
+    let changed = changes
+        .iter()
+        .map(|change| (change.path.as_path(), change.text.as_deref()))
+        .collect::<BTreeMap<_, _>>();
+    paths.retain(|path| !changed.contains_key(path.as_path()));
+    paths.extend(
+        changed
+            .iter()
+            .filter(|(_, text)| text.is_some())
+            .map(|(path, _)| path.to_path_buf()),
+    );
+    paths.sort();
+    let read = |relative: &Path| {
+        Ok((
+            true,
+            changed
+                .get(relative)
+                .copied()
+                .flatten()
+                .map(|text| text.as_bytes().to_vec()),
+        ))
+    };
+    read_record_paths(state_dir, paths, &read).map(|(files, _)| files)
+}
+
 /// Raw errors and mismatches remain separate from parser errors until the
 /// caller has completed its index checks. Parsing consumes those same bytes.
 pub(crate) fn read_record_paths(
@@ -74,7 +123,10 @@ pub(crate) fn read_record_paths(
     paths: Vec<PathBuf>,
     read: &impl Fn(&Path) -> Result<(bool, Option<Vec<u8>>)>,
 ) -> Result<(RecordFiles, Vec<PathBuf>)> {
-    let mut files = RecordFiles::default();
+    let mut files = RecordFiles {
+        state_dir: Some(state_dir.to_path_buf()),
+        ..RecordFiles::default()
+    };
     let mut changed = Vec::new();
     for relative in paths {
         let (matches, bytes) = read(&relative)?;
@@ -258,26 +310,30 @@ pub struct RecordIndex {
     links: Vec<RecordLink>,
     /// `(kind, id)` to indices into `links` touching that record.
     links_by_record: BTreeMap<(String, String), Vec<usize>>,
+    /// The repository the records were read from, when known, which says
+    /// where a record missing from them is instead.
+    repo_root: Option<PathBuf>,
 }
 
-/// A reference to a missing record often means prune removed it while a
-/// record on another branch still linked it (atelier-r7cd). Say so, and how to
-/// recover, when Git history shows the record was deleted.
-fn explain_pruned_reference(repo_root: &Path, error: anyhow::Error) -> anyhow::Error {
-    let message = error.to_string();
-    let Some((_, rest)) = message.rsplit_once(" reference to missing ") else {
-        return error;
-    };
-    let Some((kind, id)) = rest.trim().split_once(' ') else {
-        return error;
-    };
-    let dir = match kind {
-        "issue" => "issues",
-        "evidence" => "evidence",
-        "review" => "reviews",
-        _ => return error,
-    };
-    let path = format!(".atelier/{dir}/{id}.md");
+/// Explains an error about a reference to a missing record, as
+/// [`missing_reference_note`] does; any other error is returned as it is.
+fn explain_missing_reference(repo_root: &Path, error: anyhow::Error) -> anyhow::Error {
+    match missing_reference_note(repo_root, &error.to_string()) {
+        Some(note) => anyhow!("{error}; {note}"),
+        None => error,
+    }
+}
+
+/// Why a record that `message` names as `... reference to missing <kind>
+/// <id>` is missing, and how to recover, when Git shows it: it is committed
+/// at HEAD but gone from the checkout; prune or someone deleted it while a
+/// record on another branch still linked it (atelier-r7cd); or it exists
+/// only on another branch, which is named (atelier-ilba). `None` for any
+/// other message, or when Git shows none of these.
+pub(crate) fn missing_reference_note(repo_root: &Path, message: &str) -> Option<String> {
+    let (_, rest) = message.rsplit_once(" reference to missing ")?;
+    let (kind, id) = rest.trim().split_once(' ')?;
+    let path = stored_record_path(kind, id)?;
     let git = |args: &[&str]| {
         crate::git_freshness::git_output(repo_root, args)
             .ok()
@@ -286,17 +342,109 @@ fn explain_pruned_reference(repo_root: &Path, error: anyhow::Error) -> anyhow::E
     };
     let unlink = "or remove the link: delete it from the linking issue's relationships, or remove a review or evidence record whose only target is gone. Commands cannot load the records until one of these is done";
     if git(&["cat-file", "-t", &format!("HEAD:{path}")]).is_some() {
-        return anyhow!(
-            "{message}; {id} is committed at HEAD but missing from the checkout. Restore it with `git restore -- ':/{path}'`, {unlink}"
-        );
+        return Some(format!(
+            "{id} is committed at HEAD but missing from the checkout. Restore it with `git restore -- ':/{path}'`, {unlink}"
+        ));
     }
-    match git(&["log", "-1", "--diff-filter=D", "--format=%h", "--", &path])
+    if let Some(commit) = git(&["log", "-1", "--diff-filter=D", "--format=%h", "--", &path])
         .filter(|commit| !commit.is_empty())
     {
-        Some(commit) => anyhow!(
-            "{message}; {id} was deleted in commit {commit} (for example by atelier prune). Restore it with `git restore --source={commit}^ -- ':/{path}'`, {unlink}"
+        return Some(format!(
+            "{id} was deleted in commit {commit} (for example by atelier prune). Restore it with `git restore --source={commit}^ -- ':/{path}'`, {unlink}"
+        ));
+    }
+    let branches = branches_holding(repo_root, &path);
+    (!branches.is_empty()).then(|| {
+        format!(
+            "{id} exists only on {}, not on this branch. Merge that branch in first, or make the link there",
+            branch_list(&branches)
+        )
+    })
+}
+
+/// `.atelier/<dir>/<id>.md` for a record `kind` as a relationship stores it.
+fn stored_record_path(kind: &str, id: &str) -> Option<String> {
+    let dir = match kind {
+        "issue" => "issues",
+        "evidence" => "evidence",
+        "review" => "reviews",
+        _ => return None,
+    };
+    validate_record_id(id).ok()?;
+    Some(format!(".atelier/{dir}/{id}.md"))
+}
+
+/// The branches other than the current one whose tip holds `path`: local
+/// branches, or remote-tracking ones when no local branch does. Empty when
+/// Git cannot say, as outside a repository.
+fn branches_holding(repo_root: &Path, path: &str) -> Vec<String> {
+    let Ok(refs) = crate::git_freshness::git_output(
+        repo_root,
+        &[
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/heads",
+            "refs/remotes",
+        ],
+    )
+    .map(|out| String::from_utf8_lossy(&out).into_owned()) else {
+        return Vec::new();
+    };
+    let current = crate::git_freshness::git_output(repo_root, &["symbolic-ref", "-q", "HEAD"])
+        .map(|out| String::from_utf8_lossy(&out).trim().to_owned())
+        .unwrap_or_default();
+    let refs = refs
+        .lines()
+        .filter(|name| *name != current && !name.ends_with("/HEAD"))
+        .collect::<Vec<_>>();
+    if refs.is_empty() {
+        return Vec::new();
+    }
+    let input = refs
+        .iter()
+        .map(|name| format!("{name}:{path}\n"))
+        .collect::<String>();
+    let Ok(found) = crate::git_freshness::git_input(
+        repo_root,
+        &["cat-file", "--batch-check=%(objecttype)"],
+        input.as_bytes(),
+    ) else {
+        return Vec::new();
+    };
+    let holding = refs
+        .iter()
+        .zip(String::from_utf8_lossy(&found).lines())
+        .filter(|(_, answer)| *answer == "blob")
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let local = holding
+        .iter()
+        .filter_map(|name| name.strip_prefix("refs/heads/"))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if !local.is_empty() {
+        return local;
+    }
+    holding
+        .iter()
+        .filter_map(|name| name.strip_prefix("refs/remotes/"))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// `branch a`, `branches a and b`, or the first three and a count.
+fn branch_list(branches: &[String]) -> String {
+    match branches {
+        [one] => format!("branch {one}"),
+        [first, second] => format!("branches {first} and {second}"),
+        [first, second, third] => format!("branches {first}, {second} and {third}"),
+        _ => format!(
+            "branches {}, {}, {} and {} more",
+            branches[0],
+            branches[1],
+            branches[2],
+            branches.len() - 3
         ),
-        None => error,
     }
 }
 
@@ -378,7 +526,10 @@ impl RecordIndex {
     ) -> Result<Self> {
         let (index, errors) = Self::validated(state_dir, issues, evidence, reviews);
         match errors.into_iter().next() {
-            Some(error) => Err(error),
+            Some(error) => Err(match state_dir.parent() {
+                Some(repo_root) => explain_missing_reference(repo_root, error),
+                None => error,
+            }),
             None => Ok(index),
         }
     }
@@ -391,7 +542,29 @@ impl RecordIndex {
         evidence: Vec<EvidenceRecord>,
         reviews: Vec<ReviewRecord>,
     ) -> Vec<anyhow::Error> {
-        Self::validated(state_dir, issues, evidence, reviews).1
+        Self::checked(state_dir, issues, evidence, reviews, true).1
+    }
+
+    /// The index and every validation error, as [`Self::validation_errors`]
+    /// gives them; without `explain`, the errors do not say where a missing
+    /// record is instead, so two sets of records compare by their errors
+    /// alone.
+    pub(crate) fn checked(
+        state_dir: &Path,
+        issues: Vec<CanonicalIssueRecord>,
+        evidence: Vec<EvidenceRecord>,
+        reviews: Vec<ReviewRecord>,
+        explain: bool,
+    ) -> (Self, Vec<anyhow::Error>) {
+        let (index, errors) = Self::validated(state_dir, issues, evidence, reviews);
+        let errors = match state_dir.parent() {
+            Some(repo_root) if explain => errors
+                .into_iter()
+                .map(|error| explain_missing_reference(repo_root, error))
+                .collect(),
+            _ => errors,
+        };
+        (index, errors)
     }
 
     fn validated(
@@ -400,13 +573,8 @@ impl RecordIndex {
         evidence: Vec<EvidenceRecord>,
         reviews: Vec<ReviewRecord>,
     ) -> (Self, Vec<anyhow::Error>) {
-        let (index, mut errors) = Self::structural(issues, evidence, reviews);
-        if let Some(repo_root) = state_dir.parent() {
-            errors = errors
-                .into_iter()
-                .map(|error| explain_pruned_reference(repo_root, error))
-                .collect();
-        }
+        let (mut index, mut errors) = Self::structural(issues, evidence, reviews);
+        index.repo_root = state_dir.parent().map(Path::to_path_buf);
         let Some(repo_root) = state_dir.parent() else {
             errors.push(anyhow!(
                 "Cannot determine repository root for {}",
@@ -494,12 +662,7 @@ impl RecordIndex {
 
     /// Structural load for guards which resolve trusted policy before validation.
     pub fn load_structural(state_dir: &Path) -> Result<Self> {
-        read_record_files(state_dir)?
-            .into_index()
-            .map_err(|error| match state_dir.parent() {
-                Some(repo_root) => explain_pruned_reference(repo_root, error),
-                None => error,
-            })
+        read_record_files(state_dir)?.into_index()
     }
     pub fn validate_policy(&self, policy: &WorkflowPolicy, repo: &Path) -> Result<()> {
         let mut errors = Vec::new();
@@ -1166,9 +1329,24 @@ impl RecordIndex {
         Err(self.not_found(kind, reference))
     }
 
-    /// The shared not-found message, with near matches among this kind's ids.
+    /// The shared not-found message, with near matches among this kind's
+    /// ids; or, for a full ID that another branch holds, that branch
+    /// (atelier-ilba).
     pub fn not_found(&self, kind: RecordKind, reference: &str) -> anyhow::Error {
-        record_ref::not_found(kind, reference, self.ids(kind))
+        let elsewhere = self.repo_root.as_deref().and_then(|repo_root| {
+            let id = reference.trim().to_ascii_lowercase();
+            let path = stored_record_path(kind.stored(), &id)?;
+            let branches = branches_holding(repo_root, &path);
+            (!branches.is_empty()).then_some((id, branches))
+        });
+        match elsewhere {
+            Some((id, branches)) => anyhow!(
+                "{} {id} not found on this branch; it exists only on {}. Next: merge that branch in first, or run this there",
+                kind.noun(),
+                branch_list(&branches)
+            ),
+            None => record_ref::not_found(kind, reference, self.ids(kind)),
+        }
     }
 
     fn ids(&self, kind: RecordKind) -> Box<dyn Iterator<Item = &str> + '_> {

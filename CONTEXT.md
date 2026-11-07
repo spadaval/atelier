@@ -21,7 +21,7 @@ Use these terms for the verified repo-native tracker defined by
 | Gate | A derived `workflow_validator` query node for an invariant check; it is not a persisted record. |
 | Evidence | An immutable proof receipt with an explicit result and full Git commit, attached to the claims it supports. |
 | Result | `pass`, `fail`, `blocked`, or `not-applicable`; receipt presence alone never means pass. |
-| Review | An immutable in-repo event for examination, approval, a finding, or a trivial exemption; additions get new files. Only a finding's disposition changes in place. |
+| Review | An in-repo event for examination, approval, a finding, or a trivial exemption; additions get new files. It can be corrected or deleted until it reaches the base branch; there, only a finding's disposition changes in place. |
 | Approval | A review decision pinned to a commit, from an identity independent of the change's authors. |
 | Finding | A recorded problem that needs an explicit `FIX NOW`, `DEFER`, or `NO ACTION` disposition. |
 | Disposition | What was decided about a finding: a field of the finding's record with the decision, who set it, the commit, and why. Setting it again replaces it; Git history keeps earlier ones. A `fix_now` is followed by a re-review, which may cover only the fix's diff and may be by the same reviewer. |
