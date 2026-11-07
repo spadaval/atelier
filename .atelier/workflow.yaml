@@ -108,7 +108,7 @@ workflows:
         from: [todo]
         to: done
         required_fields: [close_reason]
-        description: Record the decision. Decisions need no branch and may close on the base branch as a planning change.
+        description: Record the decision. Decisions need no branch and are decided on the base branch as a planning change.
         validators:
         - decision.recorded
         - blockers.none_open

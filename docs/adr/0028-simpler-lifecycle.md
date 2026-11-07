@@ -21,7 +21,8 @@ Until then the code, the product docs and the PRODUCT_INTENT.md principles
 they supersede describe today's behaviour, and that item updates them.
 Decision 9 takes effect with this ADR, and decision 10 binds every item. The
 lifecycle item, atelier-jnrh, amended decision 2 with the mechanics it
-settled.
+settled; atelier-ml3r corrected decision 2 on what the review brief leaves
+out and named atelier-nn67 for the work left in the other repositories.
 
 ## Governing Principle
 
@@ -92,8 +93,9 @@ re-review, approve, merge.
   up in the wrong place. An issue is done when its change is merged.
 - A mission is closed when all its work is merged and its validation, if it
   has one, is done.
-- The author writes the implementer report before review, so the reviewer
-  reads it.
+- The author writes the implementer report before review. The review brief
+  leaves it out, since Agent Factory keeps the author's self-assessment from
+  the reviewer; a reviewer of the finished mission reads it in the debrief.
 
 Mechanics, as atelier-jnrh built them:
 
@@ -101,7 +103,7 @@ Mechanics, as atelier-jnrh built them:
   transition that requires the policy's `close_reason` field: the implementer
   report on a work item, a supersede reason, a mission's close report and a
   decision's `decide`. The author writes the implementer report in the item's
-  `## Report` before requesting review, so the reviewer can read it. The
+  `## Report` before requesting review, and the brief leaves it out. The
   policy key keeps its name and now means that section; a record's older
   `## Close Reason` heading is still read, and records are written with
   `## Report`. Atelier requires only a non-empty Report. Its parts
@@ -139,7 +141,7 @@ Mechanics, as atelier-jnrh built them:
   needs a catch-up merge before landing; astromech hit `merge_diverged` about
   56 times since 2026-10-15. Rejected: committing the done state on top of
   the branch head and fast-forwarding, which keeps two strategies and adds a
-  second kind of commit Atelier writes. atelier-ml3r tells those
+  second kind of commit Atelier writes. atelier-nn67 tells those
   repositories.
 - **"Atelier never creates commits"** now reads: Atelier creates one commit,
   the merge commit `atelier merge` integrates reviewed work with, which also
@@ -147,7 +149,7 @@ Mechanics, as atelier-jnrh built them:
   agent's.
 - **Work closed by an older Atelier.** An item already done on an unmerged
   branch merges as it is: merge marks only open work. A repository whose
-  policy still has a work `close` keeps working until atelier-ml3r updates
+  policy still has a work `close` keeps working until atelier-nn67 updates
   it, and the done marks merge writes answer to that close's required fields
   and validators.
 - **A changed Done when.** A change to a Done when line's text after start is
@@ -226,8 +228,8 @@ such as the tag of a release on the light path (decision 6), is filed on that
 change's branch with no blocker. It reaches the base with the merge, so it
 cannot be forgotten as prose can (the v0.3.1 tag was lost that way), and it
 is ready there; it also shows as ready on the branch, which is harmless.
-Whether astromech's per-feature `validation` play-checks become loose ends is
-decided when atelier-ml3r migrates it.
+Whether astromech's per-feature `validation` play-tests become loose ends is
+decided when atelier-nn67 migrates it.
 
 ### 4. Records can be corrected
 
@@ -350,7 +352,7 @@ Built by atelier-md0v:
   `review request`, status, prune, `start` and the transition guards read no
   `branch_base`, and `land_base_mismatch` goes. `start` still writes
   `branch_base`, set to the policy base and ignored when read, so older
-  pinned binaries still parse new records, until atelier-ml3r moves
+  pinned binaries still parse new records, until atelier-nn67 moves
   astromech's CI pin and drops it. A branch that targets a mission branch
   needs no recorded base: merge integrates only into the policy's base
   branch, and mission integration branches were never built (ADR 0020). A
@@ -364,8 +366,10 @@ Built by atelier-md0v:
   it refuses with `start_detached_head`; on any other branch it takes the
   current branch. `start_base_mismatch` and `start_branch_prefix_mismatch`
   go; `--base` is accepted, hidden and ignored, with a note that the base
-  comes from policy, until atelier-ml3r updates the guidance that still
-  passes it. A printed fix that starts work outside
+  comes from policy, until atelier-nn67 drops it once no guidance on this
+  host passes it (atelier-ml3r removed it from the skill). From a detached
+  HEAD the refusal names `git switch -c <id> <base> && atelier start <id>`
+  (atelier-ml3r, finding atelier-ywpf). A printed fix that starts work outside
   the owner's scope from its branch reads `git switch <base> && atelier
   start <id>`.
 - **Short commit IDs.** Wherever a command takes a commit (`--commit`,
@@ -612,9 +616,12 @@ until the item that changes the behaviour lands.
 ## Consequences
 
 - Items: atelier-3jdm (decision 1), atelier-jnrh (2), atelier-8bh4 (3),
-  atelier-ilba (4), atelier-md0v (5), atelier-4nsl (6), atelier-l457 (7) and
-  atelier-ml3r (8, with the skill, AGENTS.md and every repository on this
-  host). Each must name what it deletes before it starts (decision 9).
+  atelier-ilba (4), atelier-md0v (5), atelier-4nsl (6), atelier-l457 (7),
+  atelier-ml3r (8, with the skill and Atelier's own AGENTS.md and docs) and
+  atelier-nn67 (every other repository on this host: its policy and
+  AGENTS.md, astromech's CI pin and validation items, and dropping
+  `branch_base` and `start --base`). Each must name what it deletes before it starts (decision
+  9).
 - The six draft missions hold items planned under the old model, some
   contradicting this one. Which are superseded is Sumeet's call
   (atelier-mzpn), and none of those missions starts before he decides.

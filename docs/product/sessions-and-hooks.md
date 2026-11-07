@@ -35,10 +35,10 @@ has no `CLAUDE.md`, or through an `@AGENTS.md` import in it, so `atelier setup
 claude` warns, with that fix, when AGENTS.md exists and the repository has a
 `CLAUDE.md` or `.claude/CLAUDE.md` but neither imports `@AGENTS.md`.
 
-`land` checks a handoff without writing records, committing, switching, or
-merging. On a named branch other than the base, as HEAD's committed policy
+`land` runs at every handoff and judges the commits about to be pushed. It
+writes no records and does not commit, switch or merge. On a named branch other than the base, as HEAD's committed policy
 names it, where work is in progress, it
-reports what is open and refuses nothing: each failed check is a line with its
+reports what is open and refuses nothing: each failed gate is a line with its
 recovery step, the verdict reads `land: work in progress — N checks open (…)`,
 and it exits 0, since nothing there reaches the base without `merge`'s gates
 (ADR 0028 decision 5). On the base, and on a detached HEAD, a failed plain
@@ -54,11 +54,11 @@ Canonical records and policy must match committed HEAD, including ignored
 canonical paths and files hidden by Git index flags. Active work must have a
 recorded owner branch. An active owner may hand off unfinished code without
 approval or full scope completion; report those changes honestly. Its done
-child claims still need their applicable completion checks. A terminal owner
+child claims still need their workflow's done validators. A terminal owner
 requires a clean checkout and the full merge gates. An explicit child ID
 resolves its owner; otherwise ownership is inferred from the current branch.
 
-A failed precondition is one more failed check, and land still runs every gate
+A failed precondition is one more failed gate, and land still runs every gate
 it can: `land_records_uncommitted` names every tracker record that differs from
 HEAD (the first five, then a count) as modified, disposition changed, new,
 deleted or staged, with
@@ -98,15 +98,15 @@ branch, or active work, whose item a local branch owns is pointed at that
 branch with `git switch <branch> && atelier land` (atelier-9a6e). A
 precondition that keeps the gates from running prints after the ones found
 before it, with a `Not checked:` line naming the gates it skipped.
-When the base has commits the branch does not, `land` checks the work against
-the point where it left the base and adds a note that `atelier merge` lands
-the branch on it with a merge commit, with `atelier merge --sync` to bring the
+When the base has commits the branch does not, `land` judges the work against
+the point where it left the base and adds a note that `atelier merge` merges
+the branch onto it with a merge commit, with `atelier merge --sync` to bring the
 base in first when they conflict (atelier-qz9x, atelier-jnrh). Once the
 owner's approval is current, a passing `land` names `atelier merge <id>` as
 the next step; work in progress hands off without it.
 
 A branch that no item owns, such as a feature branch, a PR branch, a branch
-from before adoption, or a detached HEAD, lands with a note when it changes no
+from before adoption, or a detached HEAD, passes `land` with a note when it changes no
 tracker files (anything under `.atelier/`) since its merge base with the base
 branch; the note names `atelier review request`, which reviews such a branch
 on the [light path](reviews-and-merge.md#a-change-with-no-issue-the-light-path).
@@ -137,8 +137,8 @@ is the refusal as `land` prints it, ending with that verdict, with no
 sentence of its own, so each failure carries its one recovery step; its
 message on a repeated stop is one sentence, then the same refusal
 (atelier-467y, atelier-ft88). `land --push` runs the same
-checks and, when they pass or report work in progress on a branch, pushes the
-checked HEAD to the current branch's own configured upstream
+gates and, when they pass or report work in progress on a branch, pushes the
+HEAD it judged to the current branch's own configured upstream
 (`branch.<name>.remote` and `.merge`) through git, then ends `land: passed,
 pushed to <remote>/<branch>` or `land: work in progress — N checks open (…),
 pushed to <remote>/<branch>`. A refusal pushes
@@ -149,11 +149,11 @@ another name, such as a work branch created from `origin/main`
 (`land_push_upstream_mismatch`; fix it with `git push -u <remote> <branch>`).
 It also refuses when the base branch has an upstream that does not resolve to
 a remote-tracking branch, because its remote branch is gone or its remote is a
-URL or path, so unreviewed base commits could not be checked
+URL or path, so unreviewed base commits could not be found
 (`land_push_base_upstream_unresolved`; fix it with `git fetch --prune` and
 `git branch -u <remote>/<base> <base>`).
-What is pushed is the commit land checked: if HEAD moved during the checks
-nothing is pushed (`land_state_changed`). A push git rejects exits non-zero with
+What is pushed is the commit land judged: if HEAD moved meanwhile, nothing is
+pushed (`land_state_changed`). A push git rejects exits non-zero with
 git's message and `land: refused — 1 check (land_push_failed), nothing
 pushed`. `--push` does not combine with
 `--hook`. Prefer it to `atelier land && git push`, and never push behind a
@@ -167,34 +167,34 @@ issue in the owner's scope, as the start, merge and planning commits for
 owned work do; git authorship cannot tell sessions apart, since agents
 share one identity. With no owner, every unpushed base commit is named. The
 warning does not refuse: pushing the base can be meant, and it publishes
-those commits. A base with no upstream is not checked here (atelier-mvzi).
+those commits. A base with no upstream gets no warning here (atelier-mvzi).
 
-On the base branch itself, `land` checks unpushed base commits: only records
+On the base branch itself, `land` judges unpushed base commits: only records
 and mission strategies may be committed there without review (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 
-Landing also checks completed claims elsewhere in the checkout that a change
+`land` also judges completed claims elsewhere in the checkout that a change
 since a trusted point can affect. The trusted point is the merge base of the
 base's upstream with the branch base on a work branch, or with HEAD otherwise:
-the local base can hold commits no land has checked, so it is not trusted.
-Without an upstream, every claim is checked. Every change that reaches the
-base had its own claims checked when it landed, so earlier history holds by
-induction. A claim is checked when its record changed; when a changed issue
+the local base can hold commits no land has judged, so it is not trusted.
+Without an upstream, every claim is judged. Every change that reaches the
+base had its own claims judged when it merged, so earlier history holds by
+induction. A claim is judged when its record changed; when a changed issue
 record reaches it through blocked, parent, or child links, directly or along a
 chain, before or after the change; when it is a mission that such a record
 advances (the chain stops at the mission, so adding or editing one issue of a
-mission does not re-check the mission's other done work, atelier-ss25); when
+mission does not re-judge the mission's other done work, atelier-ss25); when
 a review or evidence record
 about it was added, removed, or retargeted; when the workflow policy at HEAD
 or on the base differs from the trusted point; or, under a policy that gates
 on `lint.none_blocking`, which reads every record, when any record changed.
-Review history is checked from the same point for edits to approvals and
+Review history is examined from the same point for edits to approvals and
 exemptions, and to review records the base already held.
-`atelier doctor` checks every completed claim and the whole review history,
+`atelier doctor` judges every completed claim and the whole review history,
 for history that reached the base without the gates, such as a direct push
 (atelier-37uq).
 
-Checked integrated claims retain the acceptance that was valid when completion
+Judged integrated claims retain the acceptance that was valid when completion
 was claimed. Historical acceptance requires immutable review history: an
 approval counts only as first committed, and its identity is recorded, not
 compared with the work's authors (atelier-md0v). Without an owner, a claim
@@ -228,7 +228,7 @@ The Stop hook blocks only for a refusal on the base or a detached HEAD, where
 
 - A payload the adapter cannot use, such as input that is not JSON, another
   event's payload, or a missing or unusable `cwd`, is the hook's
-  misconfiguration, not a landing failure: `Atelier hook misconfigured:
+  misconfiguration, not a `land` failure: `Atelier hook misconfigured:
   <error>; check .claude/settings.json`. SessionStart returns the same text
   as its context (atelier-ft88).
 - A Stop run from a directory outside any Atelier repository says so,
@@ -238,8 +238,8 @@ The Stop hook blocks only for a refusal on the base or a detached HEAD, where
   progress: the message is `Atelier: work in progress; land reports it and
   refuses nothing on a work branch.`, then land's report ending with its
   verdict. A missing review, an open finding, uncommitted records or code and
-  any other open check report the same way.
-- On the base branch, when every failed check is `land_records_uncommitted`,
+  any other open gate report the same way.
+- On the base branch, when every failed gate is `land_records_uncommitted`,
   the message says the base has uncommitted records and does not block, then
   gives land's refusal, which names the records and the commit that commits
   them (atelier-mp6v). Any other failure on the base blocks.

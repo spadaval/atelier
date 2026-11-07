@@ -1,7 +1,7 @@
 # Retention and Prune
 
 The active `.atelier/` tree is the working set, not an eternal archive. Terminal
-records may leave it after retention and graph protection checks. Git history
+records may leave it after retention and graph protection rules allow it. Git history
 preserves the audit trail; there is no second tracked archive format.
 
 ```text
@@ -15,7 +15,7 @@ apply. The default canonical retention window is seven days; tracked config can
 set `[prune] canonical_retention_days`. A command override affects that run.
 
 Canonical issue and evidence cleanup protects open work, retained graph
-references, required proof, recently closed records, uncommitted changes, and
+references, required proof, records that became terminal recently, uncommitted changes, and
 paths with unmerged history. What pruning keeps follows atelier-r7cd (decided
 by Sumeet 2026-10-15):
 
@@ -26,7 +26,7 @@ by Sumeet 2026-10-15):
   likely to be needed again, and Git history alone would bury them.
 
 Protection follows links in both directions and repeats, so one kept decision
-or Background record keeps every closed record connected to it, such as its
+or Background record keeps every terminal record connected to it, such as its
 parent, children, related records, and their evidence and reviews. That is
 what keeps prune from leaving dangling links.
 
@@ -52,7 +52,7 @@ prune's scope.
 Protected prune removes a terminal target and its eligible review cluster
 together. Git preserves their audit trail. Retained review events on the base
 stay immutable, apart from a finding's disposition (ADR 0025); rewrites,
-partial review deletions, and edits later reverted fail landing.
+partial review deletions, and edits later reverted fail `land`.
 
 Commit canonical record removals yourself. After a partial cleanup, inspect Git
 and rerun the dry run; do not assume every candidate was removed. Recover a

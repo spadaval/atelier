@@ -26,7 +26,7 @@ inside that visible set affect display order:
 - if a chain or diamond of visible open blockers exists, every visible blocker
   is emitted before the work it blocks;
 - blockers outside the visible set are not inserted as phantom rows;
-- closed or done blockers do not constrain ordering;
+- done or superseded blockers do not constrain ordering;
 - hidden blockers still affect the blocked row state and compact blocker cue;
 - cycles or invalid dependency graphs preserve every row and fall back to a
   deterministic display order for the cyclic remainder.
@@ -57,7 +57,7 @@ Work views use one readable row state label:
 
 - `ready`: work whose exact configured status exposes a direct transition into
   an active-category status and has no open blockers in the row state context,
-  counting open work behind a closed blocker, by the same blocker rule `start`
+  counting open work behind a terminal blocker, by the same blocker rule `start`
   applies to the records it reads;
 - `needs human`: ready work labelled `needs-human`, and unblocked open
   decisions, which only the human can do;

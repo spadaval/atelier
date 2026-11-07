@@ -57,7 +57,7 @@ fn install_steps(base: &str, current: Option<&str>) -> [FooterAction; 3] {
     };
     [
         FooterAction::new(
-            "Review the generated policy, its base branch included",
+            "Read the generated policy, its base branch included",
             atelier_app::workflow_policy::WORKFLOW_POLICY_PATH,
         ),
         FooterAction::new(

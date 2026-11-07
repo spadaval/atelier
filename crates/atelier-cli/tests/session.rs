@@ -5892,10 +5892,12 @@ fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
     let tip = git(f.path(), &["rev-parse", "main"]);
     git(f.path(), &["switch", "-q", "--detach", "main"]);
     let (pass, out) = cli(f.path(), &["start", &id]);
+    // The step creates the branch from the base, so it works in a linked
+    // worktree while the base is checked out elsewhere (finding atelier-ywpf).
     assert!(
         !pass
             && out.contains("start_detached_head")
-            && out.contains(&format!("git switch main && atelier start {id}")),
+            && out.contains(&format!("git switch -c {id} main && atelier start {id}")),
         "{out}"
     );
     assert_eq!(recorded_branch(&f, &id), None);
@@ -5913,6 +5915,31 @@ fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
         f.store().load_issue_by_id(&id).unwrap().issue.status,
         "in_progress"
     );
+}
+
+/// In a linked worktree detached at the base while the primary checkout has
+/// the base checked out, `git switch <base>` fails, so the detached-HEAD
+/// refusal's step creates the branch from the base instead, and that step
+/// works there (finding atelier-ywpf).
+#[test]
+fn the_detached_head_step_works_in_a_linked_worktree() {
+    let f = Fixture::new();
+    let id = unstarted_on_main(&f);
+    let (_holder, other) = second_worktree(&f);
+    let (pass, out) = cli(&other, &["start", &id]);
+    let step = format!("git switch -c {id} main && atelier start {id}");
+    assert!(
+        !pass && out.contains("start_detached_head") && out.contains(&step),
+        "{out}"
+    );
+    let (switched, why) = cli_git(&other, &["switch", "main"]);
+    assert!(
+        !switched,
+        "the base is checked out in the primary checkout: {why}"
+    );
+    git(&other, &["switch", "-q", "-c", &id, "main"]);
+    ok(&other, &["start", &id]);
+    assert_eq!(git(&other, &["branch", "--show-current"]), id);
 }
 
 /// On the base, an uncommitted edit of `base_branch` does not make land read

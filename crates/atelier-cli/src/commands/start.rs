@@ -118,7 +118,7 @@ pub fn run(
         }
         if !branch_exists && current.is_none() {
             bail!(
-                "start_detached_head: cannot create branch '{branch}' for {issue_id} from a detached HEAD. Next: git switch {policy_base} && atelier start {issue_id}"
+                "start_detached_head: cannot create branch '{branch}' for {issue_id} from a detached HEAD. Next: git switch -c {branch} {policy_base} && atelier start {issue_id}"
             );
         }
     }

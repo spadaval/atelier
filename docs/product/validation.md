@@ -2,20 +2,19 @@
 
 Evidence is a durable receipt for a particular claim. Agent Factory decides when
 proof needs a tracker record and when independent validation is necessary.
-Atelier checks that receipts are honest and commit-bound, and marks how fresh
-they are. No gate reads them: a receipt is a note for what nothing else
+Atelier keeps receipts honest and commit-bound, and marks how fresh they are. No gate reads them: a receipt is a note for what nothing else
 records ([ADR 0028](../adr/0028-simpler-lifecycle.md) decision 5).
 
 Every receipt names its subject, producer, kind, summary, result, and full Git
 commit. Results are `pass`, `fail`, `blocked`, or `not-applicable`. The last
-three never count as a passing check. Describe the method, artifacts, and limits
+three never count as a pass. Describe the method, artifacts, and limits
 in the body; a broad test run does not establish every acceptance claim.
 
 ## What gets a receipt
 
-A receipt records a check that leaves no other record:
+A receipt records proof that leaves no other record:
 
-- a manual, browser, device or deployed check, such as a page at phone width,
+- a manual, browser, device or deployed observation, such as a page at phone width,
   a run on a real build host, or a live service;
 - a mission success criterion (see below);
 - a measurement, such as a latency or a count;
@@ -23,9 +22,9 @@ A receipt records a check that leaves no other record:
 
 Suites, formatting and lint that CI or the policy's `merge_checks` run need
 no receipt, and nothing in Atelier asks for one after a review fix or a base
-merge. Run the check fresh after the last change and read its output all the
-same; the item's Report names the targeted test or check that proves each
-claim and its result. CI and the merge checks test the merged tree
+merge. Run the test fresh after the last change and read its output all the
+same; the item's Report names the targeted test that proves each claim and
+its result. CI and the merge checks test the merged tree
 where a repository has them; a repository without CI puts its suite in the
 policy's `merge_checks` (a `shell.check`; see [workflow
 configuration](workflow-configuration.md)), or nothing tests its merged tree
@@ -33,13 +32,14 @@ configuration](workflow-configuration.md)), or nothing tests its merged tree
 
 ## Work after the merge
 
-Every line of an item's Done when is checked before merge, on the work branch.
-Work that changes no code and can only happen after a merge or a release,
-such as pushing a tag, a play-check on a device or an eval run, is not a Done
-when line: it is a **loose end**, an issue of type `loose_end`
-([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 3). Its nearest
-stand-in, such as an emulator for a device or a test server for production,
-is still a Done when line of the item it follows.
+Every line of an item's Done when holds, and is ticked, on the work branch
+before review is requested. Work that changes no code and can only happen
+after a merge or a release, such as pushing a tag, a play-test on a device or
+an eval run, is not a Done when line: it is a **loose end**, an issue of type
+`loose_end` ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 3).
+Whatever part of it can run before merge, such as an emulator test for a
+device or a test server for production, is still a Done when line of the item
+it follows.
 
 ```text
 atelier issue create "Push the v1 tag" --issue-type loose_end --body "## Goal ... ## Done when ..."
@@ -53,7 +53,7 @@ branch with no blocker, and it reaches the base with the [light-path
 merge](reviews-and-merge.md#a-change-with-no-issue-the-light-path) and is
 ready there. It is never part of a mission: it is no issue's child
 and advances no mission, a link `atelier check` reports and a write refuses,
-so a mission closes once its code merges. It takes no branch, review or
+so a mission can close once its code merges. It takes no branch, review or
 merge: `atelier start` and `atelier merge` refuse it and name its `done`
 transition, and nothing suggests starting it. Do it on the base, then mark it
 done there with a one-line result, which `land` accepts:
@@ -62,19 +62,20 @@ done there with a one-line result, which `land` accepts:
 atelier issue transition <loose-end> done --reason "Pushed v1."
 ```
 
-Record a receipt for a device or deployed check, which leaves no other record.
+Record a receipt for a device or deployed observation, which leaves no other record.
 A bad result files a linked bug (`atelier issue create --discovered-from
 <loose-end>`) rather than reopening the merged item. A `validation`, an
-independent assessment of a mission's criteria before it closes, shares the
-loose end's workflow: it advances its mission, and is done on the base the
-same way.
+independent assessment of a mission's criteria or of an increment's
+user-facing outcome, is not a loose end, though it shares the loose end's
+workflow: it advances its mission, and is done on the base the same way
+before the mission closes.
 
 Records written under [ADR 0027](../adr/0027-proof-has-a-time.md) may hold a
-Done when line marked `After merge (<reason>): <check>. Stand-in: <...>`.
+Done when line marked `After merge (<reason>): <text>. Stand-in: <...>`.
 `review request` does not ask for such a line to be ticked; otherwise it is an
 ordinary Done when line. `atelier migrate after-merge` (a dry run unless
 `--apply`) turns each unticked one into a loose end `blocked_by` its item: the
-check becomes the loose end's Done when, the reason goes in its Goal, and it
+text becomes the loose end's Done when, the reason goes in its Goal, and it
 is labelled `needs-human` when the reason is the human's judgment or a device
 or place no agent can reach, which the dry run shows. An item that is not done
 keeps the line's stand-in as an ordinary Done when line; a done item is left
@@ -108,7 +109,7 @@ atelier evidence record --target issue/<id> --kind test -- <command>
 ```
 
 Command capture refuses a caller-supplied result. Commit the state you intend
-to check before recording proof, so the receipt describes that committed state.
+to prove before recording proof, so the receipt describes that committed state.
 
 A receipt that judges mission success criteria names each one with its own
 result, so one validation run can pass some criteria and fail others:
@@ -139,8 +140,8 @@ followed the deciding proof, and the `Criteria:` line counts proven criteria
 whose proof came before later code commits.
 
 Use `atelier evidence list <id>` to see an item's receipts, each marked
-fresh, held at close, stale or superseded (a merged done claim at its close,
-other work at HEAD), ending with the
+fresh, held at close, stale or superseded (a merged done claim judged at the
+commit that made it done, other work at HEAD), ending with the
 item's proof verdict; `--result fail` filters for one explicit result, and
 `--limit`/`--all` set how many rows. `atelier evidence show <evidence-id>` is
 brief, with `--full` for the stored record. `evidence record` confirms in
@@ -169,18 +170,18 @@ so a captured pass describes committed state; a manual pass is the
 recorder's judgment.
 
 Record-only bookkeeping, including attachments, Notes, and status updates,
-can follow the checked commit without changing its acceptance claim. Evidence
+can follow the proven commit without changing its acceptance claim. Evidence
 freshness compares the target's title, type, strategy, and typed body and rejects
 intervening non-record changes. Correct receipts by appending new proof rather
 than rewriting old observations. Record edits, receipts included, never make
 an approval stale (see [approval
 freshness](reviews-and-merge.md#approval-freshness)); review records on the
-base stay append-only by their own check.
+base stay append-only by their own rule (`review_append_only`).
 
 ## Handoff
 
-Report each acceptance claim with its result and the targeted test or check
-that proves it, with the receipt ID where it has one. Name skipped
-checks and limits explicitly. A blocked check needs an explanation of the
-blocking condition; a not-applicable result needs an explanation of why the
+Report each acceptance claim with its result and the targeted test that
+proves it, with the receipt ID where it has one. Name skipped tests and
+limits explicitly. A blocked result needs an explanation of the blocking
+condition; a not-applicable result needs an explanation of why the
 claim does not apply. Neither is a substitute for a passing requirement.
