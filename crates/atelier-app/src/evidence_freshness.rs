@@ -710,7 +710,7 @@ mod tests {
     /// A done record in the retired epic shape, and its `migrate epics` form.
     fn approved_epic() -> (String, String) {
         let mut record = issue_record("atelier-e001", "feature", "done");
-        record.sections.close_reason = Some("Shipped.".into());
+        record.sections.report = Some("Shipped.".into());
         let rendered = atelier_records::render_issue_record(&record).unwrap();
         let (front, _) = atelier_records::split_document(&rendered).unwrap();
         let epic = format!(

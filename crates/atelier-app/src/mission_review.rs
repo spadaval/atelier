@@ -613,11 +613,7 @@ pub fn debrief(
             id: id.to_string(),
             parent,
             closed_at: item.issue.closed_at,
-            report: item
-                .sections
-                .close_reason
-                .as_deref()
-                .map(CloseReport::parse),
+            report: item.sections.report.as_deref().map(CloseReport::parse),
             criteria: criteria_delivered,
             children: kids
                 .iter()
@@ -626,7 +622,7 @@ pub fn debrief(
                     report: index
                         .issue_record(kid)
                         .filter(|child| done(&child.issue))
-                        .and_then(|child| child.sections.close_reason.as_deref())
+                        .and_then(|child| child.sections.report.as_deref())
                         .map(CloseReport::parse),
                 })
                 .collect(),
@@ -1204,7 +1200,7 @@ fn outside_parentheses(text: &str) -> String {
 fn close_outcome(index: &RecordIndex, id: &str) -> String {
     index
         .issue_record(id)
-        .and_then(|record| record.sections.close_reason.as_deref())
+        .and_then(|record| record.sections.report.as_deref())
         .map(|text| CloseReport::parse(text).outcome)
         .unwrap_or_default()
 }

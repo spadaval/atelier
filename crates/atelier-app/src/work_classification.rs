@@ -105,7 +105,7 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
         ("are each", "them", "standalone validations")
     };
     format!(
-        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child closed, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge, make {pronoun} {shape}: {commands}. Writing it into {owner}'s Done when as `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before merge>.` instead is a plan change the reviewer sees, and fits only a check that needs {reasons}, with a stand-in that runs before merge.",
+        "{} labelled needs-human {verb} a child of {owner}, and review asks every open child for ticked Done when lines and a Report before atelier merge marks it done, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge, make {pronoun} {shape}: {commands}. Writing it into {owner}'s Done when as `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before merge>.` instead is a plan change the reviewer sees, and fits only a check that needs {reasons}, with a stand-in that runs before merge.",
         children.join(", "),
         reasons = crate::after_merge::REASONS,
     )

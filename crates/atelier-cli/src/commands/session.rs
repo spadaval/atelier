@@ -201,7 +201,7 @@ fn land_checked(requested: Option<&str>, install: bool, deep: bool) -> Result<(S
     let mut preconditions = crate::gate_report::Preconditions::default();
     land_gates(requested, install, deep, &mut preconditions).map_err(|error| {
         let skipped = if preconditions.owner.is_some() {
-            "the owner's review, findings, proof, blocker and open-work gates and the done claims"
+            "the owner's review, findings, proof and blocker gates and the done claims"
         } else {
             "the base commit and done-claim checks"
         };
@@ -358,7 +358,7 @@ fn land_gates(
     };
     let (branch_base, behind) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let behind_note = behind.map(|(base, count)| format!(
-        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` before atelier merge; a merge keeps an approval unless it resolves or edits code by hand, and then review.current names the merge and the files.",
+        "Base {base} has {} this branch does not; atelier merge lands the branch on it with a merge commit, and `atelier merge --sync` brings them in first when they conflict.",
         crate::human_output::count_noun(count, "commit")
     ));
     index.validate_policy(&source.policy, records_root)?;
@@ -520,7 +520,12 @@ fn land_gates(
             &id,
             base,
         )?);
-        if done {
+        // Merge marks the work done, so work with a current approval is
+        // ready for it; so is work an older Atelier closed (atelier-jnrh).
+        let approved = done
+            || review_gate::approval_state(&index, &mut read, &id, base)?
+                == review_gate::ApprovalState::Current;
+        if approved && initial_paths.is_empty() {
             next = Some(format!("Next: atelier merge {id}"));
         } else if !initial_paths.is_empty() {
             situation.push(format!(

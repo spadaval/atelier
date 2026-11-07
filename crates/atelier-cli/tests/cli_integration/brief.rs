@@ -424,11 +424,7 @@ fn mission_without_criteria_is_valid_and_its_views_omit_criteria() {
 
     let brief = ok(dir.path(), &["brief", &mission]);
     let work = ok(dir.path(), &["work", "mission", &mission]);
-    ok(dir.path(), &["issue", "transition", &item, "start"]);
-    ok(
-        dir.path(),
-        &["issue", "transition", &item, "close", "--reason", "Done A."],
-    );
+    mark_done_with_evidence(dir.path(), &item, Some("Done A."));
     let debrief = ok(dir.path(), &["debrief", &mission]);
     let brief_html =
         fs::read_to_string(ok(dir.path(), &["brief", &mission, "--html", "-q"]).trim()).unwrap();

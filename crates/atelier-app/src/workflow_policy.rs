@@ -5,7 +5,7 @@ use atelier_core::{InvalidValue, Issue};
 use crate::record_index::RecordIndex;
 
 pub use atelier_workflow::{
-    configured_initial_status, validate_issue_against_policy, BranchLifecycleConfig, MergeStrategy,
+    configured_initial_status, validate_issue_against_policy, BranchLifecycleConfig,
     StatusDefinition, TransitionDefinition, ValidatorDefinition, ValidatorParams,
     WorkflowDefinition, WorkflowPolicy, STARTER_POLICY_YAML, WORKFLOW_BRANCH_FIELD,
     WORKFLOW_POLICY_PATH,

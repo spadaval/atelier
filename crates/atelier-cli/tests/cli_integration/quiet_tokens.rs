@@ -127,16 +127,6 @@ fn every_command_prints_its_documented_quiet_token() {
 
     assert_eq!(q.ok("init", &["--slug", "atelier"]), "atelier\n");
     assert_eq!(q.ok("init", &["--force"]), "atelier\n");
-    // Closing work needs proof, so a close without it refuses with a hint.
-    let policy_path = dir.join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&policy_path).unwrap();
-    let close = "after its children.\n        validators:\n        - blockers.none_open\n";
-    assert!(policy.contains(close), "{policy}");
-    fs::write(
-        &policy_path,
-        policy.replace(close, &format!("{close}        - evidence.attached\n")),
-    )
-    .unwrap();
     let reslug = q.refused("init", &["--slug", "other"]);
     assert!(reslug.contains("already sets project_slug"), "{reslug}");
     not_atelier(q.refused_in(outside, "setup", &["claude"]));
@@ -349,13 +339,6 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_eq!(q.ok("start", &[&owner]), format!("task/{owner}\n"));
     assert_eq!(git_current_branch(dir), format!("task/{owner}"));
     let target = format!("issue/{owner}");
-    let unproven = q.refused("issue transition", &[&owner, "close", "--reason", "done"]);
-    assert!(
-        unproven.contains(&format!(
-            "Next: This policy requires a passing receipt: record one with `atelier evidence record --target {target}"
-        )),
-        "{unproven}"
-    );
     let captured = q.ok(
         "evidence record",
         &[
@@ -391,16 +374,17 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_eq!(evidence_ids.lines().count(), 2, "{evidence_ids}");
     not_atelier(q.refused_in(outside, "evidence list", &[]));
     commit_all(dir, "implementation and proof");
-    let reason = q.refused("issue transition", &[&owner, "close"]);
+    let reason = q.refused("issue transition", &[&owner, "supersede"]);
     assert!(
         reason.contains("missing required field close_reason"),
         "{reason}"
     );
-    assert_eq!(
-        q.ok("issue transition", &[&owner, "close", "--reason", "done"]),
-        "done\n"
-    );
-    commit_all(dir, "done claim");
+    // The implementer report comes before review; merge marks the work done
+    // (atelier-jnrh).
+    edit_canonical_issue(dir, &owner, |markdown| {
+        format!("{}\n\n## Report\n\nShipped.\n", markdown.trim_end())
+    });
+    commit_all(dir, "implementer report");
 
     // A failed gate prints nothing on stdout and says why on stderr.
     let refusal = q.refused("merge", &[&owner, "--check"]);

@@ -30,6 +30,15 @@ fn repository(repo: &Path, upstream: &Path) {
     git(repo, &["push", "-q", "-u", "origin", "main"]);
 }
 
+/// Writes `id`'s implementer report and commits it: the author writes it
+/// before asking for review, and merge marks the item done (atelier-jnrh).
+fn report(repo: &Path, id: &str, text: &str) {
+    let path = record_path(repo, id);
+    let record = fs::read_to_string(&path).unwrap();
+    fs::write(path, format!("{record}\n## Report\n\n{text}\n")).unwrap();
+    commit(repo, &format!("Report on {id}"));
+}
+
 fn record_path(repo: &Path, id: &str) -> std::path::PathBuf {
     repo.join(".atelier/issues").join(format!("{id}.md"))
 }
@@ -163,18 +172,7 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
     commit(repo, "Start the launcher");
     fs::write(repo.join("launcher.rs"), "fn main() {}\n").unwrap();
     commit(repo, "Implement the launcher");
-    ok(
-        repo,
-        &[
-            "issue",
-            "transition",
-            &item,
-            "close",
-            "--reason",
-            "Shipped; the phone check waits for the merge.",
-            "--commit-records",
-        ],
-    );
+    report(repo, &item, "Shipped; the phone check waits for the merge.");
 
     // The brief lists the check with its reason and stand-in, and says when
     // the reason is missing.
@@ -297,18 +295,7 @@ fn carrying_a_check_or_editing_a_done_record_on_the_base_lands() {
     commit(repo, "Start the launcher");
     fs::write(repo.join("launcher.rs"), "fn main() {}\n").unwrap();
     commit(repo, "Implement the launcher");
-    ok(
-        repo,
-        &[
-            "issue",
-            "transition",
-            &item,
-            "close",
-            "--reason",
-            "Shipped.",
-            "--commit-records",
-        ],
-    );
+    report(repo, &item, "Shipped.");
     fix_a_finding(repo, &item);
     approve_and_merge(repo, &item);
 
@@ -352,10 +339,12 @@ fn a_receipt_still_proves_its_item_after_its_check_is_ticked_on_the_base() {
     let upstream = tempdir().unwrap();
     let repo = dir.path();
     repository(repo, upstream.path());
-    // Closing an item needs a passing receipt that is fresh, or held at its
-    // close once merged.
+    // Under an older policy, closing an item needs a passing receipt that is
+    // fresh, or held at its close once merged; the item closed that way
+    // merges as it is (atelier-jnrh).
     let policy = repo.join(".atelier/workflow.yaml");
-    let text = fs::read_to_string(&policy).unwrap();
+    let text =
+        include_str!("../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml");
     let gates = "        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog";
     assert!(text.contains(gates), "{text}");
     fs::write(
@@ -430,6 +419,7 @@ fn a_check_moved_to_after_merge_once_started_is_shown_to_the_reviewer() {
     commit(repo, "Plan the launcher");
     ok(repo, &["start", &item]);
     commit(repo, "Start the launcher");
+    report(repo, &item, "Shipped.");
 
     // Before the move nothing is shown.
     let brief = ok(repo, &["review", "request", &item]);

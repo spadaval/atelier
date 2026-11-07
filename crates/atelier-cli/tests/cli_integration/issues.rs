@@ -827,7 +827,7 @@ fn test_list_filter_by_status() {
 
     run_atelier(dir.path(), &["issue", "create", "Open issue"]);
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
-    close_issue_with_evidence(dir.path(), "2", None);
+    mark_done_with_evidence(dir.path(), "2", None);
 
     let (_, open_list, _) = run_atelier(dir.path(), &["issue", "list", "-s", "todo"]);
     assert!(open_list.contains("Open issue"));
@@ -1001,7 +1001,13 @@ fn test_issue_show_is_brief_by_default() {
     );
 
     // A transition that needs an argument and has another gap stays blocked,
-    // with the other gap as its reason: a parent closes after its children.
+    // with the other gap as its reason: under a policy from before
+    // atelier-jnrh, a parent closes after its children.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        starter_with_work_close(),
+    )
+    .unwrap();
     edit_canonical_record(dir.path(), "issues", &parent, |text| {
         text.replace("status: \"todo\"", "status: \"in_progress\"")
     });
@@ -1053,17 +1059,16 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
         text.replace("status: \"todo\"", "status: \"in_progress\"")
     });
 
+    // Work has no close: merge marks it done (atelier-jnrh).
     let brief = show_ok(dir.path(), &["issue", "show", id]);
     assert!(
-        brief.contains("\nTransitions: close --reason, supersede --reason\n"),
+        brief.contains("\nTransitions: supersede --reason\n"),
         "{brief}"
     );
 
     let full = show_ok(dir.path(), &["issue", "show", id, "--full"]);
     let readiness = format!(
         "Transition Readiness\n--------------------\n  \
-         close: allowed - to done, needs --reason\n    \
-         Command: atelier issue transition {id} close --reason \"...\"\n  \
          supersede: allowed - to superseded, needs --reason\n    \
          Command: atelier issue transition {id} supersede --reason \"...\"\n"
     );
@@ -1072,8 +1077,8 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
     let options = show_ok(dir.path(), &["issue", "transition", id]);
     assert!(
         options.contains(&format!(
-            "close: allowed\n  From: in_progress\n  To:   done\n  \
-             Command: atelier issue transition {id} close --reason \"...\"\n  \
+            "supersede: allowed\n  From: backlog, todo, in_progress\n  To:   superseded\n  \
+             Command: atelier issue transition {id} supersede --reason \"...\"\n  \
              Requirements: needs --reason\n"
         )),
         "{options}"
@@ -1081,7 +1086,7 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
     assert!(!options.contains(": blocked"), "{options}");
     assert_eq!(
         show_ok(dir.path(), &["-q", "issue", "transition", id]),
-        "close\nsupersede\n"
+        "supersede\n"
     );
 }
 
@@ -2239,7 +2244,7 @@ fn test_show_closed_issue_includes_close_reason() {
 
     run_atelier(dir.path(), &["issue", "create", "Closed issue"]);
     let issue_id = issue_ref(dir.path(), 1);
-    close_issue_with_evidence(dir.path(), &issue_id, Some("Done enough"));
+    mark_done_with_evidence(dir.path(), &issue_id, Some("Done enough"));
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
@@ -2247,7 +2252,7 @@ fn test_show_closed_issue_includes_close_reason() {
     assert!(success, "issue show failed: {stderr}");
     assert!(stdout.contains("Closed issue"));
     assert!(stdout.contains("Closed:"));
-    assert!(stdout.contains("Close Reason"));
+    assert!(stdout.contains("Report"), "{stdout}");
     assert!(stdout.contains("Done enough"));
 }
 
@@ -2333,19 +2338,67 @@ fn test_update_issue_remove_label_replaces_unlabel_helper() {
 
 // ==================== Issue Close/Reopen Tests ====================
 
+/// Work reaches done when `atelier merge` integrates its branch, with no
+/// close step (atelier-jnrh).
 #[test]
 fn test_close_issue() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    init_git_repo(dir.path());
 
-    run_atelier(dir.path(), &["issue", "create", "Test issue"]);
-    let issue_id = close_issue_with_evidence(dir.path(), "1", Some("done"));
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "Test issue",
+            "--body",
+            "## Goal\n\nShip it.\n\n## Done when\n\n- [ ] It ships.",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    commit_all(dir.path(), "plan");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
+    assert!(success, "{stderr}");
+    fs::write(dir.path().join("shipped.txt"), "shipped\n").unwrap();
+    edit_canonical_issue(dir.path(), &issue_id, |markdown| {
+        format!(
+            "{}\n\n## Report\n\nShipped.\n",
+            markdown
+                .replace("- [ ] It ships.", "- [x] It ships.")
+                .trim_end()
+        )
+    });
+    commit_all(dir.path(), "ship it");
+    let (success, transitions, _) = run_atelier(dir.path(), &["issue", "transition", &issue_id]);
+    assert!(success && !transitions.contains("close"), "{transitions}");
+    let (success, _, stderr) = run_atelier(
+        dir.path(),
+        &[
+            "review",
+            "approve",
+            &issue_id,
+            "--identity",
+            "Reviewer",
+            "--commit-records",
+            "Read it",
+        ],
+    );
+    assert!(success, "{stderr}");
+    let (success, merged, stderr) = run_atelier(dir.path(), &["merge", &issue_id]);
+    assert!(success, "{merged}{stderr}");
+    assert!(
+        merged.contains(&format!("which marks {issue_id} done")),
+        "{merged}"
+    );
     let (_, show_out, _) = run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
 
     assert!(
         show_out.starts_with(&format!("{issue_id} task ✓ done ")),
         "{show_out}"
     );
+    assert!(show_out.contains("Shipped."), "{show_out}");
 }
 
 // ==================== Issue Delete Tests ====================
@@ -2417,7 +2470,7 @@ fn test_add_comment() {
 }
 
 #[test]
-fn test_issue_notes_and_close_reason_are_written_to_the_record() {
+fn test_issue_notes_and_report_are_written_to_the_record() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2482,18 +2535,15 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
             "issue",
             "transition",
             &issue_id,
-            "close",
+            "supersede",
             "--reason",
-            "Close reason body",
+            "Report body",
         ],
     );
-    assert!(success, "issue transition close failed: {stderr}");
+    assert!(success, "issue transition supersede failed: {stderr}");
 
     let record = read_canonical_record(dir.path(), "issues", &issue_id);
-    assert!(
-        record.contains("## Close Reason\n\nClose reason body"),
-        "{record}"
-    );
+    assert!(record.contains("## Report\n\nReport body"), "{record}");
     assert!(!dir
         .path()
         .join(format!(".atelier/issues/{issue_id}.activity"))
@@ -2503,12 +2553,12 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
         run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
     assert!(stdout.contains("Handoff body"), "{stdout}");
-    assert!(stdout.contains("Close Reason"), "{stdout}");
-    assert!(stdout.contains("Close reason body"), "{stdout}");
+    assert!(stdout.contains("Report"), "{stdout}");
+    assert!(stdout.contains("Report body"), "{stdout}");
 }
 
 #[test]
-fn test_issue_show_reads_notes_and_close_reason_from_the_record() {
+fn test_issue_show_reads_notes_and_report_from_the_record() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -2541,17 +2591,17 @@ fn test_issue_show_reads_notes_and_close_reason_from_the_record() {
             "issue",
             "transition",
             &issue_id,
-            "close",
+            "supersede",
             "--reason",
             "Canonical close",
         ],
     );
-    assert!(success, "close failed: {stderr}");
+    assert!(success, "supersede failed: {stderr}");
 
     let (success, stdout, stderr) =
         run_atelier(dir.path(), &["issue", "show", &issue_id, "--full"]);
     assert!(success, "show failed: {stderr}");
-    assert!(stdout.contains("Close Reason"));
+    assert!(stdout.contains("Report"));
     assert!(stdout.contains("Canonical close"));
     assert!(stdout.contains("Canonical handoff"));
 }
@@ -3886,7 +3936,8 @@ fn write_workflow_without_mission_issue_type(dir: &std::path::Path) {
         .replace(
             "    applies_to:\n    - mission\n",
             "    applies_to:\n    - spike\n",
-        );
+        )
+        .replace("Close the mission once", "Close the objective once");
     assert!(!workflow.contains("mission"), "{workflow}");
     std::fs::write(&workflow_path, workflow).expect("failed to write workflow policy");
 }
@@ -4694,7 +4745,7 @@ fn test_issue_options_do_what_their_help_says() {
         "issue",
         "transition",
         &finished,
-        "close",
+        "supersede",
         "--reason",
         "Done",
     ]);
@@ -5007,9 +5058,11 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
     assert!(success, "{stderr}");
     let migrated_policy = fs::read_to_string(&policy_path).unwrap();
     assert!(!migrated_policy.contains("epic"), "{migrated_policy}");
+    // Merge marks work done, so the migration no longer makes a parent close
+    // after its children (atelier-jnrh).
     assert_eq!(
         migrated_policy.matches("- work.terminal").count(),
-        2,
+        1,
         "{migrated_policy}"
     );
     let record = fs::read_to_string(canonical_issue_path(dir.path(), epic)).unwrap();
@@ -5828,7 +5881,7 @@ fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
     let (success, options, stderr) = run_atelier(dir.path(), &["issue", "transition", &child]);
     assert!(success, "{stderr}");
     assert!(
-        options.contains("close: allowed"),
+        options.contains("supersede: allowed"),
         "a child in flight keeps its transitions: {options}"
     );
 
@@ -5987,14 +6040,24 @@ fn next_section(output: &str) -> &str {
         .unwrap_or_else(|| panic!("no Next section:\n{output}"))
 }
 
+/// Takes the started issue to a done status with `reason` as its Report.
+/// Work reaches `done` only by merging (atelier-jnrh), so this retires it
+/// with supersede, the work workflow's done-category transition.
 fn close_issue(dir: &Path, issue_id: &str, reason: &str) -> String {
     start_issue_work(dir, issue_id);
     attach_issue_pass_evidence(dir, issue_id);
     let (success, stdout, stderr) = run_atelier(
         dir,
-        &["issue", "transition", issue_id, "close", "--reason", reason],
+        &[
+            "issue",
+            "transition",
+            issue_id,
+            "supersede",
+            "--reason",
+            reason,
+        ],
     );
-    assert!(success, "close {issue_id} failed: {stderr}");
+    assert!(success, "supersede {issue_id} failed: {stderr}");
     stdout
 }
 
@@ -6418,7 +6481,7 @@ fn test_issue_link_on_a_done_record_offers_no_transition_options() {
 }
 
 #[test]
-fn test_brief_done_issue_offers_no_close_reason_its_closed_line_shows() {
+fn test_brief_done_issue_offers_no_report_its_closed_line_shows() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     for title in ["Briefly closed", "Closed at length"] {
@@ -6437,7 +6500,7 @@ fn test_brief_done_issue_offers_no_close_reason_its_closed_line_shows() {
     let (success, brief, stderr) = run_atelier(dir.path(), &["issue", "show", &brief_id]);
     assert!(success, "{stderr}");
     assert!(brief.contains(": Shipped the fix\n"), "{brief}");
-    assert!(!brief.contains("Close Reason"), "{brief}");
+    assert!(!brief.contains("Report"), "{brief}");
 
     // A longer reason than the Closed line shows is still offered.
     let (success, long, stderr) = run_atelier(dir.path(), &["issue", "show", &long_id]);
@@ -6446,5 +6509,5 @@ fn test_brief_done_issue_offers_no_close_reason_its_closed_line_shows() {
         .lines()
         .find(|line| line.starts_with("More with --full:"))
         .unwrap_or_else(|| panic!("no More line:\n{long}"));
-    assert!(more.contains("Close Reason"), "{long}");
+    assert!(more.contains("Report"), "{long}");
 }

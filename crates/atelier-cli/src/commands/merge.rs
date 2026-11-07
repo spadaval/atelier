@@ -1,6 +1,6 @@
-//! Gated integration: a fast-forward, or under `merge_strategy:
-//! merge_commit` a merge commit whose tree passed `merge_checks`. Creates no
-//! other commits and no tracker records.
+//! Gated integration: a merge commit whose tree passed `merge_checks`, and
+//! which marks the owner's open work done (atelier-jnrh). Merge creates no
+//! other commit; the branch carries no done claim, so done means merged.
 use crate::commands::git::text;
 use anyhow::{bail, Context, Result};
 use atelier_app::{
@@ -8,7 +8,7 @@ use atelier_app::{
     record_index::RecordIndex,
     review_gate,
     storage_layout::StorageLayout,
-    workflow_policy::{MergeStrategy, ValidatorParams, WorkflowPolicy},
+    workflow_policy::{ValidatorParams, WorkflowPolicy},
 };
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -160,6 +160,75 @@ fn tree_checks(policy: &WorkflowPolicy) -> impl Iterator<Item = &str> {
         })
 }
 
+/// The scope's open work as merging marks it done: each item in the `work`
+/// workflow set to that workflow's first done status, with its Report as the
+/// reviewer read it (atelier-jnrh).
+fn done_marks(
+    index: &RecordIndex,
+    policy: &WorkflowPolicy,
+    owner: &str,
+) -> Result<Vec<atelier_records::CanonicalIssueRecord>> {
+    let now = chrono::Utc::now();
+    review_gate::open_work(index, policy, owner)?
+        .into_iter()
+        .map(|id| {
+            let mut record = index
+                .issue_record(&id)
+                .with_context(|| format!("{id} is not an issue"))?
+                .clone();
+            let done = policy
+                .merge_done_status(&record.issue.issue_type)
+                .context("open work has a done status")?;
+            record.issue.status = done.to_owned();
+            record.issue.updated_at = now;
+            record.issue.closed_at = Some(now);
+            Ok(record)
+        })
+        .collect()
+}
+
+/// `tree` with `records` written into it, built in a scratch index so no
+/// checkout, ref or index of the repository changes.
+fn tree_with_records(
+    repo: &Path,
+    tree: &str,
+    records: &[atelier_records::CanonicalIssueRecord],
+) -> Result<String> {
+    if records.is_empty() {
+        return Ok(tree.to_owned());
+    }
+    let scratch = tempfile::tempdir()?;
+    let index = scratch.path().join("index");
+    let run = |args: &[&str]| -> Result<String> {
+        let output = git::command(repo)
+            .env("GIT_INDEX_FILE", &index)
+            .args(args)
+            .output()?;
+        if !output.status.success() {
+            bail!(
+                "git {} failed while marking work done in the merge commit: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        Ok(String::from_utf8(output.stdout)?.trim().to_owned())
+    };
+    run(&["read-tree", tree])?;
+    for record in records {
+        let file = scratch.path().join(&record.issue.id);
+        std::fs::write(&file, atelier_records::render_issue_record(record)?)?;
+        let blob = run(&["hash-object", "-w", &file.to_string_lossy()])?;
+        let path = Path::new(".atelier").join(atelier_records::issue_record_path(&record.issue.id));
+        run(&[
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            &format!("100644,{blob},{}", path.to_string_lossy()),
+        ])?;
+    }
+    run(&["write-tree"])
+}
+
 /// The merge commit object; it reaches the base only if its tree passes.
 fn merge_commit(
     repo: &Path,
@@ -167,14 +236,21 @@ fn merge_commit(
     tree: &str,
     (base, base_head): (&str, &str),
     (branch, head): (&str, &str),
+    marked: &[String],
 ) -> Result<String> {
     let checks = tree_checks(policy)
         .map(|command| format!("- shell.check: {command}"))
         .collect::<Vec<_>>()
         .join("\n");
-    let message = format!(
-        "Merge {branch} into {base}\n\nThe base policy's merge_checks passed on this tree before atelier merge\nput it on {base}:\n{checks}\n"
-    );
+    let mut message = format!("Merge {branch} into {base}\n\n");
+    if !marked.is_empty() {
+        message.push_str(&format!("Marks {} done.\n\n", marked.join(", ")));
+    }
+    message.push_str(&if checks.is_empty() {
+        format!("The base policy's merge_checks have no shell.check, so nothing ran on this\ntree before atelier merge put it on {base}.\n")
+    } else {
+        format!("The base policy's merge_checks passed on this tree before atelier merge\nput it on {base}:\n{checks}\n")
+    });
     text(
         repo,
         &[
@@ -195,13 +271,14 @@ fn merge_commit(
 /// merge commit would carry them onto the base, but review and evidence pins
 /// are judged only along the work branch, so merging the base into the
 /// branch is what lets the gates judge them. Other base records, such as a
-/// blocker, are judged by the gates reading the merged records.
+/// blocker, are judged by the gates reading the merged records. `tree` is
+/// Git's merge, before merge marks work done.
 fn base_records(
     repo: &Path,
     (branch_index, merged): (&RecordIndex, &RecordIndex),
     owner: &str,
     (base, branch): (&str, &str),
-    (head, commit): (&str, &str),
+    (head, tree): (&str, &str),
 ) -> Result<()> {
     let mut ids = review_gate::scope(branch_index, owner)?;
     ids.extend(review_gate::scope(merged, owner)?);
@@ -226,7 +303,7 @@ fn base_records(
             "-z",
             "--no-renames",
             head,
-            commit,
+            tree,
             "--",
             ".atelier/",
         ],
@@ -323,16 +400,9 @@ fn first_code_commit(repo: &Path, from: &str, to: &str) -> Result<Option<(String
 }
 
 /// The error for a base that moved while checks ran: a retry marker when the
-/// move is records-only and the strategy can land on the new base without
-/// creating commits other than the merge commit, else a refusal naming what
-/// prevents the retry.
-fn base_moved(
-    repo: &Path,
-    id: &str,
-    strategy: MergeStrategy,
-    base: &str,
-    (from, to): (&str, &str),
-) -> anyhow::Error {
+/// move is records-only, so a merge commit on the new base needs no new
+/// checks, else a refusal naming what prevents the retry.
+fn base_moved(repo: &Path, id: &str, base: &str, (from, to): (&str, &str)) -> anyhow::Error {
     let named = |commit: &str, path: &Path| {
         anyhow::anyhow!("merge_snapshot_changed: {base} moved while checks ran, and {} changes {}, which is not a record. Next: rerun `atelier merge {id}`", crate::human_output::short_commit(commit), path.display())
     };
@@ -343,8 +413,12 @@ fn base_moved(
     match first_code_commit(repo, from, to) {
         Err(error) => error,
         Ok(Some((commit, path))) => named(&commit, &path),
-        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, then retry; a merge keeps the approval unless it resolves or edits code by hand, and then review.current names the merge and the files.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
-        Ok(None) => RetryOnMovedBase(format!("{base} moved from {} to {} while checks ran, only by records-only commits", crate::human_output::short_commit(from), crate::human_output::short_commit(to))).into(),
+        Ok(None) => RetryOnMovedBase(format!(
+            "{base} moved from {} to {} while checks ran, only by records-only commits",
+            crate::human_output::short_commit(from),
+            crate::human_output::short_commit(to)
+        ))
+        .into(),
     }
 }
 
@@ -678,7 +752,7 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
     let error = preconditions.refusal(
         error,
         "merge",
-        "the review, findings, proof, blocker, open-work and done-claim gates",
+        "the review, findings, proof, blocker and done-claim gates",
         is_merge_code,
     );
     if let Some(refused) = error.downcast_ref::<crate::gate_report::GatesRefused>() {
@@ -728,40 +802,14 @@ fn merge_gates(
     for diagnostic in &source.diagnostics {
         eprintln!("{diagnostic}");
     }
-    let strategy = source.policy.branch_policy.merge_strategy;
-    if source.policy.branch_policy.base_branch != *base
-        || !matches!(
-            strategy,
-            MergeStrategy::FastForwardOnly | MergeStrategy::MergeCommit
-        )
-    {
-        bail!("merge_base_policy_unsupported: merge requires base policy for {base} with merge_strategy: fast_forward_only or merge_commit. Next: review and merge the policy change on {base} first");
+    if source.policy.branch_policy.base_branch != *base {
+        bail!(
+            "merge_base_policy_unsupported: the base policy on {base} names {} as the base branch, not {base}. Next: review and merge the policy change on {base} first",
+            source.policy.branch_policy.base_branch
+        );
     }
-    let tree = if strategy == MergeStrategy::MergeCommit {
-        // Evidence at the branch head does not prove a tree the base has
-        // changed; only checks run on the merged tree can.
-        if tree_checks(&source.policy).next().is_none() {
-            bail!("merge_unproven: merge_strategy merge_commit needs a shell.check in the base policy's merge_checks for {base}; it runs on the merged tree, which evidence at the branch head and record checks do not prove");
-        }
-        Some(merged_tree(repo, base, &base_head, &branch, &head)?)
-    } else {
-        // The gates still judge the work from where it left the base.
-        if git::git_output(repo, &["merge-base", "--is-ancestor", &base_head, &head]).is_err() {
-            let fork = text(repo, &["merge-base", &base_head, &head]).unwrap_or_default();
-            let moved = match first_code_commit(repo, &fork, &base_head) {
-                Ok(None) => format!("{base} gained only records-only commits since {branch} left it, but merge_strategy fast_forward_only creates no merge commit."),
-                Ok(Some((commit, path))) => format!("{base} gained {}, which changes {}, not a record.", crate::human_output::short_commit(&commit), path.display()),
-                Err(_) => format!("{base} is not an ancestor of {branch}."),
-            };
-            preconditions.fail(
-                "merge_diverged",
-                format!("{moved} Merge it in with `git merge {base}` on {branch}, then retry; a merge keeps the approval unless it resolves or edits code by hand, and then review.current names the merge and the files. Do not rebase once review records exist: rebasing rewrites the commits they pin."),
-                Some(format!("git merge {base}")),
-            );
-        }
-        None
-    };
-    // Where the branch left the base; the base itself under fast-forward.
+    let tree = merged_tree(repo, base, &base_head, &branch, &head)?;
+    // Where the branch left the base.
     let fork_point = text(repo, &["merge-base", &base_head, &head])?;
     // Candidate syntax is checked only after trusted base resolution, so an
     // invalid branch cannot prevent a visible fallback or become base policy.
@@ -797,69 +845,65 @@ fn merge_gates(
     if committed.is_none() {
         crate::commands::git::require_committed_config(repo, &head, "merge")?;
     }
-    let merge = tree
-        .map(|tree| -> Result<_> {
-            let commit = merge_commit(
-                repo,
-                &source.policy,
-                &tree,
-                (base, &base_head),
-                (&branch, &head),
-            )?;
-            let checkout = MergedCheckout::add(repo, &commit)?;
-            let merged = committed_snapshot::CommittedSnapshot::new(&commit)?
-                .read_record_files(&checkout.path, true)?
-                .0
-                .into_index()?;
-            base_records(
-                repo,
-                (&index, &merged),
-                owner,
-                (base, &branch),
-                (&head, &commit),
-            )?;
-            Ok((tree, commit, checkout, merged))
-        })
-        .transpose()?;
+    // The merge commit marks the scope's open work done, so its tree is what
+    // reaches the base and what the checks and gates read.
+    let marks = done_marks(&index, &source.policy, owner)?;
+    let marked = marks
+        .iter()
+        .map(|record| record.issue.id.clone())
+        .collect::<Vec<_>>();
+    let commit = merge_commit(
+        repo,
+        &source.policy,
+        &tree_with_records(repo, &tree, &marks)?,
+        (base, &base_head),
+        (&branch, &head),
+        &marked,
+    )?;
+    let checkout = MergedCheckout::add(repo, &commit)?;
+    let merged = committed_snapshot::CommittedSnapshot::new(&commit)?
+        .read_record_files(&checkout.path, true)?
+        .0
+        .into_index()?;
+    base_records(
+        repo,
+        (&index, &merged),
+        owner,
+        (base, &branch),
+        (&head, &tree),
+    )?;
     // The gates read the records merging would put on the base.
     let mut nodes = review_gate::evaluate(
-        merge.as_ref().map_or(&index, |(_, _, _, merged)| merged),
+        &merged,
         &mut read,
         &source.policy,
         owner,
         &fork_point,
-        merge
-            .as_ref()
-            .map_or(repo, |(_, _, checkout, _)| checkout.path.as_path()),
+        &checkout.path,
     )?;
-    // The commit merging would put on the base, with its records: the merge
-    // commit, or the branch head itself under fast-forward.
-    let (tip, tip_index) = merge
-        .as_ref()
-        .map_or((&head, &index), |(_, commit, _, merged)| (commit, merged));
     // The records merging puts on the base can break a done claim outside
     // the item, such as one the base completed after the fork point, which no
-    // checkout held before (atelier-m4gv). Those claims are read at that
+    // checkout held before (atelier-m4gv). Those claims are read at the merge
     // commit, which holds the base commits their reviews pin (atelier-goom),
-    // under either strategy, as `land` there reads them (atelier-bu66).
+    // as `land` there reads them (atelier-bu66).
     nodes.extend(crate::commands::session::merge_claim_nodes(
         repo,
-        &mut git::ReadContext::from_snapshot(repo, tip.clone(), &[]),
-        tip_index,
+        &mut git::ReadContext::from_snapshot(repo, commit.clone(), &[]),
+        &merged,
         &source.policy,
         owner,
         &base_head,
-        tip,
+        &commit,
     )?);
-    if let Some((tree, _, _, _)) = &merge {
-        // Only the shell checks examined the merged tree; it is proven when
-        // at least one ran there and every one passed.
-        let shell = nodes
+    // Only the shell checks examined the merged tree; it is proven when
+    // every one that ran there passed. A policy without one lands a tree
+    // nothing ran (atelier-jnrh).
+    let commands = tree_checks(&source.policy).collect::<Vec<_>>().join("; ");
+    if !commands.is_empty() {
+        let passed = nodes
             .iter()
             .filter(|node| node.check == "shell.check")
-            .collect::<Vec<_>>();
-        let passed = !shell.is_empty() && shell.iter().all(|node| node.passed);
-        let commands = tree_checks(&source.policy).collect::<Vec<_>>().join("; ");
+            .all(|node| node.passed);
         nodes.push(review_gate::gate(
             owner,
             "merge.merged_tree",
@@ -874,12 +918,14 @@ fn merge_gates(
     }
     // Every done claim merging would put on the base must be one `land`
     // there accepts, judged by the same code, so a refusal comes before
-    // integration rather than after it (atelier-uw4x).
+    // integration rather than after it (atelier-uw4x). The branch's commits
+    // are read up to its head: the merge commit's own marks are the scope's
+    // work, which review.current already judges, as `land` will.
     let unreviewed = crate::commands::git::first_unreviewed_claim(
         repo,
-        tip_index,
+        &merged,
         &source.policy,
-        tip,
+        &head,
         &base_head,
     )?;
     let mut claims_reviewed = review_gate::gate(
@@ -898,10 +944,10 @@ fn merge_gates(
     if let Some((commit, claim)) = &unreviewed {
         // An approval covers a done claim in its scope while it is still
         // current at the claim's commit.
-        claims_reviewed.fix = Some(if review_gate::scope(tip_index, owner)?.contains(claim) {
+        claims_reviewed.fix = Some(if review_gate::scope(&merged, owner)?.contains(claim) {
             format!("atelier review request {owner}")
         } else {
-            format!("edit .atelier/issues/{claim}.md back to its earlier status on this branch, commit, and close {claim} on its own branch with `atelier start {claim}`")
+            format!("edit .atelier/issues/{claim}.md back to its earlier status on this branch, commit, and merge {claim} from its own branch after `atelier start {claim}`")
         });
         claims_reviewed = claims_reviewed.with_gaps(vec![review_gate::Gap::UnreviewedClaim {
             claim: claim.clone(),
@@ -912,7 +958,7 @@ fn merge_gates(
     nodes.splice(0..0, std::mem::take(&mut preconditions.failed));
     preconditions.gates_ran = true;
     let gates = crate::gate_report::Gates {
-        index: tip_index,
+        index: &merged,
         policy: &source.policy,
         owner: Some(owner),
         uncommitted: uncommitted.as_ref(),
@@ -923,8 +969,8 @@ fn merge_gates(
     let edited = atelier_app::record_history::done_when_edits(
         &mut read,
         Some(&source.policy),
-        tip_index,
-        &review_gate::scope(tip_index, owner)?,
+        &merged,
+        &review_gate::scope(&merged, owner)?,
     )?
     .iter()
     .map(|edit| format!("Note: {}", crate::human_output::done_when_edit(edit)))
@@ -989,7 +1035,7 @@ fn merge_gates(
     // only the attempt that returns reports (atelier-1hjj).
     let moved = match crate::commands::git::resolve(repo, &base_ref) {
         Ok(current) if current == base_head => None,
-        Ok(current) => Some(base_moved(repo, &id, strategy, base, (&base_head, &current))),
+        Ok(current) => Some(base_moved(repo, &id, base, (&base_head, &current))),
         Err(_) => Some(anyhow::anyhow!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}`")),
     };
     if let Some(moved) = moved {
@@ -1026,16 +1072,14 @@ fn merge_gates(
             bail!("merge_snapshot_changed: base checkout changed while checks ran. Next: rerun `atelier merge {id}`");
         }
     }
-    if let Some((_, commit, checkout, _)) = &merge {
-        if !text(
-            &checkout.path,
-            &["status", "--porcelain", "--untracked-files=all"],
-        )?
-        .is_empty()
-            || git::head_commit(&checkout.path)? != *commit
-        {
-            bail!("merge_checkout_dirty: merge_checks changed the merged checkout; checks must be read-only");
-        }
+    if !text(
+        &checkout.path,
+        &["status", "--porcelain", "--untracked-files=all"],
+    )?
+    .is_empty()
+        || git::head_commit(&checkout.path)? != commit
+    {
+        bail!("merge_checkout_dirty: merge_checks changed the merged checkout; checks must be read-only");
     }
     if !failed.is_empty() {
         if json {
@@ -1051,13 +1095,7 @@ fn merge_gates(
     if check_only {
         return Ok(());
     }
-    let landed = match merge {
-        Some((_, commit, checkout, _)) => {
-            drop(checkout);
-            Some(commit)
-        }
-        None => None,
-    };
+    drop(checkout);
     // A separately checked-out base can be updated without touching it from
     // this worktree. Detach the source so its now-integrated branch can go.
     let target = base_tree.as_deref().unwrap_or(repo);
@@ -1074,10 +1112,10 @@ fn merge_gates(
             "core.hooksPath=/dev/null",
             "merge",
             "--ff-only",
-            landed.as_deref().unwrap_or(&head),
+            &commit,
         ],
     )
-    .context("fast-forward failed; no tracker state was written")?;
+    .context("fast-forward to the merge commit failed; the base is unchanged")?;
     if base_tree.is_some() {
         git::git_output(
             repo,
@@ -1129,13 +1167,12 @@ fn merge_gates(
         return Ok(());
     }
     println!(
-        "✓ Merged {branch} into {base} {}; branch deleted. Next: atelier land, then git push.",
-        match &landed {
-            Some(commit) => format!(
-                "with merge commit {}",
-                crate::human_output::short_commit(commit)
-            ),
-            None => format!("at {}", crate::human_output::short_commit(&head)),
+        "✓ Merged {branch} into {base} with merge commit {}{}; branch deleted. Next: atelier land, then git push.",
+        crate::human_output::short_commit(&commit),
+        if marked.is_empty() {
+            String::new()
+        } else {
+            format!(", which marks {} done", marked.join(", "))
         }
     );
     if let Some(note) = detached {

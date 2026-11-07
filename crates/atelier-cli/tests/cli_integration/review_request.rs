@@ -19,8 +19,9 @@ fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-/// A started owner with one code commit after the start, and a Close Reason
-/// style rationale in its notes that the brief must not carry.
+/// A started owner with one code commit after the start, which also writes
+/// its implementer report, and a rationale in its notes that the brief must
+/// not carry.
 fn owner(dir: &Path) -> String {
     init_atelier(dir);
     init_git_repo(dir);
@@ -53,6 +54,12 @@ fn owner(dir: &Path) -> String {
         ],
     );
     fs::write(dir.join("parser.rs"), "fn parse() {}\n").unwrap();
+    edit_canonical_issue(dir, &id, |markdown| {
+        format!(
+            "{}\n\n## Report\n\nThe parser parses.\n",
+            markdown.trim_end()
+        )
+    });
     commit_all(dir, "add the parser");
     id
 }
@@ -300,4 +307,116 @@ fn merging_the_base_into_the_branch_does_not_grow_the_review_range() {
         "{brief}"
     );
     assert!(brief.contains("^main`"), "{brief}");
+}
+
+/// Asking for review means the work is done to the best of the author's
+/// knowledge: the request refuses while open work it covers has an unticked
+/// Done when line or an empty Report, and lists each (atelier-jnrh).
+#[test]
+fn the_request_refuses_unticked_done_when_lines_and_empty_reports_and_lists_them() {
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path();
+    init_atelier(dir);
+    init_git_repo(dir);
+    let create = |args: &[&str]| ok(dir, args).trim().to_string();
+    let id = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--issue-type",
+        "feature",
+        "--body",
+        "## Goal\n\nShip it.\n\n## Done when\n\n- [x] The first test passes.\n- [ ] The second test passes.\n- [ ] After merge (device): it opens on the phone. Stand-in: the emulator test passes.",
+        "Parent",
+    ]);
+    let child = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--parent",
+        &id,
+        "--body",
+        "## Goal\n\nPart.\n\n## Done when\n\n- [ ] The part works.",
+        "Child",
+    ]);
+    let dropped = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--parent",
+        &id,
+        "--body",
+        "## Goal\n\nDropped.\n\n## Done when\n\n- [ ] Never done.",
+        "Dropped",
+    ]);
+    let closed = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--parent",
+        &id,
+        "--body",
+        "## Goal\n\nClosed earlier.\n\n## Done when\n\n- [ ] Left unticked.",
+        "Closed by an older Atelier",
+    ]);
+    commit_all(dir, "plan");
+    ok(dir, &["start", &id]);
+    ok(
+        dir,
+        &[
+            "issue",
+            "transition",
+            &dropped,
+            "supersede",
+            "--reason",
+            "Not needed.",
+        ],
+    );
+    // An item an older Atelier closed on the branch, with its Close Reason,
+    // is done already, so merge leaves it as it is and review asks nothing
+    // of it.
+    edit_canonical_issue(dir, &closed, |markdown| {
+        format!(
+            "{}\n\n## Close Reason\n\nClosed by an older Atelier.\n",
+            markdown
+                .replace("status: \"todo\"", "status: \"done\"")
+                .trim_end()
+        )
+    });
+    commit_all(dir, "start");
+
+    let (success, stdout, stderr) = run_atelier_raw(dir, &["review", "request", &id]);
+    assert!(!success, "{stdout}");
+    let expected = format!(
+        "review_request_unfinished: asking for review means the work is done to the best of your knowledge, and {id}'s open work is not:\n- {id}: 1 Done when line unticked: \"The second test passes.\"; Report empty\n- {child}: 1 Done when line unticked: \"The part works.\"; Report empty\nNext: tick each Done when line once it holds, write each item's implementer report in its `## Report` section, commit, then rerun `atelier review request {id}`\nNote: 1 After merge line need not be ticked; `atelier migrate after-merge` turns such lines into loose ends."
+    );
+    assert!(stderr.contains(&expected), "{stderr}");
+    // The superseded child and the closed one are not work merge will mark
+    // done.
+    assert!(!stderr.contains(&dropped), "{stderr}");
+    assert!(!stderr.contains(&closed), "{stderr}");
+
+    for (item, done_when) in [
+        (
+            &id,
+            (
+                "- [ ] The second test passes.",
+                "- [x] The second test passes.",
+            ),
+        ),
+        (&child, ("- [ ] The part works.", "- [x] The part works.")),
+    ] {
+        edit_canonical_issue(dir, item, |markdown| {
+            format!(
+                "{}\n\n## Report\n\nDone.\n",
+                markdown.replace(done_when.0, done_when.1).trim_end()
+            )
+        });
+    }
+    commit_all(dir, "tick and report");
+    let brief = ok(dir, &["review", "request", &id]);
+    assert!(
+        brief.starts_with(&format!("# Review request: {id} ")),
+        "{brief}"
+    );
 }

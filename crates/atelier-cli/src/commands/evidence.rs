@@ -1105,7 +1105,7 @@ fn print_confirmation(
         ),
         (EvidenceResult::Pass, _, _) => crate::gate_report::verdict("evidence record", &[]),
         (EvidenceResult::Fail, Some(issue), _) => format!(
-            "evidence record: recorded fail — {issue} cannot close or merge until a later pass"
+            "evidence record: recorded fail — {issue} cannot merge or be done until a later pass"
         ),
         (EvidenceResult::Fail, None, _) => "evidence record: recorded fail".to_string(),
         (result, _, _) => format!(

@@ -38,38 +38,18 @@ fn test_init_creates_atelier_directory() {
     assert!(!config.contains("cache_dir"));
 }
 
+/// `atelier merge` always creates a merge commit and marks the work done in
+/// it, so the starter names no merge strategy and gives work no close
+/// (atelier-jnrh).
 #[test]
-fn test_init_policy_defaults_the_merge_strategy_from_its_merge_checks() {
-    use atelier_workflow::MergeStrategy;
+fn test_init_policy_names_no_merge_strategy_and_no_work_close() {
     let dir = tempdir().unwrap();
     run_atelier(dir.path(), &["init", "--slug", "atelier"]);
-    let path = dir.path().join(".atelier/workflow.yaml");
-    let starter = std::fs::read_to_string(&path).unwrap();
-    let strategy = || {
-        atelier_workflow::load(dir.path())
-            .unwrap()
-            .branch_policy
-            .merge_strategy
-    };
-    // No test check proves a merged tree, so the starter keeps fast-forward.
+    let starter = std::fs::read_to_string(dir.path().join(".atelier/workflow.yaml")).unwrap();
     assert!(!starter.contains("merge_strategy"), "{starter}");
-    assert_eq!(strategy(), MergeStrategy::FastForwardOnly);
-    // A shell.check makes merge_commit the default; an explicit choice wins.
-    std::fs::write(
-        &path,
-        format!("{starter}merge_checks:\n  - shell.check: {{ command: 'true' }}\n"),
-    )
-    .unwrap();
-    assert_eq!(strategy(), MergeStrategy::MergeCommit);
-    std::fs::write(
-        &path,
-        format!("{starter}merge_checks:\n  - shell.check: {{ command: 'true' }}\n").replace(
-            "base_branch: main\n",
-            "base_branch: main\n  merge_strategy: fast_forward_only\n",
-        ),
-    )
-    .unwrap();
-    assert_eq!(strategy(), MergeStrategy::FastForwardOnly);
+    let policy = atelier_workflow::load(dir.path()).unwrap();
+    assert!(!policy.workflows["work"].transitions.contains_key("close"));
+    assert_eq!(policy.merge_done_status("task"), Some("done"));
 }
 
 #[test]
@@ -678,15 +658,6 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_ref(dir.path(), 1);
     make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
-    let policy = dir.path().join(".atelier/workflow.yaml");
-    fs::write(
-        &policy,
-        fs::read_to_string(&policy).unwrap().replace(
-            "base_branch: main\n",
-            "base_branch: main\n  merge_strategy: squash\n",
-        ),
-    )
-    .unwrap();
     commit_all(dir.path(), "terminal owner fixture");
     let branch = format!("task/{issue_id}");
     let worktree = dir.path().join("terminal-owner-worktree");
@@ -705,7 +676,7 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
             .unwrap();
         assert!(status.success(), "git {:?} failed", args);
     }
-    fs::write(worktree.join("squash-merged.txt"), "merged branch work\n").unwrap();
+    fs::write(worktree.join("merged.txt"), "merged branch work\n").unwrap();
     commit_all(&worktree, "terminal owner branch work");
     let status = Command::new("git")
         .current_dir(&worktree)
@@ -713,10 +684,8 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
         .status()
         .unwrap();
     assert!(status.success());
-    for args in [
-        vec!["merge", "--squash", &branch],
-        vec!["commit", "-m", &format!("Squash merge {branch} into main")],
-    ] {
+    // `atelier merge` integrates with a merge commit (atelier-jnrh).
+    for args in [vec!["merge", "--no-ff", "--no-edit", &branch]] {
         let status = Command::new("git")
             .current_dir(dir.path())
             .args(&args)
@@ -1021,21 +990,16 @@ fn test_prune_rechecks_late_recorded_owner_association() {
     );
 }
 
-/// Gives `issue_id` a pushed `task/<id>` owner branch whose work is
-/// squash-merged into main. Returns the bare remote (keep it alive) and the
-/// branch name.
+/// Gives `issue_id` a pushed `task/<id>` owner branch whose work is merged
+/// into main with a merge commit, as `atelier merge` integrates. Returns the
+/// bare remote (keep it alive) and the branch name.
 fn merged_pushed_owner_branch(dir: &Path, issue_id: &str) -> (tempfile::TempDir, String) {
-    // Historical squash integration remains prunable when its policy says so.
-    let policy = dir.join(".atelier/workflow.yaml");
-    fs::write(
-        &policy,
-        fs::read_to_string(&policy).unwrap().replace(
-            "base_branch: main\n",
-            "base_branch: main\n  merge_strategy: squash\n",
-        ),
-    )
-    .unwrap();
-    commit_all(dir, "historical squash policy");
+    pushed_owner_branch(dir, issue_id, false)
+}
+
+/// A pushed `task/<id>` owner branch merged into main with a merge commit,
+/// or squash-merged when `squash`.
+fn pushed_owner_branch(dir: &Path, issue_id: &str, squash: bool) -> (tempfile::TempDir, String) {
     let remote = tempdir().unwrap();
     let branch = format!("task/{issue_id}");
     let git = |args: &[&str]| {
@@ -1054,15 +1018,51 @@ fn merged_pushed_owner_branch(dir: &Path, issue_id: &str) -> (tempfile::TempDir,
     commit_all(dir, "owner branch work");
     git(&["push", "-q", "-u", "origin", &branch]);
     git(&["switch", "-q", "main"]);
-    git(&["merge", "-q", "--squash", &branch]);
-    git(&[
-        "commit",
-        "-q",
-        "-m",
-        &format!("Squash merge {branch} into main"),
-    ]);
+    if squash {
+        git(&["merge", "-q", "--squash", &branch]);
+        git(&[
+            "commit",
+            "-q",
+            "-m",
+            &format!("Squash merge {branch} into main"),
+        ]);
+    } else {
+        git(&["merge", "-q", "--no-ff", "--no-edit", &branch]);
+    }
     git(&["push", "-q"]);
     (remote, branch)
+}
+
+/// `atelier merge` always creates a merge commit (atelier-jnrh), so prune no
+/// longer takes a squash merge as integration, even under a policy that
+/// still names `merge_strategy: squash`.
+#[test]
+fn test_prune_keeps_a_squash_merged_owner_branch() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Squashed owner"]);
+    assert!(success, "{stderr}");
+    let issue_id = issue_ref(dir.path(), 1);
+    make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
+    let policy = dir.path().join(".atelier/workflow.yaml");
+    fs::write(
+        &policy,
+        fs::read_to_string(&policy).unwrap().replace(
+            "base_branch: main\n",
+            "base_branch: main\n  merge_strategy: squash\n",
+        ),
+    )
+    .unwrap();
+    commit_all(dir.path(), "old owner record under a squash policy");
+    let (_remote, branch) = pushed_owner_branch(dir.path(), &issue_id, true);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stdout.contains(&format!("protected branch {branch}"))
+            && stdout.contains("contains commits not integrated into owner base main"),
+        "{stdout}"
+    );
 }
 
 fn branch_exists(dir: &Path, branch: &str) -> bool {
@@ -1302,10 +1302,10 @@ fn test_root_help_lists_every_command_and_lifecycle_common_commands() {
             "atelier issue show <id>",
             "atelier start <id>",
             "atelier evidence record --target issue/<id> --kind test -- <command>",
-            "atelier issue transition <id> close --reason \"...\"",
+            "atelier review request <id>",
             "atelier review approve <id> --identity <name> \"...\"",
             "atelier land",
-            "atelier merge <id> --check",
+            "atelier merge <id>",
         ],
         "{stdout}"
     );
@@ -1522,8 +1522,13 @@ fn test_mission_help_exposes_close_with_reason() {
     let (success, stdout, stderr) = run_atelier_raw(dir.path(), &["issue", "transition", "--help"]);
     assert!(success, "mission close help failed: {stderr}");
     assert!(stdout.contains("--reason <CLOSE_REASON>"));
-    assert!(stdout.contains("Close reason used by transitions that require it"));
+    assert!(
+        stdout.contains("The Report a transition that requires one stores, such as a supersede reason or a mission's close report"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("File holding the whole Report"), "{stdout}");
     assert!(!stdout.contains("closeout"));
+    assert!(!stdout.contains("Close Reason"), "{stdout}");
 }
 
 #[test]
@@ -1918,8 +1923,11 @@ fn test_issue_transition_options_and_blocked_attempts_do_not_write() {
     let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
     let git_before = git_status_short(dir.path());
     let (success, stdout, stderr) =
-        run_atelier(dir.path(), &["issue", "transition", &issue_id, "close"]);
-    assert!(!success, "close should be blocked by its required fields");
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "supersede"]);
+    assert!(
+        !success,
+        "supersede should be blocked by its required fields"
+    );
     assert!(stdout.contains("Blockers"), "{stdout}");
     assert!(
         stderr.contains("missing required field close_reason"),
@@ -2187,6 +2195,12 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Validator blocked item");
     move_epic_directly_to_ready(dir.path(), &issue_id);
+    // A policy from before atelier-jnrh, whose work still closes.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        starter_with_work_close(),
+    )
+    .unwrap();
     add_close_validator(dir.path(), "git.worktree_clean");
 
     let (success, _, stderr) =
@@ -2244,6 +2258,9 @@ fn test_issue_transition_blocked_attempt_leaves_canonical_records_unchanged() {
     );
 }
 
+/// A done-category transition (here supersede, since merge marks work done)
+/// writes only the record: it commits nothing, switches no branch, and the
+/// item leaves current work.
 #[test]
 fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
     let dir = tempdir().unwrap();
@@ -2281,35 +2298,38 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
             "issue",
             "transition",
             &issue_id,
-            "close",
+            "supersede",
             "--reason",
             "done",
         ],
     );
-    assert!(success, "issue transition close failed: {stderr}");
+    assert!(success, "issue transition supersede failed: {stderr}");
     assert!(
-        close_out.contains("Applied transition close"),
+        close_out.contains("Applied transition supersede"),
         "{close_out}"
     );
-    assert!(close_out.contains("To:       done"), "{close_out}");
+    assert!(close_out.contains("To:       superseded"), "{close_out}");
     assert_eq!(
         git_rev_parse(dir.path(), "HEAD"),
         head_before,
-        "close must not commit"
+        "supersede must not commit"
     );
     assert_eq!(
         git_current_branch(dir.path()),
         branch_before,
-        "close must not switch branches"
+        "supersede must not switch branches"
     );
     assert_eq!(
         git_status_short(dir.path()).trim(),
         format!("M .atelier/issues/{issue_id}.md"),
-        "close must write only the issue record"
+        "supersede must write only the issue record"
     );
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
-    assert!(issue_text.contains("status: \"done\""), "{issue_text}");
+    assert!(
+        issue_text.contains("status: \"superseded\""),
+        "{issue_text}"
+    );
 
     let (success, status_out, stderr) = run_atelier(dir.path(), &["status"]);
     assert!(success, "status failed: {stderr}");
@@ -2317,10 +2337,7 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
         status_out.contains("\nCurrent Work\n------------\n(none)\n"),
         "{status_out}"
     );
-    assert!(
-        issue_text.contains("## Close Reason\n\ndone"),
-        "{issue_text}"
-    );
+    assert!(issue_text.contains("## Report\n\ndone"), "{issue_text}");
 }
 
 #[test]
@@ -2502,8 +2519,10 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
-    // Close needs only its reason, so it is allowed and names the flag.
-    assert!(options_out.contains("close: allowed"), "{options_out}");
+    // Supersede needs only its reason, so it is allowed and names the flag.
+    // Work has no close: merge marks it done (atelier-jnrh).
+    assert!(options_out.contains("supersede: allowed"), "{options_out}");
+    assert!(!options_out.contains("close"), "{options_out}");
     assert!(
         options_out.contains("  Requirements: needs --reason"),
         "{options_out}"
@@ -2511,11 +2530,13 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(options_out.contains("  Decision: allowed"), "{options_out}");
     assert!(options_out.contains("Description"), "{options_out}");
     assert!(
-        options_out.contains("Done claim; commit it on the work branch before review."),
+        options_out.contains(
+            "Retire work that is no longer needed. Work is done when atelier merge integrates it."
+        ),
         "{options_out}"
     );
     assert!(options_out.contains(&format!(
-        "atelier issue transition {issue_id} close --reason \"...\""
+        "atelier issue transition {issue_id} supersede --reason \"...\""
     )));
 }
 

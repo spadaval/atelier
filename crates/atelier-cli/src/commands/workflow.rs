@@ -40,24 +40,22 @@ impl IssueTransitionOption {
     }
 }
 
-/// Where a transition's Close Reason comes from: `--reason` sets the
-/// Outcome, `--reason-file` gives the whole report.
+/// Where a transition's Report comes from: `--reason` gives it in one line,
+/// `--reason-file` from a file.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CloseReasonInput<'a> {
     pub reason: Option<&'a str>,
     pub reason_file: Option<&'a Path>,
 }
 
-/// The Close Reason a transition checks and stores (atelier-sfsq): a
-/// `--reason-file`'s whole text, a `--reason` Outcome, or, with neither, the
-/// record's own Close Reason, so a report written in the record body needs
-/// no flag. A `--reason` Outcome keeps the report parts the record already
-/// holds only when the transition requires a report; a supersede drops a
-/// report written for a close (atelier-ypks).
+/// The Report a transition checks and stores: a `--reason-file`'s whole
+/// text, a `--reason`, or, with neither, the record's own Report, so a
+/// report written in the record body needs no flag. A flag replaces the
+/// whole Report, so a supersede drops a report written earlier
+/// (atelier-ypks).
 fn effective_close_reason(
     existing: Option<&str>,
     input: CloseReasonInput<'_>,
-    keeps_report: bool,
 ) -> Result<Option<String>> {
     let existing = existing.map(str::trim).filter(|text| !text.is_empty());
     Ok(match (input.reason, input.reason_file) {
@@ -67,20 +65,9 @@ fn effective_close_reason(
                 .with_context(|| format!("cannot read --reason-file {}", path.display()))?;
             Some(text.trim().to_string())
         }
-        (Some(outcome), None) => Some(match existing.filter(|_| keeps_report) {
-            Some(existing) => atelier_core::CloseReport::with_outcome(existing, outcome),
-            None => outcome.trim().to_string(),
-        }),
+        (Some(reason), None) => Some(reason.trim().to_string()),
         (None, None) => existing.map(str::to_string),
     })
-}
-
-/// Whether the transition requires any implementer report part.
-fn requires_report(transition: &TransitionDefinition) -> bool {
-    transition
-        .required_fields
-        .iter()
-        .any(|field| atelier_core::ReportPart::from_field(field).is_some())
 }
 
 /// Applies a workflow transition: checks required fields and read-only
@@ -106,13 +93,13 @@ pub fn transition_issue(
     ensure_transition_available(&before, transition_name, transition)?;
     let existing = index
         .issue_record(&issue_id)
-        .and_then(|record| record.sections.close_reason.as_deref());
-    let close_reason = effective_close_reason(existing, reason, requires_report(transition))?;
+        .and_then(|record| record.sections.report.as_deref());
+    let close_reason = effective_close_reason(existing, reason)?;
     let close_reason = close_reason.as_deref();
     if let Some(reason) = close_reason {
         atelier_records::validate_issue_section_text(
             &issue_id,
-            atelier_records::IssueSectionName::CloseReason,
+            atelier_records::IssueSectionName::Report,
             reason,
         )?;
     }
@@ -152,10 +139,10 @@ pub fn transition_issue(
         .map(|text| atelier_core::CloseReport::parse(text).outcome)
     {
         // Policy lets no transition leave a done status, so an item reopens
-        // only by a hand edit that keeps its old Close Reason. Say which one
-        // this close stored (atelier-ypks).
+        // only by a hand edit that keeps its old Report. Say which one this
+        // transition stored (atelier-ypks).
         let first = outcome.lines().next().unwrap_or_default();
-        println!("Close Reason: kept from the record: {first}");
+        println!("Report: kept from the record: {first}");
     }
     let mut next = vec![FooterAction::new(
         "Inspect this issue",
@@ -213,7 +200,7 @@ fn handoff_steps(index: &RecordIndex, issue: &Issue) -> Result<Vec<FooterAction>
     Ok(vec![
         FooterAction::new("Check handoff", format!("atelier land {owner_id}")),
         FooterAction::new(
-            "Check completed-owner merge readiness",
+            "Check merge readiness",
             format!("atelier merge {owner_id} --check"),
         ),
     ])
@@ -377,7 +364,7 @@ pub fn issue_transition_options(
     ensure_transitionable_status(&policy, &issue)?;
     let existing = index
         .issue_record(&issue_id)
-        .and_then(|record| record.sections.close_reason.as_deref());
+        .and_then(|record| record.sections.report.as_deref());
     let mut options = Vec::new();
     for (name, transition) in policy.transitions_from_status(&issue.issue_type, &issue.status)? {
         let (blockers, validator_results) =
@@ -498,7 +485,7 @@ pub(crate) fn apply_transition(
         .map(str::trim)
         .filter(|reason| closing && !reason.is_empty())
     {
-        record.sections.close_reason = Some(reason.to_string());
+        record.sections.report = Some(reason.to_string());
     }
 }
 
@@ -684,26 +671,19 @@ fn ensure_transitionable_status(policy: &WorkflowPolicy, issue: &Issue) -> Resul
 }
 
 /// Each required field the caller has not given, as its flag and the failure.
+/// `close_reason` is the only one: a non-empty Report (atelier-jnrh).
 fn required_field_failures(
     transition: &TransitionDefinition,
     close_reason: Option<&str>,
 ) -> Result<Vec<(&'static str, String)>> {
-    let report = atelier_core::CloseReport::parse(close_reason.unwrap_or_default());
     let mut failures = Vec::new();
-    let mut missing_parts = Vec::new();
     for field in &transition.required_fields {
-        if let Some(part) = atelier_core::ReportPart::from_field(field) {
-            if report.part(part).is_none() {
-                missing_parts.push(part);
-            }
-            continue;
-        }
         match field.as_str() {
             "close_reason" => {
-                if report.outcome.is_empty() {
+                if close_reason.is_none_or(|report| report.trim().is_empty()) {
                     failures.push((
                         "--reason",
-                        "missing required field close_reason; rerun with `--reason \"...\"`, or write the Outcome at the top of the record's Close Reason"
+                        "missing required field close_reason; rerun with `--reason \"...\"`, or write it in the record's `## Report` section"
                             .to_string(),
                     ));
                 }
@@ -713,49 +693,14 @@ fn required_field_failures(
             }
         }
     }
-    // One failure names every missing part, so each flag adds one blocker. A
-    // report file also carries the Outcome, so it stands in for `--reason`.
-    if !missing_parts.is_empty() {
-        let outcome_missing = failures.iter().any(|(flag, _)| *flag == "--reason");
-        failures.retain(|(flag, _)| *flag != "--reason");
-        let titles = missing_parts
-            .iter()
-            .map(|part| part.title())
-            .collect::<Vec<_>>();
-        let headings = missing_parts
-            .iter()
-            .map(|part| format!("`### {}`", part.title()))
-            .collect::<Vec<_>>();
-        failures.push((
-            "--reason-file",
-            format!(
-                "missing {}report {} {}; add {} to the record's Close Reason (write `None.` when there is nothing to report), or pass the whole report with `--reason-file <file>`",
-                if outcome_missing {
-                    "required field close_reason and "
-                } else {
-                    ""
-                },
-                if titles.len() == 1 { "part" } else { "parts" },
-                titles.join(", "),
-                if outcome_missing {
-                    format!("the Outcome and {}", headings.join(", "))
-                } else {
-                    headings.join(", ")
-                }
-            ),
-        ));
-    }
     Ok(failures)
 }
 
-/// The command that runs the transition, with the flags its missing
-/// required fields need. A report file carries the Outcome too, so it
-/// stands in for `--reason`.
+/// The command that runs the transition, with the flag its missing Report
+/// needs.
 fn transition_command(issue_id: &str, transition_name: &str, missing: &[&str]) -> String {
     let mut command = format!("atelier issue transition {issue_id} {transition_name}");
-    if missing.contains(&"--reason-file") {
-        command.push_str(" --reason-file <file>");
-    } else if missing.contains(&"--reason") {
+    if missing.contains(&"--reason") {
         command.push_str(" --reason \"...\"");
     }
     command
@@ -957,7 +902,7 @@ state_root = ".atelier"
         assert_eq!(stored.issue.status, "superseded");
         assert!(stored.issue.closed_at.is_some());
         assert_eq!(
-            stored.sections.close_reason.as_deref(),
+            stored.sections.report.as_deref(),
             Some("Replaced by a smaller mission.")
         );
     }
@@ -990,6 +935,6 @@ state_root = ".atelier"
             .unwrap();
         assert_eq!(stored.issue.status, "in_progress");
         assert!(stored.issue.closed_at.is_none());
-        assert_eq!(stored.sections.close_reason, None);
+        assert_eq!(stored.sections.report, None);
     }
 }

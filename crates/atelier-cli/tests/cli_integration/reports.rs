@@ -1,5 +1,7 @@
-//! The implementer report (atelier-sfsq): policy-required parts of Close
-//! Reason, read from the record body or a file at the close transition.
+//! The Report section (atelier-jnrh): what a transition that requires
+//! `close_reason` records, read from the record body or a flag. Atelier
+//! requires only a non-empty Report; the implementer report's parts are
+//! Agent Factory guidance.
 
 use super::*;
 
@@ -17,22 +19,11 @@ fn refused(dir: &Path, args: &[&str]) -> String {
     format!("{stdout}{stderr}")
 }
 
-/// A started work item under a policy whose work `close` requires every
-/// report part.
-fn started_item(dir: &Path) -> String {
-    init_atelier(dir);
-    let path = dir.join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&path).unwrap();
-    let close = "        required_fields: [close_reason]\n        description: Done claim;";
-    assert!(policy.contains(close), "{policy}");
-    fs::write(
-        &path,
-        policy.replace(
-            close,
-            "        required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]\n        description: Done claim;",
-        ),
-    )
-    .unwrap();
+/// A started work item under the starter policy.
+fn started_item(dir: &Path, title: &str) -> String {
+    if !dir.join(".atelier").exists() {
+        init_atelier(dir);
+    }
     let id = ok(
         dir,
         &[
@@ -41,7 +32,7 @@ fn started_item(dir: &Path) -> String {
             "-q",
             "--body",
             "## Goal\n\nG\n\n## Done when\n\nD",
-            "Work",
+            title,
         ],
     )
     .trim()
@@ -50,88 +41,47 @@ fn started_item(dir: &Path) -> String {
     id
 }
 
-fn close_reason(dir: &Path, id: &str) -> String {
+fn report(dir: &Path, id: &str) -> String {
     let record = read_canonical_record(dir, "issues", id);
     record
-        .split("## Close Reason\n\n")
+        .split("## Report\n\n")
         .nth(1)
         .unwrap_or_default()
         .trim()
         .to_string()
 }
 
+fn with_report(dir: &Path, id: &str, heading: &str) {
+    edit_canonical_issue(dir, id, |markdown| {
+        format!("{}\n\n## {heading}\n\n{FULL_REPORT}\n", markdown.trim_end())
+    });
+}
+
 #[test]
-fn close_refuses_a_missing_report_part_and_names_the_recovery() {
+fn supersede_refuses_without_a_report_and_names_the_flag() {
     let dir = tempdir().unwrap();
-    let id = started_item(dir.path());
-    let output = refused(
-        dir.path(),
-        &["issue", "transition", &id, "close", "--reason", "Done"],
-    );
+    let id = started_item(dir.path(), "Work");
+    let output = refused(dir.path(), &["issue", "transition", &id, "supersede"]);
     assert!(
-        output.contains("missing report parts Deviations, Decisions, Surprises, Open items; add `### Deviations`, `### Decisions`, `### Surprises`, `### Open items` to the record's Close Reason (write `None.` when there is nothing to report), or pass the whole report with `--reason-file <file>`"),
+        output.contains("missing required field close_reason; rerun with `--reason \"...\"`, or write it in the record's `## Report` section"),
         "{output}"
     );
     let options = ok(dir.path(), &["issue", "transition", &id]);
     assert!(
         options.contains(&format!(
-            "atelier issue transition {id} close --reason-file <file>"
+            "atelier issue transition {id} supersede --reason \"...\""
         )),
         "{options}"
     );
-    let quiet = ok(dir.path(), &["issue", "transition", &id, "-q"]);
-    assert!(
-        quiet.lines().any(|name| name == "close"),
-        "close is allowed with a flag: {quiet}"
-    );
-
-    // An empty part is a missing part.
-    let file = dir.path().join("report.md");
-    fs::write(&file, FULL_REPORT.replace("- atelier-x follow-up", "")).unwrap();
-    let output = refused(
-        dir.path(),
-        &[
-            "issue",
-            "transition",
-            &id,
-            "close",
-            "--reason-file",
-            file.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        output.contains("missing report part Open items;"),
-        "{output}"
-    );
-    assert!(!output.contains("Deviations,"), "{output}");
-
-    // With no Outcome, the file stands in for --reason too.
-    fs::write(&file, FULL_REPORT.replace("Shipped the view.\n\n", "")).unwrap();
-    let output = refused(
-        dir.path(),
-        &[
-            "issue",
-            "transition",
-            &id,
-            "close",
-            "--reason-file",
-            file.to_str().unwrap(),
-        ],
-    );
-    assert!(
-        output.contains("missing required field close_reason"),
-        "{output}"
-    );
-    assert_eq!(
-        read_canonical_record(dir.path(), "issues", &id).contains("status: \"done\""),
-        false
-    );
+    // The work workflow has no close: merge marks work done.
+    assert!(!options.contains("close"), "{options}");
+    assert!(read_canonical_record(dir.path(), "issues", &id).contains("status: \"in_progress\""));
 }
 
 #[test]
-fn close_reads_the_report_from_a_file_or_the_record_body() {
+fn supersede_reads_the_report_from_a_file_or_the_record_body() {
     let dir = tempdir().unwrap();
-    let id = started_item(dir.path());
+    let id = started_item(dir.path(), "Work");
     let file = dir.path().join("report.md");
     fs::write(&file, format!("\n{FULL_REPORT}\n\n")).unwrap();
     ok(
@@ -140,82 +90,51 @@ fn close_reads_the_report_from_a_file_or_the_record_body() {
             "issue",
             "transition",
             &id,
-            "close",
+            "supersede",
             "--reason-file",
             file.to_str().unwrap(),
         ],
     );
-    assert_eq!(close_reason(dir.path(), &id), FULL_REPORT);
+    assert_eq!(report(dir.path(), &id), FULL_REPORT);
     let show = ok(dir.path(), &["issue", "show", &id]);
     assert!(
         show.contains("Closed ") && show.contains(": Shipped the view."),
         "{show}"
     );
 
-    // A report written in the record body needs no flag.
-    let second = ok(
-        dir.path(),
-        &[
-            "issue",
-            "create",
-            "-q",
-            "--body",
-            "## Goal\n\nG\n\n## Done when\n\nD",
-            "Second",
-        ],
-    )
-    .trim()
-    .to_string();
-    ok(dir.path(), &["issue", "transition", &second, "start"]);
-    edit_canonical_issue(dir.path(), &second, |markdown| {
-        format!(
-            "{}\n\n## Close Reason\n\n{FULL_REPORT}\n",
-            markdown.trim_end()
-        )
-    });
+    // A Report written in the record body needs no flag.
+    let second = started_item(dir.path(), "Second");
+    with_report(dir.path(), &second, "Report");
     ok(dir.path(), &["check"]);
     let options = ok(dir.path(), &["issue", "transition", &second]);
     assert!(
         options.contains(&format!(
-            "Command: atelier issue transition {second} close\n"
+            "Command: atelier issue transition {second} supersede\n"
         )),
         "{options}"
     );
-    ok(dir.path(), &["issue", "transition", &second, "close"]);
-    assert_eq!(close_reason(dir.path(), &second), FULL_REPORT);
+    ok(dir.path(), &["issue", "transition", &second, "supersede"]);
+    assert_eq!(report(dir.path(), &second), FULL_REPORT);
+}
+
+/// A record an older Atelier wrote keeps its `## Close Reason` heading until
+/// it is next written, and is read as the Report.
+#[test]
+fn a_close_reason_heading_is_read_as_the_report_and_rewritten_as_report() {
+    let dir = tempdir().unwrap();
+    let id = started_item(dir.path(), "Work");
+    with_report(dir.path(), &id, "Close Reason");
+    ok(dir.path(), &["check"]);
+    ok(dir.path(), &["issue", "transition", &id, "supersede"]);
+    let record = read_canonical_record(dir.path(), "issues", &id);
+    assert!(!record.contains("Close Reason"), "{record}");
+    assert_eq!(report(dir.path(), &id), FULL_REPORT);
 }
 
 #[test]
-fn reason_replaces_only_the_outcome_of_a_written_report() {
+fn reason_and_reason_file_conflict_and_reason_replaces_the_whole_report() {
     let dir = tempdir().unwrap();
-    let id = started_item(dir.path());
-    edit_canonical_issue(dir.path(), &id, |markdown| {
-        format!(
-            "{}\n\n## Close Reason\n\n{FULL_REPORT}\n",
-            markdown.trim_end()
-        )
-    });
-    ok(
-        dir.path(),
-        &[
-            "issue",
-            "transition",
-            &id,
-            "close",
-            "--reason",
-            "Shipped it differently.",
-        ],
-    );
-    assert_eq!(
-        close_reason(dir.path(), &id),
-        FULL_REPORT.replace("Shipped the view.", "Shipped it differently.")
-    );
-}
-
-#[test]
-fn reason_and_reason_file_conflict_and_supersede_needs_only_the_outcome() {
-    let dir = tempdir().unwrap();
-    let id = started_item(dir.path());
+    let id = started_item(dir.path(), "Work");
     let file = dir.path().join("report.md");
     fs::write(&file, FULL_REPORT).unwrap();
     let output = refused(
@@ -224,7 +143,7 @@ fn reason_and_reason_file_conflict_and_supersede_needs_only_the_outcome() {
             "issue",
             "transition",
             &id,
-            "close",
+            "supersede",
             "--reason",
             "x",
             "--reason-file",
@@ -238,7 +157,7 @@ fn reason_and_reason_file_conflict_and_supersede_needs_only_the_outcome() {
             "issue",
             "transition",
             &id,
-            "close",
+            "supersede",
             "--reason-file",
             "missing.md",
         ],
@@ -247,6 +166,8 @@ fn reason_and_reason_file_conflict_and_supersede_needs_only_the_outcome() {
         output.contains("cannot read --reason-file missing.md"),
         "{output}"
     );
+    // A report written for review gives way to the supersede reason.
+    with_report(dir.path(), &id, "Report");
     ok(
         dir.path(),
         &[
@@ -258,13 +179,13 @@ fn reason_and_reason_file_conflict_and_supersede_needs_only_the_outcome() {
             "Not needed after all.",
         ],
     );
-    assert_eq!(close_reason(dir.path(), &id), "Not needed after all.");
+    assert_eq!(report(dir.path(), &id), "Not needed after all.");
 }
 
 #[test]
-fn a_reclose_with_no_flag_says_which_close_reason_it_kept() {
+fn a_retransition_with_no_flag_says_which_report_it_kept() {
     let dir = tempdir().unwrap();
-    let id = started_item(dir.path());
+    let id = started_item(dir.path(), "Work");
     let file = dir.path().join("report.md");
     fs::write(&file, FULL_REPORT).unwrap();
     let output = ok(
@@ -273,15 +194,15 @@ fn a_reclose_with_no_flag_says_which_close_reason_it_kept() {
             "issue",
             "transition",
             &id,
-            "close",
+            "supersede",
             "--reason-file",
             file.to_str().unwrap(),
         ],
     );
-    assert!(!output.contains("Close Reason:"), "{output}");
+    assert!(!output.contains("Report:"), "{output}");
 
     // No transition leaves done, so an item reopens only by a hand edit that
-    // keeps the old Close Reason; the next close names the one it kept.
+    // keeps the old Report; the next transition names the one it kept.
     edit_canonical_issue(dir.path(), &id, |markdown| {
         replace_front_matter_scalar(&markdown, "status", "in_progress")
             .lines()
@@ -290,34 +211,36 @@ fn a_reclose_with_no_flag_says_which_close_reason_it_kept() {
             .join("\n")
             + "\n"
     });
-    let output = ok(dir.path(), &["issue", "transition", &id, "close"]);
+    let output = ok(dir.path(), &["issue", "transition", &id, "supersede"]);
     assert!(
-        output.contains("Close Reason: kept from the record: Shipped the view.\n"),
+        output.contains("Report: kept from the record: Shipped the view.\n"),
         "{output}"
     );
-    assert_eq!(close_reason(dir.path(), &id), FULL_REPORT);
+    assert_eq!(report(dir.path(), &id), FULL_REPORT);
 }
 
+/// A policy from before atelier-jnrh that required each report part on its
+/// work `close` still loads, and its parts are read as a non-empty Report.
 #[test]
-fn supersede_reason_drops_a_report_written_for_a_close() {
+fn an_older_policys_report_parts_are_read_as_a_non_empty_report() {
     let dir = tempdir().unwrap();
-    let id = started_item(dir.path());
-    edit_canonical_issue(dir.path(), &id, |markdown| {
-        format!(
-            "{}\n\n## Close Reason\n\n{FULL_REPORT}\n",
-            markdown.trim_end()
-        )
-    });
+    init_atelier(dir.path());
+    let policy = starter_with_work_close().replace(
+        "        required_fields: [close_reason]\n        description: Done claim;",
+        "        required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]\n        description: Done claim;",
+    );
+    assert_ne!(policy, starter_with_work_close());
+    fs::write(dir.path().join(".atelier/workflow.yaml"), policy).unwrap();
+    let id = started_item(dir.path(), "Work");
+    let output = refused(dir.path(), &["issue", "transition", &id, "close"]);
+    assert!(
+        output.contains("missing required field close_reason"),
+        "{output}"
+    );
     ok(
         dir.path(),
-        &[
-            "issue",
-            "transition",
-            &id,
-            "supersede",
-            "--reason",
-            "Not needed after all.",
-        ],
+        &["issue", "transition", &id, "close", "--reason", "Done."],
     );
-    assert_eq!(close_reason(dir.path(), &id), "Not needed after all.");
+    assert_eq!(report(dir.path(), &id), "Done.");
+    assert!(read_canonical_record(dir.path(), "issues", &id).contains("status: \"done\""));
 }

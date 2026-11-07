@@ -673,19 +673,25 @@ fn start_issue_work(dir: &Path, issue_ref_value: &str) -> String {
     issue_id
 }
 
-fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
+/// Starts the issue, attaches passing evidence, and marks it done with
+/// `reason` as its Report, as `atelier merge` would when its branch merges
+/// (atelier-jnrh): the work workflow has no close transition.
+fn mark_done_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
     start_issue_work(dir, &issue_id);
     ensure_all_issue_completion_sections(dir);
     attach_issue_pass_evidence(dir, &issue_id);
+    let store = atelier_records::RecordStore::new(dir.join(".atelier"));
+    let mut record = store.load_issue_by_id(&issue_id).unwrap();
+    let now = chrono::Utc::now();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(now);
+    record.issue.updated_at = now;
+    record.sections.report = Some(reason.unwrap_or("done").to_string());
+    store.write_issue_atomic(&record).unwrap();
     if dir.join(".git").exists() {
-        commit_all(dir, &format!("ready to close {issue_id}"));
+        commit_all(dir, &format!("mark {issue_id} done"));
     }
-    let mut args = vec!["issue", "transition", &issue_id, "close"];
-    args.push("--reason");
-    args.push(reason.unwrap_or("done"));
-    let (success, _, stderr) = run_atelier(dir, &args);
-    assert!(success, "issue transition close failed: {stderr}");
     issue_id
 }
 
@@ -716,9 +722,22 @@ fn add_close_validator(dir: &Path, validator: &str) {
 const STARTER_WITH_BLOCKED_AND_REVIEW: &str =
     include_str!("../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml");
 
-/// Starter policy whose work `close` also requires passing evidence.
+/// The starter policy as it was before atelier-jnrh, with a work `close` that
+/// requires a Report and makes a parent close after its children.
+/// Repositories that have not migrated keep it, and it must keep working.
+fn starter_with_work_close() -> String {
+    let supersede = "      supersede:\n        from: [backlog, todo, in_progress]\n";
+    let close = "      close:\n        from: [in_progress]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n";
+    let policy =
+        atelier_workflow::STARTER_POLICY_YAML.replace(supersede, &format!("{close}{supersede}"));
+    assert_ne!(policy, atelier_workflow::STARTER_POLICY_YAML);
+    policy
+}
+
+/// The pre-atelier-jnrh starter policy, whose work `close` also requires
+/// passing evidence.
 fn write_evidence_gated_workflow(dir: &Path) {
-    write_evidence_gated_workflow_from(dir, atelier_workflow::STARTER_POLICY_YAML);
+    write_evidence_gated_workflow_from(dir, &starter_with_work_close());
 }
 
 /// `policy` with passing evidence also required by its work `close`.

@@ -24,10 +24,10 @@ const GLOBAL_OPTION_ORDER: usize = 1000;
   atelier issue show <id>
   atelier start <id>
   atelier evidence record --target issue/<id> --kind test -- <command>
-  atelier issue transition <id> close --reason \"...\"
+  atelier review request <id>
   atelier review approve <id> --identity <name> \"...\"
   atelier land
-  atelier merge <id> --check")]
+  atelier merge <id>")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)
@@ -127,8 +127,9 @@ enum ReviewCommands {
     /// reasons and stand-ins, Done when edits made after the start, the
     /// commits to review, earlier findings, dispositions and reviews,
     /// recorded proof, the working rules from policy, and the commands that
-    /// record the review. It never includes the author's notes or Close
-    /// Reason.
+    /// record the review. It never includes the author's notes or Report,
+    /// and it refuses while an open item it covers has an unticked Done when
+    /// line or an empty Report.
     Request {
         /// Branch owner, or an item of the owner's parent, to be reviewed
         id: String,
@@ -499,14 +500,12 @@ enum IssueCommands {
         /// To begin work, use `atelier start <id>`, which also creates and
         /// records the owner branch; `start` here only changes the record
         transition: Option<String>,
-        /// Close reason used by transitions that require it: the Outcome,
-        /// kept above any report parts the record's Close Reason already has
+        /// The Report a transition that requires one stores, such as a
+        /// supersede reason or a mission's close report; it replaces the
+        /// record's Report. With neither flag, the record's own Report is used
         #[arg(long = "reason", conflicts_with = "reason_file")]
         close_reason: Option<String>,
-        /// File holding the whole Close Reason: the Outcome, then report parts
-        /// as `### Deviations`, `### Decisions`, `### Surprises` and
-        /// `### Open items`. With neither flag, the record's own Close Reason
-        /// is used
+        /// File holding the whole Report
         #[arg(long)]
         reason_file: Option<std::path::PathBuf>,
         /// Show validator passes, action preflight detail, descriptions, and debug context
@@ -530,8 +529,8 @@ enum IssueCommands {
         #[arg(long)]
         issue_type: Option<String>,
         /// Replace the typed body sections, given as `## ` headings for the
-        /// record's type and checked like `atelier check`; Notes and Close
-        /// Reason are kept, and done records cannot be revised. Change
+        /// record's type and checked like `atelier check`; Notes and the
+        /// Report are kept, and done records cannot be revised. Change
         /// status with `atelier issue transition`
         #[arg(long)]
         body: Option<String>,

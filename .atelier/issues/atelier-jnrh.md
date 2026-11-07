@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:00.003526374+00:00"
 id: "atelier-jnrh"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-jnrh
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Do work in one order: tick Done when, review, and let merge mark it done"
-updated_at: "2026-11-07T06:05:08.285084692+00:00"
+updated_at: "2026-11-07T06:18:35.610701336+00:00"
 ---
 
 ## Goal

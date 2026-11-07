@@ -102,9 +102,12 @@ fn set_dependency_fixture_status(dir: &std::path::Path, issue_id: &str, status: 
     });
 }
 
+/// Work done statuses decide closure, not the status category: `done` stays
+/// a status work can reach, through the pre-atelier-jnrh `close`, while only
+/// `accepted` closes it.
 fn configure_dependency_fixture_terminal_status(dir: &std::path::Path) {
     let policy_path = dir.join(".atelier/workflow.yaml");
-    let policy = std::fs::read_to_string(&policy_path).unwrap();
+    let policy = starter_with_work_close();
     let policy = policy.replace(
         "  done:\n    category: done\n",
         "  done:\n    category: done\n  accepted:\n    category: done\n",

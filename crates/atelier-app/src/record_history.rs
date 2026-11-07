@@ -455,9 +455,11 @@ fn advances(record: &CanonicalIssueRecord, other: &str) -> bool {
         .any(|link| link.relation_type == "advances" && link.id == other)
 }
 
-/// A Done when edited after its item was started (atelier-r9hb): shown
-/// where closing is judged, so a criterion changed once work began is seen
-/// by whoever judges the work. It refuses nothing.
+/// A Done when whose text changed after its item was started (atelier-r9hb):
+/// shown where review is asked for and merge is judged, so a criterion
+/// changed once work began is seen by whoever judges the work, including
+/// after an approval, which record edits do not make stale. It refuses
+/// nothing.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DoneWhenEdit {
     pub issue: String,
@@ -475,13 +477,16 @@ pub enum Precedent {
     FailingReceipt(String),
 }
 
-/// Every edit to the Done when of `ids` that HEAD holds, made in a commit
-/// descending from one that started the item: moved its status into an
-/// `active` category (`in_progress` without a policy). Edits, starts,
-/// findings and receipts are ordered by Git ancestry, never by time, so
-/// work merged from another branch is judged where it was written. Merges
-/// are not read: the commit that made an edit is in HEAD's history itself.
-/// Recording an after-merge check's validation is not an edit.
+/// Every change to the text of the Done when of `ids` that HEAD holds and a
+/// commit that started the item does not: one that moved its status into an
+/// `active` category (`in_progress` without a policy). A change merged in
+/// from the base after the start counts, as does one made after approval
+/// (atelier-jnrh, finding atelier-l5fb). Ticking boxes changes no text, and
+/// neither does recording an after-merge check's validation. A merge counts
+/// as a change only where it differs from every parent, as when a conflict
+/// resolution writes new text; a clean merge brings in commits that are
+/// themselves listed. Changes, starts, findings and receipts are ordered by
+/// Git ancestry, never by time.
 pub fn done_when_edits(
     read: &mut ReadContext<'_>,
     policy: Option<&WorkflowPolicy>,
@@ -500,7 +505,7 @@ pub fn done_when_edits(
         record
             .sections
             .section(IssueSectionName::DoneWhen)
-            .map(|text| text.trim().to_string())
+            .map(str::to_string)
     };
     for id in ids {
         let path = Path::new(".atelier")
@@ -511,7 +516,6 @@ pub fn done_when_edits(
             "log",
             "--reverse",
             "--full-history",
-            "--no-merges",
             "--format=%H %P",
             &head,
             "--",
@@ -523,8 +527,8 @@ pub fn done_when_edits(
                 .or_else(|| retired_epic_at(read, commit, id))
         };
         let mut starts = Vec::new();
-        // Each edit, with its parent: an ancestor of the parent is a strict
-        // ancestor of the edit.
+        // Each change, with its first parent: an ancestor of the parent is a
+        // strict ancestor of the change.
         let mut changed = Vec::new();
         for line in commits.lines() {
             let mut parts = line.split_whitespace();
@@ -534,33 +538,41 @@ pub fn done_when_edits(
             let Some(after) = version(read, commit) else {
                 continue;
             };
-            let before = match parts.next() {
-                Some(parent) => version(read, parent).map(|record| (parent.to_string(), record)),
-                None => None,
-            };
-            if active(&after) && before.as_ref().is_none_or(|(_, record)| !active(record)) {
+            let parents = parts.map(str::to_string).collect::<Vec<_>>();
+            let mut befores = Vec::new();
+            for parent in &parents {
+                if let Some(record) = version(read, parent) {
+                    befores.push(record);
+                }
+            }
+            if active(&after) && befores.iter().all(|record| !active(record)) {
                 starts.push(commit.to_string());
             }
-            if let Some((parent, before)) = before {
-                let (before, after) = (done_when(&before), done_when(&after));
+            let after_text = done_when(&after);
+            // A parent without the record says nothing about a change.
+            let differs = |before: &CanonicalIssueRecord| {
+                let before_text = done_when(before);
                 // Ticking or carrying an after-merge check records its
                 // validation; it does not change what done means (ADR 0027).
-                let validated = matches!((&before, &after), (Some(before), Some(after))
+                let validated = matches!((&before_text, &after_text), (Some(before), Some(after))
                     if crate::after_merge::only_validated(before, after, index));
-                if before != after && !validated {
-                    changed.push((commit.to_string(), parent));
-                }
+                before_text.as_deref().map(crate::done_when::without_ticks)
+                    != after_text.as_deref().map(crate::done_when::without_ticks)
+                    && !validated
+            };
+            if !befores.is_empty() && befores.iter().all(differs) {
+                changed.push((commit.to_string(), parents[0].clone()));
             }
         }
         for (commit, parent) in changed {
-            let mut started = false;
+            let mut after_start = false;
             for start in &starts {
-                if read.ancestor(start, &parent)? {
-                    started = true;
+                if !read.ancestor(&commit, start)? {
+                    after_start = true;
                     break;
                 }
             }
-            if started {
+            if after_start {
                 let after = precedent(read, index, id, &parent)?;
                 edits.push(DoneWhenEdit {
                     issue: id.clone(),

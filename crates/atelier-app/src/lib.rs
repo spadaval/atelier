@@ -8,6 +8,7 @@ pub mod base_policy;
 pub mod committed_snapshot;
 pub mod criteria;
 pub mod decisions;
+pub mod done_when;
 pub mod epic_migration;
 pub mod evidence_freshness;
 pub mod git_freshness;

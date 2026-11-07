@@ -185,6 +185,26 @@ pub fn scope(index: &RecordIndex, owner: &str) -> Result<BTreeSet<String>> {
     Ok(ids)
 }
 
+/// The open work in `owner`'s scope that merging marks done, owner first:
+/// each item of the `work` workflow not yet in a done status, so a
+/// superseded child and an item an older Atelier closed are left as they are
+/// (atelier-jnrh). `review request` asks each for ticked Done when lines and
+/// a Report.
+pub fn open_work(index: &RecordIndex, policy: &WorkflowPolicy, owner: &str) -> Result<Vec<String>> {
+    let mut open = Vec::new();
+    let ids = scope(index, owner)?;
+    for id in std::iter::once(owner).chain(ids.iter().map(String::as_str).filter(|id| *id != owner))
+    {
+        let issue = index.require_issue(id)?;
+        if policy.merge_done_status(&issue.issue_type).is_some()
+            && !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
+        {
+            open.push(id.to_owned());
+        }
+    }
+    Ok(open)
+}
+
 /// Whether `edge`'s change to the review record at `path` leaves every
 /// event as it was: it adds a new event, sets or changes a finding's
 /// disposition and nothing else (ADR 0025), or removes a separate
@@ -1094,32 +1114,11 @@ fn evaluate_scope(
             }
         }
     }
-    let terminal = ids
-        .iter()
-        .filter_map(|id| index.get_issue(id))
-        .filter(|issue| {
-            !policy
-                .issue_status_is_terminal(&issue.issue_type, &issue.status)
-                .unwrap_or(false)
-        })
-        .map(|issue| issue.id)
-        .collect::<Vec<_>>();
     let mut nodes = Vec::new();
     if complete {
-        nodes.push(
-            gate(
-                owner,
-                "work.terminal",
-                terminal.is_empty(),
-                if terminal.is_empty() {
-                    "owner and all scoped work are closed".into()
-                } else {
-                    format!("open scoped work: {}", terminal.join(", "))
-                },
-                Vec::new(),
-            )
-            .with_gaps(terminal.iter().cloned().map(Gap::Open).collect()),
-        );
+        // Merge marks the scope's open work done, so its gates read the
+        // records with those marks and refuse only an open blocker
+        // (atelier-jnrh).
         let mut open = BTreeSet::new();
         // A superseded child's blockers do not hold its parent (atelier-lq42).
         for id in ids.iter().filter(|id| {
@@ -1307,12 +1306,7 @@ fn evaluate_scope(
         .with_gaps(gaps),
     );
     nodes.extend(completion_claims(
-        index,
-        read,
-        policy,
-        base_commit,
-        &claimed,
-        historical,
+        index, read, policy, &claimed, historical,
     )?);
     let checks = if let EvaluationKind::Merge(checks_root) = kind {
         crate::workflow_validation::evaluate_policy_transition(
@@ -1366,68 +1360,11 @@ fn evaluate_scope(
     Ok(unique.into_values().collect())
 }
 
-/// The fields the base's policy required on transitions into the issue's
-/// status when its current done claim was made. The policy is the base's at
-/// the point where the claim's commit and `base_commit` last met, never the
-/// branch's own, so a branch cannot weaken the policy around a claim; for a
-/// claim `base_commit` already holds, that is the commit that made it.
-/// `None` for an uncommitted claim, or one whose earlier policy cannot be
-/// read: it answers to the current policy.
-fn fields_required_when_claimed(
-    index: &RecordIndex,
-    read: &mut git::ReadContext<'_>,
-    base_commit: &str,
-    id: &str,
-) -> Result<Option<BTreeSet<String>>> {
-    let current = index
-        .issue_record(id)
-        .context("closed issue record missing")?;
-    let head = read.pinned("HEAD")?;
-    let path = std::path::Path::new(".atelier").join(atelier_records::issue_record_path(id));
-    let path_text = path.to_string_lossy().into_owned();
-    let commits = read.history(&["log", "--format=%H", &head, "--", &path_text])?;
-    // The oldest commit, walking back, whose record still makes this claim.
-    let mut introduced = None;
-    for commit in commits.lines() {
-        match read.issue_at(commit, id) {
-            Ok(before)
-                if crate::evidence_freshness::completion_claim_matches(&before, current, index) =>
-            {
-                introduced = Some(commit.to_string());
-            }
-            _ => break,
-        }
-    }
-    let Some(commit) = introduced else {
-        return Ok(None);
-    };
-    let Ok(base) = git::git_output(read.repo, &["merge-base", &commit, base_commit]) else {
-        return Ok(None);
-    };
-    let base = String::from_utf8(base)?.trim().to_string();
-    let Ok(then) = crate::base_policy::from_captured(read, &base) else {
-        return Ok(None);
-    };
-    let issue = &current.issue;
-    let Ok(workflow) = then.policy.workflow_for_issue_type(&issue.issue_type) else {
-        return Ok(None);
-    };
-    Ok(Some(
-        workflow
-            .transitions
-            .values()
-            .filter(|transition| transition.to == issue.status)
-            .flat_map(|transition| transition.required_fields.iter().cloned())
-            .collect(),
-    ))
-}
-
 /// Validate committed terminal claims without imposing session choreography.
 fn completion_claims(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     policy: &WorkflowPolicy,
-    base_commit: &str,
     ids: &BTreeSet<String>,
     historical: bool,
 ) -> Result<Vec<GateNode>> {
@@ -1480,7 +1417,6 @@ fn completion_claims(
     }
     // Terminal records can also be edited directly; retain the trusted
     // policy's completion checks when evaluating their committed claims.
-    let mut then_required = BTreeMap::<String, Option<BTreeSet<String>>>::new();
     for id in ids {
         let issue = index.require_issue(id)?;
         if !policy.issue_status_is_terminal(&issue.issue_type, &issue.status)? {
@@ -1492,45 +1428,20 @@ fn completion_claims(
             .values()
             .filter(|transition| transition.to == issue.status)
         {
-            let report = atelier_core::CloseReport::parse(
-                index
-                    .issue_record(id)
-                    .context("closed issue record missing")?
-                    .sections
-                    .close_reason
-                    .as_deref()
-                    .unwrap_or_default(),
-            );
+            let report = index
+                .issue_record(id)
+                .context("closed issue record missing")?
+                .sections
+                .report
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
             for field in &transition.required_fields {
+                // `close_reason` is the only required field: a non-empty
+                // Report (atelier-jnrh).
                 let present = match field.as_str() {
-                    "close_reason" => !report.outcome.is_empty(),
-                    // A report part the policy came to require after a claim
-                    // was made does not unsettle it (atelier-sfsq): neither a
-                    // claim the base already holds nor a child closed on its
-                    // parent's branch before the base's policy changed. A
-                    // held claim is judged by the policy of the commit that
-                    // made it, not skipped, so a claim one commit back on a
-                    // base with no upstream still needs its parts
-                    // (atelier-uxrs).
-                    field if atelier_core::ReportPart::from_field(field).is_some() => {
-                        let present = atelier_core::ReportPart::from_field(field)
-                            .and_then(|part| report.part(part))
-                            .is_some();
-                        if !present {
-                            if !then_required.contains_key(id) {
-                                let fields =
-                                    fields_required_when_claimed(index, read, base_commit, id)?;
-                                then_required.insert(id.clone(), fields);
-                            }
-                            if then_required[id]
-                                .as_ref()
-                                .is_some_and(|fields| !fields.contains(field))
-                            {
-                                continue;
-                            }
-                        }
-                        present
-                    }
+                    "close_reason" => !report.is_empty(),
                     other => bail!("unsupported required field '{other}'"),
                 };
                 nodes.push(gate(
@@ -1539,13 +1450,8 @@ fn completion_claims(
                     present,
                     if present {
                         format!("committed claim includes required field {field}")
-                    } else if let Some(part) = atelier_core::ReportPart::from_field(field) {
-                        format!(
-                            "committed claim is missing required field {field}; add a `### {}` subsection to {id}'s Close Reason on its work branch",
-                            part.title()
-                        )
                     } else {
-                        format!("committed claim is missing required field {field}")
+                        format!("committed claim is missing required field {field}, a Report")
                     },
                     Vec::new(),
                 ));

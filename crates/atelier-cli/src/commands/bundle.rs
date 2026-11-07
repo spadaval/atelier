@@ -166,7 +166,7 @@ fn fill_update_from_record(
             &record.issue.issue_type,
         )
         .with_context(|| format!("Invalid body for {client_ref}"))?;
-        if parsed.notes.is_some() || parsed.close_reason.is_some() {
+        if parsed.notes.is_some() || parsed.report.is_some() {
             bail!(
                 "Update {client_ref} replaces typed sections only; add notes with the notes field"
             );
@@ -174,7 +174,7 @@ fn fill_update_from_record(
     } else {
         let mut sections = record.clone();
         sections.sections.notes = None;
-        sections.sections.close_reason = None;
+        sections.sections.report = None;
         let rendered = atelier_records::render_issue_record(&sections)?;
         let (_, body) = atelier_records::split_document(&rendered)
             .with_context(|| format!("cannot read the body of {id}"))?;
