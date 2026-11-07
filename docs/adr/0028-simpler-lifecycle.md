@@ -201,94 +201,109 @@ the repository's merge checks.
 
 ## Supersession
 
-Each earlier decision named here is replaced as stated; everything else in
-that ADR stands.
+Each replacement takes effect when the item that builds its decision merges,
+named in parentheses below. Until then the earlier text describes current
+behaviour and still applies. Decision 9 applies now. Everything an entry does
+not name stands.
 
 **[ADR 0016](0016-canonical-work-branches-and-mission-integration.md).**
-Replaced (decision 5 above): the recorded branch base, which review target
-validation, sync and integration read instead of the current hierarchy,
-together with the reasoning of the rejected alternative "Recompute Review
-Targets From Parent Hierarchy"; and canonical `<issue_type>/<issue_id>` work
-branch names as a rule Atelier enforces. Stands: `base_branch`, work branches,
+Replaced (decision 5 above, atelier-md0v): the recorded branch base, and
+canonical `<issue_type>/<issue_id>` work branch names as a rule Atelier
+enforces. The conclusion of the rejected alternative "Recompute Review
+Targets From Parent Hierarchy", that the recorded base is the target, goes
+with the recorded base; whether a target is recomputed from the hierarchy
+instead is open under decision 5. Stands: `base_branch`, work branches,
 opt-in mission integration branches, mission scope as direct `advances` links
 plus descendants, and domain names for starter workflows.
 
 **[ADR 0019](0019-verified-repo-native-tracker.md).**
 
-- Decision 2: evidence is no longer a guarded invariant, since receipts gate
-  nothing; "a current approval from a non-author" becomes a current
-  independent approval, where current means no code changed since it and the
-  reviewer's identity is recorded but not compared with the Git authors; "a
-  disposition for every finding" becomes a decision for each deferred or
-  dismissed finding. Atelier now enforces two steps of one order: `review
-  request` refuses while a Done when line is unticked, and `merge` marks the
-  issue done. Valid records are guarded when written.
-- Decision 3: `start` no longer records a branch base; `merge` also marks the
-  issue done; a change with no issue merges without `start`.
+- Decision 2: no gate reads evidence receipts (atelier-md0v), though a
+  receipt stays tied to a commit with an explicit result and command capture
+  still refuses uncommitted code. "A current approval from a non-author"
+  becomes a current independent approval, where current means no code changed
+  since it (atelier-3jdm) and the reviewer's identity is recorded but not
+  compared with the Git authors (atelier-md0v). "A disposition for every
+  finding" becomes a decision for each deferred or dismissed finding
+  (atelier-md0v). Atelier enforces two steps of one order: `review request`
+  refuses while a Done when line is unticked, and `merge` marks the issue
+  done (atelier-jnrh). That narrows "Statuses, transitions, graph shape, and
+  planning depth are agent-owned" for those two steps. Valid records are
+  guarded when written (atelier-ilba).
+- Decision 3: `start` no longer records a branch base (atelier-md0v); `merge`
+  also marks the issue done (atelier-jnrh); a change with no issue merges
+  without `start` (atelier-4nsl). Whether "Atelier never creates commits"
+  still holds as written is open (decision 2 above).
 - Decision 4: the done claim is no longer committed on the work branch and
   reviewed with the code, and merging writes the done state, so "merging
-  writes no tracker state" goes. Its freshness rule, under which record-only
-  commits keep an approval current by kind and a change to acceptance
-  criteria makes it stale, is replaced by decision 1 above. Stands: the base
-  shows an item done exactly when its code is merged, a clean merge of the
-  base keeps an approval current, and `land` examines only what a change can
-  affect, though it no longer refuses work in progress.
-- Decision 6: append-only applies only to records on the base, and a `fix_now`
-  finding records no disposition.
+  writes no tracker state" goes (atelier-jnrh). Its freshness rule, under
+  which record-only commits keep an approval current by kind and a change to
+  acceptance criteria makes it stale, is replaced by decision 1 above
+  (atelier-3jdm). Stands: the base shows an item done exactly when its code
+  is merged, a clean merge of the base keeps an approval current, and `land`
+  examines only what a change can affect, though it no longer refuses work in
+  progress (atelier-md0v).
+- Decision 6: append-only applies only to records on the base
+  (atelier-ilba), and a `fix_now` finding records no disposition
+  (atelier-md0v).
 - Decisions 1, 5 and 7 stand.
 
 **[ADR 0021](0021-parent-issues-replace-epics.md).** Decision 2: the parent
 no longer closes after every child is terminal, and the starter policy's
-`close` no longer runs `work.terminal`, since merge marks work done (how a
-parent and its children are marked done is open, decision 2 above); the
-branch name `<issue_type>/<parent-id>` is no longer a rule. Stands: no epic
-type, the parent owns the branch its children work on, superseding a parent
-retires its open children, and decisions 1, 3, 4 and 5.
+`close` no longer runs `work.terminal`, since merge marks work done
+(atelier-jnrh; how a parent and its children are marked done is open,
+decision 2 above); the branch name `<issue_type>/<parent-id>` is no longer a
+rule (atelier-md0v). Stands: no epic type, the parent owns the branch its
+children work on, superseding a parent retires its open children, and
+decisions 1, 3, 4 and 5.
 
 **[ADR 0025](0025-findings-carry-their-disposition.md).**
 
 - Decision 1: `fix_now` is no longer a disposition with a resolution commit;
-  the approval that follows the finding resolves it. The field stays for
-  `defer` and `no_action`.
-- Decision 2: append-only applies only once a review record is on the base,
-  and approval freshness no longer shares the append-only rule, since it
-  reads no records.
+  the approval that follows the finding resolves it (atelier-md0v). The field
+  stays for `defer` and `no_action`.
+- Decision 2: append-only applies only once a review record is on the base
+  (atelier-ilba), and approval freshness no longer shares the append-only
+  rule, since it reads no records (atelier-3jdm).
 - Decision 3: replaced by decision 1 above; no record edit makes an approval
-  stale.
+  stale (atelier-3jdm).
 - Decision 4: whether its comparison with the work's Git authors goes is open
-  (decision 5 above).
+  (decision 5 above, atelier-md0v).
 - Decisions 5 and 6 stand.
 
 **[ADR 0026](0026-evidence-records-only-what-nothing-else-records.md).**
 Replaced, from What stays: the `evidence.no_newer_failure` block on close,
 land and merge, and a policy's own `evidence.attached` gate; no gate reads
-receipts. Its "Close Reason names the targeted test or check" now means the
-implementer report. Stands: what gets a receipt, the rules it removed, no
-reruns in `merge --sync`, command capture refusing uncommitted code, and
-freshness marks in `evidence list`.
+receipts (atelier-md0v). Its "Close Reason names the targeted test or check"
+means the implementer report once atelier-jnrh lands. Stands: what gets a
+receipt, the rules it removed, no reruns in `merge --sync`, command capture
+refusing uncommitted code, and freshness marks in `evidence list`.
 
-**[ADR 0027](0027-proof-has-a-time.md).** Superseded: loose ends replace its
-after-merge checks, so its Decision goes in full. Its rejected options, a
-status after `done` and a front-matter field, are not revived; a loose end is
-an issue.
+**[ADR 0027](0027-proof-has-a-time.md).** Superseded (atelier-8bh4): loose
+ends replace its after-merge checks, so its Decision goes in full. Its
+rejected options, a status after `done` and a front-matter field, are not
+revived; a loose end is an issue.
 
 **[PRODUCT_INTENT.md](../../PRODUCT_INTENT.md).** These lines stay as written
 until the item that changes the behaviour lands.
 
 - "Guard valid records, dependency closure, traceable active work, fresh
   honest evidence, independent approval, visible trivial exemptions, and
-  dispositions for findings": evidence is no longer guarded, findings need a
-  decision only when deferred or dismissed, and valid records are guarded at
-  write (atelier-md0v, atelier-ilba).
+  dispositions for findings": no gate reads receipts, though a receipt stays
+  tied to a commit with an explicit result; findings need a decision only
+  when deferred or dismissed; and valid records are guarded at write
+  (atelier-md0v, atelier-ilba).
 - "Let agents commit records with the code. Atelier never creates commits":
   open while atelier-jnrh settles how merge writes the done state.
 - "Make transitions record writes with read-only checks. Branch preparation
   and gated integration are explicit `start` and `merge` commands": `merge`
   also marks the issue done, and a change with no issue merges without
   `start` (atelier-jnrh, atelier-4nsl).
-- "Commit done claims on the work branch. Merge writes no tracker state":
-  replaced; merge marks the issue done, and the base still sees completion
-  together with the implementation (atelier-jnrh).
+- "Git carries both the implementation and its done claim through review and
+  integration", in the opening, and "Commit done claims on the work branch.
+  Merge writes no tracker state": replaced; merge marks the issue done, and
+  the base still sees completion together with the implementation
+  (atelier-jnrh).
 - "Keep review and evidence append-only and tied to full Git commit
   identities", with its exception for a finding's disposition: append-only
   applies only to records on the base (atelier-ilba), and a `fix_now` finding
@@ -304,7 +319,7 @@ until the item that changes the behaviour lands.
 - Items: atelier-3jdm (decision 1), atelier-jnrh (2), atelier-8bh4 (3),
   atelier-ilba (4), atelier-md0v (5), atelier-4nsl (6), atelier-l457 (7) and
   atelier-ml3r (8, with the skill, AGENTS.md and every repository on this
-  host). Each names what it deletes.
+  host). Each must name what it deletes before it starts (decision 9).
 - The six draft missions hold items planned under the old model, some
   contradicting this one. Which are superseded is Sumeet's call
   (atelier-mzpn), and none of those missions starts before he decides.

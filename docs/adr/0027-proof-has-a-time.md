@@ -6,9 +6,10 @@ Accepted (2026-11-06, within the authority of mission atelier-n4mj's strategy,
 docs/strategies/lighter-workflow.md, on Sumeet's direction for the model;
 atelier-n0qh).
 
-Superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession): loose ends
-replace after-merge checks, so the After merge marker, stand-ins, `carried
-to`, the awaiting-validation views and the mission-close warning go.
+Superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession) when
+atelier-8bh4 lands: loose ends replace after-merge checks, so the After merge
+marker, stand-ins, `carried to`, the awaiting-validation views and the
+mission-close warning go. Until then this ADR applies as written.
 
 ## Context
 

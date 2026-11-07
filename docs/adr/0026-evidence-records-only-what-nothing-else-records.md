@@ -7,10 +7,11 @@ mission, atelier-n4mj, to keep receipts only for checks that leave no other
 record, and accepted that repositories without CI lose their merged-tree
 check; atelier-s66u).
 
-Partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession):
-no gate reads receipts, so the `evidence.no_newer_failure` block and a
-policy's `evidence.attached` gate, kept under "What stays", go. What gets a
-receipt, and the rules this ADR removed, stand.
+Partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession)
+when atelier-md0v lands: no gate reads receipts, so the
+`evidence.no_newer_failure` block and a policy's `evidence.attached` gate,
+kept under "What stays", go. Until then they apply. What gets a receipt, and
+the rules this ADR removed, stand.
 
 ## Context
 

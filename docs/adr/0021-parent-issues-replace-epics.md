@@ -9,8 +9,9 @@ draft epics become `backlog` work items, and later increments stay in
 `backlog` until their predecessor's evidence arrives.
 
 Decision 2 is partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession):
-a parent no longer closes after every child is terminal, since merge marks
-work done, and its branch need not be named `<issue_type>/<parent-id>`. The
+when atelier-jnrh lands, a parent no longer closes after every child is
+terminal, since merge marks work done; when atelier-md0v lands, its branch
+need not be named `<issue_type>/<parent-id>`. Until then both apply. The
 parent still owns the branch, and the rest stands.
 
 ## Context
