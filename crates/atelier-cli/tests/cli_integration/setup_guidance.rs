@@ -1321,7 +1321,7 @@ fn test_root_help_lists_every_command_and_lifecycle_common_commands() {
     assert!(
         stdout.contains("One issue, in order: start it; implement; tick every Done when line")
             && stdout.contains("merge, which\nmakes one merge commit and marks the work done")
-            && stdout.contains("only a code change makes an approval stale"),
+            && stdout.contains("Only\na code change makes an approval stale"),
         "{stdout}"
     );
 
