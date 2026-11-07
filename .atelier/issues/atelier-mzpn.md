@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-07T21:06:25.676596555+00:00"
+status: "done"
 title: "Which items of the six draft missions does the simpler lifecycle supersede, revise or keep?"
-updated_at: "2026-11-07T05:52:22.228799928+00:00"
+updated_at: "2026-11-07T21:06:25.676596555+00:00"
 ---
 
 ## Context
@@ -32,6 +33,15 @@ Six draft missions (atelier-2mky, atelier-4pzj, atelier-gg6b, atelier-l63c, atel
 
 - The orchestrator prepares a triage table as a note on this record: each item marked supersede, revise (with the change) or keep, with a one-line reason. Sumeet decides from the table.
 - Supersede the six missions wholesale and re-plan later from scratch.
+
+## Decision
+
+The first option. Sumeet approved the triage note below on 2026-11-07 ("The plan looks good. Apply the changes."), and it was applied the same day after checking each row against what atelier-mmpv had merged since it was written (master bc8bee34).
+
+- **Items (109):** 32 superseded, 24 because mmpv removed the premise, an mmpv item did the work or the view did not earn its place, and 8 merged into a surviving item (ry7d and 4t5l into kset; rp1c, 08rc and pxyz into rmvb; 46nq into om6l; majk into avx0; t18i into yzuv and x3ru). 32 revised to the new lifecycle, 5 of them keep items that absorbed a merge (kset, rmvb, om6l, avx0, x3ru). 45 kept unchanged.
+- **Missions:** atelier-l63c merged into atelier-4pzj (33 items, Outcome and title widened to where things stand); atelier-2mky's check items moved to atelier-uf97 (27 items; S6 dropped, refuse-then-confirm narrowed), and 2mky, atelier-gg6b, l63c and atelier-ll3p are superseded. 17 survivors stand alone, unassigned: fad5, nl9a, rmvb, hzuk, h90a, gg0m, t3ko and ten debrief items.
+- **Judgment calls, as recommended:** fad5 standalone; nl9a and abdp revised and kept (abdp in 4pzj); om6l kept with 46nq and lkuy's Waiting on line folded in; avx0 kept with majk; gg6b superseded wholesale, with loose end atelier-jdpf for one review of a debrief generated under the new lifecycle once mmpv closes.
+- **Adjustments from merged work:** gg0m and efnf were marked supersede but keep what md0v left (SessionStart wording; ✓ approved disagreeing with merge over an open finding), so both are revised. 6tmk is done by l457 and superseded. t3ko was not fully done by l457, which left its re-run message and `-q`, so it is revised to those. hfze is superseded because the triage's own condition holds (the shrunken policy reads plainly). oyzb is superseded because 315d6f23 had already done it. w4ef, k55o and guew were to fold into ilba, which merged without them, so they stand in uf97, and k55o drops the no-checkbox rule jnrh rejected. mi3x stays in 4pzj, since ml3r merged without it. pxyz joined the prune merger the triage's per-mission line describes.
 
 ## Notes
 
@@ -236,3 +246,7 @@ Six draft missions (atelier-2mky, atelier-4pzj, atelier-gg6b, atelier-l63c, atel
   5. **gg6b: supersede wholesale, and how much more to invest in the debrief at all.** I recommend superseding the mission and re-reviewing a fresh debrief after mmpv. The larger question is whether the debrief keeps earning its place, given that Sumeet's own taste read (atelier-3km4) is still open.
 
   The next closest calls were rz2l (record import, superseded), hfze (policy view, folded into ml3r) and cy58 (row suffix, superseded).
+
+## Report
+
+Applied Sumeet's 2026-11-07 approval of the draft-mission triage: of 109 items, 32 superseded (8 as merges), 32 revised, 45 kept; l63c merged into 4pzj, 2mky's check items into uf97, and 2mky, gg6b, l63c and ll3p superseded; the five judgment calls taken as recommended, with the adjustments the Decision section lists.
