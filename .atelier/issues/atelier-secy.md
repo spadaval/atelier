@@ -59,8 +59,7 @@ None.
 - The rule lives in the done-claim comparison, not in approval freshness (`allowed_edge`), so a tick on a work branch after approval is still a change the approval did not see; only the base's judgement of an already-merged claim changes. `completion_claim_matches` now takes the record index (for `carried to` targets) and is directional (`before`, `after`); `claim_endpoint` had the arguments the other way round and now passes them oldest first.
 
 ### Surprises
-- The same tick also marks the item's evidence receipts stale ("acceptance changed since the pin") in `evidence list`, because receipt staleness (`acceptance_matches` in `first_mismatch`) still compares the whole Done when. Starter policy requires no evidence, so it refuses nothing today, but a policy with evidence gates on done claims would likely hit it. Left out of scope; not filed.
+- The same tick also marked the item's evidence receipts stale ("acceptance changed since the pin"): receipt staleness (`first_mismatch`) compared the whole Done when, so under an `evidence.attached` close gate `land` still refused. Review finding atelier-xqjc; fixed in c1bc3ac4 by the same rule (`same_acceptance`), proven by `proof_timing::a_receipt_still_proves_its_item_after_its_check_is_ticked_on_the_base` (passes; fails without the fix with evidence.attached "found 0").
 
 ### Open items
-- Receipt staleness after a validation tick, above: needs an issue if the orchestrator agrees it is a defect.
 - Suite with `--features test-hooks` and macOS left to CI.
