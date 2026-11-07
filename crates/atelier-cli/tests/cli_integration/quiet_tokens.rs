@@ -489,6 +489,9 @@ fn every_command_prints_its_documented_quiet_token() {
     not_atelier(q.refused_in(outside, "migrate dispositions", &[]));
     let undeclared = q.refused("migrate epics", &["--to", "nonexistent"]);
     assert!(undeclared.contains("is not declared"), "{undeclared}");
+    // No record has an After merge line; loose_ends.rs pins migrated IDs.
+    assert_eq!(q.ok("migrate after-merge", &[]), "");
+    not_atelier(q.refused_in(outside, "migrate after-merge", &[]));
 
     let fixture = workspace_root().join("docs/spec/bundle/fixtures/valid-bundle.json");
     let fixture = fixture.to_str().unwrap();

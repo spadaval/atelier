@@ -650,6 +650,15 @@ fn owned(
     if owner_record.issue_type == "mission" {
         bail!("merge_mission: {owner} is a mission, and missions have no work branch. Next: merge one of its issues, listed by `atelier work mission {owner}`");
     }
+    if let Ok(source) = base_policy::working(repo) {
+        for item in [&id, &owner] {
+            crate::commands::workflow::refuse_done_on_base(
+                &source.policy,
+                &index.require_issue(item)?,
+                "merge",
+            )?;
+        }
+    }
     let Some(recorded) = owner_record.workflow_branch.as_ref() else {
         // The base learns of the branch only when the work merges.
         match crate::commands::git::owning_branches(repo, &owner)?.first() {

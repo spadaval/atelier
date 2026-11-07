@@ -123,9 +123,8 @@ enum ReviewCommands {
     },
     /// Print the brief an independent reviewer is given for an item
     ///
-    /// The item's Goal and Done when, its after-merge checks with their
-    /// reasons and stand-ins, Done when edits made after the start, the
-    /// commits to review, earlier findings, dispositions and reviews,
+    /// The item's Goal and Done when, Done when edits made after the start,
+    /// the commits to review, earlier findings, dispositions and reviews,
     /// recorded proof, the working rules from policy, and the commands that
     /// record the review. It never includes the author's notes or Report,
     /// and it refuses while the item it names, or for the owner a started
@@ -346,6 +345,20 @@ enum MigrateCommands {
         #[arg(long)]
         apply: bool,
     },
+    /// Turn open After merge lines into loose ends; dry run unless --apply
+    ///
+    /// Each unticked `After merge (<reason>): <check>` Done when line becomes
+    /// a loose end blocked_by its item: the check is its Done when, the
+    /// reason goes in its Goal, and it is labelled needs-human when the
+    /// reason is the human's judgment or a device or place no agent can
+    /// reach. An item that is not done keeps the line's stand-in as an
+    /// ordinary Done when line; a done item is left as it is. Lines carried
+    /// to another issue are skipped, and rerunning changes nothing.
+    AfterMerge {
+        /// Write the changes; without this flag the command only reports them
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 // ============================================================================
@@ -420,12 +433,10 @@ enum IssueCommands {
         /// Background); Question (optionally Options,
         /// Decision, Context, Background) for decisions. Plain text becomes
         /// the Goal, Outcome, or Question. Done when lines are checked before
-        /// merge. Mark a line `- [ ] After merge (<reason>): <check>.
-        /// Stand-in: <what runs before merge>.` only when it needs the
-        /// deployed or merged system, a device or place no agent can reach,
-        /// the human's judgment, or time and real use, and its stand-in runs
-        /// before merge; decide it when planning, since a later move is a
-        /// plan change the reviewer sees
+        /// merge. Work that changes no code and can only happen after a merge
+        /// or release, such as pushing a tag or a play-check, is a loose end:
+        /// its own issue (`--issue-type loose_end`), linked with
+        /// `--role blocked_by` to what it waits on
         #[arg(long)]
         body: Option<String>,
         /// Priority: P0-P3 or critical, high, medium, low
@@ -1179,6 +1190,12 @@ fn run() -> Result<()> {
         Commands::Migrate {
             action: MigrateCommands::Dispositions { apply },
         } => commands::migrate::dispositions(apply, quiet),
+        Commands::Migrate {
+            action: MigrateCommands::AfterMerge { apply },
+        } => {
+            let (_, index) = load_repository()?;
+            commands::migrate::after_merge(&index, apply, quiet)
+        }
 
         Commands::Prune {
             apply,
@@ -1250,7 +1267,8 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Migrate {
             action:
                 MigrateCommands::Epics { apply: true, .. }
-                | MigrateCommands::Dispositions { apply: true },
+                | MigrateCommands::Dispositions { apply: true }
+                | MigrateCommands::AfterMerge { apply: true },
         } => CanonicalTransactionMode::Exclusive,
         Commands::Review {
             action:

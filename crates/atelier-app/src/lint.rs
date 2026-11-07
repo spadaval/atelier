@@ -172,6 +172,7 @@ pub(crate) fn lint_files(
         scoped_id.is_some(),
     ));
     findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
+    findings.extend(loose_end_findings(&files.issues, scoped_id));
     if let (true, Some(index)) = (records_valid, graph) {
         let index = index
             .with_base_exemptions(files.base_exemptions)?
@@ -265,6 +266,62 @@ pub fn issue_findings<'a>(
                     name.title()
                 )));
             }
+        }
+    }
+    findings
+}
+
+/// A loose end waits on what it follows through `blocked_by` and is never
+/// part of a mission: it is no issue's child and advances no mission
+/// (atelier-8bh4). The record guard refuses the write that links one, since
+/// it would add a finding. Scoped to one issue, only the links it is an end
+/// of.
+fn loose_end_findings(all: &[CanonicalIssueRecord], scoped_id: Option<&str>) -> Vec<LintFinding> {
+    let loose_end = |id: &str| {
+        all.iter().any(|record| {
+            record.issue.id == id && record.issue.issue_type == atelier_workflow::LOOSE_END_TYPE
+        })
+    };
+    let mut findings = Vec::new();
+    for record in all {
+        let id = &record.issue.id;
+        for child in &record.relationships.children {
+            if child.kind == "issue"
+                && loose_end(&child.id)
+                && scoped_id.is_none_or(|scoped| scoped == id || scoped == child.id)
+            {
+                findings.push(LintFinding {
+                    id: child.id.clone(),
+                    message: format!(
+                        "Loose end {child} is a child of {id}, but a loose end is never part of another issue's work; it waits on what it follows. Next: `atelier issue update {child} --no-parent`, then `atelier issue link {child} {id} --role blocked_by`",
+                        child = child.id
+                    ),
+                });
+            }
+        }
+        for relation in record
+            .relationships
+            .relates
+            .iter()
+            .filter(|relation| relation.kind == "issue" && relation.relation_type == "advances")
+        {
+            let (end, other) = if loose_end(id) {
+                (id.as_str(), relation.id.as_str())
+            } else if loose_end(&relation.id) {
+                (relation.id.as_str(), id.as_str())
+            } else {
+                continue;
+            };
+            if scoped_id.is_some_and(|scoped| scoped != end && scoped != other) {
+                continue;
+            }
+            findings.push(LintFinding {
+                id: end.to_owned(),
+                message: format!(
+                    "Loose end {end} advances {other}, but a loose end is never part of a mission, so it never holds one open. Next: `atelier issue unlink {id} {} --role advances`, and link the loose end to the work it waits on with `--role blocked_by`",
+                    relation.id
+                ),
+            });
         }
     }
     findings

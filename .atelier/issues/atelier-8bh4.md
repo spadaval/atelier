@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:00.329959594+00:00"
 id: "atelier-8bh4"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-8bh4
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Track post-merge work as loose ends, outside any mission"
-updated_at: "2026-11-07T06:05:08.393934690+00:00"
+updated_at: "2026-11-07T08:34:52.317697757+00:00"
 ---
 
 ## Goal

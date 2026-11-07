@@ -351,6 +351,13 @@ pub fn issue_descendant_ids(index: &RecordIndex, issue_id: &str) -> Result<BTree
         };
         collect_issue_and_descendants(index, &linked_id, &mut issue_ids)?;
     }
+    // A loose end is never part of a mission, so it never holds one open,
+    // even when a link `atelier check` reports puts it there (atelier-8bh4).
+    issue_ids.retain(|id| {
+        index
+            .issue_record(id)
+            .is_none_or(|record| record.issue.issue_type != atelier_workflow::LOOSE_END_TYPE)
+    });
     Ok(issue_ids)
 }
 

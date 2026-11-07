@@ -64,9 +64,10 @@ pub fn needs_human(labels: &[String]) -> bool {
     labels.iter().any(|label| label == NEEDS_HUMAN_LABEL)
 }
 
-/// Open children of `owner` labelled needs-human. A parent integrates only
-/// once every child is terminal, so such a child holds the owner's branch off
-/// the base until the human acts (atelier-1jll).
+/// Open children of `owner` labelled needs-human that its merge would mark
+/// done. Review asks each for ticked Done when lines and a Report, so such a
+/// child holds the owner's branch off the base until the human acts
+/// (atelier-1jll). A child done on the base, such as a validation, does not.
 pub fn open_human_children(
     index: &RecordIndex,
     policy: &WorkflowPolicy,
@@ -82,6 +83,7 @@ pub fn open_human_children(
         .filter_map(|child| index.issue_record(&child.id))
         .filter(|child| {
             needs_human(&child.labels)
+                && !policy.done_on_base(&child.issue.issue_type)
                 && !policy
                     .issue_status_is_terminal(&child.issue.issue_type, &child.issue.status)
                     .unwrap_or(false)
@@ -95,19 +97,18 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
     let commands = children
         .iter()
         .map(|child| {
-            format!("`atelier issue update {child} --no-parent`, then `atelier issue link {child} {owner} --role blocked_by`")
+            format!("`atelier issue update {child} --no-parent --issue-type loose_end`, then `atelier issue link {child} {owner} --role blocked_by`")
         })
         .collect::<Vec<_>>()
         .join("; ");
     let (verb, pronoun, shape) = if children.len() == 1 {
-        ("is", "it", "a standalone validation")
+        ("is", "it", "a loose end")
     } else {
-        ("are each", "them", "standalone validations")
+        ("are each", "them", "loose ends")
     };
     format!(
-        "{} labelled needs-human {verb} a child of {owner}, and review asks every open child for ticked Done when lines and a Report before atelier merge marks it done, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge, make {pronoun} {shape}: {commands}. Writing it into {owner}'s Done when as `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before merge>.` instead is a plan change the reviewer sees, and fits only a check that needs {reasons}, with a stand-in that runs before merge.",
+        "{} labelled needs-human {verb} a child of {owner}, and review asks every open child for ticked Done when lines and a Report before atelier merge marks it done, so the branch cannot integrate until the human finishes {pronoun}. If the work can only happen after the merge, make {pronoun} {shape} that waits on {owner}, outside its scope: {commands}.",
         children.join(", "),
-        reasons = crate::after_merge::REASONS,
     )
 }
 
@@ -128,9 +129,6 @@ pub struct WorkBuckets {
     pub blocked: Vec<WorkRow>,
     pub backlog: Vec<WorkRow>,
     pub done: Vec<WorkRow>,
-    /// Done work with an after-merge check still open (ADR 0027); also in
-    /// `done`.
-    pub awaiting_validation: Vec<WorkRow>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -164,11 +162,6 @@ pub fn work_buckets_for<'a>(
     let mut buckets = WorkBuckets::default();
     for issue in issues {
         let row = work_row(index, workflow_policy, issue.clone())?;
-        if index.issue_record(&issue.id).is_some_and(|record| {
-            crate::after_merge::awaiting_validation(record, workflow_policy, index)
-        }) {
-            buckets.awaiting_validation.push(row.clone());
-        }
         match row.state_label() {
             "active" => buckets.active.push(row),
             "ready" => buckets.ready.push(row),
@@ -186,7 +179,6 @@ pub fn work_buckets_for<'a>(
     sort_work_rows(&mut buckets.blocked);
     sort_work_rows(&mut buckets.backlog);
     sort_work_rows(&mut buckets.done);
-    sort_work_rows(&mut buckets.awaiting_validation);
     Ok(buckets)
 }
 
@@ -238,6 +230,26 @@ pub fn classify_issue(
             WorkClassification::NeedsHuman
         } else {
             WorkClassification::Blocked
+        }
+    } else if let Some(done) = workflow_policy
+        .filter(|policy| {
+            status_category.as_deref() == Some("todo") && policy.done_on_base(&issue.issue_type)
+        })
+        .map(|policy| {
+            policy
+                .done_transition(&issue.issue_type, &issue.status)
+                .is_some()
+        })
+    {
+        // A loose end or validation takes no branch: once what it waits on
+        // is done it is ready to be done on the base, never started
+        // (atelier-8bh4).
+        if !done {
+            WorkClassification::Backlog
+        } else if !open_blockers.is_empty() {
+            WorkClassification::Blocked
+        } else {
+            WorkClassification::Ready
         }
     } else {
         match status_category.as_deref() {

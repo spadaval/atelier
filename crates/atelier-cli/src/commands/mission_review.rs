@@ -336,9 +336,6 @@ fn change_text(change: &Change) -> String {
             format!("Review waived as trivial: {}", first_sentence(summary))
         }
         Change::DoneWhenEdited(edit) => crate::human_output::done_when_edit(edit),
-        Change::AwaitingValidation(checks) => {
-            format!("Awaiting validation after merge: {}", checks.join("; "))
-        }
     }
 }
 

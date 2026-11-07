@@ -82,7 +82,6 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
             ("Parents and Missions (context)", &buckets.context),
             ("Blocked Work", &buckets.blocked),
             ("Backlog Work", &buckets.backlog),
-            ("Awaiting Validation", &buckets.awaiting_validation),
         ],
         other => bail!("unknown work bucket '{other}'"),
     };
@@ -297,7 +296,6 @@ fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
             &buckets.context,
             &buckets.blocked,
             &buckets.backlog,
-            &buckets.awaiting_validation,
         ],
         _ => &[&buckets.ready],
     };
@@ -507,8 +505,9 @@ struct ScopedWork {
     rows: Vec<(Issue, ClassifiedWork)>,
     size: usize,
     totals: ObjectiveBucketTotals,
-    /// Done work in scope with an after-merge check still open (ADR 0027).
-    awaiting: BTreeSet<String>,
+    /// Items done on the base, such as a validation, which take no branch
+    /// and so are never the item to start (atelier-8bh4).
+    on_base: BTreeSet<String>,
 }
 
 impl ScopedWork {
@@ -524,12 +523,13 @@ impl ScopedWork {
         let mut rows = Vec::new();
         let mut totals = ObjectiveBucketTotals::default();
         let mut size = 0;
-        let mut awaiting = BTreeSet::new();
+        let mut on_base = BTreeSet::new();
         for issue in issues {
-            if index.issue_record(&issue.id).is_some_and(|record| {
-                atelier_app::after_merge::awaiting_validation(record, policy.as_ref(), index)
-            }) {
-                awaiting.insert(issue.id.clone());
+            if policy
+                .as_ref()
+                .is_some_and(|policy| policy.done_on_base(&issue.issue_type))
+            {
+                on_base.insert(issue.id.clone());
             }
             let classified =
                 atelier_app::work_classification::classify_issue(index, policy.as_ref(), &issue)?;
@@ -560,17 +560,19 @@ impl ScopedWork {
             rows,
             size,
             totals,
-            awaiting,
+            on_base,
         })
     }
 
-    /// The first ready item in work order that no other branch has started.
+    /// The first ready item in work order that `atelier start` takes and no
+    /// other branch has started.
     fn top_ready(&self, in_flight: &BTreeMap<String, String>) -> Option<&Issue> {
         self.rows
             .iter()
             .find(|(issue, work)| {
                 work.classification == WorkClassification::Ready
                     && !in_flight.contains_key(&issue.id)
+                    && !self.on_base.contains(&issue.id)
             })
             .map(|(issue, _)| issue)
     }
@@ -597,7 +599,7 @@ impl ScopedWork {
             DashboardFilter::Done => &[(filter.classification(), "Done Work")],
             DashboardFilter::All => &[(None, "Scoped Work")],
         };
-        let mut panels = groups
+        groups
             .iter()
             .filter_map(|(state, title)| {
                 let rows = self
@@ -644,28 +646,7 @@ impl ScopedWork {
                     panel
                 })
             })
-            .collect::<Vec<_>>();
-        if matches!(filter, DashboardFilter::Summary | DashboardFilter::All)
-            && !self.awaiting.is_empty()
-        {
-            let rows = self
-                .rows
-                .iter()
-                .filter(|(issue, _)| self.awaiting.contains(&issue.id))
-                .map(|(issue, work)| IssueListRow {
-                    id: issue.id.clone(),
-                    status: issue.status.clone(),
-                    status_category: work.status_category.clone(),
-                    classification: work.classification,
-                    priority: issue.priority.clone(),
-                    title: issue.title.clone(),
-                    blockers: 0,
-                    depth: 1,
-                })
-                .collect();
-            panels.push(IssueListPanel::new("Awaiting Validation", rows));
-        }
-        panels
+            .collect::<Vec<_>>()
     }
 }
 

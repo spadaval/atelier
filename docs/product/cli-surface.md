@@ -23,7 +23,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `setup` | Install supported harness hooks. |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |
-| `migrate` | Apply one-shot record migrations: `migrate epics`, `migrate dispositions`. |
+| `migrate` | Apply one-shot record migrations: `migrate epics`, `migrate dispositions`, `migrate after-merge`. |
 
 ## Orientation and ordinary work
 
