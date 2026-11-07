@@ -1,7 +1,8 @@
 //! Markdown review event codec and creation. Commands only add events, apart
 //! from setting a finding's disposition in place (ADR 0025); a record can be
 //! corrected by hand until it reaches the base, and `review_gate` keeps it as
-//! it is there (ADR 0028).
+//! it is there (ADR 0028). An event is about an issue, or, on the light path,
+//! about a branch no issue owns (ADR 0028 decision 6, atelier-4nsl).
 use crate::{
     attachment_relationship, canonical_record_path, display_state_path,
     mutation_lock::CanonicalMutationLock, record_kinds::REVIEW_KIND, split_document,
@@ -20,6 +21,16 @@ use std::path::Path;
 /// dispositions were separate `disposition` events.
 const SEPARATE_DISPOSITIONS_VERSION: i64 = 1;
 
+/// The schema version an event about a branch is written at, the first that
+/// can name a branch (atelier-4nsl). An older Atelier reads it as a record a
+/// newer Atelier wrote, not as an invalid one. Events about an issue and base
+/// exemptions are still written at `REVIEW_KIND.schema_version`, so a binary
+/// that predates the light path keeps reading every ordinary review.
+pub const BRANCH_TARGET_VERSION: i64 = 3;
+
+/// The newest schema version this Atelier reads.
+const SUPPORTED_VERSION: i64 = BRANCH_TARGET_VERSION;
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Front {
@@ -27,12 +38,17 @@ struct Front {
     schema_version: i64,
     id: String,
     title: String,
-    /// The issue an event is about; absent for a base exemption.
+    /// The issue an event is about; absent for a base exemption and for an
+    /// event about a branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     target: Option<String>,
     /// The base branch of a base exemption, which has no target.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     base: Option<String>,
+    /// The branch an event on the light path is about, which no issue owns;
+    /// from schema version 3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    branch: Option<String>,
     identity: String,
     commit: String,
     created_at: DateTime<Utc>,
@@ -94,7 +110,18 @@ pub fn set_finding_disposition(
     record.header.updated_at = record
         .disposition()
         .map_or(record.header.created_at, |set| set.recorded_at);
-    record.header.relationships = relationships(&record.target, &record.event);
+    // An event about an issue links it as the issue it reviews; one about a
+    // branch links none, and keeps linking none.
+    let issue_target = record
+        .header
+        .relationships
+        .attachments
+        .iter()
+        .any(|link| link.kind == "issue" && link.role == "reviews");
+    record.header.relationships = relationships(
+        issue_target.then_some(record.target.as_str()),
+        &record.event,
+    );
     Ok(previous)
 }
 
@@ -230,11 +257,15 @@ pub fn validate_commit(commit: &str) -> Result<()> {
     Ok(())
 }
 
-fn relationships(target: &str, event: &ReviewEvent) -> Relationships {
+/// The links an event derives: the issue it is about, which an event about a
+/// branch has none of, and a deferred finding's follow-up.
+fn relationships(issue: Option<&str>, event: &ReviewEvent) -> Relationships {
     let mut links = Relationships::default();
-    links
-        .attachments
-        .push(attachment_relationship("issue", target, "reviews"));
+    if let Some(target) = issue {
+        links
+            .attachments
+            .push(attachment_relationship("issue", target, "reviews"));
+    }
     if let Some(issue) = match event {
         ReviewEvent::Finding {
             disposition: Some(disposition),
@@ -249,47 +280,57 @@ fn relationships(target: &str, event: &ReviewEvent) -> Relationships {
     links
 }
 
-/// A file under `reviews/`: an event about an issue, a base exemption, or a
-/// retired disposition event from before ADR 0025.
+/// A file under `reviews/`: an event about an issue, an event about a
+/// branch no issue owns (the light path), a base exemption, or a retired
+/// disposition event from before ADR 0025.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReviewFile {
     Event(ReviewRecord),
+    /// An event whose `target` is a branch name, not an issue
+    /// (atelier-4nsl). It never counts for an issue.
+    BranchEvent(ReviewRecord),
     BaseExemption(BaseExemption),
     RetiredDisposition(RetiredDisposition),
 }
 
 impl ReviewFile {
-    /// The issue the file is about; `None` for a base exemption.
+    /// The issue the file is about; `None` for a base exemption and an
+    /// event about a branch.
     pub fn target(&self) -> Option<&str> {
         match self {
             ReviewFile::Event(record) => Some(&record.target),
             ReviewFile::RetiredDisposition(record) => Some(&record.target),
-            ReviewFile::BaseExemption(_) => None,
+            ReviewFile::BaseExemption(_) | ReviewFile::BranchEvent(_) => None,
         }
     }
 }
 
 pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
+    parse_review_file_supporting(text, relative, SUPPORTED_VERSION)
+}
+
+/// [`parse_review_file`] by a reader whose newest schema version is
+/// `supported`, as an older Atelier reads a newer record.
+fn parse_review_file_supporting(text: &str, relative: &Path, supported: i64) -> Result<ReviewFile> {
     let (front, body) = split_document(text).context("review needs YAML front matter")?;
     // A newer Atelier's review can add fields, so its version is read before
     // the fields this one knows (atelier-u4ql).
     if let Some(found) = serde_yaml::from_str::<serde_yaml::Value>(front)
         .ok()
         .and_then(|value| value.get("schema_version")?.as_i64())
-        .filter(|found| *found > REVIEW_KIND.schema_version)
+        .filter(|found| *found > supported)
     {
         return Err(atelier_core::NewerSchema {
             path: display_state_path(relative),
             found,
-            supported: REVIEW_KIND.schema_version,
+            supported,
         }
         .into());
     }
     let front: Front = serde_yaml::from_str(front)
         .with_context(|| format!("invalid review {}", display_state_path(relative)))?;
     if front.schema != REVIEW_KIND.schema
-        || !(SEPARATE_DISPOSITIONS_VERSION..=REVIEW_KIND.schema_version)
-            .contains(&front.schema_version)
+        || !(SEPARATE_DISPOSITIONS_VERSION..=supported).contains(&front.schema_version)
     {
         bail!(
             "unsupported review schema in {}",
@@ -305,7 +346,8 @@ pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
     let separate = front.schema_version == SEPARATE_DISPOSITIONS_VERSION;
     let invalid = || format!("invalid review {}", display_state_path(relative));
     if front.event.get("event").and_then(serde_yaml::Value::as_str) == Some("disposition") {
-        let (true, Some(target), None) = (separate, front.target, front.base) else {
+        let (true, Some(target), None, None) = (separate, front.target, front.base, front.branch)
+        else {
             bail!(
                 "{}: a disposition is a field of its finding since schema version 2, not an event",
                 invalid()
@@ -353,17 +395,21 @@ pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
         created_at: front.created_at,
         updated_at,
     };
-    match (front.target.clone(), front.base.clone()) {
-        (Some(target), None) => {
-            let updated_at = match &event {
-                ReviewEvent::Finding {
-                    disposition: Some(disposition),
-                    ..
-                } => disposition.recorded_at,
-                _ => front.created_at,
-            };
+    let updated_at = match &event {
+        ReviewEvent::Finding {
+            disposition: Some(disposition),
+            ..
+        } => disposition.recorded_at,
+        _ => front.created_at,
+    };
+    match (
+        front.target.clone(),
+        front.base.clone(),
+        front.branch.clone(),
+    ) {
+        (Some(target), None, None) => {
             let record = ReviewRecord {
-                header: header(relationships(&target, &event), updated_at),
+                header: header(relationships(Some(&target), &event), updated_at),
                 target,
                 identity: front.identity,
                 commit: front.commit,
@@ -373,7 +419,25 @@ pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
             validate_review(&record)?;
             Ok(ReviewFile::Event(record))
         }
-        (None, Some(base)) => {
+        (None, None, Some(branch)) => {
+            if front.schema_version < BRANCH_TARGET_VERSION {
+                bail!(
+                    "{}: an event names a branch only from schema version {BRANCH_TARGET_VERSION}",
+                    invalid()
+                );
+            }
+            let record = ReviewRecord {
+                header: header(relationships(None, &event), updated_at),
+                target: branch,
+                identity: front.identity,
+                commit: front.commit,
+                event,
+                summary: body.trim().into(),
+            };
+            validate_branch_review(&record)?;
+            Ok(ReviewFile::BranchEvent(record))
+        }
+        (None, Some(base), None) => {
             if event != ReviewEvent::TrivialExemption {
                 bail!(
                     "review {} names a base, which only a trivial exemption may",
@@ -391,9 +455,19 @@ pub fn parse_review_file(text: &str, relative: &Path) -> Result<ReviewFile> {
             Ok(ReviewFile::BaseExemption(record))
         }
         _ => bail!(
-            "review {} needs exactly one of target and base",
+            "review {} needs exactly one of target, base and branch",
             display_state_path(relative)
         ),
+    }
+}
+
+/// Parses an event about an issue or about a branch; a base exemption or
+/// retired disposition is refused. A finding's disposition is set the same
+/// way on either.
+pub fn parse_review_event(text: &str, relative: &Path) -> Result<ReviewRecord> {
+    match parse_review_file(text, relative)? {
+        ReviewFile::BranchEvent(record) => Ok(record),
+        _ => parse_review_record(text, relative),
     }
 }
 
@@ -417,6 +491,11 @@ fn validate_retired_disposition(record: &RetiredDisposition) -> Result<()> {
 pub fn parse_review_record(text: &str, relative: &Path) -> Result<ReviewRecord> {
     match parse_review_file(text, relative)? {
         ReviewFile::Event(record) => Ok(record),
+        ReviewFile::BranchEvent(record) => bail!(
+            "review {} is about branch {}, not an issue",
+            display_state_path(relative),
+            record.target
+        ),
         ReviewFile::BaseExemption(_) => bail!(
             "review {} is a base exemption, not an event about an issue",
             display_state_path(relative)
@@ -455,12 +534,59 @@ pub fn validate_review(record: &ReviewRecord) -> Result<()> {
         bail!("review requires an explicit identity and explanation");
     }
     if record.header.kind != "review"
-        || record.header.relationships != relationships(&record.target, &record.event)
+        || record.header.relationships != relationships(Some(&record.target), &record.event)
     {
         bail!("review relationships must match its typed event references");
     }
     if let Some(disposition) = record.disposition() {
         validate_disposition(disposition)?;
+    }
+    Ok(())
+}
+
+/// Validates an event about a branch: `target` holds the branch name. It
+/// links no issue, and there is no trivial exemption of a branch: an
+/// approval is the light path's only cover (atelier-4nsl).
+pub fn validate_branch_review(record: &ReviewRecord) -> Result<()> {
+    validate_record_id(&record.header.id)?;
+    validate_branch_name(&record.target)?;
+    validate_commit(&record.commit)?;
+    if record.event == ReviewEvent::TrivialExemption {
+        bail!("a branch has no trivial exemption; an approval covers a branch no issue owns");
+    }
+    if record.identity.trim().is_empty()
+        || record.summary.trim().is_empty()
+        || record.header.title.trim().is_empty()
+    {
+        bail!("review requires an explicit identity and explanation");
+    }
+    if record.header.kind != "review"
+        || record.header.relationships != relationships(None, &record.event)
+    {
+        bail!("review relationships must match its typed event references");
+    }
+    if let Some(disposition) = record.disposition() {
+        validate_disposition(disposition)?;
+    }
+    Ok(())
+}
+
+/// A branch name as Git allows one for a local branch, as far as a review
+/// record needs: one line, with no space, control character or `..`, and
+/// none of the characters Git refuses in a ref.
+pub fn validate_branch_name(name: &str) -> Result<()> {
+    let refused = name.is_empty()
+        || name.starts_with(['-', '/', '.'])
+        || name.ends_with(['/', '.'])
+        || name.ends_with(".lock")
+        || name.contains("..")
+        || name.contains("//")
+        || name.contains("@{")
+        || name
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || "~^:?*[\\".contains(c));
+    if refused {
+        bail!("{name:?} is not a branch name");
     }
     Ok(())
 }
@@ -497,6 +623,7 @@ pub fn render_base_exemption(record: &BaseExemption) -> Result<String> {
         title: record.header.title.clone(),
         target: None,
         base: Some(record.base.clone()),
+        branch: None,
         identity: record.identity.clone(),
         commit: record.commit.clone(),
         created_at: record.header.created_at,
@@ -518,6 +645,31 @@ pub fn render_review_record(record: &ReviewRecord) -> Result<String> {
         title: record.header.title.clone(),
         target: Some(record.target.clone()),
         base: None,
+        branch: None,
+        identity: record.identity.clone(),
+        commit: record.commit.clone(),
+        created_at: record.header.created_at,
+        event: serde_yaml::to_value(&record.event)?,
+    };
+    Ok(format!(
+        "---\n{}---\n\n{}\n",
+        serde_yaml::to_string(&front)?,
+        record.summary.trim()
+    ))
+}
+
+/// Renders an event about a branch, whose `target` is the branch name, at
+/// [`BRANCH_TARGET_VERSION`].
+pub fn render_branch_review_record(record: &ReviewRecord) -> Result<String> {
+    validate_branch_review(record)?;
+    let front = Front {
+        schema: REVIEW_KIND.schema.into(),
+        schema_version: BRANCH_TARGET_VERSION,
+        id: record.header.id.clone(),
+        title: record.header.title.clone(),
+        target: None,
+        base: None,
+        branch: Some(record.target.clone()),
         identity: record.identity.clone(),
         commit: record.commit.clone(),
         created_at: record.header.created_at,
@@ -559,7 +711,7 @@ impl RecordStore {
                 title: generated_title(event.name(), "on", target, commit),
                 status: "recorded".into(),
                 labels: Vec::new(),
-                relationships: relationships(target, &event),
+                relationships: relationships(Some(target), &event),
                 created_at: now,
                 updated_at: now,
             },
@@ -570,6 +722,39 @@ impl RecordStore {
             summary: summary.into(),
         };
         self.publish_review(&record.header.id, render_review_record(&record)?)?;
+        Ok(record)
+    }
+
+    /// Creates a new event about `branch`, a branch no issue owns, on the
+    /// light path (atelier-4nsl). Never replaces an existing path.
+    pub fn create_branch_review(
+        &self,
+        branch: &str,
+        identity: &str,
+        commit: &str,
+        event: ReviewEvent,
+        summary: &str,
+    ) -> Result<ReviewRecord> {
+        let _lock = CanonicalMutationLock::exclusive(&self.state_dir)?;
+        let now = Utc::now();
+        let record = ReviewRecord {
+            header: RecordHeader {
+                kind: "review".into(),
+                id: self.allocate_record_id()?,
+                title: generated_title(event.name(), "on branch", branch, commit),
+                status: "recorded".into(),
+                labels: Vec::new(),
+                relationships: relationships(None, &event),
+                created_at: now,
+                updated_at: now,
+            },
+            target: branch.into(),
+            identity: identity.into(),
+            commit: commit.into(),
+            event,
+            summary: summary.into(),
+        };
+        self.publish_review(&record.header.id, render_branch_review_record(&record)?)?;
         Ok(record)
     }
 
@@ -614,9 +799,20 @@ impl RecordStore {
     ) -> Result<(ReviewRecord, Option<Disposition>)> {
         let _lock = CanonicalMutationLock::exclusive(&self.state_dir)?;
         let relative = canonical_record_path(&REVIEW_KIND, id)?;
-        let mut record = parse_review_record(&self.read_record_file(&relative)?, &relative)?;
+        let text = self.read_record_file(&relative)?;
+        // A finding about a branch stays about that branch.
+        let branch = matches!(
+            parse_review_file(&text, &relative)?,
+            ReviewFile::BranchEvent(_)
+        );
+        let mut record = parse_review_event(&text, &relative)?;
         let previous = set_finding_disposition(&mut record, disposition)?;
-        self.write_atomic(&relative, render_review_record(&record)?)?;
+        let rendered = if branch {
+            render_branch_review_record(&record)?
+        } else {
+            render_review_record(&record)?
+        };
+        self.write_atomic(&relative, rendered)?;
         Ok((record, previous))
     }
 
@@ -669,13 +865,13 @@ mod tests {
             )
         };
         let path = Path::new("reviews/atelier-r001.md");
-        let newer = parse_review_file(&text(3), path).unwrap_err();
+        let newer = parse_review_file(&text(4), path).unwrap_err();
         assert_eq!(
             newer.downcast_ref::<atelier_core::NewerSchema>(),
             Some(&atelier_core::NewerSchema {
                 path: ".atelier/reviews/atelier-r001.md".into(),
-                found: 3,
-                supported: 2,
+                found: 4,
+                supported: 3,
             })
         );
         let older = parse_review_file(&text(0), path).unwrap_err();
@@ -718,7 +914,115 @@ mod tests {
         match file {
             ReviewFile::BaseExemption(record) => render_base_exemption(&record).unwrap(),
             ReviewFile::Event(record) => render_review_record(&record).unwrap(),
+            ReviewFile::BranchEvent(record) => render_branch_review_record(&record).unwrap(),
             ReviewFile::RetiredDisposition(_) => unreachable!("never rendered"),
+        }
+    }
+
+    fn event_file(version: i64, subject: &str, event: &str) -> String {
+        let commit = "a".repeat(40);
+        format!(
+            "---\nschema: atelier.review\nschema_version: {version}\nid: atelier-r001\ntitle: why\n{subject}identity: Reviewer\ncommit: {commit}\ncreated_at: 2026-11-07T00:00:00Z\nevent:\n{event}---\n\nwhy\n"
+        )
+    }
+
+    /// An event about a branch is written at schema version 3, names the
+    /// branch and links no issue; an event about an issue is still written
+    /// at version 2, so a binary that predates the light path keeps reading
+    /// it (atelier-4nsl).
+    #[test]
+    fn an_event_about_a_branch_is_written_at_the_newer_version_and_round_trips() {
+        let path = Path::new("reviews/atelier-r001.md");
+        let ReviewFile::BranchEvent(record) = parse_review_file(
+            &event_file(3, "branch: release\n", "  event: approval\n"),
+            path,
+        )
+        .unwrap() else {
+            panic!("an event about a branch parses as one");
+        };
+        assert_eq!(record.target, "release");
+        assert!(record.header.relationships.attachments.is_empty());
+        let text = render_branch_review_record(&record).unwrap();
+        assert!(text.contains("schema_version: 3\n"), "{text}");
+        assert!(
+            text.contains("branch: release\n") && !text.contains("target:"),
+            "{text}"
+        );
+        assert_eq!(
+            parse_review_file(&text, path).unwrap(),
+            ReviewFile::BranchEvent(record.clone())
+        );
+        // Never read as an event about an issue.
+        assert!(parse_review_record(&text, path).is_err());
+        assert_eq!(parse_review_event(&text, path).unwrap(), record);
+        let ReviewFile::Event(issue) = parse_review_file(
+            &event_file(2, "target: atelier-i001\n", "  event: approval\n"),
+            path,
+        )
+        .unwrap() else {
+            panic!("an event about an issue parses as one");
+        };
+        assert!(render_review_record(&issue)
+            .unwrap()
+            .contains("schema_version: 2\n"));
+        // A deferred finding about a branch links its follow-up and keeps
+        // linking no target when its disposition changes.
+        let mut finding = record.clone();
+        finding.event = ReviewEvent::Finding {
+            recommendation: FindingDecision::Defer,
+            disposition: None,
+        };
+        finding.header.relationships = relationships(None, &finding.event);
+        set_finding_disposition(
+            &mut finding,
+            Disposition {
+                decision: FindingDecision::Defer,
+                identity: "Lead".into(),
+                commit: "b".repeat(40),
+                recorded_at: Utc::now(),
+                resolution_commit: None,
+                follow_up: Some("atelier-f001".into()),
+                reason: "later".into(),
+                migrated_from: None,
+            },
+        )
+        .unwrap();
+        let links = &finding.header.relationships.attachments;
+        assert_eq!(links.len(), 1, "{links:?}");
+        assert_eq!(
+            (links[0].id.as_str(), links[0].role.as_str()),
+            ("atelier-f001", "follow_up")
+        );
+        render_branch_review_record(&finding).unwrap();
+    }
+
+    /// A reader that predates the light path, whose newest version is 2,
+    /// reads an event about a branch as a record a newer Atelier wrote, not
+    /// as an invalid one; this Atelier refuses a branch at an older version,
+    /// a trivial exemption of a branch, and a record with two subjects.
+    #[test]
+    fn an_older_reader_needs_a_newer_atelier_for_an_event_about_a_branch() {
+        let path = Path::new("reviews/atelier-r001.md");
+        let text = event_file(3, "branch: release\n", "  event: approval\n");
+        let older = parse_review_file_supporting(&text, path, 2).unwrap_err();
+        let newer = older
+            .downcast_ref::<atelier_core::NewerSchema>()
+            .expect("needs a newer Atelier");
+        assert_eq!((newer.found, newer.supported), (3, 2));
+        assert!(newer.to_string().contains("newer"), "{newer}");
+        for (version, subject, event) in [
+            (2, "branch: release\n", "  event: approval\n"),
+            (3, "branch: release\n", "  event: trivial_exemption\n"),
+            (
+                3,
+                "branch: release\ntarget: atelier-i001\n",
+                "  event: approval\n",
+            ),
+            (3, "branch: release\nbase: main\n", "  event: approval\n"),
+            (3, "branch: two words\n", "  event: approval\n"),
+        ] {
+            let text = event_file(version, subject, event);
+            assert!(parse_review_file(&text, path).is_err(), "{text}");
         }
     }
 }

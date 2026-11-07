@@ -22,5 +22,6 @@ pub mod review_request;
 
 pub(crate) mod git;
 pub mod lease;
+pub(crate) mod light_path;
 pub mod session;
 pub mod setup;

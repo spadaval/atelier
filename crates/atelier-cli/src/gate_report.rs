@@ -20,6 +20,9 @@ pub(crate) struct Gates<'a> {
     /// Records the checkout holds differently from HEAD, when the gates read
     /// HEAD's instead.
     pub uncommitted: Option<&'a Uncommitted>,
+    /// Whether `owner` is a branch no issue owns, reviewed and merged with
+    /// no ID (the light path, atelier-4nsl).
+    pub light_path: bool,
 }
 
 /// The issues whose checkout records differ from HEAD's, and the command
@@ -400,6 +403,16 @@ impl Gates<'_> {
         Some(node.target.as_str()) == self.owner
     }
 
+    /// The command that asks for a review of `target`: with no ID on the
+    /// light path, where `target` is the checked-out branch.
+    fn request_command(&self, target: &str) -> String {
+        if self.light_path && Some(target) == self.owner {
+            "atelier review request".to_owned()
+        } else {
+            format!("atelier review request {target}")
+        }
+    }
+
     /// Whether the checkout's copy of `id` differs from the one the gates read.
     fn differs(&self, id: &str) -> bool {
         self.uncommitted
@@ -661,7 +674,11 @@ impl Gates<'_> {
     /// A finding as `<id> <recommendation> finding "<first line>"`, with
     /// its target and recommendation.
     fn finding(&self, id: &str) -> (String, String, Option<FindingDecision>) {
-        let Ok(record) = self.index.require_review(id) else {
+        let Some(record) = self
+            .index
+            .branch_review(id)
+            .or_else(|| self.index.require_review(id).ok())
+        else {
             return (id.to_owned(), id.to_owned(), None);
         };
         let recommendation = match &record.event {
@@ -734,7 +751,10 @@ impl Gates<'_> {
             } else {
                 node.target.clone()
             };
-            let owner = self.reviewed_owner(targets.first().map_or(&record, |target| target));
+            let owner = match self.owner {
+                Some(owner) if self.light_path => owner.to_owned(),
+                _ => self.reviewed_owner(targets.first().map_or(&record, |target| target)),
+            };
             let count = count_noun(awaiting.len(), "fix_now finding");
             let (they, their, await_) = if awaiting.len() == 1 {
                 ("it needs", "its", "awaits")
@@ -754,7 +774,7 @@ impl Gates<'_> {
                 &record,
                 node,
                 cause,
-                Some(format!("atelier review request {owner}")),
+                Some(self.request_command(&owner)),
             ));
         }
         lines
@@ -819,7 +839,7 @@ impl Gates<'_> {
                 target,
                 node,
                 node.reason.clone(),
-                Some(format!("atelier review request {target}")),
+                Some(self.request_command(target)),
             )],
             "findings.disposed" => self.finding_lines(node, nodes),
             "shell.check" => node
@@ -837,6 +857,9 @@ impl Gates<'_> {
                         // On the merged tree the check sees the base's
                         // changes, so the base comes in before rerunning it.
                         Some(match self.owner.filter(|_| merged_tree) {
+                            Some(_) if self.light_path => {
+                                format!("`atelier merge --sync`, then `{command}`")
+                            }
                             Some(owner) => {
                                 format!("`atelier merge {owner} --sync`, then `{command}`")
                             }

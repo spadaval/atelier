@@ -13,8 +13,9 @@ with an explicit result), the comparison of reviewer and Git authors, a
 disposition for every finding, and agent-owned statuses and transitions for
 the two steps Atelier now enforces (`review request` refuses an unticked Done
 when line, and `merge` marks the issue done). In decision 3: the recorded
-branch base; whether "Atelier never creates commits" still holds is open
-there. In decision 4: the done claim committed on the work branch, "merging
+branch base, and that only a started issue's branch merges (a branch no issue
+owns merges on the light path); whether "Atelier never creates commits"
+still holds is open there. In decision 4: the done claim committed on the work branch, "merging
 writes no tracker state", and approval freshness judged by which records
 changed. In decision 6: append-only for records not yet on the base, and a
 disposition for a `fix_now` finding. Decisions 1, 5 and 7 stand.

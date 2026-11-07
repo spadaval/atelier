@@ -231,9 +231,11 @@ pub(crate) fn require_committed_config(repo: &Path, head: &str, command: &str) -
 /// Record-only changes may be committed on the base branch directly; any
 /// other unpushed base commit must be covered by an approval or trivial
 /// exemption of a completed owner that branched from this base, which is what
-/// `atelier merge` integrates, or be the very commit a base exemption pins
-/// (atelier-mbrf). Commits that install the workflow policy predate the gates
-/// and are exempt.
+/// `atelier merge` integrates, by an accepted approval of a branch no issue
+/// owned (the light path, atelier-4nsl), or be the very commit a base
+/// exemption pins (atelier-mbrf). An approval of a branch covers no done
+/// claim, so its commits' claims are still judged. Commits that install the
+/// workflow policy predate the gates and are exempt.
 pub(crate) fn check_base_commits(
     repo: &Path,
     index: &RecordIndex,
@@ -263,6 +265,8 @@ pub(crate) fn check_base_commits(
     let tip = &resolve(repo, tip)?;
     let mut read = git_freshness::ReadContext::from_head(repo, tip.clone());
     let reviews = BaseReviews::new(repo, index, policy, &mut read, &upstream)?;
+    let light =
+        atelier_app::light_path::covered_on_base(repo, index, &mut read, policy, tip, &upstream)?;
     let unreviewed = text(repo, &["rev-list", tip, "--not", &upstream])?
         .lines()
         .filter(|commit| !reviews.covered.contains(*commit))
@@ -358,6 +362,11 @@ pub(crate) fn check_base_commits(
             .map(|id| Path::new(".atelier").join(atelier_records::issue_record_path(&id)))
             .collect::<BTreeSet<_>>();
         if !marks.is_empty() && changed.iter().all(|path| marks.contains(path)) {
+            continue;
+        }
+        // An accepted approval of a light-path branch reviewed its code; its
+        // done claims were judged above.
+        if light.contains(commit) {
             continue;
         }
         checked += 1;
@@ -851,6 +860,9 @@ pub(crate) struct BranchSummaries {
     base_branch: String,
     /// In branch order.
     entries: Vec<Result<BranchOwner, UnreadableBranch>>,
+    /// Branches no issue owns that hold review records about themselves
+    /// (the light path, atelier-4nsl), each as its status row.
+    light: Vec<String>,
     /// Branches with no started work or no tracker, in branch order.
     unowned: Vec<String>,
     /// Each pair of waiting branches that change the same files, with them.
@@ -881,6 +893,7 @@ impl BranchSummaries {
                 }
             })
             .collect::<Vec<_>>();
+        lines.extend(self.light.iter().cloned());
         if !self.unowned.is_empty() {
             lines.push(format!("Unowned: {}", self.unowned.join(", ")));
         }
@@ -983,6 +996,7 @@ fn branch_summaries_for(
     )?;
     let base_head = resolve(repo, &format!("refs/heads/{base_branch}")).ok();
     let mut entries = Vec::new();
+    let mut light = Vec::new();
     let mut unowned = Vec::new();
     // The files each waiting branch changes since it left the base.
     let mut waiting = Vec::<(String, Vec<PathBuf>)>::new();
@@ -1029,11 +1043,32 @@ fn branch_summaries_for(
                     Path::new(".atelier/config.toml"),
                 )?;
             }
-            let owners = match &owners {
-                Ok(owners) if owners.is_empty() => return Ok(None),
+            let mut owners = match &owners {
                 Ok(owners) => owners.clone(),
                 Err(error) => bail!("{error:#}"),
             };
+            // An owner already done on the base no longer owns a branch that
+            // holds commits the base lacks: the branch is on the light path
+            // (atelier-4nsl, finding atelier-4t47). A branch the base already
+            // contains has nothing to review, so its row still says what
+            // merged.
+            let unmerged = base_head.as_deref().is_some_and(|base_head| {
+                git_freshness::git_output(repo, &["merge-base", "--is-ancestor", commit, base_head])
+                    .is_err()
+            });
+            if unmerged {
+                owners.retain(|id| {
+                    !atelier_app::light_path::done_at(
+                        repo,
+                        &branch_policy,
+                        &format!("refs/heads/{base_branch}"),
+                        id,
+                    )
+                });
+            }
+            if owners.is_empty() {
+                return Ok(None);
+            }
             let snapshot = Snapshot::at(repo, state, commit)?;
             snapshot
                 .index
@@ -1091,7 +1126,17 @@ fn branch_summaries_for(
         })();
         match view {
             Ok(Some(rows)) => entries.extend(rows.into_iter().map(Ok)),
-            Ok(None) => unowned.push(branch.to_string()),
+            Ok(None) => match base_head
+                .as_deref()
+                .map(|base_head| light_row(repo, branch, commit, base_head))
+            {
+                Some(Ok(Some(row))) => light.push(row),
+                Some(Err(error)) => light.push(format!(
+                    "{branch}  light path, review state unknown: {}",
+                    short_reason(&error)
+                )),
+                _ => unowned.push(branch.to_string()),
+            },
             Err(error) => entries.push(Err(UnreadableBranch {
                 branch: branch.to_string(),
                 owners: owners.unwrap_or_default(),
@@ -1115,9 +1160,56 @@ fn branch_summaries_for(
     Ok(BranchSummaries {
         base_branch: base_branch.to_owned(),
         entries,
+        light,
         unowned,
         shared,
     })
+}
+
+/// The status row of `branch` at `tip`, which no issue owns, when its
+/// current run holds review records about it: `<branch>  light path, ✓
+/// approved, behind 3, merges cleanly`. `None` when it holds none, so the
+/// branch is listed as unowned. Only the review records the branch added
+/// since it left the base are read.
+fn light_row(repo: &Path, branch: &str, tip: &str, base_head: &str) -> Result<Option<String>> {
+    let fork = text(repo, &["merge-base", base_head, tip])?;
+    let added = text(
+        repo,
+        &[
+            "diff",
+            "--name-only",
+            "--diff-filter=AM",
+            &fork,
+            tip,
+            "--",
+            ".atelier/reviews/",
+        ],
+    )?;
+    let mut records = Vec::new();
+    for path in added.lines() {
+        let path = Path::new(path);
+        let text = git_freshness::blob(repo, tip, path)?;
+        if let Ok(atelier_records::review::ReviewFile::BranchEvent(record)) =
+            atelier_records::review::parse_review_file(&text, path.strip_prefix(".atelier")?)
+        {
+            records.push(record);
+        }
+    }
+    let mut read = git_freshness::ReadContext::from_snapshot(repo, tip.to_owned(), &[]);
+    let run = atelier_app::light_path::run(&records, &mut read, branch, &fork);
+    if run.is_empty() {
+        return Ok(None);
+    }
+    let state = atelier_app::light_path::standing(&run, &mut read, &fork)?.state;
+    let merge = branch_merge(repo, tip, base_head)?;
+    let facts = Readiness {
+        approval: state,
+        behind: merge.behind,
+        failing: None,
+        conflicts: merge.conflicts,
+    }
+    .facts();
+    Ok(Some(format!("{branch}  light path{facts}")))
 }
 
 /// How a branch at `tip` meets the base at `base_head`; the same for every

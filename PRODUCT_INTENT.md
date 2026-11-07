@@ -39,7 +39,11 @@ mechanical guards at the point of action. The governing decision is
   merge commit `merge` integrates reviewed work with, which also marks that
   work done.
 - Make transitions record writes with read-only checks. Branch preparation and
-  gated integration are explicit `start` and `merge` commands.
+  gated integration are explicit `start` and `merge` commands for an issue's
+  work. A change no issue owns, such as a release, docs or a mockup, needs no
+  `start`: it is reviewed and merged on an independent approval of its branch
+  head, under the same merge checks, and writes no issue state
+  ([ADR 0028](docs/adr/0028-simpler-lifecycle.md), decision 6).
 - Enforce one order where each step happens: `review request` refuses while a
   Done when line is unticked or the Report is empty, and `merge` marks the
   owner's open work done in its merge commit, so the base branch sees

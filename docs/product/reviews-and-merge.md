@@ -3,7 +3,8 @@
 Reviews are Markdown events under `.atelier/reviews/`. Each command
 adds a new file with an explicit identity, target, full commit, and explanation;
 a [base exemption](#trivial-changes-on-the-base) names its base branch instead
-of a target. Until a finding reaches the base branch it can be
+of a target, and a record on the [light path](#a-change-with-no-issue-the-light-path)
+names the branch it is about. Until a finding reaches the base branch it can be
 [corrected or deleted](#correcting-review-records), while an approval or
 trivial exemption stays as first committed; on the base, the one thing that
 changes in place is a finding's [disposition](#dispositions), a field of the
@@ -24,9 +25,14 @@ atelier review approve <owner-id> --identity "Reviewer" "Approval summary"
 atelier review finding <owner-id> --identity "Reviewer" --recommendation fix_now "Problem"
 atelier review trivial <owner-id> --identity "Author" "Why correctness is evident"
 atelier review trivial --base <commit> --identity "Author" "Why correctness is evident"
+atelier review finding --branch <name> --identity "Reviewer" --recommendation fix_now "Problem"
+atelier review approve --branch <name> --identity "Reviewer" "Approval summary"
 atelier review list <owner-id>
 atelier review show <review-id>
 ```
+
+`--branch <name>` in place of the owner records an event about a branch no
+issue owns (see [the light path](#a-change-with-no-issue-the-light-path)).
 
 `record` stores a review account; `approve` stores approval. Identity is
 self-declared and recorded with each event; it is not compared with the work's
@@ -163,10 +169,13 @@ the base remain immutable.
 
 ## Requesting a review
 
-`atelier review request <id> [--identity <name>] [--from <rev>]` prints the
+`atelier review request [<id>] [--identity <name>] [--from <rev>]` prints the
 brief to give an independent reviewer, as dense Markdown (ADR 0022), so the
 orchestrator does not hand-write it. `<id>` is the branch owner or one of its
-children; run it from the owner's worktree. The brief holds only what comes
+children; run it from the owner's worktree. With no ID it reviews the
+checked-out branch's owner, or, on a branch no issue owns, the branch itself
+([the light path](#a-change-with-no-issue-the-light-path)); on the base it
+refuses with `review_request_base`. The brief holds only what comes
 from records, Git and policy:
 
 - the owner's Goal and Done when, and each child's Done when;
@@ -300,7 +309,11 @@ atelier merge <owner-or-child-id>
 atelier merge <owner-or-child-id> --sync
 ```
 
-Run these from the recorded work branch. From anywhere else, `merge` refuses
+Run these from the recorded work branch. With no ID, `merge` acts on the
+checked-out branch's owner, or, on a branch no issue owns, merges the branch
+itself on an approval of its head ([the light
+path](#a-change-with-no-issue-the-light-path)); on the base it refuses with
+`merge_base_branch`. From anywhere else, `merge` refuses
 with `merge_branch_mismatch`, naming the work branch and `git switch
 <branch>`; on the base, where the records learn of the branch only when the
 work merges, it finds the branch from the local branches' own records. An item
@@ -542,7 +555,9 @@ resolved by this approval when it pins a later commit holding the finding's
 record and was recorded after the finding, or, for an older Atelier's FIX NOW
 disposition, when its
 resolution commit is at or before the approval's pin. That is what `atelier merge` integrates. A commit a [base
-exemption](#trivial-changes-on-the-base) pins is covered too. Every other commit may touch only records and the
+exemption](#trivial-changes-on-the-base) pins is covered too, and so are the
+commits an approval of a [light-path branch](#a-change-with-no-issue-the-light-path)
+covers, though their done claims are still judged. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. Those record-only commits also may not take a work
 item to done: work is done by the merge that integrates it, so `land` refuses
@@ -595,3 +610,80 @@ and it covers no done claim, which only a merge of the work makes
 (`land_base_done_claim`). `review list` and `review show` show it, and a
 mission's debrief shows each base exemption recorded between the mission's
 start and its done claim on its timeline, because it names no mission.
+
+Use it for one commit whose correctness is evident from its diff, already on
+the base. Anything that deserves a review but has no issue, such as a
+release, a docs change or a mockup, goes on a branch and takes [the light
+path](#a-change-with-no-issue-the-light-path) instead.
+
+## A change with no issue: the light path
+
+A release, a docs edit or a mockup change gets an independent review without
+an issue around it: no create, `start`, Done when or Report ([ADR
+0028](../adr/0028-simpler-lifecycle.md), decision 6, atelier-4nsl). Commit it
+on a branch no issue owns, then, from that branch:
+
+```text
+atelier review request
+atelier review finding --branch <name> --identity "Reviewer" --recommendation fix_now "Problem" --commit-records
+atelier review approve --branch <name> --identity "Reviewer" "What was checked" --commit-records
+atelier merge --check
+atelier merge
+```
+
+- **Which branches.** A branch is owned while an issue that is not done on
+  the base records it as its work branch; an owner already done on the base
+  no longer owns the name, so a branch that reuses it is on the light path.
+  The base is never on it. On an owned branch, `review request` and `merge`
+  with no ID act on the owner, and records about the branch count for
+  nothing.
+- **The brief.** `review request` with no ID prints the branch's commits since
+  it left the base: the range, each commit's subject, the diff stat, earlier
+  findings and reviews of the branch, the merge checks, the working rules,
+  and the `--branch` commands to record findings and an approval. It has no
+  Goal or Done when, so the reviewer judges each change from its commits. A
+  branch with no commits since the base refuses with `review_request_empty`.
+- **Records.** A record about a branch is an ordinary review record whose
+  front matter names `branch: <name>` instead of a `target`, at review schema
+  version 3; an Atelier that predates the light path reports such a record as
+  needing a newer Atelier and refuses to load the repository's records until
+  it is upgraded, so a repository whose CI pins an older binary waits for the
+  pin to move. Records about issues are still written at version 2. It is written only from a checkout of that branch, unowned
+  (`review_branch_owned` names the owner otherwise), and pinned after the
+  branch left the base (`review_branch_pin`). `review disposition` decides a
+  finding about a branch by its ID, and `review list` and `review show` show
+  `on branch <name>`. There is no trivial exemption of a branch: an approval
+  is the only cover. Records about a branch are never pruned, and a deferred
+  finding's follow-up issue is kept while they are.
+- **The current run.** A record counts only when it is pinned to a commit the
+  branch holds and the point where it left the base does not, so a later
+  branch named `release` inherits none of an earlier `release` branch's
+  findings or approvals. Approvals stay as first committed and go stale only
+  on code changes, as for an issue.
+- **Merge.** `atelier merge` with no ID requires a current independent
+  approval of the branch head, judges the branch's findings as
+  `findings.disposed` judges an issue's, runs the base policy's
+  `merge_checks` on the merged tree (a check that reads an issue passes,
+  since there is none) and the `claims.reviewed` check, and writes no issue
+  state: the merge commit's tree is Git's own merge of the base and the
+  branch head. `atelier merge --sync` with no ID catches the branch up and
+  reports whether its approval survived.
+- **No done claim.** An approval of a branch covers its code and never a done
+  claim: a light-path branch whose commits mark an issue done is refused by
+  `claims.reviewed`, and on the base by `land_base_done_claim`. When
+  `atelier start` takes a branch that holds records about itself, it notes
+  that they stop counting, and the branch follows the issue path.
+- **On the base.** `land` counts the branch's commits as reviewed when its
+  approval is one merge would have accepted: it reached the base through a
+  merge, no issue owned the branch when it merged, the approval is as first
+  committed and every finding of its run pinned at or before it is settled.
+  `atelier check` and `doctor` accept the records.
+- **A release.** File the tag as a [loose end](validation.md#work-after-the-merge)
+  on the release branch with no blocker: it reaches the base with the merge,
+  where it is ready, and cannot be forgotten. It also shows as ready on the
+  branch, which is harmless.
+
+`atelier merge` is the documented path. A plain `git merge` of an approved
+light-path branch passes `land` without running `merge_checks`, because
+`land` cannot tell how a merge commit was made; the approval still covers
+the code, and CI runs on the base (an accepted risk, ADR 0028 decision 6).

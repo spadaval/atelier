@@ -405,13 +405,13 @@ fn first_code_commit(repo: &Path, from: &str, to: &str) -> Result<Option<(String
 /// The error for a base that moved while checks ran: a retry marker when the
 /// move is records-only, so a merge commit on the new base needs no new
 /// checks, else a refusal naming what prevents the retry.
-fn base_moved(repo: &Path, id: &str, base: &str, (from, to): (&str, &str)) -> anyhow::Error {
+fn base_moved(repo: &Path, rerun: &str, base: &str, (from, to): (&str, &str)) -> anyhow::Error {
     let named = |commit: &str, path: &Path| {
-        anyhow::anyhow!("merge_snapshot_changed: {base} moved while checks ran, and {} changes {}, which is not a record. Next: rerun `atelier merge {id}`", crate::human_output::short_commit(commit), path.display())
+        anyhow::anyhow!("merge_snapshot_changed: {base} moved while checks ran, and {} changes {}, which is not a record. Next: rerun `{rerun}`", crate::human_output::short_commit(commit), path.display())
     };
     let ancestor = git::git_output(repo, &["merge-base", "--is-ancestor", from, to]).is_ok();
     if !ancestor {
-        return anyhow::anyhow!("merge_snapshot_changed: {base} was rewritten while checks ran, from {} to {}. Next: rerun `atelier merge {id}`", crate::human_output::short_commit(from), crate::human_output::short_commit(to));
+        return anyhow::anyhow!("merge_snapshot_changed: {base} was rewritten while checks ran, from {} to {}. Next: rerun `{rerun}`", crate::human_output::short_commit(from), crate::human_output::short_commit(to));
     }
     match first_code_commit(repo, from, to) {
         Err(error) => error,
@@ -442,7 +442,10 @@ fn test_move_base_before_locks(repo: &Path, base: &str) {
 /// merge is done); a failed gate's line goes to stderr instead. A base that
 /// moves by records-only commits while checks run is merged again, up to
 /// `MAX_ATTEMPTS` times; any other move refuses.
-pub fn run(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+/// With no ID, the checked-out branch says what merges: its owner's work, or
+/// on a branch no issue owns, the branch itself on an approval of its head
+/// (the light path, atelier-4nsl).
+pub fn run(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -> Result<()> {
     let result = attempts(issue_ref, check_only, json, quiet);
     // `--json` is a script's format and keeps its errors (ADR 0022).
     if json {
@@ -496,14 +499,14 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
         .then(|| code.to_owned())
 }
 
-fn attempts(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+fn attempts(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -> Result<()> {
     for attempt in 1..=MAX_ATTEMPTS {
         match merge_once(issue_ref, check_only, json, quiet) {
             Err(error) => match error.downcast_ref::<RetryOnMovedBase>() {
                 Some(moved) if attempt < MAX_ATTEMPTS => {
                     eprintln!("merge_base_moved: {moved}; running the gates again on the new base")
                 }
-                Some(moved) => bail!("merge_snapshot_changed: {moved}, and it kept moving across {MAX_ATTEMPTS} attempts. Next: rerun `atelier merge {issue_ref}` once the base is quiet"),
+                Some(moved) => bail!("merge_snapshot_changed: {moved}, and it kept moving across {MAX_ATTEMPTS} attempts. Next: rerun `{}` once the base is quiet", rerun(issue_ref)),
                 None => return Err(error),
             },
             done => return done,
@@ -512,8 +515,17 @@ fn attempts(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Resul
     unreachable!("the last attempt returns")
 }
 
+/// The command that runs this merge again.
+fn rerun(issue_ref: Option<&str>) -> String {
+    match issue_ref {
+        Some(id) => format!("atelier merge {id}"),
+        None => "atelier merge".to_owned(),
+    }
+}
+
 /// The checked-out work branch of the item's owner, read from its committed
-/// records: what `merge` and `merge --sync` both start from.
+/// records: what `merge` and `merge --sync` both start from. On the light
+/// path `owner` is the branch, which no issue owns, and `id` is empty.
 pub(super) struct Owned {
     pub layout: StorageLayout,
     pub head: String,
@@ -528,6 +540,9 @@ pub(super) struct Owned {
     pub committed: Option<tempfile::TempDir>,
     /// The records that differ, when `committed` holds HEAD's.
     pub uncommitted: Option<crate::gate_report::Uncommitted>,
+    /// Whether this is a branch no issue owns, merged on an approval of its
+    /// head (atelier-4nsl).
+    pub light: bool,
 }
 
 /// An item whose work is already on the base: `merge` has nothing to do.
@@ -541,7 +556,7 @@ impl std::fmt::Display for AlreadyMerged {
 impl std::error::Error for AlreadyMerged {}
 
 /// The owner's work branch, refusing any checkout but its own clean one.
-pub(super) fn owned_branch(issue_ref: &str) -> Result<Owned> {
+pub(super) fn owned_branch(issue_ref: Option<&str>) -> Result<Owned> {
     owned(issue_ref, None)
 }
 
@@ -549,7 +564,7 @@ pub(super) fn owned_branch(issue_ref: &str) -> Result<Owned> {
 /// differ from HEAD are failed preconditions instead of refusals, and the
 /// records are read from HEAD's commit, so the gates still run.
 fn owned(
-    issue_ref: &str,
+    issue_ref: Option<&str>,
     mut preconditions: Option<&mut crate::gate_report::Preconditions>,
 ) -> Result<Owned> {
     let layout = StorageLayout::discover()?;
@@ -631,6 +646,52 @@ fn owned(
             );
         }
     };
+    // With no ID, the checked-out branch says which path merge takes: its
+    // owner's, or on a branch no issue owns, the light path (atelier-4nsl).
+    let issue_ref = match issue_ref {
+        Some(reference) => reference.to_owned(),
+        None => {
+            use crate::commands::light_path::{checkout, single_owner, Checkout};
+            let base = base_policy::from_ref(repo, "HEAD")?
+                .policy
+                .branch_policy
+                .base_branch;
+            let path = checkout(repo, &index, &base);
+            let light = match path {
+                Ok(Checkout::Owned(owners)) => single_owner(&owners, "merge_owner_ambiguous"),
+                Ok(Checkout::Light(light)) => {
+                    if let Some(preconditions) = preconditions.as_deref_mut() {
+                        preconditions.owner = Some(light.branch.clone());
+                    }
+                    report_found(&mut preconditions, &mut found);
+                    return Ok(Owned {
+                        layout,
+                        head,
+                        owner: light.branch,
+                        branch,
+                        snapshot,
+                        index,
+                        id: String::new(),
+                        base,
+                        committed,
+                        uncommitted,
+                        light: true,
+                    });
+                }
+                Ok(Checkout::Base(base)) => Err(anyhow::anyhow!("merge_base_branch: {base} is the base branch, which merges nothing into itself. Next: name the issue to merge, or check out the branch to merge")),
+                Ok(Checkout::Detached) => Err(anyhow::anyhow!("merge_detached_head: merge requires a local work branch. Next: check out the work branch, then retry")),
+                Err(error) => Err(error),
+            };
+            match light {
+                Ok(owner) => owner,
+                Err(error) => {
+                    report_found(&mut preconditions, &mut found);
+                    return Err(error);
+                }
+            }
+        }
+    };
+    let issue_ref = issue_ref.as_str();
     let resolved = (|| -> Result<(String, String)> {
         let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, issue_ref)?;
         let issue = index.require_issue(&id)?;
@@ -736,6 +797,7 @@ fn owned(
         base,
         committed,
         uncommitted,
+        light: false,
     })
 }
 
@@ -753,7 +815,7 @@ fn is_merge_code(code: &str) -> bool {
 /// One merge attempt. A failed precondition is one more failed check, and
 /// the gates still run against what can be read; one that keeps them from
 /// running prints with the preconditions before it.
-fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+fn merge_once(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -> Result<()> {
     let mut preconditions = crate::gate_report::Preconditions::default();
     let result = merge_gates(issue_ref, check_only, json, quiet, &mut preconditions);
     let Err(error) = result else {
@@ -786,7 +848,7 @@ fn merge_once(issue_ref: &str, check_only: bool, json: bool, quiet: bool) -> Res
 }
 
 fn merge_gates(
-    issue_ref: &str,
+    issue_ref: Option<&str>,
     check_only: bool,
     json: bool,
     quiet: bool,
@@ -803,8 +865,10 @@ fn merge_gates(
         base,
         committed,
         uncommitted,
+        light,
     } = owned(issue_ref, Some(preconditions))?;
     let repo = layout.repo_root();
+    let rerun = if light { rerun(None) } else { rerun(Some(&id)) };
     // Where the records the gates read are: the checkout, or HEAD's when
     // the checkout's differ.
     let records_root = committed.as_ref().map_or(repo, |dir| dir.path());
@@ -840,7 +904,7 @@ fn merge_gates(
     };
     if let Err(error) = candidate {
         let (code, cause) = crate::gate_report::policy_failure(&error).with_context(|| {
-            format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml, commit it, then rerun `atelier merge {id}`")
+            format!("candidate workflow policy is invalid: {error:#}. Next: fix .atelier/workflow.yaml, commit it, then rerun `{rerun}`")
         })?;
         let (cause, fix) =
             crate::gate_report::policy_fix(&cause, atelier_workflow::needs_newer_atelier(&error));
@@ -864,8 +928,13 @@ fn merge_gates(
         crate::commands::git::require_committed_config(repo, &head, "merge")?;
     }
     // The merge commit marks the scope's open work done, so its tree is what
-    // reaches the base and what the checks and gates read.
-    let marks = done_marks(&index, &source.policy, owner)?;
+    // reaches the base and what the checks and gates read. A branch no issue
+    // owns has no scope: its merge writes no issue state (atelier-4nsl).
+    let marks = if light {
+        Vec::new()
+    } else {
+        done_marks(&index, &source.policy, owner)?
+    };
     let marked = marks
         .iter()
         .map(|record| record.issue.id.clone())
@@ -905,22 +974,39 @@ fn merge_gates(
         .read_record_files(&checkout.path, true)?
         .0
         .into_index()?;
-    base_records(
-        repo,
-        (&index, &merged),
-        owner,
-        (base, &branch),
-        (&head, &tree),
-    )?;
+    // The owner's scope; a branch no issue owns has none.
+    let scope = if light {
+        std::collections::BTreeSet::new()
+    } else {
+        base_records(
+            repo,
+            (&index, &merged),
+            owner,
+            (base, &branch),
+            (&head, &tree),
+        )?;
+        review_gate::scope(&merged, owner)?
+    };
     // The gates read the records merging would put on the base.
-    let mut nodes = review_gate::evaluate(
-        &merged,
-        &mut read,
-        &source.policy,
-        owner,
-        &fork_point,
-        &checkout.path,
-    )?;
+    let mut nodes = if light {
+        atelier_app::light_path::evaluate(
+            &merged,
+            &mut read,
+            &source.policy,
+            owner,
+            &fork_point,
+            Some(&checkout.path),
+        )?
+    } else {
+        review_gate::evaluate(
+            &merged,
+            &mut read,
+            &source.policy,
+            owner,
+            &fork_point,
+            &checkout.path,
+        )?
+    };
     // The records merging puts on the base, the done marks it writes
     // included, pass `atelier check` there, as every other write of records
     // does (atelier-ilba).
@@ -935,7 +1021,7 @@ fn merge_gates(
         &mut git::ReadContext::from_snapshot(repo, commit.clone(), &[]),
         &merged,
         &source.policy,
-        owner,
+        &scope,
         &base_head,
         &commit,
     )?);
@@ -988,7 +1074,7 @@ fn merge_gates(
     if let Some((commit, claim)) = &unreviewed {
         // An approval covers a done claim in its scope while it is still
         // current at the claim's commit.
-        claims_reviewed.fix = Some(if review_gate::scope(&merged, owner)?.contains(claim) {
+        claims_reviewed.fix = Some(if scope.contains(claim) {
             format!("atelier review request {owner}")
         } else {
             format!("edit .atelier/issues/{claim}.md back to its earlier status on this branch, commit, and merge {claim} from its own branch after `atelier start {claim}`")
@@ -1006,6 +1092,7 @@ fn merge_gates(
         policy: &source.policy,
         owner: Some(owner),
         uncommitted: uncommitted.as_ref(),
+        light_path: light,
     }
     .report(&nodes);
     // A Done when edited after its item was started is shown to whoever
@@ -1014,7 +1101,7 @@ fn merge_gates(
         &mut read,
         Some(&source.policy),
         &merged,
-        &review_gate::scope(&merged, owner)?,
+        &scope,
     )?
     .iter()
     .map(|edit| format!("Note: {}", crate::human_output::done_when_edit(edit)))
@@ -1051,7 +1138,7 @@ fn merge_gates(
                 say(line);
             }
             if check_only && !quiet {
-                println!("Next: atelier merge {id}");
+                println!("Next: {rerun}");
             }
         } else {
             for line in gates.failures.iter().chain(&gates.passes).chain(&edited) {
@@ -1088,8 +1175,10 @@ fn merge_gates(
     // only the attempt that returns reports (atelier-1hjj).
     let moved = match crate::commands::git::resolve(repo, &base_ref) {
         Ok(current) if current == base_head => None,
-        Ok(current) => Some(base_moved(repo, &id, base, (&base_head, &current))),
-        Err(_) => Some(anyhow::anyhow!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}`")),
+        Ok(current) => Some(base_moved(repo, &rerun, base, (&base_head, &current))),
+        Err(_) => Some(anyhow::anyhow!(
+            "merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `{rerun}`"
+        )),
     };
     if let Some(moved) = moved {
         if moved.downcast_ref::<RetryOnMovedBase>().is_none() {
@@ -1109,10 +1198,10 @@ fn merge_gates(
             &["rev-parse", "--verify", &format!("refs/heads/{branch}")],
         )? != head
     {
-        bail!("merge_snapshot_changed: Git refs changed while checks ran. Next: rerun `atelier merge {id}`");
+        bail!("merge_snapshot_changed: Git refs changed while checks ran. Next: rerun `{rerun}`");
     }
     if base_checkout(repo, base)? != base_tree {
-        bail!("merge_snapshot_changed: base checkout ownership changed while checks ran. Next: rerun `atelier merge {id}`");
+        bail!("merge_snapshot_changed: base checkout ownership changed while checks ran. Next: rerun `{rerun}`");
     }
     if let Some(path) = &base_tree {
         base_snapshot
@@ -1122,7 +1211,7 @@ fn merge_gates(
         if git::head_commit(path)? != base_head
             || crate::commands::git::checkout_branch(path)?.as_deref() != Some(base.as_str())
         {
-            bail!("merge_snapshot_changed: base checkout changed while checks ran. Next: rerun `atelier merge {id}`");
+            bail!("merge_snapshot_changed: base checkout changed while checks ran. Next: rerun `{rerun}`");
         }
     }
     if !text(

@@ -191,13 +191,16 @@ fn lint_records(
         let integrity_errors = match other_file_errors.into_iter().next() {
             Some(first) => vec![first.message],
             None => {
-                let (index, errors) = RecordIndex::checked(
+                let (index, mut errors) = RecordIndex::checked(
                     state_dir,
                     files.issues.clone(),
                     files.evidence.clone(),
                     files.reviews.clone(),
                     explain,
                 );
+                // Events about branches name no issue as their target
+                // (atelier-4nsl).
+                errors.extend(index.branch_review_errors(&files.branch_reviews));
                 graph = Some(index);
                 errors
                     .into_iter()
@@ -229,7 +232,8 @@ fn lint_records(
     if let (true, Some(index)) = (records_valid, graph) {
         let index = index
             .with_base_exemptions(files.base_exemptions)?
-            .with_retired_dispositions(files.retired_dispositions)?;
+            .with_retired_dispositions(files.retired_dispositions)?
+            .with_branch_reviews(files.branch_reviews)?;
         findings.extend(criteria_findings(&index, repo_root, scoped_id)?);
         loaded = Some(index);
     }
@@ -546,7 +550,11 @@ fn resolve_issue_id(files: &crate::record_index::RecordFiles, issue_ref: &str) -
         .evidence
         .iter()
         .map(|record| record.header.id.as_str());
-    let reviews = files.reviews.iter().map(|record| record.header.id.as_str());
+    let reviews = files
+        .reviews
+        .iter()
+        .chain(&files.branch_reviews)
+        .map(|record| record.header.id.as_str());
     for (kind, other_ids) in [
         (RecordKind::Evidence, evidence.collect::<Vec<_>>()),
         (RecordKind::Review, reviews.collect::<Vec<_>>()),
