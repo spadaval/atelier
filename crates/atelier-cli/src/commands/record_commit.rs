@@ -24,7 +24,9 @@ use std::path::{Path, PathBuf};
 pub struct RecordCommitArgs {
     /// Stage the records this command wrote and commit them with a generated
     /// subject, together with any records earlier `--stage-records` commands
-    /// staged. Refuses to start when the index holds other staged changes
+    /// staged; amends the record commit the previous `--commit-records` made
+    /// while no record pins it and nothing else holds it. Refuses to start
+    /// when the index holds other staged changes
     #[arg(long, conflicts_with = "stage_records")]
     pub commit_records: bool,
     /// Stage the records this command wrote without committing, so that a
