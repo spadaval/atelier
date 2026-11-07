@@ -48,7 +48,9 @@ atelier issue link <loose-end> <item> --role blocked_by
 
 A loose end is `blocked_by` the issue it waits on, so it shows in `work
 blocked` until that merges and in `work ready` after, or in `work human` when
-labelled `needs-human`. A release has no issue: file its tag on the release
+labelled `needs-human`. One that is not near-term, or a validation saved for
+later, can be parked in `backlog` with `defer` and brought back with `plan`,
+as work can; `issue create --status backlog` files it there. A release has no issue: file its tag on the release
 branch with no blocker, and it reaches the base with the [light-path
 merge](reviews-and-merge.md#a-change-with-no-issue-the-light-path) and is
 ready there. It is never part of a mission: it is no issue's child

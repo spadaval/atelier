@@ -2547,7 +2547,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
     let output = ok(f.path(), &["land"]);
     assert!(
         output
-            .contains("No work owner on branch feature/unowned; it changes no Atelier tracker files since main"),
+            .contains("No work owner on branch feature/unowned; it changes no Atelier tracker records since main"),
         "{output}"
     );
     let stop =
@@ -2563,7 +2563,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
         !pass
-            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier tracker files since main")
+            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier tracker records since main")
             && output.contains(&format!(".atelier/issues/{filed}.md"))
             && output.contains(&format!("Next: give the work an owner branch with `atelier start {filed}`")),
         "{output}"
@@ -6901,7 +6901,7 @@ fn an_unowned_branch_changing_an_owned_item_points_to_its_branch() {
     assert!(!pass);
     assert!(
         out.contains(&format!(
-            "{id} is owned on {}. Next: land it there with `git switch {} && atelier land`, or move the tracker changes onto {}\n",
+            "{id} is owned on {}. Next: land it there with `git switch {} && atelier land`, or move the tracker records onto {}\n",
             f.branch, f.branch, f.branch
         )),
         "{out}"

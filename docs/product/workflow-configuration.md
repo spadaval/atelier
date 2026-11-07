@@ -96,7 +96,8 @@ before the decision type existed can copy its `issue_types` entry and
 `decision` workflow from a fresh `atelier init`. Loose ends and validations
 share the `on_base` workflow, which has no start either: `done` takes one from
 `todo` to `done` once nothing blocks it, and requires a Report, a one-line
-result; `supersede` retires it. Any item whose workflow has no `start`
+result; `defer` parks one in `backlog` and `plan` brings it back, as for work;
+`supersede` retires it. Any item whose workflow has no `start`
 transition takes no branch, review or merge: `atelier start` and `atelier
 merge` refuse it and name its done transition, and `land` accepts it marked
 done on the base, as it does a mission closed there (atelier-8bh4). This is
@@ -127,23 +128,24 @@ has makes `atelier check` and every command that loads the records report
 `workflow_issue_status_invalid`, including the transitions that would move
 it. Move a policy to the starter's shape in this order:
 
-1. **Move items out of the statuses the new policy lacks**, while the old
-   policy is still in place: each goes to `todo`, or is superseded. That is
-   every `blocked` or `review` item and, when validations move to the
-   `on_base` workflow, every validation in a status other than `todo`,
-   `done` or `superseded`, such as `backlog` or `in_progress`, because
-   `on_base` has only those. Use the old policy's transitions where one
-   leads there (`plan` takes `backlog` to `todo`), and otherwise edit the
-   record's `status`; `atelier check` judges either.
+1. **Move items out of `blocked` and `review`**, while the old policy is
+   still in place: each goes to `todo`, or is superseded. The old policy's
+   `defer` then `plan` take a `blocked` item to `todo`; no transition takes
+   a `review` item there, so edit its record's `status`. `atelier check`
+   judges either. When validations move to `on_base`, which has no
+   `in_progress`, a validation still `in_progress` under the old `work`
+   workflow moves to `todo` too.
 2. **Switch the policy to the starter's shape**, copying each piece from the
-   policy a fresh `atelier init` writes: `branch_policy.merge_strategy:
-   merge_commit`; no `close` on the `work` workflow, since `atelier merge`
-   marks work done; no `blocked` or `review` status, nor the transitions
-   that use them; and the `loose_end` issue type with the `on_base`
-   workflow, applied to `loose_end` and `validation`, with `validation`
-   taken out of `work`'s `applies_to`, since an issue type belongs to one
-   workflow. A repository that keeps validations in `work` applies `on_base`
-   to `loose_end` alone.
+   policy a fresh `atelier init` writes: no `close` on the `work` workflow,
+   since `atelier merge` marks work done; no `blocked` or `review` status,
+   nor the transitions that use them; and the `loose_end` issue type with
+   the `on_base` workflow, applied to `loose_end` and `validation`, with
+   `validation` taken out of `work`'s `applies_to`, since an issue type
+   belongs to one workflow. `on_base` keeps `backlog`, so parked validations
+   stay parked. A repository that keeps validations in `work` applies
+   `on_base` to `loose_end` alone. An old `branch_policy.merge_strategy` can
+   stay or go: a fresh init writes none, and every value, `fast_forward_only`
+   and `squash` included, is read as a merge commit.
 3. **Run `atelier migrate after-merge`**, which needs the `loose_end` type:
    its dry run shows the loose end each open After merge line becomes, and
    `--apply` writes them (see

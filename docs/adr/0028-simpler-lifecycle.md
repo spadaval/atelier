@@ -24,8 +24,8 @@ lifecycle item, atelier-jnrh, amended decision 2 with the mechanics it
 settled; atelier-ml3r corrected decision 2 on what the review brief leaves
 out and named atelier-nn67 for the work left in the other repositories;
 atelier-nn67 moved the `branch_base` write and `start --base` to
-atelier-hfme (decision 5) and kept an item's last Done when line in the
-migration (decision 3).
+atelier-hfme (decision 5), kept an item's last Done when line in the
+migration and gave the `on_base` workflow a `backlog` (decision 3).
 
 ## Governing Principle
 
@@ -186,6 +186,10 @@ Built by atelier-8bh4:
   a transition named `done`, which requires the policy's `close_reason`, a
   non-empty Report holding the one-line result, and runs
   `blockers.none_open`; plus `supersede`. It has no `start` transition.
+  atelier-nn67 gave it `backlog`, with `defer` and `plan` as work has, on
+  the orchestrator's decision: repositories park validations (astromech had
+  six in `backlog`), and without it moving a policy meant moving them,
+  which broke every in-flight branch that edited them until it synced.
   Atelier does not count the Report's lines; one line is the guidance.
 - **Judged by workflow.** An item whose workflow has no `start` transition
   takes no branch, review or merge, whatever its type: `atelier start` and

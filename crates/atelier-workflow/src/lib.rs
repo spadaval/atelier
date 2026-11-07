@@ -144,6 +144,14 @@ workflows:
     - done
     - superseded
     transitions:
+      plan:
+        from: [backlog]
+        to: todo
+        description: Bring a parked item back into the near-term plan.
+      defer:
+        from: [todo]
+        to: backlog
+        description: Park an item that is recorded but not near-term, such as a validation for later.
       done:
         from: [todo]
         to: done
@@ -152,7 +160,7 @@ workflows:
         validators:
         - blockers.none_open
       supersede:
-        from: [todo]
+        from: [backlog, todo]
         to: superseded
         required_fields: [close_reason]
         description: Retire it once it is no longer needed.
@@ -1913,12 +1921,23 @@ mod tests {
         assert_eq!(policy.merge_done_status("decision"), None);
         assert_eq!(policy.merge_done_status("loose_end"), None);
         // Loose ends and validations share one workflow with no start: done
-        // on the base through `done`, which requires a Report (atelier-8bh4).
+        // on the base through `done`, which requires a Report (atelier-8bh4),
+        // and parked in `backlog` as work is (atelier-nn67).
         let on_base = &policy.workflows["on_base"].transitions;
-        assert_eq!(
-            on_base.keys().map(String::as_str).collect::<Vec<_>>(),
-            vec!["done", "supersede"]
-        );
+        let mut names = on_base.keys().map(String::as_str).collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names, vec!["defer", "done", "plan", "supersede"]);
+        for (name, from, to) in [
+            ("plan", vec!["backlog"], "todo"),
+            ("defer", vec!["todo"], "backlog"),
+            ("supersede", vec!["backlog", "todo"], "superseded"),
+        ] {
+            assert_eq!(
+                (on_base[name].from.clone(), on_base[name].to.as_str()),
+                (from.into_iter().map(String::from).collect(), to),
+                "{name}"
+            );
+        }
         assert_eq!(on_base["done"].from, vec!["todo".to_string()]);
         assert_eq!(on_base["done"].to, "done");
         assert_eq!(
@@ -1938,6 +1957,7 @@ mod tests {
         assert_eq!(policy.done_transition("loose_end", "todo"), Some("done"));
         assert_eq!(policy.done_transition("decision", "todo"), Some("decide"));
         assert_eq!(policy.done_transition("loose_end", "done"), None);
+        assert_eq!(policy.done_transition("loose_end", "backlog"), None);
         let close = &policy.workflows["objective"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(

@@ -423,6 +423,66 @@ fn validation_is_done_on_the_base_unless_the_policy_keeps_it_in_work() {
     assert!(output.contains("Applied transition start"), "{output}");
 }
 
+/// Loose ends and validations can be parked in `backlog`, as work can
+/// (atelier-nn67): `issue create --status backlog` files one there, where it
+/// is not ready; `plan` brings it to `todo`, where it is, `defer` parks it
+/// again, and `supersede` retires a parked one.
+#[test]
+fn a_loose_end_or_validation_is_parked_in_backlog_and_planned_back() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    for issue_type in ["loose_end", "validation"] {
+        let id = create(
+            repo,
+            &[
+                &format!("Parked {issue_type}"),
+                "--issue-type",
+                issue_type,
+                "--status",
+                "backlog",
+                "--body",
+                TAG,
+            ],
+        );
+        assert!(record(repo, &id).contains("status: \"backlog\""));
+        let ready = |repo: &Path| ok(repo, &["-q", "work", "ready"]);
+        assert!(!ready(repo).contains(&id));
+
+        ok(repo, &["issue", "transition", &id, "plan"]);
+        assert!(record(repo, &id).contains("status: \"todo\""));
+        assert!(ready(repo).contains(&id));
+
+        ok(repo, &["issue", "transition", &id, "defer"]);
+        assert!(record(repo, &id).contains("status: \"backlog\""));
+        assert!(!ready(repo).contains(&id));
+        // Parked, it is not done on the base by `done`.
+        let (done, output) = cli(
+            repo,
+            &["issue", "transition", &id, "done", "--reason", "Pushed."],
+        );
+        assert!(!done, "{output}");
+
+        ok(
+            repo,
+            &[
+                "issue",
+                "transition",
+                &id,
+                "supersede",
+                "--reason",
+                "No longer needed.",
+            ],
+        );
+        assert!(record(repo, &id).contains("status: \"superseded\""));
+    }
+    assert_eq!(ok(repo, &["check"]), "Check passed.");
+    commit(repo, "Park, plan and retire a loose end and a validation");
+    let (landed, output) = cli(repo, &["land"]);
+    assert!(landed, "{output}");
+}
+
 #[test]
 fn migrate_after_merge_turns_open_lines_into_loose_ends_once() {
     let dir = tempdir().unwrap();
