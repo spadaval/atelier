@@ -336,13 +336,16 @@ fn base_records(
     Ok(())
 }
 
+/// Refuses a checkout with uncommitted changes to tracked files. Untracked
+/// files are no commit's, so merging leaves them in place (atelier-l457).
 fn clean(repo: &Path) -> Result<()> {
-    let dirty = text(repo, &["status", "--porcelain", "--untracked-files=all"])?;
+    let dirty = text(repo, &["status", "--porcelain", "--untracked-files=no"])?;
     if !dirty.is_empty() {
         bail!("merge_checkout_dirty: {} has uncommitted changes:\n{dirty}\nCommit or stash them before retrying.", repo.display());
     }
     Ok(())
 }
+
 fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
     let worktrees =
         String::from_utf8(git::git_output(repo, &["worktree", "list", "--porcelain"])?)?;
@@ -944,6 +947,28 @@ fn merge_gates(
         (&branch, &head),
         &marked,
     )?;
+    // Integrating moves the base checkout to the merge commit, or the work
+    // checkout to the base and then to it.
+    let (target, trees) = match &base_tree {
+        Some(path) => (path.as_path(), vec![commit.as_str()]),
+        None => (repo, vec![base_head.as_str(), commit.as_str()]),
+    };
+    let overwritten = crate::commands::git::untracked_overwritten(target, &trees)?;
+    if !overwritten.is_empty() {
+        preconditions.fail(
+            "merge_untracked_overwritten",
+            format!(
+                "{} has {} where {base} or the merge commit has files, so integrating would overwrite them: {}",
+                target.display(),
+                crate::human_output::count_noun(overwritten.len(), "untracked path"),
+                crate::human_output::first_five(
+                    overwritten.iter().map(|path| path.display().to_string()),
+                    ", "
+                )
+            ),
+            Some("move them out of the way, or commit them, then retry".to_owned()),
+        );
+    }
     let checkout = MergedCheckout::add(repo, &commit)?;
     let merged = committed_snapshot::CommittedSnapshot::new(&commit)?
         .read_record_files(&checkout.path, true)?

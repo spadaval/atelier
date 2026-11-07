@@ -11,14 +11,23 @@ fn test_init_creates_atelier_directory() {
     assert!(stdout.contains("Created") || stdout.contains("initialized"));
     assert!(stdout.contains("Created"));
     assert!(stdout.contains(".atelier/workflow.yaml"));
-    assert!(stdout.contains("atelier check"));
-    assert!(stdout.contains("atelier issue create \"Task\""));
-    let lint_pos = stdout.find("atelier check").unwrap();
-    let issue_pos = stdout.find("atelier issue create \"Task\"").unwrap();
     assert!(
-        lint_pos < issue_pos,
-        "fresh init must verify setup before suggesting issue creation:\n{stdout}"
+        stdout.contains("Base branch: main (from the current branch)"),
+        "{stdout}"
     );
+    // Fresh init ends with the install's steps, in order: review the
+    // policy, commit it on the base, then create the first issue
+    // (atelier-l457).
+    let review = stdout
+        .find("Review the generated policy, its base branch included: .atelier/workflow.yaml")
+        .expect(&stdout);
+    let commit = stdout
+        .find("Commit the install on main; it predates the gates, so it needs no review: git add .atelier .gitignore && git commit -m \"Install Atelier\"")
+        .expect(&stdout);
+    let issue = stdout
+        .find("Create the first issue: atelier issue create \"Task\"")
+        .expect(&stdout);
+    assert!(review < commit && commit < issue, "{stdout}");
     assert!(dir.path().join(".atelier").exists());
     assert!(dir.path().join(".atelier").join("config.toml").exists());
     assert!(dir.path().join(".atelier").join("workflow.yaml").exists());

@@ -85,8 +85,11 @@ fn migrate_default_issue_workflow(dir: &Path) {
     if workflow_path.exists() {
         return;
     }
-    fs::write(&workflow_path, atelier_workflow::STARTER_POLICY_YAML)
-        .expect("failed to write starter workflow policy");
+    fs::write(
+        &workflow_path,
+        atelier_workflow::starter_policy_yaml("main"),
+    )
+    .expect("failed to write starter workflow policy");
 }
 
 fn move_mission_directly_to_ready(dir: &Path, mission_id: &str) {
@@ -140,6 +143,21 @@ fn init_git_repo(dir: &Path) {
 }
 
 fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
+    // `init` runs in a Git repository; the first commit waits for the first
+    // command that needs one.
+    let in_git = Command::new("git")
+        .current_dir(dir)
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .is_ok_and(|output| output.status.success());
+    if matches!(args, ["init", ..]) && !in_git {
+        let status = Command::new("git")
+            .current_dir(dir)
+            .args(["init", "-q", "-b", "main"])
+            .status()
+            .unwrap();
+        assert!(status.success(), "git init failed");
+    }
     let needs_git = matches!(
         args,
         ["issue", "transition", ..]
@@ -148,7 +166,7 @@ fn ensure_git_for_workflow_fixture(dir: &Path, args: &[&str]) {
             | ["evidence", "record", ..]
             | ["--quiet", "evidence", "record", ..]
     );
-    if needs_git && !dir.join(".git").exists() {
+    if needs_git && !git_has_commit(dir) {
         init_git_repo(dir);
         commit_if_dirty(dir, "test fixture state before workflow command");
     }
@@ -728,9 +746,9 @@ const STARTER_WITH_BLOCKED_AND_REVIEW: &str =
 fn starter_with_work_close() -> String {
     let supersede = "      supersede:\n        from: [backlog, todo, in_progress]\n";
     let close = "      close:\n        from: [in_progress]\n        to: done\n        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n";
-    let policy =
-        atelier_workflow::STARTER_POLICY_YAML.replace(supersede, &format!("{close}{supersede}"));
-    assert_ne!(policy, atelier_workflow::STARTER_POLICY_YAML);
+    let starter = atelier_workflow::starter_policy_yaml("main");
+    let policy = starter.replace(supersede, &format!("{close}{supersede}"));
+    assert_ne!(policy, starter);
     policy
 }
 

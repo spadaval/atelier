@@ -636,7 +636,8 @@ fn work_mission_needs_no_git_history() {
     )
     .trim()
     .to_string();
-    assert!(!dir.path().join(".git").exists());
+    // `init` needs a Git repository, but no commit.
+    assert!(!git_has_commit(dir.path()));
     let view = ok(dir.path(), &["work", "mission", &mission]);
     assert!(view.contains("fast unproven Fast."), "{view}");
 }

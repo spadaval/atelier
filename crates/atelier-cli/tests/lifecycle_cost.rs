@@ -10,6 +10,10 @@
 //! test prints how many `atelier` commands the author and the reviewer ran
 //! (run it with `--no-capture` to see them); it pins no count, so a change
 //! that adds a step shows in that line and in this scenario's diff.
+//!
+//! The repository starts from `git init` on `main` or on `master`, and its
+//! setup follows the steps `atelier init` prints, with no edit to the policy
+//! it writes (atelier-l457).
 use std::{cell::Cell, fs, path::Path};
 use tempfile::tempdir;
 #[path = "support/cli.rs"]
@@ -45,6 +49,29 @@ impl Actors<'_> {
 
 #[test]
 fn one_issue_goes_from_start_to_merge_with_no_refusal_and_one_approval() {
+    lifecycle("main");
+}
+
+/// The same scenario from `git init` on `master`: init detects the branch,
+/// so the starter policy merges as written.
+#[test]
+fn the_lifecycle_merges_from_a_git_init_on_master_with_no_policy_edit() {
+    lifecycle("master");
+}
+
+/// The next steps a command's footer prints, as `(label, command)`.
+fn next_steps(output: &str) -> Vec<(String, String)> {
+    output
+        .split_once("\nNext\n----\n")
+        .map(|(_, footer)| footer)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| line.trim().split_once(": "))
+        .map(|(label, command)| (label.to_owned(), command.to_owned()))
+        .collect()
+}
+
+fn lifecycle(base: &str) {
     let dir = tempdir().unwrap();
     let repo = dir.path();
     let actors = Actors {
@@ -54,12 +81,41 @@ fn one_issue_goes_from_start_to_merge_with_no_refusal_and_one_approval() {
         reviewer: Cell::new(0),
     };
 
-    // A repository with the starter policy and the issue planned on the base.
-    git(repo, &["init", "-qb", "main"]);
+    // A repository with the starter policy, set up as `init` says: review
+    // the policy, which names the detected base, commit the install on the
+    // base, then create the first issue on it.
+    git(repo, &["init", "-qb", base]);
     git(repo, &["config", "user.name", AUTHOR]);
     git(repo, &["config", "user.email", "author@example.test"]);
-    actors.planner(&["init", "--slug", "atelier"]);
-    commit(repo, "Initialize Atelier");
+    let init = actors.planner(&["init", "--slug", "atelier"]);
+    assert!(
+        init.contains(&format!("Base branch: {base} (from the current branch)")),
+        "{init}"
+    );
+    let steps = next_steps(&init);
+    let [(review, policy), (commit_label, install), (create, first_issue)] = steps.as_slice()
+    else {
+        panic!("init prints three next steps: {init}");
+    };
+    assert!(review.starts_with("Review the generated policy"), "{init}");
+    let written = fs::read_to_string(repo.join(policy)).unwrap();
+    assert!(
+        written.contains(&format!("branch_policy:\n  base_branch: {base}\n")),
+        "{written}"
+    );
+    assert!(
+        commit_label.starts_with(&format!("Commit the install on {base}")),
+        "{init}"
+    );
+    let committed = std::process::Command::new("sh")
+        .current_dir(repo)
+        .args(["-c", install])
+        .output()
+        .unwrap();
+    assert!(committed.status.success(), "{install}: {committed:?}");
+    assert_eq!(git(repo, &["status", "--porcelain"]), "");
+    assert_eq!(create, "Create the first issue");
+    assert!(first_issue.starts_with("atelier issue create "), "{init}");
     let id = actors.planner(&["-q", "issue", "create", "Change", "--body", WORK]);
     let context = actors.planner(&["-q", "issue", "create", "Context", "--body", WORK]);
     commit(repo, "Plan the change");
@@ -146,7 +202,7 @@ fn one_issue_goes_from_start_to_merge_with_no_refusal_and_one_approval() {
 
     let merged = actors.author(&["merge", &id]);
     assert!(merged.ends_with("merge: passed"), "{merged}");
-    assert_eq!(git(repo, &["branch", "--show-current"]), "main");
+    assert_eq!(git(repo, &["branch", "--show-current"]), base);
     let landed = actors.author(&["land"]);
     assert!(landed.ends_with("land: passed"), "{landed}");
     let doctor = actors.author(&["doctor"]);
@@ -163,9 +219,9 @@ fn one_issue_goes_from_start_to_merge_with_no_refusal_and_one_approval() {
             .issue
             .status
     };
-    assert_eq!(git(repo, &["rev-parse", "main^2"]), tip);
+    assert_eq!(git(repo, &["rev-parse", &format!("{base}^2")]), tip);
     assert_eq!(status_at(&tip), "in_progress");
-    assert_eq!(status_at("main"), "done");
+    assert_eq!(status_at(base), "done");
     // The one approval is the fix's re-review, and the fix_now finding
     // carries no disposition.
     let reviews = repo.join(".atelier/reviews");
@@ -179,7 +235,7 @@ fn one_issue_goes_from_start_to_merge_with_no_refusal_and_one_approval() {
     assert!(!fixed.contains("disposition:"), "{fixed}");
 
     println!(
-        "lifecycle: the author ran {} atelier commands and the reviewer {} ({} together); planning ran {}",
+        "lifecycle on {base}: the author ran {} atelier commands and the reviewer {} ({} together); planning ran {}",
         actors.author.get(),
         actors.reviewer.get(),
         actors.author.get() + actors.reviewer.get(),

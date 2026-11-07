@@ -47,6 +47,9 @@ pub struct LintView {
     /// The checked issue's full ID, when the check was scoped to one.
     pub scoped_id: Option<String>,
     pub findings: Vec<LintFinding>,
+    /// Old record forms Atelier still reads, each naming the migration that
+    /// rewrites them; they pass the check (atelier-l457).
+    pub notes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -67,11 +70,50 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     let scoped_id = issue_ref
         .map(|issue_ref| resolve_issue_id(&files, issue_ref))
         .transpose()?;
-    let findings = lint_files(state_dir, files, scoped_id.as_deref(), true)?;
+    let (findings, index) = lint_records(state_dir, files, scoped_id.as_deref(), true)?;
+    let notes = index
+        .map(|index| old_form_notes(&index, state_dir, scoped_id.as_deref()))
+        .unwrap_or_default();
     Ok(LintView {
         scoped_id,
         findings,
+        notes,
     })
+}
+
+/// The old record forms still read, each with the migration that rewrites
+/// it: separate disposition events (before ADR 0025) and open After merge
+/// lines (before loose ends, ADR 0028). Version 1 reviews are read as
+/// written and get no note, since approvals stay as committed.
+fn old_form_notes(index: &RecordIndex, state_dir: &Path, scoped_id: Option<&str>) -> Vec<String> {
+    let mut notes = Vec::new();
+    let events = index
+        .retired_dispositions()
+        .filter(|event| scoped_id.is_none_or(|id| event.target == id))
+        .count();
+    if events > 0 {
+        notes.push(format!(
+            "Note: {} in the form before ADR 0025, read folded into their findings. `atelier migrate dispositions --apply` writes the fold.",
+            atelier_core::count_noun(events, "separate disposition event")
+        ));
+    }
+    let policy = state_dir
+        .parent()
+        .and_then(|root| crate::workflow_policy::load(root).ok());
+    let done = |record: &CanonicalIssueRecord| {
+        crate::workflow_policy::status_is_done(policy.as_ref(), &record.issue.status)
+    };
+    let lines = crate::after_merge::open_lines(index, done)
+        .into_iter()
+        .filter(|open| scoped_id.is_none_or(|id| open.item.issue.id == id))
+        .count();
+    if lines > 0 {
+        notes.push(format!(
+            "Note: {} in the form before loose ends. `atelier migrate after-merge` turns each into a loose end.",
+            atelier_core::count_noun(lines, "open After merge line")
+        ));
+    }
+    notes
 }
 
 /// The findings `atelier check` reports for `files`, the records read from
@@ -84,6 +126,16 @@ pub(crate) fn lint_files(
     scoped_id: Option<&str>,
     explain: bool,
 ) -> Result<Vec<LintFinding>> {
+    lint_records(state_dir, files, scoped_id, explain).map(|(findings, _)| findings)
+}
+
+/// [`lint_files`], with the record index when every record loaded.
+fn lint_records(
+    state_dir: &Path,
+    files: RecordFiles,
+    scoped_id: Option<&str>,
+    explain: bool,
+) -> Result<(Vec<LintFinding>, Option<RecordIndex>)> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
             "Cannot determine repository root for {}",
@@ -176,14 +228,16 @@ pub(crate) fn lint_files(
     ));
     findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
     findings.extend(loose_end_findings(&files.issues, scoped_id));
+    let mut loaded = None;
     if let (true, Some(index)) = (records_valid, graph) {
         let index = index
             .with_base_exemptions(files.base_exemptions)?
             .with_retired_dispositions(files.retired_dispositions)?
             .with_branch_reviews(files.branch_reviews)?;
         findings.extend(criteria_findings(&index, repo_root, scoped_id)?);
+        loaded = Some(index);
     }
-    Ok(findings)
+    Ok((findings, loaded))
 }
 
 /// Per-issue findings: empty titles, workflow-policy violations, and

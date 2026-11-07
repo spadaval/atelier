@@ -1055,7 +1055,7 @@ fn invalid_candidate_policy_is_rejected_and_base_fallback_is_visible() {
     git(other.path(), &["merge", "--no-edit", "main"]);
     fs::write(
         other.path().join(".atelier/workflow.yaml"),
-        atelier_workflow::STARTER_POLICY_YAML,
+        atelier_workflow::starter_policy_yaml("main"),
     )
     .unwrap();
     commit(other.path(), "repair candidate policy");
@@ -1071,17 +1071,17 @@ fn invalid_candidate_policy_is_rejected_and_base_fallback_is_visible() {
 fn dirty_candidate_or_base_checkout_is_refused_and_a_diverged_base_takes_a_merge_commit() {
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
-    fs::write(fixture.path().join("uncommitted"), "dirty").unwrap();
+    fs::write(fixture.path().join("src.rs"), "dirty").unwrap();
     fixture.refusal("merge_checkout_dirty");
-    fs::remove_file(fixture.path().join("uncommitted")).unwrap();
+    git(fixture.path(), &["checkout", "--", "src.rs"]);
     let base = tempdir().unwrap();
     git(
         fixture.path(),
         &["worktree", "add", base.path().to_str().unwrap(), "main"],
     );
-    fs::write(base.path().join("dirty"), "base dirty").unwrap();
+    fs::write(base.path().join(".gitignore"), "base dirty").unwrap();
     fixture.refusal("merge_checkout_dirty");
-    fs::remove_file(base.path().join("dirty")).unwrap();
+    git(base.path(), &["checkout", "--", ".gitignore"]);
     fs::write(base.path().join("new-base-code"), "diverged").unwrap();
     commit(base.path(), "base divergence");
     // Merge always creates a merge commit, so a base that moved on needs no
@@ -1092,6 +1092,91 @@ fn dirty_candidate_or_base_checkout_is_refused_and_a_diverged_base_takes_a_merge
     assert_eq!(git(base.path(), &["rev-parse", "HEAD^1"]), diverged);
     assert_eq!(git(base.path(), &["rev-parse", "HEAD^2"]), head);
     assert!(base.path().join("new-base-code").exists() && base.path().join("src.rs").exists());
+}
+
+/// An untracked file is no commit's, so it holds up neither `merge` nor
+/// `land`, in the work checkout or a separate base checkout, and merge
+/// leaves it in place; one integrating would overwrite, a file at its path
+/// or a file and a directory where the other is, refuses before anything
+/// changes (atelier-l457).
+#[test]
+fn untracked_files_hold_up_merge_and_land_only_where_merging_would_overwrite_them() {
+    // In the work checkout, which merge switches to the base and then to the
+    // merge commit.
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(fixture.path().join("from-base.txt"), "base\n").unwrap();
+    commit(fixture.path(), "the base adds a file");
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    fixture.approval("Reviewer");
+    fs::write(fixture.path().join("notes.txt"), "scratch\n").unwrap();
+    let landed = ok(fixture.path(), &["land"]);
+    assert!(
+        landed.contains("Untracked: 1 path: notes.txt.")
+            && landed.contains(&format!("Next: atelier merge {id}"))
+            && landed.ends_with("land: passed"),
+        "{landed}"
+    );
+    ok(fixture.path(), &["merge", &id, "--check"]);
+    fs::write(fixture.path().join("from-base.txt"), "mine\n").unwrap();
+    fixture.refusal("merge_untracked_overwritten");
+    let (_, out) = cli(fixture.path(), &["merge", &id, "--check"]);
+    assert!(out.contains("has 1 untracked path where main or the merge commit has files, so integrating would overwrite them: from-base.txt. Next: move them out of the way, or commit them, then retry"), "{out}");
+    assert_eq!(
+        fs::read_to_string(fixture.path().join("from-base.txt")).unwrap(),
+        "mine\n"
+    );
+    fs::remove_file(fixture.path().join("from-base.txt")).unwrap();
+    ok(fixture.path(), &["merge", &id]);
+    assert_eq!(git(fixture.path(), &["branch", "--show-current"]), "main");
+    assert_eq!(
+        fs::read_to_string(fixture.path().join("notes.txt")).unwrap(),
+        "scratch\n"
+    );
+    assert!(ok(fixture.path(), &["land"]).ends_with("land: passed"));
+
+    // In a separate base checkout, which merge fast-forwards to the merge
+    // commit; untracked files in the work checkout are left alone.
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    fs::create_dir(fixture.path().join("pkg")).unwrap();
+    fs::write(fixture.path().join("pkg/mod.rs"), "module\n").unwrap();
+    commit(fixture.path(), "a module");
+    fixture.approval("Reviewer");
+    fs::write(fixture.path().join("work-notes.txt"), "scratch\n").unwrap();
+    let base = tempdir().unwrap();
+    git(
+        fixture.path(),
+        &[
+            "worktree",
+            "add",
+            "-q",
+            base.path().to_str().unwrap(),
+            "main",
+        ],
+    );
+    fs::write(base.path().join("notes.txt"), "scratch\n").unwrap();
+    assert!(ok(base.path(), &["land"]).ends_with("land: passed"));
+    ok(fixture.path(), &["merge", &id, "--check"]);
+    // A file where the merge holds a directory, and one inside a directory
+    // where it holds a file.
+    fs::write(base.path().join("pkg"), "in the way\n").unwrap();
+    fs::create_dir(base.path().join("src.rs")).unwrap();
+    fs::write(base.path().join("src.rs/inner"), "in the way\n").unwrap();
+    fixture.refusal("merge_untracked_overwritten");
+    let (_, out) = cli(fixture.path(), &["merge", &id, "--check"]);
+    assert!(out.contains("has 2 untracked paths where main or the merge commit has files, so integrating would overwrite them: pkg, src.rs/inner."), "{out}");
+    fs::remove_file(base.path().join("pkg")).unwrap();
+    fs::remove_dir_all(base.path().join("src.rs")).unwrap();
+    ok(fixture.path(), &["merge", &id]);
+    assert!(base.path().join("pkg/mod.rs").exists());
+    assert_eq!(
+        fs::read_to_string(base.path().join("notes.txt")).unwrap(),
+        "scratch\n"
+    );
+    assert!(fixture.path().join("work-notes.txt").exists());
+    assert!(ok(base.path(), &["land"]).ends_with("land: passed"));
 }
 
 #[test]
@@ -4172,6 +4257,9 @@ fn merge_check_names_every_uncommitted_record_and_path_and_still_runs_the_gates(
     let new = ok(fixture.path(), &["-q", "issue", "create", "Uncommitted"]);
     fs::write(fixture.path().join("src.rs"), "unreviewed\n").unwrap();
     fs::write(fixture.path().join("new.rs"), "unreviewed\n").unwrap();
+    // Staged, a new file is an uncommitted change; untracked, merge would
+    // leave it in place (atelier-l457).
+    git(fixture.path(), &["add", "new.rs"]);
     let mut records = [(id.clone(), "modified"), (new.clone(), "new")];
     records.sort();
     let records = records
@@ -4188,7 +4276,7 @@ fn merge_check_names_every_uncommitted_record_and_path_and_still_runs_the_gates(
         lines[..2],
         [
             format!("⚠ {id} canonical_snapshot_uncommitted: 2 tracker records differ from HEAD: {records}; commit them with the work. Next: git add .atelier && git commit -m \"…\""),
-            format!("⚠ {id} merge_checkout_dirty: {repo} has 2 uncommitted paths: new.rs, src.rs. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`"),
+            format!("⚠ {id} merge_checkout_dirty: {repo} has 2 uncommitted paths: new.rs, src.rs. Next: commit them with `git commit -am \"…\"`, or set them aside with `git stash push`"),
         ]
     );
     // The approval of HEAD still holds for the committed records, but no

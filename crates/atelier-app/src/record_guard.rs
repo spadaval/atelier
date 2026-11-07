@@ -203,7 +203,7 @@ mod tests {
         fs::create_dir_all(state.join("reviews")).unwrap();
         fs::write(
             state.join("workflow.yaml"),
-            atelier_workflow::STARTER_POLICY_YAML,
+            atelier_workflow::starter_policy_yaml("main"),
         )
         .unwrap();
         atelier_records::RecordStore::new(&state)

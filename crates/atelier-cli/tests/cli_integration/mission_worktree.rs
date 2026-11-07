@@ -2873,21 +2873,29 @@ fn test_start_refuses_dirty_checkout_before_any_change() {
     let dir = start_fixture();
     let issue_id = create_issue(dir.path(), &["Dirty start", "--issue-type", "task"]);
     commit_all(dir.path(), "start fixture");
-    std::fs::write(dir.path().join("scratch.txt"), "uncommitted").unwrap();
+    // A change to a tracked file; an untracked one holds nothing up
+    // (atelier-l457).
+    let ignore = dir.path().join(".gitignore");
+    let ignored = std::fs::read_to_string(&ignore).unwrap();
+    std::fs::write(&ignore, format!("{ignored}# uncommitted\n")).unwrap();
     let record_before = read_canonical_record(dir.path(), "issues", &issue_id);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
 
     assert!(!success, "dirty start should fail:\n{stdout}");
     assert!(stderr.contains("start_checkout_dirty"), "{stderr}");
-    assert!(stderr.contains("scratch.txt"), "{stderr}");
+    assert!(stderr.contains(".gitignore"), "{stderr}");
+    assert!(
+        stderr.contains("Commit them, or set them aside with `git stash push`, then rerun"),
+        "{stderr}"
+    );
     assert!(!stdout.contains("git switch"), "{stdout}");
     assert_eq!(git_current_branch(dir.path()), "main");
     assert_eq!(
         read_canonical_record(dir.path(), "issues", &issue_id),
         record_before
     );
-    assert_eq!(git_status_short(dir.path()).trim(), "?? scratch.txt");
+    assert_eq!(git_status_short(dir.path()).trim(), "M .gitignore");
 }
 
 #[test]

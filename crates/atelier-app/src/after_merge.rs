@@ -76,6 +76,80 @@ pub fn parse(line: &str) -> Option<MarkedLine> {
     })
 }
 
+/// An open After merge line: one `atelier migrate after-merge` turns into a
+/// loose end.
+#[derive(Debug, Clone)]
+pub struct OpenLine<'r> {
+    pub item: &'r atelier_records::CanonicalIssueRecord,
+    pub line: MarkedLine,
+    /// The loose end an earlier run of the migration made for the line.
+    pub existing: Option<String>,
+}
+
+/// The open After merge lines in `index`, the migration's work: each
+/// unticked line not carried to an existing issue, on an item not
+/// superseded, apart from one on a done item (`done`) an earlier run already
+/// made a loose end for. `atelier check` notes them (atelier-l457).
+pub fn open_lines<'r>(
+    index: &'r crate::record_index::RecordIndex,
+    done: impl Fn(&atelier_records::CanonicalIssueRecord) -> bool,
+) -> Vec<OpenLine<'r>> {
+    use atelier_workflow::LOOSE_END_TYPE;
+    let migrated = |item: &str, check: &str| {
+        index
+            .issue_records()
+            .filter(|record| {
+                record.issue.issue_type == LOOSE_END_TYPE
+                    && index
+                        .get_blockers(&record.issue.id)
+                        .iter()
+                        .any(|id| id == item)
+            })
+            .find(|record| {
+                record
+                    .sections
+                    .section(atelier_records::IssueSectionName::DoneWhen)
+                    .unwrap_or_default()
+                    .lines()
+                    .any(|line| {
+                        crate::done_when::checkbox(line)
+                            .is_some_and(|(_, text)| text == check.trim())
+                    })
+            })
+            .map(|record| record.issue.id.clone())
+    };
+    let mut open = Vec::new();
+    for item in index.issue_records() {
+        if item.issue.status == "superseded" {
+            continue;
+        }
+        let done_when = item
+            .sections
+            .section(atelier_records::IssueSectionName::DoneWhen)
+            .unwrap_or_default();
+        for line in done_when.lines().filter_map(parse) {
+            let carried = line
+                .carried_to
+                .as_deref()
+                .is_some_and(|id| index.issue_record(id).is_some());
+            if line.ticked || carried {
+                continue;
+            }
+            let existing = migrated(&item.issue.id, &line.check);
+            // A line already migrated on a done item has nothing left to do.
+            if existing.is_some() && done(item) {
+                continue;
+            }
+            open.push(OpenLine {
+                item,
+                line,
+                existing,
+            });
+        }
+    }
+    open
+}
+
 /// Whether a check that waited for the merge for `reason` is work for the
 /// human: the human's judgment, or a device or place no agent can reach.
 /// The other reasons, the deployed or merged system and time and real use,

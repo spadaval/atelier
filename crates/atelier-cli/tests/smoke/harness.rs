@@ -43,7 +43,8 @@ impl SmokeHarness {
             issue_ids: Mutex::new(Vec::new()),
         };
 
-        // Run atelier init
+        // Atelier keeps its records in Git, so init runs in a repository.
+        harness.git(&["init", "-q", "-b", "main"]);
         let result = harness.run(&["init", "--slug", "atelier"]);
         assert!(result.success, "atelier init failed: {}", result.stderr);
         harness.init_git_repo();

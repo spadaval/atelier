@@ -274,64 +274,21 @@ pub fn after_merge(
         .workflow_for_issue_type(LOOSE_END_TYPE)?
         .initial_status
         .clone();
-    let migrated = |item: &str, check: &str| {
-        index
-            .issue_records()
-            .filter(|record| {
-                record.issue.issue_type == LOOSE_END_TYPE
-                    && index
-                        .get_blockers(&record.issue.id)
-                        .iter()
-                        .any(|id| id == item)
-            })
-            .find(|record| {
-                record
-                    .sections
-                    .section(atelier_records::IssueSectionName::DoneWhen)
-                    .unwrap_or_default()
-                    .lines()
-                    .any(|line| {
-                        atelier_app::done_when::checkbox(line)
-                            .is_some_and(|(_, text)| text == check.trim())
-                    })
-            })
-            .map(|record| record.issue.id.clone())
-    };
     let done =
         |item: &CanonicalIssueRecord| policy.status_category(&item.issue.status) == Some("done");
-    let mut plans = Vec::new();
-    for item in index.issue_records() {
-        if item.issue.status == "superseded" {
-            continue;
-        }
-        let done_when = item
-            .sections
-            .section(atelier_records::IssueSectionName::DoneWhen)
-            .unwrap_or_default();
-        for line in done_when.lines().filter_map(after_merge::parse) {
-            let carried = line
-                .carried_to
+    let plans = after_merge::open_lines(index, done)
+        .into_iter()
+        .map(|open| LooseEndPlan {
+            item: open.item,
+            needs_human: open
+                .line
+                .reason
                 .as_deref()
-                .is_some_and(|id| index.issue_record(id).is_some());
-            if line.ticked || carried {
-                continue;
-            }
-            let existing = migrated(&item.issue.id, &line.check);
-            // A line already migrated on a done item has nothing left to do.
-            if existing.is_some() && done(item) {
-                continue;
-            }
-            plans.push(LooseEndPlan {
-                item,
-                needs_human: line
-                    .reason
-                    .as_deref()
-                    .is_some_and(after_merge::reason_needs_human),
-                existing,
-                line,
-            });
-        }
-    }
+                .is_some_and(after_merge::reason_needs_human),
+            existing: open.existing,
+            line: open.line,
+        })
+        .collect::<Vec<_>>();
     if plans.is_empty() {
         if !quiet {
             println!("No open After merge lines to migrate.");

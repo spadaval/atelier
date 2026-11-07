@@ -115,7 +115,7 @@ pub fn issue_inventory<'a>(
 mod tests {
     use super::*;
     use crate::test_records::Records;
-    use crate::workflow_policy::{load, STARTER_POLICY_YAML};
+    use crate::workflow_policy::{load, starter_policy_yaml};
     use std::fs;
     use tempfile::tempdir;
 
@@ -160,7 +160,7 @@ mod tests {
         fs::create_dir(dir.path().join(".atelier")).unwrap();
         fs::write(
             dir.path().join(".atelier/workflow.yaml"),
-            STARTER_POLICY_YAML.replace("in_progress", "working"),
+            starter_policy_yaml("main").replace("in_progress", "working"),
         )
         .unwrap();
         let policy = load(dir.path()).unwrap();

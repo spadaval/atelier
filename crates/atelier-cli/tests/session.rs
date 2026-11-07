@@ -1273,6 +1273,69 @@ fn completed_owner_shell_cannot_hide_code_changes_from_landing_fence() {
     );
 }
 
+/// `start` leaves an untracked file outside the tracker in place, as merge
+/// does, but refuses an untracked record, which would join the started
+/// branch's records, and an untracked file the branch it switches to holds,
+/// each before anything changes (atelier-l457).
+#[test]
+fn start_leaves_untracked_files_in_place_unless_they_are_records_or_in_the_way() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("scratch.txt"), "notes\n").unwrap();
+    let unchanged = |f: &Fixture, status: &str| {
+        assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+        assert_eq!(git(f.path(), &["status", "--porcelain"]), status);
+    };
+
+    // An untracked record refuses, with a stash that sets it aside.
+    let other = ok(f.path(), &["-q", "issue", "create", "Other"]);
+    let status = git(f.path(), &["status", "--porcelain"]);
+    let (pass, out) = cli(f.path(), &["start", &other]);
+    assert!(
+        !pass
+            && out.contains("start_checkout_dirty")
+            && out.contains(&format!(".atelier/issues/{other}.md"))
+            && !out.contains("scratch.txt")
+            && out.contains("`git stash push --include-untracked`"),
+        "{out}"
+    );
+    unchanged(&f, &status);
+
+    // Committed, the item starts, and the scratch file comes along.
+    git(f.path(), &["add", ".atelier"]);
+    git(f.path(), &["commit", "-qm", "plan the other item"]);
+    ok(f.path(), &["start", &other]);
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), other);
+    assert_eq!(
+        fs::read_to_string(f.path().join("scratch.txt")).unwrap(),
+        "notes\n"
+    );
+    git(f.path(), &["add", ".atelier"]);
+    git(f.path(), &["commit", "-qm", "start the other item"]);
+    git(f.path(), &["switch", "-q", "main"]);
+
+    // Switching to an existing branch that holds a file at an untracked
+    // path would overwrite it, so start refuses first.
+    fs::write(f.path().join("code"), "mine\n").unwrap();
+    let status = git(f.path(), &["status", "--porcelain"]);
+    let (pass, out) = cli(f.path(), &["start", &f.id]);
+    assert!(
+        !pass
+            && out.contains(&format!(
+                "start_untracked_overwritten: switching to branch '{}'",
+                f.branch
+            ))
+            && out.contains("\ncode\n"),
+        "{out}"
+    );
+    unchanged(&f, &status);
+    assert_eq!(fs::read_to_string(f.path().join("code")).unwrap(), "mine\n");
+    fs::remove_file(f.path().join("code")).unwrap();
+    ok(f.path(), &["start", &f.id]);
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), f.branch);
+    assert!(f.path().join("scratch.txt").exists());
+}
+
 #[test]
 fn start_cannot_switch_away_from_hidden_modified_code() {
     let f = Fixture::new();
@@ -3984,6 +4047,103 @@ fn pruned_owner_labels_cover_other_branch_rows_and_an_uncommitted_status() {
         "{output}"
     );
 }
+/// With no commits yet, as right after `git init` and `atelier init`,
+/// `init`, `status` and `check` work, and `land`, `doctor` and the Stop hook
+/// say there is nothing to land, name the install commit and exit
+/// successfully; after that commit, `land` on the base passes (atelier-l457).
+#[test]
+fn an_unborn_head_is_reported_and_holds_nothing_up() {
+    let dir = tempdir().unwrap();
+    let repo = dir.path();
+    git(repo, &["init", "-qb", "master"]);
+    git(repo, &["config", "user.name", "Author"]);
+    git(repo, &["config", "user.email", "author@example.test"]);
+    let init = ok(repo, &["init", "--slug", "atelier"]);
+    assert!(
+        init.contains("Base branch: master (from the current branch)"),
+        "{init}"
+    );
+    let install = "git add .atelier .gitignore && git commit -m \"Install Atelier\"";
+
+    let status = ok(repo, &["status"]);
+    assert_eq!(
+        field(&status, "Branch"),
+        Some("master (no commits yet)"),
+        "{status}"
+    );
+    assert!(
+        field(&status, "Checkout").is_some_and(|checkout| checkout.starts_with("dirty (3 paths")),
+        "{status}"
+    );
+    assert!(
+        status.ends_with(&format!(
+            "Next\n----\n  Commit the Atelier install: {install}"
+        )),
+        "{status}"
+    );
+    assert_eq!(ok(repo, &["check"]), "Check passed.");
+
+    let report = format!(
+        "No commits yet on master, so there is nothing to land. Next: commit the Atelier install with `{install}`"
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(repo)
+        .arg("land")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("{report}\nland: passed\n")
+    );
+    assert_eq!(
+        hook(
+            repo,
+            "land",
+            serde_json::json!({"hook_event_name": "Stop", "cwd": repo, "stop_hook_active": false})
+        ),
+        serde_json::json!({"systemMessage": format!("Atelier: {report}")})
+    );
+    assert!(ok(repo, &["doctor"]).starts_with("No commits yet on master"));
+
+    let committed = Command::new("sh")
+        .current_dir(repo)
+        .args(["-c", install])
+        .output()
+        .unwrap();
+    assert!(committed.status.success(), "{committed:?}");
+    assert!(ok(repo, &["land"]).ends_with("land: passed"));
+    assert_eq!(
+        hook(
+            repo,
+            "land",
+            serde_json::json!({"hook_event_name": "Stop", "cwd": repo, "stop_hook_active": false})
+        ),
+        serde_json::json!({})
+    );
+}
+
+/// cosplay-studio's history holds review records in the form before
+/// Markdown, `.atelier/reviews/<id>.yaml` files with no front matter, which
+/// the commit that migrated its records deleted. They are not review
+/// records Atelier reads, so the append-only check of the whole history
+/// passes over them, and `doctor` passes (atelier-l457).
+#[test]
+fn doctor_passes_over_review_files_in_the_form_before_markdown() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let old = f.path().join(".atelier/reviews/atelier-old1.yaml");
+    fs::write(
+        &old,
+        "created_at: \"2026-07-12T06:23:03Z\"\nevents:\n  - actor: reviewer\n    kind: approval\nid: \"atelier-old1\"\nissue: \"atelier-gone\"\n",
+    )
+    .unwrap();
+    commit(f.path(), "a review record in the form before Markdown");
+    fs::remove_file(&old).unwrap();
+    commit(f.path(), "migrate the records to Markdown");
+    ok(f.path(), &["doctor"]);
+    ok(f.path(), &["land"]);
+}
 #[test]
 fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     let f = Fixture::new();
@@ -6313,14 +6473,29 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
 }
 
 /// A passing land says what it checked and, for a done owner, what comes
-/// next; an active owner's land names the uncommitted paths (atelier-bvl3).
+/// next; an active owner's land names the uncommitted paths (atelier-bvl3),
+/// and names untracked ones apart, since merge leaves them in place
+/// (atelier-l457).
 #[test]
 fn land_pass_lists_what_it_checked_and_the_next_step() {
     let f = Fixture::new();
     let id = f.id.clone();
-    for name in ["p1", "p2", "p3", "p4", "p5", "p6"] {
+    let names = ["p1", "p2", "p3", "p4", "p5", "p6"];
+    for name in names {
         fs::write(f.path().join(name), "unfinished\n").unwrap();
     }
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass);
+    assert_eq!(
+        out,
+        "✓ records committed\n\
+         ✓ 1 check passes (findings.disposed)\n\
+         Untracked: 6 paths: p1, p2, p3, p4, p5 and 1 more. No commit holds them, so merge leaves them in place; commit any that belong to the work.\n\
+         land: passed\n"
+    );
+    let mut add = vec!["add"];
+    add.extend(names);
+    git(f.path(), &add);
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(pass);
     assert_eq!(
@@ -6330,7 +6505,10 @@ fn land_pass_lists_what_it_checked_and_the_next_step() {
          Unfinished checkout: 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. See `atelier status` before handing off.\n\
          land: passed\n"
     );
-    for name in ["p1", "p2", "p3", "p4", "p5", "p6"] {
+    let mut unstage = vec!["rm", "-q", "--cached"];
+    unstage.extend(names);
+    git(f.path(), &unstage);
+    for name in names {
         fs::remove_file(f.path().join(name)).unwrap();
     }
     let child = ok(
@@ -6405,6 +6583,9 @@ fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
     for name in ["p1", "p2", "p3", "p4", "p5", "p6"] {
         fs::write(f.path().join(name), "unfinished\n").unwrap();
     }
+    // Staged, they are tracked changes a completion leaves; untracked, merge
+    // would leave them in place (atelier-l457).
+    git(f.path(), &["add", "p1", "p2", "p3", "p4", "p5", "p6"]);
     let records = new
         .iter()
         .take(5)
@@ -6422,7 +6603,7 @@ fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
         out,
         format!(
             "⚠ {id} land_records_uncommitted: 6 tracker records differ from HEAD: {records} and 1 more; commit them with the work. Next: git add .atelier && git commit -m \"…\"\n\
-             ⚠ {id} land_completion_dirty: done, but the checkout has 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`\n\
+             ⚠ {id} land_completion_dirty: done, but the checkout has 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. Next: commit them with `git commit -am \"…\"`, or set them aside with `git stash push`\n\
              ⚠ {id} review.current: no independent approval or trivial exemption, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n\
              land: work in progress — 3 checks open (land_records_uncommitted, land_completion_dirty, review.current)\n"
         )
@@ -7382,8 +7563,15 @@ fn work_in_progress_on_a_branch_is_reported_and_blocks_no_turn() {
         hook(f.path(), "land", stop(f.path())),
         in_progress_message(&out)
     );
-    // Uncommitted code in a done checkout is reported too.
+    // An untracked file holds nothing up; uncommitted code in a done
+    // checkout is reported too.
     fs::write(f.path().join("scratch"), "unfinished\n").unwrap();
+    let (_, out) = cli(f.path(), &["land"]);
+    assert!(
+        !out.contains("land_completion_dirty") && out.contains("review.current"),
+        "{out}"
+    );
+    git(f.path(), &["add", "scratch"]);
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(
         !pass && out.contains("land_completion_dirty") && out.contains("review.current"),
@@ -7393,6 +7581,7 @@ fn work_in_progress_on_a_branch_is_reported_and_blocks_no_turn() {
         hook(f.path(), "land", stop(f.path())),
         in_progress_message(&out)
     );
+    git(f.path(), &["rm", "-q", "--cached", "scratch"]);
     fs::remove_file(f.path().join("scratch")).unwrap();
     // So is an open finding.
     ok(
@@ -7659,8 +7848,12 @@ fn pre_adr_0025_repository(no_action_identity: &str, merged: bool) -> (Fixture, 
 #[test]
 fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     let (f, findings) = pre_adr_0025_repository("Reviewer", true);
-    // Unmigrated, the events read as folded into their findings.
-    ok(f.path(), &["check"]);
+    // Unmigrated, the events read as folded into their findings, and
+    // `check` passes with a note naming the migration (atelier-l457).
+    assert_eq!(
+        ok(f.path(), &["check"]),
+        "Check passed.\nNote: 4 separate disposition events in the form before ADR 0025, read folded into their findings. `atelier migrate dispositions --apply` writes the fold."
+    );
     ok(f.path(), &["doctor"]);
     ok(f.path(), &["land"]);
     let reviews = f.path().join(".atelier/reviews");
@@ -7681,6 +7874,7 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     assert_eq!(git(f.path(), &["status", "--porcelain"]), "");
     ok(f.path(), &["migrate", "dispositions", "--apply"]);
     commit(f.path(), "migrate dispositions");
+    assert_eq!(ok(f.path(), &["check"]), "Check passed.");
     // Four disposition events are gone; the findings and approval remain.
     assert_eq!(fs::read_dir(&reviews).unwrap().count(), before - 4);
     let deferred = fs::read_to_string(reviews.join(format!("{}.md", findings[1]))).unwrap();
@@ -7752,6 +7946,7 @@ fn a_migrated_author_no_action_is_accepted() {
     ok(f.path(), &["doctor"]);
     ok(f.path(), &["migrate", "dispositions", "--apply"]);
     commit(f.path(), "migrate dispositions");
+    assert_eq!(ok(f.path(), &["check"]), "Check passed.");
     ok(f.path(), &["doctor"]);
 }
 

@@ -223,6 +223,13 @@ Which branch `start` uses depends on where it runs (atelier-md0v):
 - On any other branch, such as one created by hand, it takes the current
   branch as the owner's work branch.
 
+Switching branches needs no uncommitted changes to tracked files and no
+untracked records (`start_checkout_dirty`, naming each path, with the stash
+that sets them aside). Any other untracked file is no commit's, so it comes
+along unless the existing branch `start` switches to holds a file at its
+path, which refuses with `start_untracked_overwritten` before anything
+changes (atelier-l457).
+
 `start` runs from where it is. An older `--base <branch>` is accepted,
 hidden and ignored, with a note that the base comes from policy, so
 guidance that still passes it does not fail.

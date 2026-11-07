@@ -44,7 +44,11 @@ and it exits 0, since nothing there reaches the base without `merge`'s gates
 (ADR 0028 decision 5). On the base, and on a detached HEAD, a failed plain
 command exits nonzero with the failed invariant and recovery step, since that
 is where unreviewed code would reach the base. `atelier doctor` refuses any
-failure wherever it runs.
+failure wherever it runs. On a branch with no commits yet, as right after
+`git init` and `atelier init`, there is nothing to land: `land`, `doctor` and
+the Stop hook say so, name the install commit, and pass, and `status` shows
+the branch as having no commits yet with that commit as its next step
+(atelier-l457).
 
 Canonical records and policy must match committed HEAD, including ignored
 canonical paths and files hidden by Git index flags. Active work must have a
@@ -77,8 +81,10 @@ as `land_rebase_in_progress`, `land_merge_in_progress`,
 `land_cherry_pick_in_progress` or `land_revert_in_progress` (`merge_*` from
 `merge`), with `git rebase --abort`, `git merge --abort`, `git cherry-pick
 --abort` or `git revert --abort` (atelier-vlhn, atelier-zegg); `land_completion_dirty` names a done owner's uncommitted
-paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
-push --include-untracked`); an invalid committed policy is reported once, as
+changes to tracked paths, to commit (`git commit -am "…"`) or set aside (`git
+stash push`). Untracked files hold nothing up, since merge leaves them in
+place; an owner's `land` names them in an `Untracked:` line, in case one
+belongs in a commit (atelier-l457). An invalid committed policy is reported once, as
 its `workflow_*` code, which also lets the gates run (atelier-kiry,
 atelier-grsi, atelier-7ts2, atelier-y0en). The base is the policy's
 `base_branch`; a `branch_base` an owner record carries is not read. `land <id>`

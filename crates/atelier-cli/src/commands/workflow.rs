@@ -868,7 +868,7 @@ state_root = ".atelier"
         .unwrap();
         std::fs::write(
             dir.path().join(".atelier/workflow.yaml"),
-            atelier_app::workflow_policy::STARTER_POLICY_YAML,
+            atelier_app::workflow_policy::starter_policy_yaml("main"),
         )
         .unwrap();
     }

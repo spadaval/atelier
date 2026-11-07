@@ -8,11 +8,19 @@ use std::path::Path;
 
 use atelier_core::{Issue, IssueStrategy, ISSUE_STRATEGY_FIELD};
 
-pub const STARTER_POLICY_YAML: &str = r#"schema: atelier.workflow
-schema_version: 3
-branch_policy:
-  base_branch: main
-issue_types:
+/// The workflow policy `atelier init` writes, naming `base_branch`, the
+/// branch init detected, as the base.
+pub fn starter_policy_yaml(base_branch: &str) -> String {
+    // A branch name that YAML would misread is quoted.
+    let base_branch = serde_yaml::to_string(base_branch).expect("a string serializes as YAML");
+    format!(
+        "schema: atelier.workflow\nschema_version: 3\nbranch_policy:\n  base_branch: {}\n{STARTER_POLICY_BODY}",
+        base_branch.trim_end()
+    )
+}
+
+/// The starter policy after its `branch_policy`.
+const STARTER_POLICY_BODY: &str = r#"issue_types:
   bug:
     label: Bug
   decision:
@@ -1781,8 +1789,8 @@ fn policy_error_with_reference(
 mod tests {
     use super::*;
 
-    fn valid_policy() -> &'static str {
-        STARTER_POLICY_YAML
+    fn valid_policy() -> String {
+        starter_policy_yaml("main")
     }
 
     /// A higher schema_version says to reinstall; a lower one stays
@@ -1865,7 +1873,7 @@ mod tests {
 
     #[test]
     fn parses_valid_policy() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(policy.schema_version, 3);
         for (issue_type, workflow) in [
             ("mission", "objective"),
@@ -1948,7 +1956,7 @@ mod tests {
     /// stays.
     #[test]
     fn starter_policy_declares_the_statuses_and_types_in_use() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             policy
                 .statuses
@@ -2014,7 +2022,7 @@ mod tests {
 
     #[test]
     fn starter_policy_has_objective_work_decision_and_on_base_workflows_only() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             policy
                 .workflows
@@ -2054,7 +2062,7 @@ mod tests {
 
     #[test]
     fn starter_policy_distinguishes_draft_objectives_from_execution_ready_objectives() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
 
         assert!(!policy.can_enter_active("mission", "draft").unwrap());
         assert!(policy.can_enter_active("mission", "todo").unwrap());
@@ -2124,7 +2132,7 @@ mod tests {
 
     #[test]
     fn validates_strategy_field_as_mission_only() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut issue = test_issue();
         issue.strategy = Some(IssueStrategy::new("docs/strategies/adaptive-mission.md").unwrap());
         issue.issue_type = "mission".to_string();
@@ -2145,7 +2153,7 @@ mod tests {
 
     #[test]
     fn validates_workflow_branch_field_shape() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut issue = test_issue();
         issue.workflow_branch = Some(atelier_core::WorkflowBranch {
             work_branch: "task/atelier-pr01".to_string(),
@@ -2162,7 +2170,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_issue_type_in_record() {
-        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        let policy = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut issue = test_issue();
         issue.issue_type = "incident".to_string();
 
