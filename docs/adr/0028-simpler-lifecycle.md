@@ -251,10 +251,12 @@ Built by atelier-ilba:
 Built by atelier-md0v:
 
 - **A fix_now finding.** One whose reviewer recommended `fix_now` and that
-  has no disposition is resolved by an approval that is both pinned to a
-  later commit than the finding and recorded after it (`created_at`), so an
-  approval that never saw the finding cannot resolve it; an approval of the
-  finding's own commit does not, and a trivial exemption never does. An
+  has no disposition is resolved by an approval that is pinned to a later
+  commit than the finding, one that holds the finding's record, and recorded
+  after it (`created_at`), so an approval that never saw the finding cannot
+  resolve it; an approval of the finding's own commit does not, nor does a
+  parallel reviewer's approval of a head without the finding's record
+  (review finding atelier-6xiw), and a trivial exemption never does. An
   older Atelier's `fix_now` disposition still counts: with a resolution
   commit it is resolved, as before, by an approval at or after that commit,
   and without one by the rule above. `review disposition --decision fix_now`
@@ -272,7 +274,8 @@ Built by atelier-md0v:
   records: `evidence list` still marks freshness, and marks a fail with no
   pass after it `⚠ no pass since`.
 - **land and the Stop hook report.** On a named branch other than the base,
-  where work is in progress, `land` prints its report, ends with `land: work
+  as HEAD's committed policy names it (an uncommitted `base_branch` edit does
+  not move it; review finding atelier-bo2i), where work is in progress, `land` prints its report, ends with `land: work
   in progress — <n> checks open (<checks>)` and exits successfully; `land
   --push` there pushes the commit HEAD was at when land began to the
   branch's own upstream, and nothing when a check moved HEAD. The Stop hook
@@ -309,8 +312,10 @@ Built by atelier-md0v:
   bare ID, or switches to one of that name. On a branch another item owns it
   refuses with `start_branch_owned`, naming that item; from a detached HEAD
   it refuses with `start_detached_head`; on any other branch it takes the
-  current branch. `--base`, `start_base_mismatch` and
-  `start_branch_prefix_mismatch` go. A printed fix that starts work outside
+  current branch. `start_base_mismatch` and `start_branch_prefix_mismatch`
+  go; `--base` is accepted, hidden and ignored, with a note that the base
+  comes from policy, until atelier-ml3r updates the guidance that still
+  passes it. A printed fix that starts work outside
   the owner's scope from its branch reads `git switch <base> && atelier
   start <id>`.
 - **Short commit IDs.** Wherever a command takes a commit (`--commit`,

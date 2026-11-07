@@ -61,9 +61,10 @@ rest of a step); see [Committing records](cli-surface.md#committing-records).
 ### Dispositions
 
 A finding recommended `fix_now` needs no disposition: an approval pinned to a
-later commit than the finding and recorded after it resolves it, so the fix's
-re-review is what settles it, and an approval that never saw the finding
-cannot. A finding recommended `defer` or `no_action` needs a recorded
+later commit than the finding, one that holds the finding's record, and
+recorded after it resolves it, so the fix's re-review is what settles it, and
+an approval that never saw the finding cannot, such as a parallel reviewer's
+approval of a head that did not hold it. A finding recommended `defer` or `no_action` needs a recorded
 decision, even if it was fixed instead. Recommendations and decisions use
 `fix_now`, `defer`, or `no_action`:
 
@@ -181,9 +182,10 @@ from records, Git and policy:
   owner (or after `--from`), and the whole branch since it left the base, with
   the full head commit to pin records to;
 - every finding with its disposition, open ones first (a `fix_now` finding
-  reads `open until an approval after its fix`, a defer or no_action one
-  `open, no decision`), earlier reviews and approvals, and the newest
-  recorded proof;
+  reads `open until an approval after its fix`, or `approved since by
+  <approval>` once one resolves it, judged as `review list` judges it; a
+  defer or no_action one `open, no decision`), earlier reviews and approvals,
+  and the newest recorded proof;
 - the working rules: the built-in ones (read-only on code, run the proof,
   approve only without `fix_now` findings, and that the approval of a later
   commit resolves the `fix_now` findings recorded before it), the base
@@ -535,8 +537,9 @@ approval `merge` would accept counts (atelier-n90q): one as first committed,
 whose identity is recorded and not compared with any author (atelier-md0v).
 Every finding pinned at or before it must be settled by the rules merge
 applies: a defer or no_action finding has a decision; a `fix_now` finding is
-resolved by this approval when it pins a later commit and was recorded after
-the finding, or, for an older Atelier's FIX NOW disposition, when its
+resolved by this approval when it pins a later commit holding the finding's
+record and was recorded after the finding, or, for an older Atelier's FIX NOW
+disposition, when its
 resolution commit is at or before the approval's pin. That is what `atelier merge` integrates. A commit a [base
 exemption](#trivial-changes-on-the-base) pins is covered too. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with

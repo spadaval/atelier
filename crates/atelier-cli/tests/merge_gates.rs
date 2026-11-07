@@ -756,6 +756,95 @@ fn an_approval_that_never_saw_a_finding_does_not_resolve_it() {
     let _ = finding;
 }
 
+/// Parallel reviewers whose briefs were printed at different heads: R1's
+/// fix_now finding, pinned to C1, is not resolved by R2's approval of C2,
+/// which never held the finding's record, though it is pinned later and
+/// recorded later; `review list` and the brief agree. A fix and an approval
+/// that saw the finding resolve it (findings atelier-6xiw, atelier-kby7).
+#[test]
+fn a_parallel_reviewers_approval_does_not_resolve_a_finding_it_never_saw() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let brief = || ok(fixture.path(), &["review", "request", &id]);
+    // R1's brief at C1.
+    let c1 = git(fixture.path(), &["rev-parse", "HEAD"]);
+    assert!(brief().contains(&c1));
+    // The author commits a note: C2, and R2's brief there.
+    ok(fixture.path(), &["issue", "note", &id, "Author note"]);
+    commit(fixture.path(), "a note");
+    let c2 = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let r2_brief = brief();
+    assert!(
+        r2_brief.contains(&c2) && r2_brief.contains("## Findings so far\n\nNone."),
+        "{r2_brief}"
+    );
+    let finding = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "R1",
+            "--commit",
+            &c1,
+            "--recommendation",
+            "fix_now",
+            "--commit-records",
+            "R1's contract failure",
+        ],
+    );
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "R2",
+            "--commit",
+            &c2,
+            "--commit-records",
+            "R2 approves what it saw",
+        ],
+    );
+    fixture.refusal("findings.disposed");
+    let listed = ok(fixture.path(), &["review", "list", &id]);
+    assert!(
+        listed.contains(&format!(
+            "⚠ {finding} fix_now, open until an approval after its fix"
+        )),
+        "{listed}"
+    );
+    assert!(
+        brief().contains(&format!(
+            "- {finding} fix_now | open until an approval after its fix @ "
+        )),
+        "{}",
+        brief()
+    );
+
+    fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
+    commit(fixture.path(), "fix the contract");
+    let approval = fixture.approval("R2");
+    ok(fixture.path(), &["merge", &id, "--check"]);
+    let listed = ok(fixture.path(), &["review", "list", &id]);
+    assert!(
+        listed.contains(&format!(
+            "✓ {finding} fix_now → approved since by {approval} @"
+        )),
+        "{listed}"
+    );
+    assert!(
+        brief().contains(&format!(
+            "- {finding} fix_now | approved since by {approval} @ "
+        )),
+        "{}",
+        brief()
+    );
+}
+
 /// A finding recommended defer or no_action still needs a recorded
 /// decision, even when it was fixed instead; any identity may record it
 /// (atelier-md0v).

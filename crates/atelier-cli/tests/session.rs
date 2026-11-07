@@ -5727,7 +5727,12 @@ fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
     );
     assert_eq!(recorded_branch(&f, &id), None);
     git(f.path(), &["switch", "-q", "main"]);
-    ok(f.path(), &["start", &id]);
+    // `--base`, which older guidance still passes, is accepted and ignored.
+    let out = ok(f.path(), &["start", &id, "--base", "main"]);
+    assert!(
+        out.contains("Note: start --base is deprecated and ignored"),
+        "{out}"
+    );
     assert_eq!(git(f.path(), &["branch", "--show-current"]), id);
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
     assert_eq!(recorded_branch(&f, &id), Some((id.clone(), "main".into())));
@@ -5735,6 +5740,50 @@ fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
         f.store().load_issue_by_id(&id).unwrap().issue.status,
         "in_progress"
     );
+}
+
+/// On the base, an uncommitted edit of `base_branch` does not make land read
+/// the base as a work branch: land judges it by HEAD's committed policy, so
+/// its refusal of unreviewed code stands, nothing is pushed and the Stop
+/// hook blocks (finding atelier-bo2i).
+#[test]
+fn an_uncommitted_base_branch_edit_on_the_base_leaves_its_refusal_standing() {
+    let f = Fixture::new();
+    let remote = with_remote(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("unreviewed"), "code nobody reviewed\n").unwrap();
+    commit(f.path(), "unreviewed code on the base");
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    assert!(policy.contains("base_branch: main"), "{policy}");
+    fs::write(
+        &path,
+        policy.replace("base_branch: main", "base_branch: renamed"),
+    )
+    .unwrap();
+    let before = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .args(["land", "--push"])
+        .output()
+        .unwrap();
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!output.status.success(), "{out}");
+    assert!(
+        out.contains("land_base_unreviewed")
+            && last_line(&out).starts_with("land: refused")
+            && last_line(&out).ends_with(", nothing pushed"),
+        "{out}"
+    );
+    assert_eq!(
+        git(remote.path(), &["rev-parse", "refs/heads/main"]),
+        before
+    );
+    assert_eq!(hook(f.path(), "land", stop(f.path()))["decision"], "block");
 }
 
 #[test]

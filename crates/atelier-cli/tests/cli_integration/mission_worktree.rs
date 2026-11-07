@@ -3059,7 +3059,7 @@ fn test_start_on_existing_owner_branch_ignores_and_keeps_its_recorded_base() {
 }
 
 #[test]
-fn test_start_refuses_another_items_branch_and_a_detached_head() {
+fn test_start_refuses_another_items_branch_and_a_detached_head_and_ignores_base() {
     let dir = start_fixture();
     let owner_id = create_issue(dir.path(), &["Branch owner", "--issue-type", "task"]);
     let other_id = create_issue(dir.path(), &["Other work", "--issue-type", "task"]);
@@ -3104,12 +3104,29 @@ fn test_start_refuses_another_items_branch_and_a_detached_head() {
         .unwrap();
     assert!(output.stdout.is_empty(), "branch must not be created");
 
-    // `--base` is gone: start runs from where it is.
+    // `--base` is deprecated: accepted, ignored and named so, since the base
+    // comes from policy; start still runs from where it is.
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &other_id, "--base", "main"]);
     assert!(
-        !success && stderr.contains("unexpected argument '--base'"),
+        !success
+            && stderr.contains("start --base is deprecated and ignored")
+            && stderr.contains("start_detached_head"),
         "{stderr}"
     );
+    git_ok(dir.path(), &["switch", "main"]);
+    let (success, stdout, stderr) =
+        run_atelier(dir.path(), &["start", &other_id, "--base", "elsewhere"]);
+    assert!(success, "{stderr}");
+    assert!(
+        stderr.contains(
+            "Note: start --base is deprecated and ignored; the base is the policy's base_branch."
+        ),
+        "{stderr}"
+    );
+    assert!(stdout.contains("Base:     main"), "{stdout}");
+    assert_eq!(git_current_branch(dir.path()), other_id);
+    let help = run_atelier(dir.path(), &["start", "--help"]).1;
+    assert!(!help.contains("--base"), "{help}");
 }
 
 #[test]

@@ -174,6 +174,7 @@ fn gather(
     let mut findings = Vec::new();
     let mut reviews = Vec::new();
     let mut last_account = None;
+    let mut read = atelier_app::git_freshness::ReadContext::new(repo);
     for record in &events {
         let line = |what: String| HistoryLine {
             id: record.header.id.clone(),
@@ -188,28 +189,60 @@ fn gather(
                 disposition,
             } => {
                 // A fix_now finding needs no decision: the approval after
-                // its fix resolves it (atelier-md0v).
-                let state = match disposition {
-                    None if *recommendation == FindingDecision::FixNow => {
-                        "open until an approval after its fix".to_owned()
+                // its fix resolves it, judged as `review list` judges it
+                // (atelier-md0v, finding atelier-kby7).
+                let fixed =
+                    atelier_app::review_gate::fix_approval(&index, &mut read, &owner_id, record)
+                        .map(|approval| {
+                            format!(
+                                "approved since by {} @ {}",
+                                approval.header.id,
+                                short(&approval.commit)
+                            )
+                        });
+                let fix_now = disposition
+                    .as_ref()
+                    .map_or(*recommendation == FindingDecision::FixNow, |disposition| {
+                        disposition.decision == FindingDecision::FixNow
+                    });
+                let mut parts = Vec::new();
+                if let Some(disposition) = disposition {
+                    let mut state = format!(
+                        "{} by {}",
+                        disposition.decision.as_str(),
+                        disposition.identity
+                    );
+                    if let Some(commit) = &disposition.resolution_commit {
+                        state.push_str(&format!(" at {}", short(commit)));
                     }
-                    None => "open, no decision".to_owned(),
-                    Some(disposition) => {
-                        let mut state = format!(
-                            "{} by {}",
-                            disposition.decision.as_str(),
-                            disposition.identity
-                        );
-                        if let Some(commit) = &disposition.resolution_commit {
-                            state.push_str(&format!(" at {}", short(commit)));
-                        }
-                        if let Some(follow_up) = &disposition.follow_up {
-                            state.push_str(&format!(" to {follow_up}"));
-                        }
-                        state
+                    if let Some(follow_up) = &disposition.follow_up {
+                        state.push_str(&format!(" to {follow_up}"));
                     }
+                    parts.push(state);
+                }
+                let open = match (fix_now, fixed) {
+                    (true, Some(fixed)) => {
+                        parts.push(fixed);
+                        false
+                    }
+                    (true, None) => {
+                        parts.push("open until an approval after its fix".to_owned());
+                        true
+                    }
+                    (false, _) if disposition.is_none() => {
+                        parts.push("open, no decision".to_owned());
+                        true
+                    }
+                    (false, _) => false,
                 };
-                findings.push(line(format!("{} | {state}", recommendation.as_str())));
+                findings.push((
+                    open,
+                    line(format!(
+                        "{} | {}",
+                        recommendation.as_str(),
+                        parts.join(", ")
+                    )),
+                ));
             }
             ReviewEvent::Review | ReviewEvent::Approval | ReviewEvent::TrivialExemption => {
                 let what = match &record.event {
@@ -225,7 +258,11 @@ fn gather(
         }
     }
     // Open findings first; the rest keep their order.
-    findings.sort_by_key(|finding| !finding.what.contains("| open"));
+    findings.sort_by_key(|(open, _)| !open);
+    let findings = findings
+        .into_iter()
+        .map(|(_, finding)| finding)
+        .collect::<Vec<_>>();
 
     let since = match from {
         Some(reference) => {

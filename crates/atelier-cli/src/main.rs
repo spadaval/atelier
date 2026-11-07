@@ -210,6 +210,9 @@ enum Commands {
     Start {
         /// Issue ID
         id: String,
+        /// Deprecated and ignored: the base is the policy's base_branch
+        #[arg(long, hide = true, value_name = "BRANCH")]
+        base: Option<String>,
         /// Start even though another live session or worktree holds the item
         #[arg(long)]
         take_over: bool,
@@ -238,8 +241,10 @@ enum Commands {
         /// workflow policy yet, so it lands through the repository's usual review
         #[arg(long)]
         install: bool,
-        /// After the checks pass, push the current branch to its configured
-        /// upstream; a refused land or a failed push exits non-zero
+        /// Push the current branch to its own configured upstream when the
+        /// checks pass, or when land reports work in progress on a work
+        /// branch; a refusal (on the base or a detached HEAD) pushes nothing,
+        /// and it or a failed push exits non-zero
         #[arg(long, conflicts_with = "hook")]
         push: bool,
     },
@@ -933,7 +938,16 @@ fn run() -> Result<()> {
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
-        Commands::Start { id, take_over } => {
+        Commands::Start {
+            id,
+            base,
+            take_over,
+        } => {
+            // Older guidance still passes `--base`; it is accepted and
+            // ignored, since the base comes from policy (atelier-md0v).
+            if base.is_some() {
+                eprintln!("Note: start --base is deprecated and ignored; the base is the policy's base_branch.");
+            }
             let (state_dir, index) = load_repository()?;
             commands::start::run(&index, &state_dir, &id, take_over, quiet)
         }

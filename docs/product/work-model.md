@@ -217,7 +217,9 @@ Which branch `start` uses depends on where it runs (atelier-md0v):
 - On any other branch, such as one created by hand, it takes the current
   branch as the owner's work branch.
 
-There is no `--base`: `start` runs from where it is.
+`start` runs from where it is. An older `--base <branch>` is accepted,
+hidden and ignored, with a note that the base comes from policy, so
+guidance that still passes it does not fail.
 
 `start` also leaves a runtime lease for the owner, so a second session can
 learn the item is taken (atelier-81e5). The lease is a small file under

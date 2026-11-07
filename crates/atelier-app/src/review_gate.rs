@@ -611,9 +611,10 @@ fn short(commit: &str) -> &str {
 /// is as first committed, and every finding on the scope pinned at or before
 /// it is settled by the rules `findings.disposed` applies (atelier-md0v). A
 /// defer or no_action decision settles a finding; a fix_now finding is
-/// settled by this approval when it reviewed a later commit and was recorded
-/// after the finding, or, for an older Atelier's fix_now disposition, when
-/// its resolution commit is at or before the pin. The reviewer's identity is
+/// settled by this approval when it reviewed a later commit holding the
+/// finding's record and was recorded after it, or, for an older Atelier's
+/// fix_now disposition, when its resolution commit is at or before the pin.
+/// The reviewer's identity is
 /// recorded but not compared with the work's Git authors. `land` on the base
 /// counts only these approvals as covering commits.
 pub fn approval_accepted(
@@ -708,8 +709,10 @@ pub fn fix_approval<'i>(
 }
 
 /// Whether `approval` resolves the fix_now `finding`: it reviewed a later
-/// commit than the finding and was recorded after it, so an approval that
-/// never saw the finding cannot resolve it. An older Atelier's fix_now
+/// commit than the finding, one that holds the finding's record, and was
+/// recorded after it, so an approval that never saw the finding cannot
+/// resolve it, as a parallel reviewer's approval of a head that held no
+/// such record would (finding atelier-6xiw). An older Atelier's fix_now
 /// disposition naming a resolution commit is resolved, as it was, by an
 /// approval at or after that commit.
 fn fix_resolved(
@@ -723,10 +726,15 @@ fn fix_resolved(
     {
         Some(resolution) => ancestor(read, resolution, &approval.commit),
         None => {
+            let path =
+                std::path::PathBuf::from(format!(".atelier/reviews/{}.md", finding.header.id));
             approval.event == ReviewEvent::Approval
                 && approval.commit != finding.commit
                 && approval.header.created_at > finding.header.created_at
                 && ancestor(read, &finding.commit, &approval.commit)
+                && read
+                    .entry(&approval.commit, &path)
+                    .is_ok_and(|entry| entry.is_some())
         }
     }
 }

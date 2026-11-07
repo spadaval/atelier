@@ -36,7 +36,8 @@ claude` warns, with that fix, when AGENTS.md exists and the repository has a
 `CLAUDE.md` or `.claude/CLAUDE.md` but neither imports `@AGENTS.md`.
 
 `land` checks a handoff without writing records, committing, switching, or
-merging. On a named branch other than the base, where work is in progress, it
+merging. On a named branch other than the base, as HEAD's committed policy
+names it, where work is in progress, it
 reports what is open and refuses nothing: each failed check is a line with its
 recovery step, the verdict reads `land: work in progress — N checks open (…)`,
 and it exits 0, since nothing there reaches the base without `merge`'s gates

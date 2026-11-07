@@ -142,7 +142,8 @@ has. A
 finding recommended defer or no_action is open until it has a decision; its
 line shows the current one, with who set it and the commit it was set at. A
 `fix_now` finding, or one decided `fix_now`, is open until an approval of a
-later commit, recorded after the finding, resolves it, and its line then
+later commit that holds the finding's record, recorded after the finding,
+resolves it, and its line then
 names that approval; whether the approval is still current is the approval
 line's.
 

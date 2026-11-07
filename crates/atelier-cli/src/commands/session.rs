@@ -771,7 +771,10 @@ fn on_work_branch() -> bool {
         return false;
     };
     let repo = layout.repo_root();
-    let Ok(source) = base_policy::working(repo) else {
+    // HEAD's committed policy, as `land_gates` and `merge` judge the base:
+    // an uncommitted edit of `base_branch` does not move it (finding
+    // atelier-bo2i).
+    let Ok(source) = base_policy::from_ref(repo, "HEAD") else {
         return false;
     };
     git::checkout_branch(repo)
