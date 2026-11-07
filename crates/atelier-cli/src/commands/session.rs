@@ -95,9 +95,12 @@ fn check_traceability(
     }
     Ok(())
 }
-/// Tracker files (anything under `.atelier/`) a branch changes relative to
-/// the base. Every local and remote-tracking copy of the base counts, so a
-/// stale local base cannot attribute upstream changes to the branch.
+/// Tracker records a branch changes relative to the base. The workflow
+/// policy and project config are code, as approval freshness counts them
+/// (`git_freshness::is_record_path`), so the approval that covers the
+/// branch's other code covers them too. Every local and remote-tracking copy
+/// of the base counts, so a stale local base cannot attribute upstream
+/// changes to the branch.
 /// `None` when the base has no Atelier policy yet, so the branch installs it.
 fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path::PathBuf>>> {
     let refs = git::text(
@@ -145,7 +148,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         };
         let paths = git_freshness::changed_paths(repo, &fork, "HEAD")?
             .into_iter()
-            .filter(|path| path.starts_with(".atelier"))
+            .filter(|path| git_freshness::is_record_path(path))
             .collect::<Vec<_>>();
         changed = Some(match changed {
             Some(previous) => previous

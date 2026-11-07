@@ -530,6 +530,64 @@ fn merge_takes_a_branch_no_issue_owns_on_an_approval_of_its_head() {
     ok(repo, &["doctor"]);
 }
 
+/// The workflow policy and project config are code, as approval freshness
+/// and the CI merge check count them (ADR 0028), so a branch no issue owns
+/// that changes them is on the light path: `land` and `doctor` report its
+/// review state rather than refuse its changes as untraceable tracker
+/// files, and it merges and lands on the base as any reviewed branch does.
+#[test]
+fn a_branch_no_issue_owns_changes_the_policy_and_config_on_the_light_path() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+
+    git(repo, &["switch", "-qc", "lifecycle"]);
+    let policy = fs::read_to_string(repo.join(".atelier/workflow.yaml")).unwrap();
+    change(
+        repo,
+        ".atelier/workflow.yaml",
+        &format!("{policy}merge_checks:\n  - shell.check:\n      command: \"test ! -f BROKEN\"\n"),
+        "Check that nothing is broken",
+    );
+    let config = fs::read_to_string(repo.join(".atelier/config.toml")).unwrap();
+    change(
+        repo,
+        ".atelier/config.toml",
+        &format!("{config}\n# Reviewed like the policy.\n"),
+        "Note how the config is reviewed",
+    );
+    let output = ok(repo, &["land"]);
+    assert!(
+        output.contains("No work owner on branch lifecycle")
+            && output
+                .contains("`atelier review request` asks for an independent review of its head")
+            && !output.contains("land_work_untraceable"),
+        "{output}"
+    );
+    ok(repo, &["doctor"]);
+
+    approve(repo, "lifecycle");
+    let output = ok(repo, &["land"]);
+    assert!(
+        output.contains("Light path: no issue owns branch lifecycle, so its 3 commits since main merge on an independent approval of its head.")
+            && output.contains("Next: atelier merge")
+            && output.contains("land: passed"),
+        "{output}"
+    );
+    ok(repo, &["doctor"]);
+
+    let output = ok(repo, &["merge"]);
+    assert!(output.contains("Merged lifecycle into main"), "{output}");
+    assert!(git(repo, &["show", "main:.atelier/workflow.yaml"]).contains("test ! -f BROKEN"));
+    let output = ok(repo, &["land"]);
+    assert!(
+        output.contains("land: passed") && !output.contains("land_base_unreviewed"),
+        "{output}"
+    );
+    ok(repo, &["doctor"]);
+}
+
 #[test]
 fn an_owned_branch_keeps_the_issue_path_and_a_branch_approval_covers_no_done_claim() {
     let dir = tempdir().unwrap();
