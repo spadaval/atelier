@@ -652,8 +652,8 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     );
 
     // The advised recovery: restore the reviewed tip, cherry-pick the fix
-    // without the review record it added, merge the base, then record proof
-    // and review again.
+    // without the review record it added, merge the base, then get the
+    // branch reviewed again.
     git(fixture.path(), &["reset", "-q", "--hard", &reviewed]);
     git(fixture.path(), &["cherry-pick", "-n", &fix]);
     let added = git(
