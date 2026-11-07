@@ -10,6 +10,13 @@ created_at: 2026-11-07T05:50:03.726431292Z
 event:
   event: finding
   recommendation: fix_now
+  disposition:
+    decision: fix_now
+    identity: orchestrator (claude-opus-5-5), mission atelier-mmpv
+    commit: b7282bb8cd7a53d795bc8cfbc615795be3ce5c8d
+    recorded_at: 2026-11-07T05:53:43.266397747Z
+    resolution_commit: b7282bb8cd7a53d795bc8cfbc615795be3ce5c8d
+    reason: Fixed in b7282bb8.
 ---
 
 medium: PRODUCT_INTENT.md:12 'Git carries both the implementation and its done claim through review and integration' is superseded by decision 2 (ADR 0028 lines 228-230: the done claim is no longer committed on the work branch and reviewed with the code), but ADR 0028's PRODUCT_INTENT.md list (docs/adr/0028-simpler-lifecycle.md:275-300) omits it. atelier-jnrh will update PRODUCT_INTENT.md from that list ('describe the mechanics as built'), so this line would stay stale and contradict the new model. Fix: add it to the list beside 'Commit done claims on the work branch' (atelier-jnrh).

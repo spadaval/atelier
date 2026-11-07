@@ -10,6 +10,13 @@ created_at: 2026-11-07T05:50:04.366379517Z
 event:
   event: finding
   recommendation: fix_now
+  disposition:
+    decision: fix_now
+    identity: orchestrator (claude-opus-5-5), mission atelier-mmpv
+    commit: b7282bb8cd7a53d795bc8cfbc615795be3ce5c8d
+    recorded_at: 2026-11-07T05:53:45.180359367Z
+    resolution_commit: b7282bb8cd7a53d795bc8cfbc615795be3ce5c8d
+    reason: Fixed in b7282bb8.
 ---
 
 low: docs/adr/0028-simpler-lifecycle.md:209 Replacing 'the reasoning of the rejected alternative Recompute Review Targets From Parent Hierarchy' goes beyond the strategy, which is silent on it, and pre-empts the question the ADR leaves open for atelier-md0v (line 152: what replaces the recorded base for a branch that targets a mission branch). It also conflicts with ADR 0016's new Status line, whose 'the rest stands' keeps that rejection. Fix: say only that the alternative's conclusion (the recorded base is the target) goes with the recorded base, and that whether targets are recomputed from the hierarchy is open under decision 5.
