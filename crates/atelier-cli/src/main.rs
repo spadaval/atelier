@@ -32,12 +32,13 @@ One issue, in order: start it; implement; tick every Done when line and
 write its ## Report; review request, which refuses until both hold; fix
 each fix_now finding and get the fix reviewed again; approve; merge, which
 makes one merge commit and marks the work done. Work has no close step. Only
-a code change makes an approval stale, though a rewritten Done when line still
-gets a fresh one. Work that changes no code and can only happen after a merge
-or release, such as pushing a tag, is a loose end (--issue-type loose_end);
-an independent validation is a validation item instead. A change with no
-issue takes review request and merge with no ID on its own branch. Run land
-before every handoff.")]
+a code change makes an approval stale; a Done when line rewritten after start
+is shown in the review brief and by merge --check, and refuses nothing. Work
+that changes no code and can only happen after a merge or release, such as
+pushing a tag, is a loose end (--issue-type loose_end); an independent
+validation is a validation item instead. A change with no issue takes review
+request and merge with no ID on its own branch. Run land before every
+handoff.")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)
@@ -451,7 +452,8 @@ enum WorkCommands {
     /// Show ready work an agent can pick up; work labelled needs-human is
     /// listed separately
     Ready,
-    /// Show ready work only the human can do (labelled needs-human)
+    /// Show ready work only the human can do: open decisions and work
+    /// labelled needs-human
     Human,
     /// Show blocked work
     Blocked,
