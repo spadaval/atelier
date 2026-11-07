@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:24.972698957+00:00"
+status: "superseded"
 title: "Warn when a bundle evidence commit is not in the repository"
-updated_at: "2026-10-17T01:10:57.968962482+00:00"
+updated_at: "2026-11-07T21:04:24.972698957+00:00"
 ---
 
 ## Goal
@@ -29,3 +30,7 @@ The shipped fixture docs/spec/bundle/fixtures/valid-bundle.json gives its eviden
 
 - Preview and apply print `⚠ evidence.bundle-contract: commit aaaaaaaa is not in this repository; it cannot count as proof` and still succeed.
 - A test asserts the warning.
+
+## Report
+
+A receipt proves nothing since atelier-md0v, so a warning that one "cannot count as proof" warns about a gate that no longer exists (decision atelier-mzpn).

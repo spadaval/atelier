@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:18.139930331+00:00"
+status: "superseded"
 title: "Add a view of the workflow policy"
-updated_at: "2026-10-17T01:10:57.972320540+00:00"
+updated_at: "2026-11-07T21:04:18.139930331+00:00"
 ---
 
 ## Goal
@@ -44,3 +45,7 @@ merge: fast_forward_only into master · shell: git diff --check HEAD^ HEAD
 ## Unknowns
 
 Command name, and whether validator descriptions come from the policy file or from built-in text for each check.
+
+## Report
+
+Decision atelier-mzpn dropped it if the shrunken policy reads plainly, and it does: after atelier-jnrh, atelier-md0v and atelier-8bh4 every transition carries a description, and atelier-ml3r's CLI help with the YAML as written passed the legible criterion's cold read (atelier-l6jx).

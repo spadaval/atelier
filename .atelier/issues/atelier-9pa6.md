@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:24.499276168+00:00"
+status: "superseded"
 title: "Warn when a done transition runs on the base branch"
-updated_at: "2026-10-17T01:10:57.962367692+00:00"
+updated_at: "2026-11-07T21:04:24.499276168+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ On master in a scratch clone, `atelier issue transition 43m1 start` and then `cl
 ## Unknowns
 
 Refuse or warn. Refusing matches `land`; warning keeps the transition usable in repositories without a branch policy.
+
+## Report
+
+Work items have no close transition since atelier-jnrh, so nobody can make a done claim on the base; merge marks work done (decision atelier-mzpn).

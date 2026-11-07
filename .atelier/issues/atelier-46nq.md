@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:20.843735267+00:00"
+status: "superseded"
 title: "Say what each Needs a Human item is and what it holds up"
-updated_at: "2026-10-17T01:10:57.985849753+00:00"
+updated_at: "2026-11-07T21:04:20.843735267+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ Needs a Human rows read `shown for context atelier-spvd [todo] medium - Pick wid
 ## Context
 
 Reworks the same row rendering as atelier-deyy. Fixture: scratch clone with mission atelier-j76w; parent atelier-qhnh (children s47h active, 9t9q blocked_by s47h, 1gc5 blocked_by 9vdd); qhnh blocked_by decision atelier-spvd (needs a human); chain 5hp9 <- fhep <- il31 <- ubti (ubti ready, low, no mission); 9vdd advances superseded mission atelier-ba3h.
+
+## Report
+
+Merged into atelier-om6l (decision atelier-mzpn): the "shown for context" label is gone, and what each Needs a Human item holds is om6l's.

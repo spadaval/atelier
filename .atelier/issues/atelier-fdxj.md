@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:20.606402699+00:00"
+status: "superseded"
 title: "Show what to do next: blocker chains and the work each item unblocks"
-updated_at: "2026-10-17T00:31:29.226859246+00:00"
+updated_at: "2026-11-07T21:04:20.606402699+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Whether this belongs in `work ready`, `work mission`, or its own view; whether a
 ## Notes
 
 - 2026-10-17 [human] 2026-10-17: left out of the orientation mission by Sumeet; a ranking changes no view read before, during, or after a mission. Revisit after atelier-stsa shows criteria in work mission.
+
+## Report
+
+Sumeet left it out (note of 2026-10-17), and atelier-om6l covers what holds work up (decision atelier-mzpn).

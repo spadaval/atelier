@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:23.778078154+00:00"
+status: "superseded"
 title: "Record who implemented an item, so the non-author check catches honest slips"
-updated_at: "2026-10-31T00:04:40.084530635+00:00"
+updated_at: "2026-11-07T21:04:23.778078154+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ Tests show: after `start --identity implementer/a`, `review approve --identity i
 ## Context
 
 Decision atelier-80qd. Stated principle: PRODUCT_INTENT.md, "the guards prevent routine mistakes rather than defend against malicious actors". The skill-side half, every delegation stating the role and identity, is still to be made, in spadaval/.agents (ADR 0023), which has no tracker; until it lands nobody passes `--identity` and this check never fires. Whoever closes this item confirms that wording exists or says plainly in the Close Reason that it does not.
+
+## Report
+
+atelier-md0v removed the rule that a reviewer's identity differ from the Git authors, which this strengthened; decision atelier-80qd's work goes with it (decision atelier-mzpn).

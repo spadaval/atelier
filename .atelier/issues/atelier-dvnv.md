@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:22.033038608+00:00"
+status: "superseded"
 title: "Warn in status when land would fail"
-updated_at: "2026-11-04T23:05:33.167989567+00:00"
+updated_at: "2026-11-07T21:04:22.033038608+00:00"
 ---
 
 ## Goal
@@ -47,3 +48,7 @@ Status showed `[ahead 1]` or a dirty path and suggested ready work. The agent le
   Rejected: Running the full land_text on every status
 - 2026-11-04 [decision] The cheap subset covers all four failure kinds in Goal: uncommitted records, unreviewed base commits, done claims that no longer hold (a done child blocked by an open issue), and a branch behind its base
   Reason: Done when needs a test for each kind; the earlier note named the checks loosely and missed the last two
+
+## Report
+
+atelier-md0v made land report-only on work branches, refusing only unreviewed code on the base; the done-claim and uncommitted-record failures are gone, and the base case is step 5 of atelier-mi3x (decision atelier-mzpn).

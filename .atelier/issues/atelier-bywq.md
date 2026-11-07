@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:24.734213561+00:00"
+status: "superseded"
 title: "Warn when a command on the base edits a record an open work branch owns"
-updated_at: "2026-10-30T06:40:57.500738838+00:00"
+updated_at: "2026-11-07T21:04:24.734213561+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ Issue mutation commands run on the base branch. Work branches and records-only p
 
 - Sibling atelier-9pa6 owns done transitions on the base and has not settled refuse versus warn; this item covers the other commands. Share the warning path.
 - Open branches and their owners are already listed by `status` (Branches) and computed as in-flight marks (atelier-3i7x).
+
+## Report
+
+Since atelier-3jdm a record edit or record-only conflict resolution no longer makes an approval stale, so the warning guards nothing (decision atelier-mzpn).

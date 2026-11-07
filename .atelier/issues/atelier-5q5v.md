@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:20.128637475+00:00"
+status: "superseded"
 title: "Show parent and child structure in work mission"
-updated_at: "2026-10-17T01:10:57.985530787+00:00"
+updated_at: "2026-11-07T21:04:20.128637475+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Every mission row is rendered at `depth: 1` (crates/atelier-cli/src/commands/wor
   ```
 - In summary sections, child rows end with `· parent atelier-qhnh`.
 - A test covers a parent with children in different states.
+
+## Report
+
+Did not earn its place (decision atelier-mzpn): work parent already shows children, and atelier-jnrh removed the parent-closes-last rule that made structure matter.

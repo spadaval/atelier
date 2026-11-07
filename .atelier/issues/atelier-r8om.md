@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:21.555343263+00:00"
+status: "superseded"
 title: "Tell planning reviews from delivery reviews in the debrief"
-updated_at: "2026-11-05T06:07:19.198719+00:00"
+updated_at: "2026-11-07T21:04:21.555343263+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ A CLI fixture that reproduces the case in a scratch repository shows the problem
 ## Context
 
 Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
+
+## Report
+
+Needs a new record field, against the no-regrowth rule; reviews of plan records are ordinary reviews under atelier-3jdm and atelier-4nsl (decision atelier-mzpn).

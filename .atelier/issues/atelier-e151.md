@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:19.654145191+00:00"
+status: "superseded"
 title: "Let start create the owner worktree, or show the owner branch first"
-updated_at: "2026-10-17T01:10:57.967303104+00:00"
+updated_at: "2026-11-07T21:04:19.654145191+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,7 @@ Tests cover a standalone item and a child of a parent (whose branch is the paren
 ## Unknowns
 
 Which option. `--worktree` removes the guess entirely but makes `start` manage worktrees; showing the branch is smaller and fits the issue show ownership item (i.show-ownership-proof).
+
+## Report
+
+atelier-md0v removed type-named branches: start names a new branch with the bare item ID and a child's start takes its parent's branch, so there is no branch name to guess (decision atelier-mzpn).

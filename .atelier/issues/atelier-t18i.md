@@ -20,9 +20,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:23.045049936+00:00"
+status: "superseded"
 title: "Count links and name blocker cycles the same way for every link storage"
-updated_at: "2026-10-17T06:28:32.644079557+00:00"
+updated_at: "2026-11-07T21:04:23.045049936+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ After atelier-ihss, links can be stored on the declaring record, on the blocker'
 
 - Each link counts once in the Relationships line, whatever its storage, shown by a test with declared, blocker-side and two-sided links.
 - The cycle error names the issues in the cycle and the link role, not a storage field.
+
+## Report
+
+Merged (decision atelier-mzpn): the Relationships line and its count go with atelier-yzuv, and the cycle message joins atelier-x3ru.

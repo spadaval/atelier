@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:21.076677210+00:00"
+status: "superseded"
 title: "Show every receipt in a debrief validation run, not only those with criteria"
-updated_at: "2026-11-05T06:07:19.198719+00:00"
+updated_at: "2026-11-07T21:04:21.076677210+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ A CLI fixture that reproduces the case in a scratch repository shows the problem
 ## Context
 
 Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
+
+## Report
+
+Receipts are optional notes that gate nothing (atelier-md0v) and validation lost its own branch (atelier-8bh4), so the Validation section is judged afresh by loose end atelier-jdpf (decision atelier-mzpn).

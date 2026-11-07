@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Show an open finding in branch readiness, so the approval mark agrees with merge"
-updated_at: "2026-11-07T21:03:31.324580474+00:00"
+updated_at: "2026-11-07T21:04:13.230058758+00:00"
 ---
 
 ## Goal

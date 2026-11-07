@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:22.797477620+00:00"
+status: "superseded"
 title: "Show recent tracker activity at session start"
-updated_at: "2026-10-16T23:04:58.948224135+00:00"
+updated_at: "2026-11-07T21:04:22.797477620+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ A fresh session has no summary of what closed, merged, or changed in the tracker
 ## Unknowns
 
 What "recent" means without session records (ADR 0014/0019): the last N base commits, the upstream, or a time window.
+
+## Report
+
+Merged into atelier-avx0 (decision atelier-mzpn), whose --since <commit> answers what "recent" means.

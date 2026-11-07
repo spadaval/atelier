@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:17.650582605+00:00"
+status: "superseded"
 title: "Detect the base branch at init, and give land_base_mismatch a fix"
-updated_at: "2026-10-17T01:10:57.979015085+00:00"
+updated_at: "2026-11-07T21:04:17.650582605+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ In a fresh `git init` repository on `master`, `atelier init` writes `base_branch
 ## Context
 
 Init lives in crates/atelier-app/src/init.rs (no branch detection today) and crates/atelier-cli/src/commands/init.rs. The land messages are at crates/atelier-cli/src/commands/session.rs:258 and 465-470. `start` accepting a base that disagrees with the policy may need its own check.
+
+## Report
+
+Decision atelier-mzpn: atelier-l457 made init pick the base branch (origin's HEAD, else main or master, else the current branch) and print it, and atelier-md0v removed the recorded base and land_base_mismatch; the --base override is not carried, since init's next step says to read the policy's base_branch.

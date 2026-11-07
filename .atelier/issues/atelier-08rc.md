@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:19.176102079+00:00"
+status: "superseded"
 title: "End prune --apply with the commit step and an exact recovery"
-updated_at: "2026-10-17T01:10:57.972626841+00:00"
+updated_at: "2026-11-07T21:04:19.176102079+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ After removing 651 records in a scratch clone (`atelier prune --apply --retentio
 - Apply ends with `Removed 651 (512 issues, 90 evidence, 49 reviews). Next: git commit -am "Prune …"; undo before committing: git restore .atelier`, using the real counts.
 - The owner reason reads `owner atelier-bw0b is open (todo)`.
 - A test asserts the summary and footer.
+
+## Report
+
+Merged into atelier-rmvb as one prune-output item (decision atelier-mzpn).

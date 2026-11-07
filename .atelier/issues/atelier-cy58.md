@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:19.889121958+00:00"
+status: "superseded"
 title: "Show each row's mission and parent in repo-wide work views"
-updated_at: "2026-10-17T01:10:57.987452965+00:00"
+updated_at: "2026-11-07T21:04:19.889121958+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ Repo-wide rows read `ready atelier-ubti [todo] low - Audit legacy widget names`,
 ## Context
 
 atelier-7n5u adds an in-flight mark to the same rows; coordinate the row format.
+
+## Report
+
+Did not earn its place (decision atelier-mzpn): a suffix on every row for two observed calls, and loose ends, never in a mission, would make "no mission" common noise.

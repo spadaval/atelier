@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:22.514315298+00:00"
+status: "superseded"
 title: "Show docs that exist only on unmerged branches"
-updated_at: "2026-10-17T19:00:36.356707263+00:00"
+updated_at: "2026-11-07T21:04:22.514315298+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ updated_at: "2026-10-17T19:00:36.356707263+00:00"
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Report
+
+Did not earn its place (decision atelier-mzpn): one anecdote, and it adds a scan of every branch to status.

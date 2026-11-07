@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:23.536181859+00:00"
+status: "superseded"
 title: "Show when a command-backed fail is cleared by anything but a pass of the same command"
-updated_at: "2026-10-30T06:52:05.478210610+00:00"
+updated_at: "2026-11-07T21:04:23.536181859+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ Tests show, on one item: a captured fail of command C followed by a newer manual
 ## Design
 
 Show, do not refuse. Atelier's guards prevent routine mistakes rather than defend against malicious actors (PRODUCT_INTENT.md), and the human directed that shortcuts be made visible; a refusal with no override would make an item whose check cannot be rerun impossible to close. Decided by the human on 2026-10-30. Related atelier-4urj unifies the supersession rule; this item does not depend on it.
+
+## Report
+
+No gate reads receipts since atelier-md0v, so nothing is passed by assertion (decision atelier-mzpn).

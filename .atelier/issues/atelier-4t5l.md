@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:18.690065936+00:00"
+status: "superseded"
 title: "Make atelier check confirm what it checked"
-updated_at: "2026-10-17T01:10:57.971093279+00:00"
+updated_at: "2026-11-07T21:04:18.690065936+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ A passing `atelier check` prints only `Lint passed.`, the same for the whole rep
 ## Context
 
 Pairs with the one-line findings item in this mission.
+
+## Report
+
+Merged into atelier-kset as one check-output item (decision atelier-mzpn).

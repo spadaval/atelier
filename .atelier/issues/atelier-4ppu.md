@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:24.256666863+00:00"
+status: "superseded"
 title: "Say at close what the done claim still needs before it can merge"
-updated_at: "2026-10-17T01:36:21.325032540+00:00"
+updated_at: "2026-11-07T21:04:24.256666863+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ updated_at: "2026-10-17T01:36:21.325032540+00:00"
 ## Context
 
 The confirmation follows atelier-i2qq and atelier-7ebi. From the 2026-10-16 transcript retrospective.
+
+## Report
+
+atelier-jnrh removed the close step: review request refuses unticked lines or an empty Report, and merge --check names what is missing (decision atelier-mzpn).

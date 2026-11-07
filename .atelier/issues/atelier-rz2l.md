@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:25.211875462+00:00"
+status: "superseded"
 title: "Import a drafted record file into the tracker after validating it"
-updated_at: "2026-10-17T01:36:21.044375930+00:00"
+updated_at: "2026-11-07T21:04:25.211875462+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ Agents that draft records outside the tracker, for bulk grooming or long bodies,
 ## Context
 
 This may answer the open question on atelier-o3lm about a Markdown input format for bundles: importing record files gives Markdown input for single records. Bundles stay the tool for creating linked graphs. From the 2026-10-16 transcript retrospective.
+
+## Report
+
+Fails fewer-concepts: a fourth way to write records beside create, bundle and direct edits; atelier-sxcj covers the quoting problem and atelier-ilba the validation (decision atelier-mzpn).

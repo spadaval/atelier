@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:23.292002638+00:00"
+status: "superseded"
 title: "Fix work mission and parent footers, omission hints and filters"
-updated_at: "2026-10-17T01:10:57.984917292+00:00"
+updated_at: "2026-11-07T21:04:23.292002638+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ updated_at: "2026-10-17T01:10:57.984917292+00:00"
 - `--human` and `--backlog` exist on `work mission`, or summary sections never truncate.
 - `work parent` accepts the same filters as `work mission`.
 - Terminal missions get no transition hint. Tests cover each.
+
+## Report
+
+Done since 315d6f23 (2026-10-17): every omission line names its view (--done, --all), the footer no longer offers the filter in use or a misnamed blockers list, and terminal missions get no transition hint; --all reaches every section, the no-new-flags route decision atelier-mzpn chose.

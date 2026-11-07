@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:22.269485664+00:00"
+status: "superseded"
 title: "Show planned versus built work and backlog health in work missions"
-updated_at: "2026-10-17T19:00:36.341319071+00:00"
+updated_at: "2026-11-07T21:04:22.269485664+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ About 85 of the 99 CLI-audit issues sit untouched in five draft missions, the ba
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Report
+
+Did not earn its place (decision atelier-mzpn): it adds a configurable age; a triage handles backlog sprawl, and work missions already shows counts per state.

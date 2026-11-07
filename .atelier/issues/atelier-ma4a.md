@@ -6,11 +6,7 @@ labels: []
 priority: "P2"
 relationships:
   blocks: []
-  children:
-  - kind: "issue"
-    id: "atelier-abdp"
-  - kind: "issue"
-    id: "atelier-efnf"
+  children: []
   attachments: []
   relates:
   - kind: "issue"
@@ -18,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:24.018934841+00:00"
+status: "superseded"
 title: "Show a work item's review history where it is judged"
-updated_at: "2026-11-06T23:57:40.039104054+00:00"
+updated_at: "2026-11-07T21:04:24.018934841+00:00"
 ---
 
 ## Goal
@@ -34,3 +31,7 @@ Every child is done with its own proof, the increment has an independent approva
 ## Background
 
 Loops seen in the 2026-10-15 to 10-29 transcripts: atelier-vkzj took 7 review rounds, efkh about 6 and 37uq 5, each round finding a wider form of the same flaw. About 12 items had Done when or criteria rewritten, waived or unlinked after a finding, often then re-approved. Atelier already keeps per-record history from Git (crates/atelier-app/src/record_history.rs) and reads review events per owner (`review list`).
+
+## Report
+
+A container for atelier-ll3p's criterion, superseded with it: atelier-r9hb did the Done when part, and atelier-efnf and atelier-abdp stand alone in atelier-4pzj (decision atelier-mzpn).

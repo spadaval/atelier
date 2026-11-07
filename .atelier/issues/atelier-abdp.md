@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Count review rounds in branch readiness and the review request brief"
-updated_at: "2026-11-07T21:03:31.624874191+00:00"
+updated_at: "2026-11-07T21:04:12.983006832+00:00"
 ---
 
 ## Goal

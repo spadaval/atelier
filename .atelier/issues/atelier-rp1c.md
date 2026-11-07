@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:18.935819993+00:00"
+status: "superseded"
 title: "Summarise prune by eligible vs kept, and name the root keeping each cluster"
-updated_at: "2026-10-17T01:10:57.973237161+00:00"
+updated_at: "2026-11-07T21:04:18.935819993+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,7 @@ Deferred Cleanup Classes
 ## Context
 
 docs/product/retention-and-prune.md (protection follows links in both directions; atelier-r7cd).
+
+## Report
+
+Merged into atelier-rmvb as one prune-output item (decision atelier-mzpn).

@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:20.364109915+00:00"
+status: "superseded"
 title: "Show retired missions as retired and flag the work they leave stranded"
-updated_at: "2026-10-17T01:10:57.987157293+00:00"
+updated_at: "2026-11-07T21:04:20.364109915+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ After superseding fixture mission atelier-ba3h, `work mission atelier-ba3h` stil
 - Done and superseded mission dashboards lead with `superseded 2026-10-16: <close reason>` and list leftover open work under "Left open", without ready hints.
 - The overview line reads `Left open by retired missions: atelier-9vdd (blocks atelier-1gc5 in atelier-j76w)`.
 - Tests cover a superseded mission with an open item that blocks another mission's work.
+
+## Report
+
+Rare, and did not earn its place (decision atelier-mzpn): status lists unassigned work, and a triage that retires a mission re-homes its items.

@@ -19,9 +19,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:17.886133992+00:00"
+status: "superseded"
 title: "Handle repositories without Git or without commits"
-updated_at: "2026-10-17T02:41:22.663991335+00:00"
+updated_at: "2026-11-07T21:04:17.886133992+00:00"
 ---
 
 ## Goal
@@ -49,3 +50,7 @@ updated_at: "2026-10-17T02:41:22.663991335+00:00"
 ## Notes
 
 - 2026-10-17 [note] 2026-10-16: Review of atelier-sdb0 found status on an unborn HEAD prints 'Checkout: unavailable - git ls-tree -rz HEAD failed' (previously 'No commits yet'). Include status in this fix.
+
+## Report
+
+Done by atelier-l457 (decision atelier-mzpn): init refuses outside Git, and with an unborn HEAD status, check, land, doctor and the Stop hook work and name the install commit; prime is retired (atelier-sdb0), and other commands outside Git need an .atelier that init no longer writes there.

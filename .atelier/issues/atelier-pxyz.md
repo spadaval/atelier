@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T21:04:19.418605316+00:00"
+status: "superseded"
 title: "Print `Next: atelier prune --apply` only when apply would do something"
-updated_at: "2026-10-17T01:10:57.972926861+00:00"
+updated_at: "2026-11-07T21:04:19.418605316+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ The hint is printed unconditionally (crates/atelier-cli/src/commands/prune.rs:11
 - On a dirty checkout it ends `⚠ apply needs a clean checkout: commit or stash N paths first`.
 - Otherwise it ends `Next: atelier prune --apply`.
 - Tests cover all three.
+
+## Report
+
+Merged into atelier-rmvb as one prune-output item (decision atelier-mzpn).
