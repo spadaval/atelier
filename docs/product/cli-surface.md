@@ -15,7 +15,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `bundle` | Preview and apply one-shot graph input. |
 | `evidence` | Record, show, list, and attach commit-bound proof. |
 | `review` | Append approvals, findings, and explicit trivial exemptions; set findings' dispositions. |
-| `merge` | Check base policy and fast-forward reviewed work, or merge it under `merge_commit`. |
+| `merge` | Check base policy and integrate reviewed work with a merge commit that marks it done. |
 | `land` | Check handoff invariants and committed records. |
 | `doctor` | Check every done claim and the whole review history. |
 | `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
@@ -68,15 +68,18 @@ atelier issue link <parent-id> <mission-id> --role advances
 atelier issue link <blocked-id> <blocker-id> --role blocked_by
 atelier issue note <id> "Handoff detail" --kind handoff
 atelier issue note <id> "Chosen approach" --kind decision --reason "Why" [--rejected "Alternative"]
-atelier issue transition <id> close --reason "Acceptance shown"
+atelier issue transition <id> supersede --reason "Why it will not happen"
 ```
 
 Transitions write records after read-only checks. `atelier start` prepares Git context; the `start` transition only changes the record.
-Commit code and related tracker records yourself. Record focused proof and
-independent review before `merge`; see [evidence](validation.md) and
-[reviews and merge](reviews-and-merge.md). Done claims belong in committed work
-branch records. Run `atelier land` before a session handoff and
-`atelier merge <id> --check` to inspect completed-owner integration gates. Atelier never pushes or squashes. It commits only the merge commit that `merge` creates under `merge_strategy: merge_commit`, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
+Commit code and related tracker records yourself. The order is: start,
+implement, tick every Done when line and write the Report, `atelier review
+request <id>`, fix and re-review, approve, `atelier merge <id>`, which marks
+the work done; there is no close step for work ([work
+model](work-model.md#completion)). Record focused proof and independent
+review before `merge`; see [evidence](validation.md) and [reviews and
+merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
+`atelier merge <id> --check` to inspect integration gates. Atelier never pushes or squashes. It commits only the merge commit that `merge` creates, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
 
 ## Review and session commands
 
@@ -96,7 +99,7 @@ a deprecated alias for `status`, kept for installed hooks.
 ## Committing records
 
 A step usually writes several records (a finding, its disposition, evidence, a
-close). `review record|approve|finding|trivial|disposition`, `evidence record`
+transition). `review record|approve|finding|trivial|disposition`, `evidence record`
 and `issue transition <id> <name>` accept two flags that replace one hand-made
 commit per record:
 

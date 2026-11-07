@@ -20,7 +20,8 @@ Decisions 1 to 8 take effect when the mission item named for each merges.
 Until then the code, the product docs and the PRODUCT_INTENT.md principles
 they supersede describe today's behaviour, and that item updates them.
 Decision 9 takes effect with this ADR, and decision 10 binds every item. The
-lifecycle item, atelier-jnrh, amends this ADR with the mechanics it settles.
+lifecycle item, atelier-jnrh, amended decision 2 with the mechanics it
+settled.
 
 ## Governing Principle
 
@@ -94,16 +95,62 @@ re-review, approve, merge.
 - The author writes the implementer report before review, so the reviewer
   reads it.
 
-Open, settled by atelier-jnrh:
+Mechanics, as atelier-jnrh built them:
 
-- where the implementer report lives until merge: a section the author writes
-  before requesting review, or input to `merge`;
-- how a parent and its children are marked done when one merge integrates
-  them;
-- how merge writes the done state under each merge strategy, since
-  `fast_forward_only` makes no merge commit, and so how "Atelier never creates
-  commits" reads afterwards;
-- what happens to items already closed on unmerged branches when this ships.
+- **The report.** One section, `Report`, says what happened for every
+  transition that requires the policy's `close_reason` field: the implementer
+  report on a work item, a supersede reason, a mission's close report and a
+  decision's `decide`. The author writes the implementer report in the item's
+  `## Report` before requesting review, so the reviewer can read it. The
+  policy key keeps its name and now means that section; a record's older
+  `## Close Reason` heading is still read, and records are written with
+  `## Report`. Atelier requires only a non-empty Report. Its parts
+  (Deviations, Decisions, Surprises, Open items) are Agent Factory guidance,
+  so a policy's `report.*` required fields are read as `close_reason`.
+- **Asking for review.** `atelier review request` refuses while an open item
+  of the `work` workflow it covers has an unticked `- [ ]` Done when line or
+  an empty Report, and lists each. A line with no box is not a checklist item
+  and is not checked. A line carrying the old After merge marker need not be
+  ticked; the refusal names `atelier migrate after-merge` for such lines
+  (atelier-8bh4).
+- **Merging marks done.** `atelier merge` always creates a merge commit, and
+  that commit sets every open item of the `work` workflow in the owner's
+  scope, the owner and its non-superseded children, to the workflow's first
+  done status. Nothing is committed on the branch, and the Report stays as
+  the reviewer read it. Merge refuses while one of those items has an open
+  blocker, and still refuses without a current independent approval. One
+  merge marks a parent and its children done, so the rule that a parent
+  closes after its children goes, and the `work` workflow has no `close`;
+  `supersede` remains. The merge commit matches Git's own merge of its
+  parents everywhere outside the records, so it keeps an approval current,
+  and `land` on the base accepts the done marks it carries.
+- **One merge strategy.** `merge_commit` is the only strategy:
+  `fast_forward_only`, `squash` and a missing `merge_strategy` are read as
+  it, and it no longer needs a shell merge check (`merge_unproven` goes).
+  This gives up linear history and the `merge_diverged` refusal in astromech,
+  demiurge and cosplay-studio, and a repository without merge checks or CI on
+  the merged tree now lands a merged tree nobody ran. In exchange no branch
+  needs a catch-up merge before landing; astromech hit `merge_diverged` about
+  56 times since 2026-10-15. Rejected: committing the done state on top of
+  the branch head and fast-forwarding, which keeps two strategies and adds a
+  second kind of commit Atelier writes. atelier-ml3r tells those
+  repositories.
+- **"Atelier never creates commits"** now reads: Atelier creates one commit,
+  the merge commit `atelier merge` integrates reviewed work with, which also
+  marks that work done. Every other commit, records included, is the
+  agent's.
+- **Work closed by an older Atelier.** An item already done on an unmerged
+  branch merges as it is: merge marks only open work. A repository whose
+  policy still has a work `close` keeps working until atelier-ml3r updates
+  it, and the done marks merge writes answer to that close's required fields
+  and validators.
+- **A changed Done when.** A change to a Done when line's text after start is
+  shown in the review request brief and in `merge --check`, including after
+  approval and including a change merged in from the base, and refuses
+  nothing. Ticking boxes is not a change.
+- **Missions.** A mission closes when all its work is merged and its
+  validation, if it has one, is done. Its `close` description says so; it is
+  not a new refusal.
 
 ### 3. Loose ends replace after-merge checks
 
@@ -231,9 +278,10 @@ plus descendants, and domain names for starter workflows.
   planning depth are agent-owned" for those two steps. Valid records are
   guarded when written (atelier-ilba).
 - Decision 3: `start` no longer records a branch base (atelier-md0v); `merge`
-  also marks the issue done (atelier-jnrh); a change with no issue merges
-  without `start` (atelier-4nsl). Whether "Atelier never creates commits"
-  still holds as written is open (decision 2 above).
+  also marks the issue done in the merge commit it always creates
+  (atelier-jnrh); a change with no issue merges without `start`
+  (atelier-4nsl). "Atelier never creates commits" now reads as decision 2
+  says: Atelier creates that merge commit and no other.
 - Decision 4: the done claim is no longer committed on the work branch and
   reviewed with the code, and merging writes the done state, so "merging
   writes no tracker state" goes (atelier-jnrh). Its freshness rule, under
@@ -249,11 +297,10 @@ plus descendants, and domain names for starter workflows.
 - Decisions 1, 5 and 7 stand.
 
 **[ADR 0021](0021-parent-issues-replace-epics.md).** Decision 2: the parent
-no longer closes after every child is terminal, and the starter policy's
-`close` no longer runs `work.terminal`, since merge marks work done
-(atelier-jnrh; how a parent and its children are marked done is open,
-decision 2 above); the branch name `<issue_type>/<parent-id>` is no longer a
-rule (atelier-md0v). Stands: no epic type, the parent owns the branch its
+no longer closes after every child is terminal, and the starter policy's work
+workflow has no `close` to run `work.terminal`, since one merge marks the
+parent and its open children done (atelier-jnrh, decision 2 above); the
+branch name `<issue_type>/<parent-id>` is no longer a rule (atelier-md0v). Stands: no epic type, the parent owns the branch its
 children work on, superseding a parent retires its open children, and
 decisions 1, 3, 4 and 5.
 
@@ -275,7 +322,7 @@ decisions 1, 3, 4 and 5.
 Replaced, from What stays: the `evidence.no_newer_failure` block on close,
 land and merge, and a policy's own `evidence.attached` gate; no gate reads
 receipts (atelier-md0v). Its "Close Reason names the targeted test or check"
-means the implementer report once atelier-jnrh lands. Stands: what gets a
+means the implementer report in the item's Report (atelier-jnrh). Stands: what gets a
 receipt, the rules it removed, no reruns in `merge --sync`, command capture
 refusing uncommitted code, and freshness marks in `evidence list`.
 
@@ -294,7 +341,8 @@ until the item that changes the behaviour lands.
   when deferred or dismissed; and valid records are guarded at write
   (atelier-md0v, atelier-ilba).
 - "Let agents commit records with the code. Atelier never creates commits":
-  open while atelier-jnrh settles how merge writes the done state.
+  Atelier creates the merge commit that integrates work and marks it done,
+  and no other (atelier-jnrh, decision 2 above).
 - "Make transitions record writes with read-only checks. Branch preparation
   and gated integration are explicit `start` and `merge` commands": `merge`
   also marks the issue done, and a change with no issue merges without

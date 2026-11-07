@@ -48,22 +48,28 @@ mission strategies on the base directly.
 
 Each issue type selects a workflow with an initial status, terminal statuses,
 and named transitions. A transition declares its accepted source statuses,
-target status, optional description, required fields such as `close_reason`,
-and read-only checks. A done-category transition may also require the
-implementer report's parts (`report.deviations`, `report.decisions`,
-`report.surprises`, `report.open_items`), which live in Close Reason, so it
-must require `close_reason` too (see the [work model](work-model.md)). Categories support queries; the exact status remains the
-stored lifecycle state.
+target status, optional description, required fields, and read-only checks.
+The one required field is `close_reason`, a non-empty Report, which only a
+done-category transition may require; an older policy's report parts
+(`report.deviations`, `report.decisions`, `report.surprises`,
+`report.open_items`) are read as `close_reason` (see the [work
+model](work-model.md)). Categories support queries; the exact status remains
+the stored lifecycle state.
 
 The starter policy has draft objectives, someday `backlog` work, todo
 executable work, active `in_progress`, and terminal `done` or `superseded`.
 `backlog` is for work that is recorded but not near-term: it shares the todo
 category but has no `start` transition, so `work ready` leaves it out. `defer`
 parks todo work in `backlog`, `plan` brings it back to `todo`, and `supersede`
-retires it. The starter has no `blocked` or `review` status: a blocker is a
-`blocked_by` link, which `work blocked` and `start` already read, and review
-is recorded in review records after the done claim, so work goes from
-`in_progress` straight to `done` (atelier-bqbz). Policies from earlier
+retires it. The `work` workflow has no `close`: `atelier merge` marks work
+done in the merge commit that integrates it, which is how work reaches its
+first done status ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision
+2). The objective workflow's `close` describes when a mission closes: once
+all its work is merged and its validation, if it has one, is done. The
+starter has no `blocked` or `review` status: a blocker is a `blocked_by`
+link, which `work blocked` and `start` already read, and review is recorded
+in review records, so work goes from `in_progress` straight to `done` when it
+merges (atelier-bqbz). Policies from earlier
 starters that declare `blocked` and `review`, with their `block`,
 `request_review` and `revise` transitions, keep working unchanged. A
 repository adopting the smaller set must first move its records out of
@@ -82,8 +88,13 @@ transition; a todo category alone is not permission to start.
 
 Transitions write the issue record after checks pass. They do not create
 branches or commits, push, open review artifacts, or merge. `start` and `merge`
-are explicit Git boundaries. Required close reasons are recorded with terminal
-claims on the work branch.
+are explicit Git boundaries. A required Report is written in the record or
+given with `--reason`.
+
+A policy from before atelier-jnrh may still give work a `close`. It keeps
+working: the transition still runs, and the done marks merge writes answer to
+its required fields and validators. atelier-ml3r updates the repositories on
+this host.
 
 ## Invariant checks
 
@@ -92,7 +103,7 @@ Record-file validity is checked whenever a command loads the repository.
 parseable intent, lint with no blocking findings (`lint.none_blocking`), and
 open direct or transitive blockers where policy selects them.
 
-Merge gates protect terminal committed scope, the absence of an uncleared
+Merge gates protect the scope merge marks done, the absence of an uncleared
 failing receipt (and fresh passing evidence where a policy's
 `evidence.attached` asks for it), independent current approval or a visible trivial exemption, finding
 dispositions, and absence of open blockers. Policy can add read-only shell
@@ -101,7 +112,6 @@ checks at merge, using this top-level YAML shape:
 ```yaml
 branch_policy:
   base_branch: master
-  merge_strategy: fast_forward_only
 merge_checks:
   - shell.check:
       command: "git diff --check HEAD^ HEAD"
@@ -109,8 +119,8 @@ merge_checks:
 
 This is a fragment of the full workflow schema, not a complete policy.
 `shell.check` is accepted only in `merge_checks`, never in transition validators.
-It runs in the work checkout, or under `merge_commit` in a temporary checkout of
-the merged tree; a zero exit status passes and output explains the
+It runs in a temporary checkout of the merge commit, the merged tree with the
+done marks; a zero exit status passes and output explains the
 result. Checks must preserve the pinned checkout and records. Git hooks are
 disabled during integration and cleanup, so put mandatory checks in this
 reviewed policy surface.
@@ -126,27 +136,21 @@ be valid; fallback does not excuse an invalid candidate. Ordinary commands can
 read working policy and visibly fall back to committed history when it is
 malformed. Fix policy through reviewed work.
 
-The supported gated integration strategies are `fast_forward_only` and
-`merge_commit`. Under `fast_forward_only`, Atelier creates no commit: if the
-base has moved on, merge it into the work branch with ordinary Git and renew any
-proof or approval made stale by the merge. Under `merge_commit`, a branch that
-merges cleanly into the current base lands as a merge commit, the only commit
-Atelier creates, after `merge_checks`, which must include a `shell.check`, pass
-on the merged tree, in a temporary checkout that reuses no build cache; see
-[reviews and merge](reviews-and-merge.md). Rebase only before any review is
+`atelier merge` always integrates with a merge commit, the only commit
+Atelier creates: a branch that merges cleanly into the current base lands as
+one, after `merge_checks` pass on the merged tree in a temporary checkout that
+reuses no build cache, and that commit marks the work done; see [reviews and
+merge](reviews-and-merge.md). A base that moved on needs no catch-up merge
+first. `branch_policy.merge_strategy` is optional: `merge_commit`, and an
+older policy's `fast_forward_only` or `squash`, are all read as a merge commit,
+and any other value is refused. A policy needs no `shell.check` to merge, but
+without one, or CI on the merged tree, it lands a merged tree nobody ran.
+Always merging gives up a linear history and the `merge_diverged` refusal
+that `fast_forward_only` repositories had; in exchange no branch catches up
+before it lands, which `fast_forward_only` forced on every open branch after
+each landing (astromech hit `merge_diverged` about 56 times from 2026-10-15
+to 2026-11-07; ADR 0028, decision 2). Rebase only before any review is
 recorded: rebasing rewrites the commits review records pin.
-
-A policy that omits `branch_policy.merge_strategy` gets `merge_commit` when its
-`merge_checks` include a `shell.check`, and `fast_forward_only` otherwise. An
-explicit value always wins. `atelier init` writes a starter policy without the
-field and without merge checks, so a new repository starts on
-`fast_forward_only` and moves to `merge_commit` when its first `shell.check` is
-added. The default exists because `fast_forward_only` makes every landing force
-each other open branch to catch up, re-prove and be re-approved: three days of
-parallel work produced 122 catch-up merges and 41 fresh-approval commits, while
-the first two branches that landed under `merge_commit` needed none. The condition is the test
-check: a merge that Git accepts can still be broken, and a `shell.check` is what
-runs on the merged tree before it reaches the base (atelier-6mgg).
 
 Consult the workflow parser and command help for exact schema fields. See
 [reviews and merge](reviews-and-merge.md) and

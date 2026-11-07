@@ -8,7 +8,8 @@ current persistence contract.
 [ADR 0019](../adr/0019-verified-repo-native-tracker.md) defines the current
 verified repo-native tracker. Records are tracked Markdown, commands parse them
 directly, reviews live in-repo, transitions have no side-effecting actions, and
-Atelier never creates commits. The rebuild deliberately removes inherited
+the only commit Atelier creates is the merge commit that integrates reviewed
+work and marks it done ([ADR 0028](../adr/0028-simpler-lifecycle.md)). The rebuild deliberately removes inherited
 utilities and later machinery that do not serve that model.
 
 Use Chainlink for source history and Atelier for the current product. Preserve

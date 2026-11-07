@@ -21,7 +21,7 @@ it stands. Both forms follow the same order:
   not filed by review, in filing order, children under their parent. A
   finding deferred to planned work does not file it.
 - **What we did:** one timeline, oldest first. Each done item appears when it
-  closed, with its outcome, its children, each with its own report under
+  was done, which for work is when its merge marked it done, with its outcome, its children, each with its own report under
   its line (its outcome and any Deviations, Surprises, Decisions and, unless
   review filed follow-ups, Open items), what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn,
@@ -103,7 +103,7 @@ version out of `draft`), its close, when each item was first linked to it
 (on either record, and for a child when its parent first listed it), and
 done claims later withdrawn. Versions in the retired epic shape are read as
 the parent issues they became. The timeline dates work by the records' own
-clock: a delivery when the item closed, and work added to the scope when
+clock: a delivery when the item was done, and work added to the scope when
 the record that links it was written, even on a branch that merged later,
 but not before the mission's start. The start and close are the commits
 that made them. Nothing new is stored. Dates are local.

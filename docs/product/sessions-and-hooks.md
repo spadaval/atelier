@@ -83,9 +83,11 @@ branch with `git switch <branch> && atelier land` (atelier-9a6e). A
 precondition that keeps the gates from running prints after the ones found
 before it, with a `Not checked:` line naming the gates it skipped.
 When the base has commits the branch does not, `land` checks the work against
-the point where it left the base and adds a note to merge the base in (`git
-merge <base>`) before `atelier merge`, which refuses
-with `merge_diverged` until then (atelier-qz9x).
+the point where it left the base and adds a note that `atelier merge` lands
+the branch on it with a merge commit, with `atelier merge --sync` to bring the
+base in first when they conflict (atelier-qz9x, atelier-jnrh). Once the
+owner's approval is current, a passing `land` names `atelier merge <id>` as
+the next step; work in progress hands off without it.
 
 A branch that no item owns, such as a feature branch, a PR branch, a branch
 from before adoption, or a detached HEAD, lands with a note when it changes no
@@ -137,8 +139,8 @@ When the local base branch is ahead of its upstream, `land` (and `land
 --push`) prints a warning, before any push, naming the unpushed base commits
 the current owner did not make: up to five, as `<hash> <subject> (<author>)`,
 then a count. A commit is the owner's when its message names the owner or an
-issue in the owner's scope, as the start, close, merge and planning commits
-for owned work do; git authorship cannot tell sessions apart, since agents
+issue in the owner's scope, as the start, merge and planning commits for
+owned work do; git authorship cannot tell sessions apart, since agents
 share one identity. With no owner, every unpushed base commit is named. The
 warning does not refuse: pushing the base can be meant, and it publishes
 those commits. A base with no upstream is not checked here (atelier-mvzi).
