@@ -65,7 +65,10 @@ retires it. The starter has no `blocked` or `review` status: a blocker is a
 is recorded in review records after the done claim, so work goes from
 `in_progress` straight to `done` (atelier-bqbz). Policies from earlier
 starters that declare `blocked` and `review`, with their `block`,
-`request_review` and `revise` transitions, keep working unchanged. Its `decision`
+`request_review` and `revise` transitions, keep working unchanged. A
+repository adopting the smaller set must first move its records out of
+`blocked` and `review` (to `todo` or `in_progress`), or `atelier check` and
+every work view report `workflow_issue_status_invalid`. Its `decision`
 workflow has no start: `decide` closes a decision once the
 `decision.recorded` check finds its Decision section. Repositories initialized
 before the decision type existed can copy its `issue_types` entry and

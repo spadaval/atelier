@@ -61,8 +61,12 @@ Work views use one readable row state label:
   applies to the records it reads;
 - `needs human`: ready work labelled `needs-human`, and unblocked open
   decisions, which only the human can do;
-- `blocked`: work with one or more open blockers, including hidden blockers
-  outside the visible set;
+- `blocked`: work not yet started that has one or more open blockers,
+  including hidden blockers outside the visible set, and work in a
+  blocked-category status where the policy declares one. Started work that
+  gains a blocker stays `active`: under a policy without a `blocked` status,
+  such as the starter, it stays `in_progress` and shows its blocker count in
+  `work active`, and `close` still refuses while the blocker is open;
 - `active`: active-category work, including configured workflow statuses such
   as `in_progress`, `review`, or `validation`;
 - `done`: done-category work;
