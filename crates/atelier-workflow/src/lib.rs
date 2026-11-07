@@ -1593,9 +1593,10 @@ fn validate_issue_fields_against_policy(
     }
     if let Some(branch) = &issue.workflow_branch {
         for (key, value) in [
-            ("work_branch", &branch.work_branch),
-            ("branch_base", &branch.branch_base),
+            ("work_branch", Some(&branch.work_branch)),
+            ("branch_base", branch.branch_base.as_ref()),
         ] {
+            let Some(value) = value else { continue };
             validate_branch_value(
                 value,
                 &report_path.display().to_string(),
@@ -2157,9 +2158,12 @@ mod tests {
         let mut issue = test_issue();
         issue.workflow_branch = Some(atelier_core::WorkflowBranch {
             work_branch: "task/atelier-pr01".to_string(),
-            branch_base: "main".to_string(),
+            branch_base: Some("main".to_string()),
         });
+        validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
 
+        // A record without `branch_base` is valid too (atelier-nn67).
+        issue.workflow_branch.as_mut().unwrap().branch_base = None;
         validate_issue_against_policy(&policy, &issue, Path::new(WORKFLOW_POLICY_PATH)).unwrap();
     }
 

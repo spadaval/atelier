@@ -309,7 +309,7 @@ mod tests {
             .issue
             .workflow_branch = Some(atelier_core::WorkflowBranch {
             work_branch: "feature/renamed".to_string(),
-            branch_base: "trunk".to_string(),
+            branch_base: Some("trunk".to_string()),
         });
         records.issue("atelier-child", "task", "todo");
         records.parent("atelier-child", "atelier-epic");

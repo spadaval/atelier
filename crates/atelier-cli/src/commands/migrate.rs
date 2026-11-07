@@ -249,11 +249,14 @@ struct LooseEndPlan<'r> {
 /// `blocked_by` its item (ADR 0028, decision 3): the check becomes the loose
 /// end's Done when, the reason goes in its Goal, and the human's judgment or
 /// a device or place no agent can reach labels it needs-human. On an item
-/// that is not done the line's stand-in stays as an ordinary Done when line;
-/// a done item is left as it is. A line carried to an existing issue, or
-/// one an earlier run already turned into a loose end, is skipped, so the
-/// migration runs any number of times. Quiet output is the IDs of the loose
-/// ends made, or of the items whose lines a dry run would migrate.
+/// that is not done the line's stand-in stays as an ordinary Done when line,
+/// and a line with no stand-in leaves, unless the section would be left
+/// empty: then the last such line stays as an ordinary Done when line and
+/// the output names the item (finding atelier-z3z1). A done item is left as
+/// it is. A line carried to an existing issue, or one an earlier run already
+/// turned into a loose end, is skipped, so the migration runs any number of
+/// times. Quiet output is the IDs of the loose ends made, or of the items
+/// whose lines a dry run would migrate.
 pub fn after_merge(
     index: &atelier_app::record_index::RecordIndex,
     apply: bool,
@@ -295,6 +298,18 @@ pub fn after_merge(
         }
         return Ok(());
     }
+    // Worked out before anything is shown, so the dry run shows what
+    // `--apply` writes.
+    let edits = plans
+        .iter()
+        .filter(|plan| !done(plan.item))
+        .map(|plan| {
+            (
+                plan.item.issue.id.as_str(),
+                remaining_done_when(plan.item, &plans),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
     for plan in &plans {
         let item = &plan.item.issue.id;
         if quiet {
@@ -318,8 +333,13 @@ pub fn after_merge(
                 }
             ),
         };
+        let kept = edits
+            .get(item.as_str())
+            .is_some_and(|remaining| remaining.kept.as_ref() == Some(&plan.line));
         let rest = if done(plan.item) {
             format!("; {item} is done, so its record is unchanged")
+        } else if kept {
+            format!("; it stays on {item} as an ordinary Done when line, since without it {item}'s Done when would be empty: give {item} a check it can meet before review")
         } else {
             match &plan.line.stand_in {
                 Some(stand_in) => {
@@ -338,36 +358,15 @@ pub fn after_merge(
         }
         return Ok(());
     }
-    let edits = plans
-        .iter()
-        .filter(|plan| !done(plan.item))
-        .map(|plan| plan.item.issue.id.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
     let now = chrono::Utc::now();
     let mut items = Vec::new();
-    for id in &edits {
+    for (id, remaining) in edits {
         let mut record = index
             .issue_record(id)
             .cloned()
             .with_context(|| format!("{id} is not an issue"))?;
         if let atelier_records::IssueBody::Issue { done_when, .. } = &mut record.sections.body {
-            *done_when = done_when
-                .lines()
-                .filter_map(|line| match after_merge::parse(line) {
-                    Some(marked)
-                        if plans
-                            .iter()
-                            .any(|plan| plan.item.issue.id == *id && plan.line == marked) =>
-                    {
-                        marked
-                            .stand_in
-                            .as_ref()
-                            .map(|stand_in| format!("{}{stand_in}", marked.prefix))
-                    }
-                    _ => Some(line.to_owned()),
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
+            *done_when = remaining.done_when;
         }
         record.issue.updated_at = now;
         items.push(record);
@@ -400,6 +399,56 @@ pub fn after_merge(
         crate::human_output::count_noun(items.len(), "item")
     );
     Ok(())
+}
+
+/// What an unfinished item's Done when becomes once its open lines leave it.
+struct RemainingDoneWhen {
+    done_when: String,
+    /// The line with no stand-in kept as an ordinary Done when line, because
+    /// removing it would leave the section empty (finding atelier-z3z1).
+    kept: Option<atelier_app::after_merge::MarkedLine>,
+}
+
+/// `item`'s Done when without its lines in `plans`: each stand-in stays as
+/// an ordinary line and a line with no stand-in leaves, except the last such
+/// line when nothing else would remain, which stays without its marker.
+fn remaining_done_when(
+    item: &CanonicalIssueRecord,
+    plans: &[LooseEndPlan<'_>],
+) -> RemainingDoneWhen {
+    let mut removed = None;
+    let mut lines = Vec::new();
+    for line in item
+        .sections
+        .section(atelier_records::IssueSectionName::DoneWhen)
+        .unwrap_or_default()
+        .lines()
+    {
+        match atelier_app::after_merge::parse(line) {
+            Some(marked)
+                if plans
+                    .iter()
+                    .any(|plan| plan.item.issue.id == item.issue.id && plan.line == marked) =>
+            {
+                match &marked.stand_in {
+                    Some(stand_in) => lines.push(format!("{}{stand_in}", marked.prefix)),
+                    None => removed = Some(marked),
+                }
+            }
+            _ => lines.push(line.to_owned()),
+        }
+    }
+    let done_when = lines.join("\n");
+    match removed {
+        Some(last) if done_when.trim().is_empty() => RemainingDoneWhen {
+            done_when: format!("{}{}", last.prefix, last.check),
+            kept: Some(last),
+        },
+        _ => RemainingDoneWhen {
+            done_when,
+            kept: None,
+        },
+    }
 }
 
 /// The loose end `plan`'s line becomes.

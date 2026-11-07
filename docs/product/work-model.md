@@ -198,8 +198,9 @@ not happen (atelier-lq42). Branch names carry no issue type: on the base,
 `start` names a new branch with the owner's bare ID. Typed `workflow_branch`
 metadata records the owner's `work_branch`, and a `branch_base` that `start`
 sets to the policy's base branch and nothing reads: the base is always the
-policy's `base_branch`, and the field stays only so an older Atelier can parse
-the record, until atelier-nn67 drops it (ADR 0028 decision 5). Missions
+policy's `base_branch`, and the field is written only so an older Atelier can
+parse the record. A record without it parses, and atelier-hfme stops writing
+it (ADR 0028 decision 5). Missions
 coordinate work rather than own a work branch.
 
 `atelier start <id>` resolves the owner, reads the target branch's records,

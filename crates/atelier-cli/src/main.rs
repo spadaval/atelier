@@ -396,8 +396,10 @@ enum MigrateCommands {
     /// reason goes in its Goal, and it is labelled needs-human when the
     /// reason is the human's judgment or a device or place no agent can
     /// reach. An item that is not done keeps the line's stand-in as an
-    /// ordinary Done when line; a done item is left as it is. Lines carried
-    /// to another issue are skipped, and rerunning changes nothing.
+    /// ordinary Done when line, and loses a line with none unless that would
+    /// leave its Done when empty, when the line stays as an ordinary one and
+    /// the item is named; a done item is left as it is. Lines carried to
+    /// another issue are skipped, and rerunning changes nothing.
     AfterMerge {
         /// Write the changes; without this flag the command only reports them
         #[arg(long)]

@@ -972,7 +972,7 @@ fn test_prune_rechecks_late_recorded_owner_association() {
     let mut record = store.load_issue_by_id(&issue_id).unwrap();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: branch.into(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     store.write_issue_atomic(&record).unwrap();
     let (success, stdout, stderr) = run_atelier(dir.path(), &["prune", "--retention-days", "30"]);

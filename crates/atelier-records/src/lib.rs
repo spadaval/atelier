@@ -2803,6 +2803,37 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(!text.contains("closed_at:"));
     }
 
+    /// `branch_base` is optional on read (atelier-nn67): a record with it
+    /// parses as one, a record without it parses too and is written back
+    /// without it.
+    #[test]
+    fn an_owner_record_parses_with_or_without_branch_base() {
+        let mut record = issue_record("atelier-ownr");
+        record.issue.workflow_branch = Some(WorkflowBranch {
+            work_branch: "atelier-ownr".into(),
+            branch_base: Some("master".into()),
+        });
+        let with = render_issue_record(&record).unwrap();
+        assert!(
+            with.contains("workflow_branch:\n  branch_base: master\n  work_branch: atelier-ownr\n"),
+            "{with}"
+        );
+        let parsed = parse_issue_record(&with, &issue_record_path("atelier-ownr")).unwrap();
+        assert_eq!(parsed, record);
+
+        let without = with.replace("  branch_base: master\n", "");
+        assert!(without.contains("workflow_branch:\n  work_branch: atelier-ownr\n"));
+        let parsed = parse_issue_record(&without, &issue_record_path("atelier-ownr")).unwrap();
+        assert_eq!(
+            parsed.issue.workflow_branch,
+            Some(WorkflowBranch {
+                work_branch: "atelier-ownr".into(),
+                branch_base: None,
+            })
+        );
+        assert_eq!(render_issue_record(&parsed).unwrap(), without);
+    }
+
     #[test]
     fn issue_record_round_trips_dated_notes_and_report() {
         let mut record = issue_record("atelier-note");
@@ -2899,7 +2930,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
         issue.issue.strategy = Some(IssueStrategy::new("docs/strategies/mission.md").unwrap());
         issue.issue.workflow_branch = Some(WorkflowBranch {
             work_branch: "mission/example".into(),
-            branch_base: "master".into(),
+            branch_base: Some("master".into()),
         });
         issue.labels = vec!["kept".into()];
         issue.sections = IssueSections::for_type("mission", Some("Keep this outcome."));

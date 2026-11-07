@@ -3,6 +3,9 @@ created_at: "2026-11-07T11:19:13.110128252+00:00"
 id: "atelier-nn67"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-nn67
 priority: "P2"
 relationships:
   blocks: []
@@ -19,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Move every Atelier repository on this host to the new lifecycle"
-updated_at: "2026-11-07T14:11:43.248964117+00:00"
+updated_at: "2026-11-07T14:22:50.373015016+00:00"
 ---
 
 ## Goal

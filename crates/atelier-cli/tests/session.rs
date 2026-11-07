@@ -1162,7 +1162,7 @@ fn custom_branch_only_owner_is_discovered_without_overlaying_base() {
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: "custom/ship-session".into(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     f.store().write_issue_atomic(&record).unwrap();
     commit(f.path(), "custom started branch-only work");
@@ -1443,7 +1443,7 @@ fn landing_rechecks_unrelated_active_branches_after_arbitrary_checks() {
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: branch.clone(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     f.store().write_issue_atomic(&record).unwrap();
     let path = f.path().join(".atelier/workflow.yaml");
@@ -1486,7 +1486,7 @@ fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: branch.clone(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     f.store().write_issue_atomic(&record).unwrap();
     commit(f.path(), "two owners in shared committed tree");
@@ -5862,7 +5862,7 @@ fn unstarted_on_main(f: &Fixture) -> String {
     commit(f.path(), "plan second item");
     id
 }
-fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, String)> {
+fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, Option<String>)> {
     f.store()
         .load_issue_by_id(id)
         .unwrap()
@@ -5882,7 +5882,7 @@ fn start_takes_an_unowned_current_branch_whatever_its_name() {
     let out = ok(f.path(), &["start", &id]);
     assert!(out.contains(&format!("Already on branch {named}")), "{out}");
     assert_eq!(git(f.path(), &["branch", "--show-current"]), named);
-    assert_eq!(recorded_branch(&f, &id), Some((named, "main".into())));
+    assert_eq!(recorded_branch(&f, &id), Some((named, Some("main".into()))));
 }
 
 #[test]
@@ -5910,7 +5910,10 @@ fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
     );
     assert_eq!(git(f.path(), &["branch", "--show-current"]), id);
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
-    assert_eq!(recorded_branch(&f, &id), Some((id.clone(), "main".into())));
+    assert_eq!(
+        recorded_branch(&f, &id),
+        Some((id.clone(), Some("main".into())))
+    );
     assert_eq!(
         f.store().load_issue_by_id(&id).unwrap().issue.status,
         "in_progress"

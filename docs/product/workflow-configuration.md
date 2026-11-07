@@ -87,10 +87,9 @@ link, which `work blocked` and `start` already read, and review is recorded
 in review records, so work goes from `in_progress` straight to `done` when it
 merges (atelier-bqbz). Policies from earlier
 starters that declare `blocked` and `review`, with their `block`,
-`request_review` and `revise` transitions, keep working unchanged. A
-repository adopting the smaller set must first move its records out of
-`blocked` and `review` (to `todo` or `in_progress`), or `atelier check` and
-every work view report `workflow_issue_status_invalid`. Its `decision`
+`request_review` and `revise` transitions, keep working unchanged; [moving
+an existing policy](#moving-an-existing-policy) says how a repository adopts
+the smaller set. Its `decision`
 workflow has no start: `decide` marks a decision done once the
 `decision.recorded` validator finds its Decision section. Repositories initialized
 before the decision type existed can copy its `issue_types` entry and
@@ -102,10 +101,8 @@ transition takes no branch, review or merge: `atelier start` and `atelier
 merge` refuse it and name its done transition, and `land` accepts it marked
 done on the base, as it does a mission closed there (atelier-8bh4). This is
 judged by workflow, so a policy that keeps `validation` in `work` starts
-validations as before. A repository without `loose_end` copies its
-`issue_types` entry and the `on_base` workflow from a fresh `atelier init`,
-then runs `atelier migrate after-merge` (see
-[validation](validation.md#work-after-the-merge)).
+validations as before. A repository without `loose_end` adds it as [moving an
+existing policy](#moving-an-existing-policy) says.
 `atelier issue create --status backlog` files new work there directly. Create
 accepts the workflow's initial status, or a todo-category status one
 transition without validators away from it; a status behind validators or required fields,
@@ -120,8 +117,42 @@ given with `--reason`.
 
 A policy from before atelier-jnrh may still give work a `close`. It keeps
 working: the transition still runs, and the done marks merge writes answer to
-its required fields and validators. atelier-nn67 updates the other
-repositories on this host.
+its required fields and validators.
+
+## Moving an existing policy
+
+A policy an earlier Atelier wrote keeps working, but it can strand items if
+it changes in the wrong order: an item whose status its workflow no longer
+has makes `atelier check` and every command that loads the records report
+`workflow_issue_status_invalid`, including the transitions that would move
+it. Move a policy to the starter's shape in this order:
+
+1. **Move items out of the statuses the new policy lacks**, while the old
+   policy is still in place: each goes to `todo`, or is superseded. That is
+   every `blocked` or `review` item and, when validations move to the
+   `on_base` workflow, every validation in a status other than `todo`,
+   `done` or `superseded`, such as `backlog` or `in_progress`, because
+   `on_base` has only those. Use the old policy's transitions where one
+   leads there (`plan` takes `backlog` to `todo`), and otherwise edit the
+   record's `status`; `atelier check` judges either.
+2. **Switch the policy to the starter's shape**, copying each piece from the
+   policy a fresh `atelier init` writes: `branch_policy.merge_strategy:
+   merge_commit`; no `close` on the `work` workflow, since `atelier merge`
+   marks work done; no `blocked` or `review` status, nor the transitions
+   that use them; and the `loose_end` issue type with the `on_base`
+   workflow, applied to `loose_end` and `validation`, with `validation`
+   taken out of `work`'s `applies_to`, since an issue type belongs to one
+   workflow. A repository that keeps validations in `work` applies `on_base`
+   to `loose_end` alone.
+3. **Run `atelier migrate after-merge`**, which needs the `loose_end` type:
+   its dry run shows the loose end each open After merge line becomes, and
+   `--apply` writes them (see
+   [validation](validation.md#work-after-the-merge)).
+
+Then `atelier check` and `atelier doctor` should pass. `atelier migrate
+dispositions` is optional: Atelier reads disposition events in the form
+before [ADR 0025](../adr/0025-findings-carry-their-disposition.md) folded
+into their findings, and the migration only rewrites them that way.
 
 ## Validators and merge checks
 
