@@ -28,6 +28,7 @@ CONTEXT.md now gives check, review, land, done and close one meaning each (ateli
 
 - [ ] Verdict and gate lines name what they count without the word check, and the Stop hook, `--quiet` tokens and every test that pins them follow.
 - [ ] Output calls terminal work done, not closed, except for a mission, which closes; the evidence freshness mark says what it means without close; the `review_request_unfinished` refusal says the work is implemented and every line holds.
+- [ ] The review brief's approve template (crates/atelier-cli/src/commands/review_request.rs and light_path.rs) asks for "<what you verified>", not "<what you checked>" (finding atelier-pkfq).
 - [ ] docs/product/human-cli-output.md, sessions-and-hooks.md and cli-surface.md quote the new lines, and the note in CONTEXT.md's Gate row goes.
 
 ## Context
