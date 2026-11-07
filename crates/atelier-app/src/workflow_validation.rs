@@ -53,6 +53,58 @@ pub(crate) fn evaluate_with_context(
     Ok(results)
 }
 
+/// The builtins that read an issue's record or graph.
+const ISSUE_VALIDATORS: [&str; 5] = [
+    "issue.sections_parseable",
+    "blockers.none_open",
+    "blockers.transitive_none_open",
+    "work.terminal",
+    "decision.recorded",
+];
+
+/// Runs `validators` for a change no issue owns, such as a branch on the
+/// light path (atelier-4nsl): a check that reads an issue passes, since there
+/// is none, and every other check runs as it would for an issue.
+pub fn evaluate_without_issue(
+    index: &RecordIndex,
+    repo_root: &Path,
+    policy: &WorkflowPolicy,
+    validators: &[ValidatorDefinition],
+) -> Result<Vec<ValidatorResult>> {
+    let request = ValidatorRequest {
+        index,
+        repo_root,
+        policy,
+        issue_id: "",
+        validators,
+    };
+    let mut read = crate::git_freshness::ReadContext::new(repo_root);
+    let mut results = Vec::new();
+    for definition in validators {
+        let started = Instant::now();
+        let (passed, reason, help) = if ISSUE_VALIDATORS.contains(&definition.builtin.as_str()) {
+            (
+                true,
+                format!(
+                    "{} reads an issue, and this change has none",
+                    definition.builtin
+                ),
+                None,
+            )
+        } else {
+            evaluate_builtin(&request, definition, &mut read)?
+        };
+        results.push(ValidatorResult {
+            validator: definition.builtin.clone(),
+            passed,
+            reason,
+            help,
+            elapsed_ms: started.elapsed().as_millis(),
+        });
+    }
+    Ok(results)
+}
+
 fn evaluate_builtin(
     request: &ValidatorRequest<'_>,
     definition: &ValidatorDefinition,

@@ -289,6 +289,12 @@ writes answer to that transition's required fields and validators.
 See [reviews and merge](reviews-and-merge.md) for approval freshness and
 findings.
 
+A change with no issue, such as a release, docs or a mockup, needs no item:
+on a branch no issue owns, `atelier review request` and `atelier merge` with
+no ID review and merge the branch on an approval of its head, and its merge
+marks nothing done ([the light
+path](reviews-and-merge.md#a-change-with-no-issue-the-light-path)).
+
 A mission closes when all its work is merged and its validation, if it has
 one, is done; its `close` transition's description says so, and nothing else
 enforces it. A loose end is never part of a mission, so it never holds one

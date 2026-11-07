@@ -94,7 +94,7 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
     let checkout = Checkout::read(repo);
     let owner = match (&checkout.branch, &policy) {
         (Ok(branch), Some(policy)) => {
-            match commands::session::branch_owners(&index, branch).as_slice() {
+            match commands::session::branch_owners(repo, &index, branch).as_slice() {
                 [] => Ok(None),
                 [id] => Owner::read(repo, &index, policy, branch, &checkout, id)
                     .with_context(|| format!("owner {id} context unavailable"))
@@ -106,6 +106,12 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
             }
         }
         _ => Ok(None),
+    };
+    // A branch no issue owns, other than the base, is on the light path:
+    // its commits merge on an approval of its head (atelier-4nsl).
+    let light = match (&owner, &policy) {
+        (Ok(None), Some(policy)) => light_state(repo, &index, &policy.branch_policy.base_branch),
+        _ => None,
     };
     let overview = atelier_app::mission_overview::mission_overview(&index, policy.as_ref(), false)?;
     let branches = git::branch_summaries(repo, &layout.canonical_dir(), &index);
@@ -123,11 +129,34 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         &overview,
         &diagnostics,
         &checkout,
-        &owner,
+        (&owner, light.as_deref()),
         &in_flight,
         branches,
         context,
     ))
+}
+
+/// The light-path line for the checked-out branch when no issue owns it and
+/// it is not the base: `3 commits since main, ✓ approved`. `None` on the
+/// base, a detached HEAD, an owned branch, or a branch with no commits the
+/// base lacks.
+fn light_state(repo: &Path, index: &RecordIndex, base: &str) -> Option<String> {
+    use crate::commands::light_path::{approval_words, checkout, state_facts, Checkout};
+    let Ok(Checkout::Light(light)) = checkout(repo, index, base) else {
+        return None;
+    };
+    // A branch the base already contains has nothing to review.
+    if light.fork == light.head {
+        return None;
+    }
+    Some(match state_facts(repo, index, &light) {
+        Ok((state, commits)) => format!(
+            "{} since {base}, {}",
+            crate::human_output::count_noun(commits, "commit"),
+            approval_words(state)
+        ),
+        Err(error) => format!("review state unknown - {error:#}"),
+    })
 }
 
 /// Git facts about the checkout; each is reported unavailable on its own,
@@ -393,7 +422,7 @@ fn render_status_page(
     overview: &MissionOverview,
     diagnostics: &[String],
     checkout: &Checkout,
-    owner: &Result<Option<Owner>>,
+    (owner, light): (&Result<Option<Owner>>, Option<&str>),
     in_flight: &BTreeMap<String, String>,
     branches: Vec<String>,
     context: RenderContext,
@@ -474,7 +503,12 @@ fn render_status_page(
                     }
                 }
             }
-            Ok(None) => local_state.push(("Owner", "none".into())),
+            Ok(None) => {
+                local_state.push(("Owner", "none".into()));
+                if let Some(light) = light {
+                    local_state.push(("Light path", light.to_owned()));
+                }
+            }
             Err(error) => local_state.push(("Owner", format!("unavailable - {error:#}"))),
         }
     }
@@ -504,6 +538,11 @@ fn render_status_page(
                 "Check merge readiness",
                 format!("atelier merge {} --check", owner.id),
             ),
+        ]
+    } else if light.is_some() {
+        vec![
+            FooterAction::new("Request review of this branch", "atelier review request"),
+            FooterAction::new("Check merge readiness", "atelier merge --check"),
         ]
     } else if let Some(top) = view.work.ready.first() {
         vec![

@@ -15,8 +15,15 @@ const SUMMARY_LIMIT: usize = 100;
 /// The paths a stale approval's edge lists before `and <n> more`.
 const LISTED_PATHS: usize = 5;
 
+/// What a review event is about: an issue, or on the light path a branch no
+/// issue owns (atelier-4nsl).
+pub enum Subject {
+    Issue(String),
+    Branch(String),
+}
+
 pub fn append(
-    owner_ref: &str,
+    subject: &Subject,
     identity: &str,
     commit: Option<&str>,
     summary: &str,
@@ -26,7 +33,6 @@ pub fn append(
     let layout = StorageLayout::discover()?;
     let repo = layout.repo_root();
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
-    let owner = index.resolve(RecordKind::Issue, owner_ref)?;
     // A short commit ID is resolved here and stored in full (atelier-md0v).
     let pin = match commit {
         Some(commit) => git::resolve_commit_id(repo, commit)?,
@@ -34,10 +40,62 @@ pub fn append(
     };
     atelier_records::review::validate_commit(&pin)?;
     require_on_branch(repo, &pin)?;
-    let created = atelier_app::project_config::record_store(&layout.canonical_dir())?
-        .create_review(&owner, identity, &pin, event, summary)?;
-    confirm(&created.header.id, &confirmation(&created), None, quiet);
+    let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
+    let created = match subject {
+        Subject::Issue(owner_ref) => {
+            let owner = index.resolve(RecordKind::Issue, owner_ref)?;
+            store.create_review(&owner, identity, &pin, event, summary)?
+        }
+        Subject::Branch(branch) => {
+            require_light_path(repo, &index, branch, &pin)?;
+            store.create_branch_review(branch, identity, &pin, event, summary)?
+        }
+    };
+    let branch = matches!(subject, Subject::Branch(_));
+    confirm(
+        &created.header.id,
+        &confirmation(&created, branch),
+        None,
+        quiet,
+    );
     Ok(())
+}
+
+/// A record about `branch` is written on that branch, checked out, when no
+/// issue owns it and it is not the base, pinned to a commit after it left
+/// the base: only such a record counts (atelier-4nsl).
+fn require_light_path(repo: &Path, index: &RecordIndex, branch: &str, pin: &str) -> Result<()> {
+    atelier_records::review::validate_branch_name(branch)?;
+    let base = atelier_app::workflow_policy::load(repo)?
+        .branch_policy
+        .base_branch;
+    use crate::commands::light_path::{self, Checkout};
+    match light_path::checkout(repo, index, &base)? {
+        Checkout::Light(light) if light.branch == branch => {
+            if git::git_output(repo, &["merge-base", "--is-ancestor", pin, &light.fork]).is_ok() {
+                bail!(
+                    "review_branch_pin: {} is on {base} already, where {branch} left it; a record about a branch counts only for a commit after it left the base. Next: commit the change on {branch}, then pin the record to it",
+                    short_commit(pin)
+                );
+            }
+            Ok(())
+        }
+        Checkout::Owned(owners) => bail!(
+            "review_branch_owned: {branch} is the work branch of {}, so its review is about that issue. Next: atelier review request {}",
+            owners.join(", "),
+            owners[0]
+        ),
+        Checkout::Base(base) => bail!(
+            "review_branch_base: {base} is the base branch, which is never reviewed as a branch. Next: name the issue, or `atelier review trivial --base <commit>` for one trivial commit on {base}"
+        ),
+        Checkout::Detached => bail!(
+            "review_branch_not_checked_out: HEAD is detached; a record about {branch} is written on it. Next: git switch {branch}"
+        ),
+        Checkout::Light(light) => bail!(
+            "review_branch_not_checked_out: this checkout is on {}, and a record about {branch} is written on {branch}. Next: run it from a checkout of {branch}",
+            light.branch
+        ),
+    }
 }
 
 /// Prints a recording command's one-line confirmation and any warning;
@@ -79,11 +137,16 @@ fn branch_owner(index: &RecordIndex, id: &str) -> String {
     }
 }
 
-/// One line saying what was recorded: the kind, ID, owner and short pin,
-/// or the step a finding needs next.
-fn confirmation(record: &ReviewRecord) -> String {
+/// One line saying what was recorded: the kind, ID, owner (or `branch`
+/// and its name) and short pin, or the step a finding needs next.
+fn confirmation(record: &ReviewRecord, branch: bool) -> String {
     let id = &record.header.id;
-    let on = format!("on {} @{}", record.target, short_commit(&record.commit));
+    let on = format!(
+        "on {}{} @{}",
+        if branch { "branch " } else { "" },
+        record.target,
+        short_commit(&record.commit)
+    );
     match &record.event {
         ReviewEvent::Review => format!("Review account {id} {on}"),
         ReviewEvent::Approval => format!("Approval {id} {on}"),
@@ -198,7 +261,12 @@ pub fn disposition(
     let repo = layout.repo_root();
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     let finding = index.resolve(RecordKind::Review, finding)?;
-    let original = index.require_review(&finding)?;
+    // A finding about a branch on the light path is decided the same way
+    // (atelier-4nsl).
+    let original = match index.branch_review(&finding) {
+        Some(record) => record,
+        None => index.require_review(&finding)?,
+    };
     // A swapped ID is the usual cause: say what the event is and where the
     // findings are listed (atelier-jiz0).
     if !matches!(original.event, ReviewEvent::Finding { .. }) {
@@ -359,6 +427,11 @@ fn list_all(index: &RecordIndex, json: bool, quiet: bool) -> Result<()> {
         .map(|record| (&record.header, event_row(record, None)))
         .chain(
             index
+                .branch_reviews()
+                .map(|record| (&record.header, branch_event_row(record))),
+        )
+        .chain(
+            index
                 .base_exemptions()
                 .map(|exemption| (&exemption.header, exemption_row(exemption))),
         )
@@ -408,6 +481,21 @@ pub(crate) fn event_row(record: &ReviewRecord, owner: Option<&str>) -> String {
         "{}  {}{target}  @{}  {}  {}  {}",
         record.header.id,
         event_kind(&record.event),
+        short_commit(&record.commit),
+        record.identity,
+        local_date(record.header.created_at),
+        first_line(&record.summary)
+    )
+}
+
+/// An event about a branch as a list row, its target shown as `on branch
+/// <name>`.
+fn branch_event_row(record: &ReviewRecord) -> String {
+    format!(
+        "{}  {}  on branch {}  @{}  {}  {}  {}",
+        record.header.id,
+        event_kind(&record.event),
+        record.target,
         short_commit(&record.commit),
         record.identity,
         local_date(record.header.created_at),
@@ -713,15 +801,20 @@ pub fn show(id: &str, quiet: bool) -> Result<()> {
         }
         return Ok(());
     }
-    let record = index.require_review(&id)?;
+    let branch = index.branch_review(&id);
+    let record = match branch {
+        Some(record) => record,
+        None => index.require_review(&id)?,
+    };
     if quiet {
         println!("{} {}", record.header.id, record.event.name());
         return Ok(());
     }
     let mut header = format!(
-        "{} {} on {} @{} by {} | {}",
+        "{} {} on {}{} @{} by {} | {}",
         record.header.id,
         event_kind(&record.event),
+        if branch.is_some() { "branch " } else { "" },
         record.target,
         short_commit(&record.commit),
         record.identity,
@@ -729,6 +822,9 @@ pub fn show(id: &str, quiet: bool) -> Result<()> {
     );
     let mut links = Vec::new();
     match &record.event {
+        // An approval of a branch is judged by `merge` on that branch and
+        // by `land` once it is on the base.
+        ReviewEvent::Approval | ReviewEvent::TrivialExemption if branch.is_some() => {}
         ReviewEvent::Approval | ReviewEvent::TrivialExemption => {
             let owner = branch_owner(&index, &record.target);
             let mut judge = Judge::new(layout.repo_root(), &index, &owner)?;

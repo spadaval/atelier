@@ -69,7 +69,7 @@ pub fn run(
         // Another item's branch is not this item's to take; this item's
         // parent owning it would have recorded it above.
         (Some(name), None) => {
-            if let Some(other) = crate::commands::session::branch_owners(index, name)
+            if let Some(other) = crate::commands::session::branch_owners(&repo_root, index, name)
                 .into_iter()
                 .find(|id| *id != derived.owner_id)
             {
@@ -283,6 +283,13 @@ pub fn run(
         &view_policy,
         &work_branch.owner_id,
     );
+    // A branch reviewed on the light path follows the issue path once an
+    // issue owns it, where its records about the branch count for nothing
+    // (atelier-4nsl).
+    let light_records = view_index
+        .branch_reviews()
+        .filter(|record| record.target == branch)
+        .count();
     drop(snapshot);
     let previous_head = atelier_app::git_freshness::head_commit(&repo_root)?;
 
@@ -347,6 +354,14 @@ pub fn run(
         &human_children,
     );
     notes.extend(lease_notes);
+    if record_branch && light_records > 0 {
+        notes.push(format!(
+            "{branch} holds {} about the branch itself, which stop counting now that {} owns it; get {} reviewed and approved before `atelier merge`.",
+            atelier_core::count_noun(light_records, "light-path review record"),
+            work_branch.owner_id,
+            work_branch.owner_id
+        ));
+    }
     if quiet {
         println!("{branch}");
         for note in notes {

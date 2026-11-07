@@ -76,7 +76,11 @@ Commit code and related tracker records yourself. The order is: start,
 implement, tick every Done when line and write the Report, `atelier review
 request <id>`, fix and re-review, approve, `atelier merge <id>`, which marks
 the work done; there is no close step for work ([work
-model](work-model.md#completion)). Record focused proof and independent
+model](work-model.md#completion)). A change no issue owns, such as a release,
+docs or a mockup, skips the issue: commit it on a branch, then `atelier
+review request`, fix and re-review, approve with `--branch <name>`, and
+`atelier merge`, all with no ID ([the light
+path](reviews-and-merge.md#a-change-with-no-issue-the-light-path)). Record focused proof and independent
 review before `merge`; see [evidence](validation.md) and [reviews and
 merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
 `atelier merge <id> --check` to inspect integration gates. Atelier never pushes or squashes. It commits only the merge commit that `merge` creates, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
@@ -84,13 +88,15 @@ merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
 ## Review and session commands
 
 `review record`, `approve`, `finding`, and `trivial` require an owner, explicit
-`--identity`, and summary; a commit they take (`--commit`, `--base`) may be a
+`--identity`, and summary (`record`, `approve` and `finding` take `--branch
+<name>` in place of the owner on the light path); a commit they take (`--commit`, `--base`) may be a
 unique short ID, stored in full. `review disposition` sets a finding's
 disposition, replacing any earlier one: a deferred or dismissed finding needs
 one, and a `fix_now` finding is resolved by the approval after its fix
 ([dispositions](reviews-and-merge.md#dispositions)).
-`review request <id>` prints the reviewer brief for an owner (see
-[requesting a review](reviews-and-merge.md#requesting-a-review)).
+`review request <id>` prints the reviewer brief for an owner, and with no ID
+for the checked-out branch's owner or, on a branch no issue owns, the branch
+itself (see [requesting a review](reviews-and-merge.md#requesting-a-review)).
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
 
 `status` orients a session; `land [id] [--install]` checks committed records and

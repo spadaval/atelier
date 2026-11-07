@@ -82,9 +82,37 @@ pub struct Facts {
 }
 
 /// Quiet output is the range to review, `<from>..<head>` in full commits.
-pub fn run(id: &str, identity: Option<&str>, from: Option<&str>, quiet: bool) -> Result<()> {
+/// With no ID, the checked-out branch is reviewed: its owner's work, or on a
+/// branch no issue owns, the branch itself (the light path, atelier-4nsl).
+pub fn run(
+    id: Option<&str>,
+    identity: Option<&str>,
+    from: Option<&str>,
+    quiet: bool,
+) -> Result<()> {
     let layout = StorageLayout::discover()?;
-    let facts = gather(&layout, id, identity, from)?;
+    let id = match id {
+        Some(id) => id.to_owned(),
+        None => {
+            let repo = layout.repo_root();
+            let index = RecordIndex::load_structural(&layout.canonical_dir())?;
+            let base = atelier_app::workflow_policy::load(repo)?
+                .branch_policy
+                .base_branch;
+            use crate::commands::light_path::{self, Checkout};
+            match light_path::checkout(repo, &index, &base)? {
+                Checkout::Detached => bail!("review_request_detached_head: a detached HEAD has no branch to review. Next: check out the branch, or name the issue"),
+                Checkout::Base(base) => bail!("review_request_base: {base} is the base branch, which is never reviewed as a branch. Next: name the issue, or commit the change on a branch of its own and rerun `atelier review request` there"),
+                Checkout::Owned(owners) => {
+                    light_path::single_owner(&owners, "review_request_owner_ambiguous")?
+                }
+                Checkout::Light(light) => {
+                    return light_path::request(repo, &index, &light, identity, from, quiet)
+                }
+            }
+        }
+    };
+    let facts = gather(&layout, &id, identity, from)?;
     if quiet {
         println!("{}..{}", facts.review_range().from, facts.head);
     } else {

@@ -707,7 +707,10 @@ fn protect_referenced_candidates(
             edges.push((("evidence", record.header.id.as_str()), (kind, id), role));
         }
     }
-    for record in index.reviews() {
+    // A record about a branch on the light path is never a candidate, so a
+    // deferred finding's follow-up stays while it does (finding
+    // atelier-tzvy).
+    for record in index.reviews().chain(index.branch_reviews()) {
         for (kind, id, role) in declared_references(&record.header.relationships) {
             edges.push((("review", record.header.id.as_str()), (kind, id), role));
         }
