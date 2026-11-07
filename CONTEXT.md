@@ -10,9 +10,8 @@ Use these terms for the verified repo-native tracker defined by
 | Strategy | Ordinary Markdown owning intent, any success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
 | Issue | One accountable slice; work items have `Goal` and `Done when` sections. |
 | Parent | Any work item with direct children, one level deep; it owns their branch, and the merge that integrates it marks it and its open children done. Replaced the epic type (atelier-9vq3). |
-| Validation item | Work dedicated to independently checking referenced acceptance claims. |
-| After-merge check | A Done when line marked `After merge (<reason>):` with its stand-in: proof only the merged or deployed system, an unreachable device or place, the human's judgment, or time and real use can give. Every other line is checked before merge (ADR 0027). |
-| Awaiting validation | Done work with an after-merge check neither ticked (`[x]`, validated on the base) nor carried to another existing item (a failed check to its follow-up bug, or one needing time and real use beyond the mission). |
+| Validation item | An independent assessment of a mission's criteria before it closes, done on the base by its `done` transition with no branch or review of its own; it shares the loose end's workflow. |
+| Loose end | A `loose_end` issue: work that changes no code and can only happen after a merge or a release, such as pushing a tag, a play-check on a device or an eval run. It is `blocked_by` what it waits on, ready once that is done, never part of a mission or any issue's children, and done on the base by its `done` transition with a one-line result in its Report; a bad result files a linked bug (ADR 0028). It replaces the After merge line of ADR 0027, which `atelier migrate after-merge` converts. |
 | Decision | A `decision` record: a Question for the human, with Options, closed by `decide` once its Decision is recorded; it needs no branch. |
 | Blocker | A native dependency that prevents another item becoming executable or done. |
 | Branch owner | A parent for its children, or a standalone work item; recorded branch metadata identifies its work branch and base. |

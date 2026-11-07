@@ -10,6 +10,8 @@ issue_types:
     label: Decision
   feature:
     label: Feature
+  loose_end:
+    label: Loose end
   mission:
     label: Mission
   spike:
@@ -70,7 +72,6 @@ workflows:
     - feature
     - spike
     - task
-    - validation
     initial_status: todo
     done_statuses:
     - done
@@ -117,6 +118,27 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire a question that no longer needs deciding.
+  on_base:
+    applies_to:
+    - loose_end
+    - validation
+    initial_status: todo
+    done_statuses:
+    - done
+    - superseded
+    transitions:
+      done:
+        from: [todo]
+        to: done
+        required_fields: [close_reason]
+        description: Record the one-line result in the Report once what it waits on is merged. It needs no branch, review or merge, and is done on the base branch as a planning change; a bad result files a linked bug.
+        validators:
+        - blockers.none_open
+      supersede:
+        from: [todo]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire it once it is no longer needed.
 # Run on the merged tree in a temporary checkout. The whitespace check skips
 # .atelier because captured evidence records end with the command output's own
 # blank lines, which `git diff --check` flags. The test suites run in CI on the

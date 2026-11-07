@@ -481,8 +481,8 @@ pub enum Precedent {
 /// commit that started the item does not: one that moved its status into an
 /// `active` category (`in_progress` without a policy). A change merged in
 /// from the base after the start counts, as does one made after approval
-/// (atelier-jnrh, finding atelier-l5fb). Ticking boxes changes no text, and
-/// neither does recording an after-merge check's validation. A merge counts
+/// (atelier-jnrh, finding atelier-l5fb). Ticking boxes changes no text. A
+/// merge counts
 /// as a change only where it differs from every parent, as when a conflict
 /// resolution writes new text; a clean merge brings in commits that are
 /// themselves listed. Changes, starts, findings and receipts are ordered by
@@ -551,14 +551,10 @@ pub fn done_when_edits(
             let after_text = done_when(&after);
             // A parent without the record says nothing about a change.
             let differs = |before: &CanonicalIssueRecord| {
-                let before_text = done_when(before);
-                // Ticking or carrying an after-merge check records its
-                // validation; it does not change what done means (ADR 0027).
-                let validated = matches!((&before_text, &after_text), (Some(before), Some(after))
-                    if crate::after_merge::only_validated(before, after, index));
-                before_text.as_deref().map(crate::done_when::without_ticks)
+                done_when(before)
+                    .as_deref()
+                    .map(crate::done_when::without_ticks)
                     != after_text.as_deref().map(crate::done_when::without_ticks)
-                    && !validated
             };
             if !befores.is_empty() && befores.iter().all(differs) {
                 changed.push((commit.to_string(), parents[0].clone()));

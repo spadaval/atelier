@@ -5753,7 +5753,17 @@ fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
     commit_all(dir.path(), "file an open question");
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &open]);
     assert!(
-        !success && stderr.contains("decisions need no branch"),
+        !success
+            && stderr.contains(&format!(
+                "start_done_on_base: {open} is a decision, whose workflow has no start transition"
+            ))
+            && stderr.contains(
+                "by its `decide` transition once its `## Decision` section records what was decided"
+            )
+            && stderr.contains(&format!(
+                "Next: record the Decision in its `## Decision` section, then run `atelier issue transition {open} decide --reason \"...\"`"
+            ))
+            && !stderr.contains("merged"),
         "{stderr}"
     );
 

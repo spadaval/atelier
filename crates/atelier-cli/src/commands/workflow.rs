@@ -118,22 +118,11 @@ pub fn transition_issue(
 
     let mut record = RecordStore::new(state_dir).load_issue_by_id(&before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
-    let warning = if closing && before.issue_type == "mission" {
-        open_validation_warning(index, &policy, &before.id)?
-    } else {
-        None
-    };
     if quiet {
         println!("{}", transition.to);
-        if let Some(warning) = warning {
-            eprintln!("{warning}");
-        }
         return Ok(());
     }
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
-    if let Some(warning) = warning {
-        println!("{warning}");
-    }
     if let Some(outcome) = close_reason
         .filter(|_| closing && reused)
         .map(|text| atelier_core::CloseReport::parse(text).outcome)
@@ -160,32 +149,63 @@ pub fn transition_issue(
     Ok(())
 }
 
-/// A mission closing while work in its scope still awaits validation after
-/// merge is told which, and closes anyway (ADR 0027).
-fn open_validation_warning(
-    index: &RecordIndex,
+/// Refuses `command` (`start` or `merge`) for an item done on the base:
+/// its workflow has no `start` transition, so it takes no branch, review or
+/// merge, and its done transition is run on the base once what it waits on
+/// is merged (atelier-8bh4). Judged by workflow, not type name, so a policy
+/// that keeps `validation` in `work` starts it as before.
+pub(crate) fn refuse_done_on_base(
     policy: &WorkflowPolicy,
-    mission: &str,
-) -> Result<Option<String>> {
-    let open = atelier_app::objective_graph::mission_issue_ids(index, mission)?
+    issue: &Issue,
+    command: &str,
+) -> Result<()> {
+    if !policy.done_on_base(&issue.issue_type) {
+        return Ok(());
+    }
+    let id = &issue.id;
+    let base = &policy.branch_policy.base_branch;
+    let Some(name) = policy.done_transition(&issue.issue_type, &issue.status) else {
+        bail!(
+            "{command}_done_on_base: {id} is {}, whose workflow has no start transition, so it takes no branch, review or merge; it is done on {base} by a transition. Next: atelier issue transition {id}",
+            atelier_app::record_ref::with_article(&issue.issue_type),
+        );
+    };
+    let transition = policy.transition_for_issue_type(&issue.issue_type, name)?;
+    let missing = required_field_failures(transition, None)?
         .into_iter()
-        .filter_map(|id| {
-            let record = index.issue_record(&id)?;
-            atelier_app::after_merge::awaiting_validation(record, Some(policy), index).then(|| {
-                let checks = atelier_app::after_merge::open_checks(record, index).len();
-                format!(
-                    "{id} ({})",
-                    atelier_core::count_noun(checks, "open after-merge check")
-                )
-            })
-        })
+        .map(|(flag, _)| flag)
         .collect::<Vec<_>>();
-    Ok((!open.is_empty()).then(|| {
-        format!(
-            "Warning: {mission} closes with validation still open: {}. Validate each check that can be validated now on the base by ticking its box (`- [x] After merge ...`). Carry only a failed check, to its follow-up bug, or one that needs time and real use beyond the mission, with `carried to <id>` on its line, and name each carried check in the mission's close report.",
-            open.join(", ")
-        )
-    }))
+    let command_line = transition_command(id, name, &missing);
+    // What the transition waits for, from the checks it runs: a decision's
+    // recorded Decision, and whatever blocks the item.
+    let runs = |builtin: &str| {
+        transition
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == builtin)
+    };
+    let recorded = runs("decision.recorded");
+    let waits = [
+        recorded.then_some("its `## Decision` section records what was decided"),
+        runs("blockers.none_open").then_some("nothing it waits on is open"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    let once = if waits.is_empty() {
+        String::new()
+    } else {
+        format!(" once {}", waits.join(" and "))
+    };
+    let next = if recorded {
+        format!("record the Decision in its `## Decision` section, then run `{command_line}`")
+    } else {
+        command_line
+    };
+    bail!(
+        "{command}_done_on_base: {id} is {}, whose workflow has no start transition, so it takes no branch, review or merge; it is done on {base} by its `{name}` transition{once}. Next: {next}",
+        atelier_app::record_ref::with_article(&issue.issue_type),
+    )
 }
 
 /// After a done claim the work is handed off, not moved again: check the

@@ -44,14 +44,17 @@ evidence arrives. Keep Design as a link to the owning document.
 
 An executable issue has Goal and Done when. Done when names a check or scenario
 that could fail if the slice were missing or wrong. Each check runs before
-merge unless its line is marked `After merge (<reason>):` with the stand-in that
-runs before merge; post-merge validation is only what cannot be checked before
-the merge (see [before and after merge](validation.md#before-and-after-merge)).
-Decide the split when planning. Scope and Context give the
-worker enough boundaries and interfaces to act without the author's context.
-A validation item follows the executable issue shape: it references the claims
-it checks in Goal and its method in Context, and records each result as an
-attached evidence receipt.
+merge. Work that changes no code and can only happen after a merge or a
+release, such as pushing a tag or a play-check, is a loose end `blocked_by`
+the issue it follows, outside the mission, and the nearest stand-in that runs
+before merge stays a Done when line (see [work after the
+merge](validation.md#work-after-the-merge)). Decide the split when planning.
+Scope and Context give the worker enough boundaries and interfaces to act
+without the author's context. A validation item follows the executable issue
+shape: it references the claims it checks in Goal and its method in Context,
+and records each result as an attached evidence receipt. It advances its
+mission and is done on the base by its `done` transition, with no branch or
+review of its own.
 
 Keep status in front matter and progress in dated Notes. Put follow-up findings
 in new issues. Use native blockers for sequencing, parent fields for direct

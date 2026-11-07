@@ -112,11 +112,11 @@ fn configure_dependency_fixture_terminal_status(dir: &std::path::Path) {
         "  done:\n    category: done\n",
         "  done:\n    category: done\n  accepted:\n    category: done\n",
     );
-    let work_done = "    - validation\n    initial_status: todo\n    done_statuses:\n    - done\n";
+    let work_done = "    - task\n    initial_status: todo\n    done_statuses:\n    - done\n";
     assert!(policy.contains(work_done));
     let policy = policy.replacen(
         work_done,
-        "    - validation\n    initial_status: todo\n    done_statuses:\n    - accepted\n",
+        "    - task\n    initial_status: todo\n    done_statuses:\n    - accepted\n",
         1,
     );
     std::fs::write(policy_path, policy).unwrap();

@@ -3883,7 +3883,7 @@ fn start_and_status_warn_when_a_branch_owner_has_a_needs_human_child() {
             "create",
             "Play-test the release build",
             "--issue-type",
-            "validation",
+            "task",
             "--parent",
             &parent,
             "-l",
@@ -3895,7 +3895,9 @@ fn start_and_status_warn_when_a_branch_owner_has_a_needs_human_child() {
     assert!(
         output.contains(&format!(
             "{check} labelled needs-human is a child of {parent}"
-        )) && output.contains(&format!("atelier issue update {check} --no-parent")),
+        )) && output.contains(&format!(
+            "atelier issue update {check} --no-parent --issue-type loose_end"
+        )),
         "{output}"
     );
     commit(f.path(), "start the feature");
@@ -3907,13 +3909,24 @@ fn start_and_status_warn_when_a_branch_owner_has_a_needs_human_child() {
         "{output}"
     );
 
-    // Following the advice detaches the check, which then waits on the merge.
-    ok(f.path(), &["issue", "update", &check, "--no-parent"]);
+    // Following the advice makes the check a loose end that waits on the
+    // merge.
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "update",
+            &check,
+            "--no-parent",
+            "--issue-type",
+            "loose_end",
+        ],
+    );
     ok(
         f.path(),
         &["issue", "link", &check, &parent, "--role", "blocked_by"],
     );
-    commit(f.path(), "make the check a standalone validation");
+    commit(f.path(), "make the check a loose end");
     let output = ok(f.path(), &["status"]);
     assert!(
         !output.contains("labelled needs-human is a child"),

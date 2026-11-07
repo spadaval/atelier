@@ -28,8 +28,7 @@ it stands. Both forms follow the same order:
   failing newest proof, a trivial exemption, a Done when [edited after the
   item was started](reviews-and-merge.md#a-done-when-edited-after-the-start)
   with the finding or failing receipt before it, naming the item since a
-  child's edit shows under its parent, and after-merge checks still
-  [awaiting validation](validation.md#before-and-after-merge)), what surprised the
+  child's edit shows under its parent), what surprised the
   implementer, the decisions made in it (the report's Decisions part, then
   its decision notes), any decision record
   cues (its ADR, the records it replaces), how review went and who approved

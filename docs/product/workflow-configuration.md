@@ -78,7 +78,18 @@ every work view report `workflow_issue_status_invalid`. Its `decision`
 workflow has no start: `decide` closes a decision once the
 `decision.recorded` check finds its Decision section. Repositories initialized
 before the decision type existed can copy its `issue_types` entry and
-`decision` workflow from a fresh `atelier init`.
+`decision` workflow from a fresh `atelier init`. Loose ends and validations
+share the `on_base` workflow, which has no start either: `done` takes one from
+`todo` to `done` once nothing blocks it, and requires a Report, a one-line
+result; `supersede` retires it. Any item whose workflow has no `start`
+transition takes no branch, review or merge: `atelier start` and `atelier
+merge` refuse it and name its done transition, and `land` accepts it marked
+done on the base, as it does a mission closed there (atelier-8bh4). This is
+judged by workflow, so a policy that keeps `validation` in `work` starts
+validations as before. A repository without `loose_end` copies its
+`issue_types` entry and the `on_base` workflow from a fresh `atelier init`,
+then runs `atelier migrate after-merge` (see
+[validation](validation.md#work-after-the-merge)).
 `atelier issue create --status backlog` files new work there directly. Create
 accepts the workflow's initial status, or a todo-category status one
 unchecked transition away from it; a status behind checks or required fields,

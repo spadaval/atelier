@@ -6,10 +6,14 @@ Accepted (2026-11-06, within the authority of mission atelier-n4mj's strategy,
 docs/strategies/lighter-workflow.md, on Sumeet's direction for the model;
 atelier-n0qh).
 
-Superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession) when
-atelier-8bh4 lands: loose ends replace after-merge checks, so the After merge
-marker, stand-ins, `carried to`, the awaiting-validation views and the
-mission-close warning go. Until then this ADR applies as written.
+Superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession), decision
+3 (atelier-8bh4): loose ends replace after-merge checks, so stand-ins,
+`carried to`, the awaiting-validation views, the brief's After merge section,
+the mission-close warning and the rule that ticking or carrying a check is no
+Done when edit are gone. An old record's marker is recognised only so `review
+request` need not ask for the line to be ticked and `atelier migrate
+after-merge` can turn each open line into a loose end; otherwise it is an
+ordinary Done when line. The text below records the decision as it was.
 
 ## Context
 

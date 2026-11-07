@@ -40,6 +40,11 @@ pub fn run(
     let repo_root = workflow::repo_root()?;
     let issue_id = crate::commands::issue::resolve_id(index, issue_ref)?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    // Work whose workflow has no `start` transition is done on the base and
+    // takes no branch (atelier-8bh4).
+    if let Some(issue) = index.get_issue(&issue_id) {
+        workflow::refuse_done_on_base(&policy, &issue, "start")?;
+    }
     let policy_base = policy.branch_policy.base_branch.clone();
     let derived = atelier_app::workflow_policy::resolve_work_branch(&policy, index, &issue_id)?;
     let current = git::current_branch(&repo_root)?;
@@ -335,6 +340,7 @@ pub fn run(
         ));
     }
     let mut notes = start_notes(
+        &view_policy,
         &issue_id,
         human_work,
         &work_branch.owner_id,
@@ -377,6 +383,7 @@ pub fn run(
 
 /// Notes that `start` is starting work for the human.
 fn start_notes(
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue_id: &str,
     human_work: bool,
     owner_id: &str,
@@ -390,6 +397,7 @@ fn start_notes(
     }
     if !human_children.is_empty() {
         notes.push(atelier_app::work_classification::human_children_note(
+            policy,
             owner_id,
             human_children,
         ));
