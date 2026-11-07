@@ -40,7 +40,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Say the lifecycle once, plainly, in the skill and Atelier's own docs"
-updated_at: "2026-11-07T13:46:53.037236060+00:00"
+updated_at: "2026-11-07T13:50:06.456180466+00:00"
 ---
 
 ## Goal
@@ -49,7 +49,7 @@ Make the agent-factory skill, the CLI help and Atelier's own docs describe the n
 
 ## Done when
 
-- [ ] Before the skill change merges, astromech's CI pin (`ATELIER_REV`) is at or past atelier-4nsl's merge, a commit that reads every record form the installed binary writes (including the light path's version-3 review records) and judges them by this mission's rules, moved through astromech's own process (astromech-5sp5 moved it to 55cf6072 on 2026-11-07 as a stopgap), since the skill, which describes the light path, is live in every repository the moment it merges.
+- [x] Before the skill change merges, astromech's CI pin (`ATELIER_REV`) is at or past atelier-4nsl's merge, a commit that reads every record form the installed binary writes (including the light path's version-3 review records) and judges them by this mission's rules, moved through astromech's own process (astromech-5sp5 moved it to 55cf6072 on 2026-11-07 as a stopgap), since the skill, which describes the light path, is live in every repository the moment it merges.
 - [x] The agent-factory skill (spadaval/.agents) describes the new lifecycle in its atelier reference and its orchestrate, implement, review, plan and validate procedures: start, implement, tick every Done when line and write the Report, review request, fix and re-review, approve, merge (which marks work done); approvals that only code makes stale; loose ends; the light path; records correctable until they reach the base; a `fix_now` finding resolved by the approval after its fix. The change is made in a worktree (`git -C ~/projects/agents-skills worktree add ~/projects/agents-skills-wt/atelier-ml3r -b atelier-ml3r main`; never switch the live checkout), the reviewer reviews that branch at a named commit together with this item's Atelier diff, and exactly that commit merges into its `main` (no-ff) when this item merges.
 - [x] Nothing the mission removed is left in the skill or its evals (`evals/agent-factory`): `start --base`, `<issue_type>/<id>` branch names, close before or after review, After merge markers and stand-ins, `carried to`, `fix_now` dispositions with resolution commits, receipts for suite runs, the reviewer-versus-Git-author rule, recorded bases. The skill's total line count falls.
 - [x] One meaning per word, in prose; no flag or policy key is renamed (that would need new shims). CONTEXT.md defines: check = `atelier check` (record validation), merge checks (the policy's merged-tree commands) and `merge --check` (merge gates without merging), and prose uses "line" for a Done when line; land = `atelier land`, the handoff and pushed-commit check; close = what a mission does (the `close_reason` key and `--reason` keep their names and write the Report); review = independent review; done = the status work gets when it merges, decisions, loose ends and validations get on the base, and a closed mission has, with superseded as the other terminal status. CLI help and docs use the words that way.
@@ -79,6 +79,7 @@ docs/adr/0028-simpler-lifecycle.md (decision 8), docs/strategies/simpler-lifecyc
   Rejected: Point the skill at Atelier's CONTEXT.md
 - 2026-11-07 [decision] Leave command output (verdict lines counting checks, closed for done work, held at close) to follow-up atelier-xz5c
   Reason: Scope is help text and the start hint; hooks, quiet tokens and many tests read those lines
+- 2026-11-07 [result] astromech's CI pin moved to atelier 12efdfd9 (atelier-4nsl's merge) through astromech-5sp5, merged as c10c8cbe and pushed to brewer-corp/astromech main on 2026-11-07; its atelier doctor job built 12efdfd9 fresh and passed (run 42369239411).
 
 ## Report
 
