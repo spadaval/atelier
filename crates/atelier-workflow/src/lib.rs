@@ -19,6 +19,8 @@ issue_types:
     label: Decision
   feature:
     label: Feature
+  loose_end:
+    label: Loose end
   mission:
     label: Mission
   spike:
@@ -79,7 +81,6 @@ workflows:
     - feature
     - spike
     - task
-    - validation
     initial_status: todo
     done_statuses:
     - done
@@ -126,6 +127,27 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire a question that no longer needs deciding.
+  on_base:
+    applies_to:
+    - loose_end
+    - validation
+    initial_status: todo
+    done_statuses:
+    - done
+    - superseded
+    transitions:
+      done:
+        from: [todo]
+        to: done
+        required_fields: [close_reason]
+        description: Record the one-line result in the Report once what it waits on is merged. It needs no branch, review or merge, and is done on the base branch as a planning change; a bad result files a linked bug.
+        validators:
+        - blockers.none_open
+      supersede:
+        from: [todo]
+        to: superseded
+        required_fields: [close_reason]
+        description: Retire it once it is no longer needed.
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -202,6 +224,16 @@ impl Default for BranchLifecycleConfig {
 /// The workflow whose items reach done when `atelier merge` integrates their
 /// branch, rather than by a transition (atelier-jnrh).
 pub const WORK_WORKFLOW: &str = "work";
+
+/// The transition `atelier start` applies. A workflow without one gives its
+/// items no branch: they are done on the base by a transition (atelier-8bh4).
+pub const START_TRANSITION: &str = "start";
+
+/// Work that changes no code and can only happen after a merge or a
+/// release, such as pushing a tag or a play-check: it waits on what it
+/// follows through `blocked_by` and is never part of a mission (ADR 0028,
+/// decision 3).
+pub const LOOSE_END_TYPE: &str = "loose_end";
 
 /// Issue field recording the branch an owner (a parent or standalone issue) is
 /// worked on and the branch it was started from. Written by `atelier start`.
@@ -306,6 +338,31 @@ impl WorkflowPolicy {
             .done_statuses
             .first()
             .map(String::as_str)
+    }
+
+    /// Whether items of this type are done on the base by a transition, with
+    /// no branch, review or merge: their workflow has no `start` transition,
+    /// as for decisions, loose ends and validations (atelier-8bh4). Judged by
+    /// workflow, so a policy that keeps `validation` in `work` starts it as
+    /// before. False for a type the policy does not map.
+    pub fn done_on_base(&self, issue_type: &str) -> bool {
+        self.workflow_for_issue_type(issue_type)
+            .is_ok_and(|workflow| !workflow.transitions.contains_key(START_TRANSITION))
+    }
+
+    /// The transition that takes an item of this type from `status` to its
+    /// workflow's first done status, such as a loose end's `done` or a
+    /// decision's `decide`.
+    pub fn done_transition(&self, issue_type: &str, status: &str) -> Option<&str> {
+        let workflow = self.workflow_for_issue_type(issue_type).ok()?;
+        let done = workflow.done_statuses.first()?;
+        workflow
+            .transitions
+            .iter()
+            .find(|(_, transition)| {
+                transition.to == *done && transition.from.iter().any(|from| from == status)
+            })
+            .map(|(name, _)| name.as_str())
     }
 
     pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
@@ -1879,7 +1936,8 @@ mod tests {
             ("mission", "objective"),
             ("feature", "work"),
             ("task", "work"),
-            ("validation", "work"),
+            ("loose_end", "on_base"),
+            ("validation", "on_base"),
         ] {
             assert_eq!(
                 policy
@@ -1909,6 +1967,33 @@ mod tests {
         assert_eq!(policy.merge_done_status("task"), Some("done"));
         assert_eq!(policy.merge_done_status("mission"), None);
         assert_eq!(policy.merge_done_status("decision"), None);
+        assert_eq!(policy.merge_done_status("loose_end"), None);
+        // Loose ends and validations share one workflow with no start: done
+        // on the base through `done`, which requires a Report (atelier-8bh4).
+        let on_base = &policy.workflows["on_base"].transitions;
+        assert_eq!(
+            on_base.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["done", "supersede"]
+        );
+        assert_eq!(on_base["done"].from, vec!["todo".to_string()]);
+        assert_eq!(on_base["done"].to, "done");
+        assert_eq!(
+            on_base["done"].required_fields,
+            vec!["close_reason".to_string()]
+        );
+        for (issue_type, on_base) in [
+            ("loose_end", true),
+            ("validation", true),
+            ("decision", true),
+            ("task", false),
+            ("mission", false),
+            ("unknown", false),
+        ] {
+            assert_eq!(policy.done_on_base(issue_type), on_base, "{issue_type}");
+        }
+        assert_eq!(policy.done_transition("loose_end", "todo"), Some("done"));
+        assert_eq!(policy.done_transition("decision", "todo"), Some("decide"));
+        assert_eq!(policy.done_transition("loose_end", "done"), None);
         let close = &policy.workflows["objective"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
@@ -1954,6 +2039,7 @@ mod tests {
                 "bug",
                 "decision",
                 "feature",
+                "loose_end",
                 "mission",
                 "spike",
                 "task",
@@ -1986,10 +2072,13 @@ mod tests {
         assert!(policy.workflows["decision"]
             .transitions
             .contains_key("block"));
+        // A policy that keeps `validation` in `work` still starts it.
+        assert!(!policy.done_on_base("validation"));
+        assert!(policy.done_on_base("decision"));
     }
 
     #[test]
-    fn starter_policy_has_objective_work_and_decision_workflows_only() {
+    fn starter_policy_has_objective_work_decision_and_on_base_workflows_only() {
         let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(
             policy
@@ -1997,7 +2086,7 @@ mod tests {
                 .keys()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
-            vec!["decision", "objective", "work"]
+            vec!["decision", "objective", "on_base", "work"]
         );
         assert!(!policy.statuses.contains_key("publish_review"));
     }

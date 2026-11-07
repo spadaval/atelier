@@ -5,7 +5,7 @@ use crate::{
     record_index::RecordIndex,
 };
 use anyhow::Result;
-use atelier_core::{EvidenceRecord, EvidenceResult, IssueBody, IssueSectionName};
+use atelier_core::{EvidenceRecord, EvidenceResult};
 use atelier_records::{issue_record_path, parse_issue_record, CanonicalIssueRecord};
 use std::path::Path;
 
@@ -22,44 +22,13 @@ fn acceptance_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> boo
         && a.sections.body == b.sections.body
 }
 /// Whether `after` makes the same done claim as `before`, an earlier version
-/// of the record. Ticking an after-merge check, or carrying it to an issue in
-/// `index`, records its validation and is not a new claim (ADR 0027); any
-/// other change to the Done when is.
+/// of the record: the same status and acceptance. Any change to the Done
+/// when, a ticked box included, is a new claim.
 pub fn completion_claim_matches(
     before: &CanonicalIssueRecord,
     after: &CanonicalIssueRecord,
-    index: &RecordIndex,
 ) -> bool {
-    before.issue.status == after.issue.status && same_acceptance(before, after, index)
-}
-/// Whether `after` asks for what `before`, an earlier version of the record,
-/// asked for: the same acceptance, where ticking or carrying an after-merge
-/// check records its validation and changes nothing a receipt proves.
-fn same_acceptance(
-    before: &CanonicalIssueRecord,
-    after: &CanonicalIssueRecord,
-    index: &RecordIndex,
-) -> bool {
-    acceptance_matches(before, after) || only_validated(before, after, index)
-}
-/// `after` is `before` with only after-merge checks validated in its Done
-/// when, by the rule `after_merge::only_validated` states.
-fn only_validated(
-    before: &CanonicalIssueRecord,
-    after: &CanonicalIssueRecord,
-    index: &RecordIndex,
-) -> bool {
-    let (Some(old), Some(new)) = (
-        before.sections.section(IssueSectionName::DoneWhen),
-        after.sections.section(IssueSectionName::DoneWhen),
-    ) else {
-        return false;
-    };
-    let mut unvalidated = after.clone();
-    if let IssueBody::Issue { done_when, .. } = &mut unvalidated.sections.body {
-        *done_when = old.to_owned();
-    }
-    acceptance_matches(before, &unvalidated) && crate::after_merge::only_validated(old, new, index)
+    before.issue.status == after.issue.status && acceptance_matches(before, after)
 }
 /// A single read phase; create a new context after mutations or external checks.
 pub type EvidenceReadContext<'a> = git::ReadContext<'a>;
@@ -94,14 +63,13 @@ impl EvidenceReadContext<'_> {
     }
     pub fn evidence_is_fresh(
         &mut self,
-        index: &RecordIndex,
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<bool> {
         // No commit since the pin changed what `record` proves, and the
         // checkout is clean.
         let edges = self.edges(&record.data.commit, "HEAD")?;
-        Ok(evidence_matches_edges(self, index, issue, record, &edges)? && self.code_clean()?)
+        Ok(evidence_matches_edges(self, issue, record, &edges)? && self.code_clean()?)
     }
     pub fn issue_gate(
         &mut self,
@@ -127,25 +95,23 @@ impl EvidenceReadContext<'_> {
 }
 fn evidence_matches_edges(
     read: &mut EvidenceReadContext<'_>,
-    index: &RecordIndex,
     issue: &CanonicalIssueRecord,
     record: &EvidenceRecord,
     edges: &[git::CommitEdge],
 ) -> Result<bool> {
-    Ok(first_mismatch(read, index, issue, record, edges)?.is_none())
+    Ok(first_mismatch(read, issue, record, edges)?.is_none())
 }
 
 /// The first change since the pin that stops `record` proving `issue`, or
 /// `None` when nothing in `edges` (oldest last) does.
 fn first_mismatch(
     read: &mut EvidenceReadContext<'_>,
-    index: &RecordIndex,
     issue: &CanonicalIssueRecord,
     record: &EvidenceRecord,
     edges: &[git::CommitEdge],
 ) -> Result<Option<Staleness>> {
     let original = read.issue_at(&record.data.commit, &issue.issue.id)?;
-    if !same_acceptance(&original, issue, index) {
+    if !acceptance_matches(&original, issue) {
         return Ok(Some(Staleness::AcceptanceChanged));
     }
     let target = Path::new(".atelier").join(issue_record_path(&issue.issue.id));
@@ -154,10 +120,9 @@ fn first_mismatch(
             return Ok(Some(Staleness::CodeChangedIn(edge.commit.clone())));
         }
         if edge.paths.contains(&target)
-            && !same_acceptance(
+            && !acceptance_matches(
                 &read.issue_at(&edge.parent, &issue.issue.id)?,
                 &read.issue_at(&edge.commit, &issue.issue.id)?,
-                index,
             )
         {
             return Ok(Some(Staleness::AcceptanceChangedIn(edge.commit.clone())));
@@ -244,7 +209,7 @@ impl EvidenceReadContext<'_> {
         parents.iter().find(|parent| {
             self.issue_at(parent, issue_id)
                 .ok()
-                .is_some_and(|before| completion_claim_matches(&before, after, index))
+                .is_some_and(|before| completion_claim_matches(&before, after))
         })
     }
 }
@@ -268,14 +233,13 @@ impl EvidenceReadContext<'_> {
     /// fresh, judged as [`Self::evidence_is_fresh`] judges it.
     pub fn staleness(
         &mut self,
-        index: &RecordIndex,
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<Option<Staleness>> {
         let Ok(edges) = self.edges(&record.data.commit, "HEAD") else {
             return Ok(Some(Staleness::NotInHistory));
         };
-        match first_mismatch(self, index, issue, record, &edges) {
+        match first_mismatch(self, issue, record, &edges) {
             Ok(Some(staleness)) => return Ok(Some(staleness)),
             Ok(None) => {}
             Err(_) => return Ok(Some(Staleness::NotInHistory)),
@@ -302,7 +266,7 @@ impl EvidenceReadContext<'_> {
         let Ok(edges) = self.edges(&record.data.commit, &end) else {
             return Ok(Err(Staleness::NotInHistory));
         };
-        Ok(match first_mismatch(self, index, issue, record, &edges) {
+        Ok(match first_mismatch(self, issue, record, &edges) {
             Ok(None) => Ok(end),
             Ok(Some(staleness)) => Err(staleness),
             Err(_) => Err(Staleness::NotInHistory),
@@ -362,7 +326,7 @@ impl EvidenceReadContext<'_> {
         // or stale and why.
         let mut standing = Vec::with_capacity(records.len());
         for record in &records {
-            standing.push(match self.staleness(index, issue, record)? {
+            standing.push(match self.staleness(issue, record)? {
                 None => ProofMark::Fresh,
                 Some(stale) if at_close && record.data.result == EvidenceResult::Pass => {
                     match self.held_at_close(index, issue, record)? {
@@ -530,18 +494,21 @@ impl EvidenceReadContext<'_> {
         fresh: bool,
     ) -> Result<bool> {
         if fresh {
-            return self.evidence_is_fresh(index, issue, record);
+            return self.evidence_is_fresh(issue, record);
         }
         if !self.ancestor(&record.data.commit, "HEAD")? {
             return Ok(false);
         }
         let end = self.claim_endpoint(index, &issue.issue.id, &record.data.commit)?;
         let edges = self.edges(&record.data.commit, &end)?;
-        evidence_matches_edges(self, index, issue, record, &edges)
+        evidence_matches_edges(self, issue, record, &edges)
     }
+    /// The commit a receipt pinned to `pin` is judged to: the done claim,
+    /// or `pin` when the claim came first. `_index` went unused when ticking
+    /// an after-merge check stopped being exempt (atelier-8bh4).
     pub(crate) fn claim_endpoint(
         &mut self,
-        index: &RecordIndex,
+        _index: &RecordIndex,
         issue_id: &str,
         pin: &str,
     ) -> Result<String> {
@@ -558,7 +525,7 @@ impl EvidenceReadContext<'_> {
         for commit in changes.iter() {
             let after = self.issue_at_migrated(commit, issue_id, &current)?;
             let parent = self.issue_at_migrated(&format!("{commit}^"), issue_id, &current);
-            if parent.is_err() || !completion_claim_matches(&parent?, &after, index) {
+            if parent.is_err() || !completion_claim_matches(&parent?, &after) {
                 claim = Some(commit);
                 break;
             }
@@ -613,9 +580,9 @@ mod tests {
             RecordIndex::from_records(issues.to_vec(), vec![evidence.clone()], Vec::new()).unwrap();
         let mut reads = EvidenceReadContext::new(repo.path());
         for issue in &issues {
-            assert!(reads.evidence_is_fresh(&index, issue, &evidence).unwrap());
+            assert!(reads.evidence_is_fresh(issue, &evidence).unwrap());
             assert!(EvidenceReadContext::new(repo.path())
-                .evidence_is_fresh(&index, issue, &evidence)
+                .evidence_is_fresh(issue, &evidence)
                 .unwrap());
         }
         for (min_count, kind) in [(1, None), (2, None), (1, Some("other"))] {
@@ -646,7 +613,7 @@ mod tests {
         );
         fs::write(repo.path().join("code.rs"), "changed code").unwrap();
         assert!(!EvidenceReadContext::new(repo.path())
-            .evidence_is_fresh(&index, &issues[0], &evidence)
+            .evidence_is_fresh(&issues[0], &evidence)
             .unwrap());
         let dirty = git::working_paths(repo.path()).unwrap();
         let mut snapshot_read = EvidenceReadContext::from_snapshot(
@@ -655,12 +622,10 @@ mod tests {
             &dirty,
         );
         assert!(!snapshot_read
-            .evidence_is_fresh(&index, &issues[0], &evidence)
+            .evidence_is_fresh(&issues[0], &evidence)
             .unwrap());
         let mut next_read = EvidenceReadContext::new(repo.path());
-        assert!(!next_read
-            .evidence_is_fresh(&index, &issues[0], &evidence)
-            .unwrap());
+        assert!(!next_read.evidence_is_fresh(&issues[0], &evidence).unwrap());
     }
 
     #[cfg(unix)]

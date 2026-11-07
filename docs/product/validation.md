@@ -30,39 +30,53 @@ policy's `merge_checks` (a `shell.check`; see [workflow
 configuration](workflow-configuration.md)), or nothing tests its merged tree
 ([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
 
-## Before and after merge
+## Work after the merge
 
-Each line of an item's Done when is checked before merge, on the work branch,
-unless it is marked to run after merge. Post-merge validation is only what
-cannot be checked before the merge: a check that needs the deployed or merged
-system, a device or place no agent can reach, the human's judgment, or time
-and real use. Its nearest stand-in still runs before merge (an emulator for a
-device, a test server for production), and the after-merge check covers only
-the gap between the stand-in and the real thing
-([ADR 0027](../adr/0027-proof-has-a-time.md)):
+Every line of an item's Done when is checked before merge, on the work branch.
+Work that changes no code and can only happen after a merge or a release,
+such as pushing a tag, a play-check on a device or an eval run, is not a Done
+when line: it is a **loose end**, an issue of type `loose_end`
+([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 3). Its nearest
+stand-in, such as an emulator for a device or a test server for production,
+is still a Done when line of the item it follows.
 
 ```text
-- [ ] After merge (device): the launcher opens on the phone. Stand-in: the emulator test passes.
+atelier issue create "Push the v1 tag" --issue-type loose_end --body "## Goal ... ## Done when ..."
+atelier issue link <loose-end> <item> --role blocked_by
 ```
 
-Mark the split when the work is planned. Moving a check to after merge once
-the item has started is a Done when edit that `merge --check` and the review
-brief show (see [reviews and merge](reviews-and-merge.md#a-done-when-edited-after-the-start)).
-The item merges as usual, which marks it done, and its Report's Open items
-name each open after-merge check with its reason and the stand-in that ran. While a check is open, `status`, `work all`, and `work
-mission` and `work parent` list it under Awaiting Validation, the debrief
-says so under the item, and closing its mission warns and names it.
+A loose end is `blocked_by` the issue it waits on, so it shows in `work
+blocked` until that merges and in `work ready` after, or in `work human` when
+labelled `needs-human`. It is never part of a mission: it is no issue's child
+and advances no mission, a link `atelier check` reports and a write refuses,
+so a mission closes once its code merges. It takes no branch, review or
+merge: `atelier start` and `atelier merge` refuse it and name its `done`
+transition, and nothing suggests starting it. Do it on the base, then mark it
+done there with a one-line result, which `land` accepts:
 
-Validate on the base, as a planning change that needs no reviewer identity:
-run the check, record its receipt (a device or deployed check leaves no other
-record), tick the box (`- [x] After merge ...`) and commit the record. If it
-fails, file a follow-up bug with `atelier issue create --discovered-from
-<item>` and add `carried to <bug>` to the line, rather than reopening the
-merged item; the bug's Done when holds the check from then on. `carried to`
-counts only when it names an existing issue. Validate every check that can
-be validated now; carry only a failed check, to its follow-up bug, or one
-that needs time and real use beyond the mission, and name each carried check
-in the mission's close report. Nothing refuses an open after-merge check.
+```text
+atelier issue transition <loose-end> done --reason "Pushed v1."
+```
+
+Record a receipt for a device or deployed check, which leaves no other record.
+A bad result files a linked bug (`atelier issue create --discovered-from
+<loose-end>`) rather than reopening the merged item. A `validation`, an
+independent assessment of a mission's criteria before it closes, shares the
+loose end's workflow: it advances its mission, and is done on the base the
+same way.
+
+Records written under [ADR 0027](../adr/0027-proof-has-a-time.md) may hold a
+Done when line marked `After merge (<reason>): <check>. Stand-in: <...>`.
+`review request` does not ask for such a line to be ticked; otherwise it is an
+ordinary Done when line. `atelier migrate after-merge` (a dry run unless
+`--apply`) turns each unticked one into a loose end `blocked_by` its item: the
+check becomes the loose end's Done when, the reason goes in its Goal, and it
+is labelled `needs-human` when the reason is the human's judgment or a device
+or place no agent can reach, which the dry run shows. An item that is not done
+keeps the line's stand-in as an ordinary Done when line; a done item is left
+as it is. Lines carried to an existing issue (`carried to <id>`) are skipped,
+and rerunning changes nothing. It refuses when the policy declares no
+`loose_end` type.
 
 ## Recording proof
 

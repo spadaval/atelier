@@ -64,7 +64,7 @@ view is a choice of rows, fields and grouping over the shared order. That
 keeps views expressible as declarations later (atelier-e95f).
 
 Every view that lists items uses this line: the `work` views, `status`
-(Current Work, Awaiting Validation, Owner, Mission, Owner Work, Ready Work and unassigned work;
+(Current Work, Owner, Mission, Owner Work, Ready Work and unassigned work;
 its `Branches` rows use the branch row below), `work missions`, `issue list`, and `issue show` (title
 line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
 Subissues and the Mission Rollup or Parent Rollup). So the Current Work row
@@ -529,8 +529,9 @@ command just run or a filter for rows already on screen:
   parent or else the issue itself; an owner with no recorded branch, such as
   a mission or decision, offers `atelier land` alone;
 - `work mission` and `work parent` offer `atelier start <id>` for the first
-  item of Ready Work, in work order, that no other branch has started, and
-  their transitions only while the objective has any;
+  item of Ready Work, in work order, that `atelier start` takes and no other
+  branch has started (a validation or loose end, done on the base, is never
+  offered), and their transitions only while the objective has any;
 - `issue create` offers `atelier start <new id>` when the item's workflow has
   a `start` transition from the status it was created in; otherwise, as for
   backlog work or a mission or decision, which have no branch, it offers the
@@ -588,6 +589,7 @@ refusal of it leaves stdout empty:
 | `bundle apply` | the IDs of the records it created or updated, one per line |
 | `migrate epics` | the IDs of the epic records it retypes, or would retype in a dry run |
 | `migrate dispositions` | the IDs of the findings it folds a disposition event into, or would in a dry run |
+| `migrate after-merge` | the IDs of the loose ends it makes, or in a dry run the IDs of the items whose After merge lines it would migrate, once per line |
 | `prune` | `mode=<dry-run or apply> eligible=<n> protected=<n> removed=<n> failures=<n>` |
 
 Values are numbers except `prune`'s `mode`. A failure still exits non-zero

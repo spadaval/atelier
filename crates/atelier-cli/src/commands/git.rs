@@ -549,9 +549,10 @@ pub(crate) fn first_unreviewed_claim(
 
 /// The work items `commit` takes to done, compared with every parent, that
 /// are still done at `tip` (a later revert withdraws the claim).
-/// Missions close and decisions are decided on the base as planning, and
-/// superseding retires work without a claim; anything else reaches done
-/// through a reviewed work branch (atelier-fj1t).
+/// Missions close on the base as planning, as does any item whose workflow
+/// has no `start` transition, such as a decision, loose end or validation
+/// (atelier-8bh4); superseding retires work without a claim; anything else
+/// reaches done through a reviewed work branch (atelier-fj1t).
 fn base_done_claims(
     repo: &Path,
     policy: &atelier_workflow::WorkflowPolicy,
@@ -590,7 +591,8 @@ fn base_done_claims(
         let Some(Some((issue_type, status))) = status_at(commit, path) else {
             continue;
         };
-        if matches!(issue_type.as_str(), "mission" | "decision")
+        if issue_type == "mission"
+            || policy.done_on_base(&issue_type)
             || status == "superseded"
             || policy.status_category(&status) != Some("done")
         {

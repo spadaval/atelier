@@ -76,8 +76,6 @@ pub enum Change {
     TrivialExemption { summary: String },
     /// The Done when was edited after the item was started.
     DoneWhenEdited(DoneWhenEdit),
-    /// Done, with these after-merge checks not yet validated (ADR 0027).
-    AwaitingValidation(Vec<String>),
 }
 
 /// How review of one item went.
@@ -546,17 +544,6 @@ pub fn debrief(
                 .cloned()
                 .map(Change::DoneWhenEdited),
         );
-        if let Some(record) = index
-            .issue_record(id)
-            .filter(|record| crate::after_merge::awaiting_validation(record, policy, index))
-        {
-            changes.push(Change::AwaitingValidation(
-                crate::after_merge::open_checks(record, index)
-                    .into_iter()
-                    .map(|check| check.check)
-                    .collect(),
-            ));
-        }
         Ok(changes)
     };
     let open_entry = |id: &str, parent: Option<String>| -> Result<OpenEntry> {

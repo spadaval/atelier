@@ -15,8 +15,11 @@ any criterion must be something the mission's own work can make true and an
 agent can check when the mission closes
 ([ADR 0024](../adr/0024-missions-are-themed-containers.md); Agent Factory's
 [Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission)). Work
-items (task, feature, bug, spike, validation, or any type the policy declares)
-state Goal and Done when, with optional Scope, Context, Unknowns, and Design.
+items (task, feature, bug, spike, validation, loose end, or any type the
+policy declares) state Goal and Done when, with optional Scope, Context,
+Unknowns, and Design. A loose end and a validation are done on the base by
+their `done` transition, with no branch, review or merge (see [work after
+the merge](validation.md#work-after-the-merge)).
 Missions and work items may also carry an optional Background section: the
 research, references, and motivation that a mission or every child of a parent
 shares, so it lives in the record instead of a side document.
@@ -133,26 +136,24 @@ notes the label when someone starts one.
 
 Do not make a `needs-human` check a child of a branch owner when the check runs
 after the merge, such as a game, headset or Windows check on the released
-build. Review asks every open child for ticked Done when lines and a Report
-before `atelier merge` marks it done, so the owner's branch could not
-integrate until the human acts. Model the check as a standalone
-validation `blocked_by` the parent instead (and `advances` the mission, if
-any). `atelier start` and `atelier status` warn when a branch owner has an open
-`needs-human` child and give the two commands that detach it (atelier-1jll).
-They also say the check could be an [after-merge
-line](validation.md#before-and-after-merge) of the owner's Done when, but
-only when it needs the deployed or merged system, a device or place no agent
-can reach, the human's judgment, or time and real use, with a stand-in that
-runs before merge; moving it there once the work started is a plan change
-the reviewer sees.
-A `needs-human` child that must finish before the merge, such as an account
+build. Review asks every open child of the `work` workflow for ticked Done
+when lines and a Report before `atelier merge` marks it done, so the owner's
+branch could not integrate until the human acts. Make the check a [loose
+end](validation.md#work-after-the-merge) `blocked_by` the parent instead,
+outside any mission. `atelier start` and `atelier status` warn when a branch
+owner has an open `needs-human` child that its merge would mark done, and give
+the two commands that make it a loose end, or a standalone item `blocked_by`
+the parent under a policy without `loose_end` (atelier-1jll, atelier-8bh4). A
+`needs-human` child that must finish before the merge, such as an account
 approval the code depends on, can stay a child.
 
-`atelier work ready` lists only work an agent can start. Missions, and parents
-with open children, are worked through their children, so ready views show
-them in a separate "Parents and Missions" context panel instead, and `--quiet`
-ready lists leave them out. A parent whose children are all terminal is ready
-again, to be started and closed.
+`atelier work ready` lists work an agent can take up now: work to start, and
+items done on the base, such as loose ends and validations, which are finished
+by their `done` transition on the base rather than started (atelier-8bh4).
+Missions, and parents with open children, are worked through their children,
+so ready views show them in a separate "Parents and Missions" context panel
+instead, and `--quiet` ready lists leave them out. A parent whose children are
+all terminal is ready again, to be started and closed.
 
 Records are branch-local, so work another session has started on its own
 branch still reads as ready on the base. `work ready`, the ready section of
@@ -173,7 +174,8 @@ planned out of its parked status (for `backlog`, with `plan`). Children
 already in flight keep their state and transitions, and a parent that can
 never start, such as an open decision, parks nothing.
 A todo-category status alone does not establish readiness: ready work must
-expose a direct transition into active work and have no open blockers. A child
+have no open blockers and expose a direct transition into active work, or,
+for an item done on the base, its transition to done. A child
 also waits on its parent's blockers, since it works on the parent's branch:
 `work ready` leaves it out, `work blocked`, mission and parent views list it as
 blocked by them, `issue show` lists them under "Blocked via parent", and
@@ -197,7 +199,11 @@ Missions coordinate work rather than own a work branch.
 
 `atelier start <id>` resolves the owner, checks the target branch's records,
 checks out or creates its work branch, records branch metadata, and applies the
-available `start` transition. Commit those record changes with the work.
+available `start` transition. Commit those record changes with the work. An
+item whose workflow has no `start` transition, such as a decision, loose end
+or validation, takes no branch: `start` and `merge` refuse it with
+`start_done_on_base` or `merge_done_on_base` and name the transition that
+marks it done on the base (atelier-8bh4).
 
 A new work branch is created from the current branch, which `start` records
 as the branch base without checking it; `land` later refuses with
@@ -278,7 +284,9 @@ findings.
 
 A mission closes when all its work is merged and its validation, if it has
 one, is done; its `close` transition's description says so, and nothing else
-enforces it.
+enforces it. A loose end is never part of a mission, so it never holds one
+open: mission scope leaves loose ends out, and a link that would put one there
+is refused when written (atelier-8bh4).
 
 Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.

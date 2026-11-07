@@ -173,11 +173,57 @@ views and the mission-close warning go. The `validation` type keeps its
 meaning, an independent assessment of a mission's criteria before it closes,
 and loses its own branch and review round.
 
-Open, settled by atelier-8bh4: whether `validation` and `loose_end` share one
-workflow, and the shape of the migration that turns open after-merge lines
-into loose ends. Settled by atelier-8bh4 with atelier-4nsl: what a loose end
-waits on when the change it follows had no issue, such as a release on the
-light path (decision 6).
+Built by atelier-8bh4:
+
+- **One workflow.** `loose_end` and `validation` share the `on_base`
+  workflow, in the starter policy and atelier's own: `todo` to `done` through
+  a transition named `done`, which requires the policy's `close_reason`, a
+  non-empty Report holding the one-line result, and runs
+  `blockers.none_open`; plus `supersede`. It has no `start` transition.
+  Atelier does not count the Report's lines; one line is the guidance.
+- **Judged by workflow.** An item whose workflow has no `start` transition
+  takes no branch, review or merge, whatever its type: `atelier start` and
+  `atelier merge` refuse it (`start_done_on_base`, `merge_done_on_base`) and
+  name its done transition, and `land` accepts it marked done on the base, in
+  place of the hard-coded `decision` exemption from `land_base_done_claim`;
+  missions stay exempt by type. A decision falls under the same rule, so its
+  `start` refusal now names `decide`. A repository whose policy keeps
+  `validation` in `work` starts and merges validations as before.
+- **Ready, never started.** A loose end in `todo` is blocked while what it
+  waits on is open, then ready, or needs a human when labelled
+  `needs-human`. No `status` or `work` hint suggests starting it, and the
+  mission views never offer a validation as the item to start.
+- **Never part of a mission.** A loose end that is an issue's child or
+  advances a mission is an `atelier check` finding, so the write that would
+  link it is refused (atelier-ilba's guard); mission scope leaves loose ends
+  out, so neither a mission's views nor its close count one even when a hand
+  edit links it.
+- **The migration.** `atelier migrate after-merge`, a dry run unless
+  `--apply`, refuses when the policy has no `loose_end`. It turns each
+  unticked After merge line into a loose end `blocked_by` its item, with the
+  check as its Done when and the reason in its Goal, labelled `needs-human`
+  when the reason's words name the human's judgment or a device or place no
+  agent can reach, which the dry run shows. An item that is not done keeps
+  the stand-in as an ordinary Done when line, or loses the line when it gave
+  none; a done item is left as it is, so the base's done records do not
+  change. A line carried to an existing issue is skipped, and a line already
+  migrated is found by its loose end, so reruns change nothing. The marker
+  is otherwise read only so `review request` need not ask for it to be
+  ticked.
+- **What went.** Stand-in parsing outside the migration, `carried to`, the
+  Awaiting Validation rows in `status`, `work all`, `work mission` and `work
+  parent`, the debrief's awaiting note, the mission-close warning, the review
+  brief's After merge section, and the rule that ticking or carrying an
+  after-merge check changes no claim, which kept a receipt held at its close.
+  Such an edit to a done record now changes its acceptance for receipts as
+  any edit does; it still lands, since record edits never make an approval
+  stale (decision 1), and ticking a box is still not reported as a Done when
+  edit.
+
+Left to atelier-4nsl: what a loose end waits on when the change it follows
+had no issue, such as a release on the light path (decision 6). Whether
+astromech's per-feature `validation` play-checks become loose ends is
+decided when atelier-ml3r migrates it.
 
 ### 4. Records can be corrected
 

@@ -254,7 +254,7 @@ impl Owner {
         if !human_children.is_empty() {
             work.push(format!(
                 "Needs a human: {}",
-                atelier_app::work_classification::human_children_note(id, &human_children)
+                atelier_app::work_classification::human_children_note(policy, id, &human_children)
             ));
         }
         let buckets = atelier_app::work_classification::work_buckets_for(
@@ -364,11 +364,9 @@ fn evidence(
             continue;
         }
         let fresh = targets.iter().all(|id| {
-            index.issue_record(id).is_some_and(|issue| {
-                proof
-                    .evidence_is_fresh(index, issue, evidence)
-                    .unwrap_or(false)
-            })
+            index
+                .issue_record(id)
+                .is_some_and(|issue| proof.evidence_is_fresh(issue, evidence).unwrap_or(false))
         });
         lines.push(format!(
             "{} — recorded {:?} @ {} ({})",
@@ -543,14 +541,6 @@ fn render_status_page(
         IssueListPanel::new("Current Work", active_rows)
             .limit(8, "atelier work active")
             .render(context),
-        // Merged work whose after-merge checks are still open (ADR 0027).
-        if view.work.awaiting_validation.is_empty() {
-            Vec::new()
-        } else {
-            IssueListPanel::from_work_rows("Awaiting Validation", &view.work.awaiting_validation)
-                .limit(READY_SHOWN, "atelier work all")
-                .render(context)
-        },
         unassigned_panel(overview, owned, in_flight, context),
         render_metadata(Some("Local State"), &local_state),
     ];

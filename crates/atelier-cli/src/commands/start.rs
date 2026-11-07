@@ -56,6 +56,9 @@ pub fn run(
         .map_or(index, |snapshot| &snapshot.index);
     let issue_id = crate::commands::issue::resolve_id(naming, issue_ref)?;
     let policy = atelier_app::workflow_policy::load(&repo_root)?;
+    if let Some(issue) = naming.get_issue(&issue_id) {
+        workflow::refuse_done_on_base(&policy, &issue, "start")?;
+    }
     let branch =
         atelier_app::workflow_policy::resolve_work_branch(&policy, naming, &issue_id)?.branch;
 
@@ -365,6 +368,7 @@ pub fn run(
         ));
     }
     let mut notes = start_notes(
+        &view_policy,
         &issue_id,
         human_work,
         &work_branch.owner_id,
@@ -407,6 +411,7 @@ pub fn run(
 
 /// Notes that `start` is starting work for the human.
 fn start_notes(
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue_id: &str,
     human_work: bool,
     owner_id: &str,
@@ -420,6 +425,7 @@ fn start_notes(
     }
     if !human_children.is_empty() {
         notes.push(atelier_app::work_classification::human_children_note(
+            policy,
             owner_id,
             human_children,
         ));
