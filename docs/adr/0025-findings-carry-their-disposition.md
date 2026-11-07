@@ -4,6 +4,9 @@
 
 Accepted (2026-11-06, within the Shape of mission atelier-n4mj, which
 Sumeet approved: "One record per finding"; atelier-hwxm).
+Amended by atelier-5822 (2026-11-06): the commit a disposition names is the
+newest commit that changed anything besides records, not HEAD, so a
+disposition can share a record commit with the records before it.
 
 Partially supersedes [ADR 0019](0019-verified-repo-native-tracker.md)
 decision 6: findings and their dispositions are no longer two append-only

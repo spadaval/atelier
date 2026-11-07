@@ -62,8 +62,11 @@ atelier review disposition <finding-id> --identity "Reviewer" --decision no_acti
 ```
 
 The disposition is a field of the finding's own record: the decision, its
-resolution commit or follow-up, the identity that set it, the commit HEAD was
-at, the time and the reason. Setting it again replaces it, so a finding is one
+resolution commit or follow-up, the identity that set it, the code it judged
+(the newest commit that changed anything besides records), the time and the
+reason. Naming the code rather than a record-only HEAD lets a disposition
+share a record commit with the records before it
+([committing records](cli-surface.md#committing-records)). Setting it again replaces it, so a finding is one
 file for its whole life. The record keeps only the current disposition;
 earlier ones, such as an author's proposal the reviewer replaced or a
 `fix_now` later changed to `defer`, stay in the Git history of the finding's

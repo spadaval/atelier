@@ -116,7 +116,25 @@ ignores. A group ends when its records are no longer staged (a hand commit, a re
 record of the group with unstaged edits refuses with
 `record_commit_pending_modified`; each command stages only the records it wrote.
 The group is remembered before the commit runs and forgotten after it succeeds,
-so a rejecting hook leaves it for the next `--commit-records`. `review` keeps `--commit` for the pinned commit; the flags here are
+so a rejecting hook leaves it for the next `--commit-records`.
+
+Consecutive `--commit-records` commands add to one commit (atelier-5822).
+When HEAD is the commit the last `--commit-records` in this checkout made, the
+next one amends it, and says `Added N records to the previous record commit
+<old>, now <new>`, unless something holds that commit:
+
+- a record being committed, or another uncommitted record, names it, as a
+  receipt recorded at it or a review pinned to it does;
+- it already holds a version of a record being committed, so every committed
+  version stays in Git history;
+- another ref (a remote-tracking or other branch, a tag) or another
+  worktree's detached HEAD contains it, or HEAD is detached;
+- its Git author is not the current one.
+
+Then the records get a commit of their own. A hand commit in between also
+ends the run. So a reviewer's findings at one head land as one commit, and
+an author's dispositions after a fix as another, with every command still
+using `--commit-records`. `review` keeps `--commit` for the pinned commit; the flags here are
 separate. Code still belongs in its own commit; `land` and `merge` check the
 committed records either way.
 

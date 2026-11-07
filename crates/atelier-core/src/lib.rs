@@ -467,7 +467,8 @@ pub struct Disposition {
     pub decision: FindingDecision,
     /// Who set it, self-declared like every review identity.
     pub identity: String,
-    /// The full commit the branch was at when it was set.
+    /// The full commit of the code it judged: when it was set, the newest
+    /// commit that changed anything besides records (atelier-5822).
     pub commit: String,
     pub recorded_at: DateTime<Utc>,
     /// FIX NOW only: the commit that fixed the finding.

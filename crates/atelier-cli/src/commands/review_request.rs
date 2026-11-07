@@ -485,7 +485,7 @@ pub fn render(facts: &Facts) -> String {
 
     let who = facts.identity.as_deref().unwrap_or("<your identity>");
     out.push_str(&format!(
-        "\n## Record\n\nPin every record to the head. `--commit-records` commits the record it writes, with any records staged earlier by `--stage-records`.\n\n```\natelier review finding {id} --identity \"{who}\" --commit {head} --recommendation {rec} --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"\natelier review approve {id} --identity \"{who}\" --commit {head} --commit-records \"<what you checked>\"\n```\n",
+        "\n## Record\n\nPin every record to the head. `--commit-records` commits the record it writes, in the record commit before it when nothing pins that one, so the head above stays the one to pin.\n\n```\natelier review finding {id} --identity \"{who}\" --commit {head} --recommendation {rec} --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"\natelier review approve {id} --identity \"{who}\" --commit {head} --commit-records \"<what you checked>\"\n```\n",
         id = owner.id,
         head = facts.head,
         rec = [
@@ -632,7 +632,7 @@ Use the repo's scratch directory.
 
 ## Record
 
-Pin every record to the head. `--commit-records` commits the record it writes, with any records staged earlier by `--stage-records`.
+Pin every record to the head. `--commit-records` commits the record it writes, in the record commit before it when nothing pins that one, so the head above stays the one to pin.
 
 ```
 atelier review finding atelier-own1 --identity \"Independent reviewer\" --commit 2222222222222222222222222222222222222222 --recommendation fix_now|defer|no_action --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"

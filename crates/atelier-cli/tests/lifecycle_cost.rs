@@ -14,8 +14,12 @@ use tempfile::tempdir;
 mod support_cli;
 use support_cli::{commit, git, ok};
 
-/// Commits on the work branch that change only files under `.atelier/`.
-const RECORD_ONLY_COMMITS: usize = 13;
+/// Commits on the work branch that change only files under `.atelier/`:
+/// start; receipt and close; the findings; the follow-up issue; the author's
+/// dispositions; the reviewer's acceptances and approval. Consecutive
+/// `--commit-records` commands add to one commit unless a record pins it or
+/// it already holds a version of the same record (atelier-5822).
+const RECORD_ONLY_COMMITS: usize = 6;
 
 /// For each finding, by its recommendation: the finding plus every review
 /// event that names it. A finding carries its disposition (atelier-hwxm).
@@ -99,29 +103,32 @@ fn one_standard_lifecycle_costs_the_recorded_bookkeeping() {
     });
     let [fix_now, defer, no_action] = &findings;
 
-    // The author fixes the fix_now finding and disposes of all three.
+    // The author fixes the fix_now finding, files the follow-up the defer
+    // names, and disposes of all three. The follow-up is filed before the
+    // dispositions so its own commit does not split them (atelier-5822).
     fs::write(repo.join("src.rs"), "fixed version\n").unwrap();
     commit(repo, "Fix the finding");
     let fix = git(repo, &["rev-parse", "HEAD"]);
+    let follow_up = ok(
+        repo,
+        &["-q", "issue", "create", "Follow up", "--body", WORK],
+    );
+    commit(repo, "Plan the follow-up");
     dispose(
         repo,
         fix_now,
         AUTHOR,
         &["fix_now", "--resolution-commit", &fix],
     );
-    let follow_up = ok(
-        repo,
-        &["-q", "issue", "create", "Follow up", "--body", WORK],
-    );
-    commit(repo, "Plan the follow-up");
     dispose(repo, defer, AUTHOR, &["defer", "--follow-up", &follow_up]);
     dispose(repo, no_action, AUTHOR, &["no_action"]);
 
-    // The reviewer accepts the defer and no_action decisions, reviews the fix
-    // and approves the head.
+    // The reviewer reviews the fix at the head it was asked to review, the
+    // one the review request brief names, accepts the defer and no_action
+    // decisions, and approves that head.
+    let head = git(repo, &["rev-parse", "HEAD"]);
     dispose(repo, defer, REVIEWER, &["defer", "--follow-up", &follow_up]);
     dispose(repo, no_action, REVIEWER, &["no_action"]);
-    let head = git(repo, &["rev-parse", "HEAD"]);
     ok(
         repo,
         &[

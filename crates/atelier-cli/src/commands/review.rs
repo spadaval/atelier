@@ -58,6 +58,27 @@ fn confirm(id: &str, line: &str, warning: Option<String>, quiet: bool) {
     }
 }
 
+/// The commit a disposition names: the newest commit on the branch that
+/// changes anything besides records, or HEAD when none does. A disposition
+/// judges code, and naming the code rather than a record-only HEAD lets
+/// `--commit-records` add it to the record commit before it (atelier-5822).
+fn code_head(repo: &Path, layout: &StorageLayout) -> Result<String> {
+    let records = layout
+        .atelier_dir()
+        .strip_prefix(repo)
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| ".atelier".to_owned());
+    let exclude = format!(":(exclude){records}");
+    let code = text(
+        repo,
+        &["log", "-1", "--format=%H", "HEAD", "--", ".", &exclude],
+    )?;
+    if code.is_empty() {
+        return git::head_commit(repo);
+    }
+    Ok(code)
+}
+
 /// A pin given on the command line must be a commit this branch holds.
 fn require_on_branch(repo: &Path, commit: &str) -> Result<()> {
     if git::git_output(repo, &["merge-base", "--is-ancestor", commit, "HEAD"]).is_err() {
@@ -225,7 +246,7 @@ pub fn disposition(
             original.target
         );
     }
-    let pin = git::head_commit(repo)?;
+    let pin = code_head(repo, &layout)?;
     if let Some(commit) = &resolution {
         atelier_records::review::validate_commit(commit)?;
         require_on_branch(repo, commit)?;

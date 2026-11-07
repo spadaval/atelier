@@ -8,6 +8,11 @@
 //! `.atelier/runtime/staged-records.json`; the next command with
 //! `--commit-records` commits those together with its own. Before a command
 //! writes anything, the index must hold nothing but those remembered records.
+//!
+//! Consecutive `--commit-records` commands add to one commit (atelier-5822):
+//! when HEAD is the commit the last one made in this checkout, nothing else
+//! has seen it and no record names it, the new records amend it instead of
+//! adding another record-only commit. See [`can_add_to_head`].
 use anyhow::{bail, Context, Result};
 use atelier_app::git_freshness::git_output;
 use atelier_app::storage_layout::StorageLayout;
@@ -51,6 +56,14 @@ struct Active {
     mode: Mode,
     layout: StorageLayout,
     pending: Pending,
+}
+
+/// The commit the last `--commit-records` in this checkout made, and its
+/// labels, so the next one can add to it.
+#[derive(Deserialize, Serialize)]
+struct LastCommit {
+    commit: String,
+    labels: Vec<String>,
 }
 
 impl RecordCommit {
@@ -160,18 +173,46 @@ impl RecordCommit {
             }
             return Ok(());
         }
-        let message = commit_message(&pending.labels);
-        let mut commit = vec!["commit", "-q", "-m", message.as_str(), "--"];
+        let head = atelier_app::git_freshness::head_commit(root)?;
+        let last = read_last(&layout)?.filter(|last| last.commit == head);
+        let amend = match last {
+            Some(last) if can_add_to_head(&layout, &head, &pending.paths)? => Some(last),
+            _ => None,
+        };
+        let mut labels = amend
+            .as_ref()
+            .map(|last| last.labels.clone())
+            .unwrap_or_default();
+        labels.extend(pending.labels.iter().cloned());
+        let message = commit_message(&labels);
+        let mut commit = vec!["commit", "-q"];
+        if amend.is_some() {
+            commit.push("--amend");
+        }
+        commit.extend(["-m", message.as_str(), "--"]);
         commit.extend(pending.paths.iter().map(String::as_str));
         git_output(root, &commit)?;
         clear_pending(&layout)?;
-        let head = atelier_app::git_freshness::head_commit(root)?;
+        let new_head = atelier_app::git_freshness::head_commit(root)?;
+        write_last(
+            &layout,
+            &LastCommit {
+                commit: new_head.clone(),
+                labels,
+            },
+        )?;
         if !quiet {
-            println!(
-                "Committed {} as {}.",
-                atelier_core::count_noun(pending.paths.len(), "record"),
-                head.get(..8).unwrap_or(&head)
-            );
+            let records = atelier_core::count_noun(pending.paths.len(), "record");
+            let short = |commit: &str| commit.get(..8).unwrap_or(commit).to_owned();
+            if amend.is_some() {
+                println!(
+                    "Added {records} to the previous record commit {}, now {}.",
+                    short(&head),
+                    short(&new_head)
+                );
+            } else {
+                println!("Committed {records} as {}.", short(&new_head));
+            }
         }
         Ok(())
     }
@@ -192,6 +233,129 @@ fn commit_message(labels: &[String]) -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!("Record {first} and {} more\n\n{body}", rest.len())
+}
+
+/// Whether records may be added to HEAD, the commit the last
+/// `--commit-records` here made, by amending it. Amending replaces the commit,
+/// so it is allowed only while nothing can hold the old one:
+///
+/// - HEAD is on a branch, and no other ref (a remote-tracking branch, another
+///   branch, a tag) and no other worktree's detached HEAD contains it, so it
+///   has not been pushed, fetched or built on;
+/// - its Git author is the current one, so authorship stays true;
+/// - it changes none of the records being committed, so every committed
+///   version of a record, such as an author's proposed disposition the
+///   reviewer replaces, stays in Git history (ADR 0025);
+/// - no record being committed and no other uncommitted record names HEAD,
+///   so no pin is left pointing at a commit that no longer exists.
+///
+/// Otherwise the records get a commit of their own, as before.
+fn can_add_to_head(layout: &StorageLayout, head: &str, paths: &[String]) -> Result<bool> {
+    let root = layout.repo_root();
+    let text = |args: &[&str]| -> Result<String> {
+        Ok(String::from_utf8_lossy(&git_output(root, args)?).into_owned())
+    };
+    let Ok(branch) = git_output(root, &["symbolic-ref", "-q", "HEAD"]) else {
+        return Ok(false);
+    };
+    let branch = String::from_utf8_lossy(&branch).trim().to_owned();
+    let refs = text(&["for-each-ref", "--contains", head, "--format=%(refname)"])?;
+    if refs.lines().any(|name| name != branch) {
+        return Ok(false);
+    }
+    let worktrees = text(&["worktree", "list", "--porcelain"])?;
+    for entry in worktrees.split("\n\n") {
+        let detached = entry.lines().any(|line| line == "detached");
+        let other = entry.lines().find_map(|line| line.strip_prefix("HEAD "));
+        if let (true, Some(other)) = (detached, other) {
+            if git_output(root, &["merge-base", "--is-ancestor", head, other]).is_ok() {
+                return Ok(false);
+            }
+        }
+    }
+    let ident = text(&["var", "GIT_AUTHOR_IDENT"])?;
+    let current = ident.rsplitn(3, ' ').nth(2).unwrap_or_default();
+    if text(&["log", "-1", "--format=%an <%ae>", head])?.trim() != current {
+        return Ok(false);
+    }
+    let changed = git_paths(
+        root,
+        &[
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            "-z",
+            "--no-renames",
+            head,
+        ],
+    )?;
+    if paths.iter().any(|path| changed.contains(path)) {
+        return Ok(false);
+    }
+    let atelier = layout
+        .atelier_dir()
+        .strip_prefix(root)
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| ".atelier".to_owned());
+    let mut records = paths.to_vec();
+    records.extend(git_paths(
+        root,
+        &[
+            "diff",
+            "--name-only",
+            "-z",
+            "--no-renames",
+            "HEAD",
+            "--",
+            &atelier,
+        ],
+    )?);
+    records.extend(git_paths(
+        root,
+        &[
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            &atelier,
+        ],
+    )?);
+    for path in records {
+        if let Ok(bytes) = std::fs::read(root.join(&path)) {
+            if bytes
+                .windows(head.len())
+                .any(|window| window == head.as_bytes())
+            {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+fn last_file(layout: &StorageLayout) -> PathBuf {
+    layout
+        .atelier_dir()
+        .join("runtime")
+        .join("last-record-commit.json")
+}
+
+fn read_last(layout: &StorageLayout) -> Result<Option<LastCommit>> {
+    let path = last_file(layout);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(serde_json::from_str(&text).ok()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("cannot read {}", path.display())),
+    }
+}
+
+fn write_last(layout: &StorageLayout, last: &LastCommit) -> Result<()> {
+    let path = last_file(layout);
+    std::fs::create_dir_all(path.parent().expect("last commit file has a directory"))?;
+    std::fs::write(&path, serde_json::to_string(last)?)
+        .with_context(|| format!("cannot write {}", path.display()))
 }
 
 fn pending_file(layout: &StorageLayout) -> PathBuf {

@@ -152,14 +152,16 @@ fn staged_records_are_committed_with_the_next_commit_records() {
     );
 
     assert_eq!(commit_count(dir), before + 1);
-    assert_eq!(changed_in_head(dir).len(), 3);
+    let changed = changed_in_head(dir);
+    assert_eq!(changed.len(), 3, "{changed:?}");
     let message = git(dir, &["log", "-1", "--format=%B"]);
     assert!(
         message.contains("and 2 more") && message.matches("- evidence ").count() == 3,
         "{message}"
     );
     assert_eq!(git(dir, &["status", "--porcelain"]), "");
-    // The group is spent: a later commit holds only its own records.
+    // The group is spent: a later receipt names that record commit, so it
+    // gets a commit of its own rather than amending the one it names.
     ok(
         dir,
         &evidence_args(&target, "Fourth check", "--commit-records"),
@@ -320,7 +322,168 @@ fn a_rejecting_hook_leaves_the_group_for_the_next_commit() {
     // The rejected record is not foreign: a retry commits both, labelled.
     ok(dir, &evidence_args(&target, "Third", "--commit-records"));
     assert_eq!(commit_count(dir), before + 1);
-    assert_eq!(changed_in_head(dir).len(), 3);
+    let changed = changed_in_head(dir);
+    assert_eq!(changed.len(), 3, "{changed:?}");
     let message = git(dir, &["log", "-1", "--format=%B"]);
     assert_eq!(message.matches("- evidence ").count(), 3, "{message}");
+}
+
+/// A finding pinned to `pin`, committed with `--commit-records`.
+fn finding(dir: &Path, id: &str, pin: &str, summary: &str) -> String {
+    ok(
+        dir,
+        &[
+            "-q",
+            "review",
+            "finding",
+            id,
+            "--identity",
+            "Reviewer",
+            "--commit",
+            pin,
+            "--recommendation",
+            "no_action",
+            "--commit-records",
+            summary,
+        ],
+    )
+    .trim()
+    .to_string()
+}
+
+fn dispose(dir: &Path, finding: &str, identity: &str) -> String {
+    ok(
+        dir,
+        &[
+            "review",
+            "disposition",
+            finding,
+            "--identity",
+            identity,
+            "--decision",
+            "no_action",
+            "--commit-records",
+            "Nothing to do",
+        ],
+    )
+}
+
+/// Consecutive `--commit-records` commands whose records name no record
+/// commit add to one commit (atelier-5822).
+#[test]
+fn consecutive_record_commits_add_to_one_commit() {
+    let (dir, id) = fixture();
+    let dir = dir.path();
+    let code = git(dir, &["rev-parse", "HEAD"]);
+    let before = commit_count(dir);
+
+    let first = finding(dir, &id, &code, "First");
+    let out = ok(
+        dir,
+        &[
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--commit",
+            &code,
+            "--recommendation",
+            "no_action",
+            "--commit-records",
+            "Second",
+        ],
+    );
+    assert!(
+        out.contains("Added 1 record to the previous record commit"),
+        "{out}"
+    );
+    let third = finding(dir, &id, &code, "Third");
+
+    assert_eq!(commit_count(dir), before + 1);
+    let changed = changed_in_head(dir);
+    assert_eq!(changed.len(), 3, "{changed:?}");
+    let message = git(dir, &["log", "-1", "--format=%B"]);
+    assert!(
+        message.starts_with(&format!("Record finding {first} and 2 more"))
+            && message.contains(&format!("- finding {third}")),
+        "{message}"
+    );
+    assert_eq!(git(dir, &["status", "--porcelain"]), "");
+
+    // A disposition rewrites its finding, which that commit holds, so it gets
+    // a commit of its own. It names the code it judges, not the record-only
+    // HEAD, so the next disposition rides along with it.
+    dispose(dir, &first, "Reviewer");
+    dispose(dir, &third, "Reviewer");
+    assert_eq!(commit_count(dir), before + 2);
+    assert_eq!(changed_in_head(dir).len(), 2);
+    for finding in [&first, &third] {
+        let record =
+            fs::read_to_string(dir.join(format!(".atelier/reviews/{finding}.md"))).unwrap();
+        // The finding's pin and its disposition's.
+        assert_eq!(
+            record.matches(&format!("commit: {code}")).count(),
+            2,
+            "{record}"
+        );
+    }
+}
+
+/// Each case leaves HEAD a record commit that must not be amended, so the
+/// next record gets a commit of its own.
+#[test]
+fn a_record_commit_is_not_amended_when_something_holds_it() {
+    let cases: [(&str, fn(&Path, &str, &str)); 6] = [
+        ("a record names it", |dir, id, _| {
+            let head = git(dir, &["rev-parse", "HEAD"]);
+            finding(dir, id, &head, "Pinned to the record commit");
+        }),
+        ("another branch holds it", |dir, id, code| {
+            git(dir, &["branch", "elsewhere"]);
+            finding(dir, id, code, "After the branch");
+        }),
+        ("a detached worktree holds it", |dir, id, code| {
+            let worktree = dir.join("detached");
+            let worktree = worktree.to_str().unwrap();
+            git(dir, &["worktree", "add", "-q", "--detach", worktree]);
+            finding(dir, id, code, "After the worktree");
+        }),
+        ("another Git author", |dir, id, code| {
+            git(dir, &["config", "user.name", "Someone Else"]);
+            finding(dir, id, code, "By someone else");
+        }),
+        ("it holds a version of the same record", |dir, _, _| {
+            let first = git(
+                dir,
+                &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+            );
+            let finding = Path::new(&first)
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            dispose(dir, &finding, "Reviewer");
+        }),
+        ("a hand commit came after it", |dir, id, code| {
+            fs::write(dir.join("code.rs"), "two\n").unwrap();
+            commit_all(dir, "by hand");
+            finding(dir, id, code, "After the hand commit");
+        }),
+    ];
+    for (case, step) in cases {
+        let (dir, id) = fixture();
+        let dir = dir.path();
+        let code = git(dir, &["rev-parse", "HEAD"]);
+        finding(dir, &id, &code, "First");
+        let record_commit = git(dir, &["rev-parse", "HEAD"]);
+        step(dir, &id, &code);
+        git(
+            dir,
+            &["merge-base", "--is-ancestor", &record_commit, "HEAD"],
+        );
+        assert_ne!(git(dir, &["rev-parse", "HEAD"]), record_commit, "{case}");
+        assert_eq!(changed_in_head(dir).len(), 1, "{case}");
+    }
 }
