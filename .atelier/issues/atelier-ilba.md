@@ -14,23 +14,31 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Refuse an invalid record when it is written, and let authors fix their own"
-updated_at: "2026-11-07T05:01:00.583737629+00:00"
+updated_at: "2026-11-07T05:55:08.852925119+00:00"
 ---
 
 ## Goal
 
-Today a record that breaks a graph rule is written without complaint, then every later command refuses, and append-only rules stop its author fixing it. On 2026-11-05 this stalled astromech for 5 hours and ended in a force-push of main; cosplay-studio lost 8 dispositions and demiurge needed a throwaway issue. Check every write against the rules `atelier check` applies, and let an author correct or delete its own records until they reach the base.
+Today a record that breaks a graph rule is written without complaint, then every later command refuses, and append-only rules stop its author fixing it. On 2026-11-05 this stalled astromech for 5 hours and ended in a force-push of main; cosplay-studio lost 8 dispositions and demiurge needed a throwaway issue. Validate every write against the rules `atelier check` applies, and let records be corrected until they reach the base.
 
 ## Done when
 
-- [ ] Every record-writing command validates the records it writes against the rules `atelier check` applies, and refuses before writing. Tests cover rules that survive this mission, such as a finding with competing disposition events (crates/atelier-records/src/review.rs) and a link to a record that exists only on another branch. (The deferral source rule, `review_follow_up_source_mismatch`, is removed by atelier-md0v and needs no write-time version.)
+- [ ] Every record-writing command validates the records it writes, together with the records they link to, against the rules `atelier check` applies, and refuses before writing anything. Tests cover rules that survive this mission, such as a finding with competing disposition events (crates/atelier-records/src/review.rs) and a link to a record that exists only on another branch. (The deferral source rule, `review_follow_up_source_mismatch`, is removed by atelier-md0v and needs no write-time version.)
 - [ ] A record that points at an issue existing only on another branch is refused at write, and the message names that branch.
-- [ ] An author can edit or delete a review or evidence record it wrote while the record is not on the base; the append-only refusal applies only to records already on the base.
+- [ ] A review or evidence record that is not yet on the base can be edited or deleted on its branch; the append-only refusal applies only to records whose path exists at the tip of the policy's base branch. Test: write a finding, delete it in a later commit, and `atelier check`, `merge --check` and `land` all accept the branch.
 - [ ] Removed, and listed in the implementer report: append-only enforcement for records not yet on the base.
 
-## Unknowns
+## Scope
 
-- How to tell cheaply whether a record is already on the base.
-- Whether the recorded identity is enough to allow an author to delete its record (identity is self-declared).
+Record writes in `issue`, `review` and `evidence` commands; the append-only check; tests and docs/product. Must not change: append-only for records already on the base; the record formats (no migration needed).
+
+## Context
+
+docs/adr/0028-simpler-lifecycle.md (decision 4), crates/atelier-cli/tests/cli_integration/discovered_from.rs (today's accept-then-refuse test), crates/atelier-app/src/review_gate.rs (`review_change_allowed`, used by the append-only check).
+
+## Design
+
+- "On the base" means the record's path exists in the tip of the policy's base branch; one `git cat-file` per record is cheap enough.
+- No identity rule: before a record reaches the base, any agent on the branch may correct it. Identity is self-declared, so an author check would add a rule without stopping anyone.
