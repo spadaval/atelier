@@ -35,8 +35,8 @@ atelier, astromech, cosplay-studio, demiurge and life-on-rails share one install
 - [x] `atelier migrate after-merge` names the item when removing its last Done when line would leave the section empty, and keeps that line as an ordinary Done when line instead (finding atelier-z3z1).
 - [x] docs/product/workflow-configuration.md says how to move an existing policy without stranding items (the order below).
 - [x] ADR 0028 (decision 5 and Consequences) names atelier-hfme for the `branch_base` write and `start --base`, and this item for the rest of the rollout (planning finding R12).
-- [ ] In each of astromech, cosplay-studio, demiurge and life-on-rails, through one issue in that repository (or the light path, which astromech's pin 12efdfd9 and the other three, which have no pinned CI, can read), reviewed independently and merged with `atelier merge`, in this order: every item in a status the new policy lacks (`blocked`, `review`) moves to `todo` or is superseded; parked validations stay in `backlog`, which the on-base workflow now keeps, with no play-check needed (finding atelier-b0uv; astromech's play-check validations stay `validation` items, since they assess its missions' criteria before close); its policy takes the starter's shape (no `close` for work, `loose_end` and `validation` on the on-base workflow with `backlog`); `atelier migrate after-merge --apply` runs where there are After merge lines (only astromech has any, 5); `atelier check` and `atelier doctor` pass; its AGENTS.md describes the lifecycle in the same words as Atelier's own.
-- [ ] Nothing is pushed for demiurge or life-on-rails beyond what their owner already pushes (both carry hundreds of unpushed local commits); astromech and cosplay-studio push their base as they usually do.
+- [x] In each of astromech, cosplay-studio, demiurge and life-on-rails, through one issue in that repository (or the light path, which astromech's pin 12efdfd9 and the other three, which have no pinned CI, can read), reviewed independently and merged with `atelier merge`, in this order: every item in a status the new policy lacks (`blocked`, `review`) moves to `todo` or is superseded; parked validations stay in `backlog`, which the on-base workflow now keeps, with no play-check needed (finding atelier-b0uv; astromech's play-check validations stay `validation` items, since they assess its missions' criteria before close); its policy takes the starter's shape (no `close` for work, `loose_end` and `validation` on the on-base workflow with `backlog`); `atelier migrate after-merge --apply` runs where there are After merge lines (only astromech has any, 5); `atelier check` and `atelier doctor` pass; its AGENTS.md describes the lifecycle in the same words as Atelier's own.
+- [x] Nothing is pushed for demiurge or life-on-rails beyond what their owner already pushes (both carry hundreds of unpushed local commits); astromech and cosplay-studio push their base as they usually do.
 
 ## Scope
 
@@ -76,6 +76,14 @@ The kept line loses its marker and its loose end is still made; see this item's 
 ### Surprises
 
 The earlier starter policy has no transition from `review` to `todo` (and `blocked` gets there only through `defer` then `plan`), so the doc's first step says to edit the record's `status` where no transition leads there.
+
+### Rollout
+- astromech: astromech-zk7z, merged as 571fee88 and pushed (brewer-corp/astromech#220); its pinned CI `atelier doctor` passed on the new policy. Parked validations stay in `backlog`. After the merge, astromech-ok29's After merge line became loose end astromech-3fpi (e6ae38df, pushed); astromech-1hh9, -v6r3 and -y6d6 are in flight and migrate their own lines on their branches. The reviewer confirmed the in-flight branches pass `merge --check` without a sync.
+- cosplay-studio: cosplay-studio-2gxj, merged as 1034f62 and pushed; it also dropped references to `atelier man` and `.atelier/events`.
+- demiurge: worldcrafter-w63h, merged as c8a096a, not pushed (its master carries 556 unpushed commits).
+- life-on-rails: lor-g07r, merged as bc0632c, not pushed (180 unpushed commits); its AGENTS.md now says a real-device check is a validation item when it assesses criteria and a loose end when it only follows a merge, matching its Panels plan.
+- In all four, `atelier check`, `atelier doctor` and `atelier land` pass with the installed binary after the merge. Each repository's move was reviewed independently in that repository.
+- Found on the way: on a work branch, merge and land judge the branch's own records by the base's policy rather than the merged result, so a future policy change that drops a status in use would break in-flight branches; filed as atelier-f4xz.
 
 ### Open items
 
