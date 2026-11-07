@@ -32,8 +32,7 @@ The after-merge path atelier-n0qh built (ADR 0027) works for every merged item: 
 - Any other edit to the done record on the base is judged as today (a test shows a non-validation edit of the same record still refuses).
 - The validation-only edit test reuses atelier-n0qh's rule (only the box and an added "carried to <id>" change; check text, reason and stand-in unchanged), not a second definition.
 - The proof_timing scenario item has a fixed fix_now finding, so the scenario covers this case.
-- `a_retained_claim_whose_pass_later_commits_staled_keeps_its_failure_cleared` asserts that land passes again, not only that a message is absent.
 
 ## Context
 
-Found by the mission validation (receipt atelier-htux). Reproduction: /home/supadava/.cache/atelier-tmp/n4mj-scripts/repro.sh atelier <dir> 1 (0 for the no-finding case that lands). The pre-mission binary refuses the same record edit, so the gate is not new; the after-merge path just never accounted for it. Strategy: docs/strategies/lighter-workflow.md (Shape "Proof has a time", "Show, don't enforce").
+Found by the mission validation (receipt atelier-htux). The refusal is findings.disposed in crates/atelier-app/src/review_gate.rs (approval_accepted), reached from land in crates/atelier-cli/src/commands/session.rs. Reproduction: /home/supadava/.cache/atelier-tmp/n4mj-scripts/repro.sh atelier <dir> 1 (0 for the no-finding case that lands). The pre-mission binary refuses the same record edit, so the gate is not new; the after-merge path just never accounted for it. Strategy: docs/strategies/lighter-workflow.md (Shape "Proof has a time", "Show, don't enforce").
