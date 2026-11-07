@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Move every Atelier repository on this host to the new lifecycle"
-updated_at: "2026-11-07T14:34:53.816055218+00:00"
+updated_at: "2026-11-07T15:07:27.361895541+00:00"
 ---
 
 ## Goal
@@ -35,7 +35,7 @@ atelier, astromech, cosplay-studio, demiurge and life-on-rails share one install
 - [x] `atelier migrate after-merge` names the item when removing its last Done when line would leave the section empty, and keeps that line as an ordinary Done when line instead (finding atelier-z3z1).
 - [x] docs/product/workflow-configuration.md says how to move an existing policy without stranding items (the order below).
 - [x] ADR 0028 (decision 5 and Consequences) names atelier-hfme for the `branch_base` write and `start --base`, and this item for the rest of the rollout (planning finding R12).
-- [ ] In each of astromech, cosplay-studio, demiurge and life-on-rails, through one issue in that repository (or the light path, which astromech's pin 12efdfd9 and the other three, which have no pinned CI, can read), reviewed independently and merged with `atelier merge`, in this order: every item in a status the new policy lacks (`backlog` validations under the on-base workflow, `blocked`, `review`) moves to `todo` or is superseded, with no play-check needed (finding atelier-b0uv; astromech's play-check validations stay `validation` items, since they assess its missions' criteria before close); its policy takes the starter's shape (`merge_commit`, no `close` for work, `loose_end` and `validation` on the on-base workflow); `atelier migrate after-merge --apply` runs where there are After merge lines (only astromech has any, 5); `atelier check` and `atelier doctor` pass; its AGENTS.md describes the lifecycle in the same words as Atelier's own.
+- [ ] In each of astromech, cosplay-studio, demiurge and life-on-rails, through one issue in that repository (or the light path, which astromech's pin 12efdfd9 and the other three, which have no pinned CI, can read), reviewed independently and merged with `atelier merge`, in this order: every item in a status the new policy lacks (`blocked`, `review`) moves to `todo` or is superseded; parked validations stay in `backlog`, which the on-base workflow now keeps, with no play-check needed (finding atelier-b0uv; astromech's play-check validations stay `validation` items, since they assess its missions' criteria before close); its policy takes the starter's shape (no `close` for work, `loose_end` and `validation` on the on-base workflow with `backlog`); `atelier migrate after-merge --apply` runs where there are After merge lines (only astromech has any, 5); `atelier check` and `atelier doctor` pass; its AGENTS.md describes the lifecycle in the same words as Atelier's own.
 - [ ] Nothing is pushed for demiurge or life-on-rails beyond what their owner already pushes (both carry hundreds of unpushed local commits); astromech and cosplay-studio push their base as they usually do.
 
 ## Scope
@@ -52,6 +52,8 @@ docs/strategies/simpler-lifecycle.md (criterion every-repo; Shape: One binary se
   Reason: Without the marker a rerun leaves the line alone and check stops noting it; making the loose end keeps the post-merge check once the owner replaces the item's line.
   Rejected: Keep the line with its marker: every rerun plans it again and check keeps noting an open After merge line.
   Rejected: Keep the line and make no loose end: the post-merge check is lost when the owner edits the item's Done when.
+- 2026-11-07 [decision] The on-base workflow keeps backlog, with plan and defer
+  Reason: Repositories park validations (astromech has six in backlog); without it, moving a policy means moving those items on the base, which would have broken every in-flight branch that edits them until it synced (rollout review finding astromech-f9t1).
 
 ## Report
 
