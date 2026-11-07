@@ -21,7 +21,7 @@ updated_at: "2026-11-07T05:00:24.456556181+00:00"
 
 ## Goal
 
-Today an approval goes stale when almost any tracker record on the branch changes after it, unless the edit is on a short allowed list (status, timestamps, Close Reason, new review and evidence records). Agents hit this dozens of times: ticking Done when boxes at close, adding a note, linking a follow-up, recording dispositions. Each time a reviewer re-approved a records-only change and found nothing. Make an approval stale only when code changed after it, so record edits never cost a re-review, while any code change, including a fix after review, still does.
+Today an approval goes stale when almost any tracker record on the branch changes after it, unless the edit is on a short allowed list (status, timestamps, Close Reason, new review and evidence records). Agents hit this dozens of times: ticking Done when boxes at close, adding a note, linking a follow-up, recording dispositions. Almost every time, a reviewer re-approved a records-only change and found nothing. Make an approval stale only when code changed after it, so record edits never cost a re-review, while any code change, including a fix after review, still does.
 
 ## Done when
 
@@ -40,6 +40,7 @@ Approval freshness in merge, land and status; their tests and docs. Must not cha
 
 - Code means everything except `.atelier/issues`, `.atelier/reviews`, `.atelier/evidence` (and `.atelier/runtime`), the same split `scripts/merge-ci-passed.sh` uses.
 - `crates/atelier-app/src/review_gate.rs` (`allowed_edge`, `issue_status_only`, `review_change_allowed`), `crates/atelier-app/src/git_freshness.rs`.
+- Other users of the same freshness rule: `author_identities_to` and `allowed_base_merge` in review_gate.rs, and trivial exemptions, which are judged by the same rule as approvals (review_gate.rs:430). Each keeps working on the new rule; a trivial exemption also goes stale only on code changes.
 - One installed binary serves every repository on this host; this change reads no new record format, so no migration is needed.
 
 ## Design

@@ -21,19 +21,19 @@ updated_at: "2026-11-07T05:00:24.620382782+00:00"
 
 ## Goal
 
-Sumeet decided the simpler lifecycle on 2026-11-06 (docs/strategies/simpler-lifecycle.md, Shape). Record those decisions in one ADR so later items and other repositories have one reference, mark what it supersedes in ADRs 0019, 0025, 0026 and 0027, and add the principle against regrowth to PRODUCT_INTENT.md now, since it governs the rest of this mission.
+Sumeet decided the simpler lifecycle on 2026-11-06 (docs/strategies/simpler-lifecycle.md, Shape). Record those decisions in one ADR so later items and other repositories have one reference, mark what it supersedes in ADRs 0016, 0019, 0021, 0025, 0026 and 0027, and add Atelier's purpose and the principle against regrowth to PRODUCT_INTENT.md now, since they govern the rest of this mission.
 
 ## Done when
 
-- [ ] `docs/adr/0028-*.md` states each Shape decision of the strategy, with the transcript analysis summarised as context, and names exactly which decisions of ADRs 0019, 0025, 0026 and 0027 and which PRODUCT_INTENT.md principles it supersedes. Mechanics the strategy leaves to later items are named as open, not invented.
+- [ ] `docs/adr/0028-*.md` states each Shape decision of the strategy, with the transcript analysis summarised as context, and names exactly which decisions of ADRs 0016 (recorded base and type-named branches), 0019, 0021 (a parent closes after its children), 0025, 0026 and 0027, and which PRODUCT_INTENT.md principles (including "merge writes no tracker state" and "append-only and tied to full Git commit identities"), it supersedes. It opens with Atelier's purpose as the governing principle: agents produce high-quality, correct code that solves real problems, with as little red tape and overhead as possible, and nothing else about Atelier is sacred. Mechanics the strategy leaves to later items are named as open, not invented.
 - [ ] The Status line of each superseded ADR points to ADR 0028 and says which part it replaces.
-- [ ] PRODUCT_INTENT.md has the no-regrowth principle: a new gate or record type names the kind of defect it would have caught in real threads, and a rule that only patches another rule's edge case is a reason to remove the first rule. Other principles change only when the item that changes the behaviour lands.
-- [ ] Sumeet has accepted the ADR (his approval recorded on this item).
+- [ ] PRODUCT_INTENT.md states that purpose first, and adds the no-regrowth principle: a new gate or record type names the kind of defect it would have caught in real agent sessions, and a rule that only patches another rule's edge case is a reason to remove the first rule. Other principles change only when the item that changes the behaviour lands.
+- [ ] The ADR's Status says it is accepted within the authority of docs/strategies/simpler-lifecycle.md, on Sumeet's direction, as ADRs 0025 and 0027 say; Sumeet reads it after merge.
 
 ## Scope
 
-Docs only: the new ADR, Status lines of the superseded ADRs, one principle in PRODUCT_INTENT.md.
+Docs only: the new ADR, Status lines of the superseded ADRs, the purpose and one principle in PRODUCT_INTENT.md.
 
 ## Context
 
-docs/adr/0019-verified-repo-native-tracker.md, 0025-findings-carry-their-disposition.md, 0026-evidence-records-only-what-nothing-else-records.md, 0027-proof-has-a-time.md; PRODUCT_INTENT.md. The analysis that motivated the mission is summarised in the strategy's Why.
+docs/adr/0016-canonical-work-branches-and-mission-integration.md, 0019-verified-repo-native-tracker.md, 0021-parent-issues-replace-epics.md, 0025-findings-carry-their-disposition.md, 0026-evidence-records-only-what-nothing-else-records.md, 0027-proof-has-a-time.md; PRODUCT_INTENT.md. The analysis that motivated the mission is summarised in the strategy's Why.

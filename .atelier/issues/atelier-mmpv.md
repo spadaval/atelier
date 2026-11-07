@@ -14,10 +14,10 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "draft"
-title: "Take one issue from start to merge in one obvious order, with nothing but code undoing a review"
+title: "Take one issue from start to merge in one obvious order, where only a code change makes an approval stale"
 updated_at: "2026-11-07T05:00:04.971587750+00:00"
 ---
 
 ## Outcome
 
-An agent takes one issue from start to merge in one obvious order: start, implement, tick every Done when line, review, fix and re-review, approve, merge. An approval goes stale only when code changes, merge marks the issue done, post-merge work is a loose end outside the mission, records are checked when written and correctable by their author until they reach the base, and only the records and gates review needs remain. Independent review before merge, and re-review of fixes, are unchanged. The strategy, docs/strategies/simpler-lifecycle.md, owns the outcome, success criteria, shape and authority.
+An agent takes one issue from start to merge in one obvious order: start, implement, tick every Done when line, review, fix and re-review, approve, merge. Only a code change makes an approval stale, merge marks the issue done, post-merge work is a loose end outside the mission, records are checked when written and correctable by their author until they reach the base, and only the records and gates review needs remain. Independent review before merge, and re-review of fixes, are unchanged. The strategy, docs/strategies/simpler-lifecycle.md, owns the outcome, success criteria, shape and authority.

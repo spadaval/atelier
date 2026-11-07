@@ -10,6 +10,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-3jdm"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-jnrh"
     type: "blocked_by"
   - kind: "issue"
@@ -29,11 +32,10 @@ Keep findings, decisions on deferred and dismissed findings, approvals and the m
 ## Done when
 
 - [ ] The approval that follows a `fix_now` finding resolves it: no resolution commit or separate `fix_now` disposition is asked for. `defer` and `no_action` still record a decision.
-- [ ] No gate reads evidence receipts: a fail receipt blocks no close, land or merge. Receipts remain as notes for checks nothing else records.
+- [ ] No gate reads evidence receipts: a fail receipt blocks neither merge nor land. Receipts remain as notes for what nothing else records.
 - [ ] `land` and the Stop hook report and exit successfully while work is in progress on a branch; they refuse only what would put unreviewed code on the base.
-- [ ] Removed: the check of reviewer identity against Git authors (the identity stays recorded), the recorded base branch and branch-type rules, the source rule on deferral follow-ups (`review_follow_up_source_mismatch`), and full-length-only commit arguments (a unique short id is accepted).
-- [ ] `scripts/merge-ci-passed.sh` treats strategy files as planning, not code.
-- [ ] The lifecycle success criterion's scenario test passes with at most 8 `atelier` commands.
+- [ ] Removed: the rule that a reviewer's identity differ from the Git authors (the identity stays recorded), the recorded base branch and branch-type names, and the source rule on deferral follow-ups (`review_follow_up_source_mismatch`).
+- [ ] The lifecycle success criterion's scenario test passes and reports its command count.
 
 ## Unknowns
 

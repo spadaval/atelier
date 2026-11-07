@@ -25,10 +25,10 @@ Today a record that breaks a graph rule is written without complaint, then every
 
 ## Done when
 
-- [ ] Every record-writing command checks the records it writes against the graph rules `atelier check` applies, and refuses before writing. The test in `crates/atelier-cli/tests/cli_integration/discovered_from.rs` that asserts a disposition is accepted and `check` then fails asserts a refusal at write instead.
+- [ ] Every record-writing command validates the records it writes against the rules `atelier check` applies, and refuses before writing. Tests cover rules that survive this mission, such as a finding with competing disposition events (crates/atelier-records/src/review.rs) and a link to a record that exists only on another branch. (The deferral source rule, `review_follow_up_source_mismatch`, is removed by atelier-md0v and needs no write-time version.)
 - [ ] A record that points at an issue existing only on another branch is refused at write, and the message names that branch.
 - [ ] An author can edit or delete a review or evidence record it wrote while the record is not on the base; the append-only refusal applies only to records already on the base.
-- [ ] Removed, and listed in the close report: append-only enforcement for records not yet on the base.
+- [ ] Removed, and listed in the implementer report: append-only enforcement for records not yet on the base.
 
 ## Unknowns
 

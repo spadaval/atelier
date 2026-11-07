@@ -34,4 +34,5 @@ A release, a docs edit or a mockup change should get reviewed without the issue,
 
 ## Unknowns
 
-- How a review targets a branch rather than an issue.
+- How a review targets a branch rather than an issue, and whether this replaces or reuses the existing `review trivial --base` route for issue-less changes.
+- What the release's loose end (the tag) waits on, since the release has no issue (see atelier-8bh4).

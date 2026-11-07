@@ -34,4 +34,5 @@ Replace after-merge checks (a marker on a Done when line, ADR 0027) with a `loos
 ## Unknowns
 
 - Whether `validation` and `loose_end` share one workflow.
+- What a loose end waits on when the change it follows had no issue (a light-path release, atelier-4nsl): a commit, a branch, or nothing.
 - The shape of the migration command.
