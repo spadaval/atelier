@@ -273,7 +273,7 @@ fn gather(
         .flat_map(|item| {
             item.done_when
                 .as_deref()
-                .map(atelier_app::after_merge::checks)
+                .map(|text| atelier_app::after_merge::checks(text, &index))
                 .unwrap_or_default()
                 .into_iter()
                 .map(|check| LateCheck {
@@ -466,7 +466,7 @@ pub fn render(facts: &Facts) -> String {
     }
     if !facts.after_merge.is_empty() {
         out.push_str(&format!(
-            "\n## After merge\n\nThese checks are marked to run after the merge. Each needs {}, and its nearest stand-in runs before merge. Record a finding for any that could be checked before merge.\n\n",
+            "\n## After merge\n\nThese checks are marked to run after the merge. Each needs {}, and its nearest stand-in runs before merge. Record a finding for any that could be checked before merge, or that lacks a reason or a stand-in.\n\n",
             atelier_app::after_merge::REASONS
         ));
         for late in &facts.after_merge {
@@ -572,7 +572,9 @@ fn late_line(late: &LateCheck) -> String {
     });
     match &check.state {
         CheckState::Open => {}
-        CheckState::Validated => line.push_str(" | validated"),
+        // The brief is read before the merge, and validation belongs on the
+        // base after it.
+        CheckState::Validated => line.push_str(" | ticked before merge"),
         CheckState::Carried(id) => line.push_str(&format!(" | carried to {id}")),
     }
     line
@@ -620,6 +622,15 @@ mod tests {
                         reason: None,
                         stand_in: None,
                         state: atelier_app::after_merge::CheckState::Carried("atelier-fol1".into()),
+                    },
+                },
+                LateCheck {
+                    item: "atelier-chd1".into(),
+                    check: atelier_app::after_merge::AfterMergeCheck {
+                        check: "It runs a week.".into(),
+                        reason: Some("use".into()),
+                        stand_in: Some("a soak test".into()),
+                        state: atelier_app::after_merge::CheckState::Validated,
                     },
                 },
             ],
@@ -712,10 +723,11 @@ Second line.
 
 ## After merge
 
-These checks are marked to run after the merge. Each needs the deployed or merged system, a device or place no agent can reach, the human's judgment, or time and real use, and its nearest stand-in runs before merge. Record a finding for any that could be checked before merge.
+These checks are marked to run after the merge. Each needs the deployed or merged system, a device or place no agent can reach, the human's judgment, or time and real use, and its nearest stand-in runs before merge. Record a finding for any that could be checked before merge, or that lacks a reason or a stand-in.
 
 - atelier-own1: It opens on the phone. | reason: device | stand-in: the emulator test passes.
 - atelier-chd1: Users like it. | reason missing | stand-in missing | carried to atelier-fol1
+- atelier-chd1: It runs a week. | reason: use | stand-in: a soak test | ticked before merge
 
 ## Findings so far
 

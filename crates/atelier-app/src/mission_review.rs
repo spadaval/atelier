@@ -548,10 +548,10 @@ pub fn debrief(
         );
         if let Some(record) = index
             .issue_record(id)
-            .filter(|record| crate::after_merge::awaiting_validation(record, policy))
+            .filter(|record| crate::after_merge::awaiting_validation(record, policy, index))
         {
             changes.push(Change::AwaitingValidation(
-                crate::after_merge::open_checks(record)
+                crate::after_merge::open_checks(record, index)
                     .into_iter()
                     .map(|check| check.check)
                     .collect(),

@@ -105,8 +105,9 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
         ("are each", "them", "standalone validations")
     };
     format!(
-        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child closed, so the branch cannot integrate until the human finishes {pronoun}. If a check can run only after the merge (a device, the deployed system, the human's judgment), write it as a line of {owner}'s Done when instead, `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before merge>.`, and supersede the child; or make {pronoun} {shape}: {commands}.",
+        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child closed, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge, make {pronoun} {shape}: {commands}. Writing it into {owner}'s Done when as `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before merge>.` instead is a plan change the reviewer sees, and fits only a check that needs {reasons}, with a stand-in that runs before merge.",
         children.join(", "),
+        reasons = crate::after_merge::REASONS,
     )
 }
 
@@ -163,10 +164,9 @@ pub fn work_buckets_for<'a>(
     let mut buckets = WorkBuckets::default();
     for issue in issues {
         let row = work_row(index, workflow_policy, issue.clone())?;
-        if index
-            .issue_record(&issue.id)
-            .is_some_and(|record| crate::after_merge::awaiting_validation(record, workflow_policy))
-        {
+        if index.issue_record(&issue.id).is_some_and(|record| {
+            crate::after_merge::awaiting_validation(record, workflow_policy, index)
+        }) {
             buckets.awaiting_validation.push(row.clone());
         }
         match row.state_label() {

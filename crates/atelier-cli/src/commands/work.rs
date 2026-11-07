@@ -527,7 +527,7 @@ impl ScopedWork {
         let mut awaiting = BTreeSet::new();
         for issue in issues {
             if index.issue_record(&issue.id).is_some_and(|record| {
-                atelier_app::after_merge::awaiting_validation(record, policy.as_ref())
+                atelier_app::after_merge::awaiting_validation(record, policy.as_ref(), index)
             }) {
                 awaiting.insert(issue.id.clone());
             }

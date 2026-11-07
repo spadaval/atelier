@@ -12,7 +12,7 @@ Use these terms for the verified repo-native tracker defined by
 | Parent | Any work item with direct children, one level deep; it owns their branch and closes after them. Replaced the epic type (atelier-9vq3). |
 | Validation item | Work dedicated to independently checking referenced acceptance claims. |
 | After-merge check | A Done when line marked `After merge (<reason>):` with its stand-in: proof only the merged or deployed system, an unreachable device or place, the human's judgment, or time and real use can give. Every other line is checked before merge (ADR 0027). |
-| Awaiting validation | Done work with an after-merge check neither ticked (`[x]`, validated on the base) nor carried to another item. |
+| Awaiting validation | Done work with an after-merge check neither ticked (`[x]`, validated on the base) nor carried to another existing item (a failed check to its follow-up bug, or one needing time and real use beyond the mission). |
 | Decision | A `decision` record: a Question for the human, with Options, closed by `decide` once its Decision is recorded; it needs no branch. |
 | Blocker | A native dependency that prevents another item becoming executable or done. |
 | Branch owner | A parent for its children, or a standalone work item; recorded branch metadata identifies its work branch and base. |

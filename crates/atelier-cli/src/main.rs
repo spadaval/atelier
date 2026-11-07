@@ -419,9 +419,12 @@ enum IssueCommands {
         /// Background); Question (optionally Options,
         /// Decision, Context, Background) for decisions. Plain text becomes
         /// the Goal, Outcome, or Question. Done when lines are checked before
-        /// merge; mark one that can only be checked after the merge as
-        /// `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before
-        /// merge>.`
+        /// merge. Mark a line `- [ ] After merge (<reason>): <check>.
+        /// Stand-in: <what runs before merge>.` only when it needs the
+        /// deployed or merged system, a device or place no agent can reach,
+        /// the human's judgment, or time and real use, and its stand-in runs
+        /// before merge; decide it when planning, since a later move is a
+        /// plan change the reviewer sees
         #[arg(long)]
         body: Option<String>,
         /// Priority: P0-P3 or critical, high, medium, low

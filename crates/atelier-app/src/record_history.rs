@@ -546,7 +546,7 @@ pub fn done_when_edits(
                 // Ticking or carrying an after-merge check records its
                 // validation; it does not change what done means (ADR 0027).
                 let validated = matches!((&before, &after), (Some(before), Some(after))
-                    if crate::after_merge::only_validated(before, after));
+                    if crate::after_merge::only_validated(before, after, index));
                 if before != after && !validated {
                     changed.push((commit.to_string(), parent));
                 }

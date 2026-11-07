@@ -184,8 +184,8 @@ fn open_validation_warning(
         .into_iter()
         .filter_map(|id| {
             let record = index.issue_record(&id)?;
-            atelier_app::after_merge::awaiting_validation(record, Some(policy)).then(|| {
-                let checks = atelier_app::after_merge::open_checks(record).len();
+            atelier_app::after_merge::awaiting_validation(record, Some(policy), index).then(|| {
+                let checks = atelier_app::after_merge::open_checks(record, index).len();
                 format!(
                     "{id} ({})",
                     atelier_core::count_noun(checks, "open after-merge check")
@@ -195,7 +195,7 @@ fn open_validation_warning(
         .collect::<Vec<_>>();
     Ok((!open.is_empty()).then(|| {
         format!(
-            "Warning: {mission} closes with validation still open: {}. Validate each check on the base by ticking its box (`- [x] After merge ...`), or carry it to another item with `carried to <id>` on its line.",
+            "Warning: {mission} closes with validation still open: {}. Validate each check that can be validated now on the base by ticking its box (`- [x] After merge ...`). Carry only a failed check, to its follow-up bug, or one that needs time and real use beyond the mission, with `carried to <id>` on its line, and name each carried check in the mission's close report.",
             open.join(", ")
         )
     }))

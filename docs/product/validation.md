@@ -48,18 +48,22 @@ the gap between the stand-in and the real thing
 Mark the split when the work is planned. Moving a check to after merge once
 the item has started is a Done when edit that `merge --check` and the review
 brief show (see [reviews and merge](reviews-and-merge.md#a-done-when-edited-after-the-start)).
-The item closes on its work branch and merges as usual; while a check is
-open, `status`, `work all`, and `work mission` and `work parent` list it
-under Awaiting Validation, the debrief says so under the item, and closing
-its mission warns and names it.
+The item closes on its work branch and merges as usual, and its Close
+Reason's Open items name each open after-merge check with its reason and the
+stand-in that ran. While a check is open, `status`, `work all`, and `work
+mission` and `work parent` list it under Awaiting Validation, the debrief
+says so under the item, and closing its mission warns and names it.
 
 Validate on the base, as a planning change that needs no reviewer identity:
 run the check, record its receipt (a device or deployed check leaves no other
 record), tick the box (`- [x] After merge ...`) and commit the record. If it
 fails, file a follow-up bug with `atelier issue create --discovered-from
 <item>` and add `carried to <bug>` to the line, rather than reopening the
-merged item; the bug's Done when holds the check from then on. Nothing
-refuses an open after-merge check.
+merged item; the bug's Done when holds the check from then on. `carried to`
+counts only when it names an existing issue. Validate every check that can
+be validated now; carry only a failed check, to its follow-up bug, or one
+that needs time and real use beyond the mission, and name each carried check
+in the mission's close report. Nothing refuses an open after-merge check.
 
 ## Recording proof
 

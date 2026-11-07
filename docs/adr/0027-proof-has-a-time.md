@@ -48,17 +48,23 @@ is the line's own:
   before.
 - `[ ]` (or no box) is open. Ticking the box, `[x]`, records the validation.
   `carried to <id>` on the line moves the check to another item, which then
-  holds it; a failed validation files a follow-up bug with `issue create
-  --discovered-from <item>` and carries the check to it, rather than
-  reopening the merged item.
+  holds it; it counts only when `<id>` is an existing issue, so prose such as
+  "carried to the server" leaves the check open. Every check that can be
+  validated now is validated, not carried. Carrying is for a failed
+  validation, which files a follow-up bug with `issue create
+  --discovered-from <item>` and carries the check to it rather than
+  reopening the merged item, and for a check that needs time and real use
+  beyond the mission; the mission's close report names each carried check.
 - The item closes on its work branch and merges as today. Recording the
   validation is an edit to a done record on the base, a planning change: it
   needs no reviewer identity, and `land` accepts it, since the status does not
   change and so it makes no done claim (`land_base_done_claim`).
 - Shown, never enforced:
   - the review request brief lists each after-merge check with its reason
-    and stand-in, saying `reason missing` or `stand-in missing`, and asks
-    the reviewer to record a finding for any that could run before merge;
+    and stand-in, saying `reason missing` or `stand-in missing`, marks one
+    `ticked before merge` (validation belongs on the base), and asks the
+    reviewer to record a finding for any that could run before merge or
+    lacks a reason or a stand-in;
   - `status`, `work all`, and `work mission` and `work parent` list done work
     with an open after-merge check under Awaiting Validation, and the debrief
     says `Awaiting validation after merge: <check>` under the item;
@@ -66,9 +72,10 @@ is the line's own:
     and closes anyway; a carried check does not count.
 - Moving a check to after merge once the item has started is a Done when edit,
   shown to the reviewer by atelier-r9hb in `merge --check` and now in the
-  brief. Ticking a box or adding `carried to <id>` to an open check is not
-  counted as an edit, so recording validation does not read as a changed
-  criterion.
+  brief. Ticking a box or adding `carried to <id>` (an existing issue) to an
+  open check is not counted as an edit, so recording validation does not
+  read as a changed criterion; any other change to the line, such as a
+  rewritten check, stand-in or reason, still is.
 
 Options rejected:
 
@@ -94,6 +101,7 @@ Options rejected:
   receipt](../product/validation.md#what-gets-a-receipt) says.
 - Awaiting Validation reads the checkout's records, so on a work branch a
   done owner with an open check shows there too, before it is merged.
-- A `needs-human` check that runs after the merge is now a marked line of the
-  owner's Done when rather than a standalone validation item, though the
-  latter still works.
+- A `needs-human` check that runs after the merge may be a marked line of the
+  owner's Done when, when it meets the reasons above and is decided at
+  planning; a standalone validation item still works, and atelier-bqbz
+  decides which types stay.

@@ -129,8 +129,9 @@ from records, Git and policy:
 - under After merge, each Done when line marked to run after the merge
   ([ADR 0027](../adr/0027-proof-has-a-time.md)), with its item, reason and
   stand-in, `reason missing` or `stand-in missing` where the line gives none,
-  and the rule that the reviewer records a finding for any check that could
-  run before merge;
+  `ticked before merge` for a check already ticked, and the rule that the
+  reviewer records a finding for any check that could run before merge or
+  lacks a reason or a stand-in;
 - the range to review: the commits since the last `review` or `approve` on the
   owner (or after `--from`), and the whole branch since it left the base, with
   the full head commit to pin records to;

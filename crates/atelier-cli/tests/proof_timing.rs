@@ -127,7 +127,9 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
         "{brief}"
     );
     assert!(
-        brief.contains("Record a finding for any that could be checked before merge."),
+        brief.contains(
+            "Record a finding for any that could be checked before merge, or that lacks a reason or a stand-in."
+        ),
         "{brief}"
     );
     edit(repo, &item, "After merge (device):", "After merge:");
@@ -208,6 +210,11 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
     let output = close_and_restore(repo, &mission);
     assert!(!output.contains("Warning"), "{output}");
 
+    // "carried to" naming no issue carries nothing: the check stays open.
+    edit(repo, &item, LATE, &format!("{LATE} Carried to the phone."));
+    let output = close_and_restore(repo, &mission);
+    assert!(output.contains("Warning"), "{output}");
+
     // Validation passes: ticked on the base as a planning change, with no
     // reviewer identity. `land` accepts it and the item stops awaiting.
     edit(repo, &item, "- [ ] After merge", "- [x] After merge");
@@ -269,4 +276,22 @@ fn a_check_moved_to_after_merge_once_started_is_shown_to_the_reviewer() {
     );
     let (_, output) = cli(repo, &["merge", &item, "--check"]);
     assert!(output.contains(&format!("Note: {line}")), "{output}");
+
+    // Ticking the check while rewriting it is an edit too, and the brief
+    // marks a check ticked before the merge.
+    edit(
+        repo,
+        &item,
+        "- [ ] After merge (device): the launcher opens on the phone.",
+        "- [x] After merge (device): the launcher compiles.",
+    );
+    commit(repo, "Tick the phone check and loosen it");
+    let loosened = git(repo, &["rev-parse", "--short=8", "HEAD"]);
+    let brief = ok(repo, &["review", "request", &item]);
+    assert!(
+        brief.contains(&format!(
+            "- {item} Done when edited at {loosened} after the item was started."
+        )) && brief.contains("| reason: device | stand-in missing | ticked before merge"),
+        "{brief}"
+    );
 }
