@@ -3,6 +3,9 @@ created_at: "2026-11-07T03:35:59.047087245+00:00"
 id: "atelier-secy"
 issue_type: "bug"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: bug/atelier-secy
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Ticking an after-merge check on the base refuses land for reviewed items"
-updated_at: "2026-11-07T03:35:59.047087245+00:00"
+updated_at: "2026-11-07T03:37:22.326233+00:00"
 ---
 
 ## Goal
