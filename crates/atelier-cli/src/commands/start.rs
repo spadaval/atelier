@@ -85,12 +85,36 @@ pub fn run(
     let existing = git::work_ref(&repo_root, &branch)?;
     let branch_exists = existing.is_some();
     if switch_needed {
-        let dirty = atelier_app::git_freshness::working_paths(&repo_root)?;
+        // An untracked file outside the tracker is no commit's, and a switch
+        // carries it along, so it holds nothing up unless the switch would
+        // overwrite it; an untracked record would join the started branch's
+        // records, so it refuses with uncommitted changes (atelier-l457).
+        let untracked = atelier_app::git_freshness::untracked_paths(&repo_root)?;
+        let dirty = atelier_app::git_freshness::working_paths(&repo_root)?
+            .into_iter()
+            .filter(|path| path.starts_with(".atelier") || !untracked.contains(path))
+            .collect::<Vec<_>>();
         if !dirty.is_empty() {
+            let stash = if dirty.iter().any(|path| untracked.contains(path)) {
+                "git stash push --include-untracked"
+            } else {
+                "git stash push"
+            };
             bail!(
-                "start_checkout_dirty: cannot switch to branch '{branch}' to start {issue_id}; the checkout has uncommitted changes:\n{}\nCommit or stash them, then rerun `atelier start {issue_id}`.",
+                "start_checkout_dirty: cannot switch to branch '{branch}' to start {issue_id}; the checkout has uncommitted changes:\n{}\nCommit them, or set them aside with `{stash}`, then rerun `atelier start {issue_id}`.",
                 dirty.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join("\n")
             );
+        }
+        // A new branch starts at HEAD, so only switching to an existing one
+        // can write over an untracked file.
+        if let Some((_, commit)) = &existing {
+            let overwritten = git::untracked_overwritten(&repo_root, &[commit])?;
+            if !overwritten.is_empty() {
+                bail!(
+                    "start_untracked_overwritten: switching to branch '{branch}' to start {issue_id} would overwrite untracked paths it holds:\n{}\nMove them out of the way, then rerun `atelier start {issue_id}`.",
+                    overwritten.iter().map(|path| path.display().to_string()).collect::<Vec<_>>().join("\n")
+                );
+            }
         }
         if !branch_exists && current.is_none() {
             bail!(

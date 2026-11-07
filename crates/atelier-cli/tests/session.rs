@@ -1273,6 +1273,69 @@ fn completed_owner_shell_cannot_hide_code_changes_from_landing_fence() {
     );
 }
 
+/// `start` leaves an untracked file outside the tracker in place, as merge
+/// does, but refuses an untracked record, which would join the started
+/// branch's records, and an untracked file the branch it switches to holds,
+/// each before anything changes (atelier-l457).
+#[test]
+fn start_leaves_untracked_files_in_place_unless_they_are_records_or_in_the_way() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("scratch.txt"), "notes\n").unwrap();
+    let unchanged = |f: &Fixture, status: &str| {
+        assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
+        assert_eq!(git(f.path(), &["status", "--porcelain"]), status);
+    };
+
+    // An untracked record refuses, with a stash that sets it aside.
+    let other = ok(f.path(), &["-q", "issue", "create", "Other"]);
+    let status = git(f.path(), &["status", "--porcelain"]);
+    let (pass, out) = cli(f.path(), &["start", &other]);
+    assert!(
+        !pass
+            && out.contains("start_checkout_dirty")
+            && out.contains(&format!(".atelier/issues/{other}.md"))
+            && !out.contains("scratch.txt")
+            && out.contains("`git stash push --include-untracked`"),
+        "{out}"
+    );
+    unchanged(&f, &status);
+
+    // Committed, the item starts, and the scratch file comes along.
+    git(f.path(), &["add", ".atelier"]);
+    git(f.path(), &["commit", "-qm", "plan the other item"]);
+    ok(f.path(), &["start", &other]);
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), other);
+    assert_eq!(
+        fs::read_to_string(f.path().join("scratch.txt")).unwrap(),
+        "notes\n"
+    );
+    git(f.path(), &["add", ".atelier"]);
+    git(f.path(), &["commit", "-qm", "start the other item"]);
+    git(f.path(), &["switch", "-q", "main"]);
+
+    // Switching to an existing branch that holds a file at an untracked
+    // path would overwrite it, so start refuses first.
+    fs::write(f.path().join("code"), "mine\n").unwrap();
+    let status = git(f.path(), &["status", "--porcelain"]);
+    let (pass, out) = cli(f.path(), &["start", &f.id]);
+    assert!(
+        !pass
+            && out.contains(&format!(
+                "start_untracked_overwritten: switching to branch '{}'",
+                f.branch
+            ))
+            && out.contains("\ncode\n"),
+        "{out}"
+    );
+    unchanged(&f, &status);
+    assert_eq!(fs::read_to_string(f.path().join("code")).unwrap(), "mine\n");
+    fs::remove_file(f.path().join("code")).unwrap();
+    ok(f.path(), &["start", &f.id]);
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), f.branch);
+    assert!(f.path().join("scratch.txt").exists());
+}
+
 #[test]
 fn start_cannot_switch_away_from_hidden_modified_code() {
     let f = Fixture::new();

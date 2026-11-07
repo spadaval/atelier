@@ -39,6 +39,42 @@ pub(crate) fn checkout_branch(repo: &Path) -> Result<Option<String>> {
             .to_owned(),
     ))
 }
+/// The untracked paths in `checkout` that moving it through `trees` would
+/// overwrite: one a tree holds a file or directory at, or one inside a
+/// directory a tree holds a file in place of. Git refuses such a switch or
+/// fast-forward, so `merge` and `start` refuse it first, before anything
+/// changes; any other untracked file is no commit's, and is left in place
+/// (atelier-l457).
+pub(crate) fn untracked_overwritten(checkout: &Path, trees: &[&str]) -> Result<Vec<PathBuf>> {
+    let untracked = git_freshness::untracked_paths(checkout)?;
+    if untracked.is_empty() {
+        return Ok(untracked);
+    }
+    let mut files = BTreeSet::new();
+    for tree in trees {
+        let listed =
+            git_freshness::git_output(checkout, &["ls-tree", "-r", "-z", "--name-only", tree])?;
+        for path in listed
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+        {
+            files.insert(PathBuf::from(std::str::from_utf8(path)?));
+        }
+    }
+    Ok(untracked
+        .into_iter()
+        .filter(|path| {
+            path.ancestors().any(|held| files.contains(held))
+                || files
+                    .range::<PathBuf, _>((
+                        std::ops::Bound::Excluded(path.clone()),
+                        std::ops::Bound::Unbounded,
+                    ))
+                    .next()
+                    .is_some_and(|file| file.starts_with(path))
+        })
+        .collect())
+}
 pub(crate) fn resolve(repo: &Path, reference: &str) -> Result<String> {
     text(
         repo,

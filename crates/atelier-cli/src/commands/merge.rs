@@ -346,39 +346,6 @@ fn clean(repo: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The untracked paths in `checkout` that moving it through `trees` would
-/// overwrite: one a tree holds a file or directory at, or one inside a
-/// directory a tree holds a file in place of. Git refuses such a switch or
-/// fast-forward, so merge refuses it first, before anything changes.
-fn untracked_overwritten(checkout: &Path, trees: &[&str]) -> Result<Vec<PathBuf>> {
-    let untracked = atelier_app::git_freshness::untracked_paths(checkout)?;
-    if untracked.is_empty() {
-        return Ok(untracked);
-    }
-    let mut files = std::collections::BTreeSet::new();
-    for tree in trees {
-        let listed = git::git_output(checkout, &["ls-tree", "-r", "-z", "--name-only", tree])?;
-        for path in listed
-            .split(|byte| *byte == 0)
-            .filter(|path| !path.is_empty())
-        {
-            files.insert(PathBuf::from(std::str::from_utf8(path)?));
-        }
-    }
-    Ok(untracked
-        .into_iter()
-        .filter(|path| {
-            path.ancestors().any(|held| files.contains(held))
-                || files
-                    .range::<PathBuf, _>((
-                        std::ops::Bound::Excluded(path.clone()),
-                        std::ops::Bound::Unbounded,
-                    ))
-                    .next()
-                    .is_some_and(|file| file.starts_with(path))
-        })
-        .collect())
-}
 fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
     let worktrees =
         String::from_utf8(git::git_output(repo, &["worktree", "list", "--porcelain"])?)?;
@@ -917,7 +884,7 @@ fn merge_gates(
         Some(path) => (path.as_path(), vec![commit.as_str()]),
         None => (repo, vec![base_head.as_str(), commit.as_str()]),
     };
-    let overwritten = untracked_overwritten(target, &trees)?;
+    let overwritten = crate::commands::git::untracked_overwritten(target, &trees)?;
     if !overwritten.is_empty() {
         preconditions.fail(
             "merge_untracked_overwritten",

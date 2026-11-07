@@ -33,8 +33,9 @@ policy then merges as written (atelier-l457).
 `init` ends by listing what it wrote and the next steps: review the generated
 policy, commit the install on the base with `git add .atelier .gitignore &&
 git commit -m "Install Atelier"` (it predates the gates, so it needs no
-review), then create the first issue. Until that commit, `status`, `check`,
-`land` and the Stop hook say there are no commits yet and name it.
+review), then create the first issue. Until that commit, `status`, `land`,
+`doctor` and the Stop hook say there are no commits yet and name it; `check`
+passes.
 
 The commit that runs `atelier init` and imports the first records comes before
 any policy on the base branch, so `atelier merge` has nothing to gate it with.
