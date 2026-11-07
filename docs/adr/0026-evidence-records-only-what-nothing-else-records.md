@@ -1,4 +1,4 @@
-# ADR 0025: Evidence Records Only What Nothing Else Records
+# ADR 0026: Evidence Records Only What Nothing Else Records
 
 ## Status
 

@@ -268,7 +268,7 @@ or `--json`.
 - **No receipts.** The sync runs and records no evidence. CI or the policy's
   `merge_checks` test the merged tree where the repository has them; a
   repository with neither has no merged-tree check until it adds a suite to
-  `merge_checks` ([ADR 0025](../adr/0025-evidence-records-only-what-nothing-else-records.md)).
+  `merge_checks` ([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
   Before atelier-s66u the sync reran the command-backed receipts that were
   current before it and committed them.
 - **Approval.** The output says `Approval kept`, judged as `review.current`

@@ -57,7 +57,7 @@ An audit on 2026-11-06 of all 1,725 receipts recorded since 2026-10-15 in atelie
 
 ## Close Reason
 
-Receipts now record only what nothing else records. A pass recorded after a failure clears it for good, even after later commits make the pass stale. `status` readiness and `work parent` show only a failing receipt with no pass after it, so an item with no receipts reads as clean. `merge --sync` merges the base and reports the approval, and no longer reruns or commits receipts. Merge, land and rebase-recovery hints, the product docs and Agent Factory no longer ask agents to record proof again. ADR 0025 records the removed rules and the merged-tree gap in demiurge and cosplay-studio.
+Receipts now record only what nothing else records. A pass recorded after a failure clears it for good, even after later commits make the pass stale. `status` readiness and `work parent` show only a failing receipt with no pass after it, so an item with no receipts reads as clean. `merge --sync` merges the base and reports the approval, and no longer reruns or commits receipts. Merge, land and rebase-recovery hints, the product docs and Agent Factory no longer ask agents to record proof again. ADR 0026 records the removed rules and the merged-tree gap in demiurge and cosplay-studio.
 
 Proof, by Done when check (targeted tests, run fresh after the last change, all passing; per the new rule no receipts were recorded for them):
 - Old fail, then pass, then base merge, then close and merge succeed: `merge_gates::a_later_pass_clears_an_older_fail_across_a_base_merge_so_close_and_merge_succeed` (pass). It fails under the old rule, which `verified_records::newer_failure_blocks_completion_without_presence_gate_until_any_later_pass` (formerly `..._stale_pass_cannot_clear_it`) asserted the opposite of. Also `records_evidence::evidence_list_verdict_agrees_with_the_close_gate` and `session::a_current_claim_whose_pass_a_later_commit_staled_keeps_its_failure_cleared` and `a_retained_claim_..._keeps_its_failure_cleared` (pass).
@@ -76,12 +76,12 @@ Proof, by Done when check (targeted tests, run fresh after the last change, all 
 ### Decisions
 - Any pass recorded after a fail clears it, whatever its pin or freshness: one rule, with no new conditions on when it applies (Shape: "simplicity wins"). `newest_failure` is now a pure function over the record index, with no Git reads.
 - A policy's own `evidence.attached` gate still needs a fresh pass. It is opt-in, and the item does not remove it.
-- The ADR is 0025, since 0024 was already taken.
+- The ADR is 0026: 0024 was taken, and atelier-hwxm took 0025 (renumbered by the orchestrator before review).
 
 ### Surprises
 - Manual `evidence record` (no command) does not refuse uncommitted code. Only capture does. The Done when only says capture keeps refusing, so this is unchanged. A manual pass recorded over dirty code now clears an older fail too.
 
 ### Open items
-- ADR number: atelier-hwxm may also add an ADR; whichever merges second renumbers if it collides with 0025.
+- ADR number: settled as 0026; atelier-hwxm has 0025.
 - The Agent Factory edits are on agents-skills branch feature/atelier-s66u (commit a4462c3, worktree ~/projects/agents-skills-wt/atelier-s66u), committed but not pushed or reviewed.
 - Independent review of both branches is outstanding.

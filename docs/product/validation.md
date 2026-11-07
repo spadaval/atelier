@@ -28,7 +28,7 @@ each claim and its result. CI and the merge checks test the merged tree
 where a repository has them; a repository without CI puts its suite in the
 policy's `merge_checks` (a `shell.check`; see [workflow
 configuration](workflow-configuration.md)), or nothing tests its merged tree
-([ADR 0025](../adr/0025-evidence-records-only-what-nothing-else-records.md)).
+([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
 
 ## Recording proof
 
