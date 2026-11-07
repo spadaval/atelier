@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Do work in one order: tick Done when, review, and let merge mark it done"
-updated_at: "2026-11-07T05:54:44.769901755+00:00"
+updated_at: "2026-11-07T06:05:08.285084692+00:00"
 ---
 
 ## Goal
@@ -28,24 +28,25 @@ Give the lifecycle one order that no source contradicts: start, implement, tick 
 
 ## Done when
 
-- [ ] `atelier review request` refuses while any Done when line of the items it covers is unticked, or their implementer report is missing, and lists what is missing.
-- [ ] `atelier merge` always creates a merge commit, and that commit marks every open work item on the branch (the owner and its children) done on the base, keeping the implementer report the reviewer read. A test covers a standalone issue and a parent with children.
-- [ ] `merge_strategy: fast_forward_only` is retired: a policy that names it is read as `merge_commit`, and `merge_commit` no longer needs a shell merge check (`merge_unproven` is removed). The starter policy and atelier's own say `merge_commit` or nothing.
-- [ ] The work workflow has no close transition (supersede remains). No command output, policy description, hint or doc tells an agent to close a work item. An item already done on an unmerged branch (closed by an older binary) merges as it is.
-- [ ] A mission closes when all its work items are merged and its validation, if it has one, is done; no loose end holds it.
+- [ ] `atelier review request` refuses while any Done when line of the open work items it covers is unticked, or their `Report` section is empty, and lists what is missing. A line carrying the old After merge marker is not required to be ticked; the refusal's message names `atelier migrate after-merge` for such lines (that command arrives with atelier-8bh4).
+- [ ] `atelier merge` always creates a merge commit, and that commit sets every open item in the `work` workflow on the branch (the owner and its non-superseded children) to the workflow's first done status, keeping the `Report` the reviewer read. Merge refuses while one of them has an open blocker. Tests cover a standalone issue and a parent with children, and `land` passes on the base after each merge.
+- [ ] `merge_strategy: fast_forward_only`, `squash` and a missing `merge_strategy` are all read as `merge_commit`, and `merge_commit` no longer needs a shell merge check (`merge_unproven` is removed). The starter policy and atelier's own say `merge_commit` or nothing.
+- [ ] The `work` workflow has no `close` transition; `supersede` remains and writes the `Report` section. The required report parts are Agent Factory guidance, not policy: Atelier requires only a non-empty `Report`. No command output, policy description, hint or doc tells an agent to close a work item. An item already done on an unmerged branch (closed by an older binary) merges as it is.
+- [ ] Docs and the mission close hint say a mission closes when all its work items are merged and its validation, if it has one, is done. This is described, not a new refusal.
 - [ ] A change to a Done when line's text after start stays reported, as atelier-r9hb does today, including after approval and including a change merged in from the base (finding atelier-l5fb), in the review request brief and `merge --check`, without refusing; a change that only ticks boxes is no longer reported. Tests for each.
-- [ ] PRODUCT_INTENT.md and ADR 0028 describe the mechanics as built, including how "Atelier creates no commits except the merge commit" now reads.
-- [ ] Removed, and listed in the implementer report: the close transition for work items, `fast_forward_only`, `merge_unproven`, the rule that a parent closes after its children, and the rules and messages about close order.
+- [ ] PRODUCT_INTENT.md and ADR 0028 describe the mechanics as built: decision 2's open paragraph is replaced by them, including the merge-strategy tradeoff below and how today's "Atelier never creates commits" principle now reads.
+- [ ] Removed, and listed in the implementer report: the `close` transition for work items, the policy's report `required_fields`, `fast_forward_only`, `merge_unproven`, the rule that a parent closes after its children, and the rules and messages about close order.
 
 ## Scope
 
-Workflow policy (starter and atelier's own), transitions, `review request`, `merge`, mission close, `status`/`work` hints, docs/product, PRODUCT_INTENT.md, ADR 0028. Must not change: merge refuses without a current independent approval; a fix after review is re-reviewed. Other repositories keep working with the shared binary: old policies (`close` transitions, `fast_forward_only`) and old records still parse; updating their policies is atelier-ml3r's job.
+Workflow policy (starter and atelier's own), transitions, `review request`, `merge`, `land`'s view of merge commits, mission close hints, `status`/`work` hints, docs/product, PRODUCT_INTENT.md, ADR 0028. Must not change: merge refuses without a current independent approval; a fix after review is re-reviewed. Other repositories keep working with the shared binary: old policies (`close` transitions with `required_fields`, `fast_forward_only`) and old records (`Close Reason`) still parse; updating their policies is atelier-ml3r's job.
 
 ## Context
 
-docs/adr/0028-simpler-lifecycle.md (decision 2 and its open mechanics), docs/strategies/simpler-lifecycle.md (Shape: One order). The loose-end type is atelier-8bh4's; leave validation and loose-end workflows to it.
+docs/adr/0028-simpler-lifecycle.md (decision 2 and its open mechanics), docs/strategies/simpler-lifecycle.md (Shape: One order). The `loose_end` type and the after-merge migration are atelier-8bh4's.
 
 ## Design
 
-- The implementer report keeps its place in the item record, written by the author before requesting review. The section is named `Report`; the old `Close Reason` heading is still read and is what `supersede` writes. Its required parts follow the policy, as today.
+- One section, `Report`, says what happened: the implementer report on a work item (written by the author before requesting review), a supersede reason, and later a loose end's result (atelier-8bh4). The old `Close Reason` heading is still read.
 - Merge marks done by writing the status change into the merge commit it creates; nothing is committed on the branch.
+- Merge strategy tradeoff, for Sumeet's after-merge read: always merging with a merge commit gives up linear history and the `merge_diverged` refusal in astromech, demiurge and cosplay-studio, and a repository without merge checks or CI on the merged tree now lands a merged tree nobody ran. In exchange no branch needs a catch-up merge before landing (astromech hit `merge_diverged` about 56 times since 2026-10-15). Rejected: committing the done state on top of the branch head and fast-forwarding, which keeps two strategies and adds a second kind of commit Atelier writes. atelier-ml3r tells those repositories.
