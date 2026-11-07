@@ -1,7 +1,8 @@
 //! Proof has a time (ADR 0027): the scenario that mission atelier-n4mj's
 //! `proof-timing` criterion names (docs/strategies/lighter-workflow.md). An
-//! item with one Done when check before merge and one after takes the
-//! after-merge path, and nothing on it refuses.
+//! item with one Done when check before merge and one after, and a review
+//! finding fixed before approval, takes the after-merge path, and nothing on
+//! it refuses.
 use std::{fs, path::Path};
 use tempfile::tempdir;
 #[path = "support/cli.rs"]
@@ -38,6 +39,73 @@ fn edit(repo: &Path, id: &str, from: &str, to: &str) {
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.contains(from), "{id} lacks {from:?}:\n{text}");
     fs::write(path, text.replacen(from, to, 1)).unwrap();
+}
+
+/// A reviewer's `fix_now` finding on `item`, fixed in a later commit and
+/// disposed with it, so the approval that follows must postdate the fix.
+fn fix_a_finding(repo: &Path, item: &str) {
+    let head = git(repo, &["rev-parse", "HEAD"]);
+    let finding = ok(
+        repo,
+        &[
+            "-q",
+            "review",
+            "finding",
+            item,
+            "--identity",
+            REVIEWER,
+            "--commit",
+            &head,
+            "--recommendation",
+            "fix_now",
+            "--commit-records",
+            "launcher.rs:1 main does nothing",
+        ],
+    );
+    fs::write(repo.join("launcher.rs"), "fn main() { launch(); }\n").unwrap();
+    commit(repo, "Launch from main");
+    let fix = git(repo, &["rev-parse", "HEAD"]);
+    ok(
+        repo,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            AUTHOR,
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &fix,
+            "--commit-records",
+            "main launches now",
+        ],
+    );
+}
+
+/// Approves `item` at HEAD as the reviewer, merges it and pushes the base.
+fn approve_and_merge(repo: &Path, item: &str) {
+    git(repo, &["config", "user.name", REVIEWER]);
+    let head = git(repo, &["rev-parse", "HEAD"]);
+    ok(
+        repo,
+        &[
+            "review",
+            "approve",
+            item,
+            "--identity",
+            REVIEWER,
+            "--commit",
+            &head,
+            "--commit-records",
+            "Reviewed the launcher and its after-merge check",
+        ],
+    );
+    git(repo, &["config", "user.name", AUTHOR]);
+    let output = ok(repo, &["merge", item]);
+    assert!(output.contains("merge: passed"), "{output}");
+    git(repo, &["switch", "-q", "main"]);
+    git(repo, &["push", "-q"]);
 }
 
 /// The lines of `page`'s section headed `title`, up to the blank line that
@@ -143,27 +211,8 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
     );
     git(repo, &["checkout", "-q", "--", ".atelier"]);
 
-    git(repo, &["config", "user.name", REVIEWER]);
-    let head = git(repo, &["rev-parse", "HEAD"]);
-    ok(
-        repo,
-        &[
-            "review",
-            "approve",
-            &item,
-            "--identity",
-            REVIEWER,
-            "--commit",
-            &head,
-            "--commit-records",
-            "Reviewed the launcher and its after-merge check",
-        ],
-    );
-    git(repo, &["config", "user.name", AUTHOR]);
-    let output = ok(repo, &["merge", &item]);
-    assert!(output.contains("merge: passed"), "{output}");
-    git(repo, &["switch", "-q", "main"]);
-    git(repo, &["push", "-q"]);
+    fix_a_finding(repo, &item);
+    approve_and_merge(repo, &item);
 
     // Merged, it awaits validation in status and the work views.
     let awaiting = |page: &str| {
@@ -216,7 +265,8 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
     assert!(output.contains("Warning"), "{output}");
 
     // Validation passes: ticked on the base as a planning change, with no
-    // reviewer identity. `land` accepts it and the item stops awaiting.
+    // reviewer identity. `land` accepts it, though the done record changed
+    // after the approval that followed the fix, and the item stops awaiting.
     edit(repo, &item, "- [ ] After merge", "- [x] After merge");
     commit(repo, &format!("Validate {item} on the phone"));
     let (landed, output) = cli(repo, &["land"]);
@@ -232,6 +282,138 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
     );
     let output = close_and_restore(repo, &mission);
     assert!(!output.contains("Warning"), "{output}");
+}
+
+#[test]
+fn carrying_a_check_on_the_base_lands_but_editing_what_done_means_does_not() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    let item = ok(repo, &["-q", "issue", "create", "Launcher", "--body", BODY]);
+    commit(repo, "Plan the launcher");
+    git(repo, &["push", "-q"]);
+    ok(repo, &["start", &item]);
+    commit(repo, "Start the launcher");
+    fs::write(repo.join("launcher.rs"), "fn main() {}\n").unwrap();
+    commit(repo, "Implement the launcher");
+    ok(
+        repo,
+        &[
+            "issue",
+            "transition",
+            &item,
+            "close",
+            "--reason",
+            "Shipped.",
+            "--commit-records",
+        ],
+    );
+    fix_a_finding(repo, &item);
+    approve_and_merge(repo, &item);
+
+    // The phone check fails: a bug is filed and the check carried to it, in
+    // one records-only commit on the base.
+    let bug = ok(
+        repo,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "The launcher does not open on the phone",
+            "--issue-type",
+            "bug",
+            "--body",
+            "## Goal\n\nOpen on the phone.\n\n## Done when\n\n- The fix's test passes.",
+        ],
+    );
+    edit(repo, &item, LATE, &format!("{LATE} Carried to {bug}."));
+    commit(repo, &format!("Carry {item}'s phone check to {bug}"));
+    let (landed, output) = cli(repo, &["land"]);
+    assert!(landed, "{output}");
+    git(repo, &["push", "-q"]);
+
+    // Any other edit of the done record is judged as before: it changes what
+    // the approval covered.
+    edit(
+        repo,
+        &item,
+        "- The launcher test passes.",
+        "- The launcher compiles.",
+    );
+    commit(repo, &format!("Loosen {item}'s Done when"));
+    let (landed, output) = cli(repo, &["land"]);
+    assert!(!landed && output.contains("findings.disposed"), "{output}");
+}
+
+#[test]
+fn a_receipt_still_proves_its_item_after_its_check_is_ticked_on_the_base() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    // Closing an item needs a passing receipt that is fresh, or held at its
+    // close once merged.
+    let policy = repo.join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    let gates = "        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog";
+    assert!(text.contains(gates), "{text}");
+    fs::write(
+        &policy,
+        text.replacen(
+            gates,
+            &gates.replacen(
+                "work.terminal\n",
+                "work.terminal\n        - evidence.attached: { min_count: 1 }\n",
+                1,
+            ),
+            1,
+        ),
+    )
+    .unwrap();
+    commit(repo, "Require a receipt to close");
+    let item = ok(repo, &["-q", "issue", "create", "Launcher", "--body", BODY]);
+    commit(repo, "Plan the launcher");
+    git(repo, &["push", "-q"]);
+    ok(repo, &["start", &item]);
+    commit(repo, "Start the launcher");
+    fs::write(repo.join("launcher.rs"), "fn main() {}\n").unwrap();
+    commit(repo, "Implement the launcher");
+    ok(
+        repo,
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &item,
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "--commit-records",
+            "The launcher test passes",
+        ],
+    );
+    ok(
+        repo,
+        &[
+            "issue",
+            "transition",
+            &item,
+            "close",
+            "--reason",
+            "Shipped.",
+            "--commit-records",
+        ],
+    );
+    approve_and_merge(repo, &item);
+
+    edit(repo, &item, "- [ ] After merge", "- [x] After merge");
+    commit(repo, &format!("Validate {item} on the phone"));
+    let (landed, output) = cli(repo, &["land"]);
+    assert!(landed, "{output}");
+    let receipts = ok(repo, &["evidence", "list"]);
+    assert!(!receipts.contains("stale"), "{receipts}");
 }
 
 #[test]

@@ -1725,7 +1725,9 @@ fn fields_required_when_claimed(
     let mut introduced = None;
     for commit in commits.lines() {
         match read.issue_at(commit, id) {
-            Ok(before) if crate::evidence_freshness::completion_claim_matches(&before, current) => {
+            Ok(before)
+                if crate::evidence_freshness::completion_claim_matches(&before, current, index) =>
+            {
                 introduced = Some(commit.to_string());
             }
             _ => break,
@@ -2173,7 +2175,7 @@ fn original_approval_valid(
 ) -> Result<bool> {
     let issue = index.require_issue(target)?;
     let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
-    let end = read.claim_endpoint(target, &approval.commit)?;
+    let end = read.claim_endpoint(index, target, &approval.commit)?;
     approval_is_current_to(read, &approval.commit, &ids, &end, base)
 }
 

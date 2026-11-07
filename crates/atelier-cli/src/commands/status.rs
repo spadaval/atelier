@@ -364,9 +364,11 @@ fn evidence(
             continue;
         }
         let fresh = targets.iter().all(|id| {
-            index
-                .issue_record(id)
-                .is_some_and(|issue| proof.evidence_is_fresh(issue, evidence).unwrap_or(false))
+            index.issue_record(id).is_some_and(|issue| {
+                proof
+                    .evidence_is_fresh(index, issue, evidence)
+                    .unwrap_or(false)
+            })
         });
         lines.push(format!(
             "{} — recorded {:?} @ {} ({})",
