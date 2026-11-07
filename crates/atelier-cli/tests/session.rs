@@ -8623,15 +8623,25 @@ fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
     git(f.path(), &["merge", "-q", "--no-edit", "main"]);
     let merge = git(f.path(), &["rev-parse", "HEAD"]);
     let main = git(f.path(), &["rev-parse", "main"]);
+    let next = format!(
+        "Next: git rebase --autostash --onto {merge}~1 {merge} && git merge --no-commit {main} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit\n"
+    );
+    let rewrites = "rewrites the commits after it: get them reviewed again";
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(
-        !pass
-            && out.contains(&format!(
-                "Next: git rebase --autostash --onto {merge}~1 {merge} && git merge --no-commit {main} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit\n"
-            )),
+        !pass && out.contains(&next) && !out.contains(rewrites),
         "{out}"
     );
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    // Below the tip, the same step rewrites the later commits, and says so.
+    fs::write(f.path().join("later"), "later work\n").unwrap();
+    commit(f.path(), "later work");
+    let (pass, below) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && below.contains(&next) && below.contains(rewrites),
+        "{below}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
     // The documented sequence, run here, leaves a branch the check accepts.
     git(
         f.path(),

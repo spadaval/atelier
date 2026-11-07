@@ -100,7 +100,9 @@ without committing and migrate before the commit: `git merge --no-commit
 commit --no-edit`. A plain merge removes the base's migrated event while the
 branch's later event remains, and `land` refuses it with
 `review_append_only`, naming that sequence after the step that leaves the
-merge out; there is no need to reset the branch (atelier-j5oq). The read path for separate events goes once every repository has
+merge out (atelier-j5oq). At the branch tip that step drops only the merge;
+below it, it rewrites the commits after the merge, which then need review
+again, since review and evidence records pinned to them no longer count. The read path for separate events goes once every repository has
 migrated (atelier-42th). A disposition read from an event, or written by the
 migration commit that removed it, is judged at the commit that added the
 event; once the finding's file has held another disposition, the later

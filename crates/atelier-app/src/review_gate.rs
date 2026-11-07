@@ -1113,7 +1113,12 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
             if !review_change_allowed(read, edge, path, &before, &after)? {
                 let commit = &edge.commit;
                 if let Some(side) = merged_migration(read, edge, path, &after)? {
-                    bail!("review_append_only: merge {commit} removed {}, a separate disposition event the branch still continues: the base it merged ran `atelier migrate dispositions`, and the branch holds a later event an older Atelier recorded. Leave the merge out and merge again, migrating before you commit, which folds the branch's events in{}. Next: git rebase --autostash --onto {commit}~1 {commit} && git merge --no-commit {side} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit", path.display(), merged_work_dropped(read, edge)?);
+                    let rewrites = if *commit == head {
+                        ""
+                    } else {
+                        ", and rewrites the commits after it: get them reviewed again, since records pinned to them no longer count"
+                    };
+                    bail!("review_append_only: merge {commit} removed {}, a separate disposition event the branch still continues: the base it merged ran `atelier migrate dispositions`, and the branch holds a later event an older Atelier recorded. Leave the merge out and merge again, migrating before you commit, which folds the branch's events in{}{rewrites}. Next: git rebase --autostash --onto {commit}~1 {commit} && git merge --no-commit {side} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit", path.display(), merged_work_dropped(read, edge)?);
                 }
                 let effect = if *commit == head {
                     "which brings the record back (only a finding's disposition may change; record a new event for anything else)"
