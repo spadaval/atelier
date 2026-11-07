@@ -22,26 +22,27 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Adopt and upgrade Atelier without hand repair"
-updated_at: "2026-11-07T10:09:45.953366781+00:00"
+updated_at: "2026-11-07T10:18:49.576212265+00:00"
 ---
 
 ## Goal
 
-Life-on-rails hit about ten refusals between `atelier init` and its first merge, and cosplay-studio needed a hand-written migrator after four dormant months. Make a new repository merge with the starter policy as written, make the first steps after `init` obvious, and give every schema change a migration.
+Life-on-rails hit about ten refusals between `atelier init` and its first merge, and cosplay-studio needed a hand-written migrator after four dormant months. Make a new repository merge with the starter policy as written, make the first steps after `init` obvious and correct, and make every old record form on this host readable or migratable.
 
 ## Done when
 
-- [ ] In a fresh Git repository, with and without CI, the policy `atelier init` writes lets the lifecycle scenario (crates/atelier-cli/tests/lifecycle_cost.rs's steps) merge with no policy edits. `init` sets `base_branch` to the branch it finds (`main`, `master` or the current branch), not a fixed name.
-- [ ] `atelier init` in a directory that is not a Git repository refuses with a message saying to run `git init` first; in a repository with an unborn HEAD (no commits yet), `init`, `status`, `check` and `land` work or say plainly what the first commit needs. Tests for each.
-- [ ] `atelier init` ends by printing what it wrote and the next steps in the new lifecycle: commit the install, get it reviewed on a branch (the light path, atelier-4nsl), merge; then create the first issue.
-- [ ] Every record schema version still present in any repository on this host migrates with `atelier migrate`, each covered by a test, and `atelier check` names the migrate command when it meets an old version it can still read.
-- [ ] Untracked files outside `.atelier/` do not block `merge` or `land` (test with an untracked file at the repository root).
-- [ ] Removed, and listed in the implementer report: whatever init-time or adoption-time refusal these tests show to be unnecessary.
+- [ ] `atelier init` picks the base branch in this order: origin's HEAD branch, else whichever one of `main` and `master` exists, else the current (or unborn) branch, writes it as `base_branch`, and prints its choice. The lifecycle scenario (crates/atelier-cli/tests/lifecycle_cost.rs's steps) merges with no policy edits from a `git init` on `master` and from one on `main`.
+- [ ] `atelier init` in a directory that is not a Git repository refuses with a message saying to run `git init` first. With an unborn HEAD (no commits yet), `init`, `status` and `check` work, and `land` and the Stop hook report and exit successfully. Tests for each.
+- [ ] `atelier init` ends by printing what it wrote and the next steps, which match how the install lands today: review the generated policy, commit it on the base (the install commit is exempt from review, as it predates the gates), then create the first issue. The lifecycle scenario's setup follows those printed steps.
+- [ ] Old record forms: on this host issue and evidence records are all schema 2, workflow 3, config 1, and review records 1 and 2; review records at version 1 stay as written (approvals are append-only). The only old forms still read are separate disposition events (astromech, cosplay-studio, demiurge) and After merge lines, migrated by `migrate dispositions` and `migrate after-merge`. When `atelier check` meets either, it prints a note naming the migration and still passes.
+- [ ] cosplay-studio's `atelier doctor` passes: the "review needs YAML front matter" failure, which the installed binary shows too, is diagnosed and fixed in Atelier or, if the record is wrong, the fix for the record is named for atelier-ml3r.
+- [ ] An untracked file does not block `merge` or `land`, in the work checkout or a separate base checkout, unless the merge would overwrite it at that path; that case is refused before anything changes. Tests for both.
+- [ ] Removed, and listed in the implementer report: the fixed `base_branch: main` in the starter policy; untracked paths in `merge_checkout_dirty` (committed_snapshot.rs `require_paths_clean`, merge.rs); `land --install` with `land_install_unconfirmed` and `land_install_invalid`, since the install commit's exemption needs no confirmation flag.
 
 ## Scope
 
-`init`, the starter policy, `migrate`, `check`'s version messages, `merge` and `land`'s checkout-cleanliness checks, tests, docs/product. Must not change: refusing uncommitted changes to tracked files, which could make merge or evidence lie about what was reviewed.
+`init`, the starter policy, `check`'s version notes, `merge` and `land`'s checkout-cleanliness checks, `land` on an unborn HEAD, the install exemption, `doctor` for cosplay-studio's records, tests, docs/product. Must not change: refusing uncommitted changes to tracked files, which could make merge or evidence lie about what was reviewed. The skill's procedures/install.md is atelier-ml3r's.
 
 ## Context
 
-docs/strategies/simpler-lifecycle.md (Shape: Small repositories work out of the box), ADR 0028 decision 7. The draft-mission items atelier-0vp3 (base detection), atelier-6tmk (no Git, unborn HEAD) and atelier-t3ko (init next steps) cover the same ground; whether they are superseded by this item is part of Sumeet's decision on atelier-mzpn. atelier-md0v (no recorded base) and atelier-4nsl (light path) land first.
+docs/strategies/simpler-lifecycle.md (Shape: Small repositories work out of the box), ADR 0028 decision 7. The draft-mission items atelier-0vp3 (base detection), atelier-6tmk (no Git, unborn HEAD) and atelier-t3ko (init next steps) cover the same ground; whether they are superseded is part of Sumeet's decision on atelier-mzpn. This item does not take 0vp3's `--base` override or t3ko's full list of created paths, re-run message, `-q` and `setup claude` step. atelier-md0v (no recorded base; report-only `land` on work branches) and atelier-4nsl (light path) land first.
