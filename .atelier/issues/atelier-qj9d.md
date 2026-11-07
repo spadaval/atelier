@@ -195,7 +195,7 @@ The skill now points to help text instead of restating it. Each piece below was 
 - **Grader bugs:**
   - done-when-rewrite requires an `atelier evidence` receipt as "fresh proof", which caused four false failures;
   - its disposition parse (`front(body, "  decision")`) misses `decision:` nested four spaces deep in schema-v2 review records.
-- **Atelier links:** Atelier's `docs/product/mission-authoring.md` and `docs/product/work-model.md` link `references/tracker-records.md`, which no longer exists once this merges. ADR 0025 and `docs/strategies/agent-factory-adaptive-missions.md` name `finding-disposition.md` and `strategic-plans.md` as history. Atelier's docs are out of this item's scope, so they need a follow-up.
+- **Atelier links:** four links in Atelier's docs point at what this cut removed: `references/tracker-records.md` (docs/product/mission-authoring.md, docs/product/work-model.md) and the `plan.md#ready-missions` anchor, now "Ready Work" (mission-authoring.md, ADR 0024). atelier-wiri fixes all four once the skill change merges (finding atelier-93db, deferred to it).
 - **Residual readings:** the final read flagged these as two-way readings, not contradictions:
   - astromech AGENTS.md wording: the trivial base exception, unconditional "no catch-up merge", "Don't do" decision records, marking a loose end done as planning, and CI as a merge condition;
   - the light path's "approval of its head" (help);
