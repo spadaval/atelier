@@ -404,8 +404,11 @@ owner ends with `Next: atelier merge <owner>`, and an active owner with
 uncommitted changes names the first five paths and the count, and points to
 `atelier status`. On the base it says `No unpushed base commits need
 review.`, or how many record-only commits it found. `merge --check` passes
-with its passes and `Next: atelier merge <id>`. A successful `merge` prints
-no gate lines, only what it did and the next step:
+with its passes and `Next: atelier merge <id>`. Under any verdict, `merge` and
+`merge --check` add a `Note: <id> Done when edited at <commit> after the item
+was started` line for each such edit, before `Next:` (see [reviews and
+merge](reviews-and-merge.md#a-done-when-edited-after-the-start)). A successful
+`merge` prints no gate lines, only those notes, what it did and the next step:
 `✓ Merged task/atelier-nqgr into master at c24af21a; branch deleted. Next:
 atelier land, then git push.` It notes that Git hooks did not run only when
 the repository has hooks of its own.

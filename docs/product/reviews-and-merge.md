@@ -244,6 +244,37 @@ record fresh proof, and renew review only if the merge needed resolving or
 brought in a change to an in-scope record beyond its status (see approval
 freshness).
 
+### A Done when edited after the start
+
+`merge` and `merge --check` show each edit to the Done when of the owner or a
+scoped child made after the item was started, whatever the verdict, after the
+gate lines (atelier-r9hb):
+
+```
+Note: atelier-2xx5 Done when edited at 4adb9ff6 after the item was started, after finding atelier-h7l3.
+```
+
+The trigger is the start, not a finding: in the usage review that motivated
+it, most narrowed criteria had no finding recorded before them. An edit
+counts when the commit that made it descends in Git from one that moved the
+item into an `active` status, such as `atelier start` or the `start`
+transition; clock times are not compared, so an edit made on the base while
+a branch worked on the item is not shown. The line names the newest finding
+or `fail` receipt on the item pinned to an ancestor of the edit, when there
+is one, so the reader can check whether the edit answers it or loosens the
+criterion to let the item close. Merge commits are not read: the commit that
+wrote an edit is in the history itself. The approval still has to cover the
+edit, as for any record change beyond status.
+
+The line refuses nothing and changes neither the verdict nor the exit status.
+A Done when is sometimes rightly corrected after a finding, and refusing it
+would need an override or a human-only record, which [ADR
+0018](../adr/0018-strategy-draft-epics-and-adaptive-expansion.md) keeps
+Atelier from becoming. Under `-q` the line goes to stderr, so stdout keeps
+its token; `--json` leaves it out. The [debrief](mission-reviews.md#debrief)
+lists the same edit under the item. Mission success criteria are not
+covered.
+
 ### Catching up with `--sync`
 
 ```text
