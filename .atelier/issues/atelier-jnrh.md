@@ -32,7 +32,7 @@ Give the lifecycle one order that no source contradicts: start, implement, tick 
 - [ ] After `atelier merge`, the merged issue is done on the base in the merge commit, carrying the implementer report the reviewer read.
 - [ ] The work workflow has no close transition (supersede remains), and no command output, policy description, hint or doc tells an agent to close a work item.
 - [ ] A mission closes when all its work items are merged and its validation, if it has one, is done; no loose end holds it.
-- [ ] A Done when change that only ticks boxes is not reported anywhere; a change to a line's text after approval is reported by `merge --check` and does not refuse (tests for both; this replaces how atelier-r9hb reports Done when edits).
+- [ ] A change to a Done when line's text after start stays reported, as atelier-r9hb does today, including after approval, in the review request brief and `merge --check`, without refusing; a change that only ticks boxes is no longer reported. Tests for both.
 - [ ] PRODUCT_INTENT.md and ADR 0028 describe the mechanics as built.
 - [ ] Removed, and listed in the implementer report: the close transition for work items, the rule that a parent closes after its children, and the rules and messages about close order.
 
