@@ -36,7 +36,10 @@ and owner branch metadata. The Markdown body is human-readable intent and
 proof. Generic extension maps and historical issue section schemas are not the
 current record model.
 
-`workflow_branch` contains `work_branch` and `branch_base` on the branch owner.
+`workflow_branch` contains `work_branch` and `branch_base` on the branch owner;
+`start` sets `branch_base` to the policy's base branch, and nothing reads it,
+since the base is always the policy's `base_branch`. The field stays so older
+binaries parse new records (ADR 0028 decision 5).
 `strategy` links a path without a revision number. Relationship buckets are
 `blocks`, `children`, `attachments`, and `relates`; indexes derive parent and
 reverse-link views from those stored edges. An issue link is stored once, on

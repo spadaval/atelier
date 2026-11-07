@@ -199,8 +199,8 @@ Built by atelier-ilba:
   its staged records as one batch. `merge` checks the
   records it puts on the base against the base's, except a workflow policy
   that does not parse, which it reports as its own check. The deferral
-  source rule (`review_follow_up_source_mismatch`) gets no write-time
-  version, since atelier-md0v removes it.
+  source rule (`review_follow_up_source_mismatch`) got no write-time
+  version, since atelier-md0v removed it.
 - A reference to a missing record, in a refusal, `atelier check` or any
   load, says where the record is: committed at HEAD but missing from the
   checkout, deleted in a named commit, or present only on a named branch. A
@@ -248,11 +248,81 @@ Built by atelier-ilba:
   names, which require a work branch to be named `<issue_type>/<id>`; and the
   source rule on deferral follow-ups (`review_follow_up_source_mismatch`).
 
-Open, settled by atelier-md0v: what replaces the recorded base for a branch
-that targets a mission branch rather than the base, and whether the rule that
-a `defer` or `no_action` be set by an identity other than the work's Git
-authors ([ADR 0025](0025-findings-carry-their-disposition.md) decision 4) goes
-with the reviewer rule, since it makes the same comparison.
+Built by atelier-md0v:
+
+- **A fix_now finding.** One whose reviewer recommended `fix_now` and that
+  has no disposition is resolved by an approval that is both pinned to a
+  later commit than the finding and recorded after it (`created_at`), so an
+  approval that never saw the finding cannot resolve it; an approval of the
+  finding's own commit does not, and a trivial exemption never does. An
+  older Atelier's `fix_now` disposition still counts: with a resolution
+  commit it is resolved, as before, by an approval at or after that commit,
+  and without one by the rule above. `review disposition --decision fix_now`
+  stays accepted and is never asked for; the finding's confirmation says to
+  fix it in a later commit, and `review list` shows `approved since by
+  <approval>` once one resolves it.
+- **A decision for defer and no_action.** A finding recommended `defer` or
+  `no_action` still needs a recorded decision, even if it was fixed instead,
+  and any identity may record it. Its gap names the `review disposition`
+  that settles it.
+- **No evidence gate.** The built-in `evidence.no_newer_failure` gate and the
+  `evidence.attached` validator go. A policy naming `evidence.attached`, with
+  any parameters, still parses and the name is ignored, so no transition,
+  merge or land reads a receipt. Receipts remain notes for what nothing else
+  records: `evidence list` still marks freshness, and marks a fail with no
+  pass after it `⚠ no pass since`.
+- **land and the Stop hook report.** On a named branch other than the base,
+  where work is in progress, `land` prints its report, ends with `land: work
+  in progress — <n> checks open (<checks>)` and exits successfully; `land
+  --push` there pushes the commit HEAD was at when land began to the
+  branch's own upstream, and nothing when a check moved HEAD. The Stop hook
+  reports the same lines as a `systemMessage` and never blocks the turn. On
+  the base and on a detached HEAD a refusal stands, since that is where
+  unreviewed code would reach the base: `land` refuses and the hook blocks
+  as before, except that uncommitted records alone on the base still block
+  no turn. `atelier doctor` still refuses any failure. A Stop hook run from a
+  directory outside any Atelier repository says so and exits successfully.
+- **No identity rule.** An approval's identity, and a `defer` or `no_action`
+  decision's, are recorded and no longer compared with the work's Git
+  authors, so the `review.current` and `findings.disposed` author checks and
+  the recording warnings go. Approvals stay append-only, and `land` and
+  `doctor` still accept one only as first committed.
+  [ADR 0025](0025-findings-carry-their-disposition.md) decision 4 goes with
+  the reviewer rule: atelier-ilba already accepts that a finding can be
+  deleted before merge, so a non-author rule on decisions guards nothing. The
+  deferral source rule (`review_follow_up_source_mismatch`) goes too.
+- **The base is the policy's.** The merge base is the
+  `branch_policy.base_branch` of the branch's committed policy, checked
+  against the base ref's own policy as merge already did. Merge, land,
+  `review request`, status, prune, `start` and the transition guards read no
+  `branch_base`, and `land_base_mismatch` goes. `start` still writes
+  `branch_base`, set to the policy base and ignored when read, so older
+  pinned binaries still parse new records, until atelier-ml3r moves
+  astromech's CI pin and drops it. A branch that targets a mission branch
+  needs no recorded base: merge integrates only into the policy's base
+  branch, and mission integration branches were never built (ADR 0020). A
+  review target is not recomputed from the hierarchy either; it is the
+  policy's base branch.
+- **start uses no type prefix.** An owner with a recorded branch, in this
+  checkout's records or in a local branch's own record of it, switches to
+  that branch. On the base, `start` creates a branch named with the owner's
+  bare ID, or switches to one of that name. On a branch another item owns it
+  refuses with `start_branch_owned`, naming that item; from a detached HEAD
+  it refuses with `start_detached_head`; on any other branch it takes the
+  current branch. `--base`, `start_base_mismatch` and
+  `start_branch_prefix_mismatch` go. A printed fix that starts work outside
+  the owner's scope from its branch reads `git switch <base> && atelier
+  start <id>`.
+- **Short commit IDs.** Wherever a command takes a commit (`--commit`,
+  `--resolution-commit`, `review trivial --base`), a unique abbreviation of
+  at least four hexadecimal digits is resolved on input and stored as the
+  full ID; an unknown prefix, or one several commits share, is refused,
+  naming the matches. `review trivial --base` still takes a revision such as
+  `HEAD`. Evidence commands take no commit.
+- **One judgement.** Merge, `land` on the base and `doctor` judge findings,
+  decisions and approvals by these rules: `findings.disposed`,
+  `approval_accepted` (which `land`'s base coverage uses) and the historical
+  paths.
 
 ### 6. A light path
 
@@ -310,10 +380,12 @@ Replaced (decision 5 above, atelier-md0v): the recorded branch base, and
 canonical `<issue_type>/<issue_id>` work branch names as a rule Atelier
 enforces. The conclusion of the rejected alternative "Recompute Review
 Targets From Parent Hierarchy", that the recorded base is the target, goes
-with the recorded base; whether a target is recomputed from the hierarchy
-instead is open under decision 5. Stands: `base_branch`, work branches,
-opt-in mission integration branches, mission scope as direct `advances` links
-plus descendants, and domain names for starter workflows.
+with the recorded base; the target is not recomputed from the hierarchy
+either, but is the policy's `base_branch`. Opt-in mission integration
+branches, never built, are no merge target: merge integrates only into the
+policy's base branch. Stands: `base_branch`, work branches, mission scope as
+direct `advances` links plus descendants, and domain names for starter
+workflows.
 
 **[ADR 0019](0019-verified-repo-native-tracker.md).**
 
@@ -329,7 +401,8 @@ plus descendants, and domain names for starter workflows.
   done (atelier-jnrh). That narrows "Statuses, transitions, graph shape, and
   planning depth are agent-owned" for those two steps. Valid records are
   guarded when written (atelier-ilba).
-- Decision 3: `start` no longer records a branch base (atelier-md0v); `merge`
+- Decision 3: no command reads a recorded branch base, which `start` still
+  writes only so older binaries parse the record (atelier-md0v); `merge`
   also marks the issue done in the merge commit it always creates
   (atelier-jnrh); a change with no issue merges without `start`
   (atelier-4nsl). "Atelier never creates commits" now reads as decision 2
@@ -366,8 +439,9 @@ decisions 1, 3, 4 and 5.
   rule, since it reads no records (atelier-3jdm).
 - Decision 3: replaced by decision 1 above; no record edit makes an approval
   stale (atelier-3jdm).
-- Decision 4: whether its comparison with the work's Git authors goes is open
-  (decision 5 above, atelier-md0v).
+- Decision 4: replaced; a `defer` or `no_action` decision's identity is
+  recorded and not compared with the work's Git authors (decision 5 above,
+  atelier-md0v).
 - Decisions 5 and 6 stand.
 
 **[ADR 0026](0026-evidence-records-only-what-nothing-else-records.md).**

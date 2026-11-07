@@ -22,9 +22,9 @@ Use these terms for the verified repo-native tracker defined by
 | Evidence | An immutable proof receipt with an explicit result and full Git commit, attached to the claims it supports. |
 | Result | `pass`, `fail`, `blocked`, or `not-applicable`; receipt presence alone never means pass. |
 | Review | An in-repo event for examination, approval, a finding, or a trivial exemption; additions get new files. A finding can be corrected or deleted until it reaches the base branch, while an approval or exemption stays as first committed; on the base, only a finding's disposition changes in place. |
-| Approval | A review decision pinned to a commit, from an identity independent of the change's authors. |
-| Finding | A recorded problem that needs an explicit `FIX NOW`, `DEFER`, or `NO ACTION` disposition. |
-| Disposition | What was decided about a finding: a field of the finding's record with the decision, who set it, the commit, and why. Setting it again replaces it; Git history keeps earlier ones. A `fix_now` is followed by a re-review, which may cover only the fix's diff and may be by the same reviewer. |
+| Approval | A review decision pinned to a commit, by an independent reviewer whose identity is recorded, not compared with the change's authors. An approval of a later commit, recorded after a `fix_now` finding, resolves it. |
+| Finding | A recorded problem with a recommended `FIX NOW`, `DEFER`, or `NO ACTION`. A `fix_now` finding is resolved by the approval after its fix; a deferred or dismissed one needs a recorded disposition. |
+| Disposition | What was decided about a finding: a field of the finding's record with the decision, who set it, the commit, and why. Setting it again replaces it; Git history keeps earlier ones. Needed for `defer` and `no_action`; a `fix_now` finding records none, and its fix's re-review, which may cover only the fix's diff and may be by the same reviewer, resolves it. |
 | Trivial exemption | An explicit visible declaration that independent approval is unnecessary because correctness is evident from the diff. |
 | Freshness | Whether later commits changed material relevant to the proof or approval. For an approval that is code: anything outside the tracker records. |
 | Report | The `## Report` section saying what happened: the implementer report a work item's author writes before review, or the reason a transition that requires `close_reason` records (supersede, a mission's close, a decision's `decide`). Records written before atelier-jnrh call it Close Reason. |
@@ -32,7 +32,7 @@ Use these terms for the verified repo-native tracker defined by
 | Done claim | A terminal status in a record; for work, the one integration writes. An item an older Atelier closed on its branch carries its own. |
 | Integration | A gated merge commit onto the base branch whose tree passed `merge_checks` and which marks the owner's open work done; the only commit Atelier creates. |
 | Status | Session orientation from records, Git state, proof, and review; `prime` is its deprecated alias. |
-| Land | A session handoff check of committed records and tracker invariants. |
+| Land | A session handoff check of committed records and tracker invariants; it reports work in progress on a branch and refuses only on the base. |
 | Active tree | Current `.atelier/` records, distinct from records retained only in Git history. |
 
 The graph stores hierarchy in `children`, dependencies in `blocks` (on the

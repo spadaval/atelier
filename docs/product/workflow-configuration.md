@@ -103,11 +103,14 @@ Record-file validity is checked whenever a command loads the repository.
 parseable intent, lint with no blocking findings (`lint.none_blocking`), and
 open direct or transitive blockers where policy selects them.
 
-Merge gates protect the scope merge marks done, the absence of an uncleared
-failing receipt (and fresh passing evidence where a policy's
-`evidence.attached` asks for it), independent current approval or a visible trivial exemption, finding
-dispositions, and absence of open blockers. Policy can add read-only shell
-checks at merge, using this top-level YAML shape:
+Merge gates protect the scope merge marks done: a current independent
+approval or a visible trivial exemption, a decision on each deferred or
+dismissed finding and an approval since each `fix_now` finding, and the
+absence of open blockers. No gate reads evidence receipts
+([ADR 0028](../adr/0028-simpler-lifecycle.md) decision 5): an older policy
+naming the `evidence.attached` validator, with any parameters, still parses,
+and the name is ignored. Policy can add read-only shell checks at merge, using
+this top-level YAML shape:
 
 ```yaml
 branch_policy:
@@ -127,7 +130,10 @@ reviewed policy surface.
 
 ## Base authority
 
-Merge evaluates the base branch's committed policy. Commit a valid policy on
+Merge integrates into the `branch_policy.base_branch` of the work branch's
+committed policy, which the base branch's own committed policy must name too;
+no recorded `branch_base` is read. Merge evaluates the base branch's committed
+policy. Commit a valid policy on
 the base before beginning governed work; without any valid base policy, merge
 refuses. Editing the work branch's policy cannot loosen that branch's gate.
 Invalid base policy emits visible diagnostics and falls back to its last valid
