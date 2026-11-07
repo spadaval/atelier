@@ -66,7 +66,7 @@ Work views use one readable row state label:
   blocked-category status where the policy declares one. Started work that
   gains a blocker stays `active`: under a policy without a `blocked` status,
   such as the starter, it stays `in_progress` and shows its blocker count in
-  `work active`, and `close` still refuses while the blocker is open;
+  `work active`, and `merge` still refuses while the blocker is open;
 - `active`: active-category work, including configured workflow statuses such
   as `in_progress`, `review`, or `validation`;
 - `done`: done-category work;

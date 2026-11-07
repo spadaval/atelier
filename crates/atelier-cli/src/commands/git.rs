@@ -296,9 +296,8 @@ pub(crate) fn check_base_commits(
         let exempt = reviews.exempt.contains(commit);
         if exempt {
             exempted += 1;
-        } else {
-            checked += 1;
         }
+        // A clean merge introduces nothing beyond its parents.
         let Some(changed) = introduced_paths(repo, commit)? else {
             continue;
         };
@@ -306,7 +305,7 @@ pub(crate) fn check_base_commits(
             reviews.unreviewed_claim(repo, &mut read, policy, commit, tip, &upstream, &changed)?;
         if let Some(id) = unreviewed_claim {
             bail!(
-                "land_base_done_claim: commit {} on {base} marks {id} done outside review; a done claim is committed on the work branch with the work it describes. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and make the claim on the work branch. To retire work that will not be done, supersede it instead of closing it.",
+                "land_base_done_claim: commit {} on {base} marks {id} done outside review; work is done when `atelier merge` integrates it. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and merge it from its work branch. To retire work that will not be done, supersede it.",
                 &commit[..8.min(commit.len())],
                 &commit[..8.min(commit.len())],
             );
@@ -316,6 +315,16 @@ pub(crate) fn check_base_commits(
         if exempt {
             continue;
         }
+        // The merge commit `atelier merge` creates introduces only the done
+        // marks an approval covers, as judged above (atelier-jnrh).
+        let marks = base_done_claims(repo, policy, commit, tip, &upstream, &changed)?
+            .into_iter()
+            .map(|id| Path::new(".atelier").join(atelier_records::issue_record_path(&id)))
+            .collect::<BTreeSet<_>>();
+        if !marks.is_empty() && changed.iter().all(|path| marks.contains(path)) {
+            continue;
+        }
+        checked += 1;
         let other = changed
             .into_iter()
             .filter(|path| !git_freshness::is_record_path(path) && !strategies.contains(path))
@@ -462,9 +471,14 @@ impl BaseReviews {
 
 /// The paths `commit` introduces, or `None` for a clean merge, which
 /// introduces nothing beyond its parents (atelier-n7g1). A merge (such as a
-/// non-rebasing pull) introduces only the paths that differ from every parent.
+/// non-rebasing pull) introduces only the paths that differ from every
+/// parent, and of a two-parent merge only those that also differ from Git's
+/// own merge of its parents: a line both sides merged cleanly is on one side
+/// or the other, as in the merge commit `atelier merge` creates, which
+/// introduces only the done marks it writes (atelier-jnrh).
 fn introduced_paths(repo: &Path, commit: &str) -> Result<Option<Vec<std::path::PathBuf>>> {
-    if git_freshness::clean_merge(repo, commit)? {
+    let by_hand = git_freshness::hand_resolved_paths(repo, commit)?;
+    if by_hand.as_ref().is_some_and(Vec::is_empty) {
         return Ok(None);
     }
     if text(repo, &["rev-list", "--parents", "-n1", commit])?
@@ -489,6 +503,11 @@ fn introduced_paths(repo: &Path, commit: &str) -> Result<Option<Vec<std::path::P
                 .split('\0')
                 .filter(|path| !path.is_empty())
                 .map(std::path::PathBuf::from)
+                .filter(|path| {
+                    by_hand
+                        .as_ref()
+                        .is_none_or(|by_hand| by_hand.contains(path))
+                })
                 .collect(),
         ));
     }
@@ -681,8 +700,8 @@ struct BranchOwner {
     /// For an owner that is not done: how many of its direct children are
     /// active and done, so a parent-owned branch does not read as idle.
     children: Children,
-    /// Set for a done owner not merged into the base: how it would merge
-    /// now, or why that could not be read.
+    /// Set for an owner not merged into the base: how it would merge now,
+    /// or why that could not be read.
     readiness: Option<Result<Readiness, String>>,
 }
 
@@ -1002,8 +1021,10 @@ fn branch_summaries_for(
                         }
                     }
                 }
+                // Merge marks the work done, so open work is what waits for
+                // it, as does work an older Atelier closed (atelier-jnrh).
                 let readiness = match (merged, &base_head) {
-                    (Some(false), Some(base_head)) => Some(
+                    (None | Some(false), Some(base_head)) => Some(
                         (|| -> Result<Readiness> {
                             if merge.is_none() {
                                 merge = Some(branch_merge(repo, commit, base_head)?);
@@ -1102,8 +1123,8 @@ fn branch_merge(repo: &Path, tip: &str, base_head: &str) -> Result<BranchMerge> 
 /// The owner's readiness on a branch at `tip`, judged from the branch's
 /// committed records: approval as `merge`'s `review.current` judges it, and
 /// the failing receipt, if any, that `evidence.no_newer_failure` would
-/// refuse on a done item in the owner's scope. Superseded work is skipped,
-/// as `merge` skips it.
+/// refuse on an item in the owner's scope that is done or that merge marks
+/// done. Superseded work is skipped, as `merge` skips it.
 fn readiness(
     repo: &Path,
     index: &RecordIndex,
@@ -1117,8 +1138,9 @@ fn readiness(
     let mut failing = None;
     for id in review_gate::scope(index, owner)? {
         let issue = index.require_issue(&id)?;
-        if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
-            && issue.status != "superseded"
+        if issue.status != "superseded"
+            && (policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
+                || policy.merge_done_status(&issue.issue_type).is_some())
         {
             failing = atelier_app::evidence_freshness::newest_failure(index, &id)?;
             if failing.is_some() {

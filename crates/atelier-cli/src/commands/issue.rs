@@ -155,12 +155,12 @@ fn render_issue_brief(
         );
     }
     let closed = closed_line(workflow_policy, record);
-    // The Closed line shows the Close Reason's first line, so --full adds
-    // nothing for a one-line reason.
+    // The Closed line shows the Report's first line, so --full adds
+    // nothing for a one-line report.
     let reason_shown = closed.is_some()
         && record
             .sections
-            .section(atelier_records::IssueSectionName::CloseReason)
+            .section(atelier_records::IssueSectionName::Report)
             .is_some_and(|reason| {
                 reason
                     .lines()
@@ -182,7 +182,7 @@ fn render_issue_brief(
     let more = IssueSections::ALL_NAMES
         .into_iter()
         .filter(|name| !lead.contains(name) && record.sections.section(*name).is_some())
-        .filter(|name| !(reason_shown && *name == atelier_records::IssueSectionName::CloseReason))
+        .filter(|name| !(reason_shown && *name == atelier_records::IssueSectionName::Report))
         .map(|name| name.title())
         .collect::<Vec<_>>();
     if !more.is_empty() {
@@ -191,7 +191,7 @@ fn render_issue_brief(
     Ok(lines)
 }
 
-/// `Closed <date>: <first line of the Close Reason>` for a done record, which
+/// `Closed <date>: <first line of the Report>` for a done record, which
 /// stands in for its transitions: a done record has none to offer.
 fn closed_line(
     workflow_policy: Option<&WorkflowPolicy>,
@@ -204,7 +204,7 @@ fn closed_line(
     let date = local_date(issue.closed_at.unwrap_or(issue.updated_at));
     let reason = record
         .sections
-        .section(atelier_records::IssueSectionName::CloseReason)
+        .section(atelier_records::IssueSectionName::Report)
         .and_then(|reason| reason.lines().map(str::trim).find(|line| !line.is_empty()));
     Some(match reason {
         Some(reason) => format!("Closed {date}: {reason}"),
@@ -1314,8 +1314,8 @@ pub fn update_lifecycle(
             &record.issue.issue_type,
         )
         .context("Invalid sectioned --body")?;
-        if parsed.notes.is_some() || parsed.close_reason.is_some() {
-            bail!("--body replaces the typed sections only; add notes with `atelier issue note {id} \"...\"`, and give a Close Reason (with any implementer report) by editing the record's Close Reason or with `--reason` or `--reason-file` on a transition that `atelier issue transition {id}` lists");
+        if parsed.notes.is_some() || parsed.report.is_some() {
+            bail!("--body replaces the typed sections only; add notes with `atelier issue note {id} \"...\"`, and write the implementer report by editing the record's `## Report` section");
         }
         record.sections.body = parsed.body;
         changed_fields.push("body");

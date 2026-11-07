@@ -139,19 +139,19 @@ impl SmokeHarness {
         first_record_id(&evidence.stdout).expect("evidence record did not print an evidence id")
     }
 
-    /// Close an issue fixture through the current proof-backed closeout path.
+    /// Finish an issue fixture with proof: start it, then mark it done with
+    /// a Report in its record, as `atelier merge` would on integrating its
+    /// branch; work has no close transition (atelier-jnrh).
     pub fn close_issue_with_evidence(&self, issue_ref: &str) {
         self.attach_issue_pass_evidence(issue_ref);
         self.run_ok(&["issue", "update", issue_ref, "--issue-type", "spike"]);
         self.run_ok(&["issue", "transition", issue_ref, "start"]);
-        self.run_ok(&[
-            "issue",
-            "transition",
-            issue_ref,
-            "close",
-            "--reason",
-            "fixture complete",
-        ]);
+        let store = atelier_records::RecordStore::new(self.atelier_dir());
+        let mut record = store.load_issue_by_id(issue_ref).unwrap();
+        record.issue.status = "done".into();
+        record.issue.closed_at = Some(chrono::Utc::now());
+        record.sections.report = Some("fixture complete".into());
+        store.write_issue_atomic(&record).unwrap();
     }
 
     /// Run an Atelier CLI command and assert it fails.

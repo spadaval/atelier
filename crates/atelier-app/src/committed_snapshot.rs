@@ -52,8 +52,8 @@ pub struct RecordsUncommitted {
     /// The review records among them that stay as they are: approvals and
     /// trivial exemptions, and records on the base already (atelier-ilba).
     pub on_base: BTreeSet<PathBuf>,
-    /// Whether a review record is final once committed, as under
-    /// `fast_forward_only`, rather than once it reaches the base.
+    /// Whether a review record is final once committed, as without a base
+    /// branch to read, rather than once it reaches the base.
     pub final_once_committed: bool,
 }
 impl RecordsUncommitted {

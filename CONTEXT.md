@@ -9,7 +9,7 @@ Use these terms for the verified repo-native tracker defined by
 | Mission | An issue of type `mission`: a themed container whose Outcome says why its work belongs together, optionally with a strategy and success criteria; its execution scope uses `advances` links. |
 | Strategy | Ordinary Markdown owning intent, any success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
 | Issue | One accountable slice; work items have `Goal` and `Done when` sections. |
-| Parent | Any work item with direct children, one level deep; it owns their branch and closes after them. Replaced the epic type (atelier-9vq3). |
+| Parent | Any work item with direct children, one level deep; it owns their branch, and the merge that integrates it marks it and its open children done. Replaced the epic type (atelier-9vq3). |
 | Validation item | Work dedicated to independently checking referenced acceptance claims. |
 | After-merge check | A Done when line marked `After merge (<reason>):` with its stand-in: proof only the merged or deployed system, an unreachable device or place, the human's judgment, or time and real use can give. Every other line is checked before merge (ADR 0027). |
 | Awaiting validation | Done work with an after-merge check neither ticked (`[x]`, validated on the base) nor carried to another existing item (a failed check to its follow-up bug, or one needing time and real use beyond the mission). |
@@ -27,8 +27,10 @@ Use these terms for the verified repo-native tracker defined by
 | Disposition | What was decided about a finding: a field of the finding's record with the decision, who set it, the commit, and why. Setting it again replaces it; Git history keeps earlier ones. A `fix_now` is followed by a re-review, which may cover only the fix's diff and may be by the same reviewer. |
 | Trivial exemption | An explicit visible declaration that independent approval is unnecessary because correctness is evident from the diff. |
 | Freshness | Whether later commits changed material relevant to the proof or approval. For an approval that is code: anything outside the tracker records. |
-| Done claim | A terminal status committed on the work branch, before integration. |
-| Integration | A gated fast-forward of the base branch, or under `merge_commit` a gated merge commit whose merged tree passed `merge_checks`; it creates no other commit and writes no tracker state. |
+| Report | The `## Report` section saying what happened: the implementer report a work item's author writes before review, or the reason a transition that requires `close_reason` records (supersede, a mission's close, a decision's `decide`). Records written before atelier-jnrh call it Close Reason. |
+| Done | A work item is done when its change is merged: integration marks it done. A mission is closed when all its work is merged and its validation, if it has one, is done. |
+| Done claim | A terminal status in a record; for work, the one integration writes. An item an older Atelier closed on its branch carries its own. |
+| Integration | A gated merge commit onto the base branch whose tree passed `merge_checks` and which marks the owner's open work done; the only commit Atelier creates. |
 | Status | Session orientation from records, Git state, proof, and review; `prime` is its deprecated alias. |
 | Land | A session handoff check of committed records and tracker invariants. |
 | Active tree | Current `.atelier/` records, distinct from records retained only in Git history. |

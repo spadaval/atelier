@@ -48,8 +48,9 @@ as one edge.
 
 Work item bodies require Goal and Done when; Scope, Context, Unknowns,
 Design, and Background are optional. Missions carry an Outcome, with
-optional Success criteria, Background, and strategy link. Shared Notes and Close
-Reason preserve handoffs and terminal reasoning. See
+optional Success criteria, Background, and strategy link. Shared Notes and the
+Report preserve handoffs and what happened; the Report is still read from a
+record's older `## Close Reason` heading and written as `## Report`. See
 [authoring](../product/mission-authoring.md) for the process-owned templates.
 
 Evidence is an immutable Markdown receipt with explicit result
@@ -87,15 +88,17 @@ before installing its issue and evidence directories; see the
 [bundle input contract](../spec/bundle/schema.md).
 
 Transitions write records and run read-only checks. `start` explicitly prepares
-a branch. `merge` explicitly checks gates and fast-forwards (or, under `merge_commit`,
-creates only the merge commit); it writes no tracker records. Agents commit record mutations with
-the implementation. Active work must resolve to a recorded owner branch.
+a branch. `merge` explicitly checks gates and creates one merge commit, which
+also marks the owner's open work done; it is the only commit and the only
+tracker write merge makes. Agents commit every other record mutation with the
+implementation. Active work must resolve to a recorded owner branch.
 
 ## Git and policy
 
-A work branch carries its own graph and done claim. The base branch obtains
-those records with the same fast-forward or merge that integrates code. Integration
-facts and author identities come from Git.
+A work branch carries its own graph, with its work still open. The base branch
+obtains those records with the merge commit that integrates the code, and that
+commit's done marks are the only records it adds. Integration facts and author
+identities come from Git.
 
 Merge policy is read from the base branch's `.atelier/workflow.yaml`, so a work
 branch cannot weaken its own gate. Invalid base policy produces a visible error

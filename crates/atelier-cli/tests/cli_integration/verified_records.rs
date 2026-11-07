@@ -8,19 +8,24 @@ fn count_markdown_records(dir: &Path, kind: &str) -> usize {
         .count()
 }
 
+/// Proof freshness is judged where a done transition runs. Merge marks work
+/// done under the current starter, so these fixtures keep the starter from
+/// before atelier-jnrh, whose work still closes, as unmigrated repositories
+/// do; with `gated`, its close also requires passing evidence.
 fn proof_fixture(gated: bool) -> (tempfile::TempDir, String) {
-    let policy = gated.then_some(atelier_workflow::STARTER_POLICY_YAML);
-    proof_fixture_under(policy)
+    proof_fixture_under(&starter_with_work_close(), gated)
 }
 
-/// A started issue with committed code, its policy `gated_policy` with
-/// passing evidence required to close, or the plain starter when `None`.
-fn proof_fixture_under(gated_policy: Option<&str>) -> (tempfile::TempDir, String) {
+/// A started issue with committed code under `policy`, with passing
+/// evidence also required to close when `gated`.
+fn proof_fixture_under(policy: &str, gated: bool) -> (tempfile::TempDir, String) {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
-    if let Some(policy) = gated_policy {
+    if gated {
         write_evidence_gated_workflow_from(dir.path(), policy);
+    } else {
+        fs::write(dir.path().join(".atelier/workflow.yaml"), policy).unwrap();
     }
     let body = "## Goal\n\nVerify evidence freshness.\n\n## Done when\n\nThe focused test proves the expected behavior.\n\n## Scope\n\nsrc.rs\n\n## Context\n\nFresh explicit proof is required.";
     let (ok, _, error) = run_atelier_raw(
@@ -244,7 +249,7 @@ fn newer_failure_blocks_completion_without_presence_gate_until_any_later_pass() 
 #[test]
 fn notes_status_and_new_evidence_records_do_not_stale_passing_proof() {
     // The earlier starter's `review` status gives in-flight status changes.
-    let (dir, id) = proof_fixture_under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
+    let (dir, id) = proof_fixture_under(STARTER_WITH_BLOCKED_AND_REVIEW, true);
     let (ok, _, error) =
         run_atelier_raw(dir.path(), &["issue", "transition", &id, "request_review"]);
     assert!(ok, "{error}");

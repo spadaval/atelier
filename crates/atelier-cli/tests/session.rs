@@ -78,6 +78,16 @@ struct Fixture {
     id: String,
     branch: String,
 }
+/// Sets `id` done with a Report by editing its record, uncommitted: a done
+/// claim made outside `atelier merge`, as an older Atelier's close made one.
+fn mark_done(dir: &Path, id: &str) {
+    let store = atelier_records::RecordStore::new(dir.join(".atelier"));
+    let mut record = store.load_issue_by_id(id).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.report = Some("completed claim".into());
+    store.write_issue_atomic(&record).unwrap();
+}
 /// The starter policy before atelier-bqbz dropped the `blocked` and `review`
 /// statuses; repository policies written from it still declare them.
 const STARTER_WITH_BLOCKED_AND_REVIEW: &str =
@@ -98,13 +108,6 @@ impl Fixture {
         if let Some(policy_text) = policy_text {
             fs::write(&policy, policy_text).unwrap();
         }
-        // These scenarios test fast-forward integration, which a starter policy
-        // with a shell.check no longer selects by default.
-        let text = fs::read_to_string(&policy).unwrap().replace(
-            "base_branch: main\n",
-            "base_branch: main\n  merge_strategy: fast_forward_only\n",
-        );
-        fs::write(policy, text).unwrap();
         let id = ok(
             dir.path(),
             &[
@@ -129,12 +132,10 @@ impl Fixture {
     fn store(&self) -> atelier_records::RecordStore {
         atelier_records::RecordStore::new(self.path().join(".atelier"))
     }
+    /// Commits `id` as done by editing its record, as an older Atelier's
+    /// close or a hand edit would; merge marks work done now (atelier-jnrh).
     fn terminal(&self, id: &str) {
-        let mut record = self.store().load_issue_by_id(id).unwrap();
-        record.issue.status = "done".into();
-        record.issue.closed_at = Some(chrono::Utc::now());
-        record.sections.close_reason = Some("completed claim".into());
-        self.store().write_issue_atomic(&record).unwrap();
+        mark_done(self.path(), id);
         commit(self.path(), "terminal claim");
     }
     fn refusal(&self, expected: &str) {
@@ -648,8 +649,10 @@ fn cross_branch_status_keeps_base_clean_and_reports_legacy_without_loading_it() 
     let head = git(f.path(), &["rev-parse", "HEAD"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("{}  {} in_progress  ", f.branch, f.id))
-            && output.contains("\nBranches\n--------\n"),
+        output.contains(&format!(
+            "{}  {} in_progress, ⚠ not approved, behind 0, merges cleanly  ",
+            f.branch, f.id
+        )) && output.contains("\nBranches\n--------\n"),
         "{output}"
     );
     // The branch rows come before the footer, which is the last section.
@@ -898,7 +901,13 @@ fn a_retained_claim_whose_pass_later_commits_staled_keeps_its_failure_cleared() 
 #[test]
 fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fields() {
     for violation in ["dependency", "failure", "required_field"] {
-        let f = Fixture::new();
+        // Work done claims answer to required fields only under an older
+        // policy whose work `close` set them (atelier-jnrh).
+        let f = if violation == "required_field" {
+            Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW))
+        } else {
+            Fixture::new()
+        };
         let child = epic_child(&f);
         f.terminal(&child);
         match violation {
@@ -929,7 +938,7 @@ fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fiel
             }
             _ => {
                 let mut record = f.store().load_issue_by_id(&child).unwrap();
-                record.sections.close_reason = None;
+                record.sections.report = None;
                 f.store().write_issue_atomic(&record).unwrap();
             }
         }
@@ -943,7 +952,9 @@ fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fiel
 }
 #[test]
 fn trusted_base_child_proof_cannot_be_removed_on_candidate() {
-    let f = Fixture::new();
+    // An older policy whose work `close` runs the proof validator; merge
+    // marks work done under the current one (atelier-jnrh).
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "main"]);
     let path = f.path().join(".atelier/workflow.yaml");
     let policy = fs::read_to_string(&path).unwrap();
@@ -1207,7 +1218,9 @@ fn custom_branch_only_owner_is_discovered_without_overlaying_base() {
     git(f.path(), &["switch", "main"]);
     let output = ok(f.path(), &["status"]);
     assert!(
-        output.contains(&format!("custom/ship-session  {id} in_progress  ")),
+        output.contains(&format!(
+            "custom/ship-session  {id} in_progress, ⚠ not approved, behind 0, merges cleanly  "
+        )),
         "{output}"
     );
     assert!(f.store().load_issue_by_id(&id).is_err());
@@ -1508,193 +1521,57 @@ fn review_regression_setup_preserves_foreign_wrappers_and_updates_owned_binary()
         .contains(env!("CARGO_BIN_EXE_atelier")));
 }
 
-/// The starter policy's work `close`, made to require the implementer report.
-fn require_report(dir: &Path) {
-    let path = dir.join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&path).unwrap();
-    let close = "        required_fields: [close_reason]\n        description: Done claim;";
-    assert!(policy.contains(close), "{policy}");
-    fs::write(
-        &path,
-        policy.replace(
-            close,
-            "        required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]\n        description: Done claim;",
-        ),
-    )
-    .unwrap();
-}
-
+/// An older policy whose work `close` required the implementer report's
+/// parts one by one still loads, and its claims need only a non-empty
+/// Report: the parts are Agent Factory guidance now (atelier-jnrh).
 #[test]
-fn report_parts_bind_new_done_claims_and_leave_earlier_claims_valid() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "main"]);
-    let earlier = ok(f.path(), &["-q", "issue", "create", "Earlier claim"]);
-    f.terminal(&earlier);
-    require_report(f.path());
-    commit(f.path(), "require the implementer report");
-    git(f.path(), &["switch", &f.branch]);
-    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
-
-    // A claim the base already holds was made before the report was
-    // required, so it stays valid.
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(pass, "{output}");
-
-    let newer = ok(f.path(), &["-q", "issue", "create", "Newer claim"]);
-    f.terminal(&newer);
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass, "{output}");
-    for part in ["deviations", "decisions", "surprises", "open_items"] {
-        assert!(
-            output.contains(&format!("required_field.report.{part}")),
-            "{output}"
-        );
-    }
-    assert!(
-        output.contains(&format!(
-            "add a `### Open items` subsection to the Close Reason in .atelier/issues/{newer}.md, then commit"
-        )),
-        "{output}"
+fn an_older_policys_report_parts_require_only_a_report() {
+    let close = "        required_fields: [close_reason]\n        description: Done claim; commit it on the work branch before review. A parent closes after its children.";
+    assert!(STARTER_WITH_BLOCKED_AND_REVIEW.contains(close));
+    let policy = STARTER_WITH_BLOCKED_AND_REVIEW.replace(
+        close,
+        "        required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]\n        description: Done claim with the implementer report.",
     );
-
-    let mut record = f.store().load_issue_by_id(&newer).unwrap();
-    record.sections.close_reason = Some(
-        "completed claim\n\n### Deviations\nNone.\n\n### Decisions\nNone.\n\n### Surprises\nNone.\n\n### Open items\n".into(),
-    );
-    f.store().write_issue_atomic(&record).unwrap();
-    commit(f.path(), "report without open items");
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && output.contains("required_field.report.open_items"),
-        "{output}"
-    );
-    assert!(
-        !output.contains("required_field.report.deviations:"),
-        "{output}"
-    );
-
-    record.sections.close_reason = Some(format!(
-        "{}\nNone.",
-        record.sections.close_reason.clone().unwrap()
-    ));
-    f.store().write_issue_atomic(&record).unwrap();
-    commit(f.path(), "complete report");
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(pass, "{output}");
-}
-
-#[test]
-fn report_parts_leave_scoped_claims_made_before_the_policy_valid() {
-    let f = Fixture::new();
-    let child = |title: &str| {
-        let child = ok(
-            f.path(),
-            &["-q", "issue", "create", title, "--parent", &f.id],
-        );
-        ok(f.path(), &["issue", "transition", &child, "start"]);
-        child
-    };
-    let earlier = child("Earlier child");
-    ok(
-        f.path(),
-        &[
-            "issue",
-            "transition",
-            &earlier,
-            "close",
-            "--reason",
-            "Closed before the report.",
-        ],
-    );
-    commit(f.path(), "close a child before the policy");
-    git(f.path(), &["switch", "main"]);
-    require_report(f.path());
-    commit(f.path(), "require the implementer report");
-    git(f.path(), &["switch", &f.branch]);
-    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(pass, "{output}");
-
-    // A child closed after the policy reached the branch needs the report.
-    let later = child("Later child");
-    commit(f.path(), "start a later child");
-    let mut record = f.store().load_issue_by_id(&later).unwrap();
-    record.issue.status = "done".into();
-    record.issue.closed_at = Some(chrono::Utc::now());
-    record.sections.close_reason = Some("Closed without the report.".into());
-    f.store().write_issue_atomic(&record).unwrap();
-    commit(f.path(), "close a later child without the report");
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass, "{output}");
-    assert!(
-        output.contains("required_field.report.deviations"),
-        "{output}"
-    );
-    assert!(output.contains(&later), "{output}");
-}
-
-#[test]
-fn a_branch_cannot_weaken_the_policy_around_a_claim_to_skip_the_report() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "main"]);
-    let path = f.path().join(".atelier/workflow.yaml");
-    let original = fs::read_to_string(&path).unwrap();
-    require_report(f.path());
-    commit(f.path(), "require the implementer report");
-    let required = fs::read_to_string(&path).unwrap();
-    git(f.path(), &["switch", &f.branch]);
-    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
-
+    let f = Fixture::under(Some(&policy));
     let child = ok(
         f.path(),
         &["-q", "issue", "create", "Child", "--parent", &f.id],
     );
     ok(f.path(), &["issue", "transition", &child, "start"]);
     commit(f.path(), "start a child");
-    // Weaken the policy in the commit that makes the claim, then restore it,
-    // so the branch diff shows no policy change.
-    fs::write(&path, &original).unwrap();
-    let mut record = f.store().load_issue_by_id(&child).unwrap();
-    record.issue.status = "done".into();
-    record.issue.closed_at = Some(chrono::Utc::now());
-    record.sections.close_reason = Some("Closed without the report.".into());
-    f.store().write_issue_atomic(&record).unwrap();
-    commit(f.path(), "close beside a weakened policy");
-    fs::write(&path, &required).unwrap();
-    commit(f.path(), "restore the policy");
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass, "{output}");
-    assert!(
-        output.contains("required_field.report.deviations"),
-        "{output}"
+    // The old close still runs, and a one-line Report satisfies it.
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &child,
+            "close",
+            "--reason",
+            "Shipped.",
+        ],
     );
-}
-
-#[test]
-fn report_parts_bind_a_claim_one_commit_back_on_a_base_with_no_upstream() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "main"]);
-    let earlier = ok(f.path(), &["-q", "issue", "create", "Earlier claim"]);
-    f.terminal(&earlier);
-    require_report(f.path());
-    commit(f.path(), "require the implementer report");
+    commit(f.path(), "close the child through the old transition");
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(pass, "{output}");
+    assert!(!output.contains("report."), "{output}");
 
-    // With no upstream to trust, land judges a claim one commit back as
-    // held by HEAD's parent, and checks its parts against the policy of the
-    // commit that made it (atelier-uxrs).
-    let newer = ok(f.path(), &["-q", "issue", "create", "Newer claim"]);
-    f.terminal(&newer);
-    ok(f.path(), &["-q", "issue", "create", "Later record"]);
-    commit(f.path(), "a later record");
+    // A claim with no Report at all still fails the one field left.
+    let mut record = f.store().load_issue_by_id(&child).unwrap();
+    record.sections.report = None;
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "drop the report");
     let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass, "{output}");
     assert!(
-        output.contains("required_field.report.deviations") && output.contains(&newer),
+        !pass && output.contains("required_field.close_reason") && output.contains(&child),
         "{output}"
     );
-    assert!(!output.contains(&earlier), "{output}");
+    assert!(
+        output.contains(&format!(
+            "write the `## Report` section in .atelier/issues/{child}.md, then commit"
+        )),
+        "{output}"
+    );
 }
 
 #[test]
@@ -1740,7 +1617,8 @@ fn status_shows_the_owner_decisions_in_brief() {
 #[test]
 fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checkout() {
     for integration_base in [false, true] {
-        let f = Fixture::new();
+        // An older policy's work `close` requires the Report (atelier-jnrh).
+        let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
         if integration_base {
             git(f.path(), &["switch", "main"]);
         }
@@ -1772,7 +1650,9 @@ fn global_terminal_claims_require_fields_and_resolved_dependencies_on_any_checko
 
 #[test]
 fn retained_completion_keeps_valid_historical_proof_and_resolution_after_unrelated_code() {
-    let f = Fixture::new();
+    // An older policy whose work `close` runs the proof validator; merge
+    // marks work done under the current one (atelier-jnrh).
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "main"]);
     let path = f.path().join(".atelier/workflow.yaml");
     let policy = fs::read_to_string(&path).unwrap();
@@ -1947,7 +1827,9 @@ fn retained_completion_keeps_valid_historical_proof_and_resolution_after_unrelat
 }
 #[test]
 fn integration_base_new_completion_cannot_omit_required_proof() {
-    let f = Fixture::new();
+    // An older policy whose work `close` runs the proof validator; merge
+    // marks work done under the current one (atelier-jnrh).
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "main"]);
     let path = f.path().join(".atelier/workflow.yaml");
     let policy = fs::read_to_string(&path).unwrap();
@@ -2508,7 +2390,7 @@ fn terminal_review_cluster_prune_remains_a_valid_handoff() {
         record.issue.created_at = date;
         record.issue.updated_at = date;
         record.issue.closed_at = Some(date);
-        record.sections.close_reason = Some("Verified terminal claim".into());
+        record.sections.report = Some("Verified terminal claim".into());
         f.store().write_issue_atomic(&record).unwrap();
         if retired {
             let created = format!("created_at: {}", date.to_rfc3339());
@@ -2942,6 +2824,8 @@ fn base_branch_accepts_record_only_commits_and_reviewed_merges_but_not_direct_co
     commit(f.path(), "approval");
     ok(f.path(), &["merge", &f.id]);
     git(f.path(), &["switch", "-q", "main"]);
+    // The approval's record commit after its pin; the merge commit adds
+    // only the done marks the approval covers (atelier-jnrh).
     let output = ok(f.path(), &["land"]);
     assert!(
         output.contains("Base commits: 1 unpushed record-only commit outside"),
@@ -3105,7 +2989,7 @@ fn a_base_exemption_covers_exactly_its_commit() {
     let mut record = f.store().load_issue_by_id(&f.id).unwrap();
     record.issue.status = "done".into();
     record.issue.closed_at = Some(chrono::Utc::now());
-    record.sections.close_reason = Some("completed claim".into());
+    record.sections.report = Some("completed claim".into());
     f.store().write_issue_atomic(&record).unwrap();
     fs::write(f.path().join("README"), "Fixed typo again\n").unwrap();
     commit(f.path(), "a claim and an edit on the base");
@@ -3181,10 +3065,7 @@ fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() 
     let work = ok(f.path(), &["-q", "issue", "create", "Branchless work"]);
     commit(f.path(), "file work on the base");
     ok(f.path(), &["issue", "transition", &work, "start"]);
-    ok(
-        f.path(),
-        &["issue", "transition", &work, "close", "--reason", "did it"],
-    );
+    mark_done(f.path(), &work);
     commit(f.path(), "branchless done claim on the base");
     let head = git(f.path(), &["rev-parse", "HEAD"]);
     let (pass, output) = cli(f.path(), &["land"]);
@@ -3241,17 +3122,7 @@ fn base_refuses_done_claims_outside_review_but_allows_supersede_and_decisions() 
         &["config", "user.email", "other@example.test"],
     );
     ok(other.path(), &["issue", "transition", &f.id, "start"]);
-    ok(
-        other.path(),
-        &[
-            "issue",
-            "transition",
-            &f.id,
-            "close",
-            "--reason",
-            "merged elsewhere",
-        ],
-    );
+    mark_done(other.path(), &f.id);
     commit(other.path(), "done claim that reached the upstream");
     git(other.path(), &["push", "-q", "origin", "main"]);
     ok(f.path(), &["-q", "issue", "create", "Local planning"]);
@@ -3280,10 +3151,7 @@ fn base_done_claims_survive_a_broken_record_and_merges_judge_every_parent() {
     commit(f.path(), "break the record");
     fs::write(&path, &original).unwrap();
     ok(f.path(), &["issue", "transition", &work, "start"]);
-    ok(
-        f.path(),
-        &["issue", "transition", &work, "close", "--reason", "did it"],
-    );
+    mark_done(f.path(), &work);
     commit(f.path(), "restore it as done");
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
@@ -3304,17 +3172,7 @@ fn base_done_claims_survive_a_broken_record_and_merges_judge_every_parent() {
         &["config", "user.email", "other@example.test"],
     );
     ok(other.path(), &["issue", "transition", &shared, "start"]);
-    ok(
-        other.path(),
-        &[
-            "issue",
-            "transition",
-            &shared,
-            "close",
-            "--reason",
-            "merged upstream",
-        ],
-    );
+    mark_done(other.path(), &shared);
     commit(other.path(), "done claim that reached the upstream");
     git(other.path(), &["push", "-q", "origin", "main"]);
     ok(
@@ -3355,17 +3213,7 @@ fn base_done_claim_check_reads_the_nearest_parseable_earlier_copy() {
         let work = ok(f.path(), &["-q", "issue", "create", "Work"]);
         commit(f.path(), "plan on the base");
         ok(f.path(), &["issue", "transition", &work, "start"]);
-        ok(
-            f.path(),
-            &[
-                "issue",
-                "transition",
-                &work,
-                "close",
-                "--reason",
-                "reviewed elsewhere",
-            ],
-        );
+        mark_done(f.path(), &work);
         commit(f.path(), "done claim that reached the upstream");
         let upstream = tempdir().unwrap();
         git(upstream.path(), &["init", "-q", "--bare"]);
@@ -3452,7 +3300,9 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
 /// before integrating, and after a forced integration `land` refuses.
 /// A follow-up filed after the approval and linked to its mission in a later
 /// commit keeps it current, though its own done claim is not covered
-/// (atelier-iaas). Each case runs under both merge strategies.
+/// (atelier-iaas). The owner's done claim is made by hand on the branch, as
+/// an older Atelier's close made it; such a claim merges as it is
+/// (atelier-jnrh).
 #[test]
 fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
     let covered_cases = [
@@ -3475,34 +3325,14 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "self_approval",
         "open_fix_now",
     ];
-    for strategy in ["fast_forward_only", "merge_commit"] {
-        for case in covered_cases.iter().chain(&stale_cases).copied() {
-            close_after_approval(strategy, case, covered_cases.contains(&case));
-        }
+    for case in covered_cases.iter().chain(&stale_cases).copied() {
+        close_after_approval(case, covered_cases.contains(&case));
     }
 }
-/// On the base, set the merge strategy `merge` uses; `merge_commit` needs a
-/// shell check to prove the merged tree.
-fn use_strategy(f: &Fixture, strategy: &str) {
-    if strategy == "merge_commit" {
-        let path = f.path().join(".atelier/workflow.yaml");
-        let policy = fs::read_to_string(&path).unwrap().replace(
-            "merge_strategy: fast_forward_only",
-            "merge_strategy: merge_commit",
-        );
-        fs::write(
-            &path,
-            format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'true' }}\n"),
-        )
-        .unwrap();
-        commit(f.path(), "base merges with a merge commit");
-    }
-}
-fn close_after_approval(strategy: &str, case: &str, covered: bool) {
-    let label = format!("{strategy}/{case}");
+fn close_after_approval(case: &str, covered: bool) {
+    let label = case;
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
-    use_strategy(&f, strategy);
     // The reviewer authored work on the base that the branch merges in.
     let reviewer_base = case.starts_with("reviewer_base");
     if reviewer_base {
@@ -3604,10 +3434,7 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
         approve(reviewer);
         let close_issue = |id: &str| {
             ok(f.path(), &["issue", "transition", id, "start"]);
-            ok(
-                f.path(),
-                &["issue", "transition", id, "close", "--reason", "done too"],
-            );
+            mark_done(f.path(), id);
         };
         match case {
             "with_code" => fs::write(f.path().join("code"), "changed while closing\n").unwrap(),
@@ -3690,7 +3517,7 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
                 let mut record = f.store().load_issue_by_id(child).unwrap();
                 record.issue.status = "done".into();
                 record.issue.closed_at = Some(chrono::Utc::now());
-                record.sections.close_reason = Some("completed claim".into());
+                record.sections.report = Some("completed claim".into());
                 f.store().write_issue_atomic(&record).unwrap();
             }
             (Some(child), _) => f.terminal(child),
@@ -3719,22 +3546,16 @@ fn close_after_approval(strategy: &str, case: &str, covered: bool) {
                         "claims.reviewed: commit {} marks {id} done",
                         &close[..8]
                     ))
-                    && output.contains(&format!(
-                        "close {id} on its own branch with `atelier start {id}`"
-                    )),
+                    && output.contains(&format!("from its own branch after `atelier start {id}`")),
                 "{label}: {output}"
             );
         }
         // Integrate past the gate, so land on the base judges it too.
         git(f.path(), &["switch", "-q", "main"]);
-        if strategy == "merge_commit" {
-            git(
-                f.path(),
-                &["merge", "-q", "--no-ff", "--no-edit", &f.branch],
-            );
-        } else {
-            git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
-        }
+        git(
+            f.path(),
+            &["merge", "-q", "--no-ff", "--no-edit", &f.branch],
+        );
     }
     let (pass, output) = cli(f.path(), &["land"]);
     if covered {
@@ -3863,6 +3684,8 @@ fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     commit(f.path(), "approval");
     ok(f.path(), &["merge", &owner]);
     git(f.path(), &["switch", "-q", "main"]);
+    // The approval's record commit after its pin; the merge commit adds
+    // only covered done marks.
     let output = ok(f.path(), &["land"]);
     assert!(
         output.contains("Base commits: 1 unpushed record-only commit outside"),
@@ -3892,14 +3715,16 @@ fn base_pull_merge_counts_only_the_paths_it_introduces() {
     ok(f.path(), &["-q", "issue", "create", "Local planning"]);
     commit(f.path(), "record-only planning on the base");
     git(f.path(), &["pull", "-q", "--no-rebase", "--no-edit"]);
+    // The clean pull merge introduces nothing, so only the planning commit
+    // counts.
     let output = ok(f.path(), &["land"]);
     assert!(
-        output.contains("Base commits: 2 unpushed record-only commits outside"),
+        output.contains("Base commits: 1 unpushed record-only commit outside"),
         "{output}"
     );
 }
 #[test]
-fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
+fn land_on_a_branch_behind_its_base_hands_off_and_says_merge_lands_on_it() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
     fs::write(f.path().join("other"), "landed on the base\n").unwrap();
@@ -3910,18 +3735,18 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     let output = ok(f.path(), &["land", &f.id]);
     assert!(
         output.contains("Base main has 1 commit this branch does not")
-            && output.contains("git merge main"),
+            && output.contains("atelier merge --sync"),
         "{output}"
     );
 
-    // Completed work is still checked against where it left the base, and
-    // the note survives a failing gate.
+    // Work an older Atelier closed is still checked against where it left
+    // the base, and the note survives a failing gate.
     f.terminal(&f.id);
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
         !pass
             && output.contains("review.current: no independent approval or trivial exemption")
-            && output.contains("git merge main"),
+            && output.contains("Base main has 1 commit this branch does not"),
         "{output}"
     );
     ok(
@@ -3937,15 +3762,49 @@ fn land_on_a_branch_behind_its_base_hands_off_and_says_to_merge_the_base() {
     );
     commit(f.path(), "approval");
     let output = ok(f.path(), &["land", &f.id]);
-    assert!(output.contains("git merge main"), "{output}");
-    let (pass, output) = cli(f.path(), &["merge", &f.id]);
-    assert!(!pass && output.contains("merge_diverged"), "{output}");
-
-    // Following the note: a clean merge of the base keeps the approval.
-    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
-    let output = ok(f.path(), &["land", &f.id]);
-    assert!(!output.contains("git merge main"), "{output}");
+    assert!(
+        output.contains("Base main has 1 commit this branch does not")
+            && output.contains("Next: atelier merge"),
+        "{output}"
+    );
+    // Merge lands it on the moved base with no catch-up merge.
     ok(f.path(), &["merge", &f.id]);
+}
+
+/// Merge always creates a merge commit, so a branch behind its base merges
+/// without catching up first, and land on the base accepts the result
+/// (atelier-jnrh).
+#[test]
+fn a_branch_behind_its_base_merges_without_catching_up() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("other"), "landed on the base\n").unwrap();
+    commit(f.path(), "other work landed on the base");
+    let base = git(f.path(), &["rev-parse", "HEAD"]);
+    git(f.path(), &["switch", "-q", &f.branch]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    let output = ok(f.path(), &["merge", &f.id]);
+    assert!(
+        output.contains(&format!("which marks {} done", f.id)),
+        "{output}"
+    );
+    assert_eq!(git(f.path(), &["rev-parse", "main^1"]), base);
+    assert_eq!(git(f.path(), &["rev-parse", "main^2"]), head);
+    let record = fs::read_to_string(f.path().join(format!(".atelier/issues/{}.md", f.id))).unwrap();
+    assert!(record.contains("status: \"done\""), "{record}");
+    ok(f.path(), &["land"]);
 }
 #[test]
 fn land_names_a_base_with_no_shared_history() {
@@ -4181,17 +4040,7 @@ fn a_kept_branch_whose_done_owner_was_pruned_from_the_base_shows_merged() {
     commit(f.path(), "plan fresh work");
     ok(f.path(), &["start", &fresh]);
     commit(f.path(), "start fresh work");
-    ok(
-        f.path(),
-        &[
-            "issue",
-            "transition",
-            &fresh,
-            "close",
-            "--reason",
-            "claimed",
-        ],
-    );
+    mark_done(f.path(), &fresh);
     let output = ok(f.path(), &["status"]);
     assert!(output.contains("not merged into main"), "{output}");
 }
@@ -4306,17 +4155,7 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
     commit(f.path(), "plan it");
     ok(f.path(), &["issue", "transition", &old, "start"]);
-    ok(
-        f.path(),
-        &[
-            "issue",
-            "transition",
-            &old,
-            "close",
-            "--reason",
-            "pushed directly",
-        ],
-    );
+    mark_done(f.path(), &old);
     commit(f.path(), "done without the gates");
     let fail = |summary: &str| {
         ok(
@@ -4464,7 +4303,9 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
 }
 #[test]
 fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
-    let f = Fixture::new();
+    // An older policy, whose work `close` validators judge the claims; merge
+    // marks work done under the current one (atelier-jnrh).
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "-q", "main"]);
     let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
     let child = ok(
@@ -4474,10 +4315,7 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     commit(f.path(), "plan it");
     for id in [&child, &old] {
         ok(f.path(), &["issue", "transition", id, "start"]);
-        ok(
-            f.path(),
-            &["issue", "transition", id, "close", "--reason", "done"],
-        );
+        mark_done(f.path(), id);
     }
     let record = |result: &str, summary: &str| {
         ok(
@@ -4530,10 +4368,7 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     );
     for id in [&nested, &behind] {
         ok(f.path(), &["issue", "transition", id, "start"]);
-        ok(
-            f.path(),
-            &["issue", "transition", id, "close", "--reason", "done"],
-        );
+        mark_done(f.path(), id);
     }
     record("fail", "Proof that failed");
     let passed = record("pass", "Proof that passed later");
@@ -4672,10 +4507,7 @@ fn land_checks_a_mission_whose_advancing_work_reopens() {
     ok(f.path(), &["issue", "link", &work, &mission]);
     commit(f.path(), "plan the mission");
     ok(f.path(), &["issue", "transition", &work, "start"]);
-    ok(
-        f.path(),
-        &["issue", "transition", &work, "close", "--reason", "done"],
-    );
+    mark_done(f.path(), &work);
     for transition in ["ready", "start"] {
         ok(f.path(), &["issue", "transition", &mission, transition]);
     }
@@ -4709,7 +4541,9 @@ fn land_checks_a_mission_whose_advancing_work_reopens() {
 }
 #[test]
 fn land_checks_every_claim_after_a_record_change_under_a_lint_gate() {
-    let f = Fixture::new();
+    // An older policy, whose work `close` validators judge the claims; merge
+    // marks work done under the current one (atelier-jnrh).
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "-q", "main"]);
     // A policy whose work closes only while the whole tracker lints clean.
     let policy = f.path().join(".atelier/workflow.yaml");
@@ -4722,10 +4556,7 @@ fn land_checks_every_claim_after_a_record_change_under_a_lint_gate() {
     let old = ok(f.path(), &["-q", "issue", "create", "Done before"]);
     commit(f.path(), "plan it");
     ok(f.path(), &["issue", "transition", &old, "start"]);
-    ok(
-        f.path(),
-        &["issue", "transition", &old, "close", "--reason", "done"],
-    );
+    mark_done(f.path(), &old);
     commit(f.path(), "done without the gates");
     let upstream = tempdir().unwrap();
     git(upstream.path(), &["init", "-q", "--bare"]);
@@ -4877,13 +4708,15 @@ fn status_current_work_row_reads_like_its_owner_row() {
 #[test]
 fn done_claims_on_work_branches_say_they_are_not_merged() {
     let f = Fixture::new();
-    // While the owner is in progress, its branch row counts it as active.
+    // While the owner is in progress, its branch row counts it as active,
+    // with how it would merge, since merge is what marks it done.
     git(f.path(), &["switch", "-q", "main"]);
     let status = ok(f.path(), &["status"]);
     assert!(
-        status
-            .lines()
-            .any(|line| line.starts_with(&format!("{}  {} in_progress  ", f.branch, f.id))),
+        status.lines().any(|line| line.starts_with(&format!(
+            "{}  {} in_progress, ⚠ not approved, behind 0, merges cleanly  ",
+            f.branch, f.id
+        ))),
         "{status}"
     );
     git(f.path(), &["switch", "-q", &f.branch]);
@@ -4921,17 +4754,7 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
     let fresh = ok(f.path(), &["-q", "issue", "create", "Fresh owner"]);
     commit(f.path(), "plan fresh owner");
     ok(f.path(), &["start", &fresh]);
-    ok(
-        f.path(),
-        &[
-            "issue",
-            "transition",
-            &fresh,
-            "close",
-            "--reason",
-            "Claimed",
-        ],
-    );
+    mark_done(f.path(), &fresh);
     let status = ok(f.path(), &["status"]);
     assert!(
         field(&status, "Owner").is_some_and(|owner| owner.starts_with(&format!("{fresh} ✓ done "))
@@ -4990,7 +4813,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     let status = ok(f.path(), &["status"]);
     for row in [
         format!("task/{finished}  {finished} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Finished elsewhere"),
-        format!("task/{stuck}  {stuck} ⚠ blocked  Stuck elsewhere"),
+        format!("task/{stuck}  {stuck} ⚠ blocked, ⚠ not approved, behind 0, merges cleanly  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
     }
@@ -5201,7 +5024,7 @@ fn a_parent_owned_branch_shows_its_childrens_activity() {
     assert_eq!(
         branch_row(&status, &f.branch),
         format!(
-            "{}  {} in_progress, 1 of 3 children done, 1 active  Session owner",
+            "{}  {} in_progress, ⚠ not approved, behind 0, merges cleanly, 1 of 3 children done, 1 active  Session owner",
             f.branch, f.id
         ),
         "{status}"
@@ -5436,20 +5259,9 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
     fs::write(path.join("code"), "first slice\n").unwrap();
     commit(path, "first slice");
     ok(path, &["land"]);
-    ok(
-        path,
-        &[
-            "issue",
-            "transition",
-            &first,
-            "close",
-            "--reason",
-            "First slice done",
-        ],
-    );
-    commit(path, "first child done");
 
-    // The parent closes only after every child is terminal.
+    // Merge marks the work done, so nothing closes, and nothing has a close
+    // order to keep (atelier-jnrh).
     ok(path, &["start", &parent]);
     let (pass, output) = cli(
         path,
@@ -5462,34 +5274,16 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
             "Too early",
         ],
     );
-    assert!(!pass && output.contains(&second), "{output}");
+    assert!(
+        !pass && output.contains("Invalid transition 'close'"),
+        "{output}"
+    );
     ok(path, &["start", &second]);
     assert_eq!(git(path, &["branch", "--show-current"]), branch);
-    ok(
-        path,
-        &[
-            "issue",
-            "transition",
-            &second,
-            "close",
-            "--reason",
-            "Second slice done",
-        ],
-    );
-    ok(
-        path,
-        &[
-            "issue",
-            "transition",
-            &parent,
-            "close",
-            "--reason",
-            "Both slices done",
-        ],
-    );
-    commit(path, "children and parent done");
-    let (pass, output) = cli(path, &["land"]);
-    assert!(!pass && output.contains("review.current"), "{output}");
+    commit(path, "start the parent and the second child");
+    // Work in progress lands without a review; merge is what needs one.
+    let output = ok(path, &["land"]);
+    assert!(!output.contains("Next: atelier merge"), "{output}");
     ok(
         path,
         &[
@@ -5502,19 +5296,29 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
         ],
     );
     commit(path, "approval");
-    ok(path, &["land"]);
+    let output = ok(path, &["land"]);
+    assert!(
+        output.contains(&format!("Next: atelier merge {parent}")),
+        "{output}"
+    );
+    let head = git(path, &["rev-parse", "HEAD"]);
     ok(path, &["merge", &first]);
     assert_eq!(git(path, &["branch", "--show-current"]), "main");
+    // One merge commit marks the parent and both children done.
+    assert_eq!(git(path, &["rev-parse", "main^2"]), head);
     for id in [&parent, &first, &second] {
         let record = fs::read_to_string(path.join(format!(".atelier/issues/{id}.md"))).unwrap();
         assert!(record.contains("status: \"done\""), "{record}");
+        let at_head = git(path, &["show", &format!("{head}:.atelier/issues/{id}.md")]);
+        assert!(at_head.contains("status: \"in_progress\""), "{at_head}");
     }
+    ok(path, &["land"]);
 }
 
 /// Low-priority follow-ups batched as children of one parent share its
 /// branch and one review: a single approval on the parent covers every child
-/// closed on the branch, through `land`, `merge` and `land` on the base
-/// (atelier-u6f3).
+/// on the branch, through `land`, `merge`, which marks them all done, and
+/// `land` on the base (atelier-u6f3, atelier-jnrh).
 #[test]
 fn one_approval_on_the_parent_covers_follow_ups_closed_on_its_branch() {
     let dir = tempdir().unwrap();
@@ -5559,34 +5363,18 @@ fn one_approval_on_the_parent_covers_follow_ups_closed_on_its_branch() {
     );
     git(path, &["push", "-q", "-u", "origin", "main"]);
 
-    // Each follow-up starts on the parent's branch, with its own code and
-    // its own done claim, and no review of its own.
+    // Each follow-up starts on the parent's branch, with its own code and no
+    // review of its own.
     let branch = format!("task/{parent}");
     for (number, child) in children.iter().enumerate() {
         ok(path, &["start", child]);
         assert_eq!(git(path, &["branch", "--show-current"]), branch);
         fs::write(path.join(format!("fix{number}")), "follow-up fix\n").unwrap();
         commit(path, &format!("fix {child}"));
-        ok(
-            path,
-            &["issue", "transition", child, "close", "--reason", "Fixed"],
-        );
-        commit(path, &format!("close {child}"));
     }
     ok(path, &["start", &parent]);
-    ok(
-        path,
-        &[
-            "issue",
-            "transition",
-            &parent,
-            "close",
-            "--reason",
-            "All fixed",
-        ],
-    );
-    commit(path, "close the batch");
-    let (pass, output) = cli(path, &["land"]);
+    commit(path, "start the batch");
+    let (pass, output) = cli(path, &["merge", &parent, "--check"]);
     assert!(!pass && output.contains("review.current"), "{output}");
 
     ok(
@@ -5608,8 +5396,9 @@ fn one_approval_on_the_parent_covers_follow_ups_closed_on_its_branch() {
         let record = fs::read_to_string(path.join(format!(".atelier/issues/{id}.md"))).unwrap();
         assert!(record.contains("status: \"done\""), "{record}");
     }
-    // On the base, the one approval covers the code and every done claim;
-    // only the approval's own record commit follows its pin.
+    // On the base, the one approval covers the code and every done claim,
+    // the merge commit's marks included; only the approval's own record
+    // commit follows its pin (atelier-jnrh).
     let output = ok(path, &["land"]);
     assert!(
         output.contains("Base commits: 1 unpushed record-only commit outside review.")
@@ -6512,17 +6301,12 @@ fn status_does_not_write_the_old_holder_back_over_a_take_over() {
 /// no other done claim in that mission: a sibling's claim does not depend on
 /// the mission (atelier-ss25). `land` on the base and on a work branch, and
 /// `merge`, skip an old sibling whose proof no longer verifies; `doctor`
-/// still reports it. Each case runs under both merge strategies.
+/// still reports it.
 #[test]
 fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
-    for strategy in ["fast_forward_only", "merge_commit"] {
-        add_to_mission_under(strategy);
-    }
-}
-fn add_to_mission_under(strategy: &str) {
+    let strategy = "merge";
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
-    use_strategy(&f, strategy);
     let mission = ok(
         f.path(),
         &[
@@ -6541,10 +6325,7 @@ fn add_to_mission_under(strategy: &str) {
     );
     commit(f.path(), "plan the mission");
     ok(f.path(), &["issue", "transition", &old, "start"]);
-    ok(
-        f.path(),
-        &["issue", "transition", &old, "close", "--reason", "done"],
-    );
+    mark_done(f.path(), &old);
     ok(
         f.path(),
         &[
@@ -6607,14 +6388,13 @@ fn add_to_mission_under(strategy: &str) {
     assert!(pass && !reported(&output), "{strategy}: {output}");
 }
 /// A done mission that a branch gives open work is a claim `land` refuses,
-/// so `merge` refuses it before integrating, under either strategy
-/// (atelier-bu66).
+/// so `merge` refuses it before integrating (atelier-bu66).
 #[test]
 fn merge_refuses_a_done_mission_the_branch_gives_open_work() {
-    for strategy in ["fast_forward_only", "merge_commit"] {
+    {
+        let strategy = "merge";
         let f = Fixture::new();
         git(f.path(), &["switch", "-q", "main"]);
-        use_strategy(&f, strategy);
         // A policy whose missions close only once their advancing work is
         // done.
         let policy = f.path().join(".atelier/workflow.yaml");
@@ -6727,11 +6507,11 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
         out,
         format!(
             "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
-             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.none_open, {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
+             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ records committed\n\
-             ✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
-             land: refused — 5 checks (review.current, blockers.none_open, findings.disposed, {child} blockers.none_open, {child} blockers.transitive_none_open)\n"
+             ✓ 1 check passes (blockers.transitive_none_open)\n\
+             land: refused — 4 checks (review.current, blockers.none_open, findings.disposed, {child} blockers.transitive_none_open)\n"
         )
     );
     // Every fix it prints runs as printed: review request, start or unlink
@@ -6809,7 +6589,7 @@ fn land_pass_lists_what_it_checked_and_the_next_step() {
         out,
         format!(
             "✓ records committed\n\
-             ✓ 6 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, review.current via {approval}, work.terminal)\n\
+             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, review.current via {approval})\n\
              ✓ 1 done claim holds\n\
              Next: atelier merge {id}\n\
              land: passed\n"
@@ -6886,7 +6666,7 @@ fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
 fn land_with_an_id_points_to_the_owners_branch() {
     let f = Fixture::new();
     let id = f.id.clone();
-    let not_checked = "Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_branch_mismatch stops land before them.";
+    let not_checked = "Not checked: the owner's review, findings, proof and blocker gates and the done claims; land_branch_mismatch stops land before them.";
     git(f.path(), &["switch", "-q", "main"]);
     // The base's record of the item says nothing of its branch.
     let (pass, out) = cli(f.path(), &["land", &id]);
@@ -6929,7 +6709,7 @@ fn land_with_an_id_points_to_the_owners_branch() {
         out,
         format!(
             "⚠ {mission} land_mission: a mission, and missions have no branch; land one of its items. Next: atelier work mission {mission}\n\
-             Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_mission stops land before them.\n\
+             Not checked: the owner's review, findings, proof and blocker gates and the done claims; land_mission stops land before them.\n\
              land: refused — 1 check (land_mission)\n"
         )
     );
@@ -6943,7 +6723,7 @@ fn land_with_an_id_points_to_the_owners_branch() {
         out,
         format!(
             "⚠ {unstarted} land_work_untraceable: {unstarted} has no work branch. Next: atelier start {unstarted}\n\
-             Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_work_untraceable stops land before them.\n\
+             Not checked: the owner's review, findings, proof and blocker gates and the done claims; land_work_untraceable stops land before them.\n\
              land: refused — 1 check (land_work_untraceable)\n"
         )
     );
@@ -6973,7 +6753,7 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
         format!(
             "⚠ {id} {cause}\n{review}\n\
              ✓ records committed\n\
-             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed)\n\
              land: refused — 2 checks (workflow_config_parse_error, review.current)\n"
         )
     );
@@ -6983,7 +6763,7 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
         out,
         format!(
             "⚠ {id} {cause}\n{} (also claims.reviewed). Next: atelier review request {id}\n\
-             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed)\n\
              merge: refused — 3 checks (workflow_config_parse_error, review.current, claims.reviewed)\n",
             review.split(". Next: ").next().unwrap()
         )
@@ -7006,13 +6786,13 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
     );
 }
 
-/// Every printed fix for open work under a closed owner and for a blocker
-/// that declares its link with `blocks` runs as printed and clears its own
-/// failure (atelier-r3oy).
+/// Every printed fix for a blocker that declares its link with `blocks`
+/// runs as printed and clears its own failure (atelier-r3oy). The owner was
+/// closed under an older policy, whose close still checks its blockers; open
+/// children under it are no longer refused, since merge marks them done
+/// (atelier-jnrh).
 #[test]
-fn land_fixes_for_open_children_and_a_blocks_link_clear_their_failures() {
-    // A policy from the earlier starter, so children can rest in its
-    // `blocked` and `review` statuses.
+fn land_fixes_for_a_blocks_link_clear_their_failures() {
     let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     let id = f.id.clone();
     let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
@@ -7020,34 +6800,11 @@ fn land_fixes_for_open_children_and_a_blocks_link_clear_their_failures() {
         f.path(),
         &["issue", "link", &blocker, &id, "--role", "blocks"],
     );
-    let mut children = Vec::new();
-    for status in ["backlog", "blocked", "review"] {
-        let child = ok(
-            f.path(),
-            &[
-                "-q",
-                "issue",
-                "create",
-                &format!("A {status} child"),
-                "--parent",
-                &id,
-            ],
-        );
-        set_status(&f, &child, status);
-        children.push(child);
-    }
-    commit(f.path(), "a blocker and open children");
+    commit(f.path(), "a blocker");
     f.terminal(&id);
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass);
-    for (child, status) in children.iter().zip(["backlog", "blocked", "review"]) {
-        assert!(
-            out.contains(&format!(
-                "⚠ {child} work.terminal: {status}, open in {id}'s scope. Next: "
-            )),
-            "{out}"
-        );
-    }
+    assert!(!out.contains(" work.terminal:"), "{out}");
     assert!(
         out.contains(&format!(
             "or drop the link with `atelier issue unlink {blocker} {id} --role blocks` if it is wrong"
@@ -7055,9 +6812,8 @@ fn land_fixes_for_open_children_and_a_blocks_link_clear_their_failures() {
         "{out}"
     );
     assert!(!out.contains("reopen"), "{out}");
-    // The review request, the blocker's start or unlink, and each child's
-    // close or supersede.
-    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 6);
+    // The review request, and the blocker's start or unlink.
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 3);
 }
 
 /// A done owner reopened in the checkout only: the gates read HEAD's done
@@ -7227,7 +6983,7 @@ fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
         records.sort();
         assert!(
             out.contains(&format!(
-                "land_records_uncommitted: 2 tracker records differ from HEAD: {}; review records are append-only, so restore the committed ones and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- {path} && git add .atelier && git commit -m \"…\"\n",
+                "land_records_uncommitted: 2 tracker records differ from HEAD: {}; approvals, trivial exemptions and review records on the base are append-only, so restore those and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- {path} && git add .atelier && git commit -m \"…\"\n",
                 records.join(", ")
             )),
             "{change}: {out}"
@@ -7550,17 +7306,13 @@ fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
     git(path, &["config", "user.name", "Author"]);
     git(path, &["config", "user.email", "author@example.test"]);
     ok(path, &["init", "--slug", "atelier"]);
+    // An older policy whose work `close` requires proof: the claims it makes
+    // are judged by its validators, as before atelier-jnrh.
     let policy = path.join(".atelier/workflow.yaml");
-    let text = fs::read_to_string(&policy)
-        .unwrap()
-        .replace(
-            "base_branch: main\n",
-            "base_branch: main\n  merge_strategy: fast_forward_only\n",
-        )
-        .replace(
-            "        - blockers.none_open\n",
-            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
-        );
+    let text = STARTER_WITH_BLOCKED_AND_REVIEW.replace(
+        "        - blockers.none_open\n",
+        "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+    );
     fs::write(&policy, text).unwrap();
     commit(path, "require proof");
     let owner = ok(path, &["-q", "issue", "create", "Owner two"]);
@@ -7796,7 +7548,7 @@ fn a_pending_review_on_the_owners_branch_blocks_no_turn() {
         format!(
             "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
              ✓ records committed\n\
-             ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, work.terminal)\n\
+             ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed)\n\
              land: refused — 1 check (review.current)\n"
         )
     );
@@ -8437,9 +8189,12 @@ fn a_disposition_after_approval_keeps_it_current() {
         text.replace("\nConcern\n", "\nA different concern\n"),
     )
     .unwrap();
+    // The finding has not reached the base, so it may still be corrected
+    // (atelier-ilba); every merge is a merge commit, so no fast-forward made
+    // it final (atelier-jnrh).
     commit(f.path(), "rewrite the finding");
     let (pass, out) = cli(f.path(), &["merge", &id, "--check"]);
-    assert!(!pass && out.contains("review_append_only"), "{out}");
+    assert!(pass && !out.contains("review_append_only"), "{out}");
 }
 
 /// An approved work branch whose dispositions are separate events passes
@@ -8606,9 +8361,13 @@ fn separate_disposition_events_cannot_be_deleted_or_restored_by_hand() {
     }
 }
 
-/// A branch whose older Atelier recorded a successor disposition event is
-/// brought up to date with a migrated base by merging without committing and
-/// migrating; a plain merge is refused, naming that step (atelier-j5oq).
+/// A branch whose older Atelier recorded a successor disposition event takes
+/// a migrated base with a plain merge: the base never held the successor
+/// event, so the branch may still correct it (atelier-ilba), and since every
+/// merge is a merge commit no fast-forward makes it final first
+/// (atelier-jnrh). Migrating the branch then folds it. Under
+/// `fast_forward_only` the plain merge was refused, naming a migrating merge
+/// (atelier-j5oq).
 #[test]
 fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
     let f = Fixture::new();
@@ -8667,45 +8426,13 @@ fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
     commit(f.path(), "migrate dispositions on the base");
     git(f.path(), &["switch", "-q", &f.branch]);
     git(f.path(), &["merge", "-q", "--no-edit", "main"]);
-    let merge = git(f.path(), &["rev-parse", "HEAD"]);
-    let main = git(f.path(), &["rev-parse", "main"]);
-    let next = format!(
-        "Next: git rebase --autostash --onto {merge}~1 {merge} && git merge --no-commit {main} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit\n"
-    );
-    let rewrites = "rewrites the commits after it: get them reviewed again";
     let (pass, out) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && out.contains(&next) && !out.contains(rewrites),
-        "{out}"
-    );
-    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
-    // Below the tip, the same step rewrites the later commits, and says so.
-    fs::write(f.path().join("later"), "later work\n").unwrap();
-    commit(f.path(), "later work");
-    let (pass, below) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && below.contains(&next) && below.contains(rewrites),
-        "{below}"
-    );
-    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
-    // The documented sequence, run here, leaves a branch the check accepts.
-    git(
-        f.path(),
-        &[
-            "rebase",
-            "-q",
-            "--autostash",
-            "--onto",
-            &format!("{merge}~1"),
-            &merge,
-        ],
-    );
-    git(f.path(), &["merge", "-q", "--no-commit", "main"]);
+    assert!(pass && !out.contains("review_append_only"), "{out}");
+    ok(f.path(), &["check"]);
     ok(f.path(), &["migrate", "dispositions", "--apply"]);
-    git(f.path(), &["add", ".atelier"]);
-    git(f.path(), &["commit", "-q", "--no-edit"]);
+    commit(f.path(), "migrate the branch's successor event");
     assert!(!f.path().join(".atelier/reviews/atelier-e002.md").exists());
-    let (_, out) = cli(f.path(), &["land"]);
-    assert!(!out.contains("review_append_only"), "{out}");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass && !out.contains("review_append_only"), "{out}");
     ok(f.path(), &["check"]);
 }

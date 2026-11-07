@@ -42,7 +42,8 @@ fn one_standard_lifecycle_costs_the_recorded_bookkeeping() {
     let base = git(repo, &["rev-parse", "HEAD"]);
 
     // The author starts the issue, implements it, records one manual receipt
-    // and closes it.
+    // and writes the implementer report, in place of the close merge makes
+    // unnecessary (atelier-jnrh).
     ok(repo, &["start", &id]);
     commit(repo, "Start the change");
     fs::write(repo.join("src.rs"), "first version\n").unwrap();
@@ -62,18 +63,14 @@ fn one_standard_lifecycle_costs_the_recorded_bookkeeping() {
             "Checked the change by hand",
         ],
     );
-    ok(
-        repo,
-        &[
-            "issue",
-            "transition",
-            &id,
-            "close",
-            "--reason",
-            "Shipped the change.",
-            "--commit-records",
-        ],
-    );
+    let path = repo.join(format!(".atelier/issues/{id}.md"));
+    let record = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        format!("{record}\n## Report\n\nShipped the change.\n"),
+    )
+    .unwrap();
+    commit(repo, "Report on the change");
 
     // An independent reviewer raises three findings at the head and does not
     // approve.

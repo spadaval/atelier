@@ -72,6 +72,11 @@ fn is_done(issue: &Issue, policy: Option<&WorkflowPolicy>) -> bool {
     category && issue.status != "superseded"
 }
 
+/// Whether `line` carries the After merge marker, ticked or not.
+pub fn is_marked(line: &str) -> bool {
+    marked(line).is_some()
+}
+
 /// Whether `after` differs from `before` only by recording validation: open
 /// after-merge checks ticked, or given a `carried to <id>` clause naming an
 /// issue in `index`, with their reason, check and stand-in otherwise

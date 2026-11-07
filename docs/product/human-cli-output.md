@@ -163,11 +163,12 @@ wording of the `↳` in-flight mark), then two spaces and the title. Facts
 about a branch go in the status part, before the free-text title. There is no
 priority, commit or active count.
 
-A done owner that is not merged is waiting to land, and its row adds its
-readiness against the current base (atelier-tciw):
+Every owner not merged into the base adds its readiness against the current
+base (atelier-tciw): open work, which merge marks done, and work an older
+Atelier closed on its branch (atelier-jnrh):
 
 ```
-task/atelier-cmhv  atelier-cmhv ✓ done, not merged, ✓ approved, behind 3, ⚠ failing evidence atelier-v1ab, merges cleanly  Title
+task/atelier-cmhv  atelier-cmhv in_progress, ✓ approved, behind 3, ⚠ failing evidence atelier-v1ab, merges cleanly  Title
 task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind 3, conflicts: Cargo.lock, src/lib.rs  Title
 ```
 
@@ -178,9 +179,9 @@ task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind
   `⚠ not approved` otherwise. `review list <id>` and `merge <id> --check`
   name the cause.
 - `behind <n>`: base commits the branch does not have.
-- `⚠ failing evidence <id>` when a done item in the owner's scope, except
-  superseded ones, has a failing receipt with no pass after it, which
-  `evidence.no_newer_failure` refuses. An item with no receipts has no gap,
+- `⚠ failing evidence <id>` when an item in the owner's scope that is done
+  or that merge marks done, except superseded ones, has a failing receipt
+  with no pass after it, which `evidence.no_newer_failure` refuses. An item with no receipts has no gap,
   so nothing is shown (atelier-s66u).
 - `merges cleanly`, or `conflicts: <path>, <path>` naming the files
   `git merge-tree` cannot merge into the current base. It comes last, so its
@@ -192,7 +193,7 @@ adds their activity, `, 1 of 3 children done, 1 active`, so a parent-owned
 branch does not read as idle.
 
 Branches with no started work or no tracker share one trailing line,
-`Unowned: <branch>, <branch>`. Each pair of waiting branches that change the
+`Unowned: <branch>, <branch>`. Each pair of unmerged branches that change the
 same files since they left the base gets a line,
 `Shared files: <branch> and <branch> both touch <path>, <path>`, naming up to
 five paths and then `and <n> more`, so an orchestrator can land them back to
@@ -310,13 +311,13 @@ refused — 1 check (sync_conflict)`),
 `merge` and `merge --check` since atelier-6rh7 (`merge: passed`, or `merge:
 refused — 2 checks (review.current, findings.disposed)`),
 `evidence record` since atelier-3ekh (`evidence record: passed`, or
-`evidence record: recorded fail — <item> cannot close or merge until a later
-pass`, which exits zero because recording succeeded; a blocked or
+`evidence record: recorded fail — <item> cannot merge or be done until a
+later pass`, which exits zero because recording succeeded; a blocked or
 not-applicable result ends `recorded <result> — it never counts as a pass`;
 a capture that refuses to run still fails with an error and no verdict line),
 `check` in atelier-4t5l, `start` in
 atelier-501y, and `doctor` in atelier-rc8j. A failed precondition, such as
-`land_records_uncommitted` or `merge_diverged`, is one more failed check in
+`land_records_uncommitted` or `canonical_snapshot_uncommitted`, is one more failed check in
 the same list, and the gates still run (atelier-0uaj).
 
 ### Gate Lines
@@ -328,12 +329,12 @@ the check, the cause and the command that fixes it; then the passes,
 collapsed; then the verdict:
 
 ```
-⚠ atelier-43m1 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Fix the findings" changed src/gate.rs (also claims.reviewed). Next: atelier review request atelier-43m1
+⚠ atelier-43m1 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Fix the findings" changed src/gate.rs. Next: atelier review request atelier-43m1
 ⚠ atelier-43m1 findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request atelier-43m1
 ⚠ atelier-jb2t blockers.none_open: done but blocked by atelier-ihns todo high Show the between-missions state (also atelier-jb2t blockers.transitive_none_open). Next: start it with `atelier start atelier-ihns`, or drop the link with `atelier issue unlink atelier-jb2t atelier-ihns --role blocked_by` if it is wrong
-✓ 3 checks pass (blockers.transitive_none_open, required_field.close_reason, work.terminal)
+✓ 2 checks pass (blockers.transitive_none_open, claims.reviewed)
 ✓ 2 done claims hold
-merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed, atelier-jb2t blockers.none_open, atelier-jb2t blockers.transitive_none_open)
+merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blockers.none_open, atelier-jb2t blockers.transitive_none_open)
 ```
 
 - `review.current` names the approval it considered and why it does not
@@ -345,7 +346,7 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   the order the gates ran. A check on the owner, or on no record, is named bare
   in the verdict; a check on another record is `<record> <check>`.
 - A precondition is a check of its own that keeps its shipped code: records or
-  code that differ from HEAD, a base not merged in, a dirty completion, an
+  code that differ from HEAD, a dirty completion, an
   invalid policy (`⚠ <owner> workflow_config_parse_error: .atelier/workflow.yaml:
   <message>. Next: fix .atelier/workflow.yaml and commit it`, printed once; the
   fallback notes for the same file are left out; a policy from a newer
@@ -362,7 +363,7 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
 
   ```
   ⚠ atelier-7b6e land_branch_mismatch: owned on task/atelier-7b6e, not on master. Next: git switch task/atelier-7b6e && atelier land
-  Not checked: the owner's review, findings, proof, blocker and open-work gates and the done claims; land_branch_mismatch stops land before them.
+  Not checked: the owner's review, findings, proof and blocker gates and the done claims; land_branch_mismatch stops land before them.
   land: refused — 1 check (land_branch_mismatch)
   ```
 
@@ -378,22 +379,23 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   the owner's scope when its review or findings fail, and `merge.merged_tree`
   when a `shell.check` failed on it.
 - The fix uses the real IDs, paths and commands it knows, and each moves the
-  check toward passing: for an open item in the scope, the workflow's
-  transitions that close it from its status, in order (`--reason "…"` where
-  the policy requires one); under a closed ancestor, which keeps it out of
-  active statuses, transitions that avoid them, such as `supersede`; for an open
-  blocker, the transition that closes it in one step, else `atelier start
-  <blocker>` when its workflow lets it start, else the listing of its
-  transitions, said as such, and the `atelier issue unlink` that drops the
-  link if it is wrong, from the record that declares it and with its role
-  (`--role blocked_by`, or `--role blocks` from the blocker); the failing receipt's own
-  command, to record a pass after the fail; the shell check to rerun, after `atelier
-  merge <owner> --sync` when it failed on the merged tree under
-  `merge_strategy: merge_commit`, which holds the base's changes the work
+  check toward passing: for open work that merge marks done, `atelier merge
+  <owner>`, or `atelier start <owner>` when it has no branch yet; for another
+  open item in the scope, the workflow's transitions that close it from its
+  status, in order (`--reason "…"` where the policy requires one); under a
+  closed ancestor, which keeps it out of active statuses, transitions that
+  avoid them, such as `supersede`; for an open blocker, `atelier start
+  <blocker>` when its workflow lets it start, `atelier merge <owner>` for
+  started work that merge marks done, else the transition that closes it in
+  one step, else the listing of its transitions, said as such, and the
+  `atelier issue unlink` that drops the link if it is wrong, from the record
+  that declares it and with its role (`--role blocked_by`, or `--role blocks`
+  from the blocker); the failing receipt's own command, to record a pass after
+  the fail; the shell check to rerun, after `atelier merge <owner> --sync` when
+  it failed on the merged tree, which holds the base's changes the work
   checkout lacks; and `atelier review request <owner>` for what needs an
   independent reviewer; for a precondition, the git command that commits or
-  sets aside what is uncommitted, `git merge <base>`, or `git switch
-  <branch>`. A fix of more than one command is a sentence with
+  sets aside what is uncommitted, or `git switch <branch>`. A fix of more than one command is a sentence with
   each command in backticks. The refusal tests run every printed fix
   verbatim in a copy of the fixture and require it to exit 0 and to change
   the records or checkout unless it only reads; then, with the records it
@@ -645,7 +647,7 @@ about them. The helpers in `crates/atelier-app/src/record_ref.rs` and
 - An error carries a code if and only if one of Atelier's checks refuses
   the command. The checks are:
   - the gates of `land`, `merge` (and `merge --check`) and `start`, such as
-    `land_records_uncommitted`, `merge_diverged`, `merge_mission`, and the
+    `land_records_uncommitted`, `merge_conflict`, `merge_mission`, and the
     record fences they run, `canonical_snapshot_uncommitted`,
     `tracked_snapshot_uncommitted` and `review_append_only`;
   - `check`, `doctor` and `prune` findings, such as `check_findings`;
@@ -700,8 +702,8 @@ repository workflow's values, read when help is shown. Global options, such as
 Every command's description is its one-line `about`, and help lists are
 generated from it, so no list is written by hand. Root help lists every
 command that is not hidden, then `Common commands` in lifecycle order: orient,
-pick work, start it, record any receipt it needs, close it, review, land and
-check the merge.
+pick work, start it, record any receipt it needs, ask for review, approve,
+land and merge.
 Bare `atelier work` prints `atelier work --help`, and with `--quiet` the view
 names.
 
@@ -728,7 +730,7 @@ brief view gives one line per fact and leaves out empty facts:
   as `supersede: allowed - to superseded, needs --reason`, the second as
   `supersede: allowed` with a `Requirements: needs --reason` line. A done
   record shows `Closed <date>: <first
-  line of its Close Reason>` instead, as `--full`'s Transition Readiness
+  line of its Report>` instead, as `--full`'s Transition Readiness
   does;
 - the two lead sections of the record's body shape: Goal and Done when for
   work items, Outcome and Success criteria (when present) for missions, and Question and
@@ -736,7 +738,7 @@ brief view gives one line per fact and leaves out empty facts:
   it. A one-line section follows its label, and a longer one is indented
   under it;
 - `More with --full:`, which names the record's other sections, leaving out
-  a one-line Close Reason that the `Closed` line already shows.
+  a one-line Report that the `Closed` line already shows.
 
 Related items are item lines. A list with one item stays on its label's line,
 and a longer list is indented under it. `issue show <id> <id>...`

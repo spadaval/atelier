@@ -23,8 +23,8 @@ A receipt records a check that leaves no other record:
 Suites, formatting and lint that CI or the policy's `merge_checks` run need
 no receipt, and nothing in Atelier asks for one after a review fix or a base
 merge. Run the check fresh after the last change and read its output all the
-same; the item's Close Reason names the targeted test or check that proves
-each claim and its result. CI and the merge checks test the merged tree
+same; the item's Report names the targeted test or check that proves each
+claim and its result. CI and the merge checks test the merged tree
 where a repository has them; a repository without CI puts its suite in the
 policy's `merge_checks` (a `shell.check`; see [workflow
 configuration](workflow-configuration.md)), or nothing tests its merged tree
@@ -48,9 +48,8 @@ the gap between the stand-in and the real thing
 Mark the split when the work is planned. Moving a check to after merge once
 the item has started is a Done when edit that `merge --check` and the review
 brief show (see [reviews and merge](reviews-and-merge.md#a-done-when-edited-after-the-start)).
-The item closes on its work branch and merges as usual, and its Close
-Reason's Open items name each open after-merge check with its reason and the
-stand-in that ran. While a check is open, `status`, `work all`, and `work
+The item merges as usual, which marks it done, and its Report's Open items
+name each open after-merge check with its reason and the stand-in that ran. While a check is open, `status`, `work all`, and `work
 mission` and `work parent` list it under Awaiting Validation, the debrief
 says so under the item, and closing its mission warns and names it.
 
@@ -143,8 +142,8 @@ stale, and `evidence list` marks it so. A stale pass does not satisfy an
 `evidence.attached` gate a policy configures, but no other gate asks for a
 fresh one.
 
-A failure blocks completion (close, `land` and `merge` refuse with
-`evidence.no_newer_failure`) until a pass is recorded after it. Any pass
+A failure blocks completion (`merge`, `land` and a done transition refuse
+with `evidence.no_newer_failure`) until a pass is recorded after it. Any pass
 recorded after it clears it for good, whatever its command or pin, even once
 later commits make the pass stale. Command capture refuses uncommitted code,
 so a captured pass describes committed state; a manual pass is the

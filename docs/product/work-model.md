@@ -20,46 +20,33 @@ state Goal and Done when, with optional Scope, Context, Unknowns, and Design.
 Missions and work items may also carry an optional Background section: the
 research, references, and motivation that a mission or every child of a parent
 shares, so it lives in the record instead of a side document.
-Notes carry dated handoffs. Close Reason is required by done-category
-transitions and checked by `land`: one or two sentences giving the observable
-result against Done when, or for `supersede` why the work will not happen.
-Test names, measurements, and review status belong in evidence and review
-records, not here.
+Notes carry dated handoffs. The Report says what happened
+([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2): on a work item,
+the implementer report its author writes before asking for review, so the
+reviewer can read it; for `supersede`, a mission's `close` and a decision's
+`decide`, the reason the transition records. A transition that requires the
+policy's `close_reason` field needs a non-empty Report, and `land` checks it
+on the done claims it judges. Its first paragraph is the Outcome: one or two
+sentences giving the observable result against Done when, or for `supersede`
+why the work will not happen. Test names, measurements, and review status
+belong in evidence and review records, not here.
 
-Close Reason can also carry the implementer report (atelier-sfsq). Its first
-paragraph stays the Outcome described above. The report's other parts are
-`### Deviations` (where the work departed from the plan), `### Decisions`
-(the choices that shaped it, usually pointing at its decision notes),
-`### Surprises` (what the implementer did not expect), and `### Open items`
-(what is left, with follow-up IDs). Policy chooses which parts a transition
-requires with the `report.deviations`, `report.decisions`,
-`report.surprises` and `report.open_items` required fields. A required part
-must be present and non-empty; write `None.` when there is nothing to report.
-This repository's policy requires all four parts on the work `close`
-transition; `supersede` needs only the Outcome. Like the rest of Close
-Reason, the report can be written after approval without making the approval
-stale.
-The close transition reads Close Reason from the record body when it is
-already written there, and then prints the Outcome it kept, or from
-`--reason-file <file>`. `--reason` replaces the Outcome and keeps the parts
-when the transition requires a report; on a transition that requires none,
-such as `supersede`, it replaces the whole Close Reason, so a report written
-for a close does not linger (atelier-ypks). No transition leaves a done
-status, so an item reopens only by an edit to its status, which keeps its
-old Close Reason; a later close with no flag prints the Outcome it kept.
-
-`land` and `merge` check a required part against the base's policy at the
-merge-base of the base and the commit that made the done claim, never the
-branch's own policy. A claim made while that policy did not require the part
-stays valid: a done record from before the policy required it, or a child
-closed on its parent's branch before the base's policy changed. A claim the
-base, or HEAD's parent on a base with no upstream, already holds is judged
-the same way, by the policy of the commit that made it, so it is checked
-rather than skipped (atelier-uxrs). The rule reads only history, which is
-its limit (atelier-u0i3): a branch can still skip parts by making its claim
-on a side branch that left the base before the policy required them and
-merging that branch in. Nothing in the history tells that claim from a child
-honestly closed before the policy changed, so review has to catch it.
+The implementer report's other parts are `### Deviations` (where the work
+departed from the plan), `### Decisions` (the choices that shaped it, usually
+pointing at its decision notes), `### Surprises` (what the implementer did not
+expect), and `### Open items` (what is left, with follow-up IDs). They are
+Agent Factory's guidance; Atelier requires only that the Report is not empty,
+and reads an older policy's `report.deviations`, `report.decisions`,
+`report.surprises` and `report.open_items` required fields as `close_reason`.
+Like every record, the Report can be written or corrected after approval
+without making the approval stale. A transition reads the Report from the
+record body when it is already written there, and then prints the Outcome it
+kept, or from `--reason "…"` or `--reason-file <file>`, which replace the
+whole Report, so a report written earlier does not linger under a supersede
+reason (atelier-ypks). No transition leaves a done status, so an item reopens
+only by an edit to its status, which keeps its old Report. Records written
+before atelier-jnrh call the section `## Close Reason`; it is still read, and
+written back as `## Report`.
 
 Priority has two spellings for four values: records store `P0`, `P1`, `P2`
 and `P3`, which views print as `critical`, `high`, `medium` and `low`. The
@@ -133,9 +120,8 @@ item, including its Design or Background, in a follow-up record instead
 Repositories with records from before this change run
 `atelier migrate epics --apply` once: it retypes each epic as a feature (or
 `--to <type>`), turns Outcome into Goal and Proof and Delivers into Done when,
-moves draft epics to `backlog`, keeps their links, removes `epic` from the
-policy, and adds `work.terminal` to the work `close` when it has the starter
-shape (otherwise it says to add it). Review the Done when sections and commit.
+moves draft epics to `backlog`, keeps their links, and removes `epic` from the
+policy. Review the Done when sections and commit.
 
 Work that only the human can do, such as a step at a particular machine, an
 account approval, or a judgement call, carries the reserved `needs-human`
@@ -147,8 +133,9 @@ notes the label when someone starts one.
 
 Do not make a `needs-human` check a child of a branch owner when the check runs
 after the merge, such as a game, headset or Windows check on the released
-build. `atelier merge` needs every child closed, so the owner's branch could
-not integrate until the human acts. Model the check as a standalone
+build. Review asks every open child for ticked Done when lines and a Report
+before `atelier merge` marks it done, so the owner's branch could not
+integrate until the human acts. Model the check as a standalone
 validation `blocked_by` the parent instead (and `advances` the mission, if
 any). `atelier start` and `atelier status` warn when a branch owner has an open
 `needs-human` child and give the two commands that detach it (atelier-1jll).
@@ -198,10 +185,10 @@ block them.
 ## Ownership and transitions
 
 A standalone work item owns its branch, and a parent owns its children's
-branch. A parent closes only after every child is terminal (the starter
-policy's `close` runs the `work.terminal` check). Superseding a parent is
-different: it retires the parent with any open children, which then show as
-context only. Superseding needs no open blockers resolved, its own or a
+branch. The merge that integrates the branch marks the parent and its open
+children done together (see [Completion](#completion)), so no rule orders a
+parent after its children. Superseding a parent retires the parent with any
+open children, which then show as context only. Superseding needs no open blockers resolved, its own or a
 parent's, and `land` does not hold a superseded item to them: the work will
 not happen (atelier-lq42). The default branch name is
 `<issue_type>/<id>`; typed `workflow_branch`
@@ -244,10 +231,10 @@ two sessions in one worktree cannot be told apart.
 Begin work with `atelier start`, not `atelier issue transition <id> start`.
 The bare transition only changes the record: it creates no branch and records
 no owner. While such work is active, `atelier land` refuses it with
-`land_work_untraceable`; if it is closed on the base branch without a branch,
-it never passes the review and merge gates (atelier-fj1t tracks refusing
-that). Use the bare transition when the owner branch already exists and is
-checked out, for example to start a further child on its parent's branch.
+`land_work_untraceable`; if it is set done on the base branch without a
+branch, `land` there refuses the done claim (atelier-fj1t). Use the bare
+transition when the owner branch already exists and is checked out, for
+example to start a further child on its parent's branch.
 
 Statuses and permitted transitions come from `.atelier/workflow.yaml`.
 `atelier issue transition <id>` shows options and blockers. Supplying a
@@ -256,31 +243,42 @@ commit, push, open reviews, or merge.
 
 ## Completion
 
-A done claim is a terminal status written and committed on the work branch.
-Open dependencies prevent completion. Evidence must state what was checked,
-against which commit, and whether it passed. Independent review examines the
-implementation and the done claim together.
+Work is done when its change is merged
+([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2). The order is:
+start, implement, tick every Done when line and write the implementer report,
+ask for review, fix and re-review, approve, merge. There is no close step for
+work: the `work` workflow has `supersede` for work that will not happen, and
+no `close`.
+
+A Done when line with a box (`- [ ]`) is ticked (`- [x]`) once it holds.
+`atelier review request <id>` refuses with `review_request_unfinished`, and
+names each gap, while an open work item it covers has an unticked box or an
+empty Report: asking for review means the work is implemented and done to the
+best of the author's knowledge. It covers the item it names; naming the owner
+covers the owner and its started children, so a parent's children can be
+reviewed one at a time while unstarted siblings wait. A line without a box is
+not checked, and a line with the old After merge marker need not be ticked;
+the refusal names `atelier migrate after-merge` for such lines
+(atelier-8bh4).
 
 `atelier merge <id>` checks the base branch's policy and review gates, then
-fast-forwards the base to the committed work, or under `merge_commit` adds one
-merge commit whose tree passed `merge_checks`. It creates no other commit and
-changes no records. The base therefore shows the item done together with its code.
-See [reviews and merge](reviews-and-merge.md) for approval freshness and findings.
+lands one merge commit whose tree passed `merge_checks`. That commit sets
+every open item of the `work` workflow in the owner's scope, the owner and
+its non-superseded children, to the workflow's first done status, and
+changes nothing else the branch holds, the Report included. Merge refuses
+while one of those items has an open blocker, and notes, without refusing,
+each one it marks done that has an unticked box or an empty Report. It creates no other commit, so
+the base shows the item done together with its code, and the work branch
+never says done for work the base lacks. An item an older Atelier closed on
+its branch merges as it is. A repository whose policy still gives work a
+`close` keeps it until it updates its policy, and the done marks merge
+writes answer to that transition's required fields and validators.
+See [reviews and merge](reviews-and-merge.md) for approval freshness and
+findings.
 
-The done claim comes before review on purpose (atelier-9k7o, decided by
-Sumeet 2026-10-15): the reviewer sees the claim together with the code. A
-review that finds problems leaves the claim in place: the author fixes the
-findings on the work branch, and the merge waits for fresh approval. Until the
-merge, though, that branch says done for work the base does not have. So
-`status`'s owner row shows a done owner as
-`✓ done on branch <work-branch>, not merged into <base>`, or as
-`✓ done, merged into <base>` once the base branch's own copy of the record is
-done. Its `Branches` rows say the same in their own form, `✓ done, not merged`,
-followed by the branch's readiness to merge into the current base (see
-[human-cli-output.md](human-cli-output.md#branches)). A claim committed
-after approval instead changes no code, so it keeps the approval current and
-needs no fresh review (see
-[approval freshness](reviews-and-merge.md#approval-freshness)).
+A mission closes when all its work is merged and its validation, if it has
+one, is done; its `close` transition's description says so, and nothing else
+enforces it.
 
 Branch-local state can differ until integration. Use labeled cross-branch
 status for orientation; it does not rewrite the current checkout's graph.

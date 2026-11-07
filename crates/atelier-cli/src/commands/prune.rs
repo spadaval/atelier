@@ -1,7 +1,6 @@
 use crate::human_output::{local_date, print_footer, FooterAction};
 use anyhow::{bail, Context, Result};
 use atelier_app::record_index::RecordIndex;
-use atelier_app::workflow_policy::MergeStrategy;
 use atelier_core::{Issue, RecordLink, Relationships};
 use chrono::{DateTime, Days, NaiveDate, Utc};
 use std::collections::{BTreeMap, BTreeSet};
@@ -70,7 +69,6 @@ struct GitWorktree {
 struct GitBranchOwner {
     id: String,
     base: String,
-    merge_strategy: MergeStrategy,
     protection: Option<String>,
     active_descendants: BTreeSet<String>,
 }
@@ -204,7 +202,6 @@ fn prune_git_artifacts(
                         base: resolution
                             .recorded_base
                             .unwrap_or_else(|| policy.branch_policy.base_branch.clone()),
-                        merge_strategy: policy.branch_policy.merge_strategy,
                         protection,
                         active_descendants: BTreeSet::new(),
                     });
@@ -417,7 +414,7 @@ fn git_owner_protection(
     if let Some(reason) = &owner.protection {
         return Ok(Some(reason.clone()));
     }
-    if !branch_is_integrated(repo_root, branch, &owner.base, owner.merge_strategy)? {
+    if !branch_is_integrated(repo_root, branch, &owner.base)? {
         return Ok(Some(format!(
             "contains commits not integrated into owner base {}",
             owner.base
@@ -469,12 +466,9 @@ fn git_worktrees(repo_root: &Path) -> Result<Vec<GitWorktree>> {
     Ok(worktrees)
 }
 
-fn branch_is_integrated(
-    repo_root: &Path,
-    branch: &str,
-    base: &str,
-    merge_strategy: MergeStrategy,
-) -> Result<bool> {
+/// Whether the base holds the branch tip. `atelier merge` always integrates
+/// with a merge commit, so no other evidence counts (atelier-jnrh).
+fn branch_is_integrated(repo_root: &Path, branch: &str, base: &str) -> Result<bool> {
     let output = atelier_app::git_freshness::command(repo_root)
         .args([
             "merge-base",
@@ -484,65 +478,7 @@ fn branch_is_integrated(
         ])
         .output()
         .context("failed to inspect Git branch integration for prune candidate")?;
-    if output.status.success() {
-        return Ok(true);
-    }
-    if merge_strategy != MergeStrategy::Squash {
-        return Ok(false);
-    }
-    branch_has_equivalent_squash(repo_root, branch, base)
-}
-
-fn branch_has_equivalent_squash(repo_root: &Path, branch: &str, base: &str) -> Result<bool> {
-    let branch_ref = format!("refs/heads/{branch}");
-    let base_ref = format!("refs/heads/{base}");
-    let merge_base = git_stdout_trimmed(repo_root, &["merge-base", &branch_ref, &base_ref])?;
-    let branch_diff = git_diff(repo_root, &merge_base, &branch_ref)?;
-    if branch_diff.is_empty() {
-        return Ok(false);
-    }
-    let output = atelier_app::git_freshness::command(repo_root)
-        .args([
-            "log",
-            "-z",
-            "--format=%H%x00%s",
-            &format!("{merge_base}..{base_ref}"),
-        ])
-        .output()
-        .context("failed to inspect squash integration history for prune candidate")?;
-    if !output.status.success() {
-        return Ok(false);
-    }
-    let fields = output.stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
-    let expected_subject = format!("Squash merge {branch} into {base}");
-    for pair in fields.chunks(2) {
-        let [commit, subject] = pair else {
-            continue;
-        };
-        if String::from_utf8_lossy(subject) != expected_subject {
-            continue;
-        }
-        let commit = String::from_utf8_lossy(commit);
-        let parent = match git_stdout_trimmed(repo_root, &["rev-parse", &format!("{commit}^")]) {
-            Ok(parent) => parent,
-            Err(_) => continue,
-        };
-        if git_diff(repo_root, &parent, &commit)? == branch_diff {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn git_diff(repo_root: &Path, from: &str, to: &str) -> Result<Vec<u8>> {
-    let output = atelier_app::git_freshness::command(repo_root)
-        .args(["diff", "--binary", "--full-index", "--no-renames", from, to])
-        .output()
-        .context("failed to compare Git integration patches for prune candidate")?;
-    if !output.status.success() {
-        bail!("git diff failed while inspecting prune candidate integration");
-    }
-    Ok(output.stdout)
+    Ok(output.status.success())
 }
 
 fn branch_push_protection(repo_root: &Path, branch: &str) -> Result<Option<String>> {
@@ -1468,66 +1404,6 @@ mod tests {
         git(repo.path(), &["commit", "-m", "work"]);
         git(repo.path(), &["tag", "main", "HEAD"]);
         git(repo.path(), &["tag", "task/owner", "refs/heads/main"]);
-        assert!(!branch_is_integrated(
-            repo.path(),
-            "task/owner",
-            "main",
-            MergeStrategy::FastForwardOnly
-        )
-        .unwrap());
-    }
-
-    #[test]
-    fn squash_subject_without_equivalent_patch_does_not_prove_integration() {
-        let repo = tempdir().unwrap();
-        git(repo.path(), &["init", "-b", "main"]);
-        git(repo.path(), &["config", "user.email", "test@example.com"]);
-        git(repo.path(), &["config", "user.name", "Test"]);
-        fs::write(repo.path().join("base"), "base").unwrap();
-        git(repo.path(), &["add", "base"]);
-        git(repo.path(), &["commit", "-m", "base"]);
-        git(repo.path(), &["checkout", "-b", "task/owner"]);
-        fs::write(repo.path().join("owner-work"), "owner").unwrap();
-        git(repo.path(), &["add", "owner-work"]);
-        git(repo.path(), &["commit", "-m", "owner work"]);
-        git(repo.path(), &["checkout", "main"]);
-        fs::write(repo.path().join("different-work"), "different").unwrap();
-        git(repo.path(), &["add", "different-work"]);
-        git(
-            repo.path(),
-            &["commit", "-m", "Squash merge task/owner into main"],
-        );
-
-        assert!(
-            !branch_is_integrated(repo.path(), "task/owner", "main", MergeStrategy::Squash)
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn historical_reverted_squash_patch_does_not_prove_later_integration() {
-        let repo = tempdir().unwrap();
-        git(repo.path(), &["init", "-b", "main"]);
-        git(repo.path(), &["config", "user.email", "test@example.com"]);
-        git(repo.path(), &["config", "user.name", "Test"]);
-        fs::write(repo.path().join("base"), "base").unwrap();
-        git(repo.path(), &["add", "base"]);
-        git(repo.path(), &["commit", "-m", "base"]);
-        fs::write(repo.path().join("replayed-work"), "same patch").unwrap();
-        git(repo.path(), &["add", "replayed-work"]);
-        git(
-            repo.path(),
-            &["commit", "-m", "Squash merge task/owner into main"],
-        );
-        git(repo.path(), &["revert", "--no-edit", "HEAD"]);
-        git(repo.path(), &["checkout", "-b", "task/owner"]);
-        fs::write(repo.path().join("replayed-work"), "same patch").unwrap();
-        git(repo.path(), &["add", "replayed-work"]);
-        git(repo.path(), &["commit", "-m", "later owner work"]);
-
-        assert!(
-            !branch_is_integrated(repo.path(), "task/owner", "main", MergeStrategy::Squash)
-                .unwrap()
-        );
+        assert!(!branch_is_integrated(repo.path(), "task/owner", "main").unwrap());
     }
 }

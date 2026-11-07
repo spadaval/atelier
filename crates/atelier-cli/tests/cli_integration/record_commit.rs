@@ -168,7 +168,7 @@ fn staged_records_are_committed_with_the_next_commit_records() {
 }
 
 #[test]
-fn a_review_step_and_the_close_each_commit_their_own_records() {
+fn a_review_step_and_a_transition_each_commit_their_own_records() {
     let (dir, id) = fixture();
     let dir = dir.path();
     let finding = ok(
@@ -224,7 +224,7 @@ fn a_review_step_and_the_close_each_commit_their_own_records() {
             "issue",
             "transition",
             &id,
-            "close",
+            "supersede",
             "--reason",
             "Done",
             "--commit-records",
@@ -237,7 +237,7 @@ fn a_review_step_and_the_close_each_commit_their_own_records() {
     );
     assert_eq!(
         git(dir, &["log", "-1", "--format=%s"]),
-        format!("Record close {id}")
+        format!("Record supersede {id}")
     );
 }
 

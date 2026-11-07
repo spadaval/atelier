@@ -105,12 +105,13 @@ atelier-ilba):
   itself, by whether its own first parent held it.
 
 A change the base already holds is refused with `review_append_only`, at the
-commit that made it (`land`, `doctor` and `merge` apply the same check). Under
-`merge_strategy: fast_forward_only`, history cannot show where a fast-forward
-began, so every commit is judged at its own first parent and a review record
-is final once committed, as it is when the base branch cannot be read. A
-change must leave a regular file, and a removed separate disposition event is
-never added back.
+commit that made it (`land`, `doctor` and `merge` apply the same check).
+Since `merge` always creates a merge commit, this holds under every policy
+(atelier-jnrh); a commit an earlier fast-forward put on the base's
+first-parent line is judged at its own first parent, as above. When the base
+branch cannot be read, every commit is judged at its own first parent and a
+review record is final once committed. A change must leave a regular file,
+and a removed separate disposition event is never added back.
 
 Approvals and trivial exemptions stay append-only from when they are first
 committed, on a branch as on the base: re-pinning an approval's commit, or
@@ -133,15 +134,15 @@ writes the field and removes its events. `atelier migrate dispositions
 removes the events, on the base or a work branch, and keeps approvals
 current; Git history keeps the events. Events that continue a folded
 disposition, as a branch recorded with an older Atelier brings in, replace
-it. To bring such a branch up to date with a base that has migrated, merge
-without committing and migrate before the commit: `git merge --no-commit
-<base>`, `atelier migrate dispositions --apply`, `git add .atelier`, `git
-commit --no-edit`. A plain merge removes the base's migrated event while the
-branch's later event remains, and `land` refuses it with
-`review_append_only`, naming that sequence after the step that leaves the
-merge out (atelier-j5oq). At the branch tip that step drops only the merge;
-below it, it rewrites the commits after the merge, which then need review
-again, since review and evidence records pinned to them no longer count. The read path for separate events goes once every repository has
+it. Such a branch takes a base that has migrated with a plain merge: the
+base never held the branch's later event, so the branch may still correct it
+(atelier-ilba), and `atelier migrate dispositions --apply` on the branch then
+folds it. Under `fast_forward_only`, before every merge was a merge commit
+(atelier-jnrh), a review record was final once committed, so `land` refused
+the plain merge with `review_append_only` and named a merge without
+committing, migrated before the commit (atelier-j5oq); a branch whose
+records are final, as when the base branch cannot be read, still gets that
+advice. The read path for separate events goes once every repository has
 migrated (atelier-42th). A disposition read from an event, or written by the
 migration commit that removed it, is judged at the commit that added the
 event; once the finding's file has held another disposition, the later
@@ -185,8 +186,20 @@ from records, Git and policy:
 - the `review finding` and `review approve` commands, pinned to the head and
   using `--commit-records`, with `--identity` filled in when given.
 
-It never includes the author's notes or Close Reason: a reviewer judges the
-change against the requirements, not the author's account of it.
+It never includes the author's notes or Report: a reviewer judges the
+change against the requirements, not the author's account of it, and reads
+the Report in the record when it helps.
+
+The request refuses first, with `review_request_unfinished`, while an open
+work item it covers has an unticked `- [ ]` Done when line or an empty Report,
+and lists each gap: asking for review means the work is implemented and done
+to the best of the author's knowledge ([ADR
+0028](../adr/0028-simpler-lifecycle.md), decision 2). It covers the item it
+names; naming the owner covers the owner and its started children, so a
+parent's children can be reviewed one at a time while an unstarted child,
+not yet claimed implemented, waits (finding atelier-2ygf). A line without a
+box is not checked. A line with the old After merge marker need not be ticked, and
+the refusal names `atelier migrate after-merge` for such lines (atelier-8bh4).
 
 ## Approval freshness
 
@@ -197,9 +210,8 @@ everything except the tracker records, the Markdown files under
 policy (`.atelier/workflow.yaml`) and the project config
 (`.atelier/config.toml`) count as code. Record edits never make an approval
 stale, whatever record they touch: ticking the Done when, adding notes or
-links, the status and Close Reason of a close (with the implementer report it
-carries), another issue's record, a finding's disposition, a new receipt, a
-new child or follow-up. Each commit after the pin is checked, so changing
+links, writing the Report, a status change, another issue's record, a
+finding's disposition, a new receipt, a new child or follow-up. Each commit after the pin is checked, so changing
 code and then restoring it does not recover an old approval, and a fix made
 after a `fix_now` finding makes the approval stale, so the fix is reviewed
 again. Review records on the base stay append-only apart from a finding's
@@ -214,17 +226,17 @@ covers it.
 This is the one rule for what an approval or trivial exemption covers, and
 `merge` (its `review.current` gate), `land` on the work branch, `land` on the
 base and `status` apply it alike, through `review_gate::approval_is_current_to`.
-So the done claims of the owner and its children may be committed before or
-after approval: a close that changes no code keeps the approval current, while
-code committed with it or after it makes the approval stale, and `merge`
-refuses before integrating until a fresh approval is recorded at or after
-that commit (atelier-n642, atelier-uw4x). The approved scope still decides
-which done claims an approval covers. The scope is the owner and its
-descendants; the owner's parent is outside it. `merge` also runs `land`'s own
-check of done claims on the commit it would put on the base, as its
+Code committed after an approval makes it stale, and `merge` refuses before
+integrating until a fresh approval is recorded at or after that commit
+(atelier-n642, atelier-uw4x). The merge commit `merge` creates matches Git's
+own merge of its parents outside the records, so its done marks keep the
+approval current, and `land` on the base accepts them. The approved scope
+still decides which done claims an approval covers. The scope is the owner
+and its descendants; the owner's parent is outside it. `merge` also runs
+`land`'s own check of the done claims the branch's commits make, as its
 `claims.reviewed` gate: a done claim outside every current approval's scope,
-such as an issue created already done after the approval or a follow-up
-closed on the branch, fails it, naming the commit and the fix.
+such as an issue created already done after the approval, or another item
+set done on the branch, fails it, naming the commit and the fix.
 
 Merging the base into a reviewed branch keeps its approval when the merge is
 clean: every other parent is already on the base, and the merge commit matches
@@ -268,20 +280,12 @@ trivial exemption; authors: ...`.
 
 ## Integration
 
-Commit the implementation, any receipts, branch ownership, and done claim on
-the work branch. The owner and its scoped children must be terminal with no
-open transitive blockers. Evidence must satisfy the base policy's completion
-checks; a failing receipt with no pass recorded after it blocks success. Review must have current independent approval
-or an explicit trivial exemption and accepted finding dispositions.
-
-The implementer report parts a done claim needs come from the base's policy
-where the claim's commit last met the base, so a claim made before the policy
-required a part stays valid (see [the work model](work-model.md)). That rule
-reads only history: a claim made on a side branch that left the base before
-the policy changed, then merged into the work branch, passes without the
-parts, and nothing in the history tells it from a child closed honestly
-before the change (atelier-u0i3). A reviewer who sees a done claim without a
-report the base's policy now requires should ask where it was made.
+Commit the implementation, any receipts, branch ownership, the ticked Done
+when and the Report on the work branch. Merge marks the owner and its open
+children done; none of them may have an open transitive blocker. Evidence
+must satisfy the base policy's completion checks; a failing receipt with no
+pass recorded after it blocks success. Review must have current independent
+approval or an explicit trivial exemption and accepted finding dispositions.
 
 ```text
 atelier merge <owner-or-child-id> --check
@@ -307,8 +311,7 @@ they run. `--check` evaluates the gates without integrating.
 
 A failed precondition does not hide the gates: uncommitted records
 (`canonical_snapshot_uncommitted`, every record named), uncommitted code
-(`merge_checkout_dirty`, every path named), a base the branch has not merged in
-under `fast_forward_only` (`merge_diverged`) and an invalid candidate policy
+(`merge_checkout_dirty`, every path named) and an invalid candidate policy
 (its `workflow_*` code) are each one more failed check with its fix, and the
 gates still run, against HEAD's committed records when the checkout's differ
 and from where the branch left the base. A real merge still refuses before
@@ -316,38 +319,59 @@ integrating. A precondition the gates cannot run past, such as the wrong
 branch or a merge conflict, is reported after the ones found before it, with
 a `Not checked:` line naming the gates it skipped (atelier-kiry).
 
-Merge uses the base branch's committed policy and its
-`branch_policy.merge_strategy`; omitted, it is `merge_commit` when `merge_checks`
-include a `shell.check` and `fast_forward_only` otherwise (see [workflow
-configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
-fast-forwards only. If the base has moved on, merge it into the work branch,
-and renew review only if the merge resolved or edited code by hand (see
-approval freshness). The merge
-records no new proof: CI or the merge checks test the merged tree where the
-repository has them (see [what gets a receipt](validation.md#what-gets-a-receipt)).
+Merge uses the base branch's committed policy, and always creates a merge
+commit, so a base that moved on needs no catch-up merge on the branch first
+([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2). An older policy's
+`merge_strategy: fast_forward_only` or `squash` is read as `merge_commit` (see
+[workflow configuration](workflow-configuration.md)). The merge records no
+new proof: CI or the merge checks test the merged tree where the repository
+has them (see [what gets a receipt](validation.md#what-gets-a-receipt)), and
+a repository with neither lands a merged tree nobody ran.
+
+The merge commit marks the owner's open work done: every item of the `work`
+workflow in the owner's scope that is not yet in a done status takes the
+workflow's first done status, with nothing else changed, so the Report stays
+as the reviewer read it. Its message names them (`Marks <ids> done.`), as
+does the success line. An item an older Atelier closed on its branch is left
+as it is, and so is a superseded child. For each item it marks done that has
+an unticked box (After merge lines aside) or an empty Report, `merge` and
+`merge --check` print a note after the gate lines, and refuse nothing, as
+for an edited Done when:
+
+```
+Note: merge marks atelier-2xx5 done with 1 Done when line unticked: "It passes on Linux."; Report empty.
+```
+
+Review asked for both, but a record edit after approval does not make the
+approval stale, and a child reviewed on its own leaves its siblings unasked,
+so this note is how such work is seen before it lands (finding
+atelier-nrq4).
 
 ### A Done when edited after the start
 
-`merge` and `merge --check` show each edit to the Done when of the owner or a
-scoped child made after the item was started, whatever the verdict, after the
-gate lines (atelier-r9hb):
+`review request` and `merge` and `merge --check` show each change to the
+text of the Done when of the owner or a scoped child made after the item was
+started, whatever the verdict (atelier-r9hb, atelier-jnrh): the brief under
+`Done when edited after start`, merge after the gate lines:
 
 ```
 Note: atelier-2xx5 Done when edited at 4adb9ff6 after the item was started, after finding atelier-h7l3.
 ```
 
 The trigger is the start, not a finding: in the usage review that motivated
-it, most narrowed criteria had no finding recorded before them. An edit
-counts when the commit that made it descends in Git from one that moved the
-item into an `active` status, such as `atelier start` or the `start`
-transition; clock times are not compared, so an edit made on the base while
-a branch worked on the item is not shown. The line names the newest finding
-or `fail` receipt on the item pinned to an ancestor of the edit, when there
-is one, so the reader can check whether the edit answers it or loosens the
-criterion to let the item close. Merge commits are not read: the commit that
-wrote an edit is in the history itself. The approval does not cover the edit,
-since record edits never make it stale, so this line is how the edit is seen,
-including one made after approval.
+it, most narrowed criteria had no finding recorded before them. A change
+counts when HEAD holds it and the commit that moved the item into an `active`
+status, such as `atelier start` or the `start` transition, does not, so an
+edit made on the base after the start and merged into the branch is shown
+like one made on the branch (finding atelier-l5fb); clock times are not
+compared. Ticking or unticking boxes changes no text and is not shown. A
+merge counts only where its Done when differs from every parent's, as when a
+conflict resolution writes new text; a clean merge brings in commits that are
+listed themselves. The line names the newest finding or `fail` receipt on the
+item pinned to an ancestor of the edit, when there is one, so the reader can
+check whether the edit answers it or loosens the criterion. The approval does
+not cover the edit, since record edits never make it stale, so this line is
+how the edit is seen, including one made after approval.
 
 The line refuses nothing and changes neither the verdict nor the exit status.
 A Done when is sometimes rightly corrected after a finding, and refusing it
@@ -393,23 +417,23 @@ or `--json`.
   not refuse the sync, which exits zero, but the verdict reads `merge: synced
   — approval needs fresh review` instead of `passed`, because `merge --check`
   will refuse until a fresh approval is recorded.
-- **Strategies.** The sync is the same under both. Under `fast_forward_only`
-  it is required whenever the base moved, since merge creates no merge commit.
-  Under `merge_commit`, merge lands a clean branch on a moved base itself, so
+- **When it matters.** Merge lands a clean branch on a moved base itself, so
   `--sync` matters for a conflicting branch or when merge refuses with
   `merge_base_records`.
 
-Under `merge_commit`, a branch that is behind the base can land without
-catching up. Merge builds Git's merge of the work branch into the current base
-with `git merge-tree --write-tree` and refuses with `merge_conflict`, naming
-the files, if any path conflicts; resolve those on the work branch as above.
-Evidence at the branch head does not prove the merged tree, so `merge_checks`
-must include a `shell.check` (otherwise `merge_unproven`); record checks such
-as `lint.none_blocking` read records and prove nothing about the tree. The
-checks run in a temporary detached checkout of the merge commit instead of the
-work checkout. The gate output adds `merge.merged_tree`, which passes only when
-the shell checks passed there and names the tree, base commit, and commands,
-and the merge commit's message lists those commands.
+A branch that is behind the base lands without catching up. Merge builds
+Git's merge of the work branch into the current base with `git merge-tree
+--write-tree` and refuses with `merge_conflict`, naming the files, if any path
+conflicts; resolve those on the work branch as above. It then writes the done
+marks into that tree, and the checks run in a temporary detached checkout of
+the resulting merge commit, never in the work checkout. Evidence at the branch
+head does not prove the merged tree; only a `shell.check` run there does, and
+record checks such as `lint.none_blocking` read records and prove nothing
+about the tree. With at least one `shell.check`, the gate output adds
+`merge.merged_tree`, which passes only when every shell check passed there and
+names the tree, base commit, and commands, and the merge commit's message
+lists those commands. A policy without one merges a tree nothing ran, and the
+merge commit's message says so.
 
 Each checkout lives in its own `atelier-merge-*` directory in the Git common
 directory, and the merge holds a lock on that directory's `lock` file while its
@@ -436,10 +460,9 @@ merge the base into the work branch so the gates judge them, then retry. Other
 base records do not touch the approval, which is judged on the work branch's
 history: it carries over, because a clean merge combines two reviewed changes
 and nobody edited the result. Merge also checks the done claims outside the
-item that the commit it would put on the base can affect, as `land` does,
-trusting the base head, under either strategy: the merge commit under
-`merge_commit`, which no checkout holds before it reaches the base, or the
-branch head under `fast_forward_only` (atelier-bu66). For example, if the base
+item that the merge commit can affect, as `land` does, trusting the base
+head; no checkout holds that commit before it reaches the base
+(atelier-bu66). For example, if the base
 closed a mission after the fork point and the branch reopens or adds work that
 mission depends on, merge refuses, naming the claim (`merge: refused — 1
 check (<mission> work.terminal)`, atelier-m4gv). These claims are read at that commit, so a
@@ -451,11 +474,7 @@ issue, review and evidence records, merge reports `merge_base_moved` and runs
 the gates again against the new base, up to three attempts in all; a record the
 item itself depends on still refuses as `merge_base_records`. If any of those
 commits changes anything else, or the base was rewritten, merge refuses with
-`merge_snapshot_changed`, naming the first such commit and file. Under
-`fast_forward_only` merge cannot land on a base that moved at all, since it
-creates no merge commit; `merge_diverged` then says whether the base gained only
-records-only commits or names the code commit, and the recovery is still `git
-merge <base>` on the work branch (atelier-p189). A lockfile that merges cleanly but is
+`merge_snapshot_changed`, naming the first such commit and file. A lockfile that merges cleanly but is
 inconsistent is caught only by a `merge_checks` command that validates it, such
 as `cargo metadata --locked`. Rebase only
 before any review is recorded: rebasing rewrites the commits that findings and
@@ -514,15 +533,18 @@ the approval's pin; the disposition itself may be recorded later. That is what `
 exemption](#trivial-changes-on-the-base) pins is covered too. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. Those record-only commits also may not take a work
-item to done: a done claim travels on the work branch with the work, so `land`
-refuses one made outside review with `land_base_done_claim`. A claim made after
-an approval's pin is reviewed while that approval is still current at the
-claim's commit, by the rule in [Approval freshness](#approval-freshness), so a
-close-only commit that `merge` accepted lands too. Revert the claim (a
-claim no longer done at the tip is withdrawn), then `atelier start` the item
-and make the claim on its work branch (atelier-fj1t). Closing a mission, deciding a `decision` record
-and superseding work stay allowed on the base. A merge commit, such as a
-non-rebasing pull, is judged by the paths that differ from all of its parents. The install predates the gates and is exempt: commits
+item to done: work is done by the merge that integrates it, so `land` refuses
+a done claim made outside review with `land_base_done_claim`. The merge
+commit's done marks are covered by the approval `merge` accepted, which is
+current at that commit by the rule in [Approval
+freshness](#approval-freshness), as is a claim an older Atelier made after an
+approval's pin. Revert an outside claim (a claim no longer done at the tip is
+withdrawn), then `atelier start` the item and merge it (atelier-fj1t).
+Closing a mission, deciding a `decision` record and superseding work stay
+allowed on the base. A merge commit, such as a non-rebasing pull or the one
+`atelier merge` creates, is judged by the paths that differ from all of its
+parents and from Git's own merge of them, so a line Git merged cleanly is not
+counted, while a conflict resolved by hand is (atelier-jnrh). The install predates the gates and is exempt: commits
 made before the policy existed, the first commit on the base's first-parent
 line that adds it, and everything that commit merges in. Without an upstream, `land`
 notes that it cannot check base commits.
@@ -557,7 +579,7 @@ the identity and the reason. It is recorded only from a checkout of the base
 branch, for a commit the base already holds. `land` on the base, and `start`,
 count exactly that commit as reviewed and report it as exempted as trivial:
 the exemption never covers an earlier or later commit, even one on top of it,
-and it covers no done claim, which still travels on a work branch
+and it covers no done claim, which only a merge of the work makes
 (`land_base_done_claim`). `review list` and `review show` show it, and a
 mission's debrief shows each base exemption recorded between the mission's
 start and its done claim on its timeline, because it names no mission.

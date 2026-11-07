@@ -24,14 +24,6 @@ impl Fixture {
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
         ok(dir.path(), &["init", "--slug", "atelier"]);
-        // These scenarios test fast-forward integration, which a starter policy
-        // with a shell.check no longer selects by default.
-        let policy = dir.path().join(".atelier/workflow.yaml");
-        let text = fs::read_to_string(&policy).unwrap().replace(
-            "base_branch: main\n",
-            "base_branch: main\n  merge_strategy: fast_forward_only\n",
-        );
-        fs::write(policy, text).unwrap();
         let id = ok(
             dir.path(),
             &[
@@ -48,11 +40,8 @@ impl Fixture {
         ok(dir.path(), &["start", &id]);
         fs::write(dir.path().join("src.rs"), "tested code\n").unwrap();
         commit(dir.path(), "implementation and branch ownership");
-        ok(
-            dir.path(),
-            &["issue", "transition", &id, "close", "--reason", "complete"],
-        );
-        commit(dir.path(), "completion claim");
+        report(dir.path(), &id, "complete");
+        commit(dir.path(), "implementer report");
         let branch = git(dir.path(), &["branch", "--show-current"]);
         Self { dir, id, branch }
     }
@@ -110,6 +99,47 @@ impl Fixture {
             .write_issue_atomic(record)
             .unwrap();
     }
+}
+
+/// Writes `text` as `id`'s Report, the implementer report written before
+/// review (atelier-jnrh); the caller commits it.
+fn report(dir: &Path, id: &str, text: &str) {
+    let store = atelier_records::RecordStore::new(dir.join(".atelier"));
+    let mut record = store.load_issue_by_id(id).unwrap();
+    record.sections.report = Some(text.to_owned());
+    store.write_issue_atomic(&record).unwrap();
+}
+
+/// `policy`, the starter, with the `work` workflow given a `close` running
+/// `validators` as an older policy's did. Merge marks work done, and the
+/// done marks answer to that close's checks (atelier-jnrh).
+fn with_work_close(policy: &str, validators: &str) -> String {
+    let supersede = "      supersede:\n        from: [backlog, todo, in_progress]\n";
+    assert!(policy.contains(supersede), "{policy}");
+    policy.replace(
+        supersede,
+        &format!("      close:\n        from: [in_progress]\n        to: done\n        required_fields: [close_reason]\n        validators:\n{validators}{supersede}"),
+    )
+}
+
+/// Sets `id` done with `report` as its Report, as merge would; the caller
+/// commits it.
+fn mark_done(dir: &Path, id: &str, report: &str) {
+    let store = atelier_records::RecordStore::new(dir.join(".atelier"));
+    let mut record = store.load_issue_by_id(id).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    record.sections.report = Some(report.to_owned());
+    store.write_issue_atomic(&record).unwrap();
+}
+
+/// The status of `id` on `main`, where merge marks the work done.
+fn status_on_main(dir: &Path, id: &str) -> String {
+    let text = git(dir, &["show", &format!("main:.atelier/issues/{id}.md")]);
+    atelier_records::parse_issue_record(&text, Path::new(&format!("issues/{id}.md")))
+        .unwrap()
+        .issue
+        .status
 }
 
 #[test]
@@ -187,35 +217,56 @@ fn missing_self_approval_and_git_email_aliases_are_refused() {
     }
 }
 
+/// A standalone issue is done when it merges: merge creates the one merge
+/// commit, which marks it done and keeps the Report the reviewer read, and
+/// `land` on the base accepts it (atelier-jnrh).
 #[test]
-fn approval_records_committed_by_author_remain_independent_and_merge_has_no_writes() {
+fn approval_records_committed_by_author_remain_independent_and_merge_marks_the_issue_done() {
     let fixture = Fixture::new();
     fixture.approval("Independent reviewer");
     let pin = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let base = git(fixture.path(), &["rev-parse", "main"]);
     let tree = git(fixture.path(), &["rev-parse", "HEAD^{tree}"]);
-    let count = git(fixture.path(), &["rev-list", "--count", "--all"]);
+    let count: usize = git(fixture.path(), &["rev-list", "--count", "--all"])
+        .parse()
+        .unwrap();
+    let before = fixture.issue();
+    assert_eq!(before.issue.status, "in_progress");
     let output = ok(fixture.path(), &["merge", &fixture.id]);
+    let merge = git(fixture.path(), &["rev-parse", "HEAD"]);
     // Success says what merging did and the next step, not the gates.
     assert_eq!(
         output,
         format!(
-            "✓ Merged {} into main at {}; branch deleted. Next: atelier land, then git push.\nmerge: passed",
+            "✓ Merged {} into main with merge commit {}, which marks {} done; branch deleted. Next: atelier land, then git push.\nmerge: passed",
             fixture.branch,
-            &pin[..8]
+            &merge[..8],
+            fixture.id
         )
     );
-    assert_eq!(git(fixture.path(), &["rev-parse", "HEAD"]), pin);
-    assert_eq!(git(fixture.path(), &["rev-parse", "HEAD^{tree}"]), tree);
+    assert_eq!(git(fixture.path(), &["rev-parse", "HEAD^1"]), base);
+    assert_eq!(git(fixture.path(), &["rev-parse", "HEAD^2"]), pin);
+    assert_eq!(git(fixture.path(), &["rev-parse", "HEAD^2^{tree}"]), tree);
     assert_eq!(
         git(fixture.path(), &["rev-list", "--count", "--all"]),
-        count
+        (count + 1).to_string()
+    );
+    assert!(git(fixture.path(), &["log", "-1", "--format=%B"])
+        .contains(&format!("Marks {} done.", fixture.id)));
+    // Only the owner's status changed from the reviewed branch.
+    assert_eq!(
+        git(fixture.path(), &["diff", "--name-only", "HEAD^2", "HEAD"]),
+        format!(".atelier/issues/{}.md", fixture.id)
     );
     assert_eq!(git(fixture.path(), &["branch", "--show-current"]), "main");
     assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
     assert!(!git(fixture.path(), &["branch", "--list", &fixture.branch]).contains(&fixture.branch));
-    let index =
-        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-    assert_eq!(index.require_issue(&fixture.id).unwrap().status, "done");
+    let after = fixture.issue();
+    assert_eq!(after.issue.status, "done");
+    assert!(after.issue.closed_at.is_some());
+    assert_eq!(after.sections, before.sections);
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
+    ok(fixture.path(), &["land"]);
 }
 
 #[test]
@@ -225,13 +276,13 @@ fn statuses_and_new_evidence_or_review_events_do_not_stale_approval() {
     let mut record = fixture.issue();
     record.issue.status = "review".into();
     record.issue.closed_at = None;
-    record.sections.close_reason = None;
+    record.sections.report = None;
     fixture.write_issue(&record);
     commit(fixture.path(), "status change");
     record.issue.status = "done".into();
     // The implementer report lives in Close Reason, so writing it after
     // approval keeps the approval current (atelier-sfsq).
-    record.sections.close_reason = Some(
+    record.sections.report = Some(
         "done\n\n### Deviations\nNone.\n\n### Decisions\nKept X.\n\n### Surprises\nNone.\n\n### Open items\nNone."
             .into(),
     );
@@ -304,12 +355,6 @@ fn implemented_owner(dir: &Path) -> (String, String) {
     git(dir, &["config", "user.name", "Author"]);
     git(dir, &["config", "user.email", "author@example.test"]);
     ok(dir, &["init", "--slug", "atelier"]);
-    let policy = dir.join(".atelier/workflow.yaml");
-    let text = fs::read_to_string(&policy).unwrap().replace(
-        "base_branch: main\n",
-        "base_branch: main\n  merge_strategy: fast_forward_only\n",
-    );
-    fs::write(policy, text).unwrap();
     let id = ok(
         dir,
         &[
@@ -453,11 +498,8 @@ fn record_edits_after_approval_keep_it_current() {
     )
     .unwrap();
     still_current("edit a receipt");
-    ok(
-        path,
-        &["issue", "transition", &id, "close", "--reason", "Shipped."],
-    );
-    still_current("close the owner");
+    report(path, &id, "Shipped.");
+    still_current("write the report");
     let approvals = || {
         atelier_app::record_index::RecordIndex::load(&path.join(".atelier"))
             .unwrap()
@@ -468,7 +510,8 @@ fn record_edits_after_approval_keep_it_current() {
     assert_eq!(approvals(), 1);
     let head = git(path, &["rev-parse", "HEAD"]);
     ok(path, &["merge", &id]);
-    assert_eq!(git(path, &["rev-parse", "main"]), head);
+    assert_eq!(git(path, &["rev-parse", "main^2"]), head);
+    assert_eq!(status_on_main(path, &id), "done");
 }
 
 /// The astromech-l5c6 sequence (atelier-3jdm): a review with a fix_now
@@ -477,7 +520,7 @@ fn record_edits_after_approval_keep_it_current() {
 /// its Done when. It merges on that one approval, and `land` on the base
 /// accepts it.
 #[test]
-fn closing_and_ticking_after_approval_merges_on_that_approval() {
+fn ticking_and_reporting_after_approval_merges_on_that_approval() {
     let dir = tempdir().unwrap();
     let path = dir.path();
     let (id, _) = implemented_owner(path);
@@ -543,11 +586,8 @@ fn closing_and_ticking_after_approval_merges_on_that_approval() {
     );
     commit(path, "Record resolution commits");
     tick_done_when(path, &id);
-    ok(
-        path,
-        &["issue", "transition", &id, "close", "--reason", "Shipped."],
-    );
-    commit(path, "Close");
+    report(path, &id, "Shipped.");
+    commit(path, "Tick Done when and write the report");
     let output = ok(path, &["merge", &id, "--check"]);
     assert!(
         output.contains(&format!("review.current via {approval}"))
@@ -556,7 +596,8 @@ fn closing_and_ticking_after_approval_merges_on_that_approval() {
     );
     let head = git(path, &["rev-parse", "HEAD"]);
     ok(path, &["merge", &id]);
-    assert_eq!(git(path, &["rev-parse", "main"]), head);
+    assert_eq!(git(path, &["rev-parse", "main^2"]), head);
+    assert_eq!(status_on_main(path, &id), "done");
     git(path, &["switch", "-q", "main"]);
     let (landed, output) = cli(path, &["land"]);
     assert!(landed, "{output}");
@@ -578,14 +619,18 @@ fn edit_then_revert_and_second_author_cannot_reuse_an_approval() {
     fixture.refusal("review.current");
 }
 
-/// Under `fast_forward_only`, as this fixture's policy is, history does not
-/// show where a commit joined the base, so a review record is final once
-/// committed (atelier-ilba).
+/// A finding the base holds stays as it is apart from its disposition, so a
+/// branch that rewrites, deletes or re-modes it is refused (atelier-ilba).
+/// Every merge is a merge commit now, so a finding not yet on the base is
+/// correctable instead (atelier-jnrh;
+/// `review_records_can_be_corrected_until_they_reach_the_base`).
 #[test]
 fn review_rewrites_deletions_and_modes_are_rejected_even_before_new_approval() {
     for action in ["edit", "delete", "mode"] {
         let fixture = Fixture::new();
         let finding = fixture.finding();
+        // The finding reaches the base.
+        git(fixture.path(), &["branch", "-f", "main", "HEAD"]);
         let path = fixture
             .path()
             .join(format!(".atelier/reviews/{finding}.md"));
@@ -794,7 +839,7 @@ fn invalid_candidate_policy_is_rejected_and_base_fallback_is_visible() {
 }
 
 #[test]
-fn divergence_and_dirty_candidate_or_base_checkout_are_refused() {
+fn dirty_candidate_or_base_checkout_is_refused_and_a_diverged_base_takes_a_merge_commit() {
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
     fs::write(fixture.path().join("uncommitted"), "dirty").unwrap();
@@ -810,12 +855,14 @@ fn divergence_and_dirty_candidate_or_base_checkout_are_refused() {
     fs::remove_file(base.path().join("dirty")).unwrap();
     fs::write(base.path().join("new-base-code"), "diverged").unwrap();
     commit(base.path(), "base divergence");
-    fixture.refusal("merge_diverged");
-    let (_, output) = cli(fixture.path(), &["merge", &fixture.id]);
-    assert!(
-        output.contains("`git merge main`") && output.contains("Do not rebase"),
-        "{output}"
-    );
+    // Merge always creates a merge commit, so a base that moved on needs no
+    // catch-up merge on the branch (atelier-jnrh).
+    let diverged = git(base.path(), &["rev-parse", "HEAD"]);
+    let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(git(base.path(), &["rev-parse", "HEAD^1"]), diverged);
+    assert_eq!(git(base.path(), &["rev-parse", "HEAD^2"]), head);
+    assert!(base.path().join("new-base-code").exists() && base.path().join("src.rs").exists());
 }
 
 #[test]
@@ -827,8 +874,8 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     let text = fs::read_to_string(&policy).unwrap();
     fs::write(
         &policy,
-        text.replace(
-            "        - blockers.none_open\n",
+        with_work_close(
+            &text,
             "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
         ),
     )
@@ -998,49 +1045,72 @@ fn git_hooks_are_explicitly_disabled_in_the_final_integration_fence() {
 }
 
 #[test]
-fn scoped_children_and_open_transitive_blockers_prevent_merge() {
+fn a_parent_and_its_open_children_merge_done_together_and_open_blockers_refuse() {
+    // One merge marks the parent and every open child done in its merge
+    // commit; a superseded child stays superseded, and `land` on the base
+    // accepts the result (atelier-jnrh).
     let fixture = Fixture::new();
-    let child = ok(fixture.path(), &["-q", "issue", "create", "Open child"]);
-    let mut owner = fixture.issue();
-    owner.issue.issue_type = "feature".into();
-    owner.sections.change_type("feature");
-    owner
-        .relationships
-        .children
-        .push(atelier_records::issue_relationship_target(&child));
-    fixture.write_issue(&owner);
-    commit(fixture.path(), "epic owns an open child");
-    fixture.approval("Reviewer");
-    fixture.refusal("work.terminal");
-    let mut active_owner = fixture.issue();
-    active_owner.issue.status = "in_progress".into();
-    active_owner.issue.closed_at = None;
-    active_owner.sections.close_reason = None;
-    fixture.write_issue(&active_owner);
-    commit(fixture.path(), "scope status active");
-    ok(fixture.path(), &["issue", "transition", &child, "start"]);
-    ok(
+    let child = ok(
         fixture.path(),
-        &["issue", "transition", &child, "close", "--reason", "done"],
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Open child",
+            "--parent",
+            &fixture.id,
+        ],
     );
-    commit(fixture.path(), "child complete");
+    let retired = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Retired child",
+            "--parent",
+            &fixture.id,
+        ],
+    );
     ok(
         fixture.path(),
         &[
             "issue",
             "transition",
-            &fixture.id,
-            "close",
+            &retired,
+            "supersede",
             "--reason",
-            "epic complete",
+            "Not needed.",
         ],
     );
-    commit(fixture.path(), "epic done claim");
+    commit(fixture.path(), "the parent's children");
+    let before = fixture.issue();
+    fixture.approval("Reviewer");
+    let head = git(fixture.path(), &["rev-parse", "HEAD"]);
     let output = ok(fixture.path(), &["merge", &fixture.id]);
-    assert!(output.contains("✓ Merged"), "{output}");
-    let index =
-        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-    assert_eq!(index.require_issue(&child).unwrap().status, "done");
+    let marked = vec![fixture.id.clone(), child.clone()];
+    assert!(
+        output.contains(&format!("which marks {} done", marked.join(", "))),
+        "{output}"
+    );
+    assert_eq!(git(fixture.path(), &["rev-parse", "main^2"]), head);
+    for id in [&fixture.id, &child] {
+        assert_eq!(status_on_main(fixture.path(), id), "done", "{id}");
+    }
+    assert_eq!(status_on_main(fixture.path(), &retired), "superseded");
+    let mut changed = git(fixture.path(), &["diff", "--name-only", "main^2", "main"])
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    changed.sort();
+    let mut expected = marked
+        .iter()
+        .map(|id| format!(".atelier/issues/{id}.md"))
+        .collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(changed, expected);
+    assert_eq!(fixture.issue().sections, before.sections);
+    ok(fixture.path(), &["land"]);
 
     let other = Fixture::new();
     let blocker = ok(other.path(), &["-q", "issue", "create", "Open dependency"]);
@@ -1052,7 +1122,7 @@ fn scoped_children_and_open_transitive_blockers_prevent_merge() {
     let store = atelier_records::RecordStore::new(other.path().join(".atelier"));
     let mut record = store.load_issue_by_id(&blocker).unwrap();
     record.issue.status = "done".into();
-    record.sections.close_reason = Some("terminal direct blocker".into());
+    record.sections.report = Some("terminal direct blocker".into());
     record
         .relationships
         .blocks
@@ -1067,6 +1137,27 @@ fn scoped_children_and_open_transitive_blockers_prevent_merge() {
     commit(other.path(), "declared dependencies");
     other.approval("Reviewer");
     other.refusal("blockers.none_open");
+
+    // An open blocker of a child holds the merge too.
+    let third = Fixture::new();
+    let child = ok(
+        third.path(),
+        &["-q", "issue", "create", "Child", "--parent", &third.id],
+    );
+    let dependency = ok(third.path(), &["-q", "issue", "create", "Dependency"]);
+    ok(
+        third.path(),
+        &["issue", "link", &child, &dependency, "--role", "blocked_by"],
+    );
+    commit(third.path(), "a child with an open blocker");
+    third.approval("Reviewer");
+    third.refusal("blockers.none_open");
+    let (_, output) = cli(third.path(), &["merge", &third.id, "--check"]);
+    assert!(
+        output.contains(&format!("blocked by {dependency}"))
+            && output.contains(&format!("atelier start {dependency}")),
+        "{output}"
+    );
 }
 
 #[test]
@@ -1114,7 +1205,7 @@ fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not()
             assert!(output.contains("review.current via"), "{output}");
             let head = git(fixture.path(), &["rev-parse", "HEAD"]);
             ok(fixture.path(), &["merge", &fixture.id]);
-            assert_eq!(git(fixture.path(), &["rev-parse", "main"]), head);
+            assert_eq!(git(fixture.path(), &["rev-parse", "main^2"]), head);
         } else {
             // The refusal names the approval and the commit that staled it.
             let head = git(fixture.path(), &["rev-parse", "HEAD"]);
@@ -1427,13 +1518,9 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
     commit(fixture.path(), "approval on the base");
     git(fixture.path(), &["switch", "-q", &branch]);
     git(fixture.path(), &["merge", "-q", "--ff-only", "main"]);
-    // The branch then changes only what may follow an approval, so the pin
-    // rule alone decides.
-    ok(
-        fixture.path(),
-        &["issue", "transition", &owner, "close", "--reason", "done"],
-    );
-    commit(fixture.path(), "second owner's claim");
+    // The branch then changes only records, so the pin rule alone decides.
+    report(fixture.path(), &owner, "done");
+    commit(fixture.path(), "second owner's report");
     git(fixture.path(), &["switch", "-q", "main"]);
     fs::write(fixture.path().join("other.rs"), "landed\n").unwrap();
     commit(fixture.path(), "other work landed on the base");
@@ -1474,7 +1561,7 @@ fn a_follow_up_or_a_new_child_after_approval_keeps_it_current() {
     let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(output.contains("review.current via"), "{output}");
 
-    ok(
+    let child = ok(
         fixture.path(),
         &[
             "-q",
@@ -1485,13 +1572,18 @@ fn a_follow_up_or_a_new_child_after_approval_keeps_it_current() {
             &fixture.id,
         ],
     );
-    // The open child holds the merge on work.terminal, not on review.
+    // A child is a record, so the approval stays current, and merge marks
+    // it done with its parent: no rule holds a parent for its children
+    // (atelier-jnrh).
     commit(fixture.path(), "new in-scope child after approval");
-    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
-        !passed && output.contains("review.current via") && output.contains("work.terminal"),
+        output.contains("review.current via") && !output.contains("work.terminal"),
         "{output}"
     );
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(status_on_main(fixture.path(), &child), "done");
+    assert_eq!(status_on_main(fixture.path(), &follow_up), "todo");
 }
 
 #[test]
@@ -1538,7 +1630,7 @@ fn prune_apply_waits_for_read_transactions_and_failure_restores_linked_bytes() {
         record.issue.status = "done".into();
         record.issue.updated_at = old;
         record.issue.closed_at = Some(old);
-        record.sections.close_reason = Some("old terminal record".into());
+        record.sections.report = Some("old terminal record".into());
         if id == &ids[1] {
             record
                 .relationships
@@ -1626,10 +1718,11 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
     git(fixture.path(), &["switch", "main"]);
     let path = fixture.path().join(".atelier/workflow.yaml");
     let policy = fs::read_to_string(&path).unwrap();
+    // An older policy's work close still governs what done needs.
     fs::write(
         &path,
-        policy.replace(
-            "        - blockers.none_open\n",
+        with_work_close(
+            &policy,
             "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
         ),
     )
@@ -1642,12 +1735,6 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
     git(fixture.path(), &["rebase", "main"]);
     fs::write(&path, &policy).unwrap();
     commit(fixture.path(), "candidate loosens close checks");
-    let mut record = fixture.issue();
-    record.issue.status = "in_progress".into();
-    record.issue.closed_at = None;
-    record.sections.close_reason = None;
-    fixture.write_issue(&record);
-    commit(fixture.path(), "active status");
     let (passed, output) = cli(
         fixture.path(),
         &[
@@ -1660,9 +1747,12 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
         ],
     );
     assert!(!passed && output.contains("evidence.attached"), "{output}");
+    fixture.approval("Reviewer");
+    fixture.refusal("evidence.attached");
+    let mut record = fixture.issue();
     record.issue.status = "done".into();
     record.issue.closed_at = Some(chrono::Utc::now());
-    record.sections.close_reason = Some("direct edit done".into());
+    record.sections.report = Some("direct edit done".into());
     fixture.write_issue(&record);
     commit(fixture.path(), "direct terminal claim");
     fixture.approval("Reviewer");
@@ -1670,7 +1760,7 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
 }
 
 #[test]
-fn separately_checked_out_clean_base_is_fast_forwarded_and_source_branch_is_cleaned() {
+fn separately_checked_out_clean_base_takes_the_merge_commit_and_source_branch_is_cleaned() {
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
     let head = git(fixture.path(), &["rev-parse", "HEAD"]);
@@ -1686,7 +1776,8 @@ fn separately_checked_out_clean_base_is_fast_forwarded_and_source_branch_is_clea
             && output.ends_with("merge: passed"),
         "{output}"
     );
-    assert_eq!(git(base.path(), &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(base.path(), &["rev-parse", "HEAD^2"]), head);
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
     assert!(git(base.path(), &["status", "--porcelain"]).is_empty());
     assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
     assert!(git(base.path(), &["branch", "--list", &fixture.branch]).is_empty());
@@ -1913,7 +2004,7 @@ fn ignored_uncommitted_approval_issue_and_evidence_are_not_merge_inputs() {
 }
 
 #[test]
-fn ignored_canonical_file_created_by_shell_is_rejected_at_final_fence() {
+fn ignored_canonical_file_created_by_shell_never_lands() {
     let fixture = Fixture::new();
     git(fixture.path(), &["switch", "main"]);
     let path = fixture.path().join(".atelier/workflow.yaml");
@@ -1930,8 +2021,15 @@ fn ignored_canonical_file_created_by_shell_is_rejected_at_final_fence() {
         ".atelier/reviews/\n",
     )
     .unwrap();
-    fixture.refusal("canonical_snapshot_uncommitted");
-    assert!(fixture.path().join(".atelier/reviews/hidden.md").exists());
+    // Merge checks run in a checkout of the merge commit, so what they write
+    // stays there and the merge commit holds only reviewed records.
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(!fixture.path().join(".atelier/reviews/hidden.md").exists());
+    assert!(
+        git(fixture.path(), &["ls-tree", "-r", "--name-only", "main"])
+            .lines()
+            .all(|path| path != ".atelier/reviews/hidden.md")
+    );
     assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
 }
 
@@ -1960,7 +2058,7 @@ fn git_index_flags_cannot_hide_uncommitted_completion_claim_bytes_or_modes() {
                 ],
             );
             let mut record = record;
-            record.sections.close_reason = None;
+            record.sections.report = None;
             fixture.write_issue(&record);
         }
         assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
@@ -1970,11 +2068,14 @@ fn git_index_flags_cannot_hide_uncommitted_completion_claim_bytes_or_modes() {
 
 #[test]
 fn direct_terminal_claim_requires_trusted_completion_fields() {
-    for status in ["done", "superseded"] {
+    // Merge marks work done, so only supersede reaches a done status by a
+    // transition, and its required Report holds a direct edit too
+    // (atelier-jnrh).
+    for status in ["superseded"] {
         let fixture = Fixture::new();
         let mut record = fixture.issue();
         record.issue.status = status.into();
-        record.sections.close_reason = None;
+        record.sections.report = None;
         fixture.write_issue(&record);
         commit(
             fixture.path(),
@@ -1982,7 +2083,7 @@ fn direct_terminal_claim_requires_trusted_completion_fields() {
         );
         fixture.approval("Reviewer");
         fixture.refusal("required_field.close_reason");
-        record.sections.close_reason = Some("Completed claim with required reason".into());
+        record.sections.report = Some("Completed claim with required reason".into());
         fixture.write_issue(&record);
         commit(fixture.path(), "record required completion reason");
         ok(fixture.path(), &["merge", &fixture.id, "--check"]);
@@ -2048,7 +2149,7 @@ fn shadow_tags_do_not_change_source_or_base_branch_identity() {
             fixture.path()
         };
         assert_eq!(git(target, &["symbolic-ref", "HEAD"]), "refs/heads/main");
-        assert_eq!(git(target, &["rev-parse", "refs/heads/main"]), head);
+        assert_eq!(git(target, &["rev-parse", "refs/heads/main^2"]), head);
         assert_eq!(
             git(
                 target,
@@ -2118,6 +2219,13 @@ fn hidden_flagged_code_is_rejected_before_merge_and_after_shell_checks_in_both_c
                     assert!(git(target, &["status", "--porcelain"]).is_empty());
                 }
                 let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+                if during_check && !base_target {
+                    // The check ran in the merged checkout, which never
+                    // lands: the merge commit holds the reviewed code.
+                    ok(fixture.path(), &["merge", &fixture.id]);
+                    assert_eq!(git(fixture.path(), &["show", "main:src.rs"]), "tested code");
+                    continue;
+                }
                 fixture.refusal("tracked_snapshot_uncommitted");
                 assert_eq!(
                     git(
@@ -2330,8 +2438,8 @@ fn merge_commit_policy(fixture: &Fixture, checks: &[&str]) {
     git(fixture.path(), &["switch", "-q", "main"]);
     let path = fixture.path().join(".atelier/workflow.yaml");
     let policy = fs::read_to_string(&path).unwrap().replace(
-        "merge_strategy: fast_forward_only",
-        "merge_strategy: merge_commit",
+        "base_branch: main\n",
+        "base_branch: main\n  merge_strategy: merge_commit\n",
     );
     let checks = checks
         .iter()
@@ -2389,7 +2497,7 @@ fn merge_commit_strategy_lands_a_clean_branch_on_a_moved_base_and_land_accepts_i
     let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
         output.contains("review.current via")
-            && output.contains("shell.check, work.terminal, merge.merged_tree")
+            && output.contains("shell.check, merge.merged_tree")
             && output.ends_with("merge: passed"),
         "{output}"
     );
@@ -2767,60 +2875,33 @@ fn merge_commit_strategy_refuses_a_base_that_moved_by_code_during_checks_naming_
     assert_eq!(worktrees(fixture.path()), 1);
 }
 
+/// An older policy's `fast_forward_only` is read as `merge_commit`: a base
+/// that moved on, by records or by code, takes a merge commit, with no
+/// catch-up merge on the branch, and `land` there accepts it (atelier-jnrh).
 #[test]
-fn fast_forward_strategy_does_not_rerun_checks_for_a_base_that_moved_by_records() {
+fn a_fast_forward_only_policy_merges_with_a_merge_commit_onto_a_moved_base() {
     let fixture = Fixture::new();
-    fixture.approval("Reviewer");
-    let logs = tempdir().unwrap();
-    let log = logs.path().join("runs");
     git(fixture.path(), &["switch", "-q", "main"]);
     let path = fixture.path().join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&path).unwrap();
-    let mover = base_mover(&log);
-    fs::write(
-        &path,
-        format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: '{mover}' }}\n"),
-    )
-    .unwrap();
-    commit(fixture.path(), "base check policy");
-    git(fixture.path(), &["switch", "-q", &fixture.branch]);
-    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
-    fixture.approval("Reviewer");
-    later_branch(&fixture, true);
-    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
-    assert!(
-        !passed && output.contains("merge_diverged: main gained only records-only commits"),
-        "{output}"
+    let policy = fs::read_to_string(&path).unwrap().replace(
+        "base_branch: main\n",
+        "base_branch: main\n  merge_strategy: fast_forward_only\n",
     );
-    assert_eq!(runs(&log), 1);
-    assert!(git(fixture.path(), &["branch", "--list", &fixture.branch]).contains(&fixture.branch));
-}
-
-#[test]
-fn fast_forward_strategy_names_records_only_base_commits_it_cannot_land_on() {
-    let fixture = Fixture::new();
-    fixture.approval("Reviewer");
-    git(fixture.path(), &["switch", "-q", "main"]);
+    fs::write(&path, policy).unwrap();
+    commit(fixture.path(), "an older policy");
     ok(fixture.path(), &["-q", "issue", "create", "Follow up"]);
     commit(fixture.path(), "records landed on the base");
-    git(fixture.path(), &["switch", "-q", &fixture.branch]);
-    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
-    assert!(
-        !passed
-            && output.contains("merge_diverged: main gained only records-only commits")
-            && output.contains("`git merge main`"),
-        "{output}"
-    );
-    // A code commit on the base is named with its file.
-    git(fixture.path(), &["switch", "-q", "main"]);
     fs::write(fixture.path().join("base.rs"), "code\n").unwrap();
     commit(fixture.path(), "code landed on the base");
+    let base = git(fixture.path(), &["rev-parse", "HEAD"]);
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
-    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id]);
-    assert!(
-        !passed && output.contains("merge_diverged: main gained") && output.contains("base.rs"),
-        "{output}"
-    );
+    fixture.approval("Reviewer");
+    let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(git(fixture.path(), &["rev-parse", "main^1"]), base);
+    assert_eq!(git(fixture.path(), &["rev-parse", "main^2"]), head);
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
+    ok(fixture.path(), &["land"]);
 }
 
 fn leftovers(fixture: &Fixture) -> Vec<std::path::PathBuf> {
@@ -2869,11 +2950,18 @@ fn merge_commit_strategy_removes_the_checkout_an_interrupted_merge_left_behind()
 }
 
 #[test]
-fn merge_commit_strategy_needs_merge_checks_to_prove_the_merged_tree() {
+fn merge_commit_strategy_merges_without_merge_checks() {
+    // A repository without a shell check lands a merged tree nothing ran;
+    // that is its choice, so merge no longer refuses it (atelier-jnrh).
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
     merge_commit_policy(&fixture, &[]);
-    fixture.refusal("merge_unproven");
+    let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(!output.contains("merge.merged_tree"), "{output}");
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(git(fixture.path(), &["log", "-1", "--format=%B", "main"])
+        .contains("merge_checks have no shell.check, so nothing ran on this"));
+    assert_eq!(worktrees(fixture.path()), 1);
 }
 
 #[test]
@@ -2919,9 +3007,9 @@ fn merge_commit_strategy_gates_the_records_the_base_gained_after_the_fork_point(
 }
 
 #[test]
-fn merge_commit_strategy_needs_a_shell_check_to_prove_the_merged_tree() {
-    // Record checks read records, not the merged tree, so they prove nothing
-    // about what merging would build.
+fn merge_commit_strategy_merges_with_only_record_checks() {
+    // Record checks read records, not the merged tree; with no shell check,
+    // merge lands the tree once they pass (atelier-jnrh).
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
     merge_commit_policy(&fixture, &[]);
@@ -2933,7 +3021,8 @@ fn merge_commit_strategy_needs_a_shell_check_to_prove_the_merged_tree() {
     fs::write(&path, policy).unwrap();
     commit(fixture.path(), "only a record check");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
-    fixture.refusal("merge_unproven");
+    ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
     assert_eq!(worktrees(fixture.path()), 1);
 }
 
@@ -2987,10 +3076,7 @@ fn merge_commit_strategy_refuses_a_merge_that_breaks_a_claim_the_base_completed(
     ok(fixture.path(), &["issue", "link", &work, &mission]);
     commit(fixture.path(), "plan the mission");
     ok(fixture.path(), &["issue", "transition", &work, "start"]);
-    ok(
-        fixture.path(),
-        &["issue", "transition", &work, "close", "--reason", "done"],
-    );
+    mark_done(fixture.path(), &work, "done");
     for transition in ["ready", "start"] {
         ok(
             fixture.path(),
@@ -3018,8 +3104,10 @@ fn merge_commit_strategy_refuses_a_merge_that_breaks_a_claim_the_base_completed(
     let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
     assert!(
         output.contains(&format!(
-            "⚠ {work} work.terminal: todo, open in {mission}'s scope. Next: `atelier issue transition {work} start`, then `atelier issue transition {work} close --reason \"…\"`"
-        )) && output.ends_with(&format!("merge: refused — 1 check ({mission} work.terminal)\n")),
+            "⚠ {work} work.terminal: todo, open in {mission}'s scope. Next: atelier start {work}"
+        )) && output.ends_with(&format!(
+            "merge: refused — 1 check ({mission} work.terminal)\n"
+        )),
         "{output}"
     );
     assert_eq!(worktrees(fixture.path()), 1);
@@ -3066,10 +3154,7 @@ fn merge_commit_strategy_accepts_a_sibling_the_base_completed_with_its_own_revie
     fixture.approval("Reviewer");
     git(fixture.path(), &["switch", "-q", "main"]);
     ok(fixture.path(), &["issue", "transition", &sibling, "start"]);
-    ok(
-        fixture.path(),
-        &["issue", "transition", &sibling, "close", "--reason", "done"],
-    );
+    mark_done(fixture.path(), &sibling, "done");
     commit(fixture.path(), "the sibling is done");
     ok(
         fixture.path(),
@@ -3494,7 +3579,7 @@ fn sync_names_the_commit_that_staled_the_approval_before_the_sync_and_every_path
 /// brings in code, the pass is stale, yet close and merge still succeed, and
 /// nothing asks for the proof to be recorded again (atelier-s66u).
 #[test]
-fn a_later_pass_clears_an_older_fail_across_a_base_merge_so_close_and_merge_succeed() {
+fn a_later_pass_clears_an_older_fail_across_a_base_merge_so_merge_succeeds() {
     let dir = tempdir().unwrap();
     let path = dir.path();
     git(path, &["init", "-qb", "main"]);
@@ -3550,11 +3635,8 @@ fn a_later_pass_clears_an_older_fail_across_a_base_merge_so_close_and_merge_succ
     assert!(listed.contains("stale (code changed in"), "{listed}");
     assert!(!listed.contains("blocks completion"), "{listed}");
 
-    ok(
-        path,
-        &["issue", "transition", &id, "close", "--reason", "complete"],
-    );
-    commit(path, "completion claim");
+    report(path, &id, "complete");
+    commit(path, "implementer report");
     ok(
         path,
         &[
@@ -3673,7 +3755,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     let refusal = format!(
         "{}\n\
          ⚠ {id} findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request {id}\n\
-         ✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal, claims.reviewed)\n\
+         ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, claims.reviewed)\n\
          merge: refused — 2 checks (review.current, findings.disposed)\n",
         stale_line(
             &fixture,
@@ -3720,7 +3802,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
         out,
         format!(
             "⚠ {id} findings.disposed: 21 fix_now findings resolved; a fix_now resolution needs an independent approval, which a trivial exemption is not. Next: atelier review request {id}\n\
-             ✓ 6 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, review.current via {exemption}, work.terminal, claims.reviewed)\n\
+             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, review.current via {exemption}, claims.reviewed)\n\
              merge: refused — 1 check (findings.disposed)\n"
         )
     );
@@ -3732,7 +3814,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     assert_eq!(
         out,
         format!(
-            "✓ 7 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, required_field.close_reason, review.current via {approval}, work.terminal, claims.reviewed)\n\
+            "✓ 5 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed, review.current via {approval}, claims.reviewed)\n\
              Next: atelier merge {id}\n\
              merge: passed\n"
         )
@@ -3743,7 +3825,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
 /// recommendation, first summary line and the disposition that settles it;
 /// an open child names the transition that closes it (atelier-6rh7).
 #[test]
-fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it() {
+fn merge_check_names_each_finding_with_the_command_that_settles_it() {
     let fixture = Fixture::new();
     let id = fixture.id.clone();
     let finding = fixture.finding();
@@ -3786,16 +3868,18 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
     );
     // The quiet token of a disposition is the finding it settles.
     assert_eq!(disposition.trim(), deferred);
+    // Merge marks an open child done with its parent, so the child holds
+    // nothing (atelier-jnrh); it has its report, as review asks.
     let child = ok(
         fixture.path(),
         &["-q", "issue", "create", "Open child", "--parent", &id],
     );
+    report(fixture.path(), &child, "Done.");
     commit(fixture.path(), "findings and an open child");
     let approval = fixture.approval("Reviewer");
     let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed);
-    // Findings are listed in ID order; the first names the done claim the
-    // unsettled findings keep the approval from covering.
+    // Findings are listed in ID order.
     let mut findings = [
         (finding.clone(), format!("{finding} fix_now finding \"Contract failure in src.rs\" has no disposition"), format!("atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"")),
         (deferred.clone(), format!("{deferred} defer finding \"Rename later\": defer disposition by Author needs to be set by a non-author"), format!("atelier review request {id}")),
@@ -3805,18 +3889,18 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
     assert_eq!(
         out,
         format!(
-            "⚠ {id} findings.disposed: {first} (also claims.reviewed). Next: {first_fix}\n\
+            "⚠ {id} findings.disposed: {first}. Next: {first_fix}\n\
              ⚠ {id} findings.disposed: {second}. Next: {second_fix}\n\
-             ⚠ {child} work.terminal: todo, open in {id}'s scope. Next: atelier issue transition {child} supersede --reason \"…\"\n\
-             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, review.current via {approval})\n\
-             merge: refused — 3 checks (findings.disposed, work.terminal, claims.reviewed)\n"
+             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, review.current via {approval}, claims.reviewed)\n\
+             ✓ 1 done claim holds\n\
+             merge: refused — 1 check (findings.disposed)\n"
         )
     );
-    // Each printed fix runs as printed: the review request, the disposition,
-    // and the transition that retires the open child under its closed owner.
+    // Each printed fix runs as printed: the review request and the
+    // disposition.
     assert_eq!(
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
-        3
+        2
     );
 }
 
@@ -3825,33 +3909,31 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
 /// run from where the branch left the base. A real merge refuses before
 /// integrating (atelier-kiry).
 #[test]
-fn merge_check_on_a_diverged_base_also_reports_the_review_and_claim_gates() {
+fn merge_check_on_a_moved_base_reports_the_review_and_finding_gates() {
+    // A base that moved on is no refusal: merge would create a merge commit
+    // onto it (atelier-jnrh).
     let fixture = Fixture::new();
     let id = fixture.id.clone();
     let finding = fixture.finding();
     git(fixture.path(), &["switch", "-q", "main"]);
     fs::write(fixture.path().join("base.rs"), "base code\n").unwrap();
     commit(fixture.path(), "base code");
-    let moved = git(fixture.path(), &["rev-parse", "--short=8", "HEAD"]);
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
-    let branch = &fixture.branch;
     let (passed, out, err) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed && err.is_empty(), "{err}");
     assert_eq!(
         out,
         format!(
-            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, then retry; a merge keeps the approval unless it resolves or edits code by hand, and then review.current names the merge and the files. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
-             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test> (also claims.reviewed). Next: atelier review request {id}\n\
+            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in src.rs\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
-             ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
-             merge: refused — 4 checks (merge_diverged, review.current, findings.disposed, claims.reviewed)\n"
+             ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, claims.reviewed)\n\
+             merge: refused — 2 checks (review.current, findings.disposed)\n"
         )
     );
     assert_eq!(
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
-        3
+        2
     );
-    fixture.refusal("merge_diverged");
 }
 
 /// Records and code that differ from HEAD are each a failed check naming
@@ -3912,7 +3994,7 @@ fn merge_names_the_work_branch_and_says_when_the_work_is_already_merged() {
     let mismatch = |here: &str| {
         format!(
             "⚠ {id} merge_branch_mismatch: owned on {branch}, not on {here}. Next: git switch {branch}\n\
-             Not checked: the review, findings, proof, blocker, open-work and done-claim gates; merge_branch_mismatch stops merge before them.\n\
+             Not checked: the review, findings, proof, blocker and done-claim gates; merge_branch_mismatch stops merge before them.\n\
              merge: refused — 1 check (merge_branch_mismatch)\n"
         )
     };
@@ -3995,8 +4077,10 @@ fn approval_explained(fixture: &Fixture, line: &str) -> String {
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &fixture.id, "--check"]),
         1
     );
+    // Land judges review only for done work, and merge marks work done, so
+    // it hands off work in progress (atelier-jnrh).
     let (passed, out) = cli(fixture.path(), &["land", &fixture.id]);
-    assert!(!passed && shown(&out), "{line}\n{out}");
+    assert!(passed && !shown(&out), "{line}\n{out}");
     let (_, out, err) = sync(fixture.path(), &fixture.id);
     format!("{out}\n{err}")
 }
@@ -4100,25 +4184,24 @@ fn gates_name_an_approval_whose_identity_matches_a_git_author() {
 fn a_gate_on_a_record_that_differs_from_head_is_fixed_by_committing_it() {
     let fixture = Fixture::new();
     let id = fixture.id.clone();
-    let child = ok(
+    let blocker = ok(fixture.path(), &["-q", "issue", "create", "Blocker"]);
+    ok(
         fixture.path(),
-        &["-q", "issue", "create", "Child", "--parent", &id],
+        &["issue", "link", &id, &blocker, "--role", "blocked_by"],
     );
-    commit(fixture.path(), "an open child");
+    commit(fixture.path(), "an open blocker");
     fixture.approval("Reviewer");
-    // The child closes in the checkout only.
-    let store = atelier_records::RecordStore::new(fixture.path().join(".atelier"));
-    let mut child_record = store.load_issue_by_id(&child).unwrap();
-    child_record.issue.status = "done".into();
-    child_record.issue.closed_at = Some(chrono::Utc::now());
-    child_record.sections.close_reason = Some("Closed in the checkout.".into());
-    store.write_issue_atomic(&child_record).unwrap();
+    // The link is dropped in the checkout only.
+    ok(
+        fixture.path(),
+        &["issue", "unlink", &id, &blocker, "--role", "blocked_by"],
+    );
     let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed);
     assert!(
         out.contains(&format!(
-            "⚠ {child} work.terminal: todo, open in {id}'s scope, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n"
-        )),
+            "⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Blocker, judged on HEAD's copy; the checkout's differs"
+        )) && out.contains("Next: git add .atelier && git commit -m \"…\"\n"),
         "{out}"
     );
     assert!(!out.contains("✓"), "{out}");
@@ -4305,19 +4388,250 @@ fn a_done_when_edited_only_before_the_start_is_not_shown() {
     assert!(edit_lines(&debrief).is_empty(), "{debrief}");
 }
 
-/// The base plan of a fixture whose base merges with a merge commit, which
-/// shows where each commit joined it.
-fn merges_with_a_merge_commit(dir: &Path, _: &str) {
-    let path = dir.join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&path).unwrap().replace(
-        "merge_strategy: fast_forward_only",
-        "merge_strategy: merge_commit",
+/// A Done when whose text changes after approval is still shown, in the
+/// brief and in `merge --check`, without a refusal; ticking its boxes is not
+/// shown (atelier-jnrh).
+#[test]
+fn a_done_when_edited_after_approval_is_shown_but_ticking_it_is_not() {
+    let fixture = Fixture::with(|dir, id| {
+        let path = dir.join(format!(".atelier/issues/{id}.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            text.replace(
+                "Scenario passes.",
+                "- [ ] Scenario passes.\n- [ ] It passes on Linux.",
+            ),
+        )
+        .unwrap();
+    });
+    let brief_edits = |fixture: &Fixture| {
+        let brief = ok(fixture.path(), &["review", "request", &fixture.id]);
+        brief
+            .split("## Done when edited after start\n\n")
+            .nth(1)
+            .map(|rest| {
+                rest.lines()
+                    .take_while(|line| line.starts_with("- "))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+    tick_done_when(fixture.path(), &fixture.id);
+    commit(fixture.path(), "tick the Done when");
+    assert!(brief_edits(&fixture).is_empty());
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed && edit_lines(&output).is_empty(), "{output}");
+    // Unticking and ticking again changes no text either.
+    let path = fixture
+        .path()
+        .join(format!(".atelier/issues/{}.md", fixture.id));
+    let ticked = fs::read_to_string(&path).unwrap();
+    fs::write(&path, ticked.replacen("- [x] ", "- [ ] ", 1)).unwrap();
+    commit(fixture.path(), "untick one line");
+    fs::write(&path, &ticked).unwrap();
+    commit(fixture.path(), "tick it again");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed && edit_lines(&output).is_empty(), "{output}");
+
+    let edit = edit_done_when(
+        fixture.path(),
+        &fixture.id,
+        "It passes on Linux.",
+        "It passes on Linux and macOS.",
     );
+    let line = format!(
+        "{} Done when edited at {} after the item was started.",
+        fixture.id,
+        &edit[..8]
+    );
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert!(output.contains("review.current via"), "{output}");
+    assert_eq!(edit_lines(&output), [format!("Note: {line}")], "{output}");
+    assert_eq!(brief_edits(&fixture), [format!("- {line}")]);
+}
+
+/// A Done when changed on the base after the item started, and merged into
+/// its branch, is shown like an edit on the branch (finding atelier-l5fb).
+#[test]
+fn a_done_when_edit_merged_in_from_the_base_is_shown() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    let edit = edit_done_when(
+        fixture.path(),
+        &fixture.id,
+        "Scenario passes.",
+        "Scenario passes.\n- [x] Also passes on macOS.",
+    );
+    git(fixture.path(), &["switch", "-q", &fixture.branch]);
+    // The record conflicts next to the branch's report; the resolution keeps
+    // both sides.
+    let record = format!(".atelier/issues/{}.md", fixture.id);
+    let ours = git(fixture.path(), &["show", &format!("HEAD:{record}")]);
+    let merged = Command::new("git")
+        .current_dir(fixture.path())
+        .args(["merge", "-q", "--no-edit", "main"])
+        .output()
+        .unwrap();
+    if !merged.status.success() {
+        fs::write(
+            fixture.path().join(&record),
+            ours.replace(
+                "Scenario passes.",
+                "Scenario passes.\n- [x] Also passes on macOS.",
+            ) + "\n",
+        )
+        .unwrap();
+        git(fixture.path(), &["add", &record]);
+        git(fixture.path(), &["commit", "-q", "--no-edit"]);
+    }
+    assert!(fixture
+        .issue()
+        .sections
+        .section(atelier_core::IssueSectionName::DoneWhen)
+        .is_some_and(|text| text.contains("macOS")));
+    let line = format!(
+        "{} Done when edited at {} after the item was started.",
+        fixture.id,
+        &edit[..8]
+    );
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert!(output.contains("review.current via"), "{output}");
+    assert_eq!(edit_lines(&output), [format!("Note: {line}")], "{output}");
+    let brief = ok(fixture.path(), &["review", "request", &fixture.id]);
+    assert!(
+        brief.contains(&format!("## Done when edited after start\n\n- {line}\n")),
+        "{brief}"
+    );
+}
+
+/// An item an older Atelier closed on its branch, with a `## Close Reason`,
+/// merges as it is: merge marks only open work, and `land` on the base
+/// accepts it (atelier-jnrh).
+#[test]
+fn an_item_closed_by_an_older_atelier_merges_as_it_is() {
+    let fixture = Fixture::new();
+    let child = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Open child",
+            "--parent",
+            &fixture.id,
+        ],
+    );
+    let path = fixture
+        .path()
+        .join(format!(".atelier/issues/{}.md", fixture.id));
+    let text = fs::read_to_string(&path).unwrap();
+    let closed = text
+        .replace("status: \"in_progress\"", "status: \"done\"")
+        .replace(
+            "## Report\n\ncomplete",
+            "## Close Reason\n\nClosed before merge marked work done.",
+        );
+    assert_ne!(closed, text);
+    fs::write(&path, &closed).unwrap();
+    commit(fixture.path(), "closed by an older Atelier");
+    fixture.approval("Reviewer");
+    let output = ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(
+        output.contains(&format!("which marks {child} done")),
+        "{output}"
+    );
+    assert_eq!(
+        git(fixture.path(), &["diff", "--name-only", "main^2", "main"]),
+        format!(".atelier/issues/{child}.md")
+    );
+    assert_eq!(
+        git(
+            fixture.path(),
+            &["show", &format!("main:.atelier/issues/{}.md", fixture.id)]
+        ),
+        closed.trim_end()
+    );
+    ok(fixture.path(), &["land"]);
+}
+
+/// Work merge marks done with an unticked Done when line or an empty Report
+/// is noted in `merge --check` and `merge`, and refuses nothing: an untick
+/// after approval and a child added after it are both seen (finding
+/// atelier-nrq4).
+#[test]
+fn merge_notes_work_it_marks_done_unticked_or_unreported() {
+    let fixture = Fixture::with(|dir, id| {
+        let path = dir.join(format!(".atelier/issues/{id}.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            text.replace(
+                "Scenario passes.",
+                "- [x] Scenario passes.\n- [x] It passes on Linux.\n- [ ] After merge (device): it opens on the phone. Stand-in: the emulator test passes.",
+            ),
+        )
+        .unwrap();
+    });
+    // Before approval only the After merge line is unticked, and it needs no
+    // tick, so nothing is noted.
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(!output.contains("Note: merge marks"), "{output}");
+    fixture.approval("Reviewer");
+    let path = fixture
+        .path()
+        .join(format!(".atelier/issues/{}.md", fixture.id));
+    let text = fs::read_to_string(&path).unwrap();
     fs::write(
         &path,
-        format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'true' }}\n"),
+        text.replace("- [x] It passes on Linux.", "- [ ] It passes on Linux."),
     )
     .unwrap();
+    let child = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Late child",
+            "--parent",
+            &fixture.id,
+            "--body",
+            "## Goal\n\nMore.\n\n## Done when\n\n- [ ] Never done.",
+        ],
+    );
+    commit(
+        fixture.path(),
+        "untick a line and add a child after approval",
+    );
+    let notes = [
+        format!(
+            "Note: merge marks {} done with 1 Done when line unticked: \"It passes on Linux.\".",
+            fixture.id
+        ),
+        format!(
+            "Note: merge marks {child} done with 1 Done when line unticked: \"Never done.\"; Report empty."
+        ),
+    ];
+    let shown = |output: &str| {
+        output
+            .lines()
+            .filter(|line| line.starts_with("Note: merge marks"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed && output.contains("review.current via"), "{output}");
+    assert_eq!(shown(&output), notes, "{output}");
+    let merged = ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(shown(&merged), notes, "{merged}");
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
+    assert_eq!(status_on_main(fixture.path(), &child), "done");
 }
 
 /// A review record can be corrected or deleted until it reaches the base,
@@ -4326,7 +4640,7 @@ fn merges_with_a_merge_commit(dir: &Path, _: &str) {
 /// a record is on the base it stays as it is (atelier-ilba).
 #[test]
 fn review_records_can_be_corrected_until_they_reach_the_base() {
-    let fixture = Fixture::with(merges_with_a_merge_commit);
+    let fixture = Fixture::new();
     let path = fixture.path();
     let finding = |summary: &str| {
         let id = ok(
@@ -4454,7 +4768,7 @@ fn review_records_can_be_corrected_until_they_reach_the_base() {
 /// reviewer never saw (atelier-ilba, finding atelier-oyh0).
 #[test]
 fn an_approval_stays_as_first_committed_before_the_base() {
-    let fixture = Fixture::with(merges_with_a_merge_commit);
+    let fixture = Fixture::new();
     let path = fixture.path();
     let approval = fixture.approval("Reviewer");
     fs::write(path.join("src.rs"), "unreviewed code\n").unwrap();

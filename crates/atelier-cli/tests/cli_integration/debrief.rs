@@ -3,6 +3,20 @@
 
 use super::*;
 
+/// A repository whose work items close by a transition, under the starter
+/// policy from before atelier-jnrh: these tests read histories that close
+/// on the base, as repositories that have not migrated still write. Work
+/// done by `atelier merge` is covered by
+/// `work_done_by_merge_is_delivered_when_the_merge_reaches_the_base`.
+fn init_closing(dir: &Path) {
+    init_atelier(dir);
+    fs::write(
+        dir.join(".atelier/workflow.yaml"),
+        starter_with_work_close(),
+    )
+    .unwrap();
+}
+
 fn ok(dir: &Path, args: &[&str]) -> String {
     let (success, stdout, stderr) = run_atelier(dir, args);
     assert!(success, "atelier {args:?} failed: {stderr}");
@@ -39,7 +53,7 @@ struct Mission {
 
 /// A mission whose history holds every kind of deviation.
 fn mission(dir: &Path) -> Mission {
-    init_atelier(dir);
+    init_closing(dir);
     init_git_repo(dir);
     let id = ok(
         dir,
@@ -540,7 +554,7 @@ fn debrief_html_is_a_self_contained_page_with_the_same_facts() {
 #[test]
 fn debrief_refuses_items_that_are_not_missions() {
     let dir = tempdir().unwrap();
-    init_atelier(dir.path());
+    init_closing(dir.path());
     let work = item(dir.path(), "Work");
     let (success, _, stderr) = run_atelier(dir.path(), &["debrief", &work]);
     assert!(
@@ -572,7 +586,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 /// A started mission with one planned item, committed.
 fn started(dir: &Path) -> (String, String) {
-    init_atelier(dir);
+    init_closing(dir);
     init_git_repo(dir);
     let mission = ok(
         dir,
@@ -647,7 +661,7 @@ fn a_child_added_to_planned_scope_after_the_start_is_new_scope() {
 #[test]
 fn a_link_stored_on_the_mission_dates_from_the_mission_record() {
     let dir = tempdir().unwrap();
-    init_atelier(dir.path());
+    init_closing(dir.path());
     init_git_repo(dir.path());
     let mission = ok(
         dir.path(),
@@ -743,6 +757,75 @@ fn work_merged_from_a_branch_is_not_reported_reopened() {
     );
     let page = ok(dir.path(), &["debrief", &mission]);
     assert!(page.contains(&format!("{planned} task ✓ done")), "{page}");
+    assert!(!deviations(&page).contains("Reopened on"), "{page}");
+}
+
+/// Under the current starter, work is done when `atelier merge` integrates
+/// it, in the merge commit (atelier-jnrh): the debrief reports it delivered,
+/// with its Report, and not reopened.
+#[test]
+fn work_done_by_merge_is_delivered_when_the_merge_reaches_the_base() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    init_git_repo(dir.path());
+    let mission = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nO\n\n## Success criteria\n\n- fast: Fast.",
+            "Mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    let planned = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--body",
+            "## Goal\n\nG\n\n## Done when\n\n- [ ] D",
+            "Planned",
+        ],
+    )
+    .trim()
+    .to_string();
+    ok(dir.path(), &["issue", "link", "-q", &planned, &mission]);
+    commit_all(dir.path(), "plan");
+    ok(dir.path(), &["issue", "transition", &mission, "ready"]);
+    commit_all(dir.path(), "start the mission");
+    ok(dir.path(), &["start", &planned]);
+    fs::write(dir.path().join("code.rs"), "fn main() {}\n").unwrap();
+    edit_canonical_issue(dir.path(), &planned, |markdown| {
+        format!(
+            "{}\n\n## Report\n\nShipped by merging.\n",
+            markdown.replace("- [ ] D", "- [x] D").trim_end()
+        )
+    });
+    commit_all(dir.path(), "implement, tick and report");
+    ok(
+        dir.path(),
+        &[
+            "review",
+            "approve",
+            &planned,
+            "--identity",
+            "Reviewer",
+            "--commit-records",
+            "Read it",
+        ],
+    );
+    ok(dir.path(), &["merge", &planned]);
+    ok(dir.path(), &["land"]);
+    let page = ok(dir.path(), &["debrief", &mission]);
+    assert!(page.contains(&format!("{planned} task ✓ done")), "{page}");
+    assert!(page.contains("Shipped by merging."), "{page}");
     assert!(!deviations(&page).contains("Reopened on"), "{page}");
 }
 
@@ -974,7 +1057,7 @@ fn planned_work_counts_only_what_was_linked_by_the_start() {
 fn deferring_a_finding_to_planned_work_keeps_it_planned() {
     let dir = tempdir().unwrap();
     let dir = dir.path();
-    init_atelier(dir);
+    init_closing(dir);
     init_git_repo(dir);
     let mission = ok(
         dir,
@@ -1616,7 +1699,7 @@ fn history_facts(page: &str) -> String {
 #[test]
 fn a_debrief_from_a_branch_that_merged_the_base_keeps_the_base_history() {
     let dir = tempdir().unwrap();
-    init_atelier(dir.path());
+    init_closing(dir.path());
     init_git_repo(dir.path());
     let mission = ok(
         dir.path(),
@@ -1942,6 +2025,10 @@ fn a_done_childs_report_sits_with_its_child_line() {
     );
 }
 
+/// An edit counts as after the start by Git ancestry, never by the clock: a
+/// commit the start descends from is before it, whatever its date, and a
+/// commit merged in from the base that the start does not hold is after it
+/// (atelier-jnrh, finding atelier-l5fb).
 #[test]
 fn a_done_when_edit_counts_as_after_the_start_by_ancestry_not_time() {
     let dir = tempdir().unwrap();
@@ -1970,11 +2057,25 @@ fn a_done_when_edit_counts_as_after_the_start_by_ancestry_not_time() {
         .trim()
         .to_string()
     };
+    // Later by the clock than the start, but before it in Git.
+    edit_canonical_issue(dir.path(), &planned, |markdown| {
+        markdown.replace("## Done when\n\nD", "## Done when\n\nD, early")
+    });
+    git(dir.path(), &["add", "-A"]);
+    let dated = Command::new("git")
+        .current_dir(dir.path())
+        .env("GIT_AUTHOR_DATE", "2099-01-01T00:00:00Z")
+        .env("GIT_COMMITTER_DATE", "2099-01-01T00:00:00Z")
+        .args(["commit", "-q", "-m", "edit the Done when, dated later"])
+        .status()
+        .unwrap();
+    assert!(dated.success());
+    let early = head(dir.path());
     git(dir.path(), &["switch", "-q", "-c", "feature"]);
     ok(dir.path(), &["issue", "transition", &planned, "start"]);
     commit_all(dir.path(), "start on the branch");
     edit_canonical_issue(dir.path(), &planned, |markdown| {
-        markdown.replace("## Done when\n\nD", "## Done when\n\nD, mostly")
+        markdown.replace("## Done when\n\nD, early", "## Done when\n\nD, mostly")
     });
     commit_all(dir.path(), "loosen the Done when on the branch");
     let on_branch = head(dir.path());
@@ -1990,13 +2091,13 @@ fn a_done_when_edit_counts_as_after_the_start_by_ancestry_not_time() {
         ],
     );
     commit_all(dir.path(), "close on the branch");
-    // Later by the clock than the start, but not after it in Git.
+    // Not held by the start, so after it, though the merge keeps the
+    // branch's text.
     git(dir.path(), &["switch", "-q", &main]);
-    std::thread::sleep(std::time::Duration::from_millis(1100));
     edit_canonical_issue(dir.path(), &planned, |markdown| {
-        markdown.replace("## Done when\n\nD", "## Done when\n\nD, on main")
+        markdown.replace("## Done when\n\nD, early", "## Done when\n\nD, on main")
     });
-    commit_all(dir.path(), "edit the Done when on main later");
+    commit_all(dir.path(), "edit the Done when on main");
     let on_main = head(dir.path());
     git(
         dir.path(),
@@ -2017,13 +2118,13 @@ fn a_done_when_edit_counts_as_after_the_start_by_ancestry_not_time() {
         .collect::<Vec<_>>();
     assert_eq!(
         edits,
-        [format!(
+        [&on_branch, &on_main].map(|commit| format!(
             "  Changed: {planned} Done when edited at {} after the item was started.",
-            &on_branch[..8]
-        )],
+            &commit[..8]
+        )),
         "{page}"
     );
-    assert!(!page.contains(&on_main[..8]), "{page}");
+    assert!(!page.contains(&early[..8]), "{page}");
 }
 
 #[test]

@@ -14,8 +14,8 @@ A branch that changes more than tracker records also needs a passing CI
 run on its pull request before it merges; record-only changes land without
 one ([AGENTS.md](../../AGENTS.md)).
 
-Atelier's merge command checks the reviewed base policy and fast-forwards
-committed work, or creates only a merge commit under `merge_commit`. It never
+Atelier's merge command checks the reviewed base policy and integrates
+committed work with one merge commit, which marks the work done. It never
 pushes. GitHub collaboration surfaces may
 support discussion and dependency updates, but do not create a second tracker
 or substitute for in-repo approval and evidence.

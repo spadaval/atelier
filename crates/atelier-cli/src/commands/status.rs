@@ -501,7 +501,7 @@ fn render_status_page(
             FooterAction::new("Inspect owner work", owner.inspect.clone()),
             FooterAction::new("Check handoff", format!("atelier land {}", owner.id)),
             FooterAction::new(
-                "Check completed-owner merge readiness",
+                "Check merge readiness",
                 format!("atelier merge {} --check", owner.id),
             ),
         ]

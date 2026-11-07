@@ -9,8 +9,8 @@ describe today's behaviour until the item that changes each lands.
 
 Atelier is a verified, repo-native work tracker and an orchestrator's durable
 memory. Missions, issues, evidence, and reviews live in Markdown beside
-the code they describe. Git carries both the implementation and its done claim
-through review and integration.
+the code they describe. Git carries the implementation through review, and
+merging it marks the work done, so done means merged.
 
 Agent Factory owns process: planning depth, assignments, independent review,
 validation, and finding disposition. Atelier owns records, graph queries, and
@@ -31,19 +31,24 @@ mechanical guards at the point of action. The governing decision is
   command that writes records refuses, before writing anything, records that
   would fail a rule `atelier check` applies, so an invalid record does not
   block later commands. Do not encode a complete agent choreography.
-- Let agents commit records with the code. Atelier never creates commits.
+- Let agents commit records with the code. Atelier creates one commit: the
+  merge commit `merge` integrates reviewed work with, which also marks that
+  work done.
 - Make transitions record writes with read-only checks. Branch preparation and
   gated integration are explicit `start` and `merge` commands.
-- Commit done claims on the work branch. Merge writes no tracker state, so the
-  base branch sees completion together with the implementation.
+- Enforce one order where each step happens: `review request` refuses while a
+  Done when line is unticked or the Report is empty, and `merge` marks the
+  owner's open work done in its merge commit, so the base branch sees
+  completion together with the implementation and no close step can come in
+  the wrong place ([ADR 0028](docs/adr/0028-simpler-lifecycle.md), decision
+  2).
 - Evaluate merge gates from the base branch's reviewed policy.
 - Keep review records append-only once they reach the base branch, approvals
   and trivial exemptions from when they are first committed, and review and
   evidence tied to full Git commit identities. Until a finding or another
   review record reaches the base, any agent on the branch may correct or
   delete it, each change judged against the base as it stood where the
-  change joined it (under `fast_forward_only`, a review record is final once
-  committed). On the base, the one exception is a finding's disposition, a
+  change joined it. On the base, the one exception is a finding's disposition, a
   field of the finding that is set and changed in place, with who set it and
   at which commit; Git history keeps earlier ones
   ([ADR 0025](docs/adr/0025-findings-carry-their-disposition.md)). Identity

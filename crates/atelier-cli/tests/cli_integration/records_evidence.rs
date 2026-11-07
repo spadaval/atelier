@@ -2101,7 +2101,7 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
     assert!(stdout.contains(&format!(" ⚠ fail validation for issue/{issue_id} @")));
     assert!(stdout.contains(" (exit 3)\n  rejected\n"), "{stdout}");
     assert!(stdout.ends_with(&format!(
-        "evidence record: recorded fail — {issue_id} cannot close or merge until a later pass\n"
+        "evidence record: recorded fail — {issue_id} cannot merge or be done until a later pass\n"
     )));
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
@@ -2183,6 +2183,12 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
 fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    // A policy from before atelier-jnrh, whose work still closes.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        starter_with_work_close(),
+    )
+    .unwrap();
 
     let issue_body = "## Goal\n\nEvidence gate body.\n\n## Done when\n\nThe issue can close after workflow proof is attached.\n\n## Context\n\n- A focused command transcript proves the workflow change.";
     let (success, _, stderr) = run_atelier(
@@ -2439,7 +2445,7 @@ fn evidence_record_confirms_in_one_line_and_ends_in_its_verdict() {
     assert_eq!(
         out,
         format!(
-            "{fail_id} ⚠ fail test for issue/{issue_id} @{pin}: sh -c 'for i in 1 2 3 4 5 6 7; do echo line$i >&2; done; exit 1' (exit 1); newer than pass {pass_id}\n  line3\n  line4\n  line5\n  line6\n  line7\nevidence record: recorded fail — {issue_id} cannot close or merge until a later pass\n"
+            "{fail_id} ⚠ fail test for issue/{issue_id} @{pin}: sh -c 'for i in 1 2 3 4 5 6 7; do echo line$i >&2; done; exit 1' (exit 1); newer than pass {pass_id}\n  line3\n  line4\n  line5\n  line6\n  line7\nevidence record: recorded fail — {issue_id} cannot merge or be done until a later pass\n"
         )
     );
 
@@ -2499,7 +2505,7 @@ fn evidence_record_confirms_in_one_line_and_ends_in_its_verdict() {
     assert_eq!(
         lines[2],
         format!(
-            "evidence record: recorded fail — {issue_id} cannot close or merge until a later pass"
+            "evidence record: recorded fail — {issue_id} cannot merge or be done until a later pass"
         )
     );
 
@@ -2805,6 +2811,12 @@ fn evidence_attach_takes_the_target_forms_record_takes() {
 fn evidence_list_verdict_agrees_with_the_close_gate() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    // A policy from before atelier-jnrh, whose work still closes.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        starter_with_work_close(),
+    )
+    .unwrap();
     let issue_id = create_task(dir.path(), "Gated issue");
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
@@ -2841,7 +2853,7 @@ fn evidence_list_verdict_agrees_with_the_close_gate() {
     let close_refusal = || {
         let (success, out, stderr) =
             run_atelier_raw(dir.path(), &["issue", "transition", &issue_id, "close"]);
-        assert!(!success, "close has no Close Reason, so it refuses: {out}");
+        assert!(!success, "close has no Report, so it refuses: {out}");
         stderr
     };
 

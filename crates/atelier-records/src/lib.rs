@@ -1664,7 +1664,7 @@ pub fn parse_issue_sections_for_type(
     let issue_id = issue_id_from_record_path(relative);
 
     for line in body.lines() {
-        if let Some(heading) = issue_level_two_heading(line) {
+        if let Some(heading) = issue_level_two_heading(line).map(current_heading_name) {
             if !IssueSections::ALL_NAMES
                 .into_iter()
                 .any(|name| name.title() == heading)
@@ -1780,7 +1780,7 @@ pub fn parse_issue_sections_for_type(
     for heading in sections.keys() {
         if !allowed
             .iter()
-            .chain([Notes, CloseReason].iter())
+            .chain([Notes, Report].iter())
             .any(|name| name.title() == heading)
         {
             bail!(
@@ -1792,9 +1792,21 @@ pub fn parse_issue_sections_for_type(
     Ok(IssueSections {
         body,
         notes: optional(Notes),
-        close_reason: optional(CloseReason),
+        report: optional(Report),
     })
 }
+
+/// A section heading as records now name it: the Report was called Close
+/// Reason before atelier-jnrh, and records keep that heading until they are
+/// next written.
+fn current_heading_name(heading: String) -> String {
+    if heading == LEGACY_REPORT_HEADING {
+        IssueSectionName::Report.title().to_string()
+    } else {
+        heading
+    }
+}
+const LEGACY_REPORT_HEADING: &str = "Close Reason";
 
 fn issue_level_two_heading(line: &str) -> Option<String> {
     let rest = line.strip_prefix("##")?;
@@ -2790,14 +2802,14 @@ updated_at: "2026-06-10T13:00:00+00:00"
     }
 
     #[test]
-    fn issue_record_round_trips_dated_notes_and_close_reason() {
+    fn issue_record_round_trips_dated_notes_and_report() {
         let mut record = issue_record("atelier-note");
         let date = chrono::NaiveDate::from_ymd_opt(2026, 9, 30).unwrap();
         record
             .sections
             .append_note(date, "handoff", "First line\n## not a heading");
         record.sections.append_note(date, "note", "Second note");
-        record.sections.close_reason = Some("Shipped with proof".to_string());
+        record.sections.report = Some("Shipped with proof".to_string());
 
         let text = render_issue_record(&record).unwrap();
         let parsed = parse_issue_record(&text, &issue_record_path("atelier-note")).unwrap();
@@ -2806,11 +2818,28 @@ updated_at: "2026-06-10T13:00:00+00:00"
         assert!(text.contains(
             "## Notes\n\n- 2026-09-30 [handoff] First line\n  ## not a heading\n- 2026-09-30 [note] Second note"
         ));
-        assert!(text.contains("## Close Reason\n\nShipped with proof"));
+        assert!(text.contains("## Report\n\nShipped with proof"));
         assert_eq!(
-            parsed.sections.section(IssueSectionName::CloseReason),
+            parsed.sections.section(IssueSectionName::Report),
             Some("Shipped with proof")
         );
+    }
+
+    #[test]
+    fn a_close_reason_heading_is_read_as_the_report_and_written_as_report() {
+        let record = issue_record("atelier-legacy");
+        let text = render_issue_record(&record).unwrap()
+            + "\n## Close Reason\n\nClosed by an older Atelier.\n";
+        let parsed = parse_issue_record(&text, &issue_record_path("atelier-legacy")).unwrap();
+        assert_eq!(
+            parsed.sections.section(IssueSectionName::Report),
+            Some("Closed by an older Atelier.")
+        );
+        let rewritten = render_issue_record(&parsed).unwrap();
+        assert!(rewritten.contains("## Report\n\nClosed by an older Atelier."));
+        assert!(!rewritten.contains("Close Reason"));
+        let both = text + "\n## Report\n\nAgain.\n";
+        assert!(parse_issue_record(&both, &issue_record_path("atelier-legacy")).is_err());
     }
 
     #[test]
@@ -2818,21 +2847,21 @@ updated_at: "2026-06-10T13:00:00+00:00"
         let dir = tempdir().unwrap();
         let store = RecordStore::for_project(dir.path().join(".atelier"), "atelier");
         let mut record = issue_record("atelier-smug");
-        record.sections.close_reason = Some("done\n## Context\nsmuggled".to_string());
+        record.sections.report = Some("done\n## Context\nsmuggled".to_string());
 
         let error = store.write_issue_atomic(&record).unwrap_err().to_string();
 
         assert!(error.contains("atelier-smug"), "{error}");
-        assert!(error.contains("'Close Reason'"), "{error}");
+        assert!(error.contains("'Report'"), "{error}");
         assert!(!store
             .state_dir
             .join(issue_record_path("atelier-smug"))
             .exists());
 
-        record.sections.close_reason = Some("done\r## Notes".to_string());
+        record.sections.report = Some("done\r## Notes".to_string());
         assert!(store.write_issue_atomic(&record).is_err());
 
-        record.sections.close_reason = Some("done\n### Detail is fine".to_string());
+        record.sections.report = Some("done\n### Detail is fine".to_string());
         store.write_issue_atomic(&record).unwrap();
     }
 

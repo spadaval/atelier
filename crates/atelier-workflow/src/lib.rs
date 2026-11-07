@@ -65,7 +65,7 @@ workflows:
         from: [in_progress]
         to: done
         required_fields: [close_reason]
-        description: Done claim; commit it on the work branch before review.
+        description: Close the mission once all its work is merged and its validation, if it has one, is done; the Report says what it achieved.
         validators:
         - blockers.none_open
       supersede:
@@ -99,19 +99,11 @@ workflows:
         description: Start work.
         validators:
         - blockers.transitive_none_open
-      close:
-        from: [in_progress]
-        to: done
-        required_fields: [close_reason]
-        description: Done claim; commit it on the work branch before review. A parent closes after its children.
-        validators:
-        - blockers.none_open
-        - work.terminal
       supersede:
         from: [backlog, todo, in_progress]
         to: superseded
         required_fields: [close_reason]
-        description: Retire work that is no longer needed.
+        description: Retire work that is no longer needed. Work is done when atelier merge integrates it.
   decision:
     applies_to:
     - decision
@@ -151,8 +143,14 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "decision.recorded",
     "shell.check",
 ];
-const ALLOWED_REQUIRED_FIELDS: &[&str] = &[
-    "close_reason",
+/// The one required field: a non-empty Report section. The policy key keeps
+/// its old name (atelier-jnrh).
+const CLOSE_REASON_FIELD: &str = "close_reason";
+const ALLOWED_REQUIRED_FIELDS: &[&str] = &[CLOSE_REASON_FIELD];
+/// Report parts an older policy required one by one; they are read as
+/// `close_reason`, since Atelier now requires only a non-empty Report
+/// (atelier-jnrh).
+const RETIRED_REPORT_FIELDS: &[&str] = &[
     "report.deviations",
     "report.decisions",
     "report.surprises",
@@ -185,28 +183,25 @@ pub struct WorkflowPolicy {
     pub workflows: BTreeMap<String, WorkflowDefinition>,
 }
 
+/// `atelier merge` always integrates with a merge commit, which also marks
+/// the work done (atelier-jnrh), so the policy names only the base. An older
+/// policy's `merge_strategy` is read and ignored.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchLifecycleConfig {
     pub base_branch: String,
-    /// Set by `branch_policy.merge_strategy`, else derived from `merge_checks`.
-    pub merge_strategy: MergeStrategy,
 }
 
 impl Default for BranchLifecycleConfig {
     fn default() -> Self {
         Self {
             base_branch: "main".to_string(),
-            merge_strategy: MergeStrategy::FastForwardOnly,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MergeStrategy {
-    Squash,
-    MergeCommit,
-    FastForwardOnly,
-}
+/// The workflow whose items reach done when `atelier merge` integrates their
+/// branch, rather than by a transition (atelier-jnrh).
+pub const WORK_WORKFLOW: &str = "work";
 
 /// Issue field recording the branch an owner (a parent or standalone issue) is
 /// worked on and the branch it was started from. Written by `atelier start`.
@@ -296,6 +291,21 @@ impl WorkflowPolicy {
             .done_statuses
             .iter()
             .any(|done_status| done_status == status))
+    }
+
+    /// The status `atelier merge` sets on an open item of this type when its
+    /// branch merges: the first done status of the `work` workflow. `None`
+    /// for types that reach done by a transition, such as missions and
+    /// decisions (atelier-jnrh).
+    pub fn merge_done_status(&self, issue_type: &str) -> Option<&str> {
+        if self.workflow_name_for_issue_type(issue_type).ok()? != WORK_WORKFLOW {
+            return None;
+        }
+        self.workflow_for_issue_type(issue_type)
+            .ok()?
+            .done_statuses
+            .first()
+            .map(String::as_str)
     }
 
     pub fn workflow_allows_status(&self, issue_type: &str, status: &str) -> Result<bool> {
@@ -544,8 +554,7 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
             display_path,
         )?,
     };
-    let branch_policy =
-        parse_branch_policy(root.get("branch_policy"), display_path, &merge_checks)?;
+    let branch_policy = parse_branch_policy(root.get("branch_policy"), display_path)?;
     let policy = WorkflowPolicy {
         merge_checks,
         schema_version,
@@ -559,15 +568,7 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
     Ok(policy)
 }
 
-/// Without `merge_strategy`, a policy that proves the merged tree with a
-/// `shell.check` merges with `merge_commit`, so landing work does not force
-/// every other branch to catch up; any other policy keeps `fast_forward_only`
-/// (atelier-6mgg).
-fn parse_branch_policy(
-    value: Option<&Value>,
-    display_path: &str,
-    merge_checks: &[ValidatorDefinition],
-) -> Result<BranchLifecycleConfig> {
+fn parse_branch_policy(value: Option<&Value>, display_path: &str) -> Result<BranchLifecycleConfig> {
     let Some(value) = value else {
         return Err(policy_error_with_field(
             "workflow_config_invalid_branch_policy",
@@ -596,33 +597,24 @@ fn parse_branch_policy(
         "branch_policy.base_branch",
         "base branch",
     )?;
-    let merge_strategy = match raw.merge_strategy.as_deref() {
-        Some(name) => parse_merge_strategy(name, display_path)?,
-        None if merge_checks
-            .iter()
-            .any(|check| matches!(check.params, Some(ValidatorParams::ShellCheck { .. }))) =>
-        {
-            MergeStrategy::MergeCommit
-        }
-        None => MergeStrategy::FastForwardOnly,
-    };
-    Ok(BranchLifecycleConfig {
-        base_branch,
-        merge_strategy,
-    })
+    if let Some(name) = raw.merge_strategy.as_deref() {
+        validate_merge_strategy(name, display_path)?;
+    }
+    Ok(BranchLifecycleConfig { base_branch })
 }
 
-fn parse_merge_strategy(value: &str, display_path: &str) -> Result<MergeStrategy> {
+/// Every strategy an Atelier policy has named is read as `merge_commit`, the
+/// only way `atelier merge` integrates (atelier-jnrh); any other name is a
+/// mistake worth reporting.
+fn validate_merge_strategy(value: &str, display_path: &str) -> Result<()> {
     match value {
-        "squash" => Ok(MergeStrategy::Squash),
-        "merge_commit" => Ok(MergeStrategy::MergeCommit),
-        "fast_forward_only" => Ok(MergeStrategy::FastForwardOnly),
+        "merge_commit" | "fast_forward_only" | "squash" => Ok(()),
         other => Err(policy_error_with_field(
             "workflow_config_invalid_branch_policy",
             display_path,
             "branch_policy.merge_strategy",
             format!(
-                "unsupported merge strategy '{}'; expected squash, merge_commit, or fast_forward_only",
+                "unsupported merge strategy '{}'; atelier merge always creates a merge commit, so write merge_commit or leave the field out",
                 other
             ),
         )),
@@ -1171,6 +1163,17 @@ fn parse_transition_definition(
         &raw.required_fields,
         display_path,
     )?;
+    let mut required_fields = Vec::<String>::new();
+    for field in &raw.required_fields {
+        let field = if RETIRED_REPORT_FIELDS.contains(&field.as_str()) {
+            CLOSE_REASON_FIELD
+        } else {
+            field.as_str()
+        };
+        if !required_fields.iter().any(|seen| seen == field) {
+            required_fields.push(field.to_string());
+        }
+    }
     let validators = parse_transition_validators(
         ValidatorContext::Transition,
         workflow_name,
@@ -1181,7 +1184,7 @@ fn parse_transition_definition(
     Ok(TransitionDefinition {
         from,
         to: raw.to,
-        required_fields: raw.required_fields,
+        required_fields,
         description: raw.description,
         validators,
     })
@@ -1330,7 +1333,9 @@ fn validate_required_fields(
     display_path: &str,
 ) -> Result<()> {
     for required_field in required_fields {
-        if !ALLOWED_REQUIRED_FIELDS.contains(&required_field.as_str()) {
+        if !ALLOWED_REQUIRED_FIELDS.contains(&required_field.as_str())
+            && !RETIRED_REPORT_FIELDS.contains(&required_field.as_str())
+        {
             return Err(policy_error_with_field(
                 "workflow_config_invalid_transition",
                 display_path,
@@ -1456,30 +1461,16 @@ fn validate_transition_statuses(
             workflow_name, transition_name
         ),
     )?;
-    let requires_report = transition
-        .required_fields
-        .iter()
-        .any(|field| atelier_core::ReportPart::from_field(field).is_some());
     let requires_reason = transition
         .required_fields
         .iter()
-        .any(|field| field == "close_reason");
-    if (requires_reason || requires_report)
-        && policy.status_category(&transition.to) != Some("done")
-    {
+        .any(|field| field == CLOSE_REASON_FIELD);
+    if requires_reason && policy.status_category(&transition.to) != Some("done") {
         return Err(policy_error_with_field(
             "workflow_config_invalid_transition",
             display_path,
             format!("workflows.{workflow_name}.transitions.{transition_name}.required_fields"),
-            "close_reason and report parts may only be required by a done-category transition",
-        ));
-    }
-    if requires_report && !requires_reason {
-        return Err(policy_error_with_field(
-            "workflow_config_invalid_transition",
-            display_path,
-            format!("workflows.{workflow_name}.transitions.{transition_name}.required_fields"),
-            "report parts live in Close Reason, so a transition that requires one also requires close_reason",
+            "close_reason may only be required by a done-category transition",
         ));
     }
     for from_status in &transition.from {
@@ -1839,17 +1830,19 @@ mod tests {
         )
     }
 
-    fn work_close_validators() -> &'static str {
-        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, in_progress]\n"
+    fn decide_validators() -> &'static str {
+        "        validators:\n        - decision.recorded\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [todo]\n"
     }
 
-    fn with_work_close_validators(validators: &str) -> String {
-        valid_policy().replace(
-            work_close_validators(),
-            &format!(
-                "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, in_progress]\n"
-            ),
-        )
+    /// The starter policy with the decision workflow's `decide` running
+    /// `validators` instead of its own.
+    fn with_decide_validators(validators: &str) -> String {
+        let policy = valid_policy().replace(
+            decide_validators(),
+            &format!("        validators:\n{validators}      supersede:\n        from: [todo]\n"),
+        );
+        assert_ne!(policy, valid_policy());
+        policy
     }
 
     fn test_issue() -> Issue {
@@ -1905,19 +1898,26 @@ mod tests {
         );
         assert_eq!(policy.status_category("done"), Some("done"));
         assert_eq!(policy.status_category("review"), None);
-        let close = &policy.workflows["work"].transitions["close"];
+        // Merge marks work done, so the work workflow has no close
+        // (atelier-jnrh); supersede still requires a Report.
+        let work = &policy.workflows["work"].transitions;
+        assert!(!work.contains_key("close"));
+        assert_eq!(
+            work["supersede"].required_fields,
+            vec!["close_reason".to_string()]
+        );
+        assert_eq!(policy.merge_done_status("task"), Some("done"));
+        assert_eq!(policy.merge_done_status("mission"), None);
+        assert_eq!(policy.merge_done_status("decision"), None);
+        let close = &policy.workflows["objective"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
             validator_names(&close.validators),
-            vec!["blockers.none_open", "work.terminal"]
+            vec!["blockers.none_open"]
         );
         assert_eq!(
             validator_names(&policy.workflows["objective"].transitions["start"].validators),
             vec!["blockers.transitive_none_open"]
-        );
-        assert_eq!(
-            policy.branch_policy.merge_strategy,
-            MergeStrategy::FastForwardOnly
         );
         assert_eq!(policy.branch_policy.base_branch, "main");
     }
@@ -2040,11 +2040,11 @@ mod tests {
 
     #[test]
     fn accepts_retained_validators_with_evidence_params() {
-        let policy = with_work_close_validators(
+        let policy = with_decide_validators(
             "        - issue.sections_parseable\n        - blockers.none_open\n        - blockers.transitive_none_open\n        - evidence.attached: { min_count: 2, kind: test }\n        - lint.none_blocking\n        - git.worktree_clean\n        - work.terminal\n",
         );
         let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let close = &policy.workflows["work"].transitions["close"];
+        let close = &policy.workflows["decision"].transitions["decide"];
         assert_eq!(close.validators.len(), 7);
         assert_eq!(
             close.validators[3].params.as_ref(),
@@ -2073,7 +2073,7 @@ mod tests {
             "no_open_work",
             "tracker.current",
         ] {
-            let policy = with_work_close_validators(&format!("        - {removed}\n"));
+            let policy = with_decide_validators(&format!("        - {removed}\n"));
             let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH)
                 .unwrap_err()
                 .to_string();
@@ -2153,54 +2153,44 @@ mod tests {
     fn parses_configured_branch_policy() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
         assert_eq!(policy.branch_policy.base_branch, "trunk");
-        assert_eq!(
-            policy.branch_policy.merge_strategy,
-            MergeStrategy::FastForwardOnly
-        );
     }
 
-    fn strategy_of(merge_checks: &str, explicit: Option<&str>) -> MergeStrategy {
-        let mut text = valid_policy().to_string();
-        if let Some(name) = explicit {
-            text = text.replace(
-                default_branch_policy(),
-                &format!("{}  merge_strategy: {name}\n", default_branch_policy()),
-            );
+    /// `atelier merge` always creates a merge commit, so every strategy an
+    /// older policy named, and none at all, still loads, with or without a
+    /// shell check; an unknown name is still a mistake (atelier-jnrh).
+    #[test]
+    fn every_merge_strategy_is_read_as_a_merge_commit() {
+        let with = |name: Option<&str>, checks: &str| {
+            let mut text = valid_policy().to_string();
+            if let Some(name) = name {
+                text = text.replace(
+                    default_branch_policy(),
+                    &format!("{}  merge_strategy: {name}\n", default_branch_policy()),
+                );
+            }
+            text.push_str(checks);
+            parse_policy_text(&text, WORKFLOW_POLICY_PATH)
+        };
+        for checks in ["", "merge_checks:\n  - shell.check: { command: 'true' }\n"] {
+            for name in [
+                None,
+                Some("merge_commit"),
+                Some("fast_forward_only"),
+                Some("squash"),
+            ] {
+                assert_eq!(
+                    with(name, checks).unwrap().branch_policy,
+                    BranchLifecycleConfig::default(),
+                    "{name:?} {checks}"
+                );
+            }
         }
-        text.push_str(merge_checks);
-        parse_policy_text(&text, WORKFLOW_POLICY_PATH)
-            .unwrap()
-            .branch_policy
-            .merge_strategy
-    }
-
-    #[test]
-    fn merge_strategy_defaults_to_merge_commit_only_with_a_shell_check() {
-        let shell = "merge_checks:\n  - shell.check: { command: 'true' }\n";
-        assert_eq!(strategy_of(shell, None), MergeStrategy::MergeCommit);
-        assert_eq!(strategy_of("", None), MergeStrategy::FastForwardOnly);
-        assert_eq!(
-            strategy_of("merge_checks:\n  - lint.none_blocking\n", None),
-            MergeStrategy::FastForwardOnly
+        let error = with(Some("rebase"), "").unwrap_err().to_string();
+        assert!(error.contains("branch_policy.merge_strategy"), "{error}");
+        assert!(
+            error.contains("unsupported merge strategy 'rebase'"),
+            "{error}"
         );
-        assert_eq!(
-            strategy_of("merge_checks: []\n", None),
-            MergeStrategy::FastForwardOnly
-        );
-    }
-
-    #[test]
-    fn explicit_merge_strategy_overrides_the_default() {
-        let shell = "merge_checks:\n  - shell.check: { command: 'true' }\n";
-        assert_eq!(
-            strategy_of(shell, Some("fast_forward_only")),
-            MergeStrategy::FastForwardOnly
-        );
-        assert_eq!(
-            strategy_of("", Some("merge_commit")),
-            MergeStrategy::MergeCommit
-        );
-        assert_eq!(strategy_of(shell, Some("squash")), MergeStrategy::Squash);
     }
 
     #[test]
@@ -2271,7 +2261,7 @@ mod tests {
     #[test]
     fn rejects_unknown_inline_validator() {
         let error = parse_policy_text(
-            &with_work_close_validators("        - missing_validator\n"),
+            &with_decide_validators("        - missing_validator\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
@@ -2358,7 +2348,7 @@ mod tests {
     #[test]
     fn rejects_invalid_evidence_validator_params() {
         let error = parse_policy_text(
-            &with_work_close_validators("        - evidence.attached: { min_count: 0 }\n"),
+            &with_decide_validators("        - evidence.attached: { min_count: 0 }\n"),
             WORKFLOW_POLICY_PATH,
         )
         .unwrap_err()
@@ -2386,18 +2376,20 @@ mod tests {
         );
         let error = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap_err();
         assert!(
-            error.to_string().contains(
-                "close_reason and report parts may only be required by a done-category transition"
-            ),
+            error
+                .to_string()
+                .contains("close_reason may only be required by a done-category transition"),
             "{error}"
         );
     }
 
+    /// An older policy's report parts are read as `close_reason`: Atelier
+    /// requires only a non-empty Report now (atelier-jnrh).
     #[test]
-    fn report_parts_need_a_done_transition_that_requires_close_reason() {
+    fn retired_report_parts_are_read_as_close_reason() {
         let start = valid_policy().replace(
             "        description: Start work.",
-            "        required_fields: [close_reason, report.deviations]\n        description: Start work.",
+            "        required_fields: [report.deviations]\n        description: Start work.",
         );
         let error = parse_policy_text(&start, WORKFLOW_POLICY_PATH).unwrap_err();
         assert!(
@@ -2406,22 +2398,22 @@ mod tests {
                 .contains("may only be required by a done-category transition"),
             "{error}"
         );
-        let close = valid_policy().replacen(
-            "required_fields: [close_reason]",
-            "required_fields: [report.open_items]",
-            1,
-        );
-        let error = parse_policy_text(&close, WORKFLOW_POLICY_PATH).unwrap_err();
-        assert!(
-            error.to_string().contains("also requires close_reason"),
-            "{error}"
-        );
-        let report = valid_policy().replacen(
-            "required_fields: [close_reason]",
-            "required_fields: [close_reason, report.deviations, report.decisions, report.surprises, report.open_items]",
-            1,
-        );
-        parse_policy_text(&report, WORKFLOW_POLICY_PATH).unwrap();
+        for fields in [
+            "[close_reason, report.deviations, report.decisions, report.surprises, report.open_items]",
+            "[report.open_items]",
+        ] {
+            let report = valid_policy().replacen(
+                "required_fields: [close_reason]",
+                &format!("required_fields: {fields}"),
+                1,
+            );
+            let policy = parse_policy_text(&report, WORKFLOW_POLICY_PATH).unwrap();
+            assert_eq!(
+                policy.workflows["objective"].transitions["close"].required_fields,
+                vec!["close_reason".to_string()],
+                "{fields}"
+            );
+        }
         let unknown = valid_policy().replacen(
             "required_fields: [close_reason]",
             "required_fields: [close_reason, report.lessons]",

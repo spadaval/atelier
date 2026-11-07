@@ -50,11 +50,11 @@ drill-down commands:
 
 - inspect work with `atelier issue show <id>` and inspect available lifecycle
   actions with `atelier issue transition <id>`;
-- enter active work and close it by executing the configured transitions shown
-  by that command, such as `atelier issue transition <id> start` and
-  `atelier issue transition <id> close` in this repository, with the
-  implementer report written in the record's Close Reason or passed with
-  `--reason-file <file>`;
+- start work with `atelier start <id>`, tick each Done when line once it
+  holds, write the implementer report in the record's `## Report`, ask for
+  review with `atelier review request <id>`, and integrate with `atelier merge
+  <id>`, which marks the work done; work items have no close transition
+  ([ADR 0028](../../adr/0028-simpler-lifecycle.md), decision 2);
 - manage blockers with
   `atelier issue link <blocked-id> <blocker-id> --role blocked_by` and
   `atelier issue unlink <blocked-id> <blocker-id> --role blocked_by`;

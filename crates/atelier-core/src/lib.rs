@@ -489,7 +489,11 @@ pub struct Disposition {
 pub struct IssueSections {
     pub body: IssueBody,
     pub notes: Option<String>,
-    pub close_reason: Option<String>,
+    /// What happened: the implementer report on a work item, written before
+    /// review, or the reason a transition that requires `close_reason`
+    /// records. Read from a `## Report` section, or the older `## Close
+    /// Reason` heading.
+    pub report: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -537,7 +541,7 @@ pub enum IssueSectionName {
     Options,
     Decision,
     Notes,
-    CloseReason,
+    Report,
 }
 
 /// One success criterion of a mission (atelier-et6q): a `- <slug>: <text>`
@@ -658,8 +662,9 @@ pub fn parse_criteria(section: &str) -> CriteriaParse {
 }
 
 /// The implementer report's parts beyond the Outcome (atelier-sfsq). Each is
-/// a `### <title>` subsection of Close Reason; the text before the first is
-/// the Outcome. Policy requires a part with the `report.<key>` field.
+/// a `### <title>` subsection of the Report; the text before the first is
+/// the Outcome. Agent Factory asks for them; Atelier requires only a
+/// non-empty Report (atelier-jnrh).
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ReportPart {
     Deviations,
@@ -686,20 +691,6 @@ impl ReportPart {
         }
     }
 
-    /// The `required_fields` entry that requires this part.
-    pub fn field(self) -> &'static str {
-        match self {
-            Self::Deviations => "report.deviations",
-            Self::Decisions => "report.decisions",
-            Self::Surprises => "report.surprises",
-            Self::OpenItems => "report.open_items",
-        }
-    }
-
-    pub fn from_field(field: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|part| part.field() == field)
-    }
-
     fn from_heading(line: &str) -> Option<Self> {
         let title = line.strip_prefix("###")?;
         if title.starts_with('#') {
@@ -712,8 +703,9 @@ impl ReportPart {
     }
 }
 
-/// Close Reason read as the implementer report: the Outcome, then any report
-/// parts. A `###` heading that names no part stays in the text around it.
+/// The Report section read as the implementer report: the Outcome, then any
+/// report parts. A `###` heading that names no part stays in the text around
+/// it.
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct CloseReport {
     pub outcome: String,
@@ -761,18 +753,6 @@ impl CloseReport {
             .find(|(existing, _)| *existing == part)
             .map(|(_, body)| body.as_str())
             .filter(|body| !body.is_empty())
-    }
-
-    /// `text` with its Outcome replaced and its report parts kept.
-    pub fn with_outcome(text: &str, outcome: &str) -> String {
-        let mut offset = 0;
-        for line in text.split_inclusive('\n') {
-            if ReportPart::from_heading(line.trim_end_matches(['\n', '\r'])).is_some() {
-                return format!("{}\n\n{}", outcome.trim(), text[offset..].trim_end());
-            }
-            offset += line.len();
-        }
-        outcome.trim().to_string()
     }
 }
 
@@ -1036,7 +1016,7 @@ impl IssueSections {
         IssueSectionName::Decision,
         IssueSectionName::Background,
         IssueSectionName::Notes,
-        IssueSectionName::CloseReason,
+        IssueSectionName::Report,
     ];
 
     pub fn for_type(issue_type: &str, text: Option<&str>) -> Self {
@@ -1055,7 +1035,7 @@ impl IssueSections {
         Self {
             body,
             notes: None,
-            close_reason: None,
+            report: None,
         }
     }
 
@@ -1215,7 +1195,7 @@ impl IssueSections {
                 SuccessCriteria,
             ) => success_criteria.as_deref(),
             (_, Notes) => self.notes.as_deref(),
-            (_, CloseReason) => self.close_reason.as_deref(),
+            (_, Report) => self.report.as_deref(),
             _ => None,
         }
     }
@@ -1283,7 +1263,7 @@ impl IssueSectionName {
             Self::Decision => "Decision",
             Self::Background => "Background",
             Self::Notes => "Notes",
-            Self::CloseReason => "Close Reason",
+            Self::Report => "Report",
         }
     }
 }
@@ -1644,16 +1624,6 @@ mod tests {
             "an empty part is missing"
         );
         assert_eq!(report.part(ReportPart::Decisions), None);
-        assert_eq!(
-            CloseReport::with_outcome(text, " New outcome "),
-            "New outcome\n\n### Deviations\nNone.\n### open items\n- follow-up\n#### deeper\n### Surprises"
-        );
-        assert_eq!(CloseReport::with_outcome("Old", "New"), "New");
-        assert_eq!(
-            ReportPart::from_field("report.open_items"),
-            Some(ReportPart::OpenItems)
-        );
-        assert_eq!(ReportPart::from_field("close_reason"), None);
     }
 
     #[test]
@@ -1768,7 +1738,7 @@ mod tests {
             *context = Some("Existing useful context.".into());
         }
         sections.notes = Some("A preserved note.".into());
-        sections.close_reason = Some("A preserved reason.".into());
+        sections.report = Some("A preserved reason.".into());
         let same_shape = sections.clone();
         sections.change_type("bug");
         assert_eq!(sections, same_shape);
@@ -1802,7 +1772,7 @@ mod tests {
             Some("Shared research.")
         );
         assert_eq!(sections.notes, same_shape.notes);
-        assert_eq!(sections.close_reason, same_shape.close_reason);
+        assert_eq!(sections.report, same_shape.report);
     }
 
     #[test]

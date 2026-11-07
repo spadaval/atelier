@@ -499,7 +499,7 @@ impl Gates<'_> {
                     transition
                         .required_fields
                         .iter()
-                        .any(|field| field == "close_reason" || field.starts_with("report.")),
+                        .any(|field| field == "close_reason"),
                 )
             })
             .unwrap_or(false);
@@ -531,11 +531,35 @@ impl Gates<'_> {
         None
     }
 
+    /// The branch owner whose merge marks `id` done, when `id` is work that
+    /// merge marks done rather than a transition (atelier-jnrh). Work under
+    /// a closed ancestor is retired instead, as its owner has merged.
+    fn merging_owner(&self, id: &str) -> Option<String> {
+        let issue = self.index.get_issue(id)?;
+        self.policy.merge_done_status(&issue.issue_type)?;
+        if self.closed_ancestor(id).is_some() {
+            return None;
+        }
+        Some(issue.parent_id.unwrap_or(issue.id))
+    }
+
     /// The commands that close `id` in its scope, one per transition; the
-    /// listing of its transitions when nothing closes it. A closed ancestor
-    /// is not offered for reopening: policy validation refuses every
-    /// transition out of a done status.
+    /// listing of its transitions when nothing closes it. Work that merge
+    /// marks done is settled by merging its owner, or starting it first. A
+    /// closed ancestor is not
+    /// offered for reopening: policy validation refuses every transition out
+    /// of a done status.
     fn settle_command(&self, id: &str) -> String {
+        if let Some(owner) = self.merging_owner(id) {
+            let started = self
+                .index
+                .get_issue(&owner)
+                .is_some_and(|owner| owner.workflow_branch.is_some());
+            return format!(
+                "atelier {} {owner}",
+                if started { "merge" } else { "start" }
+            );
+        }
         match self.closing_path(id) {
             Some(path) if path.len() == 1 => self.transition_command(id, &path[0]),
             Some(path) => path
@@ -547,10 +571,11 @@ impl Gates<'_> {
         }
     }
 
-    /// The fix for an open blocker of `blocked`: close it when one transition
-    /// does, else start its own work with `atelier start`, which applies the
-    /// workflow's `start` transition, else list its transitions; and drop the
-    /// link, naming the record that declares it, if the link is wrong.
+    /// The fix for an open blocker of `blocked`: start its own work with
+    /// `atelier start`, which applies the workflow's `start` transition, or
+    /// merge started work that merge marks done; else close it when one
+    /// transition does, else list its transitions; and drop the link, naming
+    /// the record that declares it, if the link is wrong.
     fn blocker_fix(&self, blocked: &str, blocker: &str) -> String {
         let issue = self.index.get_issue(blocker);
         let startable = self.closed_ancestor(blocker).is_none()
@@ -564,8 +589,11 @@ impl Gates<'_> {
                             .is_some_and(|transition| transition.from.contains(&issue.status))
                     })
             });
-        let (verb, command) = match self.closing_path(blocker).as_deref() {
-            Some([name]) => ("close it with", self.transition_command(blocker, name)),
+        let merging = self.merging_owner(blocker);
+        let (verb, command) = match (merging, self.closing_path(blocker).as_deref()) {
+            (Some(_), _) if startable => ("start it with", format!("atelier start {blocker}")),
+            (Some(owner), _) => ("merge it with", format!("atelier merge {owner}")),
+            (None, Some([name])) => ("close it with", self.transition_command(blocker, name)),
             _ if startable => ("start it with", format!("atelier start {blocker}")),
             _ => (
                 "list its transitions with",
@@ -912,14 +940,9 @@ impl Gates<'_> {
             )],
             check if check.starts_with("required_field.") => {
                 let field = &check["required_field.".len()..];
-                let path = format!(".atelier/issues/{target}.md");
-                let fix = match atelier_core::ReportPart::from_field(field) {
-                    Some(part) => format!(
-                        "add a `### {}` subsection to the Close Reason in {path}, then commit",
-                        part.title()
-                    ),
-                    None => format!("write the Close Reason in {path}, then commit"),
-                };
+                let fix = format!(
+                    "write the `## Report` section in .atelier/issues/{target}.md, then commit"
+                );
                 vec![Line::new(
                     target,
                     node,
