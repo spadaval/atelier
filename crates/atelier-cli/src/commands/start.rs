@@ -213,7 +213,7 @@ pub fn run(
     // Prepare every record change before acting. A recorded branch is never
     // replaced. The base is the policy's; `branch_base` is still written,
     // and ignored when read, so an older Atelier can parse the record
-    // (atelier-md0v).
+    // (atelier-md0v), until atelier-hfme stops writing it.
     let base = view_policy.branch_policy.base_branch.clone();
     let mut owner = view_index
         .issue_record(&work_branch.owner_id)
@@ -223,7 +223,7 @@ pub fn run(
     if record_branch {
         owner.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
             work_branch: branch.clone(),
-            branch_base: base.clone(),
+            branch_base: Some(base.clone()),
         });
         owner.issue.updated_at = Utc::now();
     }

@@ -95,9 +95,12 @@ fn check_traceability(
     }
     Ok(())
 }
-/// Tracker files (anything under `.atelier/`) a branch changes relative to
-/// the base. Every local and remote-tracking copy of the base counts, so a
-/// stale local base cannot attribute upstream changes to the branch.
+/// Tracker records a branch changes relative to the base. The workflow
+/// policy and project config are code, as approval freshness counts them
+/// (`git_freshness::is_record_path`), so the approval that covers the
+/// branch's other code covers them too. Every local and remote-tracking copy
+/// of the base counts, so a stale local base cannot attribute upstream
+/// changes to the branch.
 /// `None` when the base has no Atelier policy yet, so the branch installs it.
 fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path::PathBuf>>> {
     let refs = git::text(
@@ -120,7 +123,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         })
         .collect::<Vec<_>>();
     if refs.is_empty() {
-        bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker changes cannot be checked; fetch {base}, or give the work an owner branch with `atelier start` and its item's ID");
+        bail!("land_work_untraceable: base branch {base} not found, so this unowned branch's tracker records cannot be checked; fetch {base}, or give the work an owner branch with `atelier start` and its item's ID");
     }
     // No copy of the base has a workflow policy yet, so there are no gates on
     // the base to land through; the caller says whether this is an install.
@@ -145,7 +148,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         };
         let paths = git_freshness::changed_paths(repo, &fork, "HEAD")?
             .into_iter()
-            .filter(|path| path.starts_with(".atelier"))
+            .filter(|path| git_freshness::is_record_path(path))
             .collect::<Vec<_>>();
         changed = Some(match changed {
             Some(previous) => previous
@@ -156,7 +159,7 @@ fn tracker_changes_since(repo: &Path, base: &str) -> Result<Option<Vec<std::path
         });
     }
     changed.map(Some).with_context(|| {
-        format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker changes cannot be checked; start the work from {base} with `atelier start` and its item's ID")
+        format!("land_work_untraceable: this unowned branch shares no history with {base}, so its tracker records cannot be checked; start the work from {base} with `atelier start` and its item's ID")
     })
 }
 /// Names the commits the local base holds beyond its upstream that the
@@ -628,15 +631,15 @@ fn land_gates(
                 };
                 if let Some((item, owner)) = owned {
                     bail!(
-                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; {item} is owned on {owner}. Next: land it there with `git switch {owner} && atelier land`, or move the tracker changes onto {owner}"
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker records since {base}: {listed}; {item} is owned on {owner}. Next: land it there with `git switch {owner} && atelier land`, or move the tracker records onto {owner}"
                     );
                 }
                 match item {
                     Some(item) => bail!(
-                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}. Next: give the work an owner branch with `atelier start {item}`, or move the tracker changes onto one"
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker records since {base}: {listed}. Next: give the work an owner branch with `atelier start {item}`, or move the tracker records onto one"
                     ),
                     None => bail!(
-                        "land_work_untraceable: {label} has no owner but changes Atelier tracker files since {base}: {listed}; give the work an owner branch with `atelier start` and its item's ID, or move the tracker changes onto one"
+                        "land_work_untraceable: {label} has no owner but changes Atelier tracker records since {base}: {listed}; give the work an owner branch with `atelier start` and its item's ID, or move the tracker records onto one"
                     ),
                 }
             }
@@ -678,8 +681,8 @@ fn land_gates(
                             next = Some("Next: atelier review request".to_owned());
                         }
                     }
-                    Some(_) => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land. To merge it with no issue, `atelier review request` asks for an independent review of its head (the light path).")),
-                    None => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
+                    Some(_) => situation.push(format!("No work owner on {label}; it changes no Atelier tracker records since {base}, so there is nothing to land. To merge it with no issue, `atelier review request` asks for an independent review of its head (the light path).")),
+                    None => situation.push(format!("No work owner on {label}; it changes no Atelier tracker records since {base}, so there is nothing to land.")),
                 }
             }
         }
@@ -1254,7 +1257,7 @@ pub(crate) fn checkout_claim_context(
     let (branch_base, _) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let (_, mut parents) = claim_parents(repo, branch_base.as_deref(), &head)?;
     if branch_base.is_none() {
-        // Without an owner, land refuses tracker changes the base does not
+        // Without an owner, land refuses tracker records the base does not
         // hold (land_work_untraceable) before it judges any claim, so only a
         // parent the base already contains holds a claim, as on the base
         // itself; a detached checkout of unmerged work is judged at HEAD.

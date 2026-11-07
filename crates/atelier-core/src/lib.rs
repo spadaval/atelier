@@ -293,7 +293,13 @@ fn repository_relative(path: &str) -> Result<(), String> {
 #[serde(deny_unknown_fields)]
 pub struct WorkflowBranch {
     pub work_branch: String,
-    pub branch_base: String,
+    /// Nothing reads it: the base is always the policy's `base_branch`.
+    /// `start` still writes it so older binaries parse new records, and a
+    /// record without it parses (atelier-nn67); atelier-hfme stops writing
+    /// it once every pinned binary reads records without it (ADR 0028
+    /// decision 5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_base: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

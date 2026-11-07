@@ -48,7 +48,9 @@ atelier issue link <loose-end> <item> --role blocked_by
 
 A loose end is `blocked_by` the issue it waits on, so it shows in `work
 blocked` until that merges and in `work ready` after, or in `work human` when
-labelled `needs-human`. A release has no issue: file its tag on the release
+labelled `needs-human`. One that is not near-term, or a validation saved for
+later, can be parked in `backlog` with `defer` and brought back with `plan`,
+as work can; `issue create --status backlog` files it there. A release has no issue: file its tag on the release
 branch with no blocker, and it reaches the base with the [light-path
 merge](reviews-and-merge.md#a-change-with-no-issue-the-light-path) and is
 ready there. It is never part of a mission: it is no issue's child
@@ -78,10 +80,13 @@ ordinary Done when line. `atelier migrate after-merge` (a dry run unless
 text becomes the loose end's Done when, the reason goes in its Goal, and it
 is labelled `needs-human` when the reason is the human's judgment or a device
 or place no agent can reach, which the dry run shows. An item that is not done
-keeps the line's stand-in as an ordinary Done when line; a done item is left
-as it is. Lines carried to an existing issue (`carried to <id>`) are skipped,
-and rerunning changes nothing. It refuses when the policy declares no
-`loose_end` type.
+keeps the line's stand-in as an ordinary Done when line, and loses a line that
+gave none, unless that would leave its Done when empty: then the last such
+line stays without its marker, as an ordinary Done when line, and the
+migration names the item so it can be given a check it can meet before
+review. A done item is left as it is. Lines carried to an existing issue
+(`carried to <id>`) are skipped, and rerunning changes nothing. It refuses
+when the policy declares no `loose_end` type.
 
 ## Recording proof
 

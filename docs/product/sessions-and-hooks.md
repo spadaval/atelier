@@ -107,16 +107,19 @@ the next step; work in progress hands off without it.
 
 A branch that no item owns, such as a feature branch, a PR branch, a branch
 from before adoption, or a detached HEAD, passes `land` with a note when it changes no
-tracker files (anything under `.atelier/`) since its merge base with the base
-branch; the note names `atelier review request`, which reviews such a branch
-on the [light path](reviews-and-merge.md#a-change-with-no-issue-the-light-path).
-Its own review records and the loose ends it files, such as a release's tag,
+tracker records (the Markdown under `.atelier/issues`, `reviews` and
+`evidence`) since its merge base with the base branch; the note names
+`atelier review request`, which reviews such a branch on the [light
+path](reviews-and-merge.md#a-change-with-no-issue-the-light-path). The
+workflow policy and project config are code, as approval freshness counts
+them, so a branch that changes them is reviewed and merged there like any
+other code (atelier-nn67). Its own review records and the loose ends it files, such as a release's tag,
 are not counted as tracker changes: a branch carrying them says it merges on
 an approval of its head, and once it holds review records about itself
 `land` reports their gates (`review.current`, `findings.disposed`), as work
 in progress until they pass, then names `atelier merge` (atelier-4nsl). A path counts only if it changed relative to every local and
 remote-tracking copy of the base, so a stale local base does not blame the
-branch for upstream records. If the branch does change tracker files, or
+branch for upstream records. If the branch does change other tracker records, or
 shares no history with the base, `land` reports `land_work_untraceable`,
 names the changed paths (the first five, then a count), and points to
 `atelier start`. A branch that installs Atelier says so: while no copy of the

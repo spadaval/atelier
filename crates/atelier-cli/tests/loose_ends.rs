@@ -423,6 +423,66 @@ fn validation_is_done_on_the_base_unless_the_policy_keeps_it_in_work() {
     assert!(output.contains("Applied transition start"), "{output}");
 }
 
+/// Loose ends and validations can be parked in `backlog`, as work can
+/// (atelier-nn67): `issue create --status backlog` files one there, where it
+/// is not ready; `plan` brings it to `todo`, where it is, `defer` parks it
+/// again, and `supersede` retires a parked one.
+#[test]
+fn a_loose_end_or_validation_is_parked_in_backlog_and_planned_back() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    for issue_type in ["loose_end", "validation"] {
+        let id = create(
+            repo,
+            &[
+                &format!("Parked {issue_type}"),
+                "--issue-type",
+                issue_type,
+                "--status",
+                "backlog",
+                "--body",
+                TAG,
+            ],
+        );
+        assert!(record(repo, &id).contains("status: \"backlog\""));
+        let ready = |repo: &Path| ok(repo, &["-q", "work", "ready"]);
+        assert!(!ready(repo).contains(&id));
+
+        ok(repo, &["issue", "transition", &id, "plan"]);
+        assert!(record(repo, &id).contains("status: \"todo\""));
+        assert!(ready(repo).contains(&id));
+
+        ok(repo, &["issue", "transition", &id, "defer"]);
+        assert!(record(repo, &id).contains("status: \"backlog\""));
+        assert!(!ready(repo).contains(&id));
+        // Parked, it is not done on the base by `done`.
+        let (done, output) = cli(
+            repo,
+            &["issue", "transition", &id, "done", "--reason", "Pushed."],
+        );
+        assert!(!done, "{output}");
+
+        ok(
+            repo,
+            &[
+                "issue",
+                "transition",
+                &id,
+                "supersede",
+                "--reason",
+                "No longer needed.",
+            ],
+        );
+        assert!(record(repo, &id).contains("status: \"superseded\""));
+    }
+    assert_eq!(ok(repo, &["check"]), "Check passed.");
+    commit(repo, "Park, plan and retire a loose end and a validation");
+    let (landed, output) = cli(repo, &["land"]);
+    assert!(landed, "{output}");
+}
+
 #[test]
 fn migrate_after_merge_turns_open_lines_into_loose_ends_once() {
     let dir = tempdir().unwrap();
@@ -543,6 +603,61 @@ fn migrate_after_merge_turns_open_lines_into_loose_ends_once() {
     assert_eq!(output, "No open After merge lines to migrate.");
     ok(repo, &["migrate", "after-merge", "--apply"]);
     assert_eq!(git(repo, &["status", "--porcelain"]), "");
+}
+
+/// An unfinished item whose Done when holds only After merge lines with no
+/// stand-in keeps the last as an ordinary Done when line, since removing it
+/// would leave the section empty, and the migration names the item rather
+/// than failing the whole batch (finding atelier-z3z1).
+#[test]
+fn migrate_after_merge_keeps_an_item_s_last_done_when_line_and_names_the_item() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    let item = create(
+        repo,
+        &[
+            "Updater",
+            "--body",
+            "## Goal\n\nShip the updater.\n\n## Done when\n\n- [ ] After merge (use): it runs a week without a crash.\n- [ ] After merge (deployed): the update server serves it.",
+        ],
+    );
+    commit(repo, "Plan the updater");
+
+    let output = ok(repo, &["migrate", "after-merge"]);
+    let lines = output
+        .lines()
+        .filter(|line| line.starts_with("- "))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lines,
+        [
+            format!("- {item}: \"it runs a week without a crash.\" becomes a loose end blocked_by {item}, not labelled needs-human (reason: use); the line leaves {item}, which gave no stand-in"),
+            format!("- {item}: \"the update server serves it.\" becomes a loose end blocked_by {item}, not labelled needs-human (reason: deployed); it stays on {item} as an ordinary Done when line, since without it {item}'s Done when would be empty: give {item} a check it can meet before review"),
+        ],
+        "{output}"
+    );
+
+    let output = ok(repo, &["migrate", "after-merge", "--apply"]);
+    assert!(
+        output.contains(&format!("it stays on {item} as an ordinary Done when line"))
+            && output.contains("Made 2 loose ends and updated 1 item."),
+        "{output}"
+    );
+    let text = record(repo, &item);
+    assert!(
+        text.contains("## Done when\n\n- [ ] the update server serves it.\n")
+            && !text.contains("runs a week")
+            && !text.contains("After merge"),
+        "{text}"
+    );
+    assert_eq!(ok(repo, &["check"]), "Check passed.");
+    commit(repo, "Migrate the After merge lines");
+
+    // The kept line is ordinary now, so a rerun leaves it alone.
+    let output = ok(repo, &["migrate", "after-merge"]);
+    assert_eq!(output, "No open After merge lines to migrate.");
 }
 
 /// Atelier's own policy defines loose ends as the starter does: one

@@ -1162,7 +1162,7 @@ fn custom_branch_only_owner_is_discovered_without_overlaying_base() {
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: "custom/ship-session".into(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     f.store().write_issue_atomic(&record).unwrap();
     commit(f.path(), "custom started branch-only work");
@@ -1443,7 +1443,7 @@ fn landing_rechecks_unrelated_active_branches_after_arbitrary_checks() {
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: branch.clone(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     f.store().write_issue_atomic(&record).unwrap();
     let path = f.path().join(".atelier/workflow.yaml");
@@ -1486,7 +1486,7 @@ fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
         work_branch: branch.clone(),
-        branch_base: "main".into(),
+        branch_base: Some("main".into()),
     });
     f.store().write_issue_atomic(&record).unwrap();
     commit(f.path(), "two owners in shared committed tree");
@@ -2547,7 +2547,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
     let output = ok(f.path(), &["land"]);
     assert!(
         output
-            .contains("No work owner on branch feature/unowned; it changes no Atelier tracker files since main"),
+            .contains("No work owner on branch feature/unowned; it changes no Atelier tracker records since main"),
         "{output}"
     );
     let stop =
@@ -2563,7 +2563,7 @@ fn unowned_branch_lands_unless_it_changes_records() {
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
         !pass
-            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier tracker files since main")
+            && output.contains("land_work_untraceable: branch feature/unowned has no owner but changes Atelier tracker records since main")
             && output.contains(&format!(".atelier/issues/{filed}.md"))
             && output.contains(&format!("Next: give the work an owner branch with `atelier start {filed}`")),
         "{output}"
@@ -5862,7 +5862,7 @@ fn unstarted_on_main(f: &Fixture) -> String {
     commit(f.path(), "plan second item");
     id
 }
-fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, String)> {
+fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, Option<String>)> {
     f.store()
         .load_issue_by_id(id)
         .unwrap()
@@ -5882,7 +5882,7 @@ fn start_takes_an_unowned_current_branch_whatever_its_name() {
     let out = ok(f.path(), &["start", &id]);
     assert!(out.contains(&format!("Already on branch {named}")), "{out}");
     assert_eq!(git(f.path(), &["branch", "--show-current"]), named);
-    assert_eq!(recorded_branch(&f, &id), Some((named, "main".into())));
+    assert_eq!(recorded_branch(&f, &id), Some((named, Some("main".into()))));
 }
 
 #[test]
@@ -5910,7 +5910,10 @@ fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
     );
     assert_eq!(git(f.path(), &["branch", "--show-current"]), id);
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
-    assert_eq!(recorded_branch(&f, &id), Some((id.clone(), "main".into())));
+    assert_eq!(
+        recorded_branch(&f, &id),
+        Some((id.clone(), Some("main".into())))
+    );
     assert_eq!(
         f.store().load_issue_by_id(&id).unwrap().issue.status,
         "in_progress"
@@ -6898,7 +6901,7 @@ fn an_unowned_branch_changing_an_owned_item_points_to_its_branch() {
     assert!(!pass);
     assert!(
         out.contains(&format!(
-            "{id} is owned on {}. Next: land it there with `git switch {} && atelier land`, or move the tracker changes onto {}\n",
+            "{id} is owned on {}. Next: land it there with `git switch {} && atelier land`, or move the tracker records onto {}\n",
             f.branch, f.branch, f.branch
         )),
         "{out}"

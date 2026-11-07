@@ -22,7 +22,10 @@ they supersede describe today's behaviour, and that item updates them.
 Decision 9 takes effect with this ADR, and decision 10 binds every item. The
 lifecycle item, atelier-jnrh, amended decision 2 with the mechanics it
 settled; atelier-ml3r corrected decision 2 on what the review brief leaves
-out and named atelier-nn67 for the work left in the other repositories.
+out and named atelier-nn67 for the work left in the other repositories;
+atelier-nn67 moved the `branch_base` write and `start --base` to
+atelier-hfme (decision 5), kept an item's last Done when line in the
+migration and gave the `on_base` workflow a `backlog` (decision 3).
 
 ## Governing Principle
 
@@ -183,6 +186,10 @@ Built by atelier-8bh4:
   a transition named `done`, which requires the policy's `close_reason`, a
   non-empty Report holding the one-line result, and runs
   `blockers.none_open`; plus `supersede`. It has no `start` transition.
+  atelier-nn67 gave it `backlog`, with `defer` and `plan` as work has, on
+  the orchestrator's decision: repositories park validations (astromech had
+  six in `backlog`), and without it moving a policy meant moving them,
+  which broke every in-flight branch that edited them until it synced.
   Atelier does not count the Report's lines; one line is the guidance.
 - **Judged by workflow.** An item whose workflow has no `start` transition
   takes no branch, review or merge, whatever its type: `atelier start` and
@@ -208,8 +215,10 @@ Built by atelier-8bh4:
   when the reason's words name the human's judgment or a device or place no
   agent can reach, which the dry run shows. An item that is not done keeps
   the stand-in as an ordinary Done when line, or loses the line when it gave
-  none; a done item is left as it is, so the base's done records do not
-  change. A line carried to an existing issue is skipped, and a line already
+  none, except the last such line when nothing else would remain, which
+  stays as an ordinary Done when line while the migration names the item
+  (atelier-nn67, finding atelier-z3z1); a done item is left as it is, so
+  the base's done records do not change. A line carried to an existing issue is skipped, and a line already
   migrated is found by its loose end, so reruns change nothing. The marker
   is otherwise read only so `review request` need not ask for it to be
   ticked.
@@ -352,9 +361,10 @@ Built by atelier-md0v:
   `review request`, status, prune, `start` and the transition guards read no
   `branch_base`, and `land_base_mismatch` goes. `start` still writes
   `branch_base`, set to the policy base and ignored when read, so older
-  pinned binaries still parse new records, until atelier-nn67 moves
-  astromech's CI pin and drops it. A branch that targets a mission branch
-  needs no recorded base: merge integrates only into the policy's base
+  pinned binaries still parse new records. atelier-nn67 makes it optional
+  on read, and atelier-hfme stops writing it once every CI pin on this host
+  (today only astromech's) is past that change. A branch that targets a
+  mission branch needs no recorded base: merge integrates only into the policy's base
   branch, and mission integration branches were never built (ADR 0020). A
   review target is not recomputed from the hierarchy either; it is the
   policy's base branch.
@@ -366,7 +376,7 @@ Built by atelier-md0v:
   it refuses with `start_detached_head`; on any other branch it takes the
   current branch. `start_base_mismatch` and `start_branch_prefix_mismatch`
   go; `--base` is accepted, hidden and ignored, with a note that the base
-  comes from policy, until atelier-nn67 drops it once no guidance on this
+  comes from policy, until atelier-hfme drops it once no guidance on this
   host passes it (atelier-ml3r removed it from the skill). From a detached
   HEAD the refusal names `git switch -c <id> <base> && atelier start <id>`
   (atelier-ml3r, finding atelier-ywpf). A printed fix that starts work outside
@@ -617,11 +627,13 @@ until the item that changes the behaviour lands.
 
 - Items: atelier-3jdm (decision 1), atelier-jnrh (2), atelier-8bh4 (3),
   atelier-ilba (4), atelier-md0v (5), atelier-4nsl (6), atelier-l457 (7),
-  atelier-ml3r (8, with the skill and Atelier's own AGENTS.md and docs) and
-  atelier-nn67 (every other repository on this host: its policy and
-  AGENTS.md, astromech's CI pin and validation items, and dropping
-  `branch_base` and `start --base`). Each must name what it deletes before it starts (decision
-  9).
+  atelier-ml3r (8, with the skill and Atelier's own AGENTS.md and docs),
+  atelier-nn67 (the rest of the rollout: every other repository on this
+  host moves its policy, records and AGENTS.md, including astromech's
+  validation items, and `branch_base` becomes optional on read) and
+  atelier-hfme (5: dropping the `branch_base` write and `start --base` once
+  every CI pin on this host reads records without the field). Each must
+  name what it deletes before it starts (decision 9).
 - The six draft missions hold items planned under the old model, some
   contradicting this one. Which are superseded is Sumeet's call
   (atelier-mzpn), and none of those missions starts before he decides.
