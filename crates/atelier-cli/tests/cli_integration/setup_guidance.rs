@@ -19,7 +19,7 @@ fn test_init_creates_atelier_directory() {
     // policy, commit it on the base, then create the first issue
     // (atelier-l457).
     let review = stdout
-        .find("Review the generated policy, its base branch included: .atelier/workflow.yaml")
+        .find("Read the generated policy, its base branch included: .atelier/workflow.yaml")
         .expect(&stdout);
     let commit = stdout
         .find("Commit the install on main; it predates the gates, so it needs no review: git add .atelier .gitignore && git commit -m \"Install Atelier\"")
@@ -1310,12 +1310,18 @@ fn test_root_help_lists_every_command_and_lifecycle_common_commands() {
             "atelier work mission <id>",
             "atelier issue show <id>",
             "atelier start <id>",
-            "atelier evidence record --target issue/<id> --kind test -- <command>",
             "atelier review request <id>",
             "atelier review approve <id> --identity <name> \"...\"",
-            "atelier land",
             "atelier merge <id>",
+            "atelier land",
         ],
+        "{stdout}"
+    );
+    // The order of steps for one issue follows the common commands.
+    assert!(
+        stdout.contains("One issue, in order: start it; implement; tick every Done when line")
+            && stdout.contains("merge, which\nmakes one merge commit and marks the work done")
+            && stdout.contains("only a code change makes an approval stale"),
         "{stdout}"
     );
 

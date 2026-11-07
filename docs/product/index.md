@@ -1,6 +1,6 @@
 # Product Guide
 
-Atelier keeps records and proof in Git and checks invariants. Agent Factory owns
+Atelier keeps records and proof in Git and guards invariants. Agent Factory owns
 how agents plan, execute, review, and validate work. See
 [Product Intent](../../PRODUCT_INTENT.md) and
 [ADR 0019](../adr/0019-verified-repo-native-tracker.md).
@@ -14,7 +14,7 @@ how agents plan, execute, review, and validate work. See
 - [Reviews and merge](reviews-and-merge.md): approvals, findings, exemptions,
   and gated integration.
 - [Workflow configuration](workflow-configuration.md): reviewed repository
-  policy and read-only transition checks.
+  policy, transition validators and merge checks.
 - [Sessions and hooks](sessions-and-hooks.md): status, land, setup, and branch
   orientation.
 - [Mission reviews](mission-reviews.md): `brief`, `debrief` and their static

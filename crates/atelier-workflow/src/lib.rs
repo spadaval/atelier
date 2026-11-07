@@ -125,7 +125,7 @@ workflows:
         from: [todo]
         to: done
         required_fields: [close_reason]
-        description: Record the decision. Decisions need no branch and may close on the base branch as a planning change.
+        description: Record the decision. Decisions need no branch and are decided on the base branch as a planning change.
         validators:
         - decision.recorded
         - blockers.none_open
@@ -240,7 +240,7 @@ pub const WORK_WORKFLOW: &str = "work";
 pub const START_TRANSITION: &str = "start";
 
 /// Work that changes no code and can only happen after a merge or a
-/// release, such as pushing a tag or a play-check: it waits on what it
+/// release, such as pushing a tag or a play-test: it waits on what it
 /// follows through `blocked_by` and is never part of a mission (ADR 0028,
 /// decision 3).
 pub const LOOSE_END_TYPE: &str = "loose_end";

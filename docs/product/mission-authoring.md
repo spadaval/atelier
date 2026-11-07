@@ -10,7 +10,7 @@ when it has one, not a second strategy or a status table. State the outcome,
 and link the strategy by path if there is one. Success criteria are optional
 ([ADR 0024](../adr/0024-missions-are-themed-containers.md)): add one only for
 a claim about the whole that no single item proves, and only if the mission's
-own work can make it true and an agent can check it when the mission closes.
+own work can make it true and an agent can verify it when the mission closes.
 Agent Factory's [Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission) and
 [Ready Missions](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#ready-missions) sections own that process.
 
@@ -42,16 +42,16 @@ proof route, including how it delivers mission criteria. Unknowns record open
 questions; keep later increments in `backlog` until their predecessor's
 evidence arrives. Keep Design as a link to the owning document.
 
-An executable issue has Goal and Done when. Done when names a check or scenario
-that could fail if the slice were missing or wrong. Each check runs before
-merge. Work that changes no code and can only happen after a merge or a
-release, such as pushing a tag or a play-check, is a loose end `blocked_by`
-the issue it follows, outside the mission, and the nearest stand-in that runs
-before merge stays a Done when line (see [work after the
+An executable issue has Goal and Done when. Each Done when line names a test
+or scenario that could fail if the slice were missing or wrong, and holds
+before review is requested. Work that changes no code and can only happen
+after a merge or a release, such as pushing a tag or a play-test, is a loose
+end `blocked_by` the issue it follows, outside the mission, and whatever part
+of it can run before merge stays a Done when line (see [work after the
 merge](validation.md#work-after-the-merge)). Decide the split when planning.
 Scope and Context give the worker enough boundaries and interfaces to act
 without the author's context. A validation item follows the executable issue
-shape: it references the claims it checks in Goal and its method in Context,
+shape: it references the claims it validates in Goal and its method in Context,
 and records each result as an attached evidence receipt. It advances its
 mission and is done on the base by its `done` transition, with no branch or
 review of its own.

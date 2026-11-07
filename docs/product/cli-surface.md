@@ -2,7 +2,8 @@
 
 The primary interface is the `atelier` CLI and tracked Markdown. Read command
 help for exact flags. Root help lists every command from its own description,
-then the common commands in lifecycle order. Use `target/debug/atelier` to try changes; the installed
+then the common commands in lifecycle order and the order of steps for one
+issue. Use `target/debug/atelier` to try changes; the installed
 binary runs the Claude Code hooks (see [development setup](development-setup.md)).
 
 | Surface | Purpose |
@@ -13,11 +14,11 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `issue` | Create, list, show, update, transition, note, link, and unlink work. |
 | `start` | Prepare the branch owner and start selected work. |
 | `bundle` | Preview and apply one-shot graph input. |
-| `evidence` | Record, show, list, and attach commit-bound proof. |
-| `review` | Append approvals, findings, and explicit trivial exemptions; set findings' dispositions. |
-| `merge` | Check base policy and integrate reviewed work with a merge commit that marks it done. |
-| `land` | Check handoff invariants and committed records; report work in progress on a branch. |
-| `doctor` | Check every done claim and the whole review history. |
+| `evidence` | Record, show, list, and attach optional commit-bound receipts; no gate reads them. |
+| `review` | Print the reviewer's brief; record approvals, findings and explicit trivial exemptions; set findings' dispositions. |
+| `merge` | Evaluate the merge gates and integrate reviewed work with a merge commit that marks it done; `--check` evaluates them without merging. |
+| `land` | Run at every handoff: judge committed records, what changed since the base and the commits about to be pushed; report work in progress on a branch, refuse on the base. |
+| `doctor` | Judge every done claim and the whole review history. |
 | `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `debrief` | Review a mission's outcome as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `setup` | Install supported harness hooks. |
@@ -71,7 +72,7 @@ atelier issue note <id> "Chosen approach" --kind decision --reason "Why" [--reje
 atelier issue transition <id> supersede --reason "Why it will not happen"
 ```
 
-Transitions write records after read-only checks. `atelier start` prepares Git context; the `start` transition only changes the record.
+Transitions write records after read-only validators pass. `atelier start` prepares Git context; the `start` transition only changes the record.
 Commit code and related tracker records yourself. The order is: start,
 implement, tick every Done when line and write the Report, `atelier review
 request <id>`, fix and re-review, approve, `atelier merge <id>`, which marks
@@ -80,7 +81,7 @@ model](work-model.md#completion)). A change no issue owns, such as a release,
 docs or a mockup, skips the issue: commit it on a branch, then `atelier
 review request`, fix and re-review, approve with `--branch <name>`, and
 `atelier merge`, all with no ID ([the light
-path](reviews-and-merge.md#a-change-with-no-issue-the-light-path)). Record focused proof and independent
+path](reviews-and-merge.md#a-change-with-no-issue-the-light-path)). Run focused proof and get independent
 review before `merge`; see [evidence](validation.md) and [reviews and
 merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
 `atelier merge <id> --check` to inspect integration gates. Atelier never pushes or squashes. It commits only the merge commit that `merge` creates, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
@@ -99,11 +100,11 @@ for the checked-out branch's owner or, on a branch no issue owns, the branch
 itself (see [requesting a review](reviews-and-merge.md#requesting-a-review)).
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
 
-`status` orients a session; `land [id] [--install]` checks committed records and
+`status` orients a session; `land [id] [--install]` judges committed records and
 the claims that changed since the base, and on a work branch reports what is
 open and exits 0 (`land: work in progress — N checks open (…)`, quiet `work in
-progress — …`); `doctor` checks every claim. `prime` is
-a deprecated alias for `status`, kept for installed hooks.
+progress — …`; the verdict counts open gates as checks); `doctor` judges
+every claim. `prime` is a deprecated alias for `status`, kept for installed hooks.
 `setup claude [--binary <path>]` installs the supported hooks. See
 [sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.
 
@@ -122,16 +123,16 @@ commit per record:
 
 Only the records the command wrote are staged and committed: Atelier takes them
 from its own record writes, not from `git status`, so other staged or
-unstaged changes are never added. The check runs before the command writes: if
-the index holds anything but records staged earlier by `--stage-records`, the
-command refuses with `record_commit_index_not_clean` and writes nothing. The
+unstaged changes are never added. If, before the command writes, the index
+holds anything but records staged earlier by `--stage-records`, the command
+refuses with `record_commit_index_not_clean` and writes nothing. The
 staged group is remembered in `.atelier/runtime/staged-records.json`, which Git
 ignores. A group ends when its records are no longer staged (a hand commit, a reset), and a
 record of the group with unstaged edits refuses with
 `record_commit_pending_modified`; each command stages only the records it wrote.
 The group is remembered before the commit runs and forgotten after it succeeds,
 so a rejecting hook leaves it for the next `--commit-records`. `review` keeps `--commit` for the pinned commit; the flags here are
-separate. Code still belongs in its own commit; `land` and `merge` check the
+separate. Code still belongs in its own commit; `land` and `merge` judge the
 committed records either way.
 
 ## Bulk input and maintenance

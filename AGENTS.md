@@ -19,9 +19,18 @@ rebuilt model.
   source is `spadaval/.agents` ([ADR 0023](docs/adr/0023-agent-factory-is-not-vendored.md)).
 - Tracker state: `.atelier/` (records are committed with the code they
   describe)
-- Start a session with `atelier status`; before handoff commit canonical
-  records and run `atelier land`. Active work may remain open, with unfinished
-  code handed off honestly.
+- Start a session with `atelier status`; before handoff commit the records
+  and run `atelier land`. Active work may remain open, with unfinished code
+  handed off honestly.
+- One issue, in order: `atelier start <id>` (on `master` it creates a branch
+  named `<id>`; on another branch it takes that branch), implement, tick
+  every Done when line and write the `## Report`, `atelier review request
+  <id>`, fix and re-review, approve, then `atelier merge <id>` under the merge
+  policy below, which marks the work done. Work has no close step, and only a
+  code change makes an approval stale. Work that can only happen after a
+  merge or release is a loose end; a change with no issue takes the light
+  path. Agent Factory's Atelier reference and `docs/product/work-model.md`
+  have the detail; `CONTEXT.md` defines check, review, land, done and close.
 - `.claude/settings.json` runs these through the installed CLI's Claude Code
   hooks (`atelier setup claude`). To try a local build, use `target/debug/atelier`
   directly, or `setup claude --binary target/debug/atelier` without committing
@@ -34,8 +43,8 @@ rebuilt model.
 - A branch that changes anything besides tracker records (`.atelier/issues`,
   `reviews`, `evidence`; the workflow policy and config count as code) merges
   only after CI has passed on its latest code: push the work branch, open a
-  pull request, wait for the CI workflow to pass, then run `atelier merge` and
-  push `master`. Record-only commits after that run, such as approvals, need
+  pull request (before or after review), wait for the CI workflow to pass,
+  then run `atelier merge` and `atelier land`, and push `master`. Record-only commits after that run, such as approvals, need
   no new run; a code change does, including `atelier merge --sync` bringing in
   code from `master`. Record-only branches skip the pull request. The
   `scripts/merge-ci-passed.sh` merge check enforces this, so `atelier merge`
@@ -61,7 +70,7 @@ rebuilt model.
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`
 - Failure-path tests: `cargo nextest run --features test-hooks`
-- Whitespace check: `git diff --check`
+- Whitespace: `git diff --check`
 - Locally, run formatting and the tests that cover your change
   (`cargo nextest run -p <crate>` or a filter). The full suite, with and
   without `test-hooks`, on Linux and macOS, runs in CI on the pull request

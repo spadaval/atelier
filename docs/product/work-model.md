@@ -12,7 +12,7 @@ Missions and work items are issue records with distinct `issue_type` values. A
 mission is a themed container: its Outcome says why its items belong
 together, and it may link a strategy file. Success criteria are optional, and
 any criterion must be something the mission's own work can make true and an
-agent can check when the mission closes
+agent can verify when the mission closes
 ([ADR 0024](../adr/0024-missions-are-themed-containers.md); Agent Factory's
 [Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission)). Work
 items (task, feature, bug, spike, validation, loose end, or any type the
@@ -25,14 +25,17 @@ research, references, and motivation that a mission or every child of a parent
 shares, so it lives in the record instead of a side document.
 Notes carry dated handoffs. The Report says what happened
 ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2): on a work item,
-the implementer report its author writes before asking for review, so the
-reviewer can read it; for `supersede`, a mission's `close` and a decision's
-`decide`, the reason the transition records. A transition that requires the
-policy's `close_reason` field needs a non-empty Report, and `land` checks it
-on the done claims it judges. Its first paragraph is the Outcome: one or two
-sentences giving the observable result against Done when, or for `supersede`
-why the work will not happen. Test names, measurements, and review status
-belong in evidence and review records, not here.
+the implementer report its author writes before asking for review; for
+`supersede`, a mission's `close` and a decision's `decide`, the reason the
+transition records. The review brief leaves the implementer report out, as
+the author's self-assessment, and the [debrief](mission-reviews.md#debrief)
+shows it. A transition that requires the policy's `close_reason` field needs
+a non-empty Report, and `land` requires one on the done claims it judges.
+Its first paragraph is the Outcome: one or two sentences giving the
+observable result against Done when, or for `supersede` why the work will
+not happen. The implementer report then names the targeted test that proves
+each claim; measurements and review status belong in evidence and review
+records.
 
 The implementer report's other parts are `### Deviations` (where the work
 departed from the plan), `### Decisions` (the choices that shaped it, usually
@@ -66,11 +69,11 @@ the why. Missions have no parent or children; work links to missions through
 Evidence attachments represent proof; semantic links remain separate.
 
 Design questions are `decision` records (atelier-ox63). A decision states a
-Question, optionally Options, Context, and Background, and closes with the
+Question, optionally Options, Context, and Background, and is done by the
 `decide` transition once its Decision section says what was decided and why.
 Decisions are the human's by default: an open decision is listed under
 "Needs a Human", never as agent-ready work. They need no branch, so they are
-filed, decided, and closed on the base branch as planning changes (see
+filed and decided on the base branch as planning changes (see
 [planning changes on the base](reviews-and-merge.md#planning-changes-on-the-base)).
 A decision record may name the ADR it produced (`issue update --adr <path>`;
 `check` refuses a path that does not exist). A newer decision record replaces
@@ -82,8 +85,7 @@ link stored on the new issue (`issue create --discovered-from <id>`; like other
 context links it is declared by the new record, so the source is unchanged).
 The source is the issue being worked, a review event such as a finding, or an
 evidence receipt. `issue show` prints it, `check` refuses a source that does
-not exist and a deferred disposition whose follow-up declares a source other
-than the item the finding is about, and the
+not exist, and the
 [debrief](mission-reviews.md#debrief) lists the work by that source. It marks
 work as found along the way, not as scope: the work needs no `advances` link
 to appear in the debrief, and takes one only if the mission must finish it.
@@ -134,11 +136,11 @@ list it separately, and `--quiet` ready lists leave it out, so agents choosing
 ready work do not start it. `atelier work human` lists it, and `atelier start`
 notes the label when someone starts one.
 
-Do not make a `needs-human` check a child of a branch owner when the check runs
-after the merge, such as a game, headset or Windows check on the released
-build. Review asks every open child of the `work` workflow for ticked Done
+Do not make `needs-human` work a child of a branch owner when it can only
+happen after the merge, such as a play-test of the released build on a
+headset or on Windows. Review asks every open child of the `work` workflow for ticked Done
 when lines and a Report before `atelier merge` marks it done, so the owner's
-branch could not integrate until the human acts. Make the check a [loose
+branch could not integrate until the human acts. Make it a [loose
 end](validation.md#work-after-the-merge) `blocked_by` the parent instead,
 outside any mission. `atelier start` and `atelier status` warn when a branch
 owner has an open `needs-human` child that its merge would mark done, and give
@@ -153,7 +155,7 @@ by their `done` transition on the base rather than started (atelier-8bh4).
 Missions, and parents with open children, are worked through their children,
 so ready views show them in a separate "Parents and Missions" context panel
 instead, and `--quiet` ready lists leave them out. A parent whose children are
-all terminal is ready again, to be started and closed.
+all terminal is ready again, to be started and merged.
 
 Records are branch-local, so work another session has started on its own
 branch still reads as ready on the base. `work ready`, the ready section of
@@ -163,7 +165,7 @@ checkout's records, but an item that owns another local branch carries its
 committed state there on a `↳` line under its row, such as `↳ in_progress on
 bug/atelier-j48s` or `↳ ✓ done on bug/atelier-fj1t, not merged` (see
 [Other branches](sessions-and-hooks.md#other-branches)). Choose unmarked work,
-or check with the branch's session before taking marked work.
+or ask the branch's session before taking marked work.
 
 Work that is recorded but not near-term sits in `backlog` until it is planned;
 parked statuses such as `backlog` and `draft` stay in backlog views even when
@@ -197,11 +199,11 @@ not happen (atelier-lq42). Branch names carry no issue type: on the base,
 metadata records the owner's `work_branch`, and a `branch_base` that `start`
 sets to the policy's base branch and nothing reads: the base is always the
 policy's `base_branch`, and the field stays only so an older Atelier can parse
-the record, until atelier-ml3r drops it (ADR 0028 decision 5). Missions
+the record, until atelier-nn67 drops it (ADR 0028 decision 5). Missions
 coordinate work rather than own a work branch.
 
-`atelier start <id>` resolves the owner, checks the target branch's records,
-checks out or creates its work branch, records branch metadata, and applies the
+`atelier start <id>` resolves the owner, reads the target branch's records,
+switches to or creates its work branch, records branch metadata, and applies the
 available `start` transition. Commit those record changes with the work. An
 item whose workflow has no `start` transition, such as a decision, loose end
 or validation, takes no branch: `start` and `merge` refuse it with
@@ -219,7 +221,9 @@ Which branch `start` uses depends on where it runs (atelier-md0v):
   the base, or switches to an existing branch of that name.
 - On a branch another item owns, it refuses with `start_branch_owned`, naming
   that item, with `git switch <base> && atelier start <id>` as the step.
-- From a detached HEAD it refuses with `start_detached_head`.
+- From a detached HEAD it refuses with `start_detached_head`, naming `git
+  switch -c <id> <base> && atelier start <id>`, which also works in a linked
+  worktree whose base is checked out elsewhere (finding atelier-ywpf).
 - On any other branch, such as one created by hand, it takes the current
   branch as the owner's work branch.
 
@@ -231,8 +235,8 @@ path, which refuses with `start_untracked_overwritten` before anything
 changes (atelier-l457).
 
 `start` runs from where it is. An older `--base <branch>` is accepted,
-hidden and ignored, with a note that the base comes from policy, so
-guidance that still passes it does not fail.
+hidden and ignored, with a note that the base comes from policy; it changes
+nothing, so from a detached HEAD start still refuses.
 
 `start` also leaves a runtime lease for the owner, so a second session can
 learn the item is taken (atelier-81e5). The lease is a small file under
@@ -257,7 +261,7 @@ example to start a further child on its parent's branch.
 
 Statuses and permitted transitions come from `.atelier/workflow.yaml`.
 `atelier issue transition <id>` shows options and blockers. Supplying a
-transition changes the record after read-only checks. Transitions do not branch,
+transition changes the record after read-only validators pass. Transitions do not branch,
 commit, push, open reviews, or merge.
 
 ## Completion
@@ -273,23 +277,23 @@ no `close`.
 A Done when line with a box (`- [ ]`) is ticked (`- [x]`) once it holds.
 `atelier review request <id>` refuses with `review_request_unfinished`, and
 names each gap, while an open work item it covers has an unticked box or an
-empty Report: asking for review means the work is implemented and done to the
-best of the author's knowledge. It covers the item it names; naming the owner
+empty Report: asking for review means the work is implemented and every line
+holds, to the best of the author's knowledge. It covers the item it names; naming the owner
 covers the owner and its started children, so a parent's children can be
-reviewed one at a time while unstarted siblings wait. A line without a box is
-not checked, and a line with the old After merge marker need not be ticked;
+reviewed one at a time while unstarted siblings wait. A line without a box
+is not asked for, and a line with the old After merge marker need not be ticked;
 the refusal names `atelier migrate after-merge` for such lines
 (atelier-8bh4).
 
-`atelier merge <id>` checks the base branch's policy and review gates, then
-lands one merge commit whose tree passed `merge_checks`. That commit sets
+`atelier merge <id>` evaluates the base branch's policy and review gates, then
+makes one merge commit whose tree passed `merge_checks`. That commit sets
 every open item of the `work` workflow in the owner's scope, the owner and
 its non-superseded children, to the workflow's first done status, and
 changes nothing else the branch holds, the Report included. Merge refuses
 while one of those items has an open blocker, and notes, without refusing,
 each one it marks done that has an unticked box or an empty Report. It creates no other commit, so
 the base shows the item done together with its code, and the work branch
-never says done for work the base lacks. An item an older Atelier closed on
+never says done for work the base lacks. An item an older Atelier marked done on
 its branch merges as it is. A repository whose policy still gives work a
 `close` keeps it until it updates its policy, and the done marks merge
 writes answer to that transition's required fields and validators.

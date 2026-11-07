@@ -23,11 +23,19 @@ const GLOBAL_OPTION_ORDER: usize = 1000;
   atelier work mission <id>
   atelier issue show <id>
   atelier start <id>
-  atelier evidence record --target issue/<id> --kind test -- <command>
   atelier review request <id>
   atelier review approve <id> --identity <name> \"...\"
+  atelier merge <id>
   atelier land
-  atelier merge <id>")]
+
+One issue, in order: start it; implement; tick every Done when line and
+write its ## Report; review request, which refuses until both hold; fix
+each fix_now finding and get the fix reviewed again; approve; merge, which
+makes one merge commit and marks the work done. Work has no close step, and
+only a code change makes an approval stale. Work that changes no code and can
+only happen after a merge or release, such as pushing a tag, is a loose end
+(--issue-type loose_end). A change with no issue takes review request and
+merge with no ID on its own branch. Run land before every handoff.")]
 #[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Quiet mode: only output essential data (IDs, counts)
@@ -44,7 +52,7 @@ struct Cli {
 )]
 struct ReviewArgs {
     /// The branch owner, parent issue or standalone issue the event is
-    /// about, then what was checked, found or decided; with --branch, the
+    /// about, then what was reviewed, found or decided; with --branch, the
     /// summary alone
     #[arg(value_names = ["ID", "SUMMARY"], required = true, num_args = 1..=2)]
     subject: Vec<String>,
@@ -101,11 +109,11 @@ struct TrivialArgs {
 }
 #[derive(Subcommand)]
 enum ReviewCommands {
-    /// Record a review account: what was checked and its limits
+    /// Record a review account: what was reviewed and its limits
     Record(ReviewArgs),
     /// Record an independent approval of the work at the pinned commit
     Approve(ReviewArgs),
-    /// Record a finding; an approval after its fix resolves a fix_now finding, and defer or no_action needs a decision before merge
+    /// Record a finding; an approval after its fix resolves a fix_now finding, and defer or no_action needs a disposition before merge
     Finding {
         #[command(flatten)]
         args: ReviewArgs,
@@ -137,7 +145,7 @@ enum ReviewCommands {
         /// The decision on the finding
         #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
         decision: FindingDecision,
-        /// For fix_now: the commit (a full or unique short ID) that resolves the finding, later than its pin
+        /// Only for an older Atelier's fix_now disposition, which named the commit (a full or unique short ID) that resolved the finding; a fix_now finding now needs no disposition
         #[arg(long, value_parser = parse_resolution_commit)]
         resolution_commit: Option<String>,
         /// For defer: the existing follow-up issue
@@ -235,7 +243,7 @@ enum Commands {
         action: IssueCommands,
     },
 
-    /// Check out an issue's owner branch, record it, and apply its start transition
+    /// Start an issue on its work branch: its recorded branch, else on the base a new branch named with its ID, else the current branch
     Start {
         /// Issue ID
         id: String,
@@ -247,19 +255,19 @@ enum Commands {
         take_over: bool,
     },
 
-    /// First-class evidence records
+    /// Optional receipts for proof nothing else records; no gate reads them
     Evidence {
         #[command(subcommand)]
         action: EvidenceCommands,
     },
 
-    /// Append-only in-repository review events
+    /// Independent review: the brief, findings, approvals and dispositions
     Review {
         #[command(subcommand)]
         action: ReviewCommands,
     },
 
-    /// Verify committed records and applicable completion invariants
+    /// Run at every handoff: judges committed records and the commits about to be pushed; reports open work on a branch, refuses unreviewed work on the base
     Land {
         /// Issue or branch owner (otherwise inferred from the checkout)
         id: Option<String>,
@@ -290,9 +298,8 @@ enum Commands {
         /// Print the gate results as JSON
         #[arg(long, conflicts_with = "sync")]
         json: bool,
-        /// Catch up first: merge the base into the work branch, rerun the
-        /// command-backed receipts that were current, commit their new
-        /// receipts, and report whether the approval survived. Integrates
+        /// Catch up first: merge the base into the work branch and report
+        /// whether the approval survived. Records nothing and integrates
         /// nothing
         #[arg(long)]
         sync: bool,
@@ -310,9 +317,9 @@ enum Commands {
         id: Option<String>,
     },
 
-    /// Check every done claim and the whole review history
+    /// Judge every done item and the whole review history
     ///
-    /// `land` checks only what changed since the base.
+    /// `land` judges only what changed since the base.
     Doctor,
 
     /// Review a mission's plan before work starts: outcome, criteria, scope
@@ -382,8 +389,8 @@ enum MigrateCommands {
     },
     /// Turn open After merge lines into loose ends; dry run unless --apply
     ///
-    /// Each unticked `After merge (<reason>): <check>` Done when line becomes
-    /// a loose end blocked_by its item: the check is its Done when, the
+    /// Each unticked `After merge (<reason>): <text>` Done when line becomes
+    /// a loose end blocked_by its item: the text is its Done when, the
     /// reason goes in its Goal, and it is labelled needs-human when the
     /// reason is the human's judgment or a device or place no agent can
     /// reach. An item that is not done keeps the line's stand-in as an
@@ -467,11 +474,11 @@ enum IssueCommands {
         /// items; Outcome for missions (optionally Success criteria,
         /// Background); Question (optionally Options,
         /// Decision, Context, Background) for decisions. Plain text becomes
-        /// the Goal, Outcome, or Question. Done when lines are checked before
-        /// merge. Work that changes no code and can only happen after a merge
-        /// or release, such as pushing a tag or a play-check, is a loose end:
-        /// its own issue (`--issue-type loose_end`), linked with
-        /// `--role blocked_by` to what it waits on
+        /// the Goal, Outcome, or Question. Each Done when line is a `- [ ]`
+        /// box, ticked before `review request`. Work that changes no code and
+        /// can only happen after a merge or release, such as pushing a tag or
+        /// a play-test, is a loose end: its own issue (`--issue-type
+        /// loose_end`), linked with `--role blocked_by` to what it waits on
         #[arg(long)]
         body: Option<String>,
         /// Priority: P0-P3 or critical, high, medium, low

@@ -5720,7 +5720,7 @@ fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
             "{question}\n\n## Decision\n\n(a): drop epic; any issue can parent, one level deep."
         ),
     ]);
-    // Decisions need no branch: they close on the base as a planning change.
+    // Decisions need no branch: they are decided on the base as a planning change.
     commit_all(dir.path(), "file the decision");
     create(&[
         "issue",

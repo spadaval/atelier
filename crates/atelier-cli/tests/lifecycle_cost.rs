@@ -97,7 +97,7 @@ fn lifecycle(base: &str) {
     else {
         panic!("init prints three next steps: {init}");
     };
-    assert!(review.starts_with("Review the generated policy"), "{init}");
+    assert!(review.starts_with("Read the generated policy"), "{init}");
     let written = fs::read_to_string(repo.join(policy)).unwrap();
     assert!(
         written.contains(&format!("branch_policy:\n  base_branch: {base}\n")),

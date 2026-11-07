@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:01.441016682+00:00"
 id: "atelier-ml3r"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-ml3r
 priority: "P2"
 relationships:
   blocks: []
@@ -35,9 +38,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Say the lifecycle once, plainly, in the skill and Atelier's own docs"
-updated_at: "2026-11-07T11:29:57.096645251+00:00"
+updated_at: "2026-11-07T11:56:04.678290586+00:00"
 ---
 
 ## Goal

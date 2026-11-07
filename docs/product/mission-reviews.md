@@ -107,7 +107,7 @@ the record that links it was written, even on a branch that merged later,
 but not before the mission's start. The start and close are the commits
 that made them. Nothing new is stored. Dates are local.
 
-The Markdown and HTML forms come from one view model, and a test checks that
+The Markdown and HTML forms come from one view model, and a test verifies that
 every item, criterion mark, and decision in one appears in the other.
 
 ## Brief

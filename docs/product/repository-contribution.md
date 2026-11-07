@@ -11,10 +11,10 @@ before local integration into `master`. Agents may integrate reviewed work
 locally and push it, including `master` after a gated merge, under repository
 policy; force-pushing `master` or deleting remote branches requires the human.
 A branch that changes more than tracker records also needs a passing CI
-run on its pull request before it merges; record-only changes land without
+run on its pull request before it merges; record-only changes merge without
 one ([AGENTS.md](../../AGENTS.md)).
 
-Atelier's merge command checks the reviewed base policy and integrates
+Atelier's merge command evaluates the reviewed base policy's gates and integrates
 committed work with one merge commit, which marks the work done. It never
 pushes. GitHub collaboration surfaces may
 support discussion and dependency updates, but do not create a second tracker
