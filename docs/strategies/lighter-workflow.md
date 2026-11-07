@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 last_changed: "2026-11-06: on Sumeet's direction, dropped the record-commit count as a goal (atelier-5822 superseded; lifecycle-cost now judges review files per finding only); earlier that day, noted life-on-rails adopting Atelier ahead of the mission, and old-format reads for record changes; earlier that day, on Sumeet's direction, dropped the fix re-check cut (atelier-8s1m), turned the after-merge refusals into things shown, and added evidence that records only what nothing else records (after an evidence audit); earlier that day, planning review fixes; created that day from Sumeet's direction (LoR thread 'Launcher usability vs Smart Launcher')"
 ---
 
