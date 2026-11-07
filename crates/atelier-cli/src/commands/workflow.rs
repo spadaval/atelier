@@ -163,21 +163,48 @@ pub(crate) fn refuse_done_on_base(
         return Ok(());
     }
     let id = &issue.id;
-    let next = match policy.done_transition(&issue.issue_type, &issue.status) {
-        Some(name) => {
-            let transition = policy.transition_for_issue_type(&issue.issue_type, name)?;
-            let missing = required_field_failures(transition, None)?
-                .into_iter()
-                .map(|(flag, _)| flag)
-                .collect::<Vec<_>>();
-            transition_command(id, name, &missing)
-        }
-        None => format!("atelier issue transition {id}"),
+    let base = &policy.branch_policy.base_branch;
+    let Some(name) = policy.done_transition(&issue.issue_type, &issue.status) else {
+        bail!(
+            "{command}_done_on_base: {id} is {}, whose workflow has no start transition, so it takes no branch, review or merge; it is done on {base} by a transition. Next: atelier issue transition {id}",
+            atelier_app::record_ref::with_article(&issue.issue_type),
+        );
+    };
+    let transition = policy.transition_for_issue_type(&issue.issue_type, name)?;
+    let missing = required_field_failures(transition, None)?
+        .into_iter()
+        .map(|(flag, _)| flag)
+        .collect::<Vec<_>>();
+    let command_line = transition_command(id, name, &missing);
+    // What the transition waits for, from the checks it runs: a decision's
+    // recorded Decision, and whatever blocks the item.
+    let runs = |builtin: &str| {
+        transition
+            .validators
+            .iter()
+            .any(|validator| validator.builtin == builtin)
+    };
+    let recorded = runs("decision.recorded");
+    let waits = [
+        recorded.then_some("its `## Decision` section records what was decided"),
+        runs("blockers.none_open").then_some("nothing it waits on is open"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    let once = if waits.is_empty() {
+        String::new()
+    } else {
+        format!(" once {}", waits.join(" and "))
+    };
+    let next = if recorded {
+        format!("record the Decision in its `## Decision` section, then run `{command_line}`")
+    } else {
+        command_line
     };
     bail!(
-        "{command}_done_on_base: {id} is {}, whose workflow has no start transition, so it takes no branch, review or merge; it is done on {} by its own transition once what it waits on is merged. Next: {next}",
+        "{command}_done_on_base: {id} is {}, whose workflow has no start transition, so it takes no branch, review or merge; it is done on {base} by its `{name}` transition{once}. Next: {next}",
         atelier_app::record_ref::with_article(&issue.issue_type),
-        policy.branch_policy.base_branch,
     )
 }
 

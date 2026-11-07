@@ -368,6 +368,7 @@ pub fn run(
         ));
     }
     let mut notes = start_notes(
+        &view_policy,
         &issue_id,
         human_work,
         &work_branch.owner_id,
@@ -410,6 +411,7 @@ pub fn run(
 
 /// Notes that `start` is starting work for the human.
 fn start_notes(
+    policy: &atelier_app::workflow_policy::WorkflowPolicy,
     issue_id: &str,
     human_work: bool,
     owner_id: &str,
@@ -423,6 +425,7 @@ fn start_notes(
     }
     if !human_children.is_empty() {
         notes.push(atelier_app::work_classification::human_children_note(
+            policy,
             owner_id,
             human_children,
         ));

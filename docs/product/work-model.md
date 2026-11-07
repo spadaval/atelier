@@ -142,15 +142,18 @@ branch could not integrate until the human acts. Make the check a [loose
 end](validation.md#work-after-the-merge) `blocked_by` the parent instead,
 outside any mission. `atelier start` and `atelier status` warn when a branch
 owner has an open `needs-human` child that its merge would mark done, and give
-the two commands that make it a loose end (atelier-1jll, atelier-8bh4). A
+the two commands that make it a loose end, or a standalone item `blocked_by`
+the parent under a policy without `loose_end` (atelier-1jll, atelier-8bh4). A
 `needs-human` child that must finish before the merge, such as an account
 approval the code depends on, can stay a child.
 
-`atelier work ready` lists only work an agent can start. Missions, and parents
-with open children, are worked through their children, so ready views show
-them in a separate "Parents and Missions" context panel instead, and `--quiet`
-ready lists leave them out. A parent whose children are all terminal is ready
-again, to be started and closed.
+`atelier work ready` lists work an agent can take up now: work to start, and
+items done on the base, such as loose ends and validations, which are finished
+by their `done` transition on the base rather than started (atelier-8bh4).
+Missions, and parents with open children, are worked through their children,
+so ready views show them in a separate "Parents and Missions" context panel
+instead, and `--quiet` ready lists leave them out. A parent whose children are
+all terminal is ready again, to be started and closed.
 
 Records are branch-local, so work another session has started on its own
 branch still reads as ready on the base. `work ready`, the ready section of
@@ -171,7 +174,8 @@ planned out of its parked status (for `backlog`, with `plan`). Children
 already in flight keep their state and transitions, and a parent that can
 never start, such as an open decision, parks nothing.
 A todo-category status alone does not establish readiness: ready work must
-expose a direct transition into active work and have no open blockers. A child
+have no open blockers and expose a direct transition into active work, or,
+for an item done on the base, its transition to done. A child
 also waits on its parent's blockers, since it works on the parent's branch:
 `work ready` leaves it out, `work blocked`, mission and parent views list it as
 blocked by them, `issue show` lists them under "Blocked via parent", and

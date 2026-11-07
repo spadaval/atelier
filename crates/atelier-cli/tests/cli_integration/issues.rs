@@ -5754,7 +5754,13 @@ fn test_decisions_wait_for_the_human_and_close_with_a_recorded_decision() {
             && stderr.contains(&format!(
                 "start_done_on_base: {open} is a decision, whose workflow has no start transition"
             ))
-            && stderr.contains(&format!("atelier issue transition {open} decide")),
+            && stderr.contains(
+                "by its `decide` transition once its `## Decision` section records what was decided"
+            )
+            && stderr.contains(&format!(
+                "Next: record the Decision in its `## Decision` section, then run `atelier issue transition {open} decide --reason \"...\"`"
+            ))
+            && !stderr.contains("merged"),
         "{stderr}"
     );
 

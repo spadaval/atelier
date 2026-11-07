@@ -92,19 +92,36 @@ pub fn open_human_children(
         .collect()
 }
 
-/// What to do about [`open_human_children`].
-pub fn human_children_note(owner: &str, children: &[String]) -> String {
+/// What to do about [`open_human_children`]: make each a loose end that
+/// waits on `owner` when the policy declares `loose_end`, or else a
+/// standalone item that does (atelier-8bh4).
+pub fn human_children_note(policy: &WorkflowPolicy, owner: &str, children: &[String]) -> String {
+    let loose_ends = policy
+        .issue_types
+        .contains_key(atelier_workflow::LOOSE_END_TYPE);
+    let retype = if loose_ends {
+        " --issue-type loose_end"
+    } else {
+        ""
+    };
     let commands = children
         .iter()
         .map(|child| {
-            format!("`atelier issue update {child} --no-parent --issue-type loose_end`, then `atelier issue link {child} {owner} --role blocked_by`")
+            format!("`atelier issue update {child} --no-parent{retype}`, then `atelier issue link {child} {owner} --role blocked_by`")
         })
         .collect::<Vec<_>>()
         .join("; ");
-    let (verb, pronoun, shape) = if children.len() == 1 {
-        ("is", "it", "a loose end")
+    let one = children.len() == 1;
+    let (verb, pronoun) = if one {
+        ("is", "it")
     } else {
-        ("are each", "them", "loose ends")
+        ("are each", "them")
+    };
+    let shape = match (loose_ends, one) {
+        (true, true) => "a loose end",
+        (true, false) => "loose ends",
+        (false, true) => "a standalone item",
+        (false, false) => "standalone items",
     };
     format!(
         "{} labelled needs-human {verb} a child of {owner}, and review asks every open child for ticked Done when lines and a Report before atelier merge marks it done, so the branch cannot integrate until the human finishes {pronoun}. If the work can only happen after the merge, make {pronoun} {shape} that waits on {owner}, outside its scope: {commands}.",

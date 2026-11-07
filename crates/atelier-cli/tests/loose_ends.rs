@@ -183,7 +183,7 @@ fn a_loose_end_waits_for_its_merge_and_is_done_on_the_base() {
                     "{command}_done_on_base: {tag} is a loose_end, whose workflow has no start transition"
                 ))
                 && output.contains(&format!(
-                    "Next: atelier issue transition {tag} done --reason \"...\""
+                    "by its `done` transition once nothing it waits on is open. Next: atelier issue transition {tag} done --reason \"...\""
                 )),
             "{command}: {output}"
         );
@@ -594,4 +594,60 @@ fn atelier_s_own_policy_shares_the_starter_s_on_base_workflow() {
             .collect::<Vec<_>>()
     };
     assert_eq!(transitions(&own), transitions(&starter));
+}
+
+/// Without `loose_end` in the policy, the advice for a needs-human child
+/// that holds its owner's branch keeps it standalone instead, with commands
+/// that policy accepts.
+#[test]
+fn the_needs_human_child_advice_fits_a_policy_without_loose_ends() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    fs::write(repo.join(".atelier/workflow.yaml"), OLD_POLICY).unwrap();
+    commit(repo, "Use the older starter policy");
+    git(repo, &["push", "-q"]);
+    let parent = create(repo, &["Launcher", "--body", ITEM]);
+    let check = create(
+        repo,
+        &[
+            "Play-test the release build",
+            "--issue-type",
+            "validation",
+            "--parent",
+            &parent,
+            "-l",
+            "needs-human",
+        ],
+    );
+    commit(repo, "A feature with its play-test as a child");
+    let advice = format!(
+        "make it a standalone item that waits on {parent}, outside its scope: `atelier issue update {check} --no-parent`, then `atelier issue link {check} {parent} --role blocked_by`."
+    );
+    let output = ok(repo, &["start", &parent]);
+    assert!(
+        output.contains(&format!(
+            "{check} labelled needs-human is a child of {parent}"
+        )) && output.contains(&advice)
+            && !output.contains("loose_end"),
+        "{output}"
+    );
+    commit(repo, "Start the launcher");
+    let output = ok(repo, &["status"]);
+    assert!(
+        output.contains(&advice) && !output.contains("loose_end"),
+        "{output}"
+    );
+    // The advice runs under this policy.
+    ok(repo, &["issue", "update", &check, "--no-parent"]);
+    ok(
+        repo,
+        &["issue", "link", &check, &parent, "--role", "blocked_by"],
+    );
+    let output = ok(repo, &["status"]);
+    assert!(
+        !output.contains("labelled needs-human is a child"),
+        "{output}"
+    );
 }

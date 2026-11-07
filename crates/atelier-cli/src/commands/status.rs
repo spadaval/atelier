@@ -254,7 +254,7 @@ impl Owner {
         if !human_children.is_empty() {
             work.push(format!(
                 "Needs a human: {}",
-                atelier_app::work_classification::human_children_note(id, &human_children)
+                atelier_app::work_classification::human_children_note(policy, id, &human_children)
             ));
         }
         let buckets = atelier_app::work_classification::work_buckets_for(
