@@ -62,9 +62,10 @@ What stays: receipts and their freshness marks in `evidence list`, failure
 output, criteria receipts and `work mission`'s marks, the
 `evidence.no_newer_failure` block on close, land and merge, and a policy's
 own `evidence.attached` gate, which still asks for a fresh pass. Command
-capture keeps refusing uncommitted code (Sumeet, 2026-11-06), so a receipt
-always describes committed state; that is what lets a later pass clear a
-failure for good. Agent Factory's Core Rule "Prove claims with fresh
+capture keeps refusing uncommitted code (Sumeet, 2026-11-06), so a captured
+receipt describes committed state; a manual pass is the recorder's judgment
+and checks no checkout. Any pass recorded after a failure clears it,
+whatever its command or pin, and adds no refusal. Agent Factory's Core Rule "Prove claims with fresh
 evidence" stands: a check is still run after the last change and its output
 read; only whether it is recorded as a receipt changes.
 

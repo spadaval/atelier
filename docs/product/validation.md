@@ -109,10 +109,11 @@ stale, and `evidence list` marks it so. A stale pass does not satisfy an
 fresh one.
 
 A failure blocks completion (close, `land` and `merge` refuse with
-`evidence.no_newer_failure`) until a pass is recorded after it. That pass
-clears it for good, even once later commits make the pass stale, since a
-receipt always describes the committed state it was recorded at: command
-capture refuses uncommitted code.
+`evidence.no_newer_failure`) until a pass is recorded after it. Any pass
+recorded after it clears it for good, whatever its command or pin, even once
+later commits make the pass stale. Command capture refuses uncommitted code,
+so a captured pass describes committed state; a manual pass is the
+recorder's judgment.
 
 Record-only bookkeeping, including attachments, Notes, and status updates,
 can follow the checked commit without changing its acceptance claim. Evidence

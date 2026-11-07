@@ -146,8 +146,8 @@ pub(crate) enum RanOn {
 #[derive(Debug)]
 pub(crate) struct GatesRefused {
     pub report: GateReport,
-    /// Facts that bear on the failures, such as uncommitted changes that make
-    /// passing proof stale; printed after the passes.
+    /// Facts that bear on the failures, such as the base having commits the
+    /// branch lacks; printed after the passes.
     pub notes: Vec<String>,
     pub ran_on: RanOn,
 }

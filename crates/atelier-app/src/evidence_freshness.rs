@@ -454,8 +454,9 @@ fn evaluate_issue_gate(
 
 /// The newest failing receipt validating `issue_id` when no pass was
 /// recorded after it: it blocks completion. Any later pass clears it for
-/// good, even once later commits make that pass stale, since a receipt
-/// always describes the committed state it was recorded at.
+/// good, whatever its command or pin, even once later commits make that
+/// pass stale. Capture refuses uncommitted code; a manual pass is the
+/// recorder's judgment.
 pub fn newest_failure(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
     let records = validating_records(index, issue_id)?;
     let newest = |result: EvidenceResult| {
