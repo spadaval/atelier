@@ -37,7 +37,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Say the lifecycle once, plainly, in the skill and Atelier's own docs"
-updated_at: "2026-11-07T11:19:13.793485566+00:00"
+updated_at: "2026-11-07T11:29:57.096645251+00:00"
 ---
 
 ## Goal
@@ -46,16 +46,19 @@ Make the agent-factory skill, the CLI help and Atelier's own docs describe the n
 
 ## Done when
 
-- [ ] The agent-factory skill (spadaval/.agents, edited in a worktree there, reviewed and merged into its `main`) describes the new lifecycle in its atelier reference and its orchestrate, implement, review, plan and validate procedures: start, implement, tick every Done when line and write the Report, review request, fix and re-review, approve, merge (which marks work done); approvals that only code makes stale; loose ends; the light path; records correctable until they reach the base; a `fix_now` finding resolved by the approval after its fix.
-- [ ] Nothing the mission removed is left in the skill: `start --base`, `<issue_type>/<id>` branch names, close before or after review, After merge markers and stand-ins, `carried to`, `fix_now` dispositions with resolution commits, receipts for suite runs, the reviewer-versus-Git-author rule, recorded bases. The skill's total line count falls.
-- [ ] check, land, close, review and done each mean one thing across CLI help, the skill and docs, and CONTEXT.md defines each: `atelier check` validates records and merge checks are the policy's merged-tree commands (nothing else is called a check); `land` is the session handoff command; close applies to missions only; review is independent review; done means merged for work and done on the base for decisions, loose ends and validations.
+- [ ] Before the skill change merges, astromech's CI pin (`ATELIER_REV`) is at an Atelier commit that judges records by this mission's rules (approvals resolving `fix_now`, merge marking work done), moved through astromech's own process if it is not already (astromech-5sp5 moved it to 55cf6072 on 2026-11-07), since the skill is live in every repository the moment it merges.
+- [ ] The agent-factory skill (spadaval/.agents) describes the new lifecycle in its atelier reference and its orchestrate, implement, review, plan and validate procedures: start, implement, tick every Done when line and write the Report, review request, fix and re-review, approve, merge (which marks work done); approvals that only code makes stale; loose ends; the light path; records correctable until they reach the base; a `fix_now` finding resolved by the approval after its fix. The change is made in a worktree (`git -C ~/projects/agents-skills worktree add ~/projects/agents-skills-wt/atelier-ml3r -b atelier-ml3r main`; never switch the live checkout), the reviewer reviews that branch at a named commit together with this item's Atelier diff, and exactly that commit merges into its `main` (no-ff) when this item merges.
+- [ ] Nothing the mission removed is left in the skill or its evals (`evals/agent-factory`): `start --base`, `<issue_type>/<id>` branch names, close before or after review, After merge markers and stand-ins, `carried to`, `fix_now` dispositions with resolution commits, receipts for suite runs, the reviewer-versus-Git-author rule, recorded bases. The skill's total line count falls.
+- [ ] One meaning per word, in prose; no flag or policy key is renamed (that would need new shims). CONTEXT.md defines: check = `atelier check` (record validation), merge checks (the policy's merged-tree commands) and `merge --check` (merge gates without merging), and prose uses "line" for a Done when line; land = `atelier land`, the handoff and pushed-commit check; close = what a mission does (the `close_reason` key and `--reason` keep their names and write the Report); review = independent review; done = the status work gets when it merges, decisions, loose ends and validations get on the base, and a closed mission has, with superseded as the other terminal status. CLI help and docs use the words that way.
+- [ ] `start`'s detached-HEAD refusal suggests `git switch -c <id> <base> && atelier start <id>`, which works in a linked worktree, and docs/product/work-model.md no longer says old guidance passing `--base` "does not fail" (finding atelier-ywpf).
+- [ ] ADR 0028 (decisions 2, 3 and 5, Consequences), docs/product/workflow-configuration.md and docs/product/work-model.md name atelier-nn67, not this item, for astromech's pin, the `branch_base` drop, astromech's validation items and the other repositories' policies.
 - [ ] Atelier's own AGENTS.md and docs/product describe the lifecycle in the same words as the skill.
-- [ ] The legible criterion is ready to be judged: an agent reading only the skill, an AGENTS.md and the CLI help finds one order and no contradiction (checked by the mission's validation, not by this item's author).
+- [ ] A fresh subagent given only the rewritten skill, Atelier's AGENTS.md and the CLI help states the lifecycle order, what makes an approval stale and when to file a loose end, and reports no contradiction; its report is attached as a note. (The legible criterion itself is judged by the mission's validation after atelier-nn67, on astromech's AGENTS.md.)
 
 ## Scope
 
-The agent-factory skill in spadaval/.agents (via `git -C ~/projects/agents-skills worktree add ~/projects/agents-skills-wt/atelier-ml3r -b atelier-ml3r main`; never switch the live checkout's branch), Atelier's CLI help text, CONTEXT.md, AGENTS.md, docs/product. Not other repositories (atelier-nn67).
+The agent-factory skill and its evals in spadaval/.agents, Atelier's CLI help text and `start`'s detached-HEAD hint, CONTEXT.md, AGENTS.md, docs/product, ADR 0028. astromech only for its CI pin, if it needs moving again. Not the other repositories' policies or AGENTS.md (atelier-nn67).
 
 ## Context
 
-docs/adr/0028-simpler-lifecycle.md (decision 8), docs/strategies/simpler-lifecycle.md. Everything else in the mission has merged before this starts, so the skill describes what is built.
+docs/adr/0028-simpler-lifecycle.md (decision 8), docs/strategies/simpler-lifecycle.md. Everything else in the mission except atelier-nn67 has merged before this starts, so the skill describes what is built.
