@@ -8,13 +8,18 @@ use atelier_app::{
 use serde_json::{json, Value};
 use std::{io::Read, path::Path};
 
-fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<Option<String>> {
+fn owner(
+    repo: &Path,
+    index: &RecordIndex,
+    branch: &str,
+    requested: Option<&str>,
+) -> Result<Option<String>> {
     if let Some(reference) = requested {
         let id = index.resolve(atelier_app::record_ref::RecordKind::Issue, reference)?;
         let issue = index.require_issue(&id)?;
         return Ok(Some(issue.parent_id.clone().unwrap_or(id)));
     }
-    let owners = branch_owners(index, branch);
+    let owners = branch_owners(repo, index, branch);
     match owners.as_slice() {
         [] => Ok(None),
         [id] => Ok(Some(id.clone())),
@@ -24,19 +29,26 @@ fn owner(index: &RecordIndex, branch: &str, requested: Option<&str>) -> Result<O
         ),
     }
 }
-/// The issues whose recorded work branch is `branch`; more than one is a
-/// recording error that each caller reports in its own terms.
-pub(crate) fn branch_owners(index: &RecordIndex, branch: &str) -> Vec<String> {
-    index
-        .issues()
-        .filter(|issue| {
-            issue
-                .workflow_branch
-                .as_ref()
-                .is_some_and(|owner| owner.work_branch == branch)
-        })
-        .map(|issue| issue.id.clone())
-        .collect()
+/// The issues that own `branch`: those whose recorded work branch it is and
+/// that are not done on the base, so an owner already done there no longer
+/// owns the name (atelier-4nsl). A branch with none is on the light path
+/// unless it is the base. More than one is a recording error that each
+/// caller reports in its own terms.
+pub(crate) fn branch_owners(repo: &Path, index: &RecordIndex, branch: &str) -> Vec<String> {
+    match base_policy::working(repo) {
+        Ok(source) => atelier_app::light_path::owners(repo, index, &source.policy, branch),
+        // Without a policy no base can be read, so every recorded owner owns.
+        Err(_) => index
+            .issues()
+            .filter(|issue| {
+                issue
+                    .workflow_branch
+                    .as_ref()
+                    .is_some_and(|owner| owner.work_branch == branch)
+            })
+            .map(|issue| issue.id.clone())
+            .collect(),
+    }
 }
 fn check_records(
     repo: &Path,
@@ -293,7 +305,7 @@ fn land_gates(
             preconditions.fail(code, cause, Some(fix));
         }
     };
-    let id = match owner(&index, &branch, requested) {
+    let id = match owner(repo, &index, &branch, requested) {
         Ok(id) => id,
         Err(error) => {
             record_failures(preconditions);
@@ -459,6 +471,9 @@ fn land_gates(
     // passing land leads to.
     let mut situation = Vec::new();
     let mut next = None;
+    // A branch no issue owns, with commits since the base: the light path,
+    // whose gates land reports (atelier-4nsl).
+    let mut light_branch = None;
     if let (Some(id), Some(_)) = (&id, &ownership) {
         let id = id.clone();
         let issue = index.require_issue(&id)?;
@@ -526,7 +541,44 @@ fn land_gates(
         // Whether a branch installs Atelier is the caller's statement, not
         // something land infers from the branch's own, editable policy
         // (atelier-bibd).
-        match tracker_changes_since(repo, base)? {
+        // On the light path a branch carries its own review records and
+        // the loose ends it files, which merge with it; other tracker
+        // changes belong to an issue's work branch.
+        let light = match branch.is_empty() {
+            true => None,
+            false => match crate::commands::light_path::checkout(repo, &index, base) {
+                Ok(crate::commands::light_path::Checkout::Light(light)) if light.fork != head => {
+                    Some(light)
+                }
+                _ => None,
+            },
+        };
+        let carried = |path: &std::path::PathBuf| {
+            let Some(id) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                return false;
+            };
+            let Some(light) = &light else {
+                return false;
+            };
+            if path.starts_with(".atelier/reviews") {
+                index
+                    .branch_review(id)
+                    .is_some_and(|record| record.target == light.branch)
+            } else {
+                path.starts_with(".atelier/issues")
+                    && index
+                        .get_issue(id)
+                        .is_some_and(|issue| source.policy.done_on_base(&issue.issue_type))
+            }
+        };
+        let changes = tracker_changes_since(repo, base)?;
+        let carries = changes.as_ref().is_some_and(|changed| !changed.is_empty());
+        match changes.map(|changed| {
+            changed
+                .into_iter()
+                .filter(|path| !carried(path))
+                .collect::<Vec<_>>()
+        }) {
             None if install => situation.push(format!(
                 "Installing Atelier: {base} has no workflow policy yet, so atelier merge cannot gate {label}. Land it through the repository's usual review as one merge commit (merge the pull request on the host and pull, or `git merge --no-ff`), then start further work on an item with `atelier start`."
             )),
@@ -571,7 +623,48 @@ fn land_gates(
                     ),
                 }
             }
-            Some(_) => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
+            Some(_) => {
+                // The branch's review state is reported once it has review
+                // records about itself; before that, land says how it
+                // merges.
+                let reviewed = light.as_ref().is_some_and(|light| {
+                    !atelier_app::light_path::run(
+                        index.branch_reviews(),
+                        &mut read,
+                        &light.branch,
+                        &light.fork,
+                    )
+                    .is_empty()
+                });
+                match light {
+                    Some(light) if reviewed || carries => {
+                        let (_, commits) =
+                            crate::commands::light_path::state_facts(repo, &index, &light)?;
+                        situation.push(format!(
+                            "Light path: no issue owns {label}, so its {} since {base} merge on an independent approval of its head.",
+                            crate::human_output::count_noun(commits, "commit")
+                        ));
+                        if reviewed {
+                            nodes.extend(atelier_app::light_path::evaluate(
+                                &index,
+                                &mut read,
+                                &source.policy,
+                                &light.branch,
+                                &light.fork,
+                                None,
+                            )?);
+                            if initial_paths.is_empty() {
+                                next = Some("Next: atelier merge".to_owned());
+                            }
+                            light_branch = Some(light.branch);
+                        } else {
+                            next = Some("Next: atelier review request".to_owned());
+                        }
+                    }
+                    Some(_) => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land. To merge it with no issue, `atelier review request` asks for an independent review of its head (the light path).")),
+                    None => situation.push(format!("No work owner on {label}; it changes no Atelier tracker files since {base}, so there is nothing to land.")),
+                }
+            }
         }
     }
     nodes.splice(0..0, std::mem::take(&mut preconditions.failed));
@@ -582,8 +675,9 @@ fn land_gates(
     let mut report = crate::gate_report::Gates {
         index: &index,
         policy: &source.policy,
-        owner: id.as_deref(),
+        owner: id.as_deref().or(light_branch.as_deref()),
         uncommitted: differing.as_ref(),
+        light_path: light_branch.is_some(),
     }
     .report(&nodes);
     if uncommitted.is_none() {
@@ -1013,8 +1107,8 @@ fn lint_trusts(
         .is_ok_and(|changed| changed.trim().is_empty())
 }
 
-/// Gate nodes for the done claims outside the owner's scope that `commit`,
-/// the merge commit, can affect, judged in its records `index`. `base_head`
+/// Gate nodes for the done claims outside the owner's scope `owned` (empty
+/// on the light path) that `commit`, the merge commit, can affect, judged in its records `index`. `base_head`
 /// passed these checks when it reached the base, so it is the trusted point,
 /// as for land; a policy change or lint gate checks every claim.
 pub(crate) fn merge_claim_nodes(
@@ -1022,11 +1116,10 @@ pub(crate) fn merge_claim_nodes(
     read: &mut git_freshness::ReadContext<'_>,
     index: &RecordIndex,
     policy: &atelier_workflow::WorkflowPolicy,
-    owner: &str,
+    owned: &std::collections::BTreeSet<String>,
     base_head: &str,
     commit: &str,
 ) -> Result<Vec<review_gate::GateNode>> {
-    let owned = review_gate::scope(index, owner)?;
     let touched = touched_claims(repo, read, index, base_head, commit)?;
     let policy_at = |at: &str| {
         git_freshness::blob(repo, at, Path::new(workflow_policy::WORKFLOW_POLICY_PATH)).ok()
@@ -1040,7 +1133,7 @@ pub(crate) fn merge_claim_nodes(
         read,
         index,
         policy,
-        &owned,
+        owned,
         Some(base_head),
         commit,
         trusted,
@@ -1103,7 +1196,7 @@ pub(crate) fn checkout_claim_context(
 ) -> Result<atelier_app::evidence_freshness::ClaimContext> {
     let head = git_freshness::head_commit(repo)?;
     let branch = git::checkout_branch(repo)?.unwrap_or_default();
-    let id = owner(index, &branch, None)?;
+    let id = owner(repo, index, &branch, None)?;
     let base = workflow_policy::load(repo)?.branch_policy.base_branch;
     let base_pin = base_pin(repo, &base, id.as_deref())?;
     let (branch_base, _) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;

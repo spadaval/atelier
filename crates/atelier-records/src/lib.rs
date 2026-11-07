@@ -489,7 +489,9 @@ impl RecordStore {
             }
             "review" => {
                 let mut relationships = match review::parse_review_file(&text, &relative)? {
-                    review::ReviewFile::Event(record) => record.header.relationships,
+                    review::ReviewFile::Event(record) | review::ReviewFile::BranchEvent(record) => {
+                        record.header.relationships
+                    }
                     review::ReviewFile::BaseExemption(record) => record.header.relationships,
                     review::ReviewFile::RetiredDisposition(_) => Relationships::default(),
                 };

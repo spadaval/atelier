@@ -148,7 +148,8 @@ names that approval; whether the approval is still current is the approval
 line's.
 
 `review show <id>` is brief: a header line,
-`<id> <kind> on <issue> @<pin> by <identity> | <timestamp>`, ending
+`<id> <kind> on <issue> @<pin> by <identity> | <timestamp>` (`on branch
+<name>` for a record about a branch), ending
 `| ✓ current` (or the base's word) for an approval or exemption; then, for a
 finding, `Disposition: <decision> by <identity> @<pin>[, fixed at
 <commit>][, follow-up <id>] | <timestamp>: <reason>` (or `Disposition: ⚠
@@ -197,7 +198,14 @@ When readiness cannot be read, the row ends its status part with
 adds their activity, `, 1 of 3 children done, 1 active`, so a parent-owned
 branch does not read as idle.
 
-Branches with no started work or no tracker share one trailing line,
+A branch no issue owns that holds review records about itself, on the
+[light path](reviews-and-merge.md#a-change-with-no-issue-the-light-path),
+gets a row with the same readiness facts: `<branch>  light path, ✓ approved,
+behind 0, merges cleanly`. The checked-out branch, when no issue owns it and
+it is not the base, adds a `Light path` line to Local State after `Owner:
+none`, such as `2 commits since main, ⚠ not approved`, and the footer offers
+`atelier review request` and `atelier merge --check` (atelier-4nsl).
+Other branches with no started work or no tracker share one trailing line,
 `Unowned: <branch>, <branch>`. Each pair of unmerged branches that change the
 same files since they left the base gets a line,
 `Shared files: <branch> and <branch> both touch <path>, <path>`, naming up to

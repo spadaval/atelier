@@ -165,8 +165,9 @@ such as pushing a tag, a play-test on a device or an eval run, is a **loose
 end**: an issue of a new `loose_end` type with its own workflow, as `decision`
 does. It has no branch, review or merge, and is done on the base with a
 one-line result. A bad result files a linked bug. A loose end is
-`blocked_by` the issue or release it waits on and is never part of a mission,
-so it never holds one open.
+`blocked_by` the issue it waits on, or, after a release on the light path, is
+filed on the release branch with no blocker (decision 6); it is never part of
+a mission, so it never holds one open.
 
 The After merge marker, stand-ins, `carried to`, the awaiting-validation
 views and the mission-close warning go. The `validation` type keeps its
@@ -220,9 +221,12 @@ Built by atelier-8bh4:
   stale (decision 1), and ticking a box is still not reported as a Done when
   edit.
 
-Left to atelier-4nsl: what a loose end waits on when the change it follows
-had no issue, such as a release on the light path (decision 6). Whether
-astromech's per-feature `validation` play-checks become loose ends is
+Settled by atelier-4nsl: a loose end that follows a change with no issue,
+such as the tag of a release on the light path (decision 6), is filed on that
+change's branch with no blocker. It reaches the base with the merge, so it
+cannot be forgotten as prose can (the v0.3.1 tag was lost that way), and it
+is ready there; it also shows as ready on the branch, which is harmless.
+Whether astromech's per-feature `validation` play-checks become loose ends is
 decided when atelier-ml3r migrates it.
 
 ### 4. Records can be corrected
@@ -381,8 +385,72 @@ A change with no issue, such as a release, docs or a mockup, is reviewed and
 merged on an independent approval of its branch head, under the same merge
 checks, with no start or close.
 
-Open, settled by atelier-4nsl: how a review targets a branch rather than an
-issue, and whether this replaces or reuses `review trivial --base`.
+Built by atelier-4nsl:
+
+- **Owned or not.** A branch is owned while an issue that is not done on the
+  base records it as its work branch; an owner already done on the base no
+  longer owns the name. The base branch is never a light-path branch. A
+  branch no issue owns is on the light path. The rule that `merge` and
+  `review request` need an owner issue now applies only to owned branches.
+- **The brief.** On a light-path branch, `atelier review request` with no ID
+  prints a brief for the branch's commits since it left the base: the range,
+  the commit messages, the diff stat, earlier findings and reviews of the
+  branch, the merge checks, the working rules and the commands that record
+  findings and an approval. It has no Goal or Done when, since no issue
+  states them. On an owned branch, `review request` and `merge` with no ID act
+  on the owner.
+- **Records name the branch.** `atelier review finding`, `approve` and
+  `record` take `--branch <name>` in place of an issue ID, and `review
+  disposition` decides such a finding by its ID. The record is an ordinary
+  review record whose front matter names `branch: <name>` instead of a
+  `target`, written at review schema version 3, so a binary that predates
+  the light path reports "needs a newer Atelier" rather than an invalid
+  record; records about an issue are still written at version 2. It is
+  written only on that branch, checked out, unowned and pinned after it left
+  the base. There is no trivial exemption of a branch: an approval is the
+  light path's only cover.
+- **The current run.** A record about a branch counts only when it is pinned
+  to a commit the branch holds and the point where it left the base does
+  not, so a later branch with a reused name (`release`) inherits none of an
+  earlier one's findings or approvals, and records pinned to commits a
+  rebase left behind count for nothing. Approvals stay append-only and go
+  stale only on code changes, as for issues (decision 1).
+- **Merge.** On a light-path branch, `atelier merge` with no ID merges it
+  after a current independent approval of its head, with its findings
+  judged as for an issue (`findings.disposed`), under the same merge checks;
+  a merge check that reads an issue passes, since there is none. It writes no
+  issue state: its merge commit's tree is Git's own merge of the base and the
+  branch head. `merge --sync` with no ID catches the branch up the same way.
+- **Never a done claim.** Records about a branch are kept apart from those
+  about issues, so nothing that judges an issue reads them, and on an owned
+  branch they count for nothing; when `start` takes a branch that holds them,
+  it says they stop counting. An approval of a branch covers its code exactly
+  as an issue's approval does, but never a done claim: a light-path branch
+  whose commits mark an issue done is refused by `claims.reviewed` in merge
+  and by `land_base_done_claim` on the base.
+- **On the base.** `land` counts a light-path branch's commits as reviewed
+  when its approval is one merge would have accepted: it reached the base
+  through a merge, the branch was not owned when it merged, the approval is
+  as first committed, and every finding of its run pinned at or before it is
+  settled. `atelier check` and `doctor` accept the records. `status` shows
+  the checked-out branch's light-path state, and each other unowned branch
+  with records about itself, with its review state; `land` on such a branch
+  reports its review gates once it has records.
+- **Not `review trivial --base`.** The light path neither replaces nor reuses
+  the base exemption. `review trivial --base` still covers one trivial commit
+  made directly on the base, whose correctness is evident from its diff; any
+  other change with no issue, including a release, goes on a branch and gets
+  an approval.
+
+Accepted risk, for Sumeet's after-merge read: a plain `git merge` of an
+approved light-path branch passes `land` without running `merge_checks`,
+since `land` cannot tell how a merge commit was made. The approval still
+covers the code; `atelier merge` is the documented path, and CI runs on the
+base.
+
+What it deletes (decision 9): the issue, `start` and Report a change with no
+issue needed, and the review records of a hand-made issue around it. It adds
+no record type: a review record names a branch where it named an issue.
 
 ### 7. Small repositories work out of the box
 
@@ -455,8 +523,9 @@ workflows.
 - Decision 3: no command reads a recorded branch base, which `start` still
   writes only so older binaries parse the record (atelier-md0v); `merge`
   also marks the issue done in the merge commit it always creates
-  (atelier-jnrh); a change with no issue merges without `start`
-  (atelier-4nsl). "Atelier never creates commits" now reads as decision 2
+  (atelier-jnrh); a branch no issue owns is reviewed and merged on an
+  approval of its head, with no `start`, through review records that name
+  the branch, and its merge writes no issue state (atelier-4nsl, decision 6). "Atelier never creates commits" now reads as decision 2
   says: Atelier creates that merge commit and no other.
 - Decision 4: the done claim is no longer committed on the work branch and
   reviewed with the code, and merging writes the done state, so "merging
@@ -522,8 +591,9 @@ until the item that changes the behaviour lands.
   and no other (atelier-jnrh, decision 2 above).
 - "Make transitions record writes with read-only checks. Branch preparation
   and gated integration are explicit `start` and `merge` commands": `merge`
-  also marks the issue done, and a change with no issue merges without
-  `start` (atelier-jnrh, atelier-4nsl).
+  also marks the issue done (atelier-jnrh), and a branch no issue owns is
+  reviewed and merged on an approval of its head with no `start`
+  (atelier-4nsl, decision 6).
 - "Git carries both the implementation and its done claim through review and
   integration", in the opening, and "Commit done claims on the work branch.
   Merge writes no tracker state": replaced; merge marks the issue done, and

@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:01.013293142+00:00"
 id: "atelier-4nsl"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-4nsl
 priority: "P2"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Review and merge a change that has no issue"
-updated_at: "2026-11-07T10:07:46.021311613+00:00"
+updated_at: "2026-11-07T10:31:01.480244835+00:00"
 ---
 
 ## Goal

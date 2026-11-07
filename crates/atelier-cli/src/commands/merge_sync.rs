@@ -21,7 +21,9 @@ const CONFLICT: &str = "sync_conflict";
 const APPROVAL_ERROR: &str = "sync_approval_error";
 const LISTED_PATHS: usize = 20;
 
-pub fn run(issue_ref: &str, quiet: bool) -> Result<()> {
+/// With no ID, the checked-out branch is synced: its owner's, or on a branch
+/// no issue owns, the branch itself (the light path, atelier-4nsl).
+pub fn run(issue_ref: Option<&str>, quiet: bool) -> Result<()> {
     let say = |line: String| {
         if !quiet {
             println!("{line}");
@@ -76,15 +78,20 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
 
 /// The checks that failed, as codes (empty when the sync passed), and whether
 /// the approval was left needing fresh review.
-fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, bool)> {
+fn sync(issue_ref: Option<&str>, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, bool)> {
     let Owned {
         layout,
         head,
         branch,
         owner,
         base,
+        light,
         ..
     } = owned_branch(issue_ref)?;
+    let rerun = match issue_ref {
+        Some(id) => format!("atelier merge {id}"),
+        None => "atelier merge".to_owned(),
+    };
     let repo = layout.repo_root();
     let base_head = resolve(repo, &format!("refs/heads/{base}"))
         .with_context(|| format!("sync_base_missing: base branch {base} does not exist locally"))?;
@@ -123,7 +130,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
                 );
             }
             eprintln!(
-                "{CONFLICT}: merging {base} into {branch} conflicts in:\n{}\nNothing was committed and the merge is still in progress. Resolve the conflicts and commit (`git commit`), or `git merge --abort`; then rerun `atelier merge {issue_ref} --sync`, and expect the approval to need fresh review of the resolved files.",
+                "{CONFLICT}: merging {base} into {branch} conflicts in:\n{}\nNothing was committed and the merge is still in progress. Resolve the conflicts and commit (`git commit`), or `git merge --abort`; then rerun `{rerun} --sync`, and expect the approval to need fresh review of the resolved files.",
                 conflicted.lines().map(|path| format!("  {path}")).collect::<Vec<_>>().join("\n")
             );
             return Ok((vec![Some(CONFLICT.into())], false));
@@ -135,7 +142,14 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
     }
 
     let mut failures = Vec::new();
-    let stale = match report_approval(repo, &layout, &owner, &base_head, before.as_deref(), say) {
+    let stale = match report_approval(
+        repo,
+        &layout,
+        (&owner, light),
+        &base_head,
+        before.as_deref(),
+        say,
+    ) {
         Ok(stale) => stale,
         Err(error) => {
             eprintln!("{APPROVAL_ERROR}: could not tell whether the approval survived: {error:#}");
@@ -144,7 +158,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
         }
     };
     if failures.is_empty() && !stale {
-        say(format!("Next: atelier merge {issue_ref} --check"));
+        say(format!("Next: {rerun} --check"));
     }
     Ok((failures, stale))
 }
@@ -171,7 +185,7 @@ fn ancestor(repo: &Path, earlier: &str, later: &str) -> bool {
 fn report_approval(
     repo: &Path,
     layout: &atelier_app::storage_layout::StorageLayout,
-    owner: &str,
+    (owner, light): (&str, bool),
     base_head: &str,
     before: Option<&str>,
     say: &dyn Fn(String),
@@ -189,12 +203,26 @@ fn report_approval(
     // `merge`'s `review.current` also requires that the approval not predate
     // where the branch left the base (atelier-ns03); ask it the same way.
     let fork = text(repo, &["merge-base", base_head, &head])?;
-    let standing = review_gate::approval_standing(&index, &mut read, owner, &fork)?;
+    // On the light path the branch's own run of records is judged, as
+    // `merge`'s `review.current` judges it there (atelier-4nsl).
+    let run = if light {
+        atelier_app::light_path::run(index.branch_reviews(), &mut read, owner, &fork)
+    } else {
+        Vec::new()
+    };
+    let standing = if light {
+        atelier_app::light_path::standing(&run, &mut read, &fork)?
+    } else {
+        review_gate::approval_standing(&index, &mut read, owner, &fork)?
+    };
     let (Some(review), Some(why)) = (standing.record, &standing.not_current) else {
         match standing.record {
             Some(review) => say(format!(
                 "Approval kept: {} still covers the branch.",
                 review.header.id
+            )),
+            None if light => say(format!(
+                "No independent approval covers {owner} yet; there is none to keep."
             )),
             None => say(format!(
                 "No independent approval covers {owner}'s scope yet; there is none to keep."

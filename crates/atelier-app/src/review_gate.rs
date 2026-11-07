@@ -77,7 +77,7 @@ impl GateNode {
 /// A validator's result as a gate node. Its hint's command, quoted in
 /// backticks, is the node's fix; failed blocker checks name each open
 /// blocker, and failed shell checks their command.
-fn validator_gate(
+pub(crate) fn validator_gate(
     index: &RecordIndex,
     policy: &WorkflowPolicy,
     target: &str,
@@ -254,13 +254,22 @@ fn retired_event_restored(
 /// Whether two versions of a review record are the same finding, differing
 /// at most in its disposition and what that derives: its links and update
 /// time. The schema version may differ, since a finding written before
-/// ADR 0025 is rewritten in the new version when it is first disposed.
+/// ADR 0025 is rewritten in the new version when it is first disposed. A
+/// finding about an issue stays about it, and one about a branch stays about
+/// that branch (atelier-4nsl).
 pub(crate) fn disposition_only(before: &str, after: &str, relative: &Path) -> bool {
     let (Ok(mut before), Ok(mut after)) = (
-        parse_review_record(before, relative),
-        parse_review_record(after, relative),
+        parse_review_file(before, relative),
+        parse_review_file(after, relative),
     ) else {
         return false;
+    };
+    let (mut before, mut after) = match (&mut before, &mut after) {
+        (ReviewFile::Event(before), ReviewFile::Event(after))
+        | (ReviewFile::BranchEvent(before), ReviewFile::BranchEvent(after)) => {
+            (before.clone(), after.clone())
+        }
+        _ => return false,
     };
     for record in [&mut before, &mut after] {
         let ReviewEvent::Finding { disposition, .. } = &mut record.event else {
@@ -487,6 +496,28 @@ pub fn approval_standing<'i>(
     owner: &str,
     fork_point: &str,
 ) -> Result<Standing<'i>> {
+    standing_among(
+        index.reviews().filter(|record| {
+            record.target == owner
+                && matches!(
+                    record.event,
+                    ReviewEvent::Approval | ReviewEvent::TrivialExemption
+                )
+        }),
+        read,
+        fork_point,
+    )
+}
+
+/// The standing [`approval_standing`] judges among `candidates`, the
+/// approvals and trivial exemptions that could cover the work: the current
+/// one, else the newest stale one. The light path judges a branch's
+/// approvals with it too (atelier-4nsl).
+pub(crate) fn standing_among<'i>(
+    candidates: impl Iterator<Item = &'i ReviewRecord>,
+    read: &mut git::ReadContext<'_>,
+    fork_point: &str,
+) -> Result<Standing<'i>> {
     let newer = |record: &ReviewRecord, than: Option<&ReviewRecord>| {
         than.is_none_or(|newest| {
             (record.header.created_at, &record.header.id)
@@ -494,13 +525,7 @@ pub fn approval_standing<'i>(
         })
     };
     let mut stale: Option<&ReviewRecord> = None;
-    for record in index.reviews().filter(|record| {
-        record.target == owner
-            && matches!(
-                record.event,
-                ReviewEvent::Approval | ReviewEvent::TrivialExemption
-            )
-    }) {
+    for record in candidates {
         if current_on_branch(read, record, fork_point) {
             return Ok(Standing {
                 state: ApprovalState::Current,
@@ -535,7 +560,7 @@ pub fn approval_standing<'i>(
 
 /// `review.current`'s reason when it fails: the approval it considered and
 /// why it does not count, or that there is none.
-fn not_current_reason(standing: &Standing<'_>) -> String {
+pub(crate) fn not_current_reason(standing: &Standing<'_>) -> String {
     const LISTED: usize = 3;
     let (Some(record), Some(why)) = (standing.record, &standing.not_current) else {
         return "no independent approval or trivial exemption".to_owned();
@@ -652,7 +677,7 @@ pub fn approval_accepted(
 
 /// What settles a finding (atelier-md0v).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Settlement {
+pub(crate) enum Settlement {
     /// A recorded defer or no_action decision.
     Decided,
     /// An approval after the fix: a finding recommended fix_now with no
@@ -663,7 +688,7 @@ enum Settlement {
     Undecided,
 }
 
-fn settlement(finding: &ReviewRecord) -> Settlement {
+pub(crate) fn settlement(finding: &ReviewRecord) -> Settlement {
     match (&finding.event, finding.disposition()) {
         (_, Some(disposition)) if disposition.decision == FindingDecision::FixNow => {
             Settlement::Fix
@@ -715,7 +740,7 @@ pub fn fix_approval<'i>(
 /// such record would (finding atelier-6xiw). An older Atelier's fix_now
 /// disposition naming a resolution commit is resolved, as it was, by an
 /// approval at or after that commit.
-fn fix_resolved(
+pub(crate) fn fix_resolved(
     read: &mut git::ReadContext<'_>,
     finding: &ReviewRecord,
     approval: &ReviewRecord,
@@ -805,7 +830,7 @@ pub enum Held {
 /// reviewer never saw. A file that does not parse is neither.
 fn final_once_committed(text: &str, relative: &Path) -> bool {
     match parse_review_file(text, relative) {
-        Ok(ReviewFile::Event(record)) => matches!(
+        Ok(ReviewFile::Event(record) | ReviewFile::BranchEvent(record)) => matches!(
             record.event,
             ReviewEvent::Approval | ReviewEvent::TrivialExemption
         ),
@@ -1122,7 +1147,7 @@ pub fn append_only_history(
     append_only(read, &pin, branch)
 }
 
-fn ancestor(read: &mut git::ReadContext<'_>, earlier: &str, later: &str) -> bool {
+pub(crate) fn ancestor(read: &mut git::ReadContext<'_>, earlier: &str, later: &str) -> bool {
     read.ancestor(earlier, later).unwrap_or(false)
 }
 
@@ -1624,7 +1649,10 @@ fn introduced_query(head: &str, id: &str) -> PathLog {
 /// it, which must still hold it unchanged, as `land` and `doctor` read
 /// history. Its identity is recorded but not compared with the work's Git
 /// authors (atelier-md0v).
-fn original_intact(read: &mut git::ReadContext<'_>, record: &ReviewRecord) -> Result<bool> {
+pub(crate) fn original_intact(
+    read: &mut git::ReadContext<'_>,
+    record: &ReviewRecord,
+) -> Result<bool> {
     let event_path = format!(".atelier/reviews/{}.md", record.header.id);
     let head = read.pinned("HEAD")?;
     let introduced = read.path_log(&introduced_query(&head, &record.header.id))?;

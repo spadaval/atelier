@@ -39,19 +39,44 @@ struct Cli {
 }
 
 #[derive(clap::Args)]
+#[command(
+    override_usage = "atelier review <EVENT> [OPTIONS] --identity <IDENTITY> <ID> <SUMMARY>\n       atelier review <EVENT> [OPTIONS] --identity <IDENTITY> --branch <NAME> <SUMMARY>"
+)]
 struct ReviewArgs {
-    /// Branch owner, parent issue or standalone issue the event is about
-    id: String,
+    /// The branch owner, parent issue or standalone issue the event is
+    /// about, then what was checked, found or decided; with --branch, the
+    /// summary alone
+    #[arg(value_names = ["ID", "SUMMARY"], required = true, num_args = 1..=2)]
+    subject: Vec<String>,
+    /// The checked-out branch the event is about, when no issue owns it: a
+    /// release, docs or a mockup on the light path, merged on an approval of
+    /// its head
+    #[arg(long, value_name = "NAME")]
+    branch: Option<String>,
     /// Who records the event, recorded with it
     #[arg(long)]
     identity: String,
     /// Commit the event pins, a full or unique short ID of an ancestor on the work branch [default: HEAD]
     #[arg(long, value_parser = parse_commit)]
     commit: Option<String>,
-    /// What was checked, found or decided
-    summary: String,
     #[command(flatten)]
     record_commit: RecordCommitArgs,
+}
+impl ReviewArgs {
+    /// What the event is about, and its summary.
+    fn subject(&self) -> Result<(commands::review::Subject, &str)> {
+        use commands::review::Subject;
+        match (&self.branch, self.subject.as_slice()) {
+            (Some(branch), [summary]) => Ok((Subject::Branch(branch.clone()), summary)),
+            (None, [id, summary]) => Ok((Subject::Issue(id.clone()), summary)),
+            (Some(_), _) => {
+                anyhow::bail!("with --branch, give only the summary; the branch is the subject")
+            }
+            (None, _) => {
+                anyhow::bail!("name the issue and the summary, or --branch <name> and the summary")
+            }
+        }
+    }
 }
 #[derive(clap::Args)]
 struct TrivialArgs {
@@ -131,9 +156,14 @@ enum ReviewCommands {
     /// record the review. It never includes the author's notes or Report,
     /// and it refuses while the item it names, or for the owner a started
     /// child, has an unticked Done when line or an empty Report.
+    ///
+    /// With no ID it reviews the checked-out branch: its owner's work, or,
+    /// on a branch no issue owns, the branch's commits since it left the base
+    /// (the light path), with their messages and diff stat.
     Request {
         /// Branch owner, or an item of the owner's parent, to be reviewed
-        id: String,
+        /// [default: the checked-out branch]
+        id: Option<String>,
         /// The name the reviewer records under, filled into the commands
         #[arg(long)]
         identity: Option<String>,
@@ -250,8 +280,10 @@ enum Commands {
 
     /// Check merge gates, then integrate with one merge commit that marks the owner's open work done
     Merge {
-        /// Issue, or child of the parent, that owns the checked-out work branch
-        id: String,
+        /// Issue, or child of the parent, that owns the checked-out work
+        /// branch [default: the branch's owner, or, on a branch no issue
+        /// owns, the branch itself on an approval of its head]
+        id: Option<String>,
         /// Check the merge gates only; merge nothing
         #[arg(long, conflicts_with = "sync")]
         check: bool,
@@ -963,20 +995,21 @@ fn run() -> Result<()> {
             commands::start::run(&index, &state_dir, &id, take_over, quiet)
         }
 
-        Commands::Merge { id, sync: true, .. } => commands::merge_sync::run(&id, quiet),
+        Commands::Merge { id, sync: true, .. } => commands::merge_sync::run(id.as_deref(), quiet),
         Commands::Merge {
             id, check, json, ..
-        } => commands::merge::run(&id, check, json, quiet),
+        } => commands::merge::run(id.as_deref(), check, json, quiet),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event: ReviewEvent| {
+                let (subject, summary) = args.subject()?;
                 let group = RecordCommit::begin(args.record_commit)?;
                 let verb = event.name();
                 commands::review::append(
-                    &args.id,
+                    &subject,
                     &args.identity,
                     args.commit.as_deref(),
-                    &args.summary,
+                    summary,
                     event,
                     quiet,
                 )?;
@@ -993,10 +1026,10 @@ fn run() -> Result<()> {
                     }
                     (None, [id, summary]) => append(
                         ReviewArgs {
-                            id: id.clone(),
+                            subject: vec![id.clone(), summary.clone()],
+                            branch: None,
                             identity: args.identity,
                             commit: args.commit,
-                            summary: summary.clone(),
                             record_commit: args.record_commit,
                         },
                         ReviewEvent::TrivialExemption,
@@ -1036,9 +1069,12 @@ fn run() -> Result<()> {
                     )?;
                     group.finish("disposition", quiet)
                 }
-                ReviewCommands::Request { id, identity, from } => {
-                    commands::review_request::run(&id, identity.as_deref(), from.as_deref(), quiet)
-                }
+                ReviewCommands::Request { id, identity, from } => commands::review_request::run(
+                    id.as_deref(),
+                    identity.as_deref(),
+                    from.as_deref(),
+                    quiet,
+                ),
                 ReviewCommands::List { id, json } => {
                     commands::review::list(id.as_deref(), json, quiet)
                 }

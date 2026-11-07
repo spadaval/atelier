@@ -28,6 +28,9 @@ pub struct RecordFiles {
     pub issues: Vec<CanonicalIssueRecord>,
     pub evidence: Vec<EvidenceRecord>,
     pub reviews: Vec<ReviewRecord>,
+    /// Events about a branch no issue owns, on the light path
+    /// (atelier-4nsl), each with the branch name as its target.
+    pub branch_reviews: Vec<ReviewRecord>,
     /// Trivial exemptions of base commits, which name no issue.
     pub base_exemptions: Vec<BaseExemption>,
     /// Separate disposition events from before ADR 0025, already folded
@@ -56,7 +59,8 @@ impl RecordFiles {
                 None => error,
             })?
             .with_base_exemptions(self.base_exemptions)?
-            .with_retired_dispositions(self.retired_dispositions)?;
+            .with_retired_dispositions(self.retired_dispositions)?
+            .with_branch_reviews(self.branch_reviews)?;
         index.repo_root = repo_root;
         Ok(index)
     }
@@ -142,6 +146,7 @@ pub(crate) fn read_record_paths(
             Ok(Some(ParsedRecord::Issue(record))) => files.issues.push(*record),
             Ok(Some(ParsedRecord::Evidence(record))) => files.evidence.push(*record),
             Ok(Some(ParsedRecord::Review(record))) => files.reviews.push(*record),
+            Ok(Some(ParsedRecord::BranchReview(record))) => files.branch_reviews.push(*record),
             Ok(Some(ParsedRecord::BaseExemption(record))) => files.base_exemptions.push(*record),
             Ok(Some(ParsedRecord::RetiredDisposition(record))) => {
                 files.retired_dispositions.push(*record)
@@ -188,6 +193,7 @@ enum ParsedRecord {
     Issue(Box<CanonicalIssueRecord>),
     Evidence(Box<EvidenceRecord>),
     Review(Box<ReviewRecord>),
+    BranchReview(Box<ReviewRecord>),
     BaseExemption(Box<BaseExemption>),
     RetiredDisposition(Box<RetiredDisposition>),
 }
@@ -237,6 +243,9 @@ fn read_record_file(
         match atelier_records::review::parse_review_file(&text, relative)? {
             atelier_records::review::ReviewFile::Event(record) => {
                 ParsedRecord::Review(Box::new(record))
+            }
+            atelier_records::review::ReviewFile::BranchEvent(record) => {
+                ParsedRecord::BranchReview(Box::new(record))
             }
             atelier_records::review::ReviewFile::BaseExemption(record) => {
                 ParsedRecord::BaseExemption(Box::new(record))
@@ -304,6 +313,9 @@ pub struct RecordIndex {
     relations: BTreeMap<String, Vec<Relation>>,
     evidence: BTreeMap<String, EvidenceRecord>,
     reviews: BTreeMap<String, ReviewRecord>,
+    /// Events about a branch no issue owns, which never count for an issue
+    /// (atelier-4nsl).
+    branch_reviews: BTreeMap<String, ReviewRecord>,
     base_exemptions: BTreeMap<String, BaseExemption>,
     retired_dispositions: BTreeMap<String, RetiredDisposition>,
     /// Evidence attachments and issue-to-issue relations, sorted.
@@ -458,7 +470,8 @@ impl RecordIndex {
         }
         Self::from_project_records(state_dir, files.issues, files.evidence, files.reviews)?
             .with_base_exemptions(files.base_exemptions)?
-            .with_retired_dispositions(files.retired_dispositions)
+            .with_retired_dispositions(files.retired_dispositions)?
+            .with_branch_reviews(files.branch_reviews)
     }
 
     /// Adds the separate disposition events read beside the other records,
@@ -496,6 +509,61 @@ impl RecordIndex {
                     .get(id)
                     .map(|record| record.target.as_str())
             })
+    }
+
+    /// Adds the events about branches read beside the other records
+    /// (atelier-4nsl). They name no issue as their target, so only their IDs
+    /// and a deferred finding's follow-up are checked.
+    pub fn with_branch_reviews(mut self, reviews: Vec<ReviewRecord>) -> Result<Self> {
+        if let Some(error) = self.branch_review_errors(&reviews).into_iter().next() {
+            return Err(error);
+        }
+        self.branch_reviews = reviews
+            .into_iter()
+            .map(|record| (record.header.id.clone(), record))
+            .collect();
+        Ok(self)
+    }
+
+    /// What is wrong with `reviews`, events about branches, beside this
+    /// index's records: an ID another record has, or a follow-up issue that
+    /// does not exist.
+    pub fn branch_review_errors(&self, reviews: &[ReviewRecord]) -> Vec<anyhow::Error> {
+        let mut errors = Vec::new();
+        let mut seen = BTreeSet::new();
+        for record in reviews {
+            let id = &record.header.id;
+            if !seen.insert(id.as_str())
+                || self.issues.contains_key(id)
+                || self.evidence.contains_key(id)
+                || self.record_exists("review", id)
+                || self.base_exemptions.contains_key(id)
+            {
+                errors.push(anyhow!("Duplicate record ID in record files: {id}"));
+            }
+            if let Some(issue) = record
+                .disposition()
+                .and_then(|disposition| disposition.follow_up.as_ref())
+            {
+                if let Err(error) =
+                    self.ensure_reference(("review", id), "follow-up", "issue", issue)
+                {
+                    errors.push(error);
+                }
+            }
+        }
+        errors
+    }
+
+    /// Events about branches no issue owns (atelier-4nsl); `reviews` never
+    /// holds them, so nothing that judges an issue reads them.
+    pub fn branch_reviews(&self) -> impl Iterator<Item = &ReviewRecord> {
+        self.branch_reviews.values()
+    }
+
+    /// The event about a branch with this ID.
+    pub fn branch_review(&self, id: &str) -> Option<&ReviewRecord> {
+        self.branch_reviews.get(id)
     }
 
     /// Adds the base exemptions read beside the other records. They name no
@@ -1315,6 +1383,7 @@ impl RecordIndex {
             RecordKind::Review => Box::new(
                 self.reviews
                     .keys()
+                    .chain(self.branch_reviews.keys())
                     .chain(self.base_exemptions.keys())
                     .map(String::as_str),
             ),
