@@ -151,67 +151,52 @@ change against the requirements, not the author's account of it.
 
 ## Approval freshness
 
-Code, policy, acceptance, relationship, metadata, or existing proof/review edits
-make approval stale. Later commits may add new review/evidence files, set or
-change a finding's disposition (ADR 0025), create
-issues outside the reviewed scope (such as the follow-up a `defer` disposition
-names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
-Close Reason, including the implementer report it carries, without changing
-the approved acceptance. An issue record outside the scope that is not in the
-approval's pinned tree is planning in every later commit too, wherever it was
-created: on the branch, or on the base, before or after the approval, and
-merged into the branch. Such records may be committed to the base without review anyway (see
-[Planning changes on the base](#planning-changes-on-the-base)), so the branch
-may also create, link, or edit them without staling the approval. A follow-up
-filed during review may be created with `--discovered-from`, then linked to its
-mission (`atelier issue link <follow-up> <mission> --role advances`, stored on
-the follow-up) in a later commit (atelier-iaas), and an issue from the base
-that is not in the approval's pinned tree may be rewritten on the branch
-(atelier-g0mh, atelier-kotb). Neither
-record's own done claim is covered: closing it on the branch fails
-`claims.reviewed`, and `land` refuses it, as below. A record outside the scope
-in the pinned tree is still reviewed content.
+An approval covers code (atelier-3jdm). It is stale when code changed since
+the commit it pins, not counting a clean merge from the base. Code is
+everything except the tracker records, the Markdown files under
+`.atelier/issues`, `.atelier/reviews` and `.atelier/evidence`, so the workflow
+policy (`.atelier/workflow.yaml`) and the project config
+(`.atelier/config.toml`) count as code. Record edits never make an approval
+stale, whatever record they touch: ticking the Done when, adding notes or
+links, the status and Close Reason of a close (with the implementer report it
+carries), another issue's record, a finding's disposition, a new receipt, a
+new child or follow-up. Each commit after the pin is checked, so changing
+code and then restoring it does not recover an old approval, and a fix made
+after a `fix_now` finding makes the approval stale, so the fix is reviewed
+again. Review records stay append-only apart from a finding's disposition,
+but that is a check of its own (`review_append_only`), not part of freshness.
+
+A Done when changed after the item was started is still shown to whoever
+judges the work (see [A Done when edited after the
+start](#a-done-when-edited-after-the-start)), since the approval no longer
+covers it.
 
 This is the one rule for what an approval or trivial exemption covers, and
-`merge` (its `review.current` gate), `land` on the work branch and `land` on
-the base apply it alike. The approved scope is the owner and its descendants;
-the owner's parent is outside it. So the done claims of the owner and its
-children may be committed before or after approval: a close commit that
-changes only those records, by status, timestamps and Close Reason, keeps the
-approval current, while a close commit that also edits code or any other field
-makes it stale, and `merge` refuses it before integrating until a fresh
-approval is recorded at or after that commit (atelier-n642, atelier-uw4x).
-`merge` also runs `land`'s own check of done claims on the commit it would put
-on the base, as its `claims.reviewed` gate: a done claim outside every current
-approval's scope, such as an issue created already done after the approval,
-fails it, naming the commit and the fix.
-Adding a child to the
-owner edits the owner's record, so it does make approval stale. A link is
-stored only on the record that declares it (atelier-ihss), so new work that
-links itself `blocked_by` the owner leaves the owner's record and its approval
-alone; a link the owner declares, or one written into a record outside the
-scope that existed at the pin, is a relationship edit and makes approval stale. Each commit is checked; changing and then restoring code
-does not recover an old approval. New material edits require renewed review.
+`merge` (its `review.current` gate), `land` on the work branch, `land` on the
+base and `status` apply it alike, through `review_gate::approval_is_current_to`.
+So the done claims of the owner and its children may be committed before or
+after approval: a close that changes no code keeps the approval current, while
+code committed with it or after it makes the approval stale, and `merge`
+refuses before integrating until a fresh approval is recorded at or after
+that commit (atelier-n642, atelier-uw4x). The approved scope still decides
+which done claims an approval covers. The scope is the owner and its
+descendants; the owner's parent is outside it. `merge` also runs `land`'s own
+check of done claims on the commit it would put on the base, as its
+`claims.reviewed` gate: a done claim outside every current approval's scope,
+such as an issue created already done after the approval or a follow-up
+closed on the branch, fails it, naming the commit and the fix.
 
 Merging the base into a reviewed branch keeps its approval when the merge is
-clean: every other parent is already on the base, and the merge commit is
-exactly the tree `git merge-tree` produces from its parents, with no conflict
-resolution or edits made while merging (atelier-n7g1). The base commits it
-brings in were reviewed on their own branches. A merge whose conflicts are
-only in records, such as both sides linking work from a mission's record, also
-keeps the approval when it matches Git's own merge everywhere else and each
-conflicted record is a three-way merge of its sides: every field takes the
-side that changed it, relationship and label lists keep each side's additions
-and removals, and a field both sides changed differently needs renewed
-review. So a resolution cannot drop a blocker or child the base added
-(atelier-1isk). In either kind of merge, a record in the owner's scope may
-still change only in status: any other base edit to it, such as a new child,
-a blocker the record declares, or new acceptance, needs renewed review. New
-work on the base linked `blocked_by` the owner is stored in the new record
-only, so it leaves the approval current. A conflicted or hand-edited
-merge, or one that brings in a branch not yet on the base, needs renewed
-review. Proof is different: tests must run again on the merged result, so
-record fresh evidence after merging the base.
+clean: every other parent is already on the base, and the merge commit matches
+the tree `git merge-tree` produces from its parents everywhere outside the
+records, with no code conflict resolved and no code edited while merging
+(atelier-n7g1). The base commits it brings in were reviewed on their own
+branches. Record conflicts may be resolved any way, since records are not what
+an approval covers; the gates then read the records as resolved, so a blocker
+the resolution keeps still holds the merge. A merge that resolved or edited
+code by hand, or one that brings in code from a branch not yet on the base,
+makes the approval stale. Proof is different: tests must run again on the merged
+result, so record fresh evidence after merging the base.
 
 Git's own merge here is `git merge-tree` with the repository's configuration
 and attributes, so a custom merge driver (for example `merge=ours` on a
@@ -229,15 +214,15 @@ the branch. One function,
 
 ```text
 ⚠ atelier-7l79 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Tweak after approval" changed proof-sample.txt. Next: atelier review request atelier-7l79
-⚠ atelier-bw0b review.current: approval atelier-x16l @e2562bd6 is stale: base merge 4f1e2a3b changed in-scope record .atelier/issues/atelier-bw0b.md beyond status. Next: atelier review request atelier-bw0b
+⚠ atelier-bw0b review.current: approval atelier-x16l @e2562bd6 is stale: base merge 4f1e2a3b resolved or edited src/gate.rs by hand. Next: atelier review request atelier-bw0b
 ⚠ atelier-i3ay review.current: approval atelier-q2m8 @4c79d30b by author@example.com is not independent: the identity matches a Git author of the branch (authors: author a <author@example.com>). Next: atelier review request atelier-i3ay
 ```
 
 A stale line names the first commit that made the approval stale, with up to
-three paths and `(and <n> later commits)`; a merge reads `base merge <commit>`
-(or `merge <commit>` when it brings in a branch not on the base) with the
-in-scope records it changed beyond status and the paths it resolved or edited
-by hand. An approval that predates the point where the branch left the base
+three of the code paths it changed and `(and <n> later commits)`; records it
+changed are not listed. A merge reads `base merge <commit>` (or `merge
+<commit>` when it brings in a branch not on the base) with the code it
+resolved or edited by hand, or the code it changed when it did neither. An approval that predates the point where the branch left the base
 says so. With no approval at all, the line reads `no independent approval or
 trivial exemption; authors: ...`.
 
@@ -296,8 +281,8 @@ Merge uses the base branch's committed policy and its
 include a `shell.check` and `fast_forward_only` otherwise (see [workflow
 configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
 fast-forwards only. If the base has moved on, merge it into the work branch,
-and renew review only if the merge needed resolving or brought in a change to
-an in-scope record beyond its status (see approval freshness). The merge
+and renew review only if the merge resolved or edited code by hand (see
+approval freshness). The merge
 records no new proof: CI or the merge checks test the merged tree where the
 repository has them (see [what gets a receipt](validation.md#what-gets-a-receipt)).
 
@@ -320,8 +305,9 @@ a branch worked on the item is not shown. The line names the newest finding
 or `fail` receipt on the item pinned to an ancestor of the edit, when there
 is one, so the reader can check whether the edit answers it or loosens the
 criterion to let the item close. Merge commits are not read: the commit that
-wrote an edit is in the history itself. The approval still has to cover the
-edit, as for any record change beyond status.
+wrote an edit is in the history itself. The approval does not cover the edit,
+since record edits never make it stale, so this line is how the edit is seen,
+including one made after approval.
 
 The line refuses nothing and changes neither the verdict nor the exit status.
 A Done when is sometimes rightly corrected after a finding, and refusing it
@@ -360,9 +346,9 @@ or `--json`.
   current before it and committed them.
 - **Approval.** The output says `Approval kept`, judged as `review.current`
   judges it (`review_gate::approval_standing`), or `Approval needs fresh
-  review` with the first commit that made it stale and the paths of every stale commit to review,
-  namely the files a merge resolved or edited by hand and the in-scope
-  records it changed beyond status. An approval whose identity matches a Git
+  review` with the first commit that made it stale and the code paths of
+  every stale commit to review, for a merge the code it resolved or edited by
+  hand. An approval whose identity matches a Git
   author of the branch is named as not independent. A stale approval does
   not refuse the sync, which exits zero, but the verdict reads `merge: synced
   — approval needs fresh review` instead of `passed`, because `merge --check`

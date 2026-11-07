@@ -274,62 +274,292 @@ fn statuses_and_new_evidence_or_review_events_do_not_stale_approval() {
     );
 }
 
+/// Approvals cover code (atelier-3jdm): a source file, the workflow policy or
+/// the project config changed after approval makes it stale, and the
+/// refusal names the commit and the file.
 #[test]
-fn code_policy_acceptance_and_notes_changes_require_fresh_approval() {
-    for field in [
-        "code",
-        "policy",
-        "acceptance",
-        "notes",
-        "labels",
-        "title",
-        "unknown_front",
-    ] {
+fn code_policy_and_config_changes_stale_an_approval_naming_the_file() {
+    for path in ["src.rs", ".atelier/workflow.yaml", ".atelier/config.toml"] {
         let fixture = Fixture::new();
-        fixture.approval("Reviewer");
-        let mut record = fixture.issue();
-        match field {
-            "code" => fs::write(fixture.path().join("src.rs"), "changed\n").unwrap(),
-            "policy" => {
-                let path = fixture.path().join(".atelier/workflow.yaml");
-                let mut text = fs::read_to_string(&path).unwrap();
-                text.push_str("\n# changed policy\n");
-                fs::write(path, text).unwrap();
-            }
-            "acceptance" => {
-                if let atelier_core::IssueBody::Issue { done_when, .. } = &mut record.sections.body
-                {
-                    *done_when = "Changed acceptance".into();
-                }
-                fixture.write_issue(&record);
-            }
-            "notes" => {
-                record.sections.notes = Some("New notes".into());
-                fixture.write_issue(&record);
-            }
-            "labels" => {
-                record.labels.push("changed".into());
-                fixture.write_issue(&record);
-            }
-            "title" => {
-                record.issue.title = "New title".into();
-                fixture.write_issue(&record);
-            }
-            _ => {
-                let path = fixture
-                    .path()
-                    .join(format!(".atelier/issues/{}.md", fixture.id));
-                let text = fs::read_to_string(&path).unwrap().replacen(
-                    "schema:",
-                    "unknown_acceptance: new\nschema:",
-                    1,
-                );
-                fs::write(path, text).unwrap();
-            }
-        }
-        commit(fixture.path(), "relevant change");
-        fixture.refusal("review.current");
+        let approval = fixture.approval("Reviewer");
+        let file = fixture.path().join(path);
+        let mut text = fs::read_to_string(&file).unwrap();
+        text.push_str("\n# changed after approval\n");
+        fs::write(file, text).unwrap();
+        commit(fixture.path(), "change after approval");
+        let head = git(fixture.path(), &["rev-parse", "HEAD"]);
+        fixture.refusal(&stale_line(
+            &fixture,
+            &approval,
+            &format!("{} \"change after approval\" changed {path}", &head[..8]),
+        ));
     }
+}
+
+/// An owner started and implemented on its work branch, not yet closed: its
+/// Done when has one unticked line, and another issue exists on the base.
+/// Returns the owner and the other issue.
+fn implemented_owner(dir: &Path) -> (String, String) {
+    git(dir, &["init", "-qb", "main"]);
+    git(dir, &["config", "user.name", "Author"]);
+    git(dir, &["config", "user.email", "author@example.test"]);
+    ok(dir, &["init", "--slug", "atelier"]);
+    let policy = dir.join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap().replace(
+        "base_branch: main\n",
+        "base_branch: main\n  merge_strategy: fast_forward_only\n",
+    );
+    fs::write(policy, text).unwrap();
+    let id = ok(
+        dir,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Owner",
+            "--body",
+            "## Goal\n\nShip change.\n\n## Done when\n\n- [ ] Scenario passes.",
+        ],
+    );
+    let other = ok(dir, &["-q", "issue", "create", "Other work"]);
+    commit(dir, "base plan");
+    ok(dir, &["start", &id]);
+    fs::write(dir.join("src.rs"), "tested code\n").unwrap();
+    commit(dir, "implementation and branch ownership");
+    (id, other)
+}
+
+/// Ticks every Done when line of `id`'s record in the checkout.
+fn tick_done_when(dir: &Path, id: &str) {
+    let path = dir.join(format!(".atelier/issues/{id}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("- [ ] "), "{text}");
+    fs::write(&path, text.replace("- [ ] ", "- [x] ")).unwrap();
+}
+
+/// Approvals cover code, not records (atelier-3jdm): after an approval, each
+/// record edit an agent makes on its branch, one per commit, keeps the
+/// approval current, and the branch merges on it with no second approval.
+#[test]
+fn record_edits_after_approval_keep_it_current() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    let (id, other) = implemented_owner(path);
+    let finding = ok(
+        path,
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "A naming nit in src.rs",
+        ],
+    );
+    ok(
+        path,
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{id}"),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Scenario passes",
+        ],
+    );
+    commit(path, "finding and proof before approval");
+    let approval = ok(
+        path,
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed the change",
+        ],
+    );
+    commit(path, "approval record");
+    let still_current = |edit: &str| {
+        commit(path, edit);
+        let (_, output) = cli(path, &["merge", &id, "--check"]);
+        assert!(
+            output.contains(&format!("review.current via {approval}")),
+            "{edit}: {output}"
+        );
+    };
+    tick_done_when(path, &id);
+    still_current("tick the Done when");
+    ok(path, &["issue", "note", &id, "Found while testing"]);
+    still_current("add a note");
+    ok(path, &["issue", "link", &id, &other, "--role", "related"]);
+    still_current("link other work");
+    ok(
+        path,
+        &["issue", "update", &other, "--title", "Other work, renamed"],
+    );
+    still_current("rename another issue");
+    ok(path, &["issue", "transition", &other, "start"]);
+    still_current("start another issue");
+    ok(
+        path,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "The name is fine",
+        ],
+    );
+    still_current("dispose of the finding");
+    ok(
+        path,
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &format!("issue/{id}"),
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "Scenario passes again",
+        ],
+    );
+    still_current("record another receipt");
+    let receipt = fs::read_dir(path.join(".atelier/evidence"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|file| {
+            fs::read_to_string(file)
+                .unwrap()
+                .contains("Scenario passes again")
+        })
+        .unwrap();
+    let text = fs::read_to_string(&receipt).unwrap();
+    fs::write(
+        &receipt,
+        text.replace("Scenario passes again", "Scenario passes, rerun"),
+    )
+    .unwrap();
+    still_current("edit a receipt");
+    ok(
+        path,
+        &["issue", "transition", &id, "close", "--reason", "Shipped."],
+    );
+    still_current("close the owner");
+    let approvals = || {
+        atelier_app::record_index::RecordIndex::load(&path.join(".atelier"))
+            .unwrap()
+            .reviews()
+            .filter(|review| matches!(review.event, atelier_core::ReviewEvent::Approval))
+            .count()
+    };
+    assert_eq!(approvals(), 1);
+    let head = git(path, &["rev-parse", "HEAD"]);
+    ok(path, &["merge", &id]);
+    assert_eq!(git(path, &["rev-parse", "main"]), head);
+}
+
+/// The astromech-l5c6 sequence (atelier-3jdm): a review with a fix_now
+/// finding, a fix, its disposition, an approval, the resolution commit
+/// recorded after it, and then one commit that closes the item and ticks
+/// its Done when. It merges on that one approval, and `land` on the base
+/// accepts it.
+#[test]
+fn closing_and_ticking_after_approval_merges_on_that_approval() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    let (id, _) = implemented_owner(path);
+    let finding = ok(
+        path,
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "src.rs breaks the contract",
+        ],
+    );
+    commit(path, "Record findings");
+    fs::write(path.join("src.rs"), "fixed code\n").unwrap();
+    commit(path, "Fix the finding");
+    let fix = git(path, &["rev-parse", "HEAD"]);
+    ok(
+        path,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Author",
+            "--decision",
+            "fix_now",
+            "Fixing it",
+        ],
+    );
+    commit(path, "Record dispositions");
+    let approval = ok(
+        path,
+        &[
+            "-q",
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "The fix holds",
+        ],
+    );
+    commit(path, "Record approval");
+    ok(
+        path,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Author",
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &fix,
+            "Fixed",
+        ],
+    );
+    commit(path, "Record resolution commits");
+    tick_done_when(path, &id);
+    ok(
+        path,
+        &["issue", "transition", &id, "close", "--reason", "Shipped."],
+    );
+    commit(path, "Close");
+    let output = ok(path, &["merge", &id, "--check"]);
+    assert!(
+        output.contains(&format!("review.current via {approval}"))
+            && output.contains("merge: passed"),
+        "{output}"
+    );
+    let head = git(path, &["rev-parse", "HEAD"]);
+    ok(path, &["merge", &id]);
+    assert_eq!(git(path, &["rev-parse", "main"]), head);
+    git(path, &["switch", "-q", "main"]);
+    let (landed, output) = cli(path, &["land"]);
+    assert!(landed, "{output}");
 }
 
 #[test]
@@ -837,66 +1067,6 @@ fn scoped_children_and_open_transitive_blockers_prevent_merge() {
 }
 
 #[test]
-fn out_of_scope_statuses_relationship_changes_and_existing_proof_edits_stale_approval() {
-    for change in ["outside_status", "relationships", "proof_edit"] {
-        let fixture = Fixture::new();
-        let outside = ok(fixture.path(), &["-q", "issue", "create", "Outside scope"]);
-        let _proof_output = ok(
-            fixture.path(),
-            &[
-                "-q",
-                "evidence",
-                "record",
-                "--target",
-                &format!("issue/{}", fixture.id),
-                "--kind",
-                "test",
-                "--result",
-                "pass",
-                "Proof record",
-            ],
-        );
-        let proof = fs::read_dir(fixture.path().join(".atelier/evidence"))
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path()
-            .file_stem()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_owned();
-        commit(fixture.path(), "other issue and proof before approval");
-        fixture.approval("Reviewer");
-        match change {
-            "outside_status" => {
-                ok(fixture.path(), &["issue", "transition", &outside, "start"]);
-            }
-            "relationships" => {
-                let mut record = fixture.issue();
-                record
-                    .relationships
-                    .relates
-                    .push(atelier_records::issue_relates_relationship(
-                        &outside, "related",
-                    ));
-                fixture.write_issue(&record);
-            }
-            _ => {
-                let path = fixture.path().join(format!(".atelier/evidence/{proof}.md"));
-                let text = fs::read_to_string(&path)
-                    .unwrap()
-                    .replace("Proof record", "Changed proof record");
-                fs::write(path, text).unwrap();
-            }
-        }
-        commit(fixture.path(), "post-approval relevant tracker edit");
-        fixture.refusal("review.current");
-    }
-}
-
-#[test]
 fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not() {
     for case in ["clean", "conflict", "edited", "later_code"] {
         let fixture = Fixture::new();
@@ -965,13 +1135,17 @@ fn clean_merge_of_the_base_keeps_approval_but_resolved_or_edited_merges_do_not()
     }
 }
 
+/// A merge of the base whose conflicts are only in records keeps the
+/// approval however they are resolved, since records are not what it covers
+/// (atelier-3jdm); code edited while merging still makes it stale.
 #[test]
-fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
+fn base_merge_record_resolutions_keep_approval_but_code_edited_while_merging_does_not() {
     for case in [
         "union",
         "drop_side",
         "edit_while_merging",
         "base_scope_edit",
+        "code_while_merging",
     ] {
         let fixture = Fixture::new();
         git(fixture.path(), &["switch", "-q", "main"]);
@@ -1055,28 +1229,36 @@ fn base_merge_record_resolutions_keep_approval_only_when_they_lose_nothing() {
         if case == "edit_while_merging" {
             ok(fixture.path(), &["issue", "transition", &outside, "start"]);
         }
+        if case == "code_while_merging" {
+            fs::write(fixture.path().join("src.rs"), "edited while merging\n").unwrap();
+        }
         git(fixture.path(), &["add", "."]);
         git(fixture.path(), &["commit", "-q", "--no-edit"]);
         if case != "drop_side" {
             ok(fixture.path(), &["check"]);
         }
-        if case == "union" {
-            let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-            assert!(output.contains("review.current via"), "{output}");
+        if case == "code_while_merging" {
+            let merge = git(fixture.path(), &["rev-parse", "HEAD"]);
+            fixture.refusal(&stale_line(
+                &fixture,
+                &fixture_approval_id(&fixture),
+                &format!(
+                    "base merge {} resolved or edited src.rs by hand",
+                    &merge[..8]
+                ),
+            ));
         } else {
-            fixture.refusal("review.current: approval ");
-            fixture.refusal(" is stale: base merge ");
+            let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+            assert!(output.contains("review.current via"), "{case}: {output}");
         }
     }
 }
 
-/// A link is stored only on the record that declares it (atelier-ihss), so
-/// new work that waits on the approved owner, on the branch or merged in
-/// from the base, leaves the owner's record and its approval alone. A link
-/// the owner declares, or one changing an existing record, still edits a
-/// record the approval covers, as before.
+/// A link after approval keeps it current wherever it is stored: on new work
+/// that waits on the approved owner, on the branch or merged in from the
+/// base, on the owner, or on an existing record (atelier-3jdm).
 #[test]
-fn links_declared_by_new_work_keep_approval_and_edits_to_existing_records_stale_it() {
+fn links_after_approval_keep_it_current() {
     for case in [
         "branch_new_blocked_by_owner",
         "base_new_blocked_by_owner",
@@ -1107,17 +1289,18 @@ fn links_declared_by_new_work_keep_approval_and_edits_to_existing_records_stale_
             git(fixture.path(), &["switch", "-q", &fixture.branch]);
             git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
         }
-        if case.contains("new") {
-            let output = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
-            assert!(output.contains("review.current via"), "{case}: {output}");
-        } else {
-            fixture.refusal("\"link after approval\" changed .atelier/issues/");
-        }
+        // The owner now waiting on open work fails its blocker gate, not
+        // its review.
+        let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(output.contains("review.current via"), "{case}: {output}");
     }
 }
 
+/// A record conflict resolved by hand keeps the approval whether it keeps or
+/// drops the blocker or child the base added (atelier-3jdm); the gates then
+/// read the records as resolved.
 #[test]
-fn base_merge_resolutions_must_keep_the_blocker_and_child_the_base_added() {
+fn base_merge_record_resolutions_keep_approval_and_the_gates_read_what_they_kept() {
     for case in ["keep_blocker", "drop_blocker", "drop_child"] {
         let fixture = Fixture::new();
         git(fixture.path(), &["switch", "-q", "main"]);
@@ -1193,16 +1376,13 @@ fn base_merge_resolutions_must_keep_the_blocker_and_child_the_base_added() {
         }
         git(fixture.path(), &["add", "."]);
         git(fixture.path(), &["commit", "-q", "--no-edit"]);
-        if case == "keep_blocker" {
-            let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-            assert!(
-                output.contains("review.current via")
-                    && output.contains("blockers.none_open: done but blocked by"),
-                "{output}"
-            );
-        } else {
-            fixture.refusal(" is stale: base merge ");
-        }
+        let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(
+            output.contains("review.current via")
+                && output.contains("blockers.none_open: done but blocked by")
+                    == (case == "keep_blocker"),
+            "{case}: {output}"
+        );
     }
 }
 
@@ -1264,7 +1444,7 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
 }
 
 #[test]
-fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
+fn a_follow_up_or_a_new_child_after_approval_keeps_it_current() {
     let fixture = Fixture::new();
     let finding = fixture.finding();
     fixture.approval("Reviewer");
@@ -1302,9 +1482,13 @@ fn new_out_of_scope_follow_up_issue_keeps_approval_but_new_child_does_not() {
             &fixture.id,
         ],
     );
-    // Adding a child edits the owner's children, which is reviewed scope.
+    // The open child holds the merge on work.terminal, not on review.
     commit(fixture.path(), "new in-scope child after approval");
-    fixture.refusal("\"new in-scope child after approval\" changed .atelier/issues/");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        !passed && output.contains("review.current via") && output.contains("work.terminal"),
+        "{output}"
+    );
 }
 
 #[test]
@@ -3390,8 +3574,10 @@ fn a_later_pass_clears_an_older_fail_across_a_base_merge_so_close_and_merge_succ
     git(path, &["merge-base", "--is-ancestor", &head, "main"]);
 }
 
+/// A clean merge of a base that edited the owner's record keeps the approval
+/// (atelier-3jdm).
 #[test]
-fn sync_lists_only_the_in_scope_record_a_clean_base_merge_changed() {
+fn sync_keeps_the_approval_across_a_base_edit_to_the_owner_record() {
     let fixture = synced_fixture(
         "fast_forward_only",
         "test -f src.rs",
@@ -3407,14 +3593,11 @@ fn sync_lists_only_the_in_scope_record_a_clean_base_merge_changed() {
     commit(fixture.path(), "base edits the owner record");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
     let (passed, out, err) = sync(fixture.path(), &fixture.id);
-    assert!(passed, "{out}\n{err}");
     assert!(
-        out.contains(&format!(
-            "Review 1 path, then record a fresh approval:\n  .atelier/issues/{}.md",
-            fixture.id
-        )),
-        "{out}"
+        passed && out.contains("Approval kept:") && verdict(&out) == "merge: passed",
+        "{out}\n{err}"
     );
+    assert!(review_current_passes(&fixture));
 }
 
 /// `atelier` output split into its exit status, stdout and stderr.
@@ -3654,7 +3837,7 @@ fn merge_check_on_a_diverged_base_also_reports_the_review_and_claim_gates() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
+            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, then retry; a merge keeps the approval unless it resolves or edits code by hand, and then review.current names the merge and the files. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
              ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test> (also claims.reviewed). Next: atelier review request {id}\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in src.rs\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
@@ -3839,33 +4022,35 @@ fn gates_name_the_approval_a_later_commit_staled_and_the_commit() {
 }
 
 #[test]
-fn gates_name_the_base_merge_that_changed_an_in_scope_record_beyond_status() {
+fn gates_name_the_base_merge_that_resolved_code_by_hand() {
     let fixture = Fixture::new();
     let approval = fixture.approval("Reviewer");
     git(fixture.path(), &["switch", "-q", "main"]);
-    let record = fixture
-        .path()
-        .join(format!(".atelier/issues/{}.md", fixture.id));
-    let text = fs::read_to_string(&record).unwrap();
-    fs::write(&record, text.replace("Ship change.", "Ship the change.")).unwrap();
-    commit(fixture.path(), "base edits the owner record");
+    fs::write(fixture.path().join("src.rs"), "base code\n").unwrap();
+    commit(fixture.path(), "base edits the approved code");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
-    // Git merges it cleanly, yet the approved record changed beyond status.
-    git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
+    let merged = Command::new("git")
+        .current_dir(fixture.path())
+        .args(["merge", "--no-edit", "main"])
+        .output()
+        .unwrap();
+    assert!(!merged.status.success(), "src.rs conflicts");
+    fs::write(fixture.path().join("src.rs"), "resolved code\n").unwrap();
+    git(fixture.path(), &["add", "."]);
+    git(fixture.path(), &["commit", "-q", "--no-edit"]);
     let merge = git(fixture.path(), &["rev-parse", "HEAD"]);
-    let path = format!(".atelier/issues/{}.md", fixture.id);
     let line = stale_line(
         &fixture,
         &approval,
         &format!(
-            "base merge {} changed in-scope record {path} beyond status",
+            "base merge {} resolved or edited src.rs by hand",
             &merge[..8]
         ),
     );
     let synced = approval_explained(&fixture, &line);
     assert!(
         synced.contains(&format!(
-            "Approval needs fresh review: {approval} first went stale at {} (it was current before this sync). Review 1 path, then record a fresh approval:\n  {path}",
+            "Approval needs fresh review: {approval} first went stale at {} (it was current before this sync). Review 1 path, then record a fresh approval:\n  src.rs",
             &merge[..8]
         )),
         "{synced}"

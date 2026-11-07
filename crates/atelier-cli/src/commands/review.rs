@@ -32,7 +32,7 @@ pub fn append(
     atelier_records::review::validate_commit(&pin)?;
     require_on_branch(repo, &pin)?;
     // Read before the record exists, so a failure here writes nothing.
-    let authors = authors_at_head(repo, &index, &owner)?;
+    let authors = authors_at_head(repo)?;
     let created = atelier_app::project_config::record_store(&layout.canonical_dir())?
         .create_review(&owner, identity, &pin, event, summary)?;
     let warning = (created.event == ReviewEvent::Approval
@@ -71,7 +71,7 @@ fn require_on_branch(repo: &Path, commit: &str) -> Result<()> {
 /// The substantive Git authors of the work on this branch since it left the
 /// base, as `review.current` counts them; none on the base itself, or where
 /// the base cannot be found, since they only decide a warning.
-fn authors_at_head(repo: &Path, index: &RecordIndex, target: &str) -> Result<BTreeSet<String>> {
+fn authors_at_head(repo: &Path) -> Result<BTreeSet<String>> {
     let Ok(policy) = atelier_app::workflow_policy::load(repo) else {
         return Ok(BTreeSet::new());
     };
@@ -79,10 +79,8 @@ fn authors_at_head(repo: &Path, index: &RecordIndex, target: &str) -> Result<BTr
     let Ok(fork) = text(repo, &["merge-base", &format!("refs/heads/{base}"), "HEAD"]) else {
         return Ok(BTreeSet::new());
     };
-    let owner = branch_owner(index, target);
-    let ids = review_gate::scope(index, &owner)?;
     let mut read = git::ReadContext::new(repo);
-    review_gate::author_identities(&mut read, &fork, &ids)
+    review_gate::author_identities(&mut read, &fork)
 }
 
 /// The issue whose branch carries `id`'s work: `id` itself when it has
@@ -259,7 +257,7 @@ pub fn disposition(
     };
     atelier_records::review::validate_disposition(&disposition)?;
     // Read before the record changes, so a failure here writes nothing.
-    let authors = authors_at_head(repo, &index, &original.target)?;
+    let authors = authors_at_head(repo)?;
     // The disposition an older Atelier recorded as separate events is read
     // as folded into the finding (ADR 0025); writing the field removes them.
     let previous = original.disposition().cloned();
@@ -443,7 +441,6 @@ enum Judge<'r> {
     Branch {
         read: git::ReadContext<'r>,
         fork: String,
-        ids: BTreeSet<String>,
         authors: BTreeSet<String>,
     },
     Base {
@@ -466,12 +463,10 @@ impl<'r> Judge<'r> {
             let fork = text(repo, &["merge-base", &base_head, &tip])?;
             if fork != tip {
                 let mut read = git::ReadContext::from_snapshot(repo, tip, &[]);
-                let ids = review_gate::scope(index, owner)?;
-                let authors = review_gate::author_identities(&mut read, &fork, &ids)?;
+                let authors = review_gate::author_identities(&mut read, &fork)?;
                 return Ok(Judge::Branch {
                     read,
                     fork,
-                    ids,
                     authors,
                 });
             }
@@ -490,15 +485,13 @@ impl<'r> Judge<'r> {
             Judge::Branch {
                 read,
                 fork,
-                ids,
                 authors,
-                ..
             } => {
                 let identity = match record.event {
                     ReviewEvent::Approval => review_gate::independent(record, authors),
                     _ => true,
                 };
-                if identity && review_gate::current_on_branch(read, record, ids, fork) {
+                if identity && review_gate::current_on_branch(read, record, fork) {
                     "✓ current".into()
                 } else {
                     "⚠ not current".into()

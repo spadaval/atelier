@@ -3443,12 +3443,13 @@ fn migrating_an_already_done_epic_on_the_base_is_not_a_done_claim() {
         "{output}"
     );
 }
-/// One rule for what an approval covers (atelier-n642, atelier-uw4x): a
-/// close after approval that changes only the scope's own records, by status
-/// and Close Reason, stays covered under `merge` and under `land` on the
-/// base. Anything else after the approval, or an approval `merge` would not
-/// accept (atelier-n90q), leaves the claim uncovered under both: `merge`
-/// refuses before integrating, and after a forced integration `land` refuses.
+/// One rule for what an approval covers (atelier-n642, atelier-uw4x,
+/// atelier-3jdm): a close after approval that changes no code, even one that
+/// also edits the owner's Goal or adds a note, stays covered under `merge`
+/// and under `land` on the base. Code after the approval, a done claim
+/// outside the approved scope, or an approval `merge` would not accept
+/// (atelier-n90q) leaves the claim uncovered under both: `merge` refuses
+/// before integrating, and after a forced integration `land` refuses.
 /// A follow-up filed after the approval and linked to its mission in a later
 /// commit keeps it current, though its own done claim is not covered
 /// (atelier-iaas). Each case runs under both merge strategies.
@@ -3462,11 +3463,11 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "reviewer_base_reapproved_after_code",
         "follow_up_linked",
         "base_issue_edited",
+        "with_goal",
+        "with_note",
     ];
     let stale_cases = [
         "with_code",
-        "with_goal",
-        "with_note",
         "new_done_issue",
         "follow_up_done",
         "base_issue_edited_done",

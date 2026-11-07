@@ -26,7 +26,7 @@ Use these terms for the verified repo-native tracker defined by
 | Finding | A recorded problem that needs an explicit `FIX NOW`, `DEFER`, or `NO ACTION` disposition. |
 | Disposition | What was decided about a finding: a field of the finding's record with the decision, who set it, the commit, and why. Setting it again replaces it; Git history keeps earlier ones. A `fix_now` is followed by a re-review, which may cover only the fix's diff and may be by the same reviewer. |
 | Trivial exemption | An explicit visible declaration that independent approval is unnecessary because correctness is evident from the diff. |
-| Freshness | Whether later commits changed material relevant to the proof or approval. |
+| Freshness | Whether later commits changed material relevant to the proof or approval. For an approval that is code: anything outside the tracker records. |
 | Done claim | A terminal status committed on the work branch, before integration. |
 | Integration | A gated fast-forward of the base branch, or under `merge_commit` a gated merge commit whose merged tree passed `merge_checks`; it creates no other commit and writes no tracker state. |
 | Status | Session orientation from records, Git state, proof, and review; `prime` is its deprecated alias. |
