@@ -22,13 +22,14 @@ rebuilt model.
 - Start a session with `atelier status`; before handoff commit the records
   and run `atelier land`. Active work may remain open, with unfinished code
   handed off honestly.
-- One issue, in order: `atelier start <id>` (on `master` it creates a branch
-  named `<id>`; on another branch it takes that branch), implement, tick
+- One issue, in order: `atelier start <id>` (an item with a recorded branch
+  switches to it; otherwise on `master` it creates a branch named `<id>`, and
+  on another branch it takes that branch), implement, tick
   every Done when line and write the `## Report`, `atelier review request
   <id>`, fix and re-review, approve, then `atelier merge <id>` under the merge
   policy below, which marks the work done. Work has no close step, and only a
-  code change makes an approval stale. Work that can only happen after a
-  merge or release is a loose end; a change with no issue takes the light
+  code change makes an approval stale. Work that changes no code and can only
+  happen after a merge or release is a loose end; a change with no issue takes the light
   path. Agent Factory's Atelier reference and `docs/product/work-model.md`
   have the detail; `CONTEXT.md` defines check, review, land, done and close.
 - `.claude/settings.json` runs these through the installed CLI's Claude Code
@@ -39,18 +40,22 @@ rebuilt model.
 ## Merge Policy
 
 - Agents may merge independently reviewed work into `master` locally without
-  asking. Unreviewed non-trivial changes never reach `master`.
+  asking. Unreviewed non-trivial code never reaches `master`. Tracker records
+  and mission strategies may be committed there directly; non-trivial
+  planning is reviewed before the work it defines starts.
 - A branch that changes anything besides tracker records (`.atelier/issues`,
   `reviews`, `evidence`; the workflow policy and config count as code) merges
   only after CI has passed on its latest code: push the work branch, open a
-  pull request (before or after review), wait for the CI workflow to pass,
-  then run `atelier merge` and `atelier land`, and push `master`. Record-only commits after that run, such as approvals, need
-  no new run; a code change does, including `atelier merge --sync` bringing in
-  code from `master`. Record-only branches skip the pull request. The
+  pull request (a draft until it is approved), wait for the CI workflow to
+  pass, then run `atelier merge` and `atelier land`, and push `master`.
+  Record-only commits after that run, such as approvals, need no new run; a
+  commit that changes code does, including an `atelier merge --sync` that
+  brings in code from `master` (a clean one still keeps the approval).
+  Record-only branches skip the pull request. The
   `scripts/merge-ci-passed.sh` merge check enforces this, so `atelier merge`
   runs no test suite on this host.
-- Agents may push reviewed work, including `master` after a gated merge,
-  without asking. Never force-push `master` or delete remote branches without
+- Agents may push work branches, and `master` once `atelier land` passes on
+  it, without asking. Never force-push `master` or delete remote branches without
   the human.
 
 ## Product Sources

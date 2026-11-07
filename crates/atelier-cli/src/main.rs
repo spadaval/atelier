@@ -267,7 +267,7 @@ enum Commands {
         action: ReviewCommands,
     },
 
-    /// Run at every handoff: judges committed records and the commits about to be pushed; reports open work on a branch, refuses unreviewed work on the base
+    /// Run at every handoff: judges committed records and the commits about to be pushed; reports open work on a branch, refuses unreviewed code on the base
     Land {
         /// Issue or branch owner (otherwise inferred from the checkout)
         id: Option<String>,
