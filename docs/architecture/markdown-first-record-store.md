@@ -54,9 +54,12 @@ Reason preserve handoffs and terminal reasoning. See
 
 Evidence is an immutable Markdown receipt with explicit result
 (`pass`, `fail`, `blocked`, `not-applicable`) and a full commit identity. Reviews
-are append-only Markdown receipts, except that a finding carries its
+are Markdown receipts. Findings can be corrected until they reach the base,
+approvals and trivial exemptions are append-only once committed, and every
+review record is append-only on the base, except that a finding carries its
 disposition as a field set in place, with Git history keeping earlier ones
-([ADR 0025](../adr/0025-findings-carry-their-disposition.md)). Review identity,
+([ADR 0025](../adr/0025-findings-carry-their-disposition.md),
+[ADR 0028](../adr/0028-simpler-lifecycle.md) decision 4). Review identity,
 approval, findings, and dispositions are durable facts rather than provider
 state. Their exact fields
 are owned by the typed record parsers and
@@ -71,9 +74,15 @@ rerun to uncover the next one. It does not promise aggregate structural errors.
 Read commands do not
 repair files or consult a hidden secondary truth.
 
-Mutating commands validate before writing. The canonical mutation lock
-coordinates cooperative writers. A failed validation must leave the canonical
-tree unchanged. Bundle apply stages and validates the complete candidate graph
+Mutating commands validate before writing. Every write through the record
+store passes one guard, which `atelier-app` installs: the records the write
+would leave are checked with `atelier check`'s rules, and a finding the
+records before it lack refuses the whole write. A command that writes several
+records holds them in a store batch and checks them together; `start`,
+`migrate epics` and `prune`, which write outside the store, call the guard
+themselves, and `merge` checks the records it puts on the base. The canonical
+mutation lock coordinates cooperative writers. A failed validation must leave
+the canonical tree unchanged. Bundle apply stages and validates the complete candidate graph
 before installing its issue and evidence directories; see the
 [bundle input contract](../spec/bundle/schema.md).
 
@@ -96,7 +105,7 @@ acceptance. Approval freshness reads no record contents: an approval is stale
 only when code, meaning anything outside the tracker records (`.atelier/issues`,
 `reviews`, `evidence`), changed since the approved commit, not counting a clean
 merge from the base, so workflow policy and config count as code. Review records
-stay append-only by a check of their own. See the product contracts for each
+on the base stay append-only by a check of their own. See the product contracts for each
 boundary.
 
 Terminal records may be removed by explicit prune after protection checks.

@@ -578,6 +578,9 @@ fn edit_then_revert_and_second_author_cannot_reuse_an_approval() {
     fixture.refusal("review.current");
 }
 
+/// Under `fast_forward_only`, as this fixture's policy is, history does not
+/// show where a commit joined the base, so a review record is final once
+/// committed (atelier-ilba).
 #[test]
 fn review_rewrites_deletions_and_modes_are_rejected_even_before_new_approval() {
     for action in ["edit", "delete", "mode"] {
@@ -4300,4 +4303,193 @@ fn a_done_when_edited_only_before_the_start_is_not_shown() {
     assert!(edit_lines(&output).is_empty(), "{output}");
     let debrief = ok(fixture.path(), &["debrief", &mission_id]);
     assert!(edit_lines(&debrief).is_empty(), "{debrief}");
+}
+
+/// The base plan of a fixture whose base merges with a merge commit, which
+/// shows where each commit joined it.
+fn merges_with_a_merge_commit(dir: &Path, _: &str) {
+    let path = dir.join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap().replace(
+        "merge_strategy: fast_forward_only",
+        "merge_strategy: merge_commit",
+    );
+    fs::write(
+        &path,
+        format!("{policy}\nmerge_checks:\n  - shell.check: {{ command: 'true' }}\n"),
+    )
+    .unwrap();
+}
+
+/// A review record can be corrected or deleted until it reaches the base,
+/// each change judged against the base as it stood where the change joined
+/// it, so a correction made on a branch is not refused after it merges. Once
+/// a record is on the base it stays as it is (atelier-ilba).
+#[test]
+fn review_records_can_be_corrected_until_they_reach_the_base() {
+    let fixture = Fixture::with(merges_with_a_merge_commit);
+    let path = fixture.path();
+    let finding = |summary: &str| {
+        let id = ok(
+            path,
+            &[
+                "-q",
+                "review",
+                "finding",
+                &fixture.id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "no_action",
+                summary,
+            ],
+        );
+        (id.clone(), path.join(format!(".atelier/reviews/{id}.md")))
+    };
+    let (kept, kept_path) = finding("Unclear name in src.rs");
+    let (_, dropped_path) = finding("Mistaken concern");
+    commit(path, "findings");
+
+    // A correction to a finding the base does not hold is committed with the
+    // work, not restored.
+    let text = fs::read_to_string(&kept_path).unwrap();
+    fs::write(
+        &kept_path,
+        text.replace("Unclear name", "Unclear function name"),
+    )
+    .unwrap();
+    let (landed, output) = cli(path, &["land"]);
+    assert!(
+        !landed
+            && output.contains(&format!(".atelier/reviews/{kept}.md (modified)"))
+            && output.contains("commit them with the work")
+            && !output.contains("git restore"),
+        "{output}"
+    );
+    commit(path, "correct a finding");
+    fs::remove_file(&dropped_path).unwrap();
+    commit(path, "delete a mistaken finding");
+    ok(
+        path,
+        &[
+            "review",
+            "disposition",
+            &kept,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "The name reads well in context",
+        ],
+    );
+    commit(path, "disposition");
+    let approval = fixture.approval("Reviewer");
+
+    for args in [
+        &["check"][..],
+        &["land"],
+        &["doctor"],
+        &["merge", &fixture.id, "--check"],
+    ] {
+        let (passed, output) = cli(path, args);
+        assert!(passed, "{args:?} on the branch: {output}");
+    }
+    assert!(ok(path, &["merge", &fixture.id, "--check"])
+        .contains(&format!("review.current via {approval}")));
+    ok(path, &["merge", &fixture.id]);
+    git(path, &["switch", "-q", "main"]);
+    assert!(kept_path.exists() && !dropped_path.exists());
+    for args in [
+        &["check"][..],
+        &["land"],
+        &["doctor"],
+        &["merge", &fixture.id, "--check"],
+    ] {
+        let (passed, output) = cli(path, args);
+        assert!(passed, "{args:?} on the base: {output}");
+    }
+
+    // On the base, the finding stays as it is: an edit made there, or on a
+    // branch that has not merged yet, is refused.
+    let merged = git(path, &["rev-parse", "HEAD"]);
+    let text = fs::read_to_string(&kept_path).unwrap();
+    fs::write(&kept_path, text.replace("Unclear function name", "Fine")).unwrap();
+    commit(path, "edit a finding on the base");
+    let edit = git(path, &["rev-parse", "HEAD"]);
+    let (landed, output) = cli(path, &["land"]);
+    assert!(
+        !landed
+            && output.contains(&format!(
+                "review_append_only: .atelier/reviews/{kept}.md was on main already when {edit} rewrote it beyond a finding's disposition, deleted it or changed its mode"
+            )),
+        "{output}"
+    );
+    git(path, &["reset", "-q", "--hard", &merged]);
+    let next = ok(
+        path,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Next owner",
+            "--body",
+            "## Goal\n\nShip more.\n\n## Done when\n\nIt ships.",
+        ],
+    );
+    commit(path, "plan the next owner");
+    ok(path, &["start", &next]);
+    fs::remove_file(&kept_path).unwrap();
+    commit(path, "delete a finding the base holds");
+    let (passed, output) = cli(path, &["merge", &next, "--check"]);
+    assert!(
+        !passed
+            && output.contains(&format!(
+                "review_append_only: .atelier/reviews/{kept}.md was on main already"
+            )),
+        "{output}"
+    );
+}
+
+/// An approval, unlike a finding, stays as first committed even before it
+/// reaches the base: re-pinning it by hand would move it onto code its
+/// reviewer never saw (atelier-ilba, finding atelier-oyh0).
+#[test]
+fn an_approval_stays_as_first_committed_before_the_base() {
+    let fixture = Fixture::with(merges_with_a_merge_commit);
+    let path = fixture.path();
+    let approval = fixture.approval("Reviewer");
+    fs::write(path.join("src.rs"), "unreviewed code\n").unwrap();
+    commit(path, "code after the approval");
+    let (passed, output) = cli(path, &["merge", &fixture.id, "--check"]);
+    assert!(!passed && output.contains("review.current"), "{output}");
+
+    // An uncommitted edit is restored, not committed.
+    let approval_path = path.join(format!(".atelier/reviews/{approval}.md"));
+    let text = fs::read_to_string(&approval_path).unwrap();
+    let pinned = text
+        .lines()
+        .find_map(|line| line.strip_prefix("commit: "))
+        .unwrap()
+        .to_owned();
+    let head = git(path, &["rev-parse", "HEAD"]);
+    fs::write(&approval_path, text.replace(&pinned, &head)).unwrap();
+    let (landed, output) = cli(path, &["land"]);
+    assert!(
+        !landed
+            && output.contains(&format!(
+                "approvals, trivial exemptions and review records on the base are append-only, so restore those and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- .atelier/reviews/{approval}.md"
+            )),
+        "{output}"
+    );
+
+    // Committed, the re-pinned approval is refused, and merge does not pass.
+    commit(path, "re-pin the approval to HEAD");
+    let edit = git(path, &["rev-parse", "HEAD"]);
+    let refused = format!(
+        "review_append_only: .atelier/reviews/{approval}.md was rewritten beyond a finding's disposition, deleted or changed mode in {edit}"
+    );
+    for args in [&["land"][..], &["merge", &fixture.id, "--check"]] {
+        let (passed, output) = cli(path, args);
+        assert!(!passed && output.contains(&refused), "{args:?}: {output}");
+    }
+    fixture.refusal("review_append_only");
 }

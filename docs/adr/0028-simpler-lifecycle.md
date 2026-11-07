@@ -132,9 +132,54 @@ Each write is validated against the rules `atelier check` applies, so an
 invalid record is refused before it is written. Append-only applies once a
 record is on the base; before that, its author may edit or delete it.
 
-Open, settled by atelier-ilba: how to tell cheaply whether a record is on the
-base, and whether the recorded identity, which is self-declared, is enough to
-let an author delete a record.
+Built by atelier-ilba:
+
+- Every record write passes one guard before any file changes: the records
+  the write would leave are checked with `atelier check`'s rules, and a
+  finding they have that the records before it lack refuses the whole write
+  (`record_invalid`), naming each finding. A write is never refused for a
+  problem it did not make, and one that fixes a problem passes. The record
+  store runs the guard for every write; a command that writes several
+  records checks them together, so a refusal leaves all of them unwritten.
+  `start`, `migrate epics` and `prune`, which write or remove records
+  outside the store, run the same guard first, and `bundle apply` checks
+  its staged records as one batch. `merge` checks the
+  records it puts on the base against the base's, except a workflow policy
+  that does not parse, which it reports as its own check. The deferral
+  source rule (`review_follow_up_source_mismatch`) gets no write-time
+  version, since atelier-md0v removes it.
+- A reference to a missing record, in a refusal, `atelier check` or any
+  load, says where the record is: committed at HEAD but missing from the
+  checkout, deleted in a named commit, or present only on a named branch. A
+  command given the full ID of an issue, review or receipt that only another
+  branch holds names that branch.
+- A finding, or another review record that is not an approval or trivial
+  exemption, may be edited or deleted until it reaches the base. Each
+  change is judged against the base as it stood where the change joined it:
+  a commit a merge brought in, at that merge's first parent; a commit on the
+  base's first-parent line, at its own first parent; a commit not on the
+  base yet, at the tip of the policy's base branch. That costs a few Git
+  lookups per changed review record, run only for a change the old rule
+  refused. `land`, `doctor` and `merge` apply it, and `land` advises
+  committing an uncommitted correction rather than restoring it. A change
+  must leave a regular file. Adding a record is judged as before, so a
+  removed separate disposition event is still never added back.
+- Approvals and trivial exemptions stay append-only from when they are first
+  committed, wherever they are, as before (review finding atelier-oyh0): a
+  hand edit of an approval's commit, target or identity would re-point it
+  at code its reviewer never saw, and `merge`, `land` and `check` would
+  accept it.
+- Under `fast_forward_only`, history does not show where a fast-forward
+  began, and an unmerged commit will join the base by itself, so each commit
+  is judged at its own first parent: a review record is final once committed,
+  as before. The same holds when the base branch cannot be read. atelier-jnrh
+  makes every merge a merge commit, which ends the exception.
+- No identity rule: before a finding reaches the base, any agent on the
+  branch may correct it. Identity is self-declared, so an author check would
+  add a rule without stopping anyone. Accepted risk (planning review finding
+  R13): an implementer could delete a reviewer's finding before merge, so no
+  decision on it is recorded. That cannot let unreviewed code merge, since
+  approvals cannot be edited and one still has to cover the code.
 
 ### 5. Fewer records and gates
 
