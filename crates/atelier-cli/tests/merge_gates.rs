@@ -4114,7 +4114,8 @@ fn a_done_when_edited_after_the_start_is_shown_without_changing_the_verdict() {
     assert!(output.contains("Next: atelier merge"), "{output}");
     let debrief = ok(fixture.path(), &["debrief", &mission_id]);
     let said = format!(
-        "Done when edited at {} after the item was started, after finding {finding}.",
+        "{} Done when edited at {} after the item was started, after finding {finding}.",
+        fixture.id,
         &edit[..8]
     );
     assert_eq!(

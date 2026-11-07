@@ -2018,10 +2018,74 @@ fn a_done_when_edit_counts_as_after_the_start_by_ancestry_not_time() {
     assert_eq!(
         edits,
         [format!(
-            "  Changed: Done when edited at {} after the item was started.",
+            "  Changed: {planned} Done when edited at {} after the item was started.",
             &on_branch[..8]
         )],
         "{page}"
     );
     assert!(!page.contains(&on_main[..8]), "{page}");
+}
+
+#[test]
+fn a_child_done_when_edit_shown_under_its_parent_names_the_child() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let child = ok(
+        dir.path(),
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--parent",
+            &planned,
+            "--body",
+            "## Goal\n\nG\n\n## Done when\n\nD",
+            "Child",
+        ],
+    )
+    .trim()
+    .to_string();
+    commit_all(dir.path(), "plan the child");
+    for id in [&planned, &child] {
+        ok(dir.path(), &["issue", "transition", id, "start"]);
+    }
+    commit_all(dir.path(), "start");
+    edit_canonical_issue(dir.path(), &child, |markdown| {
+        markdown.replace("## Done when\n\nD", "## Done when\n\nD, mostly")
+    });
+    commit_all(dir.path(), "loosen the child's Done when");
+    let edit = String::from_utf8(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["rev-parse", "--short=8", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    for (id, reason) in [(&child, "Child done."), (&planned, "Parent done.")] {
+        ok(
+            dir.path(),
+            &["issue", "transition", id, "close", "--reason", reason],
+        );
+    }
+    commit_all(dir.path(), "close");
+    let page = ok(dir.path(), &["debrief", &mission]);
+    // The child's edit is shown in its parent's entry, so it names the child.
+    let entry = page
+        .split(&format!("delivered {planned} "))
+        .nth(1)
+        .unwrap_or_default();
+    assert!(
+        entry.contains(&format!(
+            "  Changed: {child} Done when edited at {edit} after the item was started."
+        )),
+        "{page}"
+    );
+    assert!(
+        !page.contains(&format!("Changed: {planned} Done when edited")),
+        "{page}"
+    );
 }

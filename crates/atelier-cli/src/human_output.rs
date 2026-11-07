@@ -373,7 +373,8 @@ pub(crate) fn short_commit(commit: &str) -> &str {
 }
 
 /// A Done when edited after its item was started, as `merge` and the
-/// debrief say it (atelier-r9hb).
+/// debrief say it (atelier-r9hb). It names the item, since the debrief
+/// shows a child's edit in its parent's entry.
 pub(crate) fn done_when_edit(edit: &atelier_app::record_history::DoneWhenEdit) -> String {
     use atelier_app::record_history::Precedent;
     let after = match &edit.after {
@@ -382,7 +383,8 @@ pub(crate) fn done_when_edit(edit: &atelier_app::record_history::DoneWhenEdit) -
         None => String::new(),
     };
     format!(
-        "Done when edited at {} after the item was started{after}.",
+        "{} Done when edited at {} after the item was started{after}.",
+        edit.issue,
         short_commit(&edit.commit)
     )
 }

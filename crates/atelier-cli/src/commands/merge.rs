@@ -927,13 +927,7 @@ fn merge_gates(
         &review_gate::scope(tip_index, owner)?,
     )?
     .iter()
-    .map(|edit| {
-        format!(
-            "Note: {} {}",
-            edit.issue,
-            crate::human_output::done_when_edit(edit)
-        )
-    })
+    .map(|edit| format!("Note: {}", crate::human_output::done_when_edit(edit)))
     .collect::<Vec<_>>();
     // Failures print with the passes; a passing check prints its passes and
     // next step, and a passing merge only what it did (atelier-2tux). Each
