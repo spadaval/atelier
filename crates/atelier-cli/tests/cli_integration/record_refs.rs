@@ -390,7 +390,7 @@ fn invalid_status_and_category_list_the_workflow_values() {
     let (code, stderr) = exit_code(dir.path(), &["issue", "list", "--category", "open"]);
     assert_eq!(code, Some(2), "{stderr}");
     assert!(
-        stderr.contains("Invalid category 'open'. Valid values: active, blocked, done, todo"),
+        stderr.contains("Invalid category 'open'. Valid values: active, done, todo"),
         "{stderr}"
     );
 }
@@ -452,7 +452,7 @@ fn every_invalid_value_takes_the_shared_form_and_exits_2() {
         ),
         (
             vec!["issue", "transition", &target, "nope"],
-            "Invalid transition 'nope'. Valid values: block, defer, start, supersede. These are \
+            "Invalid transition 'nope'. Valid values: defer, start, supersede. These are \
              the transitions out of status todo."
                 .into(),
         ),

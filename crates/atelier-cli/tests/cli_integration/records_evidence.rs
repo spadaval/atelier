@@ -2133,7 +2133,7 @@ fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
 
     let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
 
-    move_issue_to_review(dir.path(), target_id);
+    start_issue_work(dir.path(), target_id);
     let (success, stdout, stderr) = run_atelier(
         dir.path(),
         &[
@@ -2198,7 +2198,7 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
     assert!(success, "issue create failed: {stderr}");
     let issue_id = issue_id_by_title(dir.path(), "Evidence gate proof");
 
-    move_issue_to_review(dir.path(), &issue_id);
+    start_issue_work(dir.path(), &issue_id);
     attach_pass_evidence(
         dir.path(),
         "issue",
@@ -2244,7 +2244,7 @@ fn test_issue_closeout_requires_passing_evidence_records() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Blocked validation proof");
 
-    move_issue_to_review(dir.path(), &issue_id);
+    start_issue_work(dir.path(), &issue_id);
     attach_non_pass_evidence(
         dir.path(),
         "issue",
@@ -2361,9 +2361,7 @@ fn test_workflow_check_rejects_issue_status_outside_selected_workflow() {
     assert!(stderr.contains(&issue_id), "stderr: {stderr}");
     assert!(stderr.contains("qa_hold"), "stderr: {stderr}");
     assert!(
-        stderr.contains(
-            "allowed statuses: backlog, blocked, done, in_progress, review, superseded, todo"
-        ),
+        stderr.contains("allowed statuses: backlog, done, in_progress, superseded, todo"),
         "stderr: {stderr}"
     );
 }

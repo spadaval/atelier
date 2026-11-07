@@ -78,16 +78,28 @@ struct Fixture {
     id: String,
     branch: String,
 }
+/// The starter policy before atelier-bqbz dropped the `blocked` and `review`
+/// statuses; repository policies written from it still declare them.
+const STARTER_WITH_BLOCKED_AND_REVIEW: &str =
+    include_str!("../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml");
+
 impl Fixture {
     fn new() -> Self {
+        Self::under(None)
+    }
+    /// A fixture whose policy is `policy` rather than the `init` starter.
+    fn under(policy_text: Option<&str>) -> Self {
         let dir = tempdir().unwrap();
         git(dir.path(), &["init", "-qb", "main"]);
         git(dir.path(), &["config", "user.name", "Author"]);
         git(dir.path(), &["config", "user.email", "author@example.test"]);
         ok(dir.path(), &["init", "--slug", "atelier"]);
+        let policy = dir.path().join(".atelier/workflow.yaml");
+        if let Some(policy_text) = policy_text {
+            fs::write(&policy, policy_text).unwrap();
+        }
         // These scenarios test fast-forward integration, which a starter policy
         // with a shell.check no longer selects by default.
-        let policy = dir.path().join(".atelier/workflow.yaml");
         let text = fs::read_to_string(&policy).unwrap().replace(
             "base_branch: main\n",
             "base_branch: main\n  merge_strategy: fast_forward_only\n",
@@ -4928,7 +4940,8 @@ fn done_claims_on_work_branches_say_they_are_not_merged() {
 }
 #[test]
 fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
-    let f = Fixture::new();
+    // A policy from the earlier starter, whose `blocked` status shows here.
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "-q", "main"]);
     let finished = ok(f.path(), &["-q", "issue", "create", "Finished elsewhere"]);
     let idle = ok(f.path(), &["-q", "issue", "create", "Nobody's work"]);
@@ -6997,7 +7010,9 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
 /// failure (atelier-r3oy).
 #[test]
 fn land_fixes_for_open_children_and_a_blocks_link_clear_their_failures() {
-    let f = Fixture::new();
+    // A policy from the earlier starter, so children can rest in its
+    // `blocked` and `review` statuses.
+    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     let id = f.id.clone();
     let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
     ok(

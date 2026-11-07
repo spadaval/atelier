@@ -215,9 +215,7 @@ fn a_review_step_and_the_close_each_commit_their_own_records() {
         .iter()
         .all(|path| path.starts_with(".atelier/reviews/")));
 
-    for transition in ["start", "request_review"] {
-        ok(dir, &["issue", "transition", &id, transition]);
-    }
+    ok(dir, &["issue", "transition", &id, "start"]);
     commit_all(dir, "ready");
     let before = commit_count(dir);
     ok(

@@ -940,7 +940,7 @@ fn test_issue_show_is_brief_by_default() {
              Mission: {mission} draft medium Brief mission\n\
              Parent: {parent} todo medium Brief parent\n\
              Blocked by: {blocker} todo medium Blocker\n\
-             Transitions: block, defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
+             Transitions: defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
              Goal: Child goal.\n\
              Done when: Child done.\n\
              More with --full: Context\n"
@@ -954,7 +954,7 @@ fn test_issue_show_is_brief_by_default() {
              Children:\n  \
              {sibling} ready medium Second child\n  \
              {child} ⚠ blocked medium First child\n\
-             Transitions: block, defer, start, supersede --reason\n\
+             Transitions: defer, start, supersede --reason\n\
              Goal: Parent goal.\n\
              Done when: Parent done.\n"
         )
@@ -996,7 +996,7 @@ fn test_issue_show_is_brief_by_default() {
         "{child_view}"
     );
     assert!(
-        child_view.contains("\nTransitions: block, defer, start, supersede --reason\n"),
+        child_view.contains("\nTransitions: defer, start, supersede --reason\n"),
         "{child_view}"
     );
 
@@ -1008,7 +1008,7 @@ fn test_issue_show_is_brief_by_default() {
     let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
     assert!(
         parent_view.contains(
-            "\nTransitions: block, request_review, supersede --reason | blocked: close - validator work.terminal failed: open work: "
+            "\nTransitions: supersede --reason | blocked: close - validator work.terminal failed: open work: "
         ),
         "{parent_view}"
     );
@@ -1055,20 +1055,15 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
 
     let brief = show_ok(dir.path(), &["issue", "show", id]);
     assert!(
-        brief
-            .contains("\nTransitions: block, close --reason, request_review, supersede --reason\n"),
+        brief.contains("\nTransitions: close --reason, supersede --reason\n"),
         "{brief}"
     );
 
     let full = show_ok(dir.path(), &["issue", "show", id, "--full"]);
     let readiness = format!(
         "Transition Readiness\n--------------------\n  \
-         block: allowed - to blocked\n    \
-         Command: atelier issue transition {id} block\n  \
          close: allowed - to done, needs --reason\n    \
          Command: atelier issue transition {id} close --reason \"...\"\n  \
-         request_review: allowed - to review\n    \
-         Command: atelier issue transition {id} request_review\n  \
          supersede: allowed - to superseded, needs --reason\n    \
          Command: atelier issue transition {id} supersede --reason \"...\"\n"
     );
@@ -1077,7 +1072,7 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
     let options = show_ok(dir.path(), &["issue", "transition", id]);
     assert!(
         options.contains(&format!(
-            "close: allowed\n  From: in_progress, review\n  To:   done\n  \
+            "close: allowed\n  From: in_progress\n  To:   done\n  \
              Command: atelier issue transition {id} close --reason \"...\"\n  \
              Requirements: needs --reason\n"
         )),
@@ -1086,7 +1081,7 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
     assert!(!options.contains(": blocked"), "{options}");
     assert_eq!(
         show_ok(dir.path(), &["-q", "issue", "transition", id]),
-        "block\nclose\nrequest_review\nsupersede\n"
+        "close\nsupersede\n"
     );
 }
 
@@ -1366,7 +1361,7 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(!stdout.contains("Evidence Status"));
     assert!(!stdout.contains("Attached Proof: missing - no validating evidence link found"));
 
-    move_issue_to_review(dir.path(), &issue_id);
+    start_issue_work(dir.path(), &issue_id);
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(
@@ -2479,7 +2474,7 @@ fn test_issue_notes_and_close_reason_are_written_to_the_record() {
     );
     assert!(!record.contains("Invalid body"), "{record}");
 
-    move_issue_to_review(dir.path(), &issue_id);
+    start_issue_work(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2538,7 +2533,7 @@ fn test_issue_show_reads_notes_and_close_reason_from_the_record() {
         &["issue", "note", &issue_id, "Canonical handoff"],
     );
     assert!(success, "issue note failed: {stderr}");
-    move_issue_to_review(dir.path(), &issue_id);
+    start_issue_work(dir.path(), &issue_id);
     attach_issue_pass_evidence(dir.path(), &issue_id);
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2732,9 +2727,7 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
     );
     assert!(!success, "unknown category unexpectedly succeeded");
     assert!(
-        stderr.contains(
-            "Invalid category 'does-not-exist'. Valid values: active, blocked, done, todo"
-        ),
+        stderr.contains("Invalid category 'does-not-exist'. Valid values: active, done, todo"),
         "{stderr}"
     );
 
@@ -2775,10 +2768,10 @@ fn test_issue_list_is_flat_metadata_inventory_with_quiet_limit_and_removed_opera
     assert!(!help.contains("--blocked"), "{help}");
     // Help names the repository workflow's categories and statuses.
     assert!(
-        help.contains("[possible values: active, blocked, done, todo]"),
+        help.contains("[possible values: active, done, todo]"),
         "{help}"
     );
-    assert!(help.contains("in_progress, review"), "{help}");
+    assert!(help.contains("draft, in_progress, superseded"), "{help}");
 }
 
 #[test]
@@ -3495,6 +3488,12 @@ fn test_work_views_render_one_dense_line_per_item() {
 fn test_quiet_work_all_includes_every_open_bucket_in_panel_order() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    // Policies from the earlier starter still declare the `blocked` status.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        STARTER_WITH_BLOCKED_AND_REVIEW,
+    )
+    .unwrap();
 
     for (title, issue_type) in [
         ("Quiet mission", "mission"),
@@ -3620,6 +3619,12 @@ fn test_removed_mission_generation_flags_are_unknown_on_create_and_update() {
 fn test_work_classification_agrees_across_global_mission_and_epic_views() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    // Policies from the earlier starter still declare the `blocked` status.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        STARTER_WITH_BLOCKED_AND_REVIEW,
+    )
+    .unwrap();
 
     for args in [
         vec![
@@ -4115,6 +4120,12 @@ fn test_inventory_combines_custom_status_category_and_real_metadata_before_limit
 fn test_status_footer_uses_complete_work_buckets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    // Policies from the earlier starter still declare the `blocked` status.
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        STARTER_WITH_BLOCKED_AND_REVIEW,
+    )
+    .unwrap();
     run_atelier(dir.path(), &["issue", "create", "Status guidance"]);
     let id = issue_id_by_title(dir.path(), "Status guidance");
     for (status, expected) in [
@@ -4489,6 +4500,55 @@ fn test_someday_work_is_created_in_backlog_and_kept_out_of_ready() {
     }
 }
 
+/// A repository whose policy came from the earlier starter keeps its
+/// `blocked` and `review` statuses and their transitions (atelier-bqbz): the
+/// starter dropped them, and the binary every repository shares still runs
+/// them unchanged.
+#[test]
+fn test_policy_from_the_earlier_starter_keeps_blocked_and_review() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    fs::write(
+        dir.path().join(".atelier/workflow.yaml"),
+        STARTER_WITH_BLOCKED_AND_REVIEW,
+    )
+    .unwrap();
+    let id = show_ok(
+        dir.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Old policy work",
+            "--body",
+            "## Goal\n\nKeep working.\n\n## Done when\n\nClosed.",
+        ],
+    );
+    let id = id.trim();
+    let status = |transition: &str| {
+        show_ok(dir.path(), &["-q", "issue", "transition", id, transition])
+            .trim()
+            .to_string()
+    };
+    assert_eq!(status("start"), "in_progress");
+    assert_eq!(status("block"), "blocked");
+    let blocked = show_ok(dir.path(), &["--quiet", "work", "blocked"]);
+    assert_eq!(blocked.trim(), id);
+    assert_eq!(status("start"), "in_progress");
+    assert_eq!(status("request_review"), "review");
+    let active = show_ok(dir.path(), &["--quiet", "work", "active"]);
+    assert_eq!(active.trim(), id);
+    assert_eq!(status("revise"), "in_progress");
+    assert_eq!(status("request_review"), "review");
+    show_ok(
+        dir.path(),
+        &["issue", "transition", id, "close", "--reason", "Done."],
+    );
+    let record = fs::read_to_string(canonical_issue_path(dir.path(), id)).unwrap();
+    assert!(record.contains("status: \"done\""), "{record}");
+    assert!(run_atelier(dir.path(), &["check"]).0);
+}
+
 #[test]
 fn test_issue_options_do_what_their_help_says() {
     let dir = tempdir().unwrap();
@@ -4590,8 +4650,8 @@ fn test_issue_options_do_what_their_help_says() {
     let ready = run_atelier(dir.path(), &["--quiet", "work", "ready"]).1;
     assert!(ready.lines().any(|line| line == waiting), "{ready}");
     assert_eq!(
-        create(&["-q", "issue", "transition", &waiting, "block"]),
-        "blocked"
+        create(&["-q", "issue", "transition", &waiting, "defer"]),
+        "backlog"
     );
 
     // Revised bodies follow the record rules check applies, and done records
@@ -4893,10 +4953,10 @@ fn test_migrate_epics_retypes_epic_records_and_the_policy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     // A repository from before atelier-9vq3: the policy declares epic, and an
-    // epic record has the old Outcome/Proof/Delivers shape.
+    // epic record has the old Outcome/Proof/Delivers shape. Its policy is the
+    // starter of that time, with `blocked` and `review`.
     let policy_path = dir.path().join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&policy_path)
-        .unwrap()
+    let policy = STARTER_WITH_BLOCKED_AND_REVIEW
         .replace(
             "  bug:\n    label: Bug\n",
             "  bug:\n    label: Bug\n  epic:\n    label: Epic\n",
@@ -5753,23 +5813,6 @@ fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
         );
     }
 
-    // A blocked child cannot start under a parked parent either.
-    let blocked = create(&[
-        "-q",
-        "issue",
-        "create",
-        "Blocked slice",
-        "--parent",
-        &parent,
-    ]);
-    create(&["-q", "issue", "transition", &blocked, "block"]);
-    commit_all(dir.path(), "a blocked child");
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &blocked]);
-    assert!(
-        !success && stderr.contains("is parked in 'backlog'"),
-        "{stderr}"
-    );
-
     create(&["-q", "issue", "transition", &parent, "plan"]);
     let ready = create(&["--quiet", "work", "ready"]);
     assert!(ready.lines().any(|line| line == child), "{ready}");
@@ -5782,11 +5825,12 @@ fn test_children_of_a_parked_parent_are_parked_until_it_is_planned() {
     create(&["-q", "issue", "transition", &parent, "defer"]);
     let active = create(&["--quiet", "work", "active"]);
     assert!(active.lines().any(|line| line == child), "{active}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &child, "request_review"],
+    let (success, options, stderr) = run_atelier(dir.path(), &["issue", "transition", &child]);
+    assert!(success, "{stderr}");
+    assert!(
+        options.contains("close: allowed"),
+        "a child in flight keeps its transitions: {options}"
     );
-    assert!(success, "a child in flight keeps its transitions: {stderr}");
 
     // A parent that can never start, such as an open decision, parks nothing.
     let question = create(&[
@@ -5944,7 +5988,7 @@ fn next_section(output: &str) -> &str {
 }
 
 fn close_issue(dir: &Path, issue_id: &str, reason: &str) -> String {
-    move_issue_to_review(dir, issue_id);
+    start_issue_work(dir, issue_id);
     attach_issue_pass_evidence(dir, issue_id);
     let (success, stdout, stderr) = run_atelier(
         dir,
@@ -6305,7 +6349,7 @@ fn test_done_parent_view_offers_no_transition_readiness() {
     // view.
     let policy_path = dir.path().join(".atelier/workflow.yaml");
     let policy = std::fs::read_to_string(&policy_path).unwrap();
-    let start = "      start:\n        from: [todo, blocked]\n        to: in_progress\n";
+    let start = "      start:\n        from: [todo]\n        to: in_progress\n";
     assert!(policy.contains(start), "{policy}");
     std::fs::write(
         &policy_path,

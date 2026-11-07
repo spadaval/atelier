@@ -1846,7 +1846,7 @@ fn test_issue_transition_options_and_successful_execution_follow_workflow_policy
         "{transition_out}"
     );
     assert!(
-        transition_out.contains("block: allowed"),
+        transition_out.contains("defer: allowed"),
         "{transition_out}"
     );
     assert!(
@@ -2270,11 +2270,6 @@ fn test_issue_close_uses_terminal_transition_and_clears_active_work() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_review"],
-    );
-    assert!(success, "request_review failed: {stderr}");
     attach_issue_pass_evidence(dir.path(), &issue_id);
     commit_all(dir.path(), "ready for close");
     let head_before = git_rev_parse(dir.path(), "HEAD");
@@ -2425,7 +2420,7 @@ fn test_issue_transition_rejects_unknown_transition_name() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "ship_it"]);
     assert!(!success, "unknown transition should fail");
     assert!(
-        stderr.contains("Invalid transition 'ship_it'. Valid values: block, defer, start"),
+        stderr.contains("Invalid transition 'ship_it'. Valid values: defer, start"),
         "{stderr}"
     );
 }
@@ -2500,13 +2495,9 @@ fn test_issue_transition_options_render_guidance_and_exact_command() {
     assert!(issue_out.contains("Created issue atelier-"));
     let issue_id = issue_id_by_title(dir.path(), "Guided transition item");
     move_epic_directly_to_ready(dir.path(), &issue_id);
-    for args in [
-        vec!["issue", "transition", &issue_id, "start"],
-        vec!["issue", "transition", &issue_id, "request_review"],
-    ] {
-        let (success, stdout, stderr) = run_atelier(dir.path(), &args);
-        assert!(success, "transition {:?} failed: {stderr}", args);
-    }
+    let (success, _, stderr) =
+        run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
+    assert!(success, "start failed: {stderr}");
 
     let (success, options_out, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
@@ -3124,7 +3115,7 @@ fn rendered_views_use_one_next_footer_and_no_retired_headings() {
         .unwrap_or_else(|| panic!("no Transition Readiness:\n{full}"));
     assert!(
         readiness.contains(&format!(
-            "\n    Command: atelier issue transition {work_id} block\n"
+            "\n    Command: atelier issue transition {work_id} defer\n"
         )),
         "{readiness}"
     );
@@ -3139,7 +3130,7 @@ fn rendered_views_use_one_next_footer_and_no_retired_headings() {
     let options = output_of(format!("issue transition {work_id}"));
     assert!(
         options.contains(&format!(
-            "start: blocked\n  From: todo, blocked\n  To:   in_progress\n  Command: atelier issue transition {work_id} start\n"
+            "start: blocked\n  From: todo\n  To:   in_progress\n  Command: atelier issue transition {work_id} start\n"
         )),
         "{options}"
     );

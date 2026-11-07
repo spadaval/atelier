@@ -967,10 +967,11 @@ state_root = ".atelier"
         let dir = tempdir().unwrap();
         write_config_and_workflow(&dir);
         let state_dir = dir.path().join(".atelier");
-        let issue = test_issue("atelier-obj1");
+        let mut issue = test_issue("atelier-obj1");
+        issue.status = "todo".to_string();
         insert_canonical_issue(&state_dir, issue.clone());
         let policy = atelier_app::workflow_policy::load(dir.path()).unwrap();
-        let transition = resolve_issue_transition(&policy, &issue, "block").unwrap();
+        let transition = resolve_issue_transition(&policy, &issue, "start").unwrap();
 
         let mut record = RecordStore::new(&state_dir)
             .load_issue_by_id("atelier-obj1")
@@ -987,7 +988,7 @@ state_root = ".atelier"
         let stored = RecordStore::new(&state_dir)
             .load_issue_by_id("atelier-obj1")
             .unwrap();
-        assert_eq!(stored.issue.status, "blocked");
+        assert_eq!(stored.issue.status, "in_progress");
         assert!(stored.issue.closed_at.is_none());
         assert_eq!(stored.sections.close_reason, None);
     }
