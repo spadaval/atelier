@@ -33,8 +33,7 @@ cannot be backdated past work its owner authored later.
    `defer` with a follow-up issue, or `no_action`), the identity that set
    it, the commit the branch was at, the time and the reason.
    `review disposition` sets it, replacing any earlier one. Review records
-   move to schema version 2; version 1 records without separate
-   dispositions still load unchanged.
+   move to schema version 2; version 1 records still load.
 2. **Only the disposition changes.** Every other review event, and every
    other field of a finding, stays append-only. The append-only check and
    approval freshness share one rule: a change to a review record is
@@ -48,7 +47,9 @@ cannot be backdated past work its owner authored later.
    the field: the oldest commit since which the finding's file has held this
    disposition. The commit and time the disposition names are not trusted for
    this, so setting it again, or restoring earlier bytes by hand, is judged
-   at the later commit.
+   at the later commit. A disposition read from a separate event, or written
+   by the migration commit that removed that event, is judged at the commit
+   that added the event, and must match it.
 5. **A changed disposition is audited through Git.** The record keeps only
    the current disposition. Earlier ones, such as a `fix_now` later changed to
    `defer`, or an author's proposal the reviewer replaced, stay in the Git
@@ -57,15 +58,26 @@ cannot be backdated past work its owner authored later.
    read only the latest event before. A second record per change was
    considered and rejected: it is the record this decision removes, and Git
    already keeps every version, each pinned to a commit and author.
-6. **Migration.** `atelier migrate dispositions --apply` folds each finding's
-   latest disposition event into the finding, with `migrated_from` naming the
-   event, and removes every disposition event, superseded ones included.
-   History keeps them. A migrated disposition is traced to the commit that
-   added its event and must match that event's fields. Events that continue
-   an already migrated disposition, as a branch recorded with an older
-   Atelier brings in, are folded the same way and replace it. A separate
-   disposition event in the checkout fails to load with a pointer to the
-   command; history that holds them still reads.
+6. **Expand and contract.** Every repository on a host shares one installed
+   `atelier`, and several hold separate disposition events with live work,
+   so the change cannot require them to migrate first.
+   - *Expand (this change).* Atelier reads each separate disposition event
+     as folded into its finding: the finding takes its latest event, the one
+     no other supersedes, as its disposition, with `migrated_from` naming the
+     event, exactly as the migration would write it, and every command and
+     gate judges it so, the non-author rules included. Atelier writes no new
+     events: `review disposition` writes the field and removes the finding's
+     events. Events that continue an already folded disposition, as a branch
+     recorded with an older Atelier brings in, replace it.
+   - *Optional cleanup.* `atelier migrate dispositions --apply` writes that
+     fold into each finding and removes every event, superseded ones
+     included; history keeps them. Results read the same before and after.
+     This repository ran it with the change.
+   - *Contract (atelier-42th).* Once every repository the shared binary
+     serves has committed the migration on its base and no open branch there
+     holds an event, the read path and the migrate command are removed, and
+     a separate event in a checkout fails to load. History keeps parsing
+     them, since tracing a migrated disposition reads its event.
 
 ## Consequences
 
@@ -78,8 +90,9 @@ cannot be backdated past work its owner authored later.
 - A fix still needs a fresh independent approval after its resolution, as
   before. That re-review may cover only the fix's diff, and the reviewer who
   raised the finding may do it.
-- Repositories with disposition events run the migration once, on the base
-  and on each open work branch, and commit the result. The migration commit
-  keeps approvals current.
+- Repositories with disposition events keep working unmigrated. Each may run
+  the migration on its base, and on open work branches, whenever it chooses;
+  the migration commit keeps approvals current. The contraction waits on all
+  of them.
 - Agent Factory's text that described two events (references/atelier.md,
   references/finding-disposition.md) changes with this, per ADR 0023.

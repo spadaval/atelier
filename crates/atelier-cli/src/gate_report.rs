@@ -53,18 +53,14 @@ impl Uncommitted {
             if relative.starts_with("issues") {
                 issues.insert(id.to_owned());
             } else if relative.starts_with("reviews") {
-                issues.extend(
-                    index
-                        .require_review(id)
-                        .ok()
-                        .map(|review| review.target.clone()),
-                );
-                if let Some(atelier_records::review::ReviewFile::Event(review)) =
-                    working.and_then(|text| {
+                issues.extend(index.review_target(id).map(str::to_owned));
+                if let Some(target) = working
+                    .and_then(|text| {
                         atelier_records::review::parse_review_file(&text, relative).ok()
                     })
+                    .and_then(|review| review.target().map(str::to_owned))
                 {
-                    issues.insert(review.target);
+                    issues.insert(target);
                 }
             } else if relative.starts_with("evidence") {
                 let attached = |evidence: &atelier_records::EvidenceRecord| {

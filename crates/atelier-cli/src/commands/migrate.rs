@@ -2,13 +2,11 @@
 //! (atelier-9vq3), and separate disposition events into their findings
 //! (ADR 0025).
 //!
-//! The old shapes no longer load, so each migration reads the raw Markdown
-//! instead of loading the record index, plans every rewrite, validates each
-//! result with the record parser, and writes nothing unless all of them are
-//! valid.
+//! Epic records no longer load, so that migration reads the raw Markdown
+//! instead of loading the record index; separate disposition events still
+//! load, folded into their findings, and that migration writes the fold.
+//! Each plans every rewrite and writes nothing unless all of them are valid.
 use anyhow::{bail, Context, Result};
-use atelier_records::review::{parse_review_file, RetiredDisposition, ReviewFile};
-use std::collections::BTreeMap;
 use std::{fs, path::Path};
 
 use atelier_app::storage_layout::StorageLayout;
@@ -188,86 +186,41 @@ fn plan_epic(path: &Path, text: &str, to: &str, draft_status: &str) -> Result<Op
     }))
 }
 
-/// Folds each finding's latest disposition event into the finding as its
-/// disposition field, naming the event, and removes every disposition event
-/// (ADR 0025). Superseded events are dropped with the latest: the gates read
-/// only the latest, and Git history keeps them all. A finding migrated
-/// already takes the events that continue from its folded one. Quiet output is the IDs
-/// of the findings that take a disposition, one per line.
+/// Writes the fold Atelier reads separate disposition events as (ADR 0025):
+/// each finding with events takes its latest one as its disposition field,
+/// naming the event, and every disposition event is removed, superseded ones
+/// included. The gates read only the latest, and Git history keeps them all.
+/// A finding migrated already takes the events that continue from its
+/// folded one. Optional cleanup: the result reads the same before and after.
+/// Quiet output is the IDs of the findings that take a disposition, one per
+/// line.
 pub fn dispositions(apply: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
-    let dir = layout.canonical_dir().join("reviews");
-    let mut findings = BTreeMap::new();
-    let mut events: BTreeMap<String, Vec<(std::path::PathBuf, RetiredDisposition)>> =
-        BTreeMap::new();
-    let mut paths = match fs::read_dir(&dir) {
-        Ok(entries) => entries
-            .map(|entry| entry.map(|entry| entry.path()))
-            .collect::<std::io::Result<Vec<_>>>()?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(error) => return Err(error).context(format!("cannot read {}", dir.display())),
-    };
-    paths.sort();
-    for path in paths {
-        if path.extension().is_none_or(|ext| ext != "md") {
-            continue;
-        }
-        let relative = Path::new("reviews").join(path.file_name().context("review file name")?);
-        match parse_review_file(&fs::read_to_string(&path)?, &relative)? {
-            ReviewFile::RetiredDisposition(event) => events
-                .entry(event.finding.clone())
-                .or_default()
-                .push((path, event)),
-            ReviewFile::Event(record) => {
-                findings.insert(record.header.id.clone(), record);
-            }
-            ReviewFile::BaseExemption(_) => {}
-        }
+    let files = atelier_app::record_index::read_record_files(&layout.canonical_dir())?;
+    if let Some(first) = files.errors.into_iter().next() {
+        return Err(first.error);
     }
     let mut plans = Vec::new();
-    for (finding, chain) in &events {
-        let record = findings.get(finding).with_context(|| {
-            format!("disposition events of {finding} name a finding that does not exist; restore it, or remove those events by hand")
-        })?;
-        if !matches!(record.event, atelier_core::ReviewEvent::Finding { .. }) {
-            bail!("{finding} is not a finding, so disposition events cannot be folded into it");
-        }
-        // A finding migrated already takes events that continue from the
-        // one it was migrated from, as a branch that recorded a successor
-        // brings in when it merges a migrated base.
-        if let Some(current) = record.disposition() {
-            let continues = current.migrated_from.as_ref().is_some_and(|folded| {
-                chain
-                    .iter()
-                    .any(|(_, event)| event.supersedes.as_ref() == Some(folded))
-            });
-            if !continues {
-                bail!("finding {finding} already carries a disposition that its disposition events do not continue from; set the disposition it should have with `atelier review disposition` and remove the events by hand");
-            }
-        }
-        // The latest is the one no other event supersedes.
-        let latest = chain
+    for finding in &files.reviews {
+        let events = files
+            .retired_dispositions
             .iter()
-            .filter(|(_, event)| {
-                !chain
-                    .iter()
-                    .any(|(_, other)| other.supersedes.as_deref() == Some(event.id.as_str()))
-            })
+            .filter(|event| event.finding == finding.header.id)
             .collect::<Vec<_>>();
-        let [(_, latest)] = latest.as_slice() else {
-            bail!("finding {finding} has competing latest disposition events; run atelier check");
-        };
-        let folded = latest.folded();
-        atelier_records::review::validate_disposition(&folded)
-            .with_context(|| format!("disposition event {}", latest.id))?;
-        plans.push((finding.clone(), folded, chain));
+        if events.is_empty() {
+            continue;
+        }
+        let disposition = finding
+            .disposition()
+            .context("a finding with disposition events reads as disposed")?;
+        plans.push((finding.header.id.clone(), disposition.clone(), events));
     }
-    for (finding, folded, chain) in &plans {
+    for (finding, folded, events) in &plans {
         if quiet {
             println!("{finding}");
             continue;
         }
-        let dropped = match chain.len() - 1 {
+        let dropped = match events.len() - 1 {
             0 => String::new(),
             n => format!(
                 ", removing {} it superseded",
@@ -296,10 +249,10 @@ pub fn dispositions(apply: bool, quiet: bool) -> Result<()> {
         return Ok(());
     }
     let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
-    for (finding, folded, chain) in plans.iter() {
+    for (finding, folded, events) in &plans {
         store.set_disposition(finding, folded.clone())?;
-        for (path, _) in chain.iter() {
-            fs::remove_file(path).with_context(|| format!("cannot remove {}", path.display()))?;
+        for event in events {
+            store.remove_retired_disposition(&event.id)?;
         }
     }
     if !quiet {

@@ -332,11 +332,12 @@ enum MigrateCommands {
         #[arg(long)]
         apply: bool,
     },
-    /// Fold separate disposition events into their findings; dry run unless --apply
+    /// Write separate disposition events into their findings; dry run unless --apply
     ///
-    /// Each finding takes its latest disposition event as its disposition
-    /// field, naming the event it came from, and every disposition event is
-    /// removed; Git history keeps them (ADR 0025).
+    /// Optional cleanup: Atelier already reads each finding's latest
+    /// disposition event as its disposition. This writes it as the finding's
+    /// field, naming the event, and removes every disposition event; Git
+    /// history keeps them (ADR 0025).
     Dispositions {
         /// Write the changes; without this flag the command only reports them
         #[arg(long)]

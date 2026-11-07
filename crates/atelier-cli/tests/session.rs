@@ -8109,11 +8109,10 @@ fn pre_adr_0025_repository(no_action_identity: &str, merged: bool) -> (Fixture, 
 #[test]
 fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     let (f, findings) = pre_adr_0025_repository("Reviewer", true);
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(
-        !pass && out.contains("atelier migrate dispositions --apply"),
-        "{out}"
-    );
+    // Unmigrated, the events read as folded into their findings.
+    ok(f.path(), &["check"]);
+    ok(f.path(), &["doctor"]);
+    ok(f.path(), &["land"]);
     let reviews = f.path().join(".atelier/reviews");
     let before = fs::read_dir(&reviews).unwrap().count();
     // A dry run lists the findings and writes nothing.
@@ -8170,20 +8169,39 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     );
     commit(f.path(), "migrate the successor");
     ok(f.path(), &["doctor"]);
-    // A migrated disposition changed by hand no longer matches its event.
+    // Once the file has held another disposition, the migrated one is
+    // judged where it is set again, even by restoring its bytes by hand
+    // (ADR 0025 decision 4): the reviewer has authored work by then.
     let path = reviews.join(format!("{}.md", findings[2]));
-    let text = fs::read_to_string(&path).unwrap();
-    fs::write(
-        &path,
-        text.replace("    identity: Reviewer\n", "    identity: Someone\n"),
-    )
-    .unwrap();
-    commit(f.path(), "edit a migrated disposition");
+    let migrated = fs::read_to_string(&path).unwrap();
+    git(f.path(), &["config", "user.name", "Reviewer"]);
+    fs::write(f.path().join("reviewer-code"), "work by Reviewer\n").unwrap();
+    commit(f.path(), "Reviewer's work");
+    git(f.path(), &["config", "user.name", "Author"]);
+    ok(f.path(), &["doctor"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &findings[2],
+            "--identity",
+            "Someone",
+            "--decision",
+            "no_action",
+            "--commit-records",
+            "Changed",
+        ],
+    );
+    ok(f.path(), &["doctor"]);
+    fs::write(&path, migrated).unwrap();
+    commit(f.path(), "restore the migrated disposition by hand");
     let (pass, out) = cli(f.path(), &["doctor"]);
     assert!(
         !pass
             && out.contains("findings.disposed")
-            && out.contains("differs from atelier-d005, the event it was migrated from"),
+            && out.contains(&findings[2])
+            && out.contains("needs to be set by a non-author"),
         "{out}"
     );
 }
@@ -8193,6 +8211,32 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
 #[test]
 fn a_migrated_author_no_action_is_still_refused() {
     let (f, findings) = pre_adr_0025_repository("Author", true);
+    // Unmigrated, it is refused the same way, and the reviewer setting it
+    // writes the field and removes the event it replaces.
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass && out.contains(&findings[2]) && out.contains("needs to be set by a non-author"),
+        "{out}"
+    );
+    {
+        let (f, findings) = pre_adr_0025_repository("Author", true);
+        ok(
+            f.path(),
+            &[
+                "review",
+                "disposition",
+                &findings[2],
+                "--identity",
+                "Reviewer",
+                "--decision",
+                "no_action",
+                "--commit-records",
+                "Accepted",
+            ],
+        );
+        assert!(!f.path().join(".atelier/reviews/atelier-d004.md").exists());
+        ok(f.path(), &["doctor"]);
+    }
     ok(f.path(), &["migrate", "dispositions", "--apply"]);
     commit(f.path(), "migrate dispositions");
     let (pass, out) = cli(f.path(), &["doctor"]);
@@ -8201,6 +8245,27 @@ fn a_migrated_author_no_action_is_still_refused() {
             && out.contains("findings.disposed")
             && out.contains(&findings[2])
             && out.contains("needs to be set by a non-author"),
+        "{out}"
+    );
+    // Nor can the migration commit launder it: a fold edited before it is
+    // committed no longer matches its event.
+    let (f, findings) = pre_adr_0025_repository("Author", true);
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    let path = f
+        .path()
+        .join(format!(".atelier/reviews/{}.md", findings[2]));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("    identity: Author\n", "    identity: Reviewer\n"),
+    )
+    .unwrap();
+    commit(f.path(), "migrate dispositions, edited");
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass
+            && out.contains("findings.disposed")
+            && out.contains("differs from atelier-d004, the event it was migrated from"),
         "{out}"
     );
 }
@@ -8331,20 +8396,31 @@ fn a_disposition_after_approval_keeps_it_current() {
     assert!(!pass && out.contains("review_append_only"), "{out}");
 }
 
-/// Migrating on an approved work branch keeps its approval current, and the
-/// gates read the folded dispositions there as they read the events.
+/// An approved work branch whose dispositions are separate events passes
+/// check, land and the merge gates exactly as it does once migrated, and
+/// migrating keeps its approval current (ADR 0025).
 #[test]
 fn migrating_dispositions_on_an_approved_branch_keeps_the_approval() {
-    let (f, _) = pre_adr_0025_repository("Reviewer", false);
-    ok(f.path(), &["migrate", "dispositions", "--apply"]);
-    commit(f.path(), "migrate dispositions");
-    let out = ok(f.path(), &["merge", &f.id, "--check"]);
-    assert!(
-        out.contains("review.current via atelier-a001") && out.contains("merge: passed"),
-        "{out}"
-    );
-    ok(f.path(), &["merge", &f.id]);
-    ok(f.path(), &["doctor"]);
+    let mut reports = Vec::new();
+    for migrated in [false, true] {
+        let (f, _) = pre_adr_0025_repository("Reviewer", false);
+        if migrated {
+            ok(f.path(), &["migrate", "dispositions", "--apply"]);
+            commit(f.path(), "migrate dispositions");
+        }
+        ok(f.path(), &["check"]);
+        let land = ok(f.path(), &["land", &f.id]);
+        let out = ok(f.path(), &["merge", &f.id, "--check"]);
+        assert!(
+            out.contains("review.current via atelier-a001") && out.contains("merge: passed"),
+            "{out}"
+        );
+        reports.push(format!("{land}\n{out}").replace(&f.id, "<owner>"));
+        ok(f.path(), &["merge", &f.id]);
+        ok(f.path(), &["doctor"]);
+        ok(f.path(), &["land"]);
+    }
+    assert_eq!(reports[0], reports[1]);
 }
 
 /// An uncommitted disposition is committed with the work, not restored: it

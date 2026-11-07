@@ -147,7 +147,8 @@ with who set it and the commit it was set at.
 `| ✓ current` (or the base's word) for an approval or exemption; then, for a
 finding, `Disposition: <decision> by <identity> @<pin>[, fixed at
 <commit>][, follow-up <id>] | <timestamp>: <reason>` (or `Disposition: ⚠
-none`), `Migrated from: <event>` for one `migrate dispositions` folded in, and
+none`), `Migrated from: <event>` for one read from, or migrated from, a
+separate disposition event, and
 `Earlier dispositions: git log -p -- .atelier/reviews/<id>.md`; then the text
 once.
 

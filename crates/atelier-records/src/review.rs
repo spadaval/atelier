@@ -38,9 +38,10 @@ struct Front {
 }
 
 /// A separate disposition event, the shape schema version 1 recorded a
-/// finding's disposition in. ADR 0025 retired it: it is read only from
-/// history and by `atelier migrate dispositions`, which folds the latest one
-/// into its finding.
+/// finding's disposition in. ADR 0025 retired it: Atelier no longer writes
+/// one, reads those it finds as folded into their findings
+/// ([`fold_retired_dispositions`]), and `atelier migrate dispositions`
+/// writes that fold and removes them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RetiredDisposition {
     pub id: String,
@@ -70,6 +71,142 @@ impl RetiredDisposition {
             migrated_from: Some(self.id.clone()),
         }
     }
+}
+
+/// Sets `disposition` on the finding `record`, with what it derives: the
+/// update time and the follow-up link. Returns the disposition it replaced.
+pub fn set_finding_disposition(
+    record: &mut ReviewRecord,
+    disposition: Disposition,
+) -> Result<Option<Disposition>> {
+    let ReviewEvent::Finding {
+        disposition: slot, ..
+    } = &mut record.event
+    else {
+        bail!(
+            "{} is not a finding; a disposition settles a finding",
+            record.header.id
+        );
+    };
+    let previous = slot.replace(disposition);
+    record.header.updated_at = record
+        .disposition()
+        .map_or(record.header.created_at, |set| set.recorded_at);
+    record.header.relationships = relationships(&record.target, &record.event);
+    Ok(previous)
+}
+
+/// Reads separate disposition events as folded into their findings, as
+/// `atelier migrate dispositions` would write them (ADR 0025): each finding
+/// with events takes its latest one, the event no other supersedes. A
+/// finding that already carries a disposition takes events only when they
+/// continue from the one it was migrated from. Returns the IDs of the
+/// findings that changed, and an error for each event that cannot be
+/// folded, with the event's ID.
+pub fn fold_retired_dispositions(
+    findings: &mut [ReviewRecord],
+    events: &[RetiredDisposition],
+) -> (Vec<String>, Vec<(String, anyhow::Error)>) {
+    let mut by_finding = std::collections::BTreeMap::<&str, Vec<&RetiredDisposition>>::new();
+    for event in events {
+        by_finding.entry(&event.finding).or_default().push(event);
+    }
+    let mut folded = Vec::new();
+    let mut errors = Vec::new();
+    for (finding, chain) in by_finding {
+        let fail = |errors: &mut Vec<(String, anyhow::Error)>, message: String| {
+            for event in &chain {
+                errors.push((event.id.clone(), anyhow::anyhow!("{message}")));
+            }
+        };
+        let Some(record) = findings
+            .iter_mut()
+            .find(|record| record.header.id == finding)
+        else {
+            fail(
+                &mut errors,
+                format!("disposition events of {finding} name a finding that does not exist"),
+            );
+            continue;
+        };
+        if !matches!(record.event, ReviewEvent::Finding { .. })
+            || chain.iter().any(|event| event.target != record.target)
+        {
+            fail(
+                &mut errors,
+                format!(
+                    "disposition events of {finding} must reference a finding for the same target"
+                ),
+            );
+            continue;
+        }
+        let migrated = record
+            .disposition()
+            .and_then(|current| current.migrated_from.clone());
+        if record.disposition().is_some()
+            && !chain
+                .iter()
+                .any(|event| event.supersedes.is_some() && event.supersedes == migrated)
+        {
+            fail(
+                &mut errors,
+                format!("finding {finding} carries a disposition that its disposition events do not continue from; set the disposition it should have with `atelier review disposition`"),
+            );
+            continue;
+        }
+        let known = |id: &String| {
+            chain.iter().any(|event| &event.id == id) || Some(id) == migrated.as_ref()
+        };
+        if let Some(event) = chain
+            .iter()
+            .find(|event| event.supersedes.as_ref().is_some_and(|id| !known(id)))
+        {
+            errors.push((
+                event.id.clone(),
+                anyhow::anyhow!(
+                    "disposition {} supersedes {}, which is not a disposition of finding {finding}",
+                    event.id,
+                    event.supersedes.as_deref().unwrap_or_default()
+                ),
+            ));
+            continue;
+        }
+        let latest = chain
+            .iter()
+            .filter(|event| {
+                !chain
+                    .iter()
+                    .any(|other| other.supersedes.as_ref() == Some(&event.id))
+            })
+            .collect::<Vec<_>>();
+        let roots = chain
+            .iter()
+            .filter(|event| event.supersedes.is_none())
+            .count();
+        let [latest] = latest.as_slice() else {
+            fail(
+                &mut errors,
+                format!("finding {finding} has competing or cyclic disposition events"),
+            );
+            continue;
+        };
+        if roots > 1 || (migrated.is_none() && roots == 0) {
+            fail(
+                &mut errors,
+                format!("finding {finding} has competing disposition events"),
+            );
+            continue;
+        }
+        let disposition = latest.folded();
+        if let Err(error) = validate_disposition(&disposition)
+            .and_then(|()| set_finding_disposition(record, disposition))
+        {
+            errors.push((latest.id.clone(), error));
+            continue;
+        }
+        folded.push(finding.to_owned());
+    }
+    (folded, errors)
 }
 
 #[derive(Deserialize)]
@@ -476,19 +613,26 @@ impl RecordStore {
         let _lock = CanonicalMutationLock::exclusive(&self.state_dir)?;
         let relative = canonical_record_path(&REVIEW_KIND, id)?;
         let mut record = parse_review_record(&self.read_record_file(&relative)?, &relative)?;
-        let ReviewEvent::Finding {
-            disposition: slot, ..
-        } = &mut record.event
-        else {
-            bail!("{id} is not a finding; a disposition settles a finding");
-        };
-        let previous = slot.replace(disposition);
-        record.header.updated_at = record
-            .disposition()
-            .map_or(record.header.created_at, |set| set.recorded_at);
-        record.header.relationships = relationships(&record.target, &record.event);
+        let previous = set_finding_disposition(&mut record, disposition)?;
         self.write_atomic(&relative, render_review_record(&record)?)?;
         Ok((record, previous))
+    }
+
+    /// Removes a separate disposition event once its finding carries the
+    /// disposition (ADR 0025), noting the path for `--commit-records`.
+    pub fn remove_retired_disposition(&self, id: &str) -> Result<()> {
+        let _lock = CanonicalMutationLock::exclusive(&self.state_dir)?;
+        let relative = canonical_record_path(&REVIEW_KIND, id)?;
+        let text = self.read_record_file(&relative)?;
+        if !matches!(
+            parse_review_file(&text, &relative)?,
+            ReviewFile::RetiredDisposition(_)
+        ) {
+            bail!("{id} is not a separate disposition event");
+        }
+        fs::remove_file(self.state_dir.join(&relative))?;
+        crate::written::note(&self.state_dir.join(&relative));
+        Ok(())
     }
 
     fn publish_review(&self, id: &str, text: String) -> Result<()> {

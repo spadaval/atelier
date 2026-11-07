@@ -208,8 +208,8 @@ fn base_records(
     let bears = |index: &RecordIndex, kind: &str, id: &str| match kind {
         "issues" => ids.contains(id),
         "reviews" => index
-            .require_review(id)
-            .is_ok_and(|review| ids.contains(&review.target)),
+            .review_target(id)
+            .is_some_and(|target| ids.contains(target)),
         "evidence" => index.list_record_links("evidence", id).is_ok_and(|links| {
             links
                 .iter()

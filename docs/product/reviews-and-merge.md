@@ -85,15 +85,21 @@ record is append-only: editing it, or deleting a record, is refused, and merge
 checks review history from the base, including edits subsequently reverted.
 
 Repositories whose dispositions are separate events, from before ADR 0025,
-run `atelier migrate dispositions --apply` once on the base and on each open
-work branch, and commit the result. It folds each finding's latest
-disposition event into the finding, naming the event in `migrated_from`, and
-removes every disposition event; Git history keeps them. A migrated
-disposition is judged at the commit that added its event and must match that
-event. Run it again after merging a migrated base into a branch that recorded
-disposition events with an older Atelier: events that continue a migrated
-finding's disposition replace it. Until the migration runs, a disposition
-event in the checkout fails to load and names the command.
+keep working unmigrated: Atelier reads each finding's latest disposition
+event as its disposition, with `migrated_from` naming the event, and judges
+it at the commit that added the event, so check, land, merge and doctor give
+the same results as after migration. `review disposition` on such a finding
+writes the field and removes its events. `atelier migrate dispositions
+--apply` is the optional cleanup: it writes that fold into every finding and
+removes the events, on the base or a work branch, and keeps approvals
+current; Git history keeps the events. Events that continue a folded
+disposition, as a branch recorded with an older Atelier brings in, replace
+it. The read path for separate events goes once every repository has
+migrated (atelier-42th). A disposition read from an event, or written by the
+migration commit that removed it, is judged at the commit that added the
+event; once the finding's file has held another disposition, the later
+setting counts, even of the same bytes.
+
 Terminal targets and their eligible review clusters can leave the active tree
 together through [protected prune](retention-and-prune.md); retained events
 remain immutable.

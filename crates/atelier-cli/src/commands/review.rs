@@ -260,8 +260,17 @@ pub fn disposition(
     atelier_records::review::validate_disposition(&disposition)?;
     // Read before the record changes, so a failure here writes nothing.
     let authors = authors_at_head(repo, &index, &original.target)?;
-    let (updated, previous) = atelier_app::project_config::record_store(&layout.canonical_dir())?
-        .set_disposition(&finding, disposition.clone())?;
+    // The disposition an older Atelier recorded as separate events is read
+    // as folded into the finding (ADR 0025); writing the field removes them.
+    let previous = original.disposition().cloned();
+    let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
+    let (updated, _) = store.set_disposition(&finding, disposition.clone())?;
+    for event in index
+        .retired_dispositions()
+        .filter(|event| event.finding == finding)
+    {
+        store.remove_retired_disposition(&event.id)?;
+    }
     let mut line = format!(
         "Disposition {} of {} on {} @{}: \"{}\"{}",
         decision.as_str(),

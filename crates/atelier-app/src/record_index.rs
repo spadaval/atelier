@@ -11,6 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use atelier_core::{BaseExemption, EvidenceRecord, Issue, RecordLink, Relation, ReviewRecord};
+use atelier_records::review::RetiredDisposition;
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
     validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships, BLOCKED_BY,
@@ -29,6 +30,9 @@ pub struct RecordFiles {
     pub reviews: Vec<ReviewRecord>,
     /// Trivial exemptions of base commits, which name no issue.
     pub base_exemptions: Vec<BaseExemption>,
+    /// Separate disposition events from before ADR 0025, already folded
+    /// into their findings in `reviews`.
+    pub retired_dispositions: Vec<RetiredDisposition>,
     /// One error per unreadable, unparsable, or unsupported file, in path
     /// order. Each error names the file.
     pub errors: Vec<RecordFileError>,
@@ -39,7 +43,8 @@ impl RecordFiles {
             return Err(error.error);
         }
         RecordIndex::from_records(self.issues, self.evidence, self.reviews)?
-            .with_base_exemptions(self.base_exemptions)
+            .with_base_exemptions(self.base_exemptions)?
+            .with_retired_dispositions(self.retired_dispositions)
     }
 }
 
@@ -86,6 +91,9 @@ pub(crate) fn read_record_paths(
             Ok(Some(ParsedRecord::Evidence(record))) => files.evidence.push(*record),
             Ok(Some(ParsedRecord::Review(record))) => files.reviews.push(*record),
             Ok(Some(ParsedRecord::BaseExemption(record))) => files.base_exemptions.push(*record),
+            Ok(Some(ParsedRecord::RetiredDisposition(record))) => {
+                files.retired_dispositions.push(*record)
+            }
             Ok(None) => {}
             Err(error) => files.errors.push(RecordFileError {
                 error: name_record_file(error, &relative),
@@ -93,6 +101,22 @@ pub(crate) fn read_record_paths(
             }),
         }
     }
+    // Read separate disposition events as folded into their findings, as
+    // `atelier migrate dispositions` would write them (ADR 0025).
+    let (_, fold_errors) = atelier_records::review::fold_retired_dispositions(
+        &mut files.reviews,
+        &files.retired_dispositions,
+    );
+    for (id, error) in fold_errors {
+        let path = PathBuf::from("reviews").join(format!("{id}.md"));
+        files.errors.push(RecordFileError {
+            error: name_record_file(error, &path),
+            path,
+        });
+    }
+    files
+        .errors
+        .sort_by(|left, right| left.path.cmp(&right.path));
     Ok((files, changed))
 }
 
@@ -113,6 +137,7 @@ enum ParsedRecord {
     Evidence(Box<EvidenceRecord>),
     Review(Box<ReviewRecord>),
     BaseExemption(Box<BaseExemption>),
+    RetiredDisposition(Box<RetiredDisposition>),
 }
 
 fn read_record_file(
@@ -164,11 +189,9 @@ fn read_record_file(
             atelier_records::review::ReviewFile::BaseExemption(record) => {
                 ParsedRecord::BaseExemption(Box::new(record))
             }
-            atelier_records::review::ReviewFile::RetiredDisposition(record) => bail!(
-                "{} is a separate disposition event of finding {}; a finding carries its disposition since ADR 0025. Run `atelier migrate dispositions --apply` to fold such events into their findings",
-                display_state_path(relative),
-                record.finding
-            ),
+            atelier_records::review::ReviewFile::RetiredDisposition(record) => {
+                ParsedRecord::RetiredDisposition(Box::new(record))
+            }
         }
     } else {
         ParsedRecord::Evidence(Box::new(parse_evidence_record_file(&text, relative)?))
@@ -230,6 +253,7 @@ pub struct RecordIndex {
     evidence: BTreeMap<String, EvidenceRecord>,
     reviews: BTreeMap<String, ReviewRecord>,
     base_exemptions: BTreeMap<String, BaseExemption>,
+    retired_dispositions: BTreeMap<String, RetiredDisposition>,
     /// Evidence attachments and issue-to-issue relations, sorted.
     links: Vec<RecordLink>,
     /// `(kind, id)` to indices into `links` touching that record.
@@ -285,7 +309,45 @@ impl RecordIndex {
             return Err(first.error);
         }
         Self::from_project_records(state_dir, files.issues, files.evidence, files.reviews)?
-            .with_base_exemptions(files.base_exemptions)
+            .with_base_exemptions(files.base_exemptions)?
+            .with_retired_dispositions(files.retired_dispositions)
+    }
+
+    /// Adds the separate disposition events read beside the other records,
+    /// already folded into their findings, so their IDs still resolve as
+    /// the reviews they were (ADR 0025).
+    pub fn with_retired_dispositions(mut self, events: Vec<RetiredDisposition>) -> Result<Self> {
+        for record in events {
+            let id = record.id.clone();
+            if self.record_exists("review", &id)
+                || self.issues.contains_key(&id)
+                || self.evidence.contains_key(&id)
+                || self.base_exemptions.contains_key(&id)
+            {
+                bail!("Duplicate record ID in record files: {id}");
+            }
+            self.retired_dispositions.insert(id, record);
+        }
+        Ok(self)
+    }
+
+    /// Separate disposition events from before ADR 0025, which the
+    /// findings they name already carry.
+    pub fn retired_dispositions(&self) -> impl Iterator<Item = &RetiredDisposition> {
+        self.retired_dispositions.values()
+    }
+
+    /// The issue a review file is about: an event's target, or a separate
+    /// disposition event's.
+    pub fn review_target(&self, id: &str) -> Option<&str> {
+        self.reviews
+            .get(id)
+            .map(|record| record.target.as_str())
+            .or_else(|| {
+                self.retired_dispositions
+                    .get(id)
+                    .map(|record| record.target.as_str())
+            })
     }
 
     /// Adds the base exemptions read beside the other records. They name no
@@ -545,7 +607,7 @@ impl RecordIndex {
     pub fn discovery_source(&self, kind: &str, id: &str) -> Option<String> {
         match kind {
             "issue" => self.issues.contains_key(id).then(|| id.to_owned()),
-            "review" => self.reviews.get(id).map(|review| review.target.clone()),
+            "review" => self.review_target(id).map(str::to_owned),
             "evidence" => self
                 .evidence
                 .get(id)?
@@ -1215,7 +1277,7 @@ impl RecordIndex {
         match kind {
             "issue" => self.issues.contains_key(id),
             "evidence" => self.evidence.contains_key(id),
-            "review" => self.reviews.contains_key(id),
+            "review" => self.reviews.contains_key(id) || self.retired_dispositions.contains_key(id),
             _ => false,
         }
     }
@@ -1736,23 +1798,51 @@ mod tests {
         .is_empty());
     }
 
-    /// A separate disposition event no longer loads; the error names the
-    /// migration (ADR 0025).
+    /// A separate disposition event reads as folded into its finding, as
+    /// the migration would write it, and still resolves as a review; one
+    /// naming a missing finding is reported (ADR 0025).
     #[test]
-    fn a_separate_disposition_event_points_at_the_migration() {
+    fn a_separate_disposition_event_reads_as_folded_into_its_finding() {
         let dir = tempdir().unwrap();
         let state = dir.path().join(".atelier");
         fs::create_dir_all(state.join("reviews")).unwrap();
+        fs::create_dir_all(state.join("issues")).unwrap();
+        let store = atelier_records::RecordStore::new(state.clone());
+        store
+            .write_issue_atomic(&issue_record("atelier-real", "task", "todo"))
+            .unwrap();
         let commit = "a".repeat(40);
-        fs::write(
-            state.join("reviews/atelier-dsp1.md"),
-            format!("---\nschema: atelier.review\nschema_version: 1\nid: atelier-dsp1\ntitle: decided\ntarget: atelier-real\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: disposition\n  finding: atelier-fnd1\n  decision: no_action\n  supersedes: null\n  resolution_commit: null\n  follow_up: null\n---\n\ndecided\n"),
-        )
-        .unwrap();
+        let review = |id: &str, event: &str| {
+            fs::write(
+                state.join(format!("reviews/{id}.md")),
+                format!("---\nschema: atelier.review\nschema_version: 1\nid: {id}\ntitle: t\ntarget: atelier-real\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n{event}---\n\n{id} text\n"),
+            )
+            .unwrap();
+        };
+        review(
+            "atelier-fnd1",
+            "  event: finding\n  recommendation: no_action\n",
+        );
+        review("atelier-dsp1", "  event: disposition\n  finding: atelier-fnd1\n  decision: no_action\n  supersedes: null\n  resolution_commit: null\n  follow_up: null\n");
+        let index = RecordIndex::load_structural(&state).unwrap();
+        let disposition = index
+            .require_review("atelier-fnd1")
+            .unwrap()
+            .disposition()
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (
+                disposition.reason.as_str(),
+                disposition.migrated_from.as_deref()
+            ),
+            ("atelier-dsp1 text", Some("atelier-dsp1"))
+        );
+        assert_eq!(index.review_target("atelier-dsp1"), Some("atelier-real"));
+        review("atelier-dsp2", "  event: disposition\n  finding: atelier-gone\n  decision: no_action\n  supersedes: null\n  resolution_commit: null\n  follow_up: null\n");
         let error = format!("{:#}", RecordIndex::load_structural(&state).unwrap_err());
         assert!(
-            error.contains("atelier migrate dispositions --apply")
-                && error.contains("atelier-fnd1"),
+            error.contains("atelier-dsp2") && error.contains("name a finding that does not exist"),
             "{error}"
         );
     }

@@ -1938,37 +1938,63 @@ fn disposition_independent(
         .disposition()
         .with_context(|| format!("finding {} has no disposition", finding.header.id))?;
     let head = read.pinned("HEAD")?;
-    let set_at = match &disposition.migrated_from {
-        Some(original) => {
-            let introduced = read.path_log(&introduced_query(&head, original))?;
-            let event = introduced
-                .first()
-                .with_context(|| format!("disposition event {original} is not in history"))?
-                .clone();
-            let path = std::path::PathBuf::from(format!(".atelier/reviews/{original}.md"));
-            let folded = match parse_review_file(
-                &read.blob(&event, &path)?,
-                path.strip_prefix(".atelier")?,
-            )? {
-                ReviewFile::RetiredDisposition(old) if old.finding == finding.header.id => {
-                    old.folded()
-                }
-                _ => bail!(
-                    "{original} is not a disposition event of finding {}",
-                    finding.header.id
-                ),
-            };
-            if folded != *disposition {
-                bail!(
-                    "review_append_only: the disposition of finding {} differs from {original}, the event it was migrated from",
-                    finding.header.id
-                );
-            }
-            event
+    if let Some(original) = &disposition.migrated_from {
+        // Read from a separate event still in the tree, as an unmigrated
+        // repository holds it: it was set where that event was added.
+        let path = std::path::PathBuf::from(format!(".atelier/reviews/{original}.md"));
+        if read.entry(&head, &path)?.is_some() {
+            let event = migrated_event_commit(read, &head, finding, original)?;
+            return independent_at(index, read, &finding.target, &disposition.identity, &event);
         }
-        None => disposition_set_at(read, &head, finding)?,
-    };
+    }
+    let mut set_at = disposition_set_at(read, &head, finding)?;
+    // Set by the commit that removed the event it names, the migration: it
+    // was set where that event was added. Once the file has held another
+    // disposition, the later setting counts, even of the same bytes.
+    if let Some(original) = &disposition.migrated_from {
+        let path = std::path::PathBuf::from(format!(".atelier/reviews/{original}.md"));
+        let parent = read.first_parent(&set_at)?;
+        let removed_here = match &parent {
+            Some(parent) => {
+                read.entry(parent, &path)?.is_some() && read.entry(&set_at, &path)?.is_none()
+            }
+            None => false,
+        };
+        if removed_here {
+            set_at = migrated_event_commit(read, &head, finding, original)?;
+        }
+    }
     independent_at(index, read, &finding.target, &disposition.identity, &set_at)
+}
+/// The commit that added `original`, the separate disposition event the
+/// migration folded into `finding`, whose fields the disposition must match.
+fn migrated_event_commit(
+    read: &mut git::ReadContext<'_>,
+    head: &str,
+    finding: &ReviewRecord,
+    original: &str,
+) -> Result<String> {
+    let introduced = read.path_log(&introduced_query(head, original))?;
+    let event = introduced
+        .first()
+        .with_context(|| format!("disposition event {original} is not in history"))?
+        .clone();
+    let path = std::path::PathBuf::from(format!(".atelier/reviews/{original}.md"));
+    let folded =
+        match parse_review_file(&read.blob(&event, &path)?, path.strip_prefix(".atelier")?)? {
+            ReviewFile::RetiredDisposition(old) if old.finding == finding.header.id => old.folded(),
+            _ => bail!(
+                "{original} is not a disposition event of finding {}",
+                finding.header.id
+            ),
+        };
+    if Some(&folded) != finding.disposition() {
+        bail!(
+            "review_append_only: the disposition of finding {} differs from {original}, the event it was migrated from",
+            finding.header.id
+        );
+    }
+    Ok(event)
 }
 /// The oldest commit, walking back from `head`, since which `finding`'s
 /// file has held its current disposition.
