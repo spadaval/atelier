@@ -39,4 +39,5 @@ Keep findings, decisions on deferred and dismissed findings, approvals and the m
 
 ## Unknowns
 
+- Whether ADR 0025 decision 4, that `defer` and `no_action` are set by an identity other than the work's Git authors, goes with the reviewer-identity rule: it is the same comparison (ADR 0028, finding atelier-on6c). Sumeet decided the reviewer rule goes; ask him if removing this one is not plainly the same decision.
 - What replaces the recorded base for a branch that targets a mission branch rather than the base.
