@@ -1,6 +1,6 @@
 ---
-status: active
-last_changed: "2026-11-07: the implementer report stays out of the review brief (jnrh review); earlier that day, active on Sumeet's approval; earlier that day, planning review fixes; created that day from Sumeet's direction, after an analysis of every Atelier session on this host"
+status: completed
+last_changed: "2026-11-07: completed; earlier that day, the implementer report stays out of the review brief (jnrh review); earlier that day, active on Sumeet's approval; earlier that day, planning review fixes; created that day from Sumeet's direction, after an analysis of every Atelier session on this host"
 ---
 
 # Why
