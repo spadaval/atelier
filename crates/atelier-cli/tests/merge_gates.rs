@@ -4393,6 +4393,7 @@ fn review_records_can_be_corrected_until_they_reach_the_base() {
     for args in [
         &["check"][..],
         &["land"],
+        &["doctor"],
         &["merge", &fixture.id, "--check"],
     ] {
         let (passed, output) = cli(path, args);
@@ -4403,7 +4404,12 @@ fn review_records_can_be_corrected_until_they_reach_the_base() {
     ok(path, &["merge", &fixture.id]);
     git(path, &["switch", "-q", "main"]);
     assert!(kept_path.exists() && !dropped_path.exists());
-    for args in [&["check"][..], &["land"], &["doctor"]] {
+    for args in [
+        &["check"][..],
+        &["land"],
+        &["doctor"],
+        &["merge", &fixture.id, "--check"],
+    ] {
         let (passed, output) = cli(path, args);
         assert!(passed, "{args:?} on the base: {output}");
     }
