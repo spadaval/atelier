@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Record what proves work, when it can be proven, and nothing more"
-updated_at: "2026-11-06T23:42:03.454117611+00:00"
+updated_at: "2026-11-07T02:00:15.877605685+00:00"
 ---
 
 ## Outcome
