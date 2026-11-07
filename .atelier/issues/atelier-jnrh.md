@@ -47,6 +47,6 @@ docs/adr/0028-simpler-lifecycle.md (decision 2 and its open mechanics), docs/str
 
 ## Design
 
-- One section, `Report`, says what happened: the implementer report on a work item (written by the author before requesting review), a supersede reason, and later a loose end's result (atelier-8bh4). The old `Close Reason` heading is still read.
+- One section, `Report`, says what happened, for every transition that requires the `close_reason` policy field: the implementer report on a work item (written by the author before requesting review), a supersede reason, a mission's close report, a decision's `decide`, and later a loose end's result (atelier-8bh4). The policy key `close_reason` keeps its name and now means that section. The old `Close Reason` heading is still read.
 - Merge marks done by writing the status change into the merge commit it creates; nothing is committed on the branch.
 - Merge strategy tradeoff, for Sumeet's after-merge read: always merging with a merge commit gives up linear history and the `merge_diverged` refusal in astromech, demiurge and cosplay-studio, and a repository without merge checks or CI on the merged tree now lands a merged tree nobody ran. In exchange no branch needs a catch-up merge before landing (astromech hit `merge_diverged` about 56 times since 2026-10-15). Rejected: committing the done state on top of the branch head and fast-forwarding, which keeps two strategies and adds a second kind of commit Atelier writes. atelier-ml3r tells those repositories.
