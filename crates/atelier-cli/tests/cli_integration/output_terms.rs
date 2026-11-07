@@ -221,8 +221,15 @@ fn merge_refusals_and_invalid_policy_carry_one_code_and_one_step() {
     for args in [vec!["land"], vec!["merge", "--check", work.as_str()]] {
         let (success, stdout, stderr) = render(&args);
         let transcript = format!("{stdout}{stderr}");
+        // On a work branch land reports the check and refuses nothing
+        // (atelier-md0v); merge refuses.
+        let reported = if args[0] == "land" {
+            success && stdout.contains("land: work in progress")
+        } else {
+            !success
+        };
         assert!(
-            !success && codes(&transcript) == ["workflow_config_parse_error"],
+            reported && codes(&transcript) == ["workflow_config_parse_error"],
             "{transcript}"
         );
         assert_eq!(

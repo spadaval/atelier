@@ -185,10 +185,10 @@ fn review_list_shows_rows_in_time_order_then_approval_state_and_finding_tree() {
                 "Approval: ✓ current — {approval} @{} by Reviewer R",
                 short(&resolution)
             ),
-            "Findings: 2 disposed, 1 open".to_owned(),
-            format!("  ⚠ {open} defer, no disposition  No error type"),
+            "Findings: 2 settled, 1 open".to_owned(),
+            format!("  ⚠ {open} defer, no decision  No error type"),
             format!(
-                "  ✓ {fixed} fix_now → fix_now by Reviewer R @{0}, fixed at {0}  parse() ignores input",
+                "  ✓ {fixed} fix_now → fix_now by Reviewer R @{0}, fixed at {0}, approved since by {approval} @{0}  parse() ignores input",
                 short(&resolution)
             ),
             // The latest disposition replaced the first, which Git keeps.
@@ -343,7 +343,7 @@ fn review_show_is_a_brief_view_with_linked_events() {
 }
 
 #[test]
-fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
+fn recording_confirms_what_was_recorded_and_compares_no_identity_with_the_authors() {
     let tmp = tempdir().unwrap();
     let dir = tmp.path();
     let (id, _) = owner(dir);
@@ -376,7 +376,23 @@ fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
     assert_eq!(
         out,
         format!(
-            "Finding {finding} fix_now {at}. Dispose: atelier review disposition {finding} --identity \"...\" --decision fix_now --resolution-commit ... \"...\"\n"
+            "Finding {finding} fix_now {at}. Fix it in a later commit; an approval after the fix resolves it.\n"
+        )
+    );
+    // A defer or no_action finding names the decision it needs.
+    let (out, deferred) = record(&[
+        "finding",
+        &id,
+        "--identity",
+        "Reviewer R",
+        "--recommendation",
+        "defer",
+        "Later work",
+    ]);
+    assert_eq!(
+        out,
+        format!(
+            "Finding {deferred} defer {at}. Decide: atelier review disposition {deferred} --identity \"...\" --decision defer --follow-up ... \"...\"\n"
         )
     );
     let (out, disposed) = record(&[
@@ -388,11 +404,11 @@ fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
         "no_action",
         "Not a problem",
     ]);
+    // Identities are recorded, not compared with the work's Git authors
+    // (atelier-md0v): no warning.
     assert_eq!(
         out,
-        format!(
-            "Disposition no_action of {finding} {at}: \"parse() ignores input\"\n⚠ identity matches a Git author; this will not satisfy findings.disposed\n"
-        )
+        format!("Disposition no_action of {finding} {at}: \"parse() ignores input\"\n")
     );
     assert_eq!(disposed, finding);
     let (out, _) = record(&[
@@ -417,27 +433,19 @@ fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
         "atelier-test@example.com",
         "Mine",
     ]);
-    assert_eq!(
-        out,
-        format!(
-            "Approval {approval} {at}\n⚠ identity matches a Git author; this will not satisfy review.current\n"
-        )
-    );
+    assert_eq!(out, format!("Approval {approval} {at}\n"));
     let (out, approval) = record(&["approve", &id, "--identity", "Reviewer R", "Good"]);
     assert_eq!(out, format!("Approval {approval} {at}\n"));
     let (out, exemption) = record(&["trivial", &id, "--identity", AUTHOR, "Evident"]);
     assert_eq!(out, format!("Trivial exemption {exemption} {at}\n"));
 
-    // Quiet prints the ID alone; the warning goes to stderr.
+    // Quiet prints the ID alone.
     let (success, stdout, stderr) = run_atelier_raw(
         dir,
         &["-q", "review", "approve", &id, "--identity", AUTHOR, "Mine"],
     );
     assert!(success && is_record_id(stdout.trim()), "{stdout}");
-    assert!(
-        stderr.contains("⚠ identity matches a Git author"),
-        "{stderr}"
-    );
+    assert!(!stderr.contains("identity matches"), "{stderr}");
 
     let (success, _, stderr) = run_atelier_raw(
         dir,
@@ -510,7 +518,7 @@ fn invalid_commits_and_numbers_use_the_shared_invalid_value_form() {
     for (args, message) in [
         (
             vec!["review", "record", &id, "--identity", "r", "--commit", "zzz", "x"],
-            "Error: Invalid commit 'zzz'. Valid values: full 40- or 64-character commit IDs",
+            "Error: Invalid commit 'zzz'. Valid values: full or short commit IDs of at least 4 hexadecimal digits",
         ),
         (
             vec![
@@ -525,7 +533,7 @@ fn invalid_commits_and_numbers_use_the_shared_invalid_value_form() {
                 "abc",
                 "x",
             ],
-            "Error: Invalid resolution commit 'abc'. Valid values: full 40- or 64-character commit IDs",
+            "Error: Invalid resolution commit 'abc'. Valid values: full or short commit IDs of at least 4 hexadecimal digits",
         ),
         (
             vec!["prune", "--retention-days", "abc"],
@@ -557,7 +565,72 @@ fn invalid_commits_and_numbers_use_the_shared_invalid_value_form() {
     assert_eq!(code, Some(1), "{stderr}");
     assert_eq!(
         stderr,
-        format!("Error: commit {unknown} is not on this branch: Git does not know it, or HEAD does not contain it. Next: git log --format=%H")
+        format!("Error: {unknown} names no commit in this repository. Next: git log --format=%H")
     );
     assert!(!stderr.contains("merge-base"), "{stderr}");
+}
+
+/// A unique short commit ID is accepted wherever a command takes a commit,
+/// and stored as the full ID; an unknown prefix is refused (atelier-md0v).
+#[test]
+fn short_commit_ids_are_resolved_and_stored_in_full() {
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path();
+    let (id, _) = owner(dir);
+    let pin = git(dir, &["rev-parse", "HEAD"]);
+    let finding = event(
+        dir,
+        &[
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer R",
+            "--commit",
+            &pin[..8],
+            "--recommendation",
+            "fix_now",
+            "Short pin",
+        ],
+    );
+    assert_eq!(
+        canonical_record_front_matter(dir, "reviews", &finding)["commit"],
+        pin
+    );
+    fs::write(dir.join("fix.rs"), "fixed\n").unwrap();
+    commit_all(dir, "fix");
+    let fix = git(dir, &["rev-parse", "HEAD"]);
+    ok(
+        dir,
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer R",
+            "--decision",
+            "fix_now",
+            "--resolution-commit",
+            &fix[..7].to_uppercase(),
+            "Fixed",
+        ],
+    );
+    let stored = canonical_record_front_matter(dir, "reviews", &finding);
+    assert_eq!(stored["event"]["disposition"]["resolution_commit"], fix);
+    let (success, _, stderr) = run_atelier_raw(
+        dir,
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer R",
+            "--commit",
+            "ffffffff",
+            "Unknown",
+        ],
+    );
+    assert!(
+        !success && stderr.contains("ffffffff names no commit in this repository"),
+        "{stderr}"
+    );
 }

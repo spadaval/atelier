@@ -7,7 +7,6 @@ use atelier_app::record_ref::RecordKind;
 use atelier_app::review_gate::{self, ApprovalState, NotCurrent};
 use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
 use atelier_core::{BaseExemption, Disposition, FindingDecision, ReviewEvent, ReviewRecord};
-use std::collections::BTreeSet;
 use std::path::Path;
 
 /// The longest summary line a row or confirmation shows; `review show`
@@ -28,17 +27,16 @@ pub fn append(
     let repo = layout.repo_root();
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     let owner = index.resolve(RecordKind::Issue, owner_ref)?;
-    let pin = commit.map(str::to_owned).unwrap_or(git::head_commit(repo)?);
+    // A short commit ID is resolved here and stored in full (atelier-md0v).
+    let pin = match commit {
+        Some(commit) => git::resolve_commit_id(repo, commit)?,
+        None => git::head_commit(repo)?,
+    };
     atelier_records::review::validate_commit(&pin)?;
     require_on_branch(repo, &pin)?;
-    // Read before the record exists, so a failure here writes nothing.
-    let authors = authors_at_head(repo)?;
     let created = atelier_app::project_config::record_store(&layout.canonical_dir())?
         .create_review(&owner, identity, &pin, event, summary)?;
-    let warning = (created.event == ReviewEvent::Approval
-        && !review_gate::independent(&created, &authors))
-    .then(|| author_warning("review.current"));
-    confirm(&created.header.id, &confirmation(&created), warning, quiet);
+    confirm(&created.header.id, &confirmation(&created), None, quiet);
     Ok(())
 }
 
@@ -68,21 +66,6 @@ fn require_on_branch(repo: &Path, commit: &str) -> Result<()> {
     Ok(())
 }
 
-/// The substantive Git authors of the work on this branch since it left the
-/// base, as `review.current` counts them; none on the base itself, or where
-/// the base cannot be found, since they only decide a warning.
-fn authors_at_head(repo: &Path) -> Result<BTreeSet<String>> {
-    let Ok(policy) = atelier_app::workflow_policy::load(repo) else {
-        return Ok(BTreeSet::new());
-    };
-    let base = policy.branch_policy.base_branch;
-    let Ok(fork) = text(repo, &["merge-base", &format!("refs/heads/{base}"), "HEAD"]) else {
-        return Ok(BTreeSet::new());
-    };
-    let mut read = git::ReadContext::new(repo);
-    review_gate::author_identities(&mut read, &fork)
-}
-
 /// The issue whose branch carries `id`'s work: `id` itself when it has
 /// branch ownership or no parent, otherwise its parent.
 fn branch_owner(index: &RecordIndex, id: &str) -> String {
@@ -96,13 +79,6 @@ fn branch_owner(index: &RecordIndex, id: &str) -> String {
     }
 }
 
-/// The warning for a record the gates will refuse because its identity is
-/// one of the work's authors: an approval (`review.current`), or a defer or
-/// no_action disposition (`findings.disposed`).
-fn author_warning(gate: &str) -> String {
-    format!("⚠ identity matches a Git author; this will not satisfy {gate}")
-}
-
 /// One line saying what was recorded: the kind, ID, owner and short pin,
 /// or the step a finding needs next.
 fn confirmation(record: &ReviewRecord) -> String {
@@ -112,17 +88,23 @@ fn confirmation(record: &ReviewRecord) -> String {
         ReviewEvent::Review => format!("Review account {id} {on}"),
         ReviewEvent::Approval => format!("Approval {id} {on}"),
         ReviewEvent::TrivialExemption => format!("Trivial exemption {id} {on}"),
+        // A fix_now finding is resolved by the approval after its fix; only
+        // defer and no_action record a decision (atelier-md0v).
+        ReviewEvent::Finding {
+            recommendation: FindingDecision::FixNow,
+            ..
+        } => format!(
+            "Finding {id} fix_now {on}. Fix it in a later commit; an approval after the fix resolves it."
+        ),
         ReviewEvent::Finding { recommendation, .. } => {
             let decision = recommendation.as_str();
-            let resolution = if *recommendation == FindingDecision::FixNow {
-                " --resolution-commit ..."
-            } else if *recommendation == FindingDecision::Defer {
+            let follow_up = if *recommendation == FindingDecision::Defer {
                 " --follow-up ..."
             } else {
                 ""
             };
             format!(
-                "Finding {id} {decision} {on}. Dispose: atelier review disposition {id} --identity \"...\" --decision {decision}{resolution} \"...\""
+                "Finding {id} {decision} {on}. Decide: atelier review disposition {id} --identity \"...\" --decision {decision}{follow_up} \"...\""
             )
         }
     }
@@ -170,8 +152,16 @@ pub fn exempt_base(commit: &str, identity: &str, summary: &str, quiet: bool) -> 
             "review_base_not_checked_out: a base exemption is recorded on {base}, for a commit {base} already holds; run it from a checkout of {base}"
         );
     }
-    let pin = resolve(repo, commit)
-        .map_err(|_| anyhow::anyhow!("review_base_commit: {commit} is not a commit"))?;
+    // A commit ID, full or a unique prefix, resolves as every command that
+    // takes a commit resolves it (atelier-md0v); any other revision, such
+    // as HEAD, as Git names it.
+    let pin = if commit.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        git::resolve_commit_id(repo, commit)
+            .map_err(|error| anyhow::anyhow!("review_base_commit: {error}"))?
+    } else {
+        resolve(repo, commit)
+            .map_err(|_| anyhow::anyhow!("review_base_commit: {commit} is not a commit"))?
+    };
     if git::git_output(repo, &["merge-base", "--is-ancestor", &pin, "HEAD"]).is_err() {
         bail!("review_base_commit: {commit} is not on {base}; a base exemption covers a commit the base already holds");
     }
@@ -224,6 +214,10 @@ pub fn disposition(
         );
     }
     let pin = git::head_commit(repo)?;
+    // A short commit ID is resolved here and stored in full (atelier-md0v).
+    let resolution = resolution
+        .map(|commit| git::resolve_commit_id(repo, &commit))
+        .transpose()?;
     if let Some(commit) = &resolution {
         atelier_records::review::validate_commit(commit)?;
         require_on_branch(repo, commit)?;
@@ -256,8 +250,6 @@ pub fn disposition(
         migrated_from: None,
     };
     atelier_records::review::validate_disposition(&disposition)?;
-    // Read before the record changes, so a failure here writes nothing.
-    let authors = authors_at_head(repo)?;
     // The disposition an older Atelier recorded as separate events is read
     // as folded into the finding (ADR 0025); writing the field removes them.
     let previous = original.disposition().cloned();
@@ -289,10 +281,7 @@ pub fn disposition(
             previous.identity
         ));
     }
-    let warning = (decision != FindingDecision::FixNow
-        && !review_gate::identity_independent(identity, &authors))
-    .then(|| author_warning("findings.disposed"));
-    confirm(&updated.header.id, &line, warning, quiet);
+    confirm(&updated.header.id, &line, None, quiet);
     Ok(())
 }
 
@@ -346,7 +335,8 @@ pub fn list(reference: Option<&str>, json: bool, quiet: bool) -> Result<()> {
     for line in approval_lines(repo, &index, &owner)? {
         println!("{line}");
     }
-    for line in finding_lines(&records) {
+    let mut read = git::ReadContext::new(repo);
+    for line in finding_lines(&index, &mut read, &owner, &records) {
         println!("{line}");
     }
     Ok(())
@@ -445,7 +435,6 @@ enum Judge<'r> {
     Branch {
         read: git::ReadContext<'r>,
         fork: String,
-        authors: BTreeSet<String>,
     },
     Base {
         read: git::ReadContext<'r>,
@@ -466,13 +455,8 @@ impl<'r> Judge<'r> {
         if let (Some(tip), Some(base_head)) = (tip, base_head) {
             let fork = text(repo, &["merge-base", &base_head, &tip])?;
             if fork != tip {
-                let mut read = git::ReadContext::from_snapshot(repo, tip, &[]);
-                let authors = review_gate::author_identities(&mut read, &fork)?;
-                return Ok(Judge::Branch {
-                    read,
-                    fork,
-                    authors,
-                });
+                let read = git::ReadContext::from_snapshot(repo, tip, &[]);
+                return Ok(Judge::Branch { read, fork });
             }
         }
         Ok(Judge::Base {
@@ -486,16 +470,8 @@ impl<'r> Judge<'r> {
     /// `⚠ not accepted on <base>` there.
     fn standing(&mut self, index: &RecordIndex, record: &ReviewRecord) -> Result<String> {
         Ok(match self {
-            Judge::Branch {
-                read,
-                fork,
-                authors,
-            } => {
-                let identity = match record.event {
-                    ReviewEvent::Approval => review_gate::independent(record, authors),
-                    _ => true,
-                };
-                if identity && review_gate::current_on_branch(read, record, fork) {
+            Judge::Branch { read, fork } => {
+                if review_gate::current_on_branch(read, record, fork) {
                     "✓ current".into()
                 } else {
                     "⚠ not current".into()
@@ -530,8 +506,8 @@ fn approval_name(record: &ReviewRecord) -> String {
 
 /// The owner's approval state, from the gates' own functions: on its work
 /// branch `review_gate::approval_standing`, which `review.current` also
-/// explains, with the commits that made a stale approval stale or the
-/// author an approval's identity matches; on the base, the newest approval
+/// explains, with the commits that made a stale approval stale; on the
+/// base, the newest approval
 /// `review_gate::approval_accepted` accepts.
 fn approval_lines(repo: &Path, index: &RecordIndex, owner: &str) -> Result<Vec<String>> {
     const MISSING: &str = "Approval: ⚠ missing — no independent approval or trivial exemption";
@@ -566,10 +542,6 @@ fn approval_lines(repo: &Path, index: &RecordIndex, owner: &str) -> Result<Vec<S
                 approval_name(record)
             ));
         }
-        (_, Some(record), Some(NotCurrent::Author)) => lines.push(format!(
-            "Approval: ⚠ missing — {} is not independent: the identity matches a Git author of the branch",
-            approval_name(record)
-        )),
         _ => lines.push(MISSING.into()),
     }
     Ok(lines)
@@ -626,45 +598,88 @@ fn listed_paths(paths: &[std::path::PathBuf]) -> String {
     listed.join(", ")
 }
 
-/// The findings among `records`, open ones first, each with its
-/// disposition: `⚠ <id> <recommendation>, no disposition  <summary>` or
-/// `✓ <id> <recommendation> → <decision> by <identity> @<pin>...  <summary>`.
-fn finding_lines(records: &[&ReviewRecord]) -> Vec<String> {
-    let mut rows = records
-        .iter()
-        .filter_map(|record| match &record.event {
-            ReviewEvent::Finding {
-                recommendation,
-                disposition,
-            } => {
-                let summary = first_line(&record.summary);
-                let id = &record.header.id;
-                let recommendation = recommendation.as_str();
-                Some(match disposition {
-                    None => (
-                        false,
-                        format!("  ⚠ {id} {recommendation}, no disposition  {summary}"),
+/// The findings among `records`, open ones first, each with what settles
+/// it (atelier-md0v): a decision for one recommended defer or no_action,
+/// `⚠ <id> <recommendation>, no decision  <summary>` until it has one; an
+/// approval after the fix for a fix_now finding, `⚠ <id> fix_now, open until
+/// an approval after its fix  <summary>` until one is recorded; and
+/// `✓ <id> <recommendation> → <decision> by <identity> @<pin>...  <summary>`
+/// or `✓ <id> fix_now → approved since by <approval> @<pin>  <summary>` once
+/// settled. Whether that approval is still current is the approval line's.
+fn finding_lines(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    owner: &str,
+    records: &[&ReviewRecord],
+) -> Vec<String> {
+    let mut rows = Vec::new();
+    for record in records {
+        let ReviewEvent::Finding {
+            recommendation,
+            disposition,
+        } = &record.event
+        else {
+            continue;
+        };
+        let summary = first_line(&record.summary);
+        let id = &record.header.id;
+        let recommendation = recommendation.as_str();
+        let approval = review_gate::fix_approval(index, read, owner, record);
+        let row = match (disposition, approval) {
+            (Some(disposition), Some(approval))
+                if disposition.decision == FindingDecision::FixNow =>
+            {
+                (
+                    true,
+                    format!(
+                        "  ✓ {id} {recommendation} → {}, approved since by {} @{}  {summary}",
+                        disposition_step(disposition),
+                        approval.header.id,
+                        short_commit(&approval.commit)
                     ),
-                    Some(disposition) => (
-                        true,
-                        format!(
-                            "  ✓ {id} {recommendation} → {}  {summary}",
-                            disposition_step(disposition)
-                        ),
-                    ),
-                })
+                )
             }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
+            (Some(disposition), None) if disposition.decision == FindingDecision::FixNow => (
+                false,
+                format!(
+                    "  ⚠ {id} {recommendation} → {}, open until an approval after its fix  {summary}",
+                    disposition_step(disposition)
+                ),
+            ),
+            (Some(disposition), _) => (
+                true,
+                format!(
+                    "  ✓ {id} {recommendation} → {}  {summary}",
+                    disposition_step(disposition)
+                ),
+            ),
+            (None, Some(approval)) => (
+                true,
+                format!(
+                    "  ✓ {id} {recommendation} → approved since by {} @{}  {summary}",
+                    approval.header.id,
+                    short_commit(&approval.commit)
+                ),
+            ),
+            (None, None) if recommendation == FindingDecision::FixNow.as_str() => (
+                false,
+                format!("  ⚠ {id} {recommendation}, open until an approval after its fix  {summary}"),
+            ),
+            (None, None) => (
+                false,
+                format!("  ⚠ {id} {recommendation}, no decision  {summary}"),
+            ),
+        };
+        rows.push(row);
+    }
     if rows.is_empty() {
         return Vec::new();
     }
     // Open findings first; the rest keep their order.
-    rows.sort_by_key(|(disposed, _)| *disposed);
-    let disposed = rows.iter().filter(|(disposed, _)| *disposed).count();
-    let open = rows.len() - disposed;
-    let counts = [(disposed, "disposed"), (open, "open")]
+    rows.sort_by_key(|(settled, _)| *settled);
+    let settled = rows.iter().filter(|(settled, _)| *settled).count();
+    let open = rows.len() - settled;
+    let counts = [(settled, "settled"), (open, "open")]
         .into_iter()
         .filter(|(count, _)| *count > 0)
         .map(|(count, word)| format!("{count} {word}"))

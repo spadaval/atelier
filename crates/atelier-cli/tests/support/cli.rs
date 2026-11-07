@@ -24,13 +24,16 @@ pub fn cli(dir: &Path, args: &[&str]) -> (bool, String) {
         .args(args)
         .output()
         .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // `land` reports work in progress on a work branch and exits
+    // successfully (atelier-md0v); tests read that report, whose verdict is
+    // `land: work in progress`, as not passed, as they read a refusal.
+    let in_progress = stdout.lines().last().is_some_and(|line| {
+        line.starts_with("land: work in progress") || line.starts_with("work in progress")
+    });
     (
-        output.status.success(),
-        format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ),
+        output.status.success() && !in_progress,
+        format!("{stdout}{}", String::from_utf8_lossy(&output.stderr)),
     )
 }
 

@@ -66,11 +66,6 @@ pub fn check_merge(repo: &Path, base: &str, tip: &str) -> Result<()> {
     )
 }
 
-/// The one rule `atelier check` applies that a write does not: atelier-md0v
-/// removes the deferral source rule, so it gets no write-time version, and
-/// this exception goes with it.
-const NOT_CHECKED_AT_WRITE: &str = "review_follow_up_source_mismatch";
-
 /// Fails naming each finding in `after` that `before` lacks, with where a
 /// record it names as missing is instead.
 fn refuse_new(
@@ -83,7 +78,6 @@ fn refuse_new(
     let new = after
         .into_iter()
         .filter(|finding| !before.contains(finding))
-        .filter(|finding| !finding.message.contains(NOT_CHECKED_AT_WRITE))
         .collect::<Vec<_>>();
     if new.is_empty() {
         return Ok(());

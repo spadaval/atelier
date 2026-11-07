@@ -339,8 +339,8 @@ fn test_prune_protects_active_and_recent_terminal_owner_branches() {
     let recent_id = issue_ref(dir.path(), 2);
     make_issue_terminal_before_retention(dir.path(), &recent_id, 1);
     commit_all(dir.path(), "active and recent owner fixture");
-    let active_branch = format!("task/{active_id}");
-    let recent_branch = format!("task/{recent_id}");
+    let active_branch = active_id.clone();
+    let recent_branch = recent_id.clone();
     for args in [
         vec!["init", "--bare", remote.path().to_str().unwrap()],
         vec!["remote", "add", "origin", remote.path().to_str().unwrap()],
@@ -400,7 +400,7 @@ fn test_prune_protects_terminal_epic_branch_with_active_descendant() {
     let child_id = issue_ref(dir.path(), 2);
     make_issue_terminal_before_retention(dir.path(), &epic_id, 45);
     commit_all(dir.path(), "terminal epic with active descendant fixture");
-    let branch = format!("feature/{epic_id}");
+    let branch = epic_id.clone();
     let worktree = dir.path().join("terminal-epic-worktree");
     for args in [
         vec!["init", "--bare", remote.path().to_str().unwrap()],
@@ -490,8 +490,8 @@ fn test_prune_protects_unmerged_and_unpushed_terminal_owner_branches() {
     make_issue_terminal_before_retention(dir.path(), &unmerged_id, 45);
     make_issue_terminal_before_retention(dir.path(), &unpushed_id, 45);
     commit_all(dir.path(), "terminal branch safety fixture");
-    let unmerged_branch = format!("task/{unmerged_id}");
-    let unpushed_branch = format!("task/{unpushed_id}");
+    let unmerged_branch = unmerged_id.clone();
+    let unpushed_branch = unpushed_id.clone();
     for args in [
         vec!["init", "--bare", remote.path().to_str().unwrap()],
         vec!["remote", "add", "origin", remote.path().to_str().unwrap()],
@@ -659,7 +659,7 @@ fn test_prune_removes_merged_and_pushed_terminal_owner_branch_and_worktree() {
     let issue_id = issue_ref(dir.path(), 1);
     make_issue_terminal_before_retention(dir.path(), &issue_id, 45);
     commit_all(dir.path(), "terminal owner fixture");
-    let branch = format!("task/{issue_id}");
+    let branch = issue_id.clone();
     let worktree = dir.path().join("terminal-owner-worktree");
     for args in [
         vec!["init", "--bare", remote.path().to_str().unwrap()],
@@ -990,18 +990,18 @@ fn test_prune_rechecks_late_recorded_owner_association() {
     );
 }
 
-/// Gives `issue_id` a pushed `task/<id>` owner branch whose work is merged
+/// Gives `issue_id` a pushed `<id>` owner branch whose work is merged
 /// into main with a merge commit, as `atelier merge` integrates. Returns the
 /// bare remote (keep it alive) and the branch name.
 fn merged_pushed_owner_branch(dir: &Path, issue_id: &str) -> (tempfile::TempDir, String) {
     pushed_owner_branch(dir, issue_id, false)
 }
 
-/// A pushed `task/<id>` owner branch merged into main with a merge commit,
+/// A pushed `<id>` owner branch merged into main with a merge commit,
 /// or squash-merged when `squash`.
 fn pushed_owner_branch(dir: &Path, issue_id: &str, squash: bool) -> (tempfile::TempDir, String) {
     let remote = tempdir().unwrap();
-    let branch = format!("task/{issue_id}");
+    let branch = issue_id.to_owned();
     let git = |args: &[&str]| {
         let status = Command::new("git")
             .current_dir(dir)
@@ -1967,7 +1967,7 @@ fn test_root_start_applies_workflow_transition_and_records_active_work() {
     );
     assert!(start_out.contains("To:       in_progress"), "{start_out}");
     assert!(
-        start_out.contains(&format!("git switch -c task/{issue_id}")),
+        start_out.contains(&format!("git switch -c {issue_id}")),
         "{start_out}"
     );
 
@@ -2016,7 +2016,7 @@ fn test_root_start_allows_multiple_current_work_issues_in_same_worktree() {
     assert!(success, "initial start failed: {stderr}");
     assert!(!active_out.contains("Session:"), "{active_out}");
     assert!(
-        active_out.contains(&format!("git switch -c feature/{epic_id}")),
+        active_out.contains(&format!("git switch -c {epic_id}")),
         "{active_out}"
     );
 
@@ -2134,7 +2134,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         &policy_path,
         policy.replace(
             "        description: Start work.\n        validators:\n        - blockers.transitive_none_open\n",
-            "        description: Start work.\n        validators: [evidence.attached]\n",
+            "        description: Start work.\n        validators: [issue.sections_parseable]\n",
         ),
     )
     .unwrap();
@@ -2145,11 +2145,7 @@ fn test_root_start_reports_workflow_validator_failure() {
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start: blocked"), "{options_out}");
     assert!(
-        options_out.contains("expected at least 1 fresh passing evidence"),
-        "{options_out}"
-    );
-    assert!(
-        options_out.contains("Hint: This policy requires a passing receipt"),
+        options_out.contains("fail  issue.sections_parseable"),
         "{options_out}"
     );
 
@@ -2157,20 +2153,8 @@ fn test_root_start_reports_workflow_validator_failure() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(!success, "root start should fail when validators block it");
     assert!(stdout.contains("Blockers"), "{stdout}");
-    assert!(
-        stdout.contains("expected at least 1 fresh passing evidence"),
-        "{stdout}"
-    );
-    // The hint is the error's next step, shown once, on stderr.
-    assert!(
-        !stdout.contains("This policy requires a passing receipt"),
-        "{stdout}"
-    );
-    assert!(
-        stderr.contains("Next: This policy requires a passing receipt"),
-        "{stderr}"
-    );
-    assert!(stderr.contains("evidence.attached"), "{stderr}");
+    assert!(stdout.contains("issue.sections_parseable"), "{stdout}");
+    assert!(stderr.contains("Transition 'start' is blocked"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();
     assert!(issue_text.contains("status: \"todo\""), "{issue_text}");

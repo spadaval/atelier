@@ -42,10 +42,10 @@ struct Cli {
 struct ReviewArgs {
     /// Branch owner, parent issue or standalone issue the event is about
     id: String,
-    /// Who records the event; approvals must not match a substantive Git author
+    /// Who records the event, recorded with it
     #[arg(long)]
     identity: String,
-    /// Full commit the event pins, an ancestor on the work branch [default: HEAD]
+    /// Commit the event pins, a full or unique short ID of an ancestor on the work branch [default: HEAD]
     #[arg(long, value_parser = parse_commit)]
     commit: Option<String>,
     /// What was checked, found or decided
@@ -63,11 +63,12 @@ struct TrivialArgs {
     /// Who records the exemption
     #[arg(long)]
     identity: String,
-    /// Full commit the exemption pins, an ancestor on the work branch [default: HEAD]
+    /// Commit the exemption pins, a full or unique short ID of an ancestor on the work branch [default: HEAD]
     #[arg(long, conflicts_with = "base", value_parser = parse_commit)]
     commit: Option<String>,
-    /// Exempt exactly this commit on the base branch, with no owner issue or
-    /// work branch; run on the base, and `land` counts that commit alone as reviewed
+    /// Exempt exactly this commit (a full or unique short ID) on the base
+    /// branch, with no owner issue or work branch; run on the base, and
+    /// `land` counts that commit alone as reviewed
     #[arg(long, value_name = "COMMIT")]
     base: Option<String>,
     #[command(flatten)]
@@ -79,7 +80,7 @@ enum ReviewCommands {
     Record(ReviewArgs),
     /// Record an independent approval of the work at the pinned commit
     Approve(ReviewArgs),
-    /// Record a finding; every finding needs a disposition before merge
+    /// Record a finding; an approval after its fix resolves a fix_now finding, and defer or no_action needs a decision before merge
     Finding {
         #[command(flatten)]
         args: ReviewArgs,
@@ -98,19 +99,20 @@ enum ReviewCommands {
     Trivial(TrivialArgs),
     /// Set the decision on a finding, replacing any earlier one
     ///
-    /// The disposition is a field of the finding, with who set it and the
-    /// commit it was set at; Git keeps earlier ones in the finding file's
-    /// history.
+    /// A finding deferred or dismissed needs one before merge; a fix_now
+    /// finding needs none, since the approval after its fix resolves it. The
+    /// disposition is a field of the finding, with who set it and the commit
+    /// it was set at; Git keeps earlier ones in the finding file's history.
     Disposition {
         /// The finding's review event ID
         finding: String,
-        /// Who decides; defer and no_action need a non-author identity
+        /// Who decides, recorded with the decision
         #[arg(long)]
         identity: String,
         /// The decision on the finding
         #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
         decision: FindingDecision,
-        /// For fix_now: the full commit that resolves the finding, later than its pin
+        /// For fix_now: the commit (a full or unique short ID) that resolves the finding, later than its pin
         #[arg(long, value_parser = parse_resolution_commit)]
         resolution_commit: Option<String>,
         /// For defer: the existing follow-up issue
@@ -208,10 +210,6 @@ enum Commands {
     Start {
         /// Issue ID
         id: String,
-        /// Create the owner branch from this local branch, from any checkout
-        /// including a detached HEAD; it must be the policy's base branch
-        #[arg(long)]
-        base: Option<String>,
         /// Start even though another live session or worktree holds the item
         #[arg(long)]
         take_over: bool,
@@ -749,12 +747,19 @@ where
     })
 }
 
-/// A full commit ID, as review events pin: the shared invalid-value form
-/// for anything else (atelier-d8ku).
+/// A full commit ID, or a short one of at least four hexadecimal digits
+/// that the command resolves to the full ID it stores (atelier-md0v): the
+/// shared invalid-value form for anything else (atelier-d8ku).
 fn commit_value(field: &str, value: &str) -> Result<String, InvalidValue> {
-    atelier_records::review::validate_commit(value)
-        .map(|()| value.to_owned())
-        .map_err(|_| InvalidValue::new(field, value, &["full 40- or 64-character commit IDs"]))
+    if (4..=64).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(value.to_owned())
+    } else {
+        Err(InvalidValue::new(
+            field,
+            value,
+            &["full or short commit IDs of at least 4 hexadecimal digits"],
+        ))
+    }
 }
 fn parse_commit(value: &str) -> Result<String, InvalidValue> {
     commit_value("commit", value)
@@ -928,13 +933,9 @@ fn run() -> Result<()> {
 
         Commands::Issue { action } => issue_cli::dispatch(action, quiet),
 
-        Commands::Start {
-            id,
-            base,
-            take_over,
-        } => {
+        Commands::Start { id, take_over } => {
             let (state_dir, index) = load_repository()?;
-            commands::start::run(&index, &state_dir, &id, base.as_deref(), take_over, quiet)
+            commands::start::run(&index, &state_dir, &id, take_over, quiet)
         }
 
         Commands::Merge { id, sync: true, .. } => commands::merge_sync::run(&id, quiet),
@@ -1053,7 +1054,7 @@ fn run() -> Result<()> {
                 };
                 if command.is_empty() {
                     let (state_dir, index) = load_repository()?;
-                    commands::evidence::warn_unknown_kind(&index, &state_dir, &evidence_kind);
+                    commands::evidence::warn_unknown_kind(&index, &evidence_kind);
                     let resolved_target = parsed_target
                         .as_ref()
                         .map(|target| {
@@ -1101,8 +1102,8 @@ fn run() -> Result<()> {
                 } else {
                     // Capture reports its own refusal when the repository
                     // cannot be read, before it runs anything.
-                    if let Ok((state_dir, index)) = load_repository() {
-                        commands::evidence::warn_unknown_kind(&index, &state_dir, &evidence_kind);
+                    if let Ok((_, index)) = load_repository() {
+                        commands::evidence::warn_unknown_kind(&index, &evidence_kind);
                     }
                     let command_summary = summary.as_deref().or(summary_text.as_deref());
                     let evidence =

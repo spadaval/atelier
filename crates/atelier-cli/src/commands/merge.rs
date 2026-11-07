@@ -661,10 +661,17 @@ fn owned(
             ),
         }
     };
-    if recorded.work_branch != branch || recorded.branch_base == branch {
+    // The base is the branch's committed policy's `base_branch`, which the
+    // gates check against the base's own policy; a recorded `branch_base` is
+    // not read (atelier-md0v).
+    let base = base_policy::from_ref(repo, "HEAD")?
+        .policy
+        .branch_policy
+        .base_branch;
+    if recorded.work_branch != branch || base == branch {
         let work = &recorded.work_branch;
         let tip = crate::commands::git::resolve(repo, &format!("refs/heads/{work}")).ok();
-        if recorded.branch_base == branch {
+        if base == branch {
             // On the base, work already in it has nothing left to merge.
             let done = base_policy::working(repo).is_ok_and(|source| {
                 source
@@ -706,7 +713,6 @@ fn owned(
         }
         bail!("merge_branch_mismatch: owned on {work}, which is not a local branch. Next: git fetch && git switch {work}");
     }
-    let base = recorded.branch_base.clone();
     Ok(Owned {
         layout,
         head,

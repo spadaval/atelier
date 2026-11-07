@@ -328,13 +328,6 @@ fn transition_blockers(
         .into_iter()
         .map(|(_, failure)| failure)
         .collect::<Vec<_>>();
-    if policy.status_category(&transition.to) == Some("done") && transition.to != "superseded" {
-        if let Some(evidence_id) =
-            atelier_app::evidence_freshness::newest_failure(index, &issue.id)?
-        {
-            blockers.push(format!("newer failing evidence {evidence_id} blocks completion; rerun the failed check and record an explicit pass"));
-        }
-    }
     if let Some(blocker) = active_transition_ancestor_blocker(index, policy, issue, transition)? {
         blockers.push(blocker);
     }

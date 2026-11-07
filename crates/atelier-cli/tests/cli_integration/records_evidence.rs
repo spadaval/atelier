@@ -2101,7 +2101,7 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
     assert!(stdout.contains(&format!(" ⚠ fail validation for issue/{issue_id} @")));
     assert!(stdout.contains(" (exit 3)\n  rejected\n"), "{stdout}");
     assert!(stdout.ends_with(&format!(
-        "evidence record: recorded fail — {issue_id} cannot merge or be done until a later pass\n"
+        "evidence record: recorded fail — a note on {issue_id}; no gate reads receipts\n"
     )));
 
     let (success, evidence_list, stderr) = run_atelier(dir.path(), &["evidence", "list"]);
@@ -2112,70 +2112,6 @@ fn test_evidence_capture_records_nonzero_exit_as_command_metadata() {
             .any(|line| line.contains(" ⚠ fail validation ")
                 && line.ends_with(" · sh -c 'printf '\"'\"'rejected\\n'\"'\"'; exit 3'")),
         "{evidence_list}"
-    );
-}
-
-#[test]
-fn test_issue_closeout_rejects_evidence_attached_to_another_issue() {
-    let dir = tempdir().unwrap();
-    init_atelier(dir.path());
-    write_evidence_gated_workflow(dir.path());
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Target proof"]);
-    assert!(success, "target issue create failed: {stderr}");
-    let target_id = issue_id_by_title(dir.path(), "Target proof");
-    let target_id = target_id.as_str();
-
-    let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Donor proof"]);
-    assert!(success, "donor issue create failed: {stderr}");
-    let donor_id = issue_id_by_title(dir.path(), "Donor proof");
-    let donor_id = donor_id.as_str();
-
-    let evidence_id = attach_issue_pass_evidence(dir.path(), donor_id);
-
-    start_issue_work(dir.path(), target_id);
-    let (success, stdout, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "transition",
-            target_id,
-            "close",
-            "--reason",
-            "done",
-        ],
-    );
-    assert!(
-        !success,
-        "issue closeout must reject evidence linked only to another issue"
-    );
-    assert!(
-        stderr.contains("expected at least 1 fresh passing evidence record")
-            || stderr.contains("expected at least 1 validating evidence record")
-            || stderr.contains("no validating evidence link found"),
-        "{stderr}"
-    );
-    assert!(stderr.contains(target_id));
-
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["evidence", "attach", &evidence_id, "issue", target_id],
-    );
-    assert!(success, "target evidence attach failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &[
-            "issue",
-            "transition",
-            target_id,
-            "close",
-            "--reason",
-            "target proof",
-        ],
-    );
-    assert!(
-        success,
-        "target closeout should pass after direct proof: {stderr}"
     );
 }
 
@@ -2229,13 +2165,15 @@ fn test_issue_closeout_uses_attached_pass_evidence_not_evidence_text() {
     );
 }
 
+/// A close under a policy naming `evidence.attached` needs no passing
+/// receipt: the name is read and ignored (atelier-md0v).
 #[test]
-fn test_issue_closeout_requires_passing_evidence_records() {
+fn test_issue_closeout_needs_no_receipt_under_an_evidence_attached_policy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     write_evidence_gated_workflow(dir.path());
 
-    let issue_body = "## Goal\n\nValidation blocker body.\n\n## Done when\n\nThe issue does not close without passing evidence.\n\n## Context\n\n- A passing transcript proves closeout readiness.";
+    let issue_body = "## Goal\n\nValidation blocker body.\n\n## Done when\n\nThe issue closes without passing evidence.\n\n## Context\n\n- No gate reads receipts.";
     let (success, issue_out, stderr) = run_atelier(
         dir.path(),
         &[
@@ -2263,7 +2201,11 @@ fn test_issue_closeout_requires_passing_evidence_records() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options failed: {stderr}");
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("expected at least 1 fresh passing evidence record"));
+    assert!(!transitions.contains("evidence.attached"), "{transitions}");
+    assert!(
+        !transitions.contains("fresh passing evidence record"),
+        "{transitions}"
+    );
 
     let (success, _, stderr) = run_atelier(
         dir.path(),
@@ -2273,14 +2215,10 @@ fn test_issue_closeout_requires_passing_evidence_records() {
             &issue_id,
             "close",
             "--reason",
-            "still blocked",
+            "closed with a blocked receipt",
         ],
     );
-    assert!(
-        !success,
-        "closeout must reject evidence that is attached but not passing"
-    );
-    assert!(stderr.contains("expected at least 1 fresh passing evidence record"));
+    assert!(success, "closeout reads no receipt: {stderr}");
 }
 
 #[test]
@@ -2445,7 +2383,7 @@ fn evidence_record_confirms_in_one_line_and_ends_in_its_verdict() {
     assert_eq!(
         out,
         format!(
-            "{fail_id} ⚠ fail test for issue/{issue_id} @{pin}: sh -c 'for i in 1 2 3 4 5 6 7; do echo line$i >&2; done; exit 1' (exit 1); newer than pass {pass_id}\n  line3\n  line4\n  line5\n  line6\n  line7\nevidence record: recorded fail — {issue_id} cannot merge or be done until a later pass\n"
+            "{fail_id} ⚠ fail test for issue/{issue_id} @{pin}: sh -c 'for i in 1 2 3 4 5 6 7; do echo line$i >&2; done; exit 1' (exit 1); newer than pass {pass_id}\n  line3\n  line4\n  line5\n  line6\n  line7\nevidence record: recorded fail — a note on {issue_id}; no gate reads receipts\n"
         )
     );
 
@@ -2492,7 +2430,7 @@ fn evidence_record_confirms_in_one_line_and_ends_in_its_verdict() {
     assert!(success, "manual fail failed: {stderr}");
     assert_eq!(
         stderr,
-        "⚠ evidence kind 'weird' is new: no receipt, gate or default uses it, so no gate or filter for another kind matches it. Known kinds: test, validation\n"
+        "⚠ evidence kind 'weird' is new: no receipt or default uses it, so no filter for another kind matches it. Known kinds: test, validation\n"
     );
     let lines = out.lines().collect::<Vec<_>>();
     assert_eq!(lines.len(), 3, "{out}");
@@ -2504,9 +2442,7 @@ fn evidence_record_confirms_in_one_line_and_ends_in_its_verdict() {
     assert!(lines[1].starts_with("Committed "), "{out}");
     assert_eq!(
         lines[2],
-        format!(
-            "evidence record: recorded fail — {issue_id} cannot merge or be done until a later pass"
-        )
+        format!("evidence record: recorded fail — a note on {issue_id}; no gate reads receipts")
     );
 
     let (success, out, _) = run_atelier(
@@ -2584,7 +2520,7 @@ fn evidence_list_by_item_marks_each_receipt_as_the_gates_judge_it() {
         "{out}"
     );
     assert!(
-        shown[0].ends_with(" · ⚠ blocks completion · sh -c 'exit 1'"),
+        shown[0].ends_with(" · ⚠ no pass since · sh -c 'exit 1'"),
         "{out}"
     );
     assert!(
@@ -2706,7 +2642,7 @@ fn evidence_show_is_brief_and_full_prints_the_stored_record() {
         )),
         "{brief}"
     );
-    assert!(lines[0].ends_with(" · ⚠ blocks completion"), "{brief}");
+    assert!(lines[0].ends_with(" · ⚠ no pass since"), "{brief}");
     assert_eq!(lines[1], "Summary:  the shown fail");
     assert_eq!(
         lines[2],
@@ -2736,7 +2672,7 @@ fn evidence_show_is_brief_and_full_prints_the_stored_record() {
     assert!(full.starts_with(&format!("{id} evidence recorded the shown fail\n====")));
     for field in [
         "Result:      fail\n",
-        "Freshness:   ⚠ blocks completion\n",
+        "Freshness:   ⚠ no pass since\n",
         &format!("Commit:      {pin}\n"),
         "Exit Status: 1\n",
         &format!("Target:      issue/{issue_id}\n"),
@@ -2803,12 +2739,12 @@ fn evidence_attach_takes_the_target_forms_record_takes() {
     assert_eq!(out, format!("{id}\n"));
 }
 
-/// `evidence list`'s verdict agrees with the evidence gates the close
-/// transition runs on the same receipts: a newer fail blocks both, a fresh
-/// pass after it clears both, and a code commit that makes that pass stale
-/// leaves the fail cleared in both (atelier-u0ig, atelier-s66u).
+/// `evidence list`'s verdict notes a newer fail, a fresh pass after it
+/// clears the note, and a code commit that makes that pass stale leaves the
+/// fail cleared (atelier-u0ig, atelier-s66u); the close transition reads no
+/// receipt (atelier-md0v).
 #[test]
-fn evidence_list_verdict_agrees_with_the_close_gate() {
+fn evidence_list_verdict_notes_a_fail_the_close_transition_ignores() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     // A policy from before atelier-jnrh, whose work still closes.
@@ -2864,11 +2800,8 @@ fn evidence_list_verdict_agrees_with_the_close_gate() {
 
     let fail = record("the fail", "exit 1");
     assert_eq!(verdict(), format!("Proof: ⚠ newest is fail {fail}"));
-    assert!(
-        close_refusal().contains(&format!("newer failing evidence {fail}")),
-        "{}",
-        close_refusal()
-    );
+    let refusal = close_refusal();
+    assert!(!refusal.contains("newer failing evidence"), "{refusal}");
 
     let second = record("second pass", "true");
     assert_eq!(verdict(), format!("Proof: ✓ fresh pass {second}"));
@@ -2886,11 +2819,11 @@ fn evidence_list_verdict_agrees_with_the_close_gate() {
     assert!(!refusal.contains("newer failing evidence"), "{refusal}");
 }
 
-/// With no `evidence.attached` gate, `evidence list`'s verdict states a
-/// missing or stale pass plainly; the gate is what makes it a gap, marked ⚠
-/// (atelier-s66u).
+/// `evidence list`'s verdict states a missing or stale pass plainly, even
+/// under a policy naming `evidence.attached`, which gates nothing
+/// (atelier-s66u, atelier-md0v).
 #[test]
-fn evidence_list_marks_a_missing_pass_only_under_an_evidence_attached_gate() {
+fn evidence_list_states_a_missing_pass_plainly_whatever_the_policy() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let issue_id = create_task(dir.path(), "Unreceipted issue");
@@ -2913,14 +2846,14 @@ fn evidence_list_marks_a_missing_pass_only_under_an_evidence_attached_gate() {
     );
 
     write_evidence_gated_workflow(dir.path());
-    commit_all(dir.path(), "Gate close on evidence");
-    let gated = verdict();
+    commit_all(dir.path(), "An older policy naming evidence.attached");
+    let named = verdict();
     assert!(
-        gated.starts_with("Proof: ⚠ no fresh pass; newest pass "),
-        "{gated}"
+        named.starts_with("Proof: no fresh pass; newest pass "),
+        "{named}"
     );
-    let other = create_task(dir.path(), "Gated, unreceipted issue");
+    let other = create_task(dir.path(), "Unreceipted issue under that policy");
     let (success, out, stderr) = run_atelier(dir.path(), &["evidence", "list", &other]);
     assert!(success, "{stderr}");
-    assert!(out.contains("\nProof: ⚠ no passing proof"), "{out}");
+    assert!(out.contains("\nProof: no passing proof"), "{out}");
 }

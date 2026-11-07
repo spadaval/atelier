@@ -203,15 +203,6 @@ fn report_approval(
         return Ok(false);
     };
     let paths = match why {
-        NotCurrent::Author => {
-            say(format!(
-                "No independent approval covers {owner}'s scope yet: {} by {} is not independent, as the identity matches a Git author of the branch ({}).",
-                review.header.id,
-                review.identity,
-                standing.shown_authors().join(", ")
-            ));
-            return Ok(false);
-        }
         NotCurrent::PredatesFork => {
             // The base already holds the work after this approval (the branch
             // was merged there), so no commit on the branch is the one that

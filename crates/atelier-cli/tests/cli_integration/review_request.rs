@@ -186,8 +186,9 @@ fn the_brief_carries_findings_dispositions_and_the_range_since_the_last_review()
         .unwrap();
     let lines = findings.lines().collect::<Vec<_>>();
     assert!(
-        lines[0].starts_with(&format!("- {finding} fix_now | open, no disposition @ "))
-            && lines[0].ends_with("Reviewer: high: parser.rs:1 parse() does nothing"),
+        lines[0].starts_with(&format!(
+            "- {finding} fix_now | open until an approval after its fix @ "
+        )) && lines[0].ends_with("Reviewer: high: parser.rs:1 parse() does nothing"),
         "{findings}"
     );
     assert!(

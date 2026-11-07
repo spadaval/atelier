@@ -1217,9 +1217,11 @@ fn test_issue_show_brief_done_items_show_their_close_but_open_items_report_failu
             1,
         )
     });
+    // The base read is the policy's, not the recorded branch_base
+    // (atelier-md0v); outside Git it cannot be read.
     let view = show_ok(dir.path(), &["issue", "show", id]);
     assert!(
-        view.contains("\nTransitions: unavailable - git rev-parse --verify refs/heads/gone"),
+        view.contains("\nTransitions: unavailable - git rev-parse --verify refs/heads/main"),
         "{view}"
     );
 }
@@ -1374,10 +1376,11 @@ fn test_issue_show_surfaces_evidence_status() {
         "transition options without evidence failed: {stderr}"
     );
     assert!(transitions.contains("close"));
-    assert!(transitions.contains("fail  evidence.attached"));
-    assert!(transitions.contains("expected at least 1 fresh passing evidence record; found 0"));
+    // The policy names evidence.attached, which still parses and gates
+    // nothing (atelier-md0v).
+    assert!(!transitions.contains("evidence.attached"), "{transitions}");
     assert!(
-        transitions.contains(&format!("Hint: This policy requires a passing receipt: record one with `atelier evidence record --target issue/{issue_id} --kind test -- <command>`")),
+        !transitions.contains("fresh passing evidence record"),
         "{transitions}"
     );
 
@@ -1406,7 +1409,7 @@ fn test_issue_show_surfaces_evidence_status() {
     let (success, transitions, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "--verbose"]);
     assert!(success, "transition options with evidence failed: {stderr}");
-    assert!(transitions.contains("pass  evidence.attached"));
+    assert!(!transitions.contains("evidence.attached"), "{transitions}");
 }
 
 #[test]

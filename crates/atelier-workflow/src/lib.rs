@@ -132,11 +132,13 @@ pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
 const WORKFLOW_SCHEMA: &str = "atelier.workflow";
 const WORKFLOW_SCHEMA_VERSION: i64 = 3;
 const STATUS_CATEGORIES: &[&str] = &["todo", "active", "blocked", "done"];
+/// A validator an older policy may name, read and ignored: no gate reads
+/// evidence receipts (atelier-md0v).
+const IGNORED_VALIDATORS: &[&str] = &["evidence.attached"];
 const BUILTIN_VALIDATORS: &[&str] = &[
     "issue.sections_parseable",
     "blockers.none_open",
     "blockers.transitive_none_open",
-    "evidence.attached",
     "lint.none_blocking",
     "git.worktree_clean",
     "work.terminal",
@@ -225,13 +227,7 @@ pub struct ValidatorDefinition {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidatorParams {
-    ShellCheck {
-        command: String,
-    },
-    EvidenceAttached {
-        min_count: i64,
-        kind: Option<String>,
-    },
+    ShellCheck { command: String },
 }
 
 #[derive(Debug, Clone)]
@@ -358,10 +354,11 @@ impl WorkflowPolicy {
             })
     }
 
-    /// Canonical branch for a branch owner (a parent or a standalone issue):
-    /// `<issue_type>/<id>`.
+    /// The branch `atelier start` creates on the base for a branch owner (a
+    /// parent or a standalone issue): its bare ID. Branch names carry no
+    /// issue type (atelier-md0v).
     pub fn branch_name_for_owner(&self, owner: &Issue) -> Result<String> {
-        let branch = format!("{}/{}", owner.issue_type, owner.id);
+        let branch = owner.id.clone();
         validate_branch_value(
             &branch,
             WORKFLOW_POLICY_PATH,
@@ -931,80 +928,6 @@ fn parse_validator_params(
                 command: parsed.command,
             }))
         }
-        "evidence.attached" => {
-            let Some(params) = params else {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_validator",
-                    display_path,
-                    format!("validators.{}.params", validator_name),
-                    "evidence.attached requires params.min_count >= 1",
-                ));
-            };
-            let mapping = params.as_mapping().ok_or_else(|| {
-                policy_error_with_field(
-                    "workflow_config_invalid_validator",
-                    display_path,
-                    format!("validators.{}.params", validator_name),
-                    "validator params must be a mapping",
-                )
-            })?;
-            for key in mapping.keys() {
-                let Some(key) = key.as_str() else {
-                    return Err(policy_error_with_field(
-                        "workflow_config_invalid_validator",
-                        display_path,
-                        format!("validators.{}.params", validator_name),
-                        "validator param keys must be strings",
-                    ));
-                };
-                if key != "min_count" && key != "kind" {
-                    return Err(policy_error_with_field(
-                        "workflow_config_invalid_validator",
-                        display_path,
-                        format!("validators.{}.params.{}", validator_name, key),
-                        format!("unexpected validator param '{}'", key),
-                    ));
-                }
-            }
-            let Some(min_count_value) = mapping.get("min_count") else {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_validator",
-                    display_path,
-                    format!("validators.{}.params.min_count", validator_name),
-                    "evidence.attached requires params.min_count >= 1",
-                ));
-            };
-            let Some(min_count) = min_count_value.as_i64() else {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_validator",
-                    display_path,
-                    format!("validators.{}.params.min_count", validator_name),
-                    "validator param min_count must be an integer",
-                ));
-            };
-            if min_count < 1 {
-                return Err(policy_error_with_field(
-                    "workflow_config_invalid_validator",
-                    display_path,
-                    format!("validators.{}.params.min_count", validator_name),
-                    "validator param min_count must be at least 1",
-                ));
-            }
-            let kind = mapping
-                .get("kind")
-                .map(|value| {
-                    value.as_str().map(ToOwned::to_owned).ok_or_else(|| {
-                        policy_error_with_field(
-                            "workflow_config_invalid_validator",
-                            display_path,
-                            format!("validators.{}.params.kind", validator_name),
-                            "validator param kind must be a string",
-                        )
-                    })
-                })
-                .transpose()?;
-            Ok(Some(ValidatorParams::EvidenceAttached { min_count, kind }))
-        }
         _ => {
             if params.is_some() {
                 return Err(policy_error_with_field(
@@ -1205,6 +1128,18 @@ fn parse_transition_validators(
 ) -> Result<Vec<ValidatorDefinition>> {
     let mut validators = Vec::new();
     for value in values {
+        // An ignored validator parses with any parameters and gates nothing.
+        let ignored = match value {
+            Value::String(name) => Some(name.as_str()),
+            Value::Mapping(mapping) if mapping.len() == 1 => {
+                mapping.keys().next().and_then(Value::as_str)
+            }
+            _ => None,
+        }
+        .is_some_and(|name| IGNORED_VALIDATORS.contains(&name));
+        if ignored {
+            continue;
+        }
         match value {
             Value::String(name) => {
                 if name == "shell.check" {
@@ -2039,20 +1974,33 @@ mod tests {
     }
 
     #[test]
-    fn accepts_retained_validators_with_evidence_params() {
-        let policy = with_decide_validators(
-            "        - issue.sections_parseable\n        - blockers.none_open\n        - blockers.transitive_none_open\n        - evidence.attached: { min_count: 2, kind: test }\n        - lint.none_blocking\n        - git.worktree_clean\n        - work.terminal\n",
-        );
-        let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
-        let close = &policy.workflows["decision"].transitions["decide"];
-        assert_eq!(close.validators.len(), 7);
-        assert_eq!(
-            close.validators[3].params.as_ref(),
-            Some(&ValidatorParams::EvidenceAttached {
-                min_count: 2,
-                kind: Some("test".to_string()),
-            })
-        );
+    fn evidence_attached_still_parses_and_is_ignored() {
+        // No gate reads receipts (atelier-md0v): an older policy naming the
+        // validator, with or without parameters, parses and gates nothing.
+        for named in [
+            "        - evidence.attached: { min_count: 2, kind: test }\n",
+            "        - evidence.attached: { min_count: 0 }\n",
+            "        - evidence.attached\n",
+        ] {
+            let policy = with_decide_validators(&format!(
+                "        - issue.sections_parseable\n        - blockers.none_open\n{named}        - work.terminal\n"
+            ));
+            let policy = parse_policy_text(&policy, WORKFLOW_POLICY_PATH).unwrap();
+            let decide = &policy.workflows["decision"].transitions["decide"];
+            assert_eq!(
+                decide
+                    .validators
+                    .iter()
+                    .map(|validator| validator.builtin.as_str())
+                    .collect::<Vec<_>>(),
+                [
+                    "issue.sections_parseable",
+                    "blockers.none_open",
+                    "work.terminal"
+                ],
+                "{named}"
+            );
+        }
     }
 
     #[test]
@@ -2218,19 +2166,19 @@ mod tests {
     }
 
     #[test]
-    fn branch_name_for_owner_uses_issue_type_and_id() {
+    fn branch_name_for_owner_is_the_bare_id() {
         let policy = parse_policy_text(&configured_policy(), WORKFLOW_POLICY_PATH).unwrap();
         let mut issue = test_issue();
         issue.id = "atelier-abc1".to_string();
 
         assert_eq!(
             policy.branch_name_for_owner(&issue).unwrap(),
-            "task/atelier-abc1"
+            "atelier-abc1"
         );
         issue.issue_type = "feature".to_string();
         assert_eq!(
             policy.branch_name_for_owner(&issue).unwrap(),
-            "feature/atelier-abc1"
+            "atelier-abc1"
         );
     }
 
@@ -2343,18 +2291,6 @@ mod tests {
             .to_string();
         assert!(error.contains("workflow_config_invalid_issue_type"));
         assert!(error.contains("label must not be empty"));
-    }
-
-    #[test]
-    fn rejects_invalid_evidence_validator_params() {
-        let error = parse_policy_text(
-            &with_decide_validators("        - evidence.attached: { min_count: 0 }\n"),
-            WORKFLOW_POLICY_PATH,
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(error.contains("workflow_config_invalid_validator"));
-        assert!(error.contains("min_count"));
     }
 
     #[test]

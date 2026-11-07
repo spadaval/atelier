@@ -309,6 +309,15 @@ fn land_gates(
     } else {
         branch.clone()
     };
+    // The base is the committed policy's `base_branch`; a recorded
+    // `branch_base` is not read (atelier-md0v).
+    let policy_base = match &uncommitted {
+        Some(_) => base_policy::from_captured(&mut read, &head)?,
+        None => base_policy::working(repo)?,
+    }
+    .policy
+    .branch_policy
+    .base_branch;
     let ownership = match &id {
         Some(id) => {
             let issue = index.require_issue(id)?;
@@ -322,9 +331,7 @@ fn land_gates(
                     ),
                     None => bail!("land_work_untraceable: {id} has no work branch. Next: atelier start {id}"),
                 },
-                Some(ownership)
-                    if ownership.work_branch != branch || ownership.branch_base == branch =>
-                {
+                Some(ownership) if ownership.work_branch != branch || policy_base == branch => {
                     let work = &ownership.work_branch;
                     if git::resolve(repo, &format!("refs/heads/{work}")).is_ok() {
                         bail!("land_branch_mismatch: owned on {work}, not on {here}. Next: git switch {work} && atelier land");
@@ -348,8 +355,8 @@ fn land_gates(
         }
         None => None,
     };
-    // The owner's branch is checked above, so its recorded base is the pin.
-    let base_pin = base_pin(repo, &index, id.as_deref())?;
+    // The owner's branch is checked above, so the policy's base is the pin.
+    let base_pin = base_pin(repo, &policy_base, id.as_deref())?;
     let source = match (&base_pin, &uncommitted) {
         (Some((_, commit)), _) => base_policy::from_captured(&mut read, commit)?,
         // The working policy is not committed, so HEAD's is the one to use.
@@ -452,7 +459,7 @@ fn land_gates(
     // passing land leads to.
     let mut situation = Vec::new();
     let mut next = None;
-    if let (Some(id), Some(ownership)) = (&id, &ownership) {
+    if let (Some(id), Some(_)) = (&id, &ownership) {
         let id = id.clone();
         let issue = index.require_issue(&id)?;
         let done = source
@@ -470,41 +477,6 @@ fn land_gates(
                     )
                 ),
                 Some("commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`".to_owned()),
-            );
-        }
-        if source.policy.branch_policy.base_branch != ownership.branch_base {
-            // The record names the base; recording the policy's base in it
-            // is the fix, committed alone (atelier-9a6e). The new line is
-            // the one the record would render, passed to perl as an
-            // argument, so any legal branch name survives the shell and the
-            // pattern (atelier-hen4).
-            let (recorded, trusted) = (
-                &ownership.branch_base,
-                &source.policy.branch_policy.base_branch,
-            );
-            let path = format!(".atelier/issues/{id}.md");
-            let line = index
-                .issue_record(&id)
-                .and_then(|record| {
-                    let mut record = record.clone();
-                    record.issue.workflow_branch.as_mut()?.branch_base = trusted.clone();
-                    atelier_records::render_issue_record(&record).ok()
-                })
-                .and_then(|text| {
-                    text.lines()
-                        .find(|line| line.starts_with("  branch_base: "))
-                        .map(str::to_owned)
-                });
-            let quote = |text: &str| format!("'{}'", text.replace('\'', "'\\''"));
-            preconditions.fail(
-                "land_base_mismatch",
-                format!("recorded base {recorded} disagrees with trusted policy base {trusted}"),
-                line.map(|line| {
-                    format!(
-                        "perl -pi -e 'BEGIN {{ $line = shift }} $done ||= s/^  branch_base: .*\\n/$line\\n/' {} {path} && git commit -m \"…\" -- {path}",
-                        quote(&line)
-                    )
-                }),
             );
         }
         let base = branch_base
@@ -710,27 +682,9 @@ impl std::error::Error for Reported {}
 /// lines, each with its fix, then the passes and notes; a refusal by a check
 /// that stops land before its gates as an error with its one code.
 fn refusal(error: &anyhow::Error) -> (Vec<String>, String) {
-    let (lines, failed) = match error.downcast_ref::<crate::gate_report::GatesRefused>() {
-        Some(refused) => (
-            refused
-                .report
-                .failures
-                .iter()
-                .chain(&refused.report.passes)
-                .chain(&refused.notes)
-                .cloned()
-                .collect(),
-            refused.report.failed.clone(),
-        ),
-        // The reinstall is the one fix; the reads that met it add nothing.
-        None => match newer_schema(error) {
-            Some(newer) => (vec![format!("Error: {newer}")], Vec::new()),
-            None => (
-                vec![format!("Error: {error:?}")],
-                refusal_code(error).into_iter().collect(),
-            ),
-        },
-    };
+    // A newer schema's reinstall is the one fix; the reads that met it add
+    // nothing.
+    let (lines, failed) = report_lines(error);
     let verdict = if failed.is_empty() {
         "land: refused".to_owned()
     } else {
@@ -808,6 +762,38 @@ fn push_checked_branch(repo: &Path, checked: &str) -> Result<String> {
     Ok(format!("{remote}/{branch}"))
 }
 
+/// Whether land runs on a named branch other than the base, where work is in
+/// progress: land and the Stop hook report what is open there and refuse
+/// nothing, since nothing there reaches the base without `merge`'s gates
+/// (atelier-md0v). On the base, and on a detached HEAD, a refusal stands.
+fn on_work_branch() -> bool {
+    let Ok(layout) = StorageLayout::discover() else {
+        return false;
+    };
+    let repo = layout.repo_root();
+    let Ok(source) = base_policy::working(repo) else {
+        return false;
+    };
+    git::checkout_branch(repo)
+        .ok()
+        .flatten()
+        .is_some_and(|branch| branch != source.policy.branch_policy.base_branch)
+}
+
+/// The verdict for work in progress: `land: work in progress` with what is
+/// open, which the report above it lists.
+fn in_progress_verdict(failed: &[String]) -> String {
+    if failed.is_empty() {
+        "land: work in progress".to_owned()
+    } else {
+        format!(
+            "land: work in progress — {} open ({})",
+            crate::human_output::count_noun(failed.len(), "check"),
+            failed.join(", ")
+        )
+    }
+}
+
 pub fn land(
     requested: Option<&str>,
     hook: bool,
@@ -817,22 +803,69 @@ pub fn land(
 ) -> Result<()> {
     if !hook {
         let nothing_pushed = if push { ", nothing pushed" } else { "" };
+        // What a push of work in progress publishes: HEAD as land began, so
+        // a check that moves HEAD pushes nothing.
+        let began = StorageLayout::discover()
+            .ok()
+            .and_then(|layout| git_freshness::head_commit(layout.repo_root()).ok());
         // The checks' report prints before any push, so a warning is read
         // before the commits go out.
-        let pushed = land_checked(requested, install, false).and_then(|(output, checked)| {
-            // Refuse before the report, so no pass line precedes the refusal.
-            if push {
-                refuse_unresolved_base_upstream(StorageLayout::discover()?.repo_root())?;
+        let checked = land_checked(requested, install, false);
+        let in_progress = checked.is_err() && on_work_branch();
+        let pushed = match checked {
+            Ok((output, checked)) => {
+                // Refuse before the report, so no pass line precedes the refusal.
+                (|| {
+                    if push {
+                        refuse_unresolved_base_upstream(StorageLayout::discover()?.repo_root())?;
+                    }
+                    if !quiet {
+                        println!("{output}");
+                    }
+                    if !push {
+                        return Ok(None);
+                    }
+                    let layout = StorageLayout::discover()?;
+                    push_checked_branch(layout.repo_root(), &checked).map(Some)
+                })()
             }
-            if !quiet {
-                println!("{output}");
+            // Work in progress on a branch is reported, not refused; a push
+            // publishes the branch to its own upstream (atelier-md0v).
+            Err(error) if in_progress => {
+                let (lines, failed) = report_lines(&error);
+                if !quiet {
+                    println!("{}", lines.join("\n"));
+                }
+                let destination = if push {
+                    let layout = StorageLayout::discover()?;
+                    let head = began.context("land: HEAD could not be read")?;
+                    match push_checked_branch(layout.repo_root(), &head) {
+                        Ok(to) => Some(to),
+                        Err(error) => {
+                            eprintln!("Error: {error:#}\nland: push refused");
+                            return Err(Reported.into());
+                        }
+                    }
+                } else {
+                    None
+                };
+                let verdict = in_progress_verdict(&failed);
+                let verdict = match destination {
+                    Some(to) => format!("{verdict}, pushed to {to}"),
+                    None => verdict,
+                };
+                println!(
+                    "{}",
+                    if quiet {
+                        verdict.trim_start_matches("land: ")
+                    } else {
+                        &verdict
+                    }
+                );
+                return Ok(());
             }
-            if !push {
-                return Ok(None);
-            }
-            let layout = StorageLayout::discover()?;
-            push_checked_branch(layout.repo_root(), &checked).map(Some)
-        });
+            Err(error) => Err(error),
+        };
         match pushed {
             Ok(destination) => {
                 let verdict = match &destination {
@@ -859,23 +892,66 @@ pub fn land(
     let output = match read_hook_payload("Stop") {
         // Not a landing failure, so it does not hold the turn.
         Err(error) => json!({"systemMessage": error.to_string()}),
+        // Outside any Atelier repository there is nothing to land: say so
+        // and let the turn end (atelier-md0v).
+        Ok(_) if StorageLayout::discover().is_err() => json!({
+            "systemMessage": format!(
+                "Atelier: {} is not in an Atelier repository, so there is nothing to land.",
+                std::env::current_dir()
+                    .map(|dir| dir.display().to_string())
+                    .unwrap_or_else(|_| "this directory".to_owned())
+            )
+        }),
         Ok(repeated) => match land_text(requested, install, false) {
             Ok(_) => json!({}),
-            Err(error) => stop_hook_refusal(&error, repeated),
+            Err(error) => stop_hook_refusal(&error, repeated, on_work_branch()),
         },
     };
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
 }
 
-/// The Stop hook's answer to a refused land: the refusal as `land` prints
-/// it, as the reason that blocks the turn. Two refusals leave the agent
-/// nothing to do now, so they are reported without blocking: uncommitted
-/// records alone on the base, and on the owner's own work branch a review
-/// still pending on the owner, including a fresh approval for resolved
-/// fix_now findings. A repeated stop is not blocked again, so the
-/// hook cannot loop. `land` itself still refuses in every case.
-fn stop_hook_refusal(error: &anyhow::Error, repeated: bool) -> Value {
+/// What land reports for `error`, and the checks that failed: the report
+/// lines a refusal prints, without its verdict.
+fn report_lines(error: &anyhow::Error) -> (Vec<String>, Vec<String>) {
+    match error.downcast_ref::<crate::gate_report::GatesRefused>() {
+        Some(refused) => (
+            refused
+                .report
+                .failures
+                .iter()
+                .chain(&refused.report.passes)
+                .chain(&refused.notes)
+                .cloned()
+                .collect(),
+            refused.report.failed.clone(),
+        ),
+        None => match newer_schema(error) {
+            Some(newer) => (vec![format!("Error: {newer}")], Vec::new()),
+            None => (
+                vec![format!("Error: {error:?}")],
+                refusal_code(error).into_iter().collect(),
+            ),
+        },
+    }
+}
+
+/// The Stop hook's answer to a refused land. Work in progress on a branch is
+/// reported without blocking, since land refuses nothing there
+/// (atelier-md0v); so are uncommitted records alone on the base, which are
+/// committed at handoff, not at every turn (atelier-mp6v). Any other
+/// refusal on the base, where it guards what would put unreviewed code on
+/// it, blocks the turn with the refusal as `land` prints it. A repeated stop
+/// is not blocked again, so the hook cannot loop.
+fn stop_hook_refusal(error: &anyhow::Error, repeated: bool, in_progress: bool) -> Value {
+    if in_progress {
+        let (lines, failed) = report_lines(error);
+        return json!({"systemMessage": format!(
+            "Atelier: work in progress; land reports it and refuses nothing on a work branch.\n{}\n{}",
+            lines.join("\n"),
+            in_progress_verdict(&failed)
+        )});
+    }
     let (lines, verdict) = refusal(error);
     let report = format!("{}\n{verdict}", lines.join("\n"));
     if let Some(lead) = error
@@ -891,8 +967,8 @@ fn stop_hook_refusal(error: &anyhow::Error, repeated: bool) -> Value {
     }
 }
 
-/// Why a refusal need not block a turn, read from its failed checks by
-/// code and where land ran; `None` for every other refusal.
+/// Why a refusal on the base need not block a turn: uncommitted records
+/// alone; `None` for every other refusal.
 fn nothing_to_do_now(refused: &crate::gate_report::GatesRefused) -> Option<String> {
     use crate::gate_report::RanOn;
     let checks = &refused.report.checks;
@@ -908,26 +984,6 @@ fn nothing_to_do_now(refused: &crate::gate_report::GatesRefused) -> Option<Strin
                 .all(|check| check.check == "land_records_uncommitted") =>
         {
             Some("Atelier: the base has uncommitted records; land refuses until they are committed, but they do not block a turn.".to_owned())
-        }
-        // Only the owner's review is missing: its approval, or a fresh one
-        // for fix_now findings a later commit already resolved. Any other
-        // finding state, or any other failure, blocks (atelier-i80r).
-        RanOn::Owner(owner)
-            if checks.iter().all(|check| {
-                check.record == *owner
-                    && match check.check.as_str() {
-                        "review.current" | "claims.reviewed" => true,
-                        "findings.disposed" => {
-                            !check.gaps.is_empty()
-                                && check.gaps.iter().all(|gap| {
-                                    matches!(gap, atelier_app::review_gate::Gap::AwaitingApproval(_))
-                                })
-                        }
-                        _ => false,
-                    }
-            }) =>
-        {
-            Some(format!("Atelier: {owner} awaits an independent review; land refuses until it is approved, but waiting does not block a turn."))
         }
         _ => None,
     }
@@ -989,24 +1045,14 @@ pub(crate) fn merge_claim_nodes(
     )
 }
 
-/// The owner's recorded base branch, as a ref and the commit it names.
-fn base_pin(
-    repo: &Path,
-    index: &RecordIndex,
-    owner: Option<&str>,
-) -> Result<Option<(String, String)>> {
-    let Some(owner) = owner else {
+/// An owner's base branch, the policy's `base_branch`, as a ref and the
+/// commit it names; `None` without an owner (atelier-md0v).
+fn base_pin(repo: &Path, base: &str, owner: Option<&str>) -> Result<Option<(String, String)>> {
+    if owner.is_none() {
         return Ok(None);
-    };
-    index
-        .require_issue(owner)?
-        .workflow_branch
-        .as_ref()
-        .map(|branch| {
-            let reference = format!("refs/heads/{}", branch.branch_base);
-            Ok((reference.clone(), git::resolve(repo, &reference)?))
-        })
-        .transpose()
+    }
+    let reference = format!("refs/heads/{base}");
+    Ok(Some((reference.clone(), git::resolve(repo, &reference)?)))
 }
 
 /// A base the work lacks commits from: its name and how many.
@@ -1055,7 +1101,8 @@ pub(crate) fn checkout_claim_context(
     let head = git_freshness::head_commit(repo)?;
     let branch = git::checkout_branch(repo)?.unwrap_or_default();
     let id = owner(index, &branch, None)?;
-    let base_pin = base_pin(repo, index, id.as_deref())?;
+    let base = workflow_policy::load(repo)?.branch_policy.base_branch;
+    let base_pin = base_pin(repo, &base, id.as_deref())?;
     let (branch_base, _) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let (_, mut parents) = claim_parents(repo, branch_base.as_deref(), &head)?;
     if branch_base.is_none() {
@@ -1063,7 +1110,6 @@ pub(crate) fn checkout_claim_context(
         // hold (land_work_untraceable) before it judges any claim, so only a
         // parent the base already contains holds a claim, as on the base
         // itself; a detached checkout of unmerged work is judged at HEAD.
-        let base = workflow_policy::load(repo)?.branch_policy.base_branch;
         if let Ok(tip) = git::resolve(repo, &format!("refs/heads/{base}")) {
             parents.retain(|parent| {
                 git_freshness::git_output(repo, &["merge-base", "--is-ancestor", parent, &tip])

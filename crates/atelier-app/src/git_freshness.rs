@@ -211,7 +211,6 @@ struct ObjectCache {
     edges: HashMap<(String, String), Rc<Vec<CommitEdge>>>,
     first_parents: HashMap<String, Option<String>>,
     retired_findings: HashMap<String, Rc<std::collections::BTreeSet<String>>>,
-    authors: HashMap<String, String>,
     trees: HashMap<String, Rc<Vec<TreeEntry>>>,
     commit_trees: HashMap<String, String>,
     histories: HashMap<Vec<String>, String>,
@@ -223,8 +222,6 @@ struct ObjectCache {
     /// Whether tree diffs matched `git diff` on this read phase's first
     /// edge; `None` until checked, `false` to use `git diff` throughout.
     tree_diff_matches: Option<bool>,
-    /// Whether `git show` prints author fields unconverted.
-    utf8_log_output: Option<bool>,
 }
 
 impl<'a> ReadContext<'a> {
@@ -566,83 +563,6 @@ impl<'a> ReadContext<'a> {
         self.cache.path_logs.insert(query.clone(), listed.clone());
         Ok(listed)
     }
-    pub(crate) fn author_names(&mut self, commit: &str) -> Result<String> {
-        let commit = self.commit_id(commit)?;
-        if let Some(names) = self.cache.authors.get(&commit) {
-            return Ok(names.clone());
-        }
-        let names = match self.plain_author(&commit)? {
-            Some(names) => names,
-            None => String::from_utf8(git_output(
-                self.repo,
-                &["show", "-s", "--format=%an%n%ae", &commit],
-            )?)?,
-        };
-        self.cache.authors.insert(commit, names.clone());
-        Ok(names)
-    }
-    /// `%an%n%ae` read from the commit object when `git show` would print it
-    /// unchanged: a UTF-8 commit, UTF-8 log output and an ordinary identity.
-    /// Anything else returns `None` so `git show` decides.
-    fn plain_author(&mut self, commit: &str) -> Result<Option<String>> {
-        if self.cache.utf8_log_output.is_none() {
-            let encoding = command(self.repo)
-                .args(["config", "--get", "i18n.logOutputEncoding"])
-                .stdin(Stdio::null())
-                .output()?;
-            let encoding = String::from_utf8_lossy(&encoding.stdout)
-                .trim()
-                .to_lowercase();
-            self.cache.utf8_log_output = Some(matches!(encoding.as_str(), "" | "utf-8" | "utf8"));
-        }
-        if self.cache.utf8_log_output != Some(true) {
-            return Ok(None);
-        }
-        let Some(data) = self.cache.commits.get(commit) else {
-            return Ok(None);
-        };
-        let Ok(text) = std::str::from_utf8(data) else {
-            return Ok(None);
-        };
-        let headers = text.split("\n\n").next().unwrap_or("");
-        let mut author = None;
-        for line in headers.lines() {
-            if line.starts_with("encoding ") || line.starts_with(' ') {
-                return Ok(None);
-            }
-            if let Some(ident) = line.strip_prefix("author ") {
-                if author.replace(ident).is_some() {
-                    return Ok(None);
-                }
-            }
-        }
-        let Some(ident) = author else {
-            return Ok(None);
-        };
-        let Some((name, rest)) = ident.split_once(" <") else {
-            return Ok(None);
-        };
-        let Some((email, date)) = rest.split_once("> ") else {
-            return Ok(None);
-        };
-        let ordinary = |part: &str| {
-            !part.is_empty()
-                && part.trim() == part
-                && !part.contains(['<', '>'])
-                && !part.chars().any(char::is_control)
-        };
-        let mut date = date.split(' ');
-        let timestamp = date
-            .next()
-            .is_some_and(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit()));
-        let zone = date.next().is_some_and(|z| {
-            z.len() == 5 && z.starts_with(['+', '-']) && z[1..].bytes().all(|b| b.is_ascii_digit())
-        });
-        if !(ordinary(name) && ordinary(email) && timestamp && zone && date.next().is_none()) {
-            return Ok(None);
-        }
-        Ok(Some(format!("{name}\n{email}\n")))
-    }
     /// The findings that `commit` still holds separate disposition events
     /// for (ADR 0025).
     pub(crate) fn retired_findings_at(
@@ -882,6 +802,45 @@ pub(crate) fn git_input(repo: &Path, args: &[&str], input: &[u8]) -> Result<Vec<
     written.with_context(|| format!("cannot write the input of git {}", args.join(" ")))?;
     Ok(output.stdout)
 }
+/// The full ID of the commit `id` names: a full commit ID, or an
+/// abbreviated one at least four hexadecimal digits long that only one
+/// commit starts with. Commands that take a commit resolve it on input and
+/// store the full ID (atelier-md0v); an unknown or ambiguous prefix is
+/// refused, naming the commits it matches.
+pub fn resolve_commit_id(repo: &Path, id: &str) -> Result<String> {
+    if !(4..=64).contains(&id.len()) || !id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        bail!("{id} is not a commit ID: give a full commit ID, or a unique prefix of at least 4 hexadecimal digits");
+    }
+    let objects = String::from_utf8(git_output(
+        repo,
+        &["rev-parse", &format!("--disambiguate={id}")],
+    )?)?;
+    let mut commits = Vec::new();
+    if !objects.trim().is_empty() {
+        let kinds = String::from_utf8(git_input(
+            repo,
+            &["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+            objects.as_bytes(),
+        )?)?;
+        commits.extend(kinds.lines().filter_map(|line| {
+            let (name, kind) = line.split_once(' ')?;
+            (kind == "commit").then(|| name.to_owned())
+        }));
+    }
+    match commits.as_slice() {
+        [commit] => Ok(commit.clone()),
+        [] => bail!("{id} names no commit in this repository. Next: git log --format=%H"),
+        several => bail!(
+            "{id} is ambiguous: {} commits start with it ({}); give more of the ID",
+            several.len(),
+            several
+                .iter()
+                .map(|commit| &commit[..12.min(commit.len())])
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
 pub fn head_commit(repo: &Path) -> Result<String> {
     Ok(
         String::from_utf8(git_output(repo, &["rev-parse", "HEAD"])?)?
@@ -1092,6 +1051,55 @@ mod tests {
         head_commit(repo).unwrap()
     }
     #[test]
+    fn short_commit_ids_resolve_to_the_full_id_unless_unknown_or_ambiguous() {
+        let repo = repo("sha1");
+        let path = repo.path();
+        // These two commits of the empty tree, with these fixed identities
+        // and dates, both start with a652.
+        let tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+        git_output(path, &["hash-object", "-t", "tree", "-w", "/dev/null"]).unwrap();
+        let made = |message: &str| {
+            let output = command(path)
+                .args(["commit-tree", tree, "-m", message])
+                .envs([
+                    ("GIT_AUTHOR_NAME", "A"),
+                    ("GIT_AUTHOR_EMAIL", "a@example.test"),
+                    ("GIT_AUTHOR_DATE", "1600000000 +0000"),
+                    ("GIT_COMMITTER_NAME", "A"),
+                    ("GIT_COMMITTER_EMAIL", "a@example.test"),
+                    ("GIT_COMMITTER_DATE", "1600000000 +0000"),
+                ])
+                .output()
+                .unwrap();
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        let first = made("c229");
+        let second = made("c441");
+        assert_eq!(&first[..4], "a652");
+        assert_eq!(&second[..4], "a652");
+        // A unique prefix, in either case, and a full ID resolve to the full ID.
+        assert_eq!(resolve_commit_id(path, &first[..7]).unwrap(), first);
+        assert_eq!(
+            resolve_commit_id(path, &second[..7].to_uppercase()).unwrap(),
+            second
+        );
+        assert_eq!(resolve_commit_id(path, &first).unwrap(), first);
+        // A prefix two commits share is refused, naming both.
+        let ambiguous = resolve_commit_id(path, "a652").unwrap_err().to_string();
+        assert!(ambiguous.contains("a652 is ambiguous"), "{ambiguous}");
+        assert!(ambiguous.contains(&first[..12]) && ambiguous.contains(&second[..12]));
+        // An unknown prefix, a prefix of a non-commit object and anything
+        // that is not hexadecimal are refused.
+        let unknown = resolve_commit_id(path, "ffffffff").unwrap_err().to_string();
+        assert!(unknown.contains("names no commit"), "{unknown}");
+        assert!(resolve_commit_id(path, &tree[..8]).is_err());
+        for invalid in ["HEAD", "a65", "a652~1"] {
+            let error = resolve_commit_id(path, invalid).unwrap_err().to_string();
+            assert!(error.contains("is not a commit ID"), "{invalid}: {error}");
+        }
+    }
+
+    #[test]
     fn ancestry_path_matches_git_on_branchy_history() {
         let repo = repo("sha1");
         let path = repo.path();
@@ -1297,64 +1305,6 @@ mod tests {
             }
             assert!(read.edges(&sibling, &head).is_err());
             assert!(read.edges(&"0".repeat(pin.len()), &head).is_err());
-        }
-    }
-
-    #[test]
-    fn native_author_fields_preserve_show_encoding_and_unusual_identities() {
-        let repo = repo("sha1");
-        let pin = commit(repo.path(), "pin");
-        for (identity, encoding) in [
-            (
-                b"Ren\xc3\xa9 \xe5\x90\x8d <name+tag@example.test>".as_slice(),
-                "UTF-8",
-            ),
-            (b" spaces  <addr@example.test>".as_slice(), "UTF-8"),
-            (b"Ren\xe9 <latin@example.test>".as_slice(), "ISO-8859-1"),
-            (b"line\nname <mail@example.test>".as_slice(), "UTF-8"),
-            (b"null\0name <mail@example.test>".as_slice(), "UTF-8"),
-        ] {
-            let tree = String::from_utf8(
-                git_output(repo.path(), &["rev-parse", &format!("{pin}^{{tree}}")]).unwrap(),
-            )
-            .unwrap();
-            let mut object = format!("tree {}\nparent {pin}\nauthor ", tree.trim()).into_bytes();
-            object.extend_from_slice(identity);
-            object.extend_from_slice(format!(" 1600000000 +0000\ncommitter Author <a@example.test> 1600000000 +0000\nencoding {encoding}\n\nmessage\n").as_bytes());
-            let oid = String::from_utf8(
-                git_input(
-                    repo.path(),
-                    &[
-                        "hash-object",
-                        "--literally",
-                        "-w",
-                        "-t",
-                        "commit",
-                        "--stdin",
-                    ],
-                    &object,
-                )
-                .unwrap(),
-            )
-            .unwrap();
-            let oid = oid.trim();
-            git_output(repo.path(), &["update-ref", "refs/heads/master", oid]).unwrap();
-            for output_encoding in ["UTF-8", "ISO-8859-1"] {
-                git_output(
-                    repo.path(),
-                    &["config", "i18n.logOutputEncoding", output_encoding],
-                )
-                .unwrap();
-                let expected =
-                    git_output(repo.path(), &["show", "-s", "--format=%an%n%ae", oid]).unwrap();
-                let mut read = ReadContext::new(repo.path());
-                let expected = String::from_utf8(expected);
-                let actual = read.author_names(oid);
-                assert_eq!(actual.is_ok(), expected.is_ok());
-                if let Ok(expected) = expected {
-                    assert_eq!(actual.unwrap(), expected);
-                }
-            }
         }
     }
 

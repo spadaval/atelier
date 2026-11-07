@@ -1,4 +1,5 @@
-//! Honest evidence decisions used by transition checks and issue displays.
+//! Honest evidence freshness for issue displays; no gate reads receipts
+//! (atelier-md0v).
 use crate::{
     git_freshness as git,
     path_log::{Listing, PathLog},
@@ -8,12 +9,6 @@ use anyhow::Result;
 use atelier_core::{EvidenceRecord, EvidenceResult, IssueBody, IssueSectionName};
 use atelier_records::{issue_record_path, parse_issue_record, CanonicalIssueRecord};
 use std::path::Path;
-
-#[derive(Debug)]
-pub struct EvidenceGateStatus {
-    pub passed: bool,
-    pub reason: String,
-}
 
 fn acceptance_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> bool {
     a.issue.title == b.issue.title
@@ -103,27 +98,6 @@ impl EvidenceReadContext<'_> {
         let edges = self.edges(&record.data.commit, "HEAD")?;
         Ok(evidence_matches_edges(self, index, issue, record, &edges)? && self.code_clean()?)
     }
-    pub fn issue_gate(
-        &mut self,
-        index: &RecordIndex,
-        issue_id: &str,
-        min_count: usize,
-        kind: Option<&str>,
-    ) -> Result<EvidenceGateStatus> {
-        self.issue_gate_with_freshness(index, issue_id, min_count, kind, true)
-    }
-    pub(crate) fn issue_gate_with_freshness(
-        &mut self,
-        index: &RecordIndex,
-        issue_id: &str,
-        min_count: usize,
-        kind: Option<&str>,
-        fresh: bool,
-    ) -> Result<EvidenceGateStatus> {
-        evaluate_issue_gate(index, issue_id, min_count, kind, fresh, |issue, record| {
-            self.proof_matches(index, issue, record, fresh)
-        })
-    }
 }
 fn evidence_matches_edges(
     read: &mut EvidenceReadContext<'_>,
@@ -198,8 +172,9 @@ pub enum ProofMark {
     /// A fail that a later pass supersedes, fresh or not; names the newest
     /// pass.
     SupersededByPass(String),
-    /// The newest fail, with no pass recorded after it.
-    BlocksCompletion,
+    /// The newest fail, with no pass recorded after it: a note that gates
+    /// nothing (atelier-md0v).
+    NoPassSince,
 }
 
 impl ProofMark {
@@ -393,7 +368,7 @@ impl EvidenceReadContext<'_> {
         }
         // A fail is superseded for good by any pass recorded after it, even
         // one later commits made stale; the newest fail with no pass after
-        // it blocks completion.
+        // it is marked, as a note that gates nothing (atelier-md0v).
         let newest_pass = records
             .iter()
             .find(|record| record.data.result == EvidenceResult::Pass);
@@ -407,7 +382,7 @@ impl EvidenceReadContext<'_> {
                 continue;
             }
             if blocking_fail.as_ref() == Some(id) {
-                *mark = ProofMark::BlocksCompletion;
+                *mark = ProofMark::NoPassSince;
             } else if let Some(pass) =
                 newest_pass.filter(|pass| record.data.captured_at < pass.data.captured_at)
             {
@@ -445,61 +420,10 @@ pub fn validating_records<'a>(
     Ok(records)
 }
 
-fn evaluate_issue_gate(
-    index: &RecordIndex,
-    issue_id: &str,
-    min_count: usize,
-    kind: Option<&str>,
-    fresh: bool,
-    mut proof_matches: impl FnMut(&CanonicalIssueRecord, &EvidenceRecord) -> Result<bool>,
-) -> Result<EvidenceGateStatus> {
-    let issue = index
-        .issue_record(issue_id)
-        .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
-    let mut records = validating_records(index, issue_id)?;
-    records.retain(|record| kind.is_none_or(|kind| record.data.evidence_type == kind));
-    records.sort_by_key(|record| (record.data.captured_at, &record.header.id));
-    // A new failure supersedes earlier passing proof. Blocked and N/A never count.
-    let last_failure = records
-        .iter()
-        .filter(|record| record.data.result == EvidenceResult::Fail)
-        .map(|record| record.data.captured_at)
-        .max();
-    let mut passing = 0;
-    for record in &records {
-        if record.data.result == EvidenceResult::Pass
-            && last_failure.is_none_or(|failed_at| record.data.captured_at > failed_at)
-            && proof_matches(issue, record).unwrap_or(false)
-        {
-            passing += 1;
-        }
-    }
-    let passed = passing >= min_count.max(1);
-    Ok(EvidenceGateStatus {
-        passed,
-        reason: if passed {
-            format!(
-                "{} linked",
-                atelier_core::count_noun(
-                    passing,
-                    if fresh {
-                        "fresh passing evidence record"
-                    } else {
-                        "valid historical passing evidence record"
-                    }
-                )
-            )
-        } else {
-            format!("expected at least {}; found {passing}; older evidence, blocked/not-applicable results and passes superseded by a newer failure do not satisfy proof", atelier_core::count_noun(min_count.max(1), "fresh passing evidence record"))
-        },
-    })
-}
-
 /// The newest failing receipt validating `issue_id` when no pass was
-/// recorded after it: it blocks completion. Any later pass clears it for
-/// good, whatever its command or pin, even once later commits make that
-/// pass stale. Capture refuses uncommitted code; a manual pass is the
-/// recorder's judgment.
+/// recorded after it, which views note; it gates nothing (atelier-md0v).
+/// Any later pass clears it for good, whatever its command or pin, even
+/// once later commits make that pass stale.
 pub fn newest_failure(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
     let records = validating_records(index, issue_id)?;
     let newest = |result: EvidenceResult| {
@@ -522,23 +446,6 @@ pub fn newest_failure(index: &RecordIndex, issue_id: &str) -> Result<Option<Stri
 }
 
 impl EvidenceReadContext<'_> {
-    fn proof_matches(
-        &mut self,
-        index: &RecordIndex,
-        issue: &CanonicalIssueRecord,
-        record: &EvidenceRecord,
-        fresh: bool,
-    ) -> Result<bool> {
-        if fresh {
-            return self.evidence_is_fresh(index, issue, record);
-        }
-        if !self.ancestor(&record.data.commit, "HEAD")? {
-            return Ok(false);
-        }
-        let end = self.claim_endpoint(index, &issue.issue.id, &record.data.commit)?;
-        let edges = self.edges(&record.data.commit, &end)?;
-        evidence_matches_edges(self, index, issue, record, &edges)
-    }
     pub(crate) fn claim_endpoint(
         &mut self,
         index: &RecordIndex,
@@ -618,32 +525,6 @@ mod tests {
                 .evidence_is_fresh(&index, issue, &evidence)
                 .unwrap());
         }
-        for (min_count, kind) in [(1, None), (2, None), (1, Some("other"))] {
-            let shared = reads
-                .issue_gate(&index, "atelier-a001", min_count, kind)
-                .unwrap();
-            let separate = EvidenceReadContext::new(repo.path())
-                .issue_gate(&index, "atelier-a001", min_count, kind)
-                .unwrap();
-            assert_eq!(
-                (shared.passed, shared.reason),
-                (separate.passed, separate.reason)
-            );
-        }
-        let mut failure = evidence.clone();
-        failure.header.id = "atelier-v002".into();
-        failure.header.status = "fail".into();
-        failure.data.result = EvidenceResult::Fail;
-        failure.data.captured_at += chrono::Duration::seconds(1);
-        let failed =
-            RecordIndex::from_records(issues.to_vec(), vec![evidence.clone(), failure], Vec::new())
-                .unwrap();
-        assert!(
-            !reads
-                .issue_gate(&failed, "atelier-a001", 1, None)
-                .unwrap()
-                .passed
-        );
         fs::write(repo.path().join("code.rs"), "changed code").unwrap();
         assert!(!EvidenceReadContext::new(repo.path())
             .evidence_is_fresh(&index, &issues[0], &evidence)

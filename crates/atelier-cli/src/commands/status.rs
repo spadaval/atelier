@@ -290,11 +290,13 @@ impl Owner {
             id: id.to_owned(),
             heading,
             held,
+            // A started owner merges into the policy's base; a recorded
+            // `branch_base` is not read (atelier-md0v).
             base: record
                 .issue
                 .workflow_branch
                 .as_ref()
-                .map(|ownership| ownership.branch_base.clone()),
+                .map(|_| policy.branch_policy.base_branch.clone()),
             body: crate::utils::truncate(body, 3000),
             missions,
             work,

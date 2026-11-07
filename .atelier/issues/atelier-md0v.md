@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:00.802679334+00:00"
 id: "atelier-md0v"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-md0v
 priority: "P2"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Cut the records and gates that review does not need"
-updated_at: "2026-11-07T07:50:37.691428507+00:00"
+updated_at: "2026-11-07T08:34:54.029205352+00:00"
 ---
 
 ## Goal

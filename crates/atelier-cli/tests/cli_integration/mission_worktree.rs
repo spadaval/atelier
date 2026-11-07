@@ -628,7 +628,7 @@ fn test_work_missions_hides_done_by_default_and_all_includes_done_without_expand
 }
 
 #[test]
-fn test_ready_work_remains_visible_when_proof_blocks_start_transition() {
+fn test_ready_work_remains_visible_when_a_validator_blocks_start_transition() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
 
@@ -648,7 +648,7 @@ fn test_ready_work_remains_visible_when_proof_blocks_start_transition() {
         &policy_path,
         policy.replace(
             "        description: Start work.\n        validators:\n        - blockers.transitive_none_open\n",
-            "        description: Start work.\n        validators: [evidence.attached]\n",
+            "        description: Start work.\n        validators: [issue.sections_parseable]\n",
         ),
     )
     .unwrap();
@@ -668,7 +668,10 @@ fn test_ready_work_remains_visible_when_proof_blocks_start_transition() {
         run_atelier(dir.path(), &["issue", "transition", &ready_id]);
     assert!(success, "transition options failed: {stderr}");
     assert!(options_out.contains("start: blocked"), "{options_out}");
-    assert!(options_out.contains("evidence.attached"), "{options_out}");
+    assert!(
+        options_out.contains("issue.sections_parseable"),
+        "{options_out}"
+    );
 }
 
 #[test]
@@ -2784,14 +2787,14 @@ fn test_start_child_checks_out_parent_branch_and_records_it_on_the_parent() {
 
     assert!(success, "start failed: {stderr}");
     assert!(
-        stdout.contains(&format!("git switch -c feature/{epic_id}")),
+        stdout.contains(&format!("git switch -c {epic_id}")),
         "{stdout}"
     );
     assert!(
         stdout.contains(&format!("Applied transition start to {child_id}")),
         "{stdout}"
     );
-    assert_eq!(git_current_branch(dir.path()), format!("feature/{epic_id}"));
+    assert_eq!(git_current_branch(dir.path()), epic_id);
     assert_eq!(
         git_rev_parse(dir.path(), "HEAD"),
         head_before,
@@ -2800,7 +2803,7 @@ fn test_start_child_checks_out_parent_branch_and_records_it_on_the_parent() {
     let epic = issue_front_matter(dir.path(), &epic_id);
     assert_eq!(
         epic["workflow_branch"],
-        serde_json::json!({ "work_branch": format!("feature/{epic_id}"), "branch_base": "main" })
+        serde_json::json!({ "work_branch": epic_id, "branch_base": "main" })
     );
     assert_eq!(
         epic["status"], "todo",
@@ -2815,10 +2818,9 @@ fn test_start_child_checks_out_parent_branch_and_records_it_on_the_parent() {
 
 #[test]
 fn test_start_standalone_issue_and_parent_own_their_branches() {
-    for (issue_type, prefix, status) in [
-        ("bug", "bug", "in_progress"),
-        ("feature", "feature", "in_progress"),
-    ] {
+    // On the base, start creates a branch named with the bare ID, whatever
+    // the type (atelier-md0v).
+    for (issue_type, status) in [("bug", "in_progress"), ("feature", "in_progress")] {
         let dir = start_fixture();
         let issue_id = create_issue(dir.path(), &["Owner", "--issue-type", issue_type]);
         commit_all(dir.path(), "start fixture");
@@ -2826,7 +2828,7 @@ fn test_start_standalone_issue_and_parent_own_their_branches() {
         let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &issue_id]);
 
         assert!(success, "{issue_type} start failed: {stderr}");
-        let branch = format!("{prefix}/{issue_id}");
+        let branch = issue_id.clone();
         assert!(
             stdout.contains(&format!("git switch -c {branch}")),
             "{stdout}"
@@ -2863,7 +2865,7 @@ fn test_start_rerun_is_idempotent() {
         record_before
     );
     assert_eq!(git_status_short(dir.path()), status_before);
-    assert_eq!(git_current_branch(dir.path()), format!("task/{issue_id}"));
+    assert_eq!(git_current_branch(dir.path()), issue_id);
 }
 
 #[test]
@@ -2919,7 +2921,7 @@ fn test_start_validator_failure_does_not_switch_branches() {
     assert_eq!(git_current_branch(dir.path()), "main");
     let output = Command::new("git")
         .current_dir(dir.path())
-        .args(["branch", "--list", &format!("task/{issue_id}")])
+        .args(["branch", "--list", &issue_id])
         .output()
         .unwrap();
     assert!(output.stdout.is_empty(), "branch must not be created");
@@ -2976,14 +2978,14 @@ fn test_start_reads_the_owner_branch_not_a_same_named_tag() {
     let dir = start_fixture();
     let epic_id = create_issue(dir.path(), &["Tagged owner", "--issue-type", "feature"]);
     commit_all(dir.path(), "epic fixture");
-    git_ok(dir.path(), &["switch", "-c", "develop"]);
     let (success, _, stderr) = run_atelier(dir.path(), &["start", &epic_id]);
     assert!(success, "epic start failed: {stderr}");
     commit_all(dir.path(), "epic started");
     git_ok(dir.path(), &["switch", "main"]);
     let child_id = create_issue(dir.path(), &["Tag-only child", "--parent", &epic_id]);
     commit_all(dir.path(), "child created on main only");
-    git_ok(dir.path(), &["tag", &format!("feature/{epic_id}"), "main"]);
+    // A tag named as the branch, on main, which holds the child.
+    git_ok(dir.path(), &["tag", &epic_id, "main"]);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &child_id]);
 
@@ -3010,32 +3012,37 @@ fn git_ok(dir: &std::path::Path, args: &[&str]) {
 }
 
 #[test]
-fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
+fn test_start_on_existing_owner_branch_ignores_and_keeps_its_recorded_base() {
     let dir = start_fixture();
     let epic_id = create_issue(dir.path(), &["Shared owner", "--issue-type", "feature"]);
     let first_id = create_issue(dir.path(), &["First child", "--parent", &epic_id]);
     let second_id = create_issue(dir.path(), &["Second child", "--parent", &epic_id]);
     commit_all(dir.path(), "start fixture");
     git_ok(dir.path(), &["switch", "-c", "develop"]);
-    let (success, _, stderr) = run_atelier(dir.path(), &["start", &first_id]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &first_id]);
     assert!(success, "first start failed: {stderr}");
+    // Off the base, on a branch no item owns, start takes the branch.
+    assert!(stdout.contains("Already on branch develop"), "{stdout}");
+    // An older Atelier recorded the branch it started from as the base; the
+    // field is still written, and no longer read (atelier-md0v).
+    edit_canonical_record(dir.path(), "issues", &epic_id, |text| {
+        text.replace("  branch_base: main\n", "  branch_base: elsewhere\n")
+    });
     commit_all(dir.path(), "first child started");
     git_ok(dir.path(), &["switch", "main"]);
 
     let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &second_id]);
 
     assert!(success, "second start failed: {stderr}");
-    assert!(
-        stdout.contains(&format!("git switch feature/{epic_id}")),
-        "{stdout}"
-    );
+    // Main's records do not name the owner's branch; develop's own do.
+    assert!(stdout.contains("git switch develop"), "{stdout}");
     assert!(!stdout.contains("Recorded workflow_branch"), "{stdout}");
-    assert!(stdout.contains("Base:     develop"), "{stdout}");
-    assert_eq!(git_current_branch(dir.path()), format!("feature/{epic_id}"));
+    assert!(stdout.contains("Base:     main"), "{stdout}");
+    assert_eq!(git_current_branch(dir.path()), "develop");
     let epic = issue_front_matter(dir.path(), &epic_id);
     assert_eq!(
         epic["workflow_branch"],
-        serde_json::json!({ "work_branch": format!("feature/{epic_id}"), "branch_base": "develop" })
+        serde_json::json!({ "work_branch": "develop", "branch_base": "elsewhere" })
     );
     assert_eq!(
         issue_front_matter(dir.path(), &first_id)["status"],
@@ -3048,6 +3055,60 @@ fn test_start_on_existing_owner_branch_preserves_its_recorded_base() {
     assert_eq!(
         git_status_short(dir.path()).trim(),
         format!("M .atelier/issues/{second_id}.md")
+    );
+}
+
+#[test]
+fn test_start_refuses_another_items_branch_and_a_detached_head() {
+    let dir = start_fixture();
+    let owner_id = create_issue(dir.path(), &["Branch owner", "--issue-type", "task"]);
+    let other_id = create_issue(dir.path(), &["Other work", "--issue-type", "task"]);
+    commit_all(dir.path(), "start fixture");
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &owner_id]);
+    assert!(success, "owner start failed: {stderr}");
+    commit_all(dir.path(), "owner started");
+    let record_before = read_canonical_record(dir.path(), "issues", &other_id);
+
+    // The current branch is another item's: start names it and changes nothing.
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &other_id]);
+    assert!(
+        !success,
+        "start on another item's branch should fail:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("start_branch_owned")
+            && stderr.contains(&format!("is the work branch of {owner_id}"))
+            && stderr.contains(&format!("git switch main && atelier start {other_id}")),
+        "{stderr}"
+    );
+    assert_eq!(git_current_branch(dir.path()), owner_id);
+    assert_eq!(
+        read_canonical_record(dir.path(), "issues", &other_id),
+        record_before
+    );
+    assert!(git_status_short(dir.path()).is_empty());
+
+    // From a detached HEAD there is no branch to take or create from.
+    git_ok(dir.path(), &["switch", "--detach", "main"]);
+    let (success, stdout, stderr) = run_atelier(dir.path(), &["start", &other_id]);
+    assert!(
+        !success,
+        "start from a detached HEAD should fail:\n{stdout}"
+    );
+    assert!(stderr.contains("start_detached_head"), "{stderr}");
+    assert!(git_status_short(dir.path()).is_empty());
+    let output = Command::new("git")
+        .current_dir(dir.path())
+        .args(["branch", "--list", &other_id])
+        .output()
+        .unwrap();
+    assert!(output.stdout.is_empty(), "branch must not be created");
+
+    // `--base` is gone: start runs from where it is.
+    let (success, _, stderr) = run_atelier(dir.path(), &["start", &other_id, "--base", "main"]);
+    assert!(
+        !success && stderr.contains("unexpected argument '--base'"),
+        "{stderr}"
     );
 }
 
@@ -3079,10 +3140,7 @@ fn test_start_checks_blockers_on_the_target_branch_before_switching() {
     commit_all(dir.path(), "blocker done on main only");
     let gated_on_branch = Command::new("git")
         .current_dir(dir.path())
-        .args([
-            "show",
-            &format!("feature/{epic_id}:.atelier/issues/{gated_id}.md"),
-        ])
+        .args(["show", &format!("{epic_id}:.atelier/issues/{gated_id}.md")])
         .output()
         .unwrap()
         .stdout;
@@ -3104,10 +3162,7 @@ fn test_start_checks_blockers_on_the_target_branch_before_switching() {
     assert!(git_status_short(dir.path()).is_empty());
     let gated_after = Command::new("git")
         .current_dir(dir.path())
-        .args([
-            "show",
-            &format!("feature/{epic_id}:.atelier/issues/{gated_id}.md"),
-        ])
+        .args(["show", &format!("{epic_id}:.atelier/issues/{gated_id}.md")])
         .output()
         .unwrap()
         .stdout;

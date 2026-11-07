@@ -8,10 +8,10 @@ fn count_markdown_records(dir: &Path, kind: &str) -> usize {
         .count()
 }
 
-/// Proof freshness is judged where a done transition runs. Merge marks work
-/// done under the current starter, so these fixtures keep the starter from
-/// before atelier-jnrh, whose work still closes, as unmigrated repositories
-/// do; with `gated`, its close also requires passing evidence.
+/// Proof freshness is what `evidence list` marks; no gate reads receipts
+/// (atelier-md0v). These fixtures keep the starter from before atelier-jnrh,
+/// whose work still closes, as unmigrated repositories do; with `gated`, its
+/// close names `evidence.attached`, which is read and ignored.
 fn proof_fixture(gated: bool) -> (tempfile::TempDir, String) {
     proof_fixture_under(&starter_with_work_close(), gated)
 }
@@ -60,6 +60,15 @@ fn manual(dir: &Path, id: &str, result: &str, title: &str) -> String {
     assert!(ok, "{error}");
     record_id_by_title(dir, "evidence", title)
 }
+/// Whether `evidence list` marks a fresh pass proving `id`.
+fn proven(dir: &Path, id: &str) -> bool {
+    let (ok, out, error) = run_atelier_raw(dir, &["evidence", "list", id]);
+    assert!(ok, "{error}");
+    out.lines()
+        .find(|line| line.starts_with("Proof: "))
+        .unwrap_or_else(|| panic!("{out}"))
+        .starts_with("Proof: ✓")
+}
 fn close(dir: &Path, id: &str) -> (bool, String, String) {
     run_atelier_raw(
         dir,
@@ -101,7 +110,7 @@ fn manual_proof_requires_explicit_result_and_full_commit() {
         assert_eq!(metadata["result"], result);
         assert_eq!(metadata["commit"], git_rev_parse(dir.path(), "HEAD").trim());
         assert!(
-            !close(dir.path(), &id).0,
+            !proven(dir.path(), &id),
             "{result} must not count as a pass"
         );
     }
@@ -111,8 +120,7 @@ fn manual_proof_requires_explicit_result_and_full_commit() {
         "{list} {error}"
     );
     manual(dir.path(), &id, "pass", "Fresh explicit pass");
-    let (ok, _, error) = close(dir.path(), &id);
-    assert!(ok, "{error}");
+    assert!(proven(dir.path(), &id));
 }
 
 #[test]
@@ -205,18 +213,18 @@ fn stale_code_and_acceptance_changes_require_new_proof_including_reverts() {
         };
         std::fs::write(&path, &changed).unwrap();
         assert!(
-            !close(dir.path(), &id).0,
+            !proven(dir.path(), &id),
             "uncommitted {scope} must make proof stale"
         );
         commit_all(dir.path(), "relevant change after proof");
         assert!(
-            !close(dir.path(), &id).0,
+            !proven(dir.path(), &id),
             "committed {scope} must make proof stale"
         );
         std::fs::write(&path, &original).unwrap();
         commit_all(dir.path(), "revert relevant change");
         assert!(
-            !close(dir.path(), &id).0,
+            !proven(dir.path(), &id),
             "reverting {scope} must not revive old proof"
         );
         manual(
@@ -225,25 +233,36 @@ fn stale_code_and_acceptance_changes_require_new_proof_including_reverts() {
             "pass",
             "Proof after latest relevant change",
         );
-        let (ok, _, error) = close(dir.path(), &id);
-        assert!(ok, "fresh proof after {scope} should satisfy gate: {error}");
+        assert!(proven(dir.path(), &id), "fresh proof after {scope}");
     }
 }
 
 #[test]
-fn newer_failure_blocks_completion_without_presence_gate_until_any_later_pass() {
+fn a_newer_failure_is_noted_until_any_later_pass_and_blocks_nothing() {
     let (dir, id) = proof_fixture(false);
+    let list = |dir: &Path| {
+        let (ok, out, error) = run_atelier_raw(dir, &["evidence", "list", &id]);
+        assert!(ok, "{error}");
+        out
+    };
     manual(dir.path(), &id, "pass", "First pass");
-    manual(dir.path(), &id, "fail", "New failure");
-    let (ok, _, error) = close(dir.path(), &id);
-    assert!(!ok && error.contains("newer failing evidence"), "{error}");
+    let fail = manual(dir.path(), &id, "fail", "New failure");
+    assert!(
+        list(dir.path()).contains(&format!("Proof: ⚠ newest is fail {fail}")),
+        "{}",
+        list(dir.path())
+    );
     manual(dir.path(), &id, "pass", "Pass before code changed");
     // Later code makes the pass stale, but it still clears the older
     // failure: a receipt describes the committed state it was recorded at.
     std::fs::write(dir.path().join("src.rs"), "after failure\n").unwrap();
     commit_all(dir.path(), "changed code after latest pass");
+    assert!(!list(dir.path()).contains("newest is fail"));
+    // A fail receipt gates nothing (atelier-md0v): a new one does not hold
+    // the close.
+    manual(dir.path(), &id, "fail", "Another failure");
     let (ok, _, error) = close(dir.path(), &id);
-    assert!(ok, "a later pass clears the failure for good: {error}");
+    assert!(ok, "a fail receipt blocks no close: {error}");
 }
 
 #[test]
@@ -281,8 +300,7 @@ fn notes_status_and_new_evidence_records_do_not_stale_passing_proof() {
         "Another recorded observation",
     );
     commit_all(dir.path(), "more evidence bookkeeping");
-    let (ok, _, error) = close(dir.path(), &id);
-    assert!(ok, "{error}");
+    assert!(proven(dir.path(), &id));
 }
 
 #[test]
@@ -452,7 +470,7 @@ fn staged_code_restored_in_worktree_rejects_capture_and_stales_proof() {
         );
         assert_eq!(count_markdown_records(dir.path(), "evidence"), before);
         assert!(
-            !close(dir.path(), &id).0,
+            !proven(dir.path(), &id),
             "staged {name:?} must stale old proof"
         );
     }
@@ -491,10 +509,9 @@ fn record_only_merge_from_before_pin_preserves_proof_in_either_parent_order() {
                 ],
             );
         }
-        let (ok, _, error) = close(dir.path(), &id);
         assert!(
-            ok,
-            "record-only merge (pin first={pin_in_first_parent}) must preserve proof: {error}"
+            proven(dir.path(), &id),
+            "record-only merge (pin first={pin_in_first_parent}) must preserve proof"
         );
     }
 }
@@ -547,7 +564,7 @@ fn side_branch_edits_reverts_and_merge_result_code_changes_stale_proof() {
         }
         freshness_git(dir.path(), &["add", "-A"]);
         freshness_git(dir.path(), &["commit", "-m", "merge side branch"]);
-        assert!(!close(dir.path(), &id).0, "{history} must invalidate proof");
+        assert!(!proven(dir.path(), &id), "{history} must invalidate proof");
     }
 }
 #[cfg(not(feature = "test-hooks"))]

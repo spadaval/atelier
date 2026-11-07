@@ -142,7 +142,9 @@ fn a_missing_source_is_refused_at_create_and_by_check() {
 }
 
 #[test]
-fn a_deferral_must_name_the_source_its_follow_up_declares() {
+fn a_deferral_to_a_follow_up_found_elsewhere_passes_check() {
+    // The deferral source rule went with atelier-md0v: a follow-up may say
+    // it was discovered from another item.
     let dir = repo();
     let dir = dir.path();
     let item = create(dir, "Worked item", &[]);
@@ -181,10 +183,10 @@ fn a_deferral_must_name_the_source_its_follow_up_declares() {
         ],
     );
     let (success, stdout, stderr) = run_atelier_raw(dir, &["check"]);
-    let stderr = format!("{stdout}{stderr}");
+    let output = format!("{stdout}{stderr}");
     assert!(
-        !success && stderr.contains("review_follow_up_source_mismatch") && stderr.contains(&other),
-        "{stderr}"
+        success && !output.contains("review_follow_up_source_mismatch"),
+        "{output}"
     );
 }
 

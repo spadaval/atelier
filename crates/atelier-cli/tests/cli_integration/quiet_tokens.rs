@@ -336,8 +336,8 @@ fn every_command_prints_its_documented_quiet_token() {
         "{transition}"
     );
     assert_eq!(git_current_branch(dir), "main");
-    assert_eq!(q.ok("start", &[&owner]), format!("task/{owner}\n"));
-    assert_eq!(git_current_branch(dir), format!("task/{owner}"));
+    assert_eq!(q.ok("start", &[&owner]), format!("{owner}\n"));
+    assert_eq!(git_current_branch(dir), owner.clone());
     let target = format!("issue/{owner}");
     let captured = q.ok(
         "evidence record",
@@ -466,9 +466,11 @@ fn every_command_prints_its_documented_quiet_token() {
         "{stderr}"
     );
 
-    // Gates: `passed`, or nothing and a non-zero exit.
+    // Gates: `passed`, or nothing and a non-zero exit; land on a work
+    // branch reports work in progress and exits successfully (atelier-md0v).
     fs::write(dir.join(".atelier/issues/stray.md"), "stray").unwrap();
-    q.refused("land", &[]);
+    let token = q.ok("land", &[]);
+    assert!(token.starts_with("work in progress — "), "{token}");
     fs::remove_file(dir.join(".atelier/issues/stray.md")).unwrap();
     commit_all(dir, "reviews");
     assert_eq!(q.ok("land", &[]), "passed\n");
@@ -478,6 +480,7 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_eq!(git_current_branch(dir), "main");
 
     not_atelier(q.refused_in(outside, "doctor", &[]));
+    not_atelier(q.refused_in(outside, "land", &[]));
     let pruned = q.ok("prune", &[]);
     assert!(pruned.starts_with("mode=dry-run eligible="), "{pruned}");
     not_atelier(q.refused_in(outside, "prune", &[]));
