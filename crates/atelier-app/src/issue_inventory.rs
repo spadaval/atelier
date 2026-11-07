@@ -191,7 +191,7 @@ mod tests {
             &index,
             Some(&policy),
             IssueInventoryFilters {
-                category: Some("blocked"),
+                category: Some("done"),
                 ..filters
             },
             50,

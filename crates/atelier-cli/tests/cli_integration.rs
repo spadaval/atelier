@@ -657,30 +657,25 @@ fn ensure_all_issue_completion_sections(dir: &Path) {
     }
 }
 
-fn move_issue_to_review(dir: &Path, issue_ref_value: &str) -> String {
+/// Starts the issue unless it is already past `start`.
+fn start_issue_work(dir: &Path, issue_ref_value: &str) -> String {
     migrate_default_issue_workflow(dir);
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
-    for transition in ["start", "request_review"] {
-        let (success, options, stderr) = run_atelier(dir, &["issue", "transition", &issue_id]);
-        assert!(
-            success,
-            "transition options failed for {issue_id}: {stderr}"
-        );
-        if !options.contains(&format!("{transition}: ")) {
-            continue;
-        }
-        let (success, _, stderr) =
-            run_atelier(dir, &["issue", "transition", &issue_id, transition]);
-        if options.contains(&format!("{transition}: allowed")) {
-            assert!(success, "{transition} failed for {issue_id}: {stderr}");
-        }
+    let (success, options, stderr) = run_atelier(dir, &["issue", "transition", &issue_id]);
+    assert!(
+        success,
+        "transition options failed for {issue_id}: {stderr}"
+    );
+    if options.contains("start: allowed") {
+        let (success, _, stderr) = run_atelier(dir, &["issue", "transition", &issue_id, "start"]);
+        assert!(success, "start failed for {issue_id}: {stderr}");
     }
     issue_id
 }
 
 fn close_issue_with_evidence(dir: &Path, issue_ref_value: &str, reason: Option<&str>) -> String {
     let issue_id = resolve_test_issue_ref(dir, issue_ref_value);
-    move_issue_to_review(dir, &issue_id);
+    start_issue_work(dir, &issue_id);
     ensure_all_issue_completion_sections(dir);
     attach_issue_pass_evidence(dir, &issue_id);
     if dir.join(".git").exists() {
@@ -716,13 +711,24 @@ fn add_close_validator(dir: &Path, validator: &str) {
     fs::write(&path, updated).unwrap();
 }
 
+/// The starter policy before atelier-bqbz dropped the `blocked` and `review`
+/// statuses; repository policies written from it still declare them.
+const STARTER_WITH_BLOCKED_AND_REVIEW: &str =
+    include_str!("../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml");
+
 /// Starter policy whose work `close` also requires passing evidence.
 fn write_evidence_gated_workflow(dir: &Path) {
-    let workflow = atelier_workflow::STARTER_POLICY_YAML.replace(
-        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
-        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - evidence.attached: { min_count: 1 }\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n",
+    write_evidence_gated_workflow_from(dir, atelier_workflow::STARTER_POLICY_YAML);
+}
+
+/// `policy` with passing evidence also required by its work `close`.
+fn write_evidence_gated_workflow_from(dir: &Path, policy: &str) {
+    let close = "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n";
+    let workflow = policy.replace(
+        close,
+        &format!("{close}        - evidence.attached: {{ min_count: 1 }}\n"),
     );
-    assert_ne!(workflow, atelier_workflow::STARTER_POLICY_YAML);
+    assert_ne!(workflow, policy);
     fs::write(dir.join(".atelier/workflow.yaml"), workflow).unwrap();
 }
 

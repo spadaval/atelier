@@ -199,13 +199,13 @@ mod tests {
     use crate::test_records::Records;
 
     fn policy() -> WorkflowPolicy {
+        policy_from(crate::workflow_policy::STARTER_POLICY_YAML)
+    }
+
+    fn policy_from(yaml: &str) -> WorkflowPolicy {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join(".atelier")).unwrap();
-        std::fs::write(
-            dir.path().join(".atelier/workflow.yaml"),
-            crate::workflow_policy::STARTER_POLICY_YAML,
-        )
-        .unwrap();
+        std::fs::write(dir.path().join(".atelier/workflow.yaml"), yaml).unwrap();
         crate::workflow_policy::load(dir.path()).unwrap()
     }
 
@@ -381,7 +381,11 @@ mod tests {
             records.issue(&id, "task", "todo");
             records.relate("active-high-a", &id, "advances");
         }
-        let overview = mission_overview(&records.index(), Some(&policy()), true).unwrap();
+        // A policy from the earlier starter, which still has `blocked`.
+        let policy = policy_from(include_str!(
+            "../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml"
+        ));
+        let overview = mission_overview(&records.index(), Some(&policy), true).unwrap();
         assert_eq!(
             overview
                 .missions

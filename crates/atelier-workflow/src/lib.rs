@@ -36,10 +36,6 @@ statuses:
     category: todo
   in_progress:
     category: active
-  blocked:
-    category: blocked
-  review:
-    category: active
   done:
     category: done
   superseded:
@@ -60,32 +56,20 @@ workflows:
         validators:
         - issue.sections_parseable
       start:
-        from: [todo, blocked]
+        from: [todo]
         to: in_progress
         description: Start work.
         validators:
         - blockers.transitive_none_open
-      block:
-        from: [todo, in_progress, review]
-        to: blocked
-        description: Record a blocker.
-      request_review:
-        from: [in_progress]
-        to: review
-        description: Ready for independent review.
-      revise:
-        from: [review]
-        to: in_progress
-        description: Return to active work after review findings.
       close:
-        from: [in_progress, review]
+        from: [in_progress]
         to: done
         required_fields: [close_reason]
         description: Done claim; commit it on the work branch before review.
         validators:
         - blockers.none_open
       supersede:
-        from: [draft, todo, blocked, in_progress]
+        from: [draft, todo, in_progress]
         to: superseded
         required_fields: [close_reason]
         description: Retire work that evidence made obsolete.
@@ -106,29 +90,17 @@ workflows:
         to: todo
         description: Pull someday work into the near-term plan.
       defer:
-        from: [todo, blocked]
+        from: [todo]
         to: backlog
         description: Park work that is recorded but not near-term.
       start:
-        from: [todo, blocked]
+        from: [todo]
         to: in_progress
         description: Start work.
         validators:
         - blockers.transitive_none_open
-      block:
-        from: [todo, in_progress, review]
-        to: blocked
-        description: Record a blocker.
-      request_review:
-        from: [in_progress]
-        to: review
-        description: Ready for independent review.
-      revise:
-        from: [review]
-        to: in_progress
-        description: Return to active work after review findings.
       close:
-        from: [in_progress, review]
+        from: [in_progress]
         to: done
         required_fields: [close_reason]
         description: Done claim; commit it on the work branch before review. A parent closes after its children.
@@ -136,7 +108,7 @@ workflows:
         - blockers.none_open
         - work.terminal
       supersede:
-        from: [backlog, todo, blocked, in_progress]
+        from: [backlog, todo, in_progress]
         to: superseded
         required_fields: [close_reason]
         description: Retire work that is no longer needed.
@@ -149,7 +121,7 @@ workflows:
     - superseded
     transitions:
       decide:
-        from: [todo, blocked]
+        from: [todo]
         to: done
         required_fields: [close_reason]
         description: Record the decision. Decisions need no branch and may close on the base branch as a planning change.
@@ -157,12 +129,8 @@ workflows:
         - decision.recorded
         - blockers.none_open
         - work.terminal
-      block:
-        from: [todo]
-        to: blocked
-        description: Record a blocker.
       supersede:
-        from: [todo, blocked]
+        from: [todo]
         to: superseded
         required_fields: [close_reason]
         description: Retire a question that no longer needs deciding.
@@ -1872,14 +1840,14 @@ mod tests {
     }
 
     fn work_close_validators() -> &'static str {
-        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
+        "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog, todo, in_progress]\n"
     }
 
     fn with_work_close_validators(validators: &str) -> String {
         valid_policy().replace(
             work_close_validators(),
             &format!(
-                "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, blocked, in_progress]\n"
+                "        description: Done claim; commit it on the work branch before review. A parent closes after its children.\n        validators:\n{validators}      supersede:\n        from: [backlog, todo, in_progress]\n"
             ),
         )
     }
@@ -1936,7 +1904,7 @@ mod tests {
             Some("Task")
         );
         assert_eq!(policy.status_category("done"), Some("done"));
-        assert_eq!(policy.status_category("review"), Some("active"));
+        assert_eq!(policy.status_category("review"), None);
         let close = &policy.workflows["work"].transitions["close"];
         assert_eq!(close.required_fields, vec!["close_reason".to_string()]);
         assert_eq!(
@@ -1952,6 +1920,72 @@ mod tests {
             MergeStrategy::FastForwardOnly
         );
         assert_eq!(policy.branch_policy.base_branch, "main");
+    }
+
+    /// The starter keeps the statuses and types repositories use
+    /// (atelier-bqbz): `blocked` and `review` went, since blockers are
+    /// `blocked_by` links and the done claim comes before review; every type
+    /// stays.
+    #[test]
+    fn starter_policy_declares_the_statuses_and_types_in_use() {
+        let policy = parse_policy_text(valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(
+            policy
+                .statuses
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec![
+                "backlog",
+                "done",
+                "draft",
+                "in_progress",
+                "superseded",
+                "todo"
+            ]
+        );
+        assert_eq!(
+            policy
+                .issue_types
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec![
+                "bug",
+                "decision",
+                "feature",
+                "mission",
+                "spike",
+                "task",
+                "validation"
+            ]
+        );
+        for workflow in policy.workflows.values() {
+            for name in ["block", "request_review", "revise"] {
+                assert!(!workflow.transitions.contains_key(name), "{name}");
+            }
+        }
+    }
+
+    /// Repository policies written from the earlier starter keep `blocked`,
+    /// `review` and their transitions, and still load unchanged.
+    #[test]
+    fn the_earlier_starter_with_blocked_and_review_still_parses() {
+        let policy = parse_policy_text(
+            include_str!("../fixtures/starter-policy-with-blocked-and-review.yaml"),
+            WORKFLOW_POLICY_PATH,
+        )
+        .unwrap();
+        assert_eq!(policy.status_category("blocked"), Some("blocked"));
+        assert_eq!(policy.status_category("review"), Some("active"));
+        let work = &policy.workflows["work"].transitions;
+        assert_eq!(work["block"].to, "blocked");
+        assert_eq!(work["request_review"].to, "review");
+        assert_eq!(work["revise"].to, "in_progress");
+        assert!(work["close"].from.contains(&"review".to_string()));
+        assert!(policy.workflows["decision"]
+            .transitions
+            .contains_key("block"));
     }
 
     #[test]

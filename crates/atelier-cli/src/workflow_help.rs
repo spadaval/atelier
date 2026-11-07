@@ -98,7 +98,7 @@ mod tests {
             "{list}"
         );
         assert!(
-            list.contains("[possible values: active, blocked, done, todo]"),
+            list.contains("[possible values: active, done, todo]"),
             "{list}"
         );
 

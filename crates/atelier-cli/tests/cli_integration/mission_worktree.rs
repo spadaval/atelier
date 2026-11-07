@@ -897,11 +897,6 @@ fn test_issue_closeout_refuses_structurally_invalid_issue() {
     let (success, _, stderr) =
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "start"]);
     assert!(success, "start failed: {stderr}");
-    let (success, _, stderr) = run_atelier(
-        dir.path(),
-        &["issue", "transition", &issue_id, "request_review"],
-    );
-    assert!(success, "request_review failed: {stderr}");
     let issue_path = canonical_issue_path(dir.path(), &issue_id);
     let markdown = std::fs::read_to_string(&issue_path).unwrap();
     std::fs::write(&issue_path, remove_issue_section(&markdown, "Goal")).unwrap();
@@ -933,13 +928,13 @@ fn test_mission_close_options_report_configured_work_terminal_validator() {
     init_git_repo(dir.path());
     let policy_path = dir.path().join(".atelier/workflow.yaml");
     let policy = std::fs::read_to_string(&policy_path).unwrap();
-    let objective_close = "        validators:\n        - blockers.none_open\n      supersede:\n        from: [draft, todo, blocked, in_progress]\n";
+    let objective_close = "        validators:\n        - blockers.none_open\n      supersede:\n        from: [draft, todo, in_progress]\n";
     assert!(policy.contains(objective_close));
     std::fs::write(
         &policy_path,
         policy.replace(
             objective_close,
-            "        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [draft, todo, blocked, in_progress]\n",
+            "        validators:\n        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [draft, todo, in_progress]\n",
         ),
     )
     .unwrap();

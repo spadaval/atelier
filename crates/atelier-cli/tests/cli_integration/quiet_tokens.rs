@@ -267,7 +267,7 @@ fn every_command_prints_its_documented_quiet_token() {
     assert!(listed.lines().any(|id| id == owner), "{listed}");
     // Allowed names only, counting one that needs only `--reason`.
     let transitions = q.ok("issue transition", &[&owner]);
-    assert_eq!(transitions, "block\ndefer\nstart\nsupersede\n");
+    assert_eq!(transitions, "defer\nstart\nsupersede\n");
     let blocked = q.ok("issue transition", &[&other]);
     assert!(!blocked.lines().any(|name| name == "start"), "{blocked}");
 

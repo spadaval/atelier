@@ -56,11 +56,19 @@ must require `close_reason` too (see the [work model](work-model.md)). Categorie
 stored lifecycle state.
 
 The starter policy has draft objectives, someday `backlog` work, todo
-executable work, active `in_progress` and `review`, blocked work, and terminal
-`done` or `superseded`. `backlog` is for work that is recorded but not
-near-term: it shares the todo category but has no `start` transition, so
-`work ready` leaves it out. `defer` parks todo or blocked work in `backlog`,
-`plan` brings it back to `todo`, and `supersede` retires it. Its `decision`
+executable work, active `in_progress`, and terminal `done` or `superseded`.
+`backlog` is for work that is recorded but not near-term: it shares the todo
+category but has no `start` transition, so `work ready` leaves it out. `defer`
+parks todo work in `backlog`, `plan` brings it back to `todo`, and `supersede`
+retires it. The starter has no `blocked` or `review` status: a blocker is a
+`blocked_by` link, which `work blocked` and `start` already read, and review
+is recorded in review records after the done claim, so work goes from
+`in_progress` straight to `done` (atelier-bqbz). Policies from earlier
+starters that declare `blocked` and `review`, with their `block`,
+`request_review` and `revise` transitions, keep working unchanged. A
+repository adopting the smaller set must first move its records out of
+`blocked` and `review` (to `todo` or `in_progress`), or `atelier check` and
+every work view report `workflow_issue_status_invalid`. Its `decision`
 workflow has no start: `decide` closes a decision once the
 `decision.recorded` check finds its Decision section. Repositories initialized
 before the decision type existed can copy its `issue_types` entry and

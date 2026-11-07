@@ -144,7 +144,6 @@ impl SmokeHarness {
         self.attach_issue_pass_evidence(issue_ref);
         self.run_ok(&["issue", "update", issue_ref, "--issue-type", "spike"]);
         self.run_ok(&["issue", "transition", issue_ref, "start"]);
-        self.run_ok(&["issue", "transition", issue_ref, "request_review"]);
         self.run_ok(&[
             "issue",
             "transition",

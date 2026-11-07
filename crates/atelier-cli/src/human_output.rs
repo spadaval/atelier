@@ -1242,9 +1242,13 @@ mod tests {
     ) -> InventoryFixture {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join(".atelier")).unwrap();
+        // The earlier starter, so a row can show the `blocked` status that
+        // repository policies written from it still declare.
         std::fs::write(
             dir.path().join(".atelier/workflow.yaml"),
-            atelier_app::workflow_policy::STARTER_POLICY_YAML,
+            include_str!(
+                "../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml"
+            ),
         )
         .unwrap();
         InventoryFixture {

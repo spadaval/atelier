@@ -9,11 +9,18 @@ fn count_markdown_records(dir: &Path, kind: &str) -> usize {
 }
 
 fn proof_fixture(gated: bool) -> (tempfile::TempDir, String) {
+    let policy = gated.then_some(atelier_workflow::STARTER_POLICY_YAML);
+    proof_fixture_under(policy)
+}
+
+/// A started issue with committed code, its policy `gated_policy` with
+/// passing evidence required to close, or the plain starter when `None`.
+fn proof_fixture_under(gated_policy: Option<&str>) -> (tempfile::TempDir, String) {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     init_git_repo(dir.path());
-    if gated {
-        write_evidence_gated_workflow(dir.path());
+    if let Some(policy) = gated_policy {
+        write_evidence_gated_workflow_from(dir.path(), policy);
     }
     let body = "## Goal\n\nVerify evidence freshness.\n\n## Done when\n\nThe focused test proves the expected behavior.\n\n## Scope\n\nsrc.rs\n\n## Context\n\nFresh explicit proof is required.";
     let (ok, _, error) = run_atelier_raw(
@@ -24,10 +31,8 @@ fn proof_fixture(gated: bool) -> (tempfile::TempDir, String) {
     let id = issue_id_by_title(dir.path(), "Fresh proof");
     std::fs::write(dir.path().join("src.rs"), "before\n").unwrap();
     commit_all(dir.path(), "acceptance and code before proof");
-    for transition in ["start", "request_review"] {
-        let (ok, _, error) = run_atelier_raw(dir.path(), &["issue", "transition", &id, transition]);
-        assert!(ok, "{error}");
-    }
+    let (ok, _, error) = run_atelier_raw(dir.path(), &["issue", "transition", &id, "start"]);
+    assert!(ok, "{error}");
     commit_all(dir.path(), "work ready for proof");
     (dir, id)
 }
@@ -238,7 +243,12 @@ fn newer_failure_blocks_completion_without_presence_gate_until_any_later_pass() 
 
 #[test]
 fn notes_status_and_new_evidence_records_do_not_stale_passing_proof() {
-    let (dir, id) = proof_fixture(true);
+    // The earlier starter's `review` status gives in-flight status changes.
+    let (dir, id) = proof_fixture_under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
+    let (ok, _, error) =
+        run_atelier_raw(dir.path(), &["issue", "transition", &id, "request_review"]);
+    assert!(ok, "{error}");
+    commit_all(dir.path(), "in review");
     manual(dir.path(), &id, "pass", "Passing proof");
     let (ok, _, error) = run_atelier_raw(
         dir.path(),
