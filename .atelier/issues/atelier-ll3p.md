@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+closed_at: "2026-11-07T21:05:55.641296582+00:00"
+status: "superseded"
 title: "Make review and gate shortcuts visible where work is judged"
-updated_at: "2026-10-30T06:39:58.922719757+00:00"
+updated_at: "2026-11-07T21:05:55.641296582+00:00"
 ---
 
 ## Outcome
@@ -30,3 +31,7 @@ A review of every Agent Factory session on this host from 2026-10-15 to 2026-10-
 ## Background
 
 Source: the usage review in /home/supadava/.t3/scratch/2026-10-30-the-agent-factory-skill-has-0de9a47e/af-analysis/ (REPORT.md, synth/S1.md to S4.md), patterns 1, 3, 4 and 5. Each candidate was checked against master 2f1eea77 on 2026-10-30. Already fixed there and not part of this mission: the rebased-branch refusal now says to merge the base (merge.rs), close-then-approve ordering is one rule since atelier-uw4x, and a passing receipt keeps its byte count, digest and test-summary line rather than a cut log. Base edits to a branch-owned record are atelier-uf97's (see its new item). Skill wording belongs in spadaval/.agents (ADR 0023).
+
+## Report
+
+Superseded as a whole in decision atelier-mzpn: atelier-mmpv removed most of the gates whose shortcuts it showed (record-edit staleness, evidence gates, the reviewer identity rule, close), and atelier-r9hb delivered the Done when part. atelier-fad5 and atelier-nl9a stand alone, unassigned; atelier-efnf and atelier-abdp moved to atelier-4pzj; atelier-nmvv, jzh9 and ma4a are superseded.

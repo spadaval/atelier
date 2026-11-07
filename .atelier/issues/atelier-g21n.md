@@ -11,9 +11,6 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-gg6b"
-    type: "advances"
-  - kind: "issue"
     id: "atelier-mgl0"
     type: "discovered_from"
 schema: "atelier.issue"

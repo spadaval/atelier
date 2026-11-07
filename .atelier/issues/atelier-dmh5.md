@@ -12,11 +12,11 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-4pzj"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-ihss"
     type: "related"
-  - kind: "issue"
-    id: "atelier-l63c"
-    type: "advances"
   - kind: "review"
     id: "atelier-3ewf"
     type: "discovered_from"

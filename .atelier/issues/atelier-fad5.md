@@ -8,10 +8,7 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "atelier-ll3p"
-    type: "advances"
+  relates: []
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

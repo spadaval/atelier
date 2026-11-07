@@ -10,9 +10,6 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-2mky"
-    type: "advances"
-  - kind: "issue"
     id: "atelier-vt8q"
     type: "related"
 schema: "atelier.issue"

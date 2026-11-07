@@ -10,8 +10,11 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-4pzj"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-efnf"
-    type: "blocked_by"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
