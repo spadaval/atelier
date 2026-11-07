@@ -3,6 +3,9 @@ created_at: "2026-11-06T23:09:15.884675353+00:00"
 id: "atelier-s66u"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-s66u
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "in_progress"
 title: "Evidence records only what nothing else records"
-updated_at: "2026-11-06T23:09:15.884675353+00:00"
+updated_at: "2026-11-07T00:09:05.844050121+00:00"
 ---
 
 ## Goal
@@ -28,7 +31,6 @@ A receipt records a check that leaves no other record: a manual, browser, device
 
 ## Done when
 
-Provisional:
 - no hint, doc or Agent Factory text asks agents to record or re-record proof after review fixes or base merges: at least the "record fresh proof" hints in crates/atelier-cli/src/commands/merge.rs and commands/session.rs (land's behind-base note and land_state_changed), docs/product/validation.md and reviews-and-merge.md, and Agent Factory's procedures/orchestrate.md "Landing Parallel Branches" step that reruns proof after a base merge; grep the code and both doc trees for "fresh proof" and "record proof" to find the rest;
 - `status` and `work` views stop treating an item with no receipt as a proof gap: readiness's "no proof at head" (crates/atelier-cli/src/commands/git.rs) and proof_gap_count (commands/work.rs) show only failing receipts and mission criteria marks, with a test that an item with no receipts reads as clean;
 - `merge --sync` no longer reruns or commits receipts (crates/atelier-cli/src/commands/merge_sync.rs), and its docs say CI or the merge checks test the merged tree where the repository has them (see atelier-bp3s);
@@ -39,9 +41,9 @@ Provisional:
 - evidence capture keeps refusing uncommitted code (Sumeet, 2026-11-06), so a receipt always describes committed state;
 - an ADR records the removed rules and says that repositories without CI or `merge_checks` (demiurge and cosplay-studio today) have no merged-tree check until they add one (atelier-bp3s).
 
-## Unknowns
+## Context
 
-Whether one item is the right size: when it becomes ready, consider splitting it into the hints, views and docs; the `merge --sync` change; and the failure-clearing rule.
+Kept as one item rather than split (orchestrator, 2026-11-06): most of it removes code and text, so one branch and one review cost less than three. Strategy: docs/strategies/lighter-workflow.md (Shape, "Evidence records only what nothing else records").
 
 ## Background
 
