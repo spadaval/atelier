@@ -29,8 +29,8 @@ The agent-factory skill (spadaval/.agents, `skills/agent-factory`) is about 2,22
 - [x] Each role's read path is at most 300 lines, and the orchestrator's at most 450. A role is each subskill that remains; its read path is SKILL.md, its procedure, and every file the procedure links (counted whole, conditional links included), plus the Atelier reference for every role that runs `atelier` commands. A table in the Report gives each role's path and count at 4d88ffb (recounted by this rule) and after.
 - [x] Nothing on an agent's path links to or tells it to read the constitution, which is a manifesto about the skill, not part of it. The one rule agents need from it (strategy changes only by human direction or authority written into the strategy) is stated once, in SKILL.md's core rules, and the four links to it from plan, orchestrate, decide and strategic-plans go.
 - [x] Each rule has one home: no rule is stated in two files, and nothing restates what `atelier --help`, `atelier <cmd> --help` or a refusal message already tells the agent (record sections, flags, transition names); the skill points to the help instead. Where the skill now relies on the help, the Report names the help text it relies on, confirmed to exist.
-- [ ] The four eval scenarios (`evals/agent-factory/scenarios`: refused-land-push, vacuous-test-review, done-when-rewrite, trivial-typo) run on the skill arm, 3 runs each with Opus and with Sonnet, at the old skill (main 4d88ffb) and the new one, with the same installed `atelier` binary, every run read by hand: the new skill passes at least as many runs per scenario and model as the old. If a cell drops, read the failing run: if removed guidance caused it, restore that guidance; if not, rerun that cell at 6 runs per arm and compare again. Results are recorded in `evals/agent-factory/results/`.
-- [ ] The mission-shaping micro-test (`evals/agent-factory/results/2026-11-04-mission-shaping.md`, its input file and prompt) is rerun old skill against new, 2 runs each with Opus and Sonnet, read by hand: the new skill keeps the behaviours that test showed (a transcript measurement is not made a mission criterion; criteria do not restate single items). Recorded alongside.
+- [x] The four eval scenarios (`evals/agent-factory/scenarios`: refused-land-push, vacuous-test-review, done-when-rewrite, trivial-typo) run on the skill arm, 3 runs each with Opus and with Sonnet, at the old skill (main 4d88ffb) and the new one, with the same installed `atelier` binary, every run read by hand: the new skill passes at least as many runs per scenario and model as the old. If a cell drops, read the failing run: if removed guidance caused it, restore that guidance; if not, rerun that cell at 6 runs per arm and compare again. Results are recorded in `evals/agent-factory/results/`.
+- [x] The mission-shaping micro-test (`evals/agent-factory/results/2026-11-04-mission-shaping.md`, its input file and prompt) is rerun old skill against new, 2 runs each with Opus and Sonnet, read by hand: the new skill keeps the behaviours that test showed (a transcript measurement is not made a mission criterion; criteria do not restate single items). Recorded alongside.
 - [x] A fresh agent given only the new skill, astromech's AGENTS.md and the CLI help answers, with no contradiction found: the lifecycle order, what makes an approval stale and when to file a loose end (atelier-mmpv's legible criterion); and, as an orchestrator, who arranges review, what the reviewer is given and not given, who decides findings on an author's own work, and who records the approval.
 
 ## Scope
@@ -83,20 +83,31 @@ The eval harness: `evals/agent-factory/README.md`; method: `skills/agent-factory
 
 ## Report
 
-The agent-facing skill is cut from 2,225 lines to 816 (SKILL.md 191 to 96), and every role's read path is within its limit: the orchestrator's is 418, and the largest other is plan's at 295. Skill: branch `atelier-qj9d` in spadaval/.agents, head **e2671ec** (8586d2b, e22cc1a, 4b17ecc, 75d405c, 2eb0f93, 2c073e3, 3af0fb7, 48caade, e2671ec on main 4d88ffb). It is committed only: not pushed, not merged, and not yet reviewed. No agent-facing file links to the constitution or tells an agent to read it (`grep -ri constitution SKILL.md procedures references agents` finds nothing). The strategy-authority rule is stated once, in SKILL.md's Respect authority core rule. The fresh-agent read ran seven rounds; the last, on e2671ec, answered all seven questions and found no contradiction or stale pointer (observation note of 2026-11-07). The two eval lines are open and left to the orchestrator.
+The agent-facing skill is cut from 2,225 lines to 817 (SKILL.md 191 to 96), and every role's read path is within its limit: the orchestrator's is 419, and the largest other is plan's at 295. Skill: branch `atelier-qj9d` in spadaval/.agents, head **82ca7e4** (8586d2b, e22cc1a, 4b17ecc, 75d405c, 2eb0f93, 2c073e3, 3af0fb7, 48caade, e2671ec, 82ca7e4 on main 4d88ffb). It is committed only, not pushed or merged. 82ca7e4 fixes the review's `fix_now` finding atelier-2xlu: plan.md's Ready Work makes the human's plan approval a ready condition again, unless the strategy's Authority section delegates it. It also has review.md's DEFER file its follow-up with `--discovered-from`, and adds the eval results file. No agent-facing file links to the constitution or tells an agent to read it (`grep -ri constitution SKILL.md procedures references agents` finds nothing). The strategy-authority rule is stated once, in SKILL.md's Respect authority core rule. The fresh-agent read ran seven rounds; the last, on e2671ec, answered all seven questions and found no contradiction or stale pointer (observation note of 2026-11-07).
+
+Evals (lines 5 and 6) are recorded in `evals/agent-factory/results/2026-11-07-skill-cut.md` on the skill branch. The orchestrator ran them on old 4d88ffb against new e2671ec, with the same `atelier 0.3.1+e03d6b71`, and read every run by hand. By hand count the new skill passes at least as many runs as the old in every scenario and model:
+
+| Scenario | Opus, old → new | Sonnet, old → new |
+| --- | --- | --- |
+| refused-land-push | 3/3 → 3/3 | 3/3 → 3/3 |
+| vacuous-test-review | 3/3 → 3/3 | 3/3 → 3/3 (one doubtful pass) |
+| done-when-rewrite | 3/3 → 3/3 | 3/3 → 3/3 |
+| trivial-typo | 2/3 → 2/3 | 0/3 → 2/3 |
+
+The results file traces each new-skill failure to a cause that predates the cut. The mission-shaping micro-test, at 2 runs per arm on each model, kept both behaviours in all 8 runs: the transcript measurement stayed out of mission criteria, and no criterion restated a single item.
 
 Counts come from a script that applies the Done when rule. A role's path is SKILL.md, its procedure, and every file the procedure links, counted whole. The Atelier reference is counted for every role, since each may record to the tracker or merge. **Raw** is `wc -l`; **80-col** counts each line as ceil(length/80). The only line over 80 columns is SKILL.md's front-matter description (393 characters), unchanged from 4d88ffb.
 
-| | 4d88ffb read path | raw / 80-col | e2671ec read path | raw / 80-col |
+| | 4d88ffb read path | raw / 80-col | 82ca7e4 read path | raw / 80-col |
 | --- | --- | --- | --- | --- |
-| Agent-facing total | 23 files | 2225 / 2307 | 13 files | 816 / 821 |
+| Agent-facing total | 23 files | 2225 / 2307 | 13 files | 817 / 822 |
 | SKILL.md | | 191 / 229 | | 96 / 100 |
-| orchestrate | SKILL, orchestrate, review, atelier, constitution, branches-and-worktrees, finding-disposition, implementation-candidates, submodel-selection | 1208 / 1266 | SKILL, orchestrate, review, atelier | 418 / 422 |
+| orchestrate | SKILL, orchestrate, review, atelier, constitution, branches-and-worktrees, finding-disposition, implementation-candidates, submodel-selection | 1208 / 1266 | SKILL, orchestrate, review, atelier | 419 / 423 |
 | plan | SKILL, plan, atelier, constitution, strategic-plans, tracker-records | 1205 / 1262 | SKILL, plan, atelier | 295 / 299 |
 | implement | SKILL, implement, atelier, branches-and-worktrees, finding-disposition, good-code, implementation-candidates, tracker-records | 1132 / 1178 | SKILL, implement, atelier | 263 / 267 |
 | install | SKILL, install, atelier, branches-and-worktrees, repository-shape, strategic-plans, tracker-records | 1139 / 1198 | SKILL, install, atelier | 258 / 262 |
 | readiness | SKILL, readiness, atelier, repository-shape | 544 / 589 | merged into install | |
-| review | SKILL, review, atelier, finding-disposition, good-code | 649 / 696 | SKILL, review, atelier | 290 / 294 |
+| review | SKILL, review, atelier, finding-disposition, good-code | 649 / 696 | SKILL, review, atelier | 291 / 295 |
 | validate | SKILL, validate, atelier, finding-disposition, tracker-records | 856 / 904 | SKILL, validate, atelier | 239 / 243 |
 | decide | SKILL, decide, atelier, constitution, tracker-records | 931 / 976 | SKILL, decide, atelier | 233 / 237 |
 | docs | SKILL, docs, atelier, tracker-records | 735 / 779 | merged into implement | |
@@ -179,8 +190,11 @@ The skill now points to help text instead of restating it. Each piece below was 
 
 ### Open items
 
-- **Evals:** the eval matrix and the mission-shaping micro-test, Done when lines 5 and 6, are for the orchestrator. The new arm should use `--ref e2671ec` or later.
-- **Review:** the skill branch needs independent review before it merges into spadaval/.agents main.
+- **Re-review:** the fix in 82ca7e4 for finding atelier-2xlu needs re-review before the skill branch merges into spadaval/.agents main.
+- **Harness leak, suspected:** the eval reader suspects the harness may leak the user's global CLAUDE.md into runs. One new Sonnet vacuous-test-review run said "since you review after merge", which appears in no scenario or skill text. It is unverified, and it would reach both arms.
+- **Grader bugs:**
+  - done-when-rewrite requires an `atelier evidence` receipt as "fresh proof", which caused four false failures;
+  - its disposition parse (`front(body, "  decision")`) misses `decision:` nested four spaces deep in schema-v2 review records.
 - **Atelier links:** Atelier's `docs/product/mission-authoring.md` and `docs/product/work-model.md` link `references/tracker-records.md`, which no longer exists once this merges. ADR 0025 and `docs/strategies/agent-factory-adaptive-missions.md` name `finding-disposition.md` and `strategic-plans.md` as history. Atelier's docs are out of this item's scope, so they need a follow-up.
 - **Residual readings:** the final read flagged these as two-way readings, not contradictions:
   - astromech AGENTS.md wording: the trivial base exception, unconditional "no catch-up merge", "Don't do" decision records, marking a loose end done as planning, and CI as a merge condition;
