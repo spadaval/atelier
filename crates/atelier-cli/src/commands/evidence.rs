@@ -808,8 +808,9 @@ pub fn list(index: &RecordIndex, repo_root: &Path, options: ListOptions<'_>) -> 
         );
     }
     if let Some(item) = item.as_deref() {
+        let gated = marks.attached_gate(index, item);
         let proof = marks.item(index, item)?;
-        println!("Proof: {}", proof_verdict(proof));
+        println!("Proof: {}", proof_verdict(proof, gated));
     }
     let mut actions = Vec::new();
     if let Some(first) = shown.first() {
@@ -848,7 +849,11 @@ fn list_filters(item: Option<&str>, result: Option<EvidenceResult>) -> String {
 }
 
 /// The gates' verdict on one item's proof, for the line ending its list.
-fn proof_verdict(proof: &ItemProof) -> String {
+/// Having no fresh pass is a gap, marked ⚠, only when a policy's
+/// `evidence.attached` gate asks for one (`gated`); otherwise it is stated
+/// plainly, since no other gate needs a receipt (atelier-s66u).
+fn proof_verdict(proof: &ItemProof, gated: bool) -> String {
+    let warn = if gated { "⚠ " } else { "" };
     let held = |pass: &str| {
         proof.receipts.iter().find_map(|(id, mark)| match mark {
             ProofMark::HeldAtClose(claim) if id == pass => Some(claim.clone()),
@@ -868,8 +873,8 @@ fn proof_verdict(proof: &ItemProof) -> String {
             ),
             None => format!("✓ fresh pass {pass}"),
         },
-        (None, None, Some(pass)) => format!("⚠ no fresh pass; newest pass {pass} is stale"),
-        (None, None, None) => "⚠ no passing proof".to_string(),
+        (None, None, Some(pass)) => format!("{warn}no fresh pass; newest pass {pass} is stale"),
+        (None, None, None) => format!("{warn}no passing proof"),
     }
 }
 
@@ -924,6 +929,25 @@ impl<'a> ProofMarks<'a> {
             self.items.insert(issue_id.to_string(), proof);
         }
         Ok(&self.items[issue_id])
+    }
+
+    /// Whether the policy runs an `evidence.attached` gate on any transition
+    /// of `issue_id`'s workflow; without a readable policy, none does.
+    fn attached_gate(&self, index: &RecordIndex, issue_id: &str) -> bool {
+        let (Some(policy), Some(issue)) = (self.policy.as_ref(), index.issue_record(issue_id))
+        else {
+            return false;
+        };
+        policy
+            .workflow_for_issue_type(&issue.issue.issue_type)
+            .is_ok_and(|workflow| {
+                workflow.transitions.values().any(|transition| {
+                    transition
+                        .validators
+                        .iter()
+                        .any(|validator| validator.builtin == "evidence.attached")
+                })
+            })
     }
 
     /// The mark of `evidence_id` as proof of `issue_id`, or `None` when it

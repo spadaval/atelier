@@ -2625,7 +2625,7 @@ fn evidence_list_by_item_marks_each_receipt_as_the_gates_judge_it() {
     );
     assert!(
         out.contains(&format!(
-            "\nProof: ⚠ no fresh pass; newest pass {second_pass} is stale\n"
+            "\nProof: no fresh pass; newest pass {second_pass} is stale\n"
         )),
         "{out}"
     );
@@ -2869,9 +2869,48 @@ fn evidence_list_verdict_agrees_with_the_close_gate() {
     commit_all(dir.path(), "Change code");
     assert_eq!(
         verdict(),
-        format!("Proof: ⚠ no fresh pass; newest pass {second} is stale")
+        format!("Proof: no fresh pass; newest pass {second} is stale")
     );
     // The later pass is stale, but it still supersedes the older fail.
     let refusal = close_refusal();
     assert!(!refusal.contains("newer failing evidence"), "{refusal}");
+}
+
+/// With no `evidence.attached` gate, `evidence list`'s verdict states a
+/// missing or stale pass plainly; the gate is what makes it a gap, marked ⚠
+/// (atelier-s66u).
+#[test]
+fn evidence_list_marks_a_missing_pass_only_under_an_evidence_attached_gate() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let issue_id = create_task(dir.path(), "Unreceipted issue");
+    let verdict = || {
+        let (success, out, stderr) = run_atelier(dir.path(), &["evidence", "list", &issue_id]);
+        assert!(success, "list failed: {stderr}");
+        out.lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap_or_else(|| panic!("{out}"))
+            .to_string()
+    };
+    assert_eq!(verdict(), "Proof: no passing proof");
+    attach_pass_evidence(dir.path(), "issue", &issue_id, "Checked by hand");
+    fs::write(dir.path().join("code.txt"), "later code\n").unwrap();
+    commit_all(dir.path(), "Later code");
+    let stale = verdict();
+    assert!(
+        stale.starts_with("Proof: no fresh pass; newest pass "),
+        "{stale}"
+    );
+
+    write_evidence_gated_workflow(dir.path());
+    commit_all(dir.path(), "Gate close on evidence");
+    let gated = verdict();
+    assert!(
+        gated.starts_with("Proof: ⚠ no fresh pass; newest pass "),
+        "{gated}"
+    );
+    let other = create_task(dir.path(), "Gated, unreceipted issue");
+    let (success, out, stderr) = run_atelier(dir.path(), &["evidence", "list", &other]);
+    assert!(success, "{stderr}");
+    assert!(out.contains("\nProof: ⚠ no passing proof"), "{out}");
 }

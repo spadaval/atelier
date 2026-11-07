@@ -464,8 +464,11 @@ list with the omitted-rows line below. With an item, it lists the receipts
 validating that item under `Evidence for <item>`, its rows leave that item
 out of `for`, and the list ends with the gates' verdict on the item's proof:
 `Proof: ✓ fresh pass <id>`, `Proof: ✓ pass <id> held at close <commit>`,
-`Proof: ⚠ newest is fail <id>`, `Proof: ⚠ no
-fresh pass; newest pass <id> is stale`, or `Proof: ⚠ no passing proof`.
+`Proof: ⚠ newest is fail <id>`, `Proof: no
+fresh pass; newest pass <id> is stale`, or `Proof: no passing proof`. The
+last two are marked ⚠ only when the policy runs an `evidence.attached` gate
+on the item's workflow; otherwise no gate needs a pass, so having none is no
+gap (atelier-s66u).
 Without one, each row's standing is judged against its own first item. The
 `Next` steps repeat the item and `--result` filters given.
 
