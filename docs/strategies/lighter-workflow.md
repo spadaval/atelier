@@ -1,13 +1,13 @@
 ---
 status: active
-last_changed: "2026-11-06: noted life-on-rails adopting Atelier ahead of the mission, and old-format reads for record changes; earlier that day, on Sumeet's direction, dropped the fix re-check cut (atelier-8s1m), turned the after-merge refusals into things shown, and added evidence that records only what nothing else records (after an evidence audit); earlier that day, planning review fixes; created that day from Sumeet's direction (LoR thread 'Launcher usability vs Smart Launcher')"
+last_changed: "2026-11-06: on Sumeet's direction, dropped the record-commit count as a goal (atelier-5822 superseded; lifecycle-cost now judges review files per finding only); earlier that day, noted life-on-rails adopting Atelier ahead of the mission, and old-format reads for record changes; earlier that day, on Sumeet's direction, dropped the fix re-check cut (atelier-8s1m), turned the after-merge refusals into things shown, and added evidence that records only what nothing else records (after an evidence audit); earlier that day, planning review fixes; created that day from Sumeet's direction (LoR thread 'Launcher usability vs Smart Launcher')"
 ---
 
 # Why
 
 Atelier was built when agents needed every safeguard, and the bookkeeping around its gates has outgrown what those gates protect. Between 2026-10-15 and 2026-11-06:
 
-- **Record-only commits dominate history.** Most commits that weren't merges touched nothing but `.atelier/`. These counts include planning commits (filing and grooming issues), which this mission does not aim to reduce; the lifecycle scenario below measures only the bookkeeping of doing one item.
+- **Record-only commits dominate history.** Most commits that weren't merges touched nothing but `.atelier/`. These counts include planning commits (filing and grooming issues). The commit count is a symptom, not the cost: what costs agents is the steps behind it (records to write, receipts to re-record, refusals to clear), which the items below cut directly. Hiding the commits afterwards, by amending, batching or squashing, saves no step, so this mission does not target the count itself (Sumeet, 2026-11-06).
 
   | Repository | Commits that weren't merges | Record-only |
   | --- | --- | --- |
@@ -29,7 +29,6 @@ Atelier records what proves work, at the time it can be proven, and nothing more
 
 - A review finding and what was done about it are one record.
 - Evidence records only what nothing else records.
-- Recording proof and review adds as few commits of its own as the pinning of records to commits allows.
 - An item's proof is split, when it is planned, into what is checked before merge and what can only be shown after. Merged work that is still awaiting validation is visible until it is validated.
 - The workflow's statuses and issue types are the ones repositories actually use.
 
@@ -39,7 +38,7 @@ In this strategy and the mission's items, a **Done when check** is one line of a
 
 # Success Criteria
 
-- lifecycle-cost: In the scenario test below, review files per finding are 1 and record-only commits are at most half of atelier-5fus's baseline, with reductions coming from product changes rather than from changing how the scenario commits. The test drives one standard lifecycle in a fixture repository that uses the `atelier init` starter policy. Commands that accept `--commit-records` use it, as the review request brief instructs; `atelier start` and `issue create` are each followed by one commit of exactly the records they wrote:
+- lifecycle-cost: In the scenario test below, review files per finding are 1. The test drives one standard lifecycle in a fixture repository that uses the `atelier init` starter policy, committing records as the review request brief instructs:
   - start an issue, record one manual evidence receipt, close it;
   - one review, by an identity other than the author, that raises three findings, one of them `fix_now`, and does not approve;
   - a fix commit;
@@ -47,7 +46,7 @@ In this strategy and the mission's items, a **Done when check** is one line of a
   - the reviewer reviews the fix and approves the head;
   - merge.
 
-  It counts record-only commits (commits on the work branch that change only files under `.atelier/`) and, for each finding, the review files about it (the finding plus any event that names it). The baseline is the test's result before any product change, recorded as evidence by atelier-5fus.
+  For each finding it counts the review files about it (the finding plus any event that names it). It also reports the record-only commits on the work branch as a measurement with no target, so a later change that adds bookkeeping shows up. atelier-5fus recorded the baseline (2/3/3 files, 13 commits).
 - proof-timing: A scenario test of an item with one Done when check before merge and one after shows the after-merge path, without any new refusal:
   - the review request brief lists the after-merge check with its reason and its before-merge stand-in, and says when a reason is missing;
   - the merged item shows as awaiting validation in `status` and `work` views;
@@ -73,7 +72,7 @@ In this strategy and the mission's items, a **Done when check** is one line of a
   - Validation is recorded on the base as a planning change, needs no reviewer identity, and a failure files a follow-up bug rather than reopening the merged claim.
   - Agent-facing text says it plainly: post-merge validation is only what cannot be checked before the merge. Everything that can be checked on the branch is checked there.
 - **Show, don't enforce.** What this mission adds is shown where work is judged (the review brief, `status`, `work` views, the mission debrief) and judged by the reviewer, not refused by a command.
-- **Fewer records, then fewer commits.** Record-only commits are cut first by needing fewer records. What remains is cut by letting records ride with the commit they describe, or batching them, wherever pinning a record to a commit allows.
+- **Fewer records, not fewer commits.** Bookkeeping is cut by needing fewer records and fewer steps. Commits are not amended, batched or squashed to lower the count; history keeps the work as it happened. Letting records ride with commits was tried and dropped (atelier-5822): amending could rewrite a pushed commit, and it saved agents no step.
 - **Statuses and types follow use.** Each status and issue type is kept only if records across these repositories use it, or a gate needs it. They are counted (atelier-rkxm) before the after-merge model is designed. A post-merge state replaces whatever it makes redundant rather than being added on top.
 - **Existing records keep working.** Each record change ships with an `atelier migrate` step, as the epics change did, and the new binary keeps reading the old format until then (expand and contract), because every repository on this host shares one installed `atelier`.
 - **Simplicity wins within this Shape.** When one of the rules above can be kept only by adding a new rule about when it applies, prefer removing it, unless removing it reopens a shortcut that atelier-ll3p documents. This does not extend to rules outside this Shape or to anything the Authority section returns to Sumeet.
@@ -108,7 +107,6 @@ These come back to Sumeet:
 
 # Risks and Unknowns
 
-- **Pinning may need record-only commits.** A review event or receipt pins a commit and so cannot be part of that commit, which puts a floor under record-only commits. Keeping the fresh approval after a fix (atelier-8s1m dropped) removes one source of savings, so the cut now rests mostly on atelier-5822. atelier-5fus measures how much of the baseline is that floor, and says whether "at most half" is reachable.
 - **Every repository on this host shares one installed `atelier`.** Reinstalling after a record format change could break every repository that has not migrated, which this mission cannot do for them; hence the old-format reads in Shape.
 - **Repositories without CI lose their merged-tree check.** Accepted by Sumeet on 2026-11-06 and tracked in atelier-bp3s.
 - **Most of the evidence saving is behavior, not code.** Agents recorded suite receipts because the text told them to; the scenario cannot show that change. It shows in real repositories, which atelier-akkp re-measures after release.

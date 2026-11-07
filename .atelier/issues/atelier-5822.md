@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-07T02:51:30.720355360+00:00"
+status: "superseded"
 title: "Records ride with the commits they describe"
-updated_at: "2026-11-06T23:09:16.141634004+00:00"
+updated_at: "2026-11-07T02:51:30.720355360+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ Provisional: record-only commits in the lifecycle scenario are at most half the 
 ## Unknowns
 
 The floor measured by atelier-5fus decides how much this item can reach.
+
+## Close Reason
+
+Dropped on Sumeet's direction (2026-11-06): the record-only commit count is a symptom, not the cost. Amending consecutive record commits reached the target (6 of 13) but could rewrite a commit already pushed by URL, and only with two scenario reorderings; batching or squashing would only hide the process after the fact and save agents no step. The real cuts came from needing fewer records and steps (atelier-hwxm, atelier-s66u). Implementation and its review (findings atelier-77xt, atelier-8c8h, atelier-b5hm, atelier-7cis) are on the unmerged branch feature/atelier-5822, PR #32, closed unmerged.
