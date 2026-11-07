@@ -28,11 +28,13 @@ rebuilt model.
   every Done when line and write the `## Report`, `atelier review request
   <id>`, fix and re-review, approve, then `atelier merge <id>` under the merge
   policy below, which marks the work done. Work has no close step. Only a code
-  change makes an approval stale, though a rewritten Done when line still gets
-  a fresh one. Work that changes no code and can only happen after a merge or
-  release is a loose end, unless it is an independent validation; a change with no issue takes the light
-  path. Agent Factory's Atelier reference and `docs/product/work-model.md`
-  have the detail; `CONTEXT.md` defines check, review, land, done and close.
+  change makes an approval stale; a Done when line rewritten after start is
+  shown in the review brief and by `merge --check`, and refuses nothing. Work
+  that changes no code and can only happen after a merge or release is a loose
+  end, unless it is an independent validation; a change with no issue takes
+  the light path. Agent Factory's Atelier reference and
+  `docs/product/work-model.md` have the detail; `CONTEXT.md` defines check,
+  review, land, done and close.
 - `.claude/settings.json` runs these through the installed CLI's Claude Code
   hooks (`atelier setup claude`). To try a local build, use `target/debug/atelier`
   directly, or `setup claude --binary target/debug/atelier` without committing
