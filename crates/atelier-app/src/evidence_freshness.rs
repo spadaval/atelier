@@ -5,7 +5,7 @@ use crate::{
     record_index::RecordIndex,
 };
 use anyhow::Result;
-use atelier_core::{EvidenceRecord, EvidenceResult};
+use atelier_core::{EvidenceRecord, EvidenceResult, IssueBody, IssueSectionName};
 use atelier_records::{issue_record_path, parse_issue_record, CanonicalIssueRecord};
 use std::path::Path;
 
@@ -21,8 +21,36 @@ fn acceptance_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> boo
         && a.issue.strategy == b.issue.strategy
         && a.sections.body == b.sections.body
 }
-pub fn completion_claim_matches(a: &CanonicalIssueRecord, b: &CanonicalIssueRecord) -> bool {
-    acceptance_matches(a, b) && a.issue.status == b.issue.status
+/// Whether `after` makes the same done claim as `before`, an earlier version
+/// of the record. Ticking an after-merge check, or carrying it to an issue in
+/// `index`, records its validation and is not a new claim (ADR 0027); any
+/// other change to the Done when is.
+pub fn completion_claim_matches(
+    before: &CanonicalIssueRecord,
+    after: &CanonicalIssueRecord,
+    index: &RecordIndex,
+) -> bool {
+    before.issue.status == after.issue.status
+        && (acceptance_matches(before, after) || only_validated(before, after, index))
+}
+/// `after` is `before` with only after-merge checks validated in its Done
+/// when, by the rule `after_merge::only_validated` states.
+fn only_validated(
+    before: &CanonicalIssueRecord,
+    after: &CanonicalIssueRecord,
+    index: &RecordIndex,
+) -> bool {
+    let (Some(old), Some(new)) = (
+        before.sections.section(IssueSectionName::DoneWhen),
+        after.sections.section(IssueSectionName::DoneWhen),
+    ) else {
+        return false;
+    };
+    let mut unvalidated = after.clone();
+    if let IssueBody::Issue { done_when, .. } = &mut unvalidated.sections.body {
+        *done_when = old.to_owned();
+    }
+    acceptance_matches(before, &unvalidated) && crate::after_merge::only_validated(old, new, index)
 }
 /// A single read phase; create a new context after mutations or external checks.
 pub type EvidenceReadContext<'a> = git::ReadContext<'a>;
@@ -83,7 +111,7 @@ impl EvidenceReadContext<'_> {
         fresh: bool,
     ) -> Result<EvidenceGateStatus> {
         evaluate_issue_gate(index, issue_id, min_count, kind, fresh, |issue, record| {
-            self.proof_matches(issue, record, fresh)
+            self.proof_matches(index, issue, record, fresh)
         })
     }
 }
@@ -203,7 +231,7 @@ impl EvidenceReadContext<'_> {
         parents.iter().find(|parent| {
             self.issue_at(parent, issue_id)
                 .ok()
-                .is_some_and(|before| completion_claim_matches(&before, after))
+                .is_some_and(|before| completion_claim_matches(&before, after, index))
         })
     }
 }
@@ -247,13 +275,14 @@ impl EvidenceReadContext<'_> {
     /// claim commit it was judged to, or why not.
     fn held_at_close(
         &mut self,
+        index: &RecordIndex,
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<std::result::Result<String, Staleness>> {
         if !self.ancestor(&record.data.commit, "HEAD")? {
             return Ok(Err(Staleness::NotInHistory));
         }
-        let Ok(end) = self.claim_endpoint(&issue.issue.id, &record.data.commit) else {
+        let Ok(end) = self.claim_endpoint(index, &issue.issue.id, &record.data.commit) else {
             return Ok(Err(Staleness::NotInHistory));
         };
         let Ok(edges) = self.edges(&record.data.commit, &end) else {
@@ -322,7 +351,7 @@ impl EvidenceReadContext<'_> {
             standing.push(match self.staleness(issue, record)? {
                 None => ProofMark::Fresh,
                 Some(stale) if at_close && record.data.result == EvidenceResult::Pass => {
-                    match self.held_at_close(issue, record)? {
+                    match self.held_at_close(index, issue, record)? {
                         Ok(claim) => ProofMark::HeldAtClose(claim),
                         Err(stale) => ProofMark::Stale(stale),
                     }
@@ -481,6 +510,7 @@ pub fn newest_failure(index: &RecordIndex, issue_id: &str) -> Result<Option<Stri
 impl EvidenceReadContext<'_> {
     fn proof_matches(
         &mut self,
+        index: &RecordIndex,
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
         fresh: bool,
@@ -491,11 +521,16 @@ impl EvidenceReadContext<'_> {
         if !self.ancestor(&record.data.commit, "HEAD")? {
             return Ok(false);
         }
-        let end = self.claim_endpoint(&issue.issue.id, &record.data.commit)?;
+        let end = self.claim_endpoint(index, &issue.issue.id, &record.data.commit)?;
         let edges = self.edges(&record.data.commit, &end)?;
         evidence_matches_edges(self, issue, record, &edges)
     }
-    pub(crate) fn claim_endpoint(&mut self, issue_id: &str, pin: &str) -> Result<String> {
+    pub(crate) fn claim_endpoint(
+        &mut self,
+        index: &RecordIndex,
+        issue_id: &str,
+        pin: &str,
+    ) -> Result<String> {
         let head = self.pinned("HEAD")?;
         // Every commit that touched the issue record, newest first.
         let changes = self.path_log(&PathLog {
@@ -509,7 +544,7 @@ impl EvidenceReadContext<'_> {
         for commit in changes.iter() {
             let after = self.issue_at_migrated(commit, issue_id, &current)?;
             let parent = self.issue_at_migrated(&format!("{commit}^"), issue_id, &current);
-            if parent.is_err() || !completion_claim_matches(&after, &parent?) {
+            if parent.is_err() || !completion_claim_matches(&parent?, &after, index) {
                 claim = Some(commit);
                 break;
             }
@@ -693,9 +728,11 @@ pub(crate) mod tests {
             git::git_output(repo.path(), &["commit", "-qm", "record"]).unwrap();
             commits.push(git::head_commit(repo.path()).unwrap());
         }
+        let index = RecordIndex::from_records(Vec::new(), Vec::new(), Vec::new()).unwrap();
         let mut read = EvidenceReadContext::new(repo.path());
         assert_eq!(
-            read.claim_endpoint("atelier-e001", &commits[0]).unwrap(),
+            read.claim_endpoint(&index, "atelier-e001", &commits[0])
+                .unwrap(),
             commits[0],
             "the claim is the epic's done commit, not its migration"
         );
@@ -709,7 +746,8 @@ pub(crate) mod tests {
         let edit = git::head_commit(repo.path()).unwrap();
         let mut read = EvidenceReadContext::new(repo.path());
         assert_eq!(
-            read.claim_endpoint("atelier-e001", &commits[0]).unwrap(),
+            read.claim_endpoint(&index, "atelier-e001", &commits[0])
+                .unwrap(),
             edit
         );
     }
