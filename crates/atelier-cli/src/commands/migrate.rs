@@ -191,7 +191,8 @@ fn plan_epic(path: &Path, text: &str, to: &str, draft_status: &str) -> Result<Op
 /// Folds each finding's latest disposition event into the finding as its
 /// disposition field, naming the event, and removes every disposition event
 /// (ADR 0025). Superseded events are dropped with the latest: the gates read
-/// only the latest, and Git history keeps them all. Quiet output is the IDs
+/// only the latest, and Git history keeps them all. A finding migrated
+/// already takes the events that continue from its folded one. Quiet output is the IDs
 /// of the findings that take a disposition, one per line.
 pub fn dispositions(apply: bool, quiet: bool) -> Result<()> {
     let layout = StorageLayout::discover()?;
@@ -228,10 +229,21 @@ pub fn dispositions(apply: bool, quiet: bool) -> Result<()> {
         let record = findings.get(finding).with_context(|| {
             format!("disposition events of {finding} name a finding that does not exist; restore it, or remove those events by hand")
         })?;
-        if record.disposition().is_some()
-            || !matches!(record.event, atelier_core::ReviewEvent::Finding { .. })
-        {
-            bail!("{finding} is not a finding without a disposition, so its disposition events cannot be folded into it");
+        if !matches!(record.event, atelier_core::ReviewEvent::Finding { .. }) {
+            bail!("{finding} is not a finding, so disposition events cannot be folded into it");
+        }
+        // A finding migrated already takes events that continue from the
+        // one it was migrated from, as a branch that recorded a successor
+        // brings in when it merges a migrated base.
+        if let Some(current) = record.disposition() {
+            let continues = current.migrated_from.as_ref().is_some_and(|folded| {
+                chain
+                    .iter()
+                    .any(|(_, event)| event.supersedes.as_ref() == Some(folded))
+            });
+            if !continues {
+                bail!("finding {finding} already carries a disposition that its disposition events do not continue from; set the disposition it should have with `atelier review disposition` and remove the events by hand");
+            }
         }
         // The latest is the one no other event supersedes.
         let latest = chain

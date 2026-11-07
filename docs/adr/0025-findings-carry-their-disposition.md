@@ -61,7 +61,9 @@ cannot be backdated past work its owner authored later.
    latest disposition event into the finding, with `migrated_from` naming the
    event, and removes every disposition event, superseded ones included.
    History keeps them. A migrated disposition is traced to the commit that
-   added its event and must match that event's fields. A separate
+   added its event and must match that event's fields. Events that continue
+   an already migrated disposition, as a branch recorded with an older
+   Atelier brings in, are folded the same way and replace it. A separate
    disposition event in the checkout fails to load with a pointer to the
    command; history that holds them still reads.
 

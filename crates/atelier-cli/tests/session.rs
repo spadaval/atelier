@@ -8145,6 +8145,31 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     ok(f.path(), &["doctor"]);
     ok(f.path(), &["land"]);
     assert_eq!(ok(f.path(), &["-q", "migrate", "dispositions"]), "");
+    // A successor event an older binary recorded, as a branch brings in
+    // when it merges the migrated base, continues the folded one.
+    let fix = git(f.path(), &["rev-parse", "HEAD"]);
+    v1_disposition(
+        f.path(),
+        (
+            "atelier-d005",
+            &f.id,
+            "Reviewer",
+            &fix,
+            "2026-10-03T00:00:00Z",
+        ),
+        &findings[2],
+        "no_action",
+        Some("atelier-d004"),
+        None,
+        None,
+    );
+    commit(f.path(), "a successor disposition event");
+    assert_eq!(
+        ok(f.path(), &["-q", "migrate", "dispositions", "--apply"]),
+        findings[2]
+    );
+    commit(f.path(), "migrate the successor");
+    ok(f.path(), &["doctor"]);
     // A migrated disposition changed by hand no longer matches its event.
     let path = reviews.join(format!("{}.md", findings[2]));
     let text = fs::read_to_string(&path).unwrap();
@@ -8158,7 +8183,7 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     assert!(
         !pass
             && out.contains("findings.disposed")
-            && out.contains("differs from atelier-d004, the event it was migrated from"),
+            && out.contains("differs from atelier-d005, the event it was migrated from"),
         "{out}"
     );
 }
