@@ -154,8 +154,10 @@ Record-only bookkeeping, including attachments, Notes, and status updates,
 can follow the checked commit without changing its acceptance claim. Evidence
 freshness compares the target's title, type, strategy, and typed body and rejects
 intervening non-record changes. Correct receipts by appending new proof rather
-than rewriting old observations. [Approval freshness](reviews-and-merge.md)
-has the stricter rule for existing proof and review edits.
+than rewriting old observations. Record edits, receipts included, never make
+an approval stale (see [approval
+freshness](reviews-and-merge.md#approval-freshness)); review records stay
+append-only by their own check.
 
 ## Handoff
 
