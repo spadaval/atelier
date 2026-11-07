@@ -481,6 +481,7 @@ pub enum Precedent {
 /// findings and receipts are ordered by Git ancestry, never by time, so
 /// work merged from another branch is judged where it was written. Merges
 /// are not read: the commit that made an edit is in HEAD's history itself.
+/// Recording an after-merge check's validation is not an edit.
 pub fn done_when_edits(
     read: &mut ReadContext<'_>,
     policy: Option<&WorkflowPolicy>,
@@ -541,7 +542,12 @@ pub fn done_when_edits(
                 starts.push(commit.to_string());
             }
             if let Some((parent, before)) = before {
-                if done_when(&before) != done_when(&after) {
+                let (before, after) = (done_when(&before), done_when(&after));
+                // Ticking or carrying an after-merge check records its
+                // validation; it does not change what done means (ADR 0027).
+                let validated = matches!((&before, &after), (Some(before), Some(after))
+                    if crate::after_merge::only_validated(before, after, index));
+                if before != after && !validated {
                     changed.push((commit.to_string(), parent));
                 }
             }

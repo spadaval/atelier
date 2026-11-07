@@ -123,10 +123,12 @@ enum ReviewCommands {
     },
     /// Print the brief an independent reviewer is given for an item
     ///
-    /// The item's Goal and Done when, the commits to review, earlier
-    /// findings, dispositions and reviews, recorded proof, the working rules
-    /// from policy, and the commands that record the review. It never
-    /// includes the author's notes or Close Reason.
+    /// The item's Goal and Done when, its after-merge checks with their
+    /// reasons and stand-ins, Done when edits made after the start, the
+    /// commits to review, earlier findings, dispositions and reviews,
+    /// recorded proof, the working rules from policy, and the commands that
+    /// record the review. It never includes the author's notes or Close
+    /// Reason.
     Request {
         /// Branch owner, or an item of the owner's parent, to be reviewed
         id: String,
@@ -416,7 +418,13 @@ enum IssueCommands {
         /// items; Outcome for missions (optionally Success criteria,
         /// Background); Question (optionally Options,
         /// Decision, Context, Background) for decisions. Plain text becomes
-        /// the Goal, Outcome, or Question
+        /// the Goal, Outcome, or Question. Done when lines are checked before
+        /// merge. Mark a line `- [ ] After merge (<reason>): <check>.
+        /// Stand-in: <what runs before merge>.` only when it needs the
+        /// deployed or merged system, a device or place no agent can reach,
+        /// the human's judgment, or time and real use, and its stand-in runs
+        /// before merge; decide it when planning, since a later move is a
+        /// plan change the reviewer sees
         #[arg(long)]
         body: Option<String>,
         /// Priority: P0-P3 or critical, high, medium, low

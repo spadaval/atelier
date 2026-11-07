@@ -3,6 +3,7 @@
 //! Command orchestration uses typed request and view APIs
 //! that do not write directly to stdout or stderr.
 
+pub mod after_merge;
 pub mod base_policy;
 pub mod committed_snapshot;
 pub mod criteria;

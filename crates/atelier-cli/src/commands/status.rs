@@ -541,6 +541,14 @@ fn render_status_page(
         IssueListPanel::new("Current Work", active_rows)
             .limit(8, "atelier work active")
             .render(context),
+        // Merged work whose after-merge checks are still open (ADR 0027).
+        if view.work.awaiting_validation.is_empty() {
+            Vec::new()
+        } else {
+            IssueListPanel::from_work_rows("Awaiting Validation", &view.work.awaiting_validation)
+                .limit(READY_SHOWN, "atelier work all")
+                .render(context)
+        },
         unassigned_panel(overview, owned, in_flight, context),
         render_metadata(Some("Local State"), &local_state),
     ];

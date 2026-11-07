@@ -152,6 +152,12 @@ not integrate until the human acts. Model the check as a standalone
 validation `blocked_by` the parent instead (and `advances` the mission, if
 any). `atelier start` and `atelier status` warn when a branch owner has an open
 `needs-human` child and give the two commands that detach it (atelier-1jll).
+They also say the check could be an [after-merge
+line](validation.md#before-and-after-merge) of the owner's Done when, but
+only when it needs the deployed or merged system, a device or place no agent
+can reach, the human's judgment, or time and real use, with a stand-in that
+runs before merge; moving it there once the work started is a plan change
+the reviewer sees.
 A `needs-human` child that must finish before the merge, such as an account
 approval the code depends on, can stay a child.
 
