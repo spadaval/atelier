@@ -1,6 +1,6 @@
 ---
 schema: atelier.review
-schema_version: 1
+schema_version: 2
 id: atelier-5v68
 title: 'crates/atelier-cli/src/commands/session.rs:294-298,319 compares strategy paths as PathBuf from the raw record string. IssueStrategy::new accepts a leading CurDir (''./plans/strategy.md''), and Path comparison keeps a leading ''.'' component, so it never equals the git diff path ''plans/strategy.md''; editing that strategy on the base is then falsely refused. The set also includes strategies of any issue type while docs (reviews-and-merge.md:100, sessions-and-hooks.md:33) say ''mission strategies''. Fix: normalize by dropping CurDir components before inserting, and either filter to missions or reword the docs. Low frequency: no strategy in this repo currently uses ''./''.'
 target: atelier-3mjv
@@ -10,6 +10,14 @@ created_at: 2026-10-15T23:18:21.092683156Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: fix_now
+    identity: Claude Opus 5.5 (orchestrator)
+    commit: e37f556bdb59ce8ac006a48fdfcd436dd236c081
+    recorded_at: 2026-10-15T23:26:24.931808109Z
+    resolution_commit: e37f556bdb59ce8ac006a48fdfcd436dd236c081
+    reason: Fixed in e37f556bdb59ce8ac006a48fdfcd436dd236c081 with tests
+    migrated_from: atelier-u128
 ---
 
 crates/atelier-cli/src/commands/session.rs:294-298,319 compares strategy paths as PathBuf from the raw record string. IssueStrategy::new accepts a leading CurDir ('./plans/strategy.md'), and Path comparison keeps a leading '.' component, so it never equals the git diff path 'plans/strategy.md'; editing that strategy on the base is then falsely refused. The set also includes strategies of any issue type while docs (reviews-and-merge.md:100, sessions-and-hooks.md:33) say 'mission strategies'. Fix: normalize by dropping CurDir components before inserting, and either filter to missions or reword the docs. Low frequency: no strategy in this repo currently uses './'.

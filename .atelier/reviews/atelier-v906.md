@@ -1,6 +1,6 @@
 ---
 schema: atelier.review
-schema_version: 1
+schema_version: 2
 id: atelier-v906
 title: 'low: docs/product/work-model.md:181-183 says the base recorded from the current branch ''must be the policy''s base branch, the one land trusts'', but plain `atelier start` still records any current branch other than the ''<prefix>/<owner id>'' case (yc4d''s open item). Reword to say land will refuse any other base, or implement the proposed follow-up refusing a non-policy current-branch base.'
 target: atelier-yim7
@@ -10,6 +10,14 @@ created_at: 2026-10-22T21:06:42.656400806Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: fix_now
+    identity: Claude Opus 5.5 (orchestrator)
+    commit: ce0c9e00f477ad3173d53d743e338280321520dd
+    recorded_at: 2026-10-22T21:14:07.016530455Z
+    resolution_commit: d8351d878a66a64355662ebeaa03603495bd8fa8
+    reason: Fixed in d8351d87
+    migrated_from: atelier-c7xk
 ---
 
 low: docs/product/work-model.md:181-183 says the base recorded from the current branch 'must be the policy's base branch, the one land trusts', but plain `atelier start` still records any current branch other than the '<prefix>/<owner id>' case (yc4d's open item). Reword to say land will refuse any other base, or implement the proposed follow-up refusing a non-policy current-branch base.

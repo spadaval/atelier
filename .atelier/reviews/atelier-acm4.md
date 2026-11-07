@@ -1,6 +1,6 @@
 ---
 schema: atelier.review
-schema_version: 1
+schema_version: 2
 id: atelier-acm4
 title: finding on atelier-ma4a @77a9a8e9
 target: atelier-ma4a
@@ -10,6 +10,14 @@ created_at: 2026-10-30T06:56:15.014561869Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: fix_now
+    identity: planner (claude-opus-5-5, atelier-ll3p author)
+    commit: b4a22c6605b16025b6980cd44011eedae5e48f4e
+    recorded_at: 2026-10-30T06:57:47.866017043Z
+    resolution_commit: b4a22c6605b16025b6980cd44011eedae5e48f4e
+    reason: Fixed in the planning revision
+    migrated_from: atelier-qnl6
 ---
 
 R6: The 3e17 rewording is right for ll3p and ma4a, but child atelier-r9hb's title still reads 'Show a Done when edited after a finding or failing receipt' while its body triggers on any edit after the start. Rename it when r9hb is planned to todo (e.g. 'Show a Done when edited after the item started').
