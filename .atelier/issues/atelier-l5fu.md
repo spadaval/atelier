@@ -99,7 +99,7 @@ These are the three decision notes of 2026-11-07 above.
 
 ### Open items
 
-- **Review:** the independent review at `d4db367` recorded atelier-c4vx (fix_now), atelier-njt9 and atelier-87vf (both defer), all fixed in `e1eea38`. Re-review of `e1eea38`, dispositions for the two defer findings, and the no-ff merge into main are outstanding. The second decision note's "unguessable" claim holds only from `e1eea38`. Before it, the token was also in the canary's directory name.
+- **Review:** the independent review at `d4db367` recorded atelier-c4vx (fix_now), atelier-njt9 and atelier-87vf (recommended defer, decided fix_now); all three are fixed in `e1eea38`, which the re-review approved (atelier-ha41).
 - **Work-directory ageing:** the README now says the system may age out `/var/tmp`, as systemd-tmpfiles does here after 30 days, and points to `--work-root` for work directories that should last. The harness does not copy a failed run's grader inputs into `--out`.
 - **Older results files** (`2026-10-30-baseline.md`, `2026-11-07-skill-cut.md`) still carry no warning; only the new file says they were contaminated. A one-line pointer in each would be a small follow-up.
 - **Shared host state:** parallel refused-land-push runs share port 8080 and `/tmp`. One reviewer ran `pkill -f "python3 server.py"`. No grade changed, but the scenario needs its own port per run. This predates this item.
