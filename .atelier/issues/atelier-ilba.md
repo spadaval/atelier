@@ -20,7 +20,7 @@ schema_version: 2
 closed_at: "2026-11-07T07:13:27.190040693+00:00"
 status: "done"
 title: "Refuse an invalid record when it is written, and let authors fix their own"
-updated_at: "2026-11-07T07:13:27.190040693+00:00"
+updated_at: "2026-11-07T07:38:58.983169314+00:00"
 ---
 
 ## Goal
@@ -65,6 +65,7 @@ docs/adr/0028-simpler-lifecycle.md (decision 4), crates/atelier-app/src/review_g
   Rejected: Keeping approvals append-only before the base: an exception to the rule
 - 2026-11-07 [decision] review_follow_up_source_mismatch is left out of the write-time guard, as the orchestrator directed; atelier check still reports it
   Reason: atelier-md0v removes the rule, so it gets no write-time version
+- 2026-11-07 [resolution] Review finding atelier-oyh0 reversed one decision: approvals and trivial exemptions stay append-only from their first commit (fix b9f2214cf4063d8982c068e2ab45176f469f0b43). The earlier decision note on corrected approvals, and the Close Reason's mentions of corrected approvals (the original_independent deviation and its surprise), describe the reverted behaviour.
 
 ## Close Reason
 
