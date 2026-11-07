@@ -3,6 +3,51 @@
 //! ticked, and a change that only ticks boxes does not change what done
 //! means.
 
+use atelier_records::{CanonicalIssueRecord, IssueSectionName};
+
+/// What a work item lacks before review: the text of each unticked Done when
+/// line, how many unticked lines carry the old After merge marker (which
+/// need no tick), and whether its Report is empty. `review request` refuses
+/// on it, and `merge` notes it for the work it marks done.
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct Unfinished<'r> {
+    pub unticked: Vec<&'r str>,
+    pub after_merge: usize,
+    pub report_empty: bool,
+}
+
+impl<'r> Unfinished<'r> {
+    pub fn of(record: &'r CanonicalIssueRecord) -> Self {
+        let mut unfinished = Self {
+            report_empty: record
+                .sections
+                .section(IssueSectionName::Report)
+                .is_none_or(|report| report.trim().is_empty()),
+            ..Self::default()
+        };
+        for line in record
+            .sections
+            .section(IssueSectionName::DoneWhen)
+            .unwrap_or_default()
+            .lines()
+        {
+            match checkbox(line) {
+                Some((false, _)) if crate::after_merge::is_marked(line) => {
+                    unfinished.after_merge += 1
+                }
+                Some((false, text)) => unfinished.unticked.push(text),
+                _ => {}
+            }
+        }
+        unfinished
+    }
+
+    /// Whether nothing but After merge lines is missing.
+    pub fn is_finished(&self) -> bool {
+        self.unticked.is_empty() && !self.report_empty
+    }
+}
+
 /// For a bulleted line with a checkbox, whether it is ticked and the text
 /// after the box; `None` for any other line.
 pub fn checkbox(line: &str) -> Option<(bool, &str)> {

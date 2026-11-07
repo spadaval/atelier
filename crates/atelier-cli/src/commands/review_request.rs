@@ -137,7 +137,7 @@ fn gather(
         );
     }
     let policy = atelier_app::workflow_policy::load(repo)?;
-    refuse_unfinished(&index, &policy, &owner_id)?;
+    refuse_unfinished(&index, &policy, &id, &owner_id)?;
     let scope = atelier_app::review_gate::scope(&index, &owner_id)?;
     let base_head = resolve(repo, &format!("refs/heads/{}", branch.branch_base))
         .with_context(|| format!("base branch {} not found", branch.branch_base))?;
@@ -372,13 +372,17 @@ fn gather(
 /// Longest Done when line a refusal quotes.
 const LINE_LIMIT: usize = 80;
 
-/// Refuse while open work the request covers, which `merge` would mark done,
-/// has an unticked Done when line or an empty Report, naming each. A line
-/// with the old After merge marker need not be ticked; the refusal names the
-/// migration for such lines.
+/// Refuse while open work the request covers has an unticked Done when line
+/// or an empty Report, naming each (atelier-jnrh). It covers the item it
+/// names; naming the owner covers the owner and its started children, while
+/// an unstarted child is not claimed implemented, so a parent's children can
+/// be reviewed one at a time (finding atelier-2ygf). `merge` notes what the
+/// work it marks done lacks. A line with the old After merge marker need not
+/// be ticked; the refusal names the migration for such lines.
 fn refuse_unfinished(
     index: &RecordIndex,
     policy: &atelier_app::workflow_policy::WorkflowPolicy,
+    named: &str,
     owner: &str,
 ) -> Result<()> {
     let mut missing = Vec::new();
@@ -387,47 +391,25 @@ fn refuse_unfinished(
         let record = index
             .issue_record(&id)
             .with_context(|| format!("{id} is not an issue"))?;
-        let mut unticked = Vec::new();
-        for line in record
-            .sections
-            .section(IssueSectionName::DoneWhen)
-            .unwrap_or_default()
-            .lines()
-        {
-            match atelier_app::done_when::checkbox(line) {
-                Some((false, _)) if atelier_app::after_merge::is_marked(line) => after_merge += 1,
-                Some((false, text)) => unticked.push(text),
-                _ => {}
-            }
+        let covered = if named == owner {
+            id == owner || policy.status_category(&record.issue.status) == Some("active")
+        } else {
+            id == named
+        };
+        if !covered {
+            continue;
         }
-        let mut gaps = Vec::new();
-        if !unticked.is_empty() {
-            gaps.push(format!(
-                "{} unticked: {}",
-                atelier_core::count_noun(unticked.len(), "Done when line"),
-                unticked
-                    .iter()
-                    .map(|line| quote(line))
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            ));
-        }
-        if record
-            .sections
-            .section(IssueSectionName::Report)
-            .is_none_or(|report| report.trim().is_empty())
-        {
-            gaps.push("Report empty".to_owned());
-        }
-        if !gaps.is_empty() {
-            missing.push(format!("- {id}: {}", gaps.join("; ")));
+        let unfinished = atelier_app::done_when::Unfinished::of(record);
+        if let Some(gaps) = describe(&unfinished) {
+            after_merge += unfinished.after_merge;
+            missing.push(format!("- {id}: {gaps}"));
         }
     }
     if missing.is_empty() {
         return Ok(());
     }
     let mut message = format!(
-        "review_request_unfinished: asking for review means the work is done to the best of your knowledge, and {owner}'s open work is not:\n{}\nNext: tick each Done when line once it holds, write each item's implementer report in its `## Report` section, commit, then rerun `atelier review request {owner}`",
+        "review_request_unfinished: asking for review means the work is done to the best of your knowledge, and {named}'s open work is not:\n{}\nNext: tick each Done when line once it holds, write each item's implementer report in its `## Report` section, commit, then rerun `atelier review request {named}`",
         missing.join("\n")
     );
     if after_merge > 0 {
@@ -437,6 +419,32 @@ fn refuse_unfinished(
         ));
     }
     bail!(message)
+}
+
+/// What an item lacks, as the refusal and `merge`'s notes say it: `1 Done
+/// when line unticked: "<line>"; Report empty`. `None` when it lacks
+/// nothing but After merge ticks.
+pub(crate) fn describe(unfinished: &atelier_app::done_when::Unfinished<'_>) -> Option<String> {
+    if unfinished.is_finished() {
+        return None;
+    }
+    let mut gaps = Vec::new();
+    if !unfinished.unticked.is_empty() {
+        gaps.push(format!(
+            "{} unticked: {}",
+            atelier_core::count_noun(unfinished.unticked.len(), "Done when line"),
+            unfinished
+                .unticked
+                .iter()
+                .map(|line| quote(line))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    if unfinished.report_empty {
+        gaps.push("Report empty".to_owned());
+    }
+    Some(gaps.join("; "))
 }
 
 /// `line` quoted, cut to [`LINE_LIMIT`] characters.

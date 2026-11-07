@@ -109,8 +109,11 @@ Mechanics, as atelier-jnrh built them:
   so a policy's `report.*` required fields are read as `close_reason`.
 - **Asking for review.** `atelier review request` refuses while an open item
   of the `work` workflow it covers has an unticked `- [ ]` Done when line or
-  an empty Report, and lists each. A line with no box is not a checklist item
-  and is not checked. A line carrying the old After merge marker need not be
+  an empty Report, and lists each. It covers the item it names; naming the
+  owner covers the owner and its started children. An unstarted child is not
+  claimed implemented, so a parent's children can still be reviewed one at a
+  time (finding atelier-2ygf). A line with no box is not a checklist item and
+  is not checked. A line carrying the old After merge marker need not be
   ticked; the refusal names `atelier migrate after-merge` for such lines
   (atelier-8bh4).
 - **Merging marks done.** `atelier merge` always creates a merge commit, and
@@ -121,7 +124,10 @@ Mechanics, as atelier-jnrh built them:
   blocker, and still refuses without a current independent approval. One
   merge marks a parent and its children done, so the rule that a parent
   closes after its children goes, and the `work` workflow has no `close`;
-  `supersede` remains. The merge commit matches Git's own merge of its
+  `supersede` remains. `merge` and `merge --check` note, and do not refuse,
+  each item they mark done that has an unticked box (After merge lines
+  aside) or an empty Report, so work review did not cover, or a record edit
+  after approval undid, is still seen (finding atelier-nrq4). The merge commit matches Git's own merge of its
   parents everywhere outside the records, so it keeps an approval current,
   and `land` on the base accepts the done marks it carries.
 - **One merge strategy.** `merge_commit` is the only strategy:

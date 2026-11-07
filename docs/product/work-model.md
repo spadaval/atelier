@@ -254,16 +254,20 @@ A Done when line with a box (`- [ ]`) is ticked (`- [x]`) once it holds.
 `atelier review request <id>` refuses with `review_request_unfinished`, and
 names each gap, while an open work item it covers has an unticked box or an
 empty Report: asking for review means the work is implemented and done to the
-best of the author's knowledge. A line without a box is not checked, and a
-line with the old After merge marker need not be ticked; the refusal names
-`atelier migrate after-merge` for such lines (atelier-8bh4).
+best of the author's knowledge. It covers the item it names; naming the owner
+covers the owner and its started children, so a parent's children can be
+reviewed one at a time while unstarted siblings wait. A line without a box is
+not checked, and a line with the old After merge marker need not be ticked;
+the refusal names `atelier migrate after-merge` for such lines
+(atelier-8bh4).
 
 `atelier merge <id>` checks the base branch's policy and review gates, then
 lands one merge commit whose tree passed `merge_checks`. That commit sets
 every open item of the `work` workflow in the owner's scope, the owner and
 its non-superseded children, to the workflow's first done status, and
 changes nothing else the branch holds, the Report included. Merge refuses
-while one of those items has an open blocker. It creates no other commit, so
+while one of those items has an open blocker, and notes, without refusing,
+each one it marks done that has an unticked box or an empty Report. It creates no other commit, so
 the base shows the item done together with its code, and the work branch
 never says done for work the base lacks. An item an older Atelier closed on
 its branch merges as it is. A repository whose policy still gives work a

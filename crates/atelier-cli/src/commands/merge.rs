@@ -966,7 +966,7 @@ fn merge_gates(
     .report(&nodes);
     // A Done when edited after its item was started is shown to whoever
     // judges the work, and changes no verdict (atelier-r9hb).
-    let edited = atelier_app::record_history::done_when_edits(
+    let mut edited = atelier_app::record_history::done_when_edits(
         &mut read,
         Some(&source.policy),
         &merged,
@@ -975,9 +975,18 @@ fn merge_gates(
     .iter()
     .map(|edit| format!("Note: {}", crate::human_output::done_when_edit(edit)))
     .collect::<Vec<_>>();
+    // Work merge marks done with an unticked Done when line or an empty
+    // Report is shown too, and refuses nothing: review asked for them, and
+    // a record edit after approval, or a child review did not cover, can
+    // undo that (finding atelier-nrq4).
+    edited.extend(marks.iter().filter_map(|record| {
+        super::review_request::describe(&atelier_app::done_when::Unfinished::of(record))
+            .map(|gaps| format!("Note: merge marks {} done with {gaps}.", record.issue.id))
+    }));
     // Failures print with the passes; a passing check prints its passes and
     // next step, and a passing merge only what it did (atelier-2tux). Each
-    // edited Done when follows them, whatever the verdict.
+    // edited Done when and unfinished item follows them, whatever the
+    // verdict.
     let report = || -> Result<()> {
         let say = |line: &str| {
             if quiet {

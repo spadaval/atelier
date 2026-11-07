@@ -154,8 +154,11 @@ The request refuses first, with `review_request_unfinished`, while an open
 work item it covers has an unticked `- [ ]` Done when line or an empty Report,
 and lists each gap: asking for review means the work is implemented and done
 to the best of the author's knowledge ([ADR
-0028](../adr/0028-simpler-lifecycle.md), decision 2). A line without a box is
-not checked. A line with the old After merge marker need not be ticked, and
+0028](../adr/0028-simpler-lifecycle.md), decision 2). It covers the item it
+names; naming the owner covers the owner and its started children, so a
+parent's children can be reviewed one at a time while an unstarted child,
+not yet claimed implemented, waits (finding atelier-2ygf). A line without a
+box is not checked. A line with the old After merge marker need not be ticked, and
 the refusal names `atelier migrate after-merge` for such lines (atelier-8bh4).
 
 ## Approval freshness
@@ -289,7 +292,19 @@ workflow in the owner's scope that is not yet in a done status takes the
 workflow's first done status, with nothing else changed, so the Report stays
 as the reviewer read it. Its message names them (`Marks <ids> done.`), as
 does the success line. An item an older Atelier closed on its branch is left
-as it is, and so is a superseded child.
+as it is, and so is a superseded child. For each item it marks done that has
+an unticked box (After merge lines aside) or an empty Report, `merge` and
+`merge --check` print a note after the gate lines, and refuse nothing, as
+for an edited Done when:
+
+```
+Note: merge marks atelier-2xx5 done with 1 Done when line unticked: "It passes on Linux."; Report empty.
+```
+
+Review asked for both, but a record edit after approval does not make the
+approval stale, and a child reviewed on its own leaves its siblings unasked,
+so this note is how such work is seen before it lands (finding
+atelier-nrq4).
 
 ### A Done when edited after the start
 

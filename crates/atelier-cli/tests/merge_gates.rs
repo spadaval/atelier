@@ -4552,3 +4552,77 @@ fn an_item_closed_by_an_older_atelier_merges_as_it_is() {
     );
     ok(fixture.path(), &["land"]);
 }
+
+/// Work merge marks done with an unticked Done when line or an empty Report
+/// is noted in `merge --check` and `merge`, and refuses nothing: an untick
+/// after approval and a child added after it are both seen (finding
+/// atelier-nrq4).
+#[test]
+fn merge_notes_work_it_marks_done_unticked_or_unreported() {
+    let fixture = Fixture::with(|dir, id| {
+        let path = dir.join(format!(".atelier/issues/{id}.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            text.replace(
+                "Scenario passes.",
+                "- [x] Scenario passes.\n- [x] It passes on Linux.\n- [ ] After merge (device): it opens on the phone. Stand-in: the emulator test passes.",
+            ),
+        )
+        .unwrap();
+    });
+    // Before approval only the After merge line is unticked, and it needs no
+    // tick, so nothing is noted.
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(!output.contains("Note: merge marks"), "{output}");
+    fixture.approval("Reviewer");
+    let path = fixture
+        .path()
+        .join(format!(".atelier/issues/{}.md", fixture.id));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("- [x] It passes on Linux.", "- [ ] It passes on Linux."),
+    )
+    .unwrap();
+    let child = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Late child",
+            "--parent",
+            &fixture.id,
+            "--body",
+            "## Goal\n\nMore.\n\n## Done when\n\n- [ ] Never done.",
+        ],
+    );
+    commit(
+        fixture.path(),
+        "untick a line and add a child after approval",
+    );
+    let notes = [
+        format!(
+            "Note: merge marks {} done with 1 Done when line unticked: \"It passes on Linux.\".",
+            fixture.id
+        ),
+        format!(
+            "Note: merge marks {child} done with 1 Done when line unticked: \"Never done.\"; Report empty."
+        ),
+    ];
+    let shown = |output: &str| {
+        output
+            .lines()
+            .filter(|line| line.starts_with("Note: merge marks"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed && output.contains("review.current via"), "{output}");
+    assert_eq!(shown(&output), notes, "{output}");
+    let merged = ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(shown(&merged), notes, "{merged}");
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
+    assert_eq!(status_on_main(fixture.path(), &child), "done");
+}

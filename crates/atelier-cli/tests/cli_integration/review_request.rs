@@ -361,6 +361,8 @@ fn the_request_refuses_unticked_done_when_lines_and_empty_reports_and_lists_them
     ]);
     commit_all(dir, "plan");
     ok(dir, &["start", &id]);
+    // Naming the owner covers its started children.
+    ok(dir, &["issue", "transition", &child, "start"]);
     ok(
         dir,
         &[
@@ -418,5 +420,91 @@ fn the_request_refuses_unticked_done_when_lines_and_empty_reports_and_lists_them
     assert!(
         brief.starts_with(&format!("# Review request: {id} ")),
         "{brief}"
+    );
+}
+
+/// The request covers the item it names, and naming the owner covers the
+/// owner and its started children, so a parent's children can be reviewed
+/// one at a time while unstarted siblings wait (finding atelier-2ygf).
+#[test]
+fn the_request_covers_the_named_item_and_the_owners_started_children() {
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path();
+    init_atelier(dir);
+    init_git_repo(dir);
+    let create = |args: &[&str]| ok(dir, args).trim().to_string();
+    let id = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--issue-type",
+        "feature",
+        "--body",
+        "## Goal\n\nShip it.\n\n## Done when\n\n- [ ] The whole feature works.",
+        "Parent",
+    ]);
+    let started = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--parent",
+        &id,
+        "--body",
+        "## Goal\n\nPart one.\n\n## Done when\n\n- [x] Part one works.\n\n## Report\n\nPart one is done.",
+        "Started child",
+    ]);
+    let waiting = create(&[
+        "issue",
+        "create",
+        "-q",
+        "--parent",
+        &id,
+        "--body",
+        "## Goal\n\nPart two.\n\n## Done when\n\n- [ ] Part two works.",
+        "Unstarted child",
+    ]);
+    commit_all(dir, "plan");
+    ok(dir, &["start", &id]);
+    ok(dir, &["issue", "transition", &started, "start"]);
+    commit_all(dir, "start the parent and its first child");
+
+    // The ticked, reported child is reviewed on its own, whatever its parent
+    // and its unstarted sibling still lack.
+    let brief = ok(dir, &["review", "request", &started]);
+    assert!(
+        brief.starts_with(&format!("# Review request: {id} ")),
+        "{brief}"
+    );
+
+    // Naming the owner covers the owner and the started child, never the
+    // unstarted one.
+    edit_canonical_issue(dir, &id, |markdown| {
+        format!(
+            "{}\n\n## Report\n\nThe feature is done.\n",
+            markdown
+                .replace(
+                    "- [ ] The whole feature works.",
+                    "- [x] The whole feature works."
+                )
+                .trim_end()
+        )
+    });
+    edit_canonical_issue(dir, &started, |markdown| {
+        markdown.replace("- [x] Part one works.", "- [ ] Part one works.")
+    });
+    commit_all(dir, "tick the parent, untick the child");
+    let (success, stdout, stderr) = run_atelier_raw(dir, &["review", "request", &id]);
+    assert!(!success, "{stdout}");
+    assert!(
+        stderr.contains(&format!(
+            "and {id}'s open work is not:\n- {started}: 1 Done when line unticked: \"Part one works.\"\nNext:"
+        )),
+        "{stderr}"
+    );
+    assert!(!stderr.contains(&waiting), "{stderr}");
+    let (success, _, stderr) = run_atelier_raw(dir, &["review", "request", &started]);
+    assert!(
+        !success && stderr.contains(&format!("- {started}: 1 Done when line unticked")),
+        "{stderr}"
     );
 }

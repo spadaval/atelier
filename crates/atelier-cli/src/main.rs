@@ -128,8 +128,8 @@ enum ReviewCommands {
     /// commits to review, earlier findings, dispositions and reviews,
     /// recorded proof, the working rules from policy, and the commands that
     /// record the review. It never includes the author's notes or Report,
-    /// and it refuses while an open item it covers has an unticked Done when
-    /// line or an empty Report.
+    /// and it refuses while the item it names, or for the owner a started
+    /// child, has an unticked Done when line or an empty Report.
     Request {
         /// Branch owner, or an item of the owner's parent, to be reviewed
         id: String,
@@ -246,7 +246,7 @@ enum Commands {
         push: bool,
     },
 
-    /// Check merge gates and fast-forward, or create only a merge commit under merge_commit
+    /// Check merge gates, then integrate with one merge commit that marks the owner's open work done
     Merge {
         /// Issue, or child of the parent, that owns the checked-out work branch
         id: String,
