@@ -3,6 +3,9 @@ created_at: "2026-11-06T21:26:18.664159142+00:00"
 id: "atelier-n0qh"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: feature/atelier-n0qh
 priority: "P2"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "in_progress"
 title: "Proof has a time: before merge by default, after merge only with a reason"
-updated_at: "2026-11-06T23:09:36.927449796+00:00"
+updated_at: "2026-11-07T02:00:22.269067199+00:00"
 ---
 
 ## Goal
@@ -34,7 +37,7 @@ Each Done when check is checked before merge unless marked for after merge, with
 
 ## Done when
 
-Provisional: the proof-timing scenario test passes; the review request brief lists each after-merge check with its reason and stand-in and says when a reason is missing, and Agent Factory's review text tells the reviewer to flag any that could have run before merge; moving a check to after merge once the item has started is shown to the reviewer through atelier-r9hb; closing a mission with open validation warns and names it unless the validation is carried to another item; agent-facing text in Atelier and Agent Factory says post-merge validation is only what cannot be checked before the merge, and that a failed validation files a follow-up bug (`issue create --discovered-from`) rather than reopening the item; no new refusal and no per-check evidence gate; an ADR records the model.
+the proof-timing scenario test passes; the review request brief lists each after-merge check with its reason and stand-in and says when a reason is missing, and Agent Factory's review text tells the reviewer to flag any that could have run before merge; moving a check to after merge once the item has started is shown to the reviewer through atelier-r9hb; closing a mission with open validation warns and names it unless the validation is carried to another item; agent-facing text in Atelier and Agent Factory says post-merge validation is only what cannot be checked before the merge, and that a failed validation files a follow-up bug (`issue create --discovered-from`) rather than reopening the item; no new refusal and no per-check evidence gate; an ADR records the model.
 
 ## Unknowns
 
