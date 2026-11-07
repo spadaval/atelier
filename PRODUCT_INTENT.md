@@ -1,5 +1,12 @@
 # Atelier Product Intent
 
+Atelier exists so that agents produce high-quality, correct code that solves
+real problems, with as little red tape and overhead as possible. Nothing else
+about Atelier is sacred, and this purpose governs every tradeoff.
+[ADR 0028](docs/adr/0028-simpler-lifecycle.md) records it with the simpler
+lifecycle that follows from it; the principles below that it supersedes
+describe today's behaviour until the item that changes each lands.
+
 Atelier is a verified, repo-native work tracker and an orchestrator's durable
 memory. Missions, issues, evidence, and reviews live in Markdown beside
 the code they describe. Git carries both the implementation and its done claim
@@ -12,6 +19,10 @@ mechanical guards at the point of action. The governing decision is
 
 ## Product principles
 
+- Add nothing that does not earn its place. A new gate or record type names
+  the kind of defect it would have caught in real agent sessions, and a rule
+  that only patches another rule's edge case is a reason to remove the first
+  rule.
 - Keep one durable source of truth: tracked records under `.atelier/`.
 - Parse those records directly on each command. No database or query cache.
 - Guard valid records, dependency closure, traceable active work, fresh honest

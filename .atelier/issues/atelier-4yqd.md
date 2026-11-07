@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:00:24.620382782+00:00"
 id: "atelier-4yqd"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-4yqd
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Record the simpler lifecycle in ADR 0028, and add the no-regrowth principle"
-updated_at: "2026-11-07T05:00:24.620382782+00:00"
+updated_at: "2026-11-07T05:20:50.851077235+00:00"
 ---
 
 ## Goal

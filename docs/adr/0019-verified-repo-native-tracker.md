@@ -6,6 +6,15 @@ Accepted (2026-09-30, human-directed). Decision 6 is partially superseded by
 [ADR 0025](0025-findings-carry-their-disposition.md): a finding carries its
 disposition as a field rather than a separate append-only event.
 
+Partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession),
+which names each part: in decision 2, evidence as a guarded invariant, the
+comparison of reviewer and Git authors, and a disposition for every finding;
+in decision 3, the recorded branch base; in decision 4, the done claim
+committed on the work branch, "merging writes no tracker state", and approval
+freshness judged by which records changed; in decision 6, append-only for
+records not yet on the base, and a disposition for a `fix_now` finding.
+Decisions 1, 5 and 7 stand.
+
 Supersedes [ADR 0006](0006-agent-guidance-ownership-boundary.md),
 [ADR 0007](0007-mission-workspaces-and-epic-review-branches.md),
 [ADR 0010](0010-session-aware-pr-coordination-boundaries.md),
