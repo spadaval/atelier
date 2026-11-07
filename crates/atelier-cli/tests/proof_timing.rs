@@ -347,6 +347,76 @@ fn carrying_a_check_on_the_base_lands_but_editing_what_done_means_does_not() {
 }
 
 #[test]
+fn a_receipt_still_proves_its_item_after_its_check_is_ticked_on_the_base() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    // Closing an item needs a passing receipt that is fresh, or held at its
+    // close once merged.
+    let policy = repo.join(".atelier/workflow.yaml");
+    let text = fs::read_to_string(&policy).unwrap();
+    let gates = "        - blockers.none_open\n        - work.terminal\n      supersede:\n        from: [backlog";
+    assert!(text.contains(gates), "{text}");
+    fs::write(
+        &policy,
+        text.replacen(
+            gates,
+            &gates.replacen(
+                "work.terminal\n",
+                "work.terminal\n        - evidence.attached: { min_count: 1 }\n",
+                1,
+            ),
+            1,
+        ),
+    )
+    .unwrap();
+    commit(repo, "Require a receipt to close");
+    let item = ok(repo, &["-q", "issue", "create", "Launcher", "--body", BODY]);
+    commit(repo, "Plan the launcher");
+    git(repo, &["push", "-q"]);
+    ok(repo, &["start", &item]);
+    commit(repo, "Start the launcher");
+    fs::write(repo.join("launcher.rs"), "fn main() {}\n").unwrap();
+    commit(repo, "Implement the launcher");
+    ok(
+        repo,
+        &[
+            "evidence",
+            "record",
+            "--target",
+            &item,
+            "--kind",
+            "test",
+            "--result",
+            "pass",
+            "--commit-records",
+            "The launcher test passes",
+        ],
+    );
+    ok(
+        repo,
+        &[
+            "issue",
+            "transition",
+            &item,
+            "close",
+            "--reason",
+            "Shipped.",
+            "--commit-records",
+        ],
+    );
+    approve_and_merge(repo, &item);
+
+    edit(repo, &item, "- [ ] After merge", "- [x] After merge");
+    commit(repo, &format!("Validate {item} on the phone"));
+    let (landed, output) = cli(repo, &["land"]);
+    assert!(landed, "{output}");
+    let receipts = ok(repo, &["evidence", "list"]);
+    assert!(!receipts.contains("stale"), "{receipts}");
+}
+
+#[test]
 fn a_check_moved_to_after_merge_once_started_is_shown_to_the_reviewer() {
     let dir = tempdir().unwrap();
     let upstream = tempdir().unwrap();
