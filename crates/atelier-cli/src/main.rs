@@ -452,7 +452,8 @@ enum WorkCommands {
     /// Show ready work an agent can pick up; work labelled needs-human is
     /// listed separately
     Ready,
-    /// Show ready work only the human can do (labelled needs-human)
+    /// Show ready work only the human can do: open decisions and work
+    /// labelled needs-human
     Human,
     /// Show blocked work
     Blocked,
