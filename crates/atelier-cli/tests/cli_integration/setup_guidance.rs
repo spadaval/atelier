@@ -2141,7 +2141,7 @@ fn test_root_start_reports_workflow_validator_failure() {
         "{options_out}"
     );
     assert!(
-        options_out.contains("Hint: Record fresh proof"),
+        options_out.contains("Hint: This policy requires a passing receipt"),
         "{options_out}"
     );
 
@@ -2154,8 +2154,14 @@ fn test_root_start_reports_workflow_validator_failure() {
         "{stdout}"
     );
     // The hint is the error's next step, shown once, on stderr.
-    assert!(!stdout.contains("Record fresh proof"), "{stdout}");
-    assert!(stderr.contains("Next: Record fresh proof"), "{stderr}");
+    assert!(
+        !stdout.contains("This policy requires a passing receipt"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("Next: This policy requires a passing receipt"),
+        "{stderr}"
+    );
     assert!(stderr.contains("evidence.attached"), "{stderr}");
 
     let issue_text = std::fs::read_to_string(canonical_issue_path(dir.path(), &issue_id)).unwrap();

@@ -651,7 +651,7 @@ impl Gates<'_> {
         )
     }
 
-    /// Fresh proof for `target`: the failing receipt's command again when
+    /// A pass to clear `target`'s failing receipt: its command again when
     /// it captured one.
     fn rerun_command(&self, target: &str, evidence: &str) -> String {
         match self.index.evidence(evidence) {

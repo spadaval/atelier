@@ -2618,9 +2618,15 @@ fn evidence_list_by_item_marks_each_receipt_as_the_gates_judge_it() {
         shown[0].contains(&format!(" · ⚠ stale (code changed in {code_commit}) · ")),
         "{out}"
     );
-    assert!(shown[1].contains(" · ⚠ blocks completion · "), "{out}");
+    // The stale pass still supersedes the older fail (atelier-s66u).
     assert!(
-        out.contains(&format!("\nProof: ⚠ newest is fail {fail}\n")),
+        shown[1].contains(&format!(" · superseded by newer pass {second_pass} · ")),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!(
+            "\nProof: ⚠ no fresh pass; newest pass {second_pass} is stale\n"
+        )),
         "{out}"
     );
 
@@ -2795,8 +2801,8 @@ fn evidence_attach_takes_the_target_forms_record_takes() {
 
 /// `evidence list`'s verdict agrees with the evidence gates the close
 /// transition runs on the same receipts: a newer fail blocks both, a fresh
-/// pass after it clears both, and once a code commit makes that pass stale
-/// the fail blocks both again (atelier-u0ig).
+/// pass after it clears both, and a code commit that makes that pass stale
+/// leaves the fail cleared in both (atelier-u0ig, atelier-s66u).
 #[test]
 fn evidence_list_verdict_agrees_with_the_close_gate() {
     let dir = tempdir().unwrap();
@@ -2861,11 +2867,11 @@ fn evidence_list_verdict_agrees_with_the_close_gate() {
 
     fs::write(dir.path().join("code.txt"), "changed code\n").unwrap();
     commit_all(dir.path(), "Change code");
-    assert_eq!(verdict(), format!("Proof: ⚠ newest is fail {fail}"));
-    // The later pass no longer proves the claim, so the fail blocks again.
-    let refusal = close_refusal();
-    assert!(
-        refusal.contains(&format!("newer failing evidence {fail}")),
-        "{refusal}"
+    assert_eq!(
+        verdict(),
+        format!("Proof: ⚠ no fresh pass; newest pass {second} is stale")
     );
+    // The later pass is stale, but it still supersedes the older fail.
+    let refusal = close_refusal();
+    assert!(!refusal.contains("newer failing evidence"), "{refusal}");
 }

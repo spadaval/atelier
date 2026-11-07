@@ -221,22 +221,19 @@ fn stale_code_and_acceptance_changes_require_new_proof_including_reverts() {
 }
 
 #[test]
-fn newer_failure_blocks_completion_without_presence_gate_and_stale_pass_cannot_clear_it() {
+fn newer_failure_blocks_completion_without_presence_gate_until_any_later_pass() {
     let (dir, id) = proof_fixture(false);
     manual(dir.path(), &id, "pass", "First pass");
     manual(dir.path(), &id, "fail", "New failure");
     let (ok, _, error) = close(dir.path(), &id);
     assert!(!ok && error.contains("newer failing evidence"), "{error}");
     manual(dir.path(), &id, "pass", "Pass before code changed");
+    // Later code makes the pass stale, but it still clears the older
+    // failure: a receipt describes the committed state it was recorded at.
     std::fs::write(dir.path().join("src.rs"), "after failure\n").unwrap();
     commit_all(dir.path(), "changed code after latest pass");
-    assert!(
-        !close(dir.path(), &id).0,
-        "a stale pass cannot clear the failure"
-    );
-    manual(dir.path(), &id, "pass", "Fresh recovery");
     let (ok, _, error) = close(dir.path(), &id);
-    assert!(ok, "{error}");
+    assert!(ok, "a later pass clears the failure for good: {error}");
 }
 
 #[test]
