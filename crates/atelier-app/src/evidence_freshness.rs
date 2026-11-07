@@ -60,17 +60,10 @@ impl EvidenceReadContext<'_> {
         issue: &CanonicalIssueRecord,
         record: &EvidenceRecord,
     ) -> Result<bool> {
-        Ok(self.matches_commits_to_head(issue, record)? && self.code_clean()?)
-    }
-    /// Whether no commit since the pin changed what `record` proves; fresh
-    /// proof also needs a clean checkout.
-    fn matches_commits_to_head(
-        &mut self,
-        issue: &CanonicalIssueRecord,
-        record: &EvidenceRecord,
-    ) -> Result<bool> {
+        // No commit since the pin changed what `record` proves, and the
+        // checkout is clean.
         let edges = self.edges(&record.data.commit, "HEAD")?;
-        evidence_matches_edges(self, issue, record, &edges)
+        Ok(evidence_matches_edges(self, issue, record, &edges)? && self.code_clean()?)
     }
     pub fn issue_gate(
         &mut self,
@@ -161,9 +154,10 @@ pub enum ProofMark {
     /// A pass that a fail recorded at or after it supersedes; names the
     /// newest such fail.
     SupersededByFail(String),
-    /// A fail that a later fresh pass supersedes; names the newest such pass.
+    /// A fail that a later pass supersedes, fresh or not; names the newest
+    /// pass.
     SupersededByPass(String),
-    /// The newest fail, which no later fresh pass supersedes.
+    /// The newest fail, with no pass recorded after it.
     BlocksCompletion,
 }
 
@@ -219,7 +213,7 @@ impl EvidenceReadContext<'_> {
 #[derive(Debug)]
 pub struct ItemProof {
     pub receipts: Vec<(String, ProofMark)>,
-    /// The newest fail no later counting pass supersedes; it blocks
+    /// The newest fail with no pass recorded after it; it blocks
     /// completion.
     pub blocking_fail: Option<String>,
     /// The newest pass that counts as proof: fresh, or held at close.
@@ -354,11 +348,15 @@ impl EvidenceReadContext<'_> {
             }
             receipts.push((record.header.id.clone(), mark));
         }
-        // A fail is superseded by a fresh pass recorded after it; the newest
-        // fail no such pass supersedes blocks completion.
+        // A fail is superseded for good by any pass recorded after it, even
+        // one later commits made stale; the newest fail with no pass after
+        // it blocks completion.
+        let newest_pass = records
+            .iter()
+            .find(|record| record.data.result == EvidenceResult::Pass);
         let blocking_fail = newest_fail
             .filter(|(failed_at, _)| {
-                fresh_pass.is_none_or(|pass| pass.data.captured_at <= *failed_at)
+                newest_pass.is_none_or(|pass| pass.data.captured_at <= *failed_at)
             })
             .map(|(_, id)| id);
         for ((id, mark), record) in receipts.iter_mut().zip(&records) {
@@ -368,7 +366,7 @@ impl EvidenceReadContext<'_> {
             if blocking_fail.as_ref() == Some(id) {
                 *mark = ProofMark::BlocksCompletion;
             } else if let Some(pass) =
-                fresh_pass.filter(|pass| record.data.captured_at < pass.data.captured_at)
+                newest_pass.filter(|pass| record.data.captured_at < pass.data.captured_at)
             {
                 *mark = ProofMark::SupersededByPass(pass.header.id.clone());
             }
@@ -376,10 +374,7 @@ impl EvidenceReadContext<'_> {
         Ok(ItemProof {
             blocking_fail,
             proving_pass: fresh_pass.map(|record| record.header.id.clone()),
-            newest_pass: records
-                .iter()
-                .find(|record| record.data.result == EvidenceResult::Pass)
-                .map(|record| record.header.id.clone()),
+            newest_pass: newest_pass.map(|record| record.header.id.clone()),
             receipts,
         })
     }
@@ -457,88 +452,33 @@ fn evaluate_issue_gate(
     })
 }
 
-/// A recorded fail newer than every explicit pass blocks successful completion.
-pub fn newest_failure(index: &RecordIndex, repo: &Path, issue_id: &str) -> Result<Option<String>> {
-    Ok(EvidenceReadContext::new(repo)
-        .newest_failure(index, issue_id, true)?
-        .map(|failure| failure.id))
-}
-
-/// A failing evidence record that no current pass supersedes.
-pub(crate) struct NewestFailure {
-    pub(crate) id: String,
-    /// A newer pass that does not prove the current checkout or commit,
-    /// such as one made stale by uncommitted changes (atelier-749l).
-    pub(crate) stale_pass: Option<String>,
-    /// Whether that pass would still prove the claim with uncommitted
-    /// changes set aside, so the checkout alone makes it stale (atelier-x3bj).
-    pub(crate) stale_from_checkout: bool,
+/// The newest failing receipt validating `issue_id` when no pass was
+/// recorded after it: it blocks completion. Any later pass clears it for
+/// good, whatever its command or pin, even once later commits make that
+/// pass stale. Capture refuses uncommitted code; a manual pass is the
+/// recorder's judgment.
+pub fn newest_failure(index: &RecordIndex, issue_id: &str) -> Result<Option<String>> {
+    let records = validating_records(index, issue_id)?;
+    let newest = |result: EvidenceResult| {
+        records
+            .iter()
+            .filter(|record| record.data.result == result)
+            .map(|record| (record.data.captured_at, &record.header.id))
+            .max()
+    };
+    Ok(
+        match (newest(EvidenceResult::Fail), newest(EvidenceResult::Pass)) {
+            (Some((failed_at, id)), pass)
+                if pass.is_none_or(|(passed_at, _)| passed_at <= failed_at) =>
+            {
+                Some(id.clone())
+            }
+            _ => None,
+        },
+    )
 }
 
 impl EvidenceReadContext<'_> {
-    pub(crate) fn newest_failure(
-        &mut self,
-        index: &RecordIndex,
-        issue_id: &str,
-        fresh: bool,
-    ) -> Result<Option<NewestFailure>> {
-        let issue = index
-            .issue_record(issue_id)
-            .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, issue_id))?;
-        let mut newest_fail = None;
-        let mut newest_pass = None;
-        let mut newest_stale_pass: Option<(_, String, bool)> = None;
-        for link in index.list_record_links("issue", issue_id)? {
-            if link.relation_type != "validates" {
-                continue;
-            }
-            let id = if link.source_kind == "evidence" {
-                &link.source_id
-            } else if link.target_kind == "evidence" {
-                &link.target_id
-            } else {
-                continue;
-            };
-            let record = index.require_evidence(id)?;
-            let candidate = (record.data.captured_at, record.header.id.clone());
-            match record.data.result {
-                EvidenceResult::Fail if newest_fail.as_ref().is_none_or(|old| &candidate > old) => {
-                    newest_fail = Some(candidate)
-                }
-                EvidenceResult::Pass if newest_pass.as_ref().is_none_or(|old| &candidate > old) => {
-                    if self.proof_matches(issue, record, fresh).unwrap_or(false) {
-                        newest_pass = Some(candidate)
-                    } else if newest_stale_pass
-                        .as_ref()
-                        .is_none_or(|old| (&candidate.0, &candidate.1) > (&old.0, &old.1))
-                    {
-                        // Stale only because of the checkout: no commit since
-                        // the pin changed what it proves, but code is dirty.
-                        let from_checkout = fresh
-                            && self.matches_commits_to_head(issue, record).unwrap_or(false)
-                            && !self.code_clean().unwrap_or(true);
-                        newest_stale_pass = Some((candidate.0, candidate.1, from_checkout))
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(newest_fail
-            .filter(|failed| {
-                newest_pass
-                    .as_ref()
-                    .is_none_or(|passed| passed.0 <= failed.0)
-            })
-            .map(|(failed_at, id)| {
-                let stale = newest_stale_pass.filter(|(passed_at, _, _)| *passed_at > failed_at);
-                NewestFailure {
-                    id,
-                    stale_from_checkout: stale.as_ref().is_some_and(|(_, _, checkout)| *checkout),
-                    stale_pass: stale.map(|(_, id, _)| id),
-                }
-            }))
-    }
-
     fn proof_matches(
         &mut self,
         issue: &CanonicalIssueRecord,

@@ -82,7 +82,7 @@ precondition that keeps the gates from running prints after the ones found
 before it, with a `Not checked:` line naming the gates it skipped.
 When the base has commits the branch does not, `land` checks the work against
 the point where it left the base and adds a note to merge the base in (`git
-merge <base>`) and record fresh proof before `atelier merge`, which refuses
+merge <base>`) before `atelier merge`, which refuses
 with `merge_diverged` until then (atelier-qz9x).
 
 A branch that no item owns, such as a feature branch, a PR branch, a branch

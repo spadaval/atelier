@@ -699,34 +699,35 @@ struct Readiness {
     approval: review_gate::ApprovalState,
     /// Base commits the branch does not have.
     behind: usize,
-    /// Every done item in the owner's scope, except superseded ones, has
-    /// fresh passing proof at the branch head.
-    proof: bool,
+    /// The newest failing receipt with no pass after it on a done item in
+    /// the owner's scope, which blocks the merge; an item with no receipts
+    /// has no gap.
+    failing: Option<String>,
     /// The paths `git merge-tree` cannot merge into the current base.
     conflicts: Vec<PathBuf>,
 }
 
 impl Readiness {
-    /// `, ✓ approved, behind 3, proof at head, merges cleanly`: the facts
-    /// for the row's status part, the conflict list last so its commas end
-    /// the part.
+    /// `, ✓ approved, behind 3, merges cleanly`: the facts for the row's
+    /// status part, with `⚠ failing evidence <id>` before the merge fact
+    /// when a receipt blocks, the conflict list last so its commas end the
+    /// part.
     fn facts(&self) -> String {
         let approval = match self.approval {
             review_gate::ApprovalState::Current => "✓ approved",
             review_gate::ApprovalState::Stale => "⚠ approval stale",
             review_gate::ApprovalState::Missing => "⚠ not approved",
         };
-        let proof = if self.proof {
-            "proof at head"
-        } else {
-            "no proof at head"
-        };
+        let failing = self
+            .failing
+            .as_ref()
+            .map_or(String::new(), |id| format!(", ⚠ failing evidence {id}"));
         let merge = if self.conflicts.is_empty() {
             "merges cleanly".to_owned()
         } else {
             format!("conflicts: {}", display_paths(&self.conflicts))
         };
-        format!(", {approval}, behind {}, {proof}, {merge}", self.behind)
+        format!(", {approval}, behind {}{failing}, {merge}", self.behind)
     }
 }
 
@@ -1100,8 +1101,9 @@ fn branch_merge(repo: &Path, tip: &str, base_head: &str) -> Result<BranchMerge> 
 
 /// The owner's readiness on a branch at `tip`, judged from the branch's
 /// committed records: approval as `merge`'s `review.current` judges it, and
-/// whether every done item in the owner's scope has fresh passing proof at
-/// the tip. Superseded work needs no proof, as `merge` asks none of it.
+/// the failing receipt, if any, that `evidence.no_newer_failure` would
+/// refuse on a done item in the owner's scope. Superseded work is skipped,
+/// as `merge` skips it.
 fn readiness(
     repo: &Path,
     index: &RecordIndex,
@@ -1112,21 +1114,22 @@ fn readiness(
 ) -> Result<Readiness> {
     let mut read = git_freshness::ReadContext::from_snapshot(repo, tip.to_owned(), &[]);
     let approval = review_gate::approval_state(index, &mut read, owner, &merge.fork_point)?;
-    let mut proof = true;
+    let mut failing = None;
     for id in review_gate::scope(index, owner)? {
         let issue = index.require_issue(&id)?;
         if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
             && issue.status != "superseded"
-            && !read.issue_gate(index, &id, 1, None)?.passed
         {
-            proof = false;
-            break;
+            failing = atelier_app::evidence_freshness::newest_failure(index, &id)?;
+            if failing.is_some() {
+                break;
+            }
         }
     }
     Ok(Readiness {
         approval,
         behind: merge.behind,
-        proof,
+        failing,
         conflicts: merge.conflicts.clone(),
     })
 }

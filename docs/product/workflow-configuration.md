@@ -84,8 +84,9 @@ Record-file validity is checked whenever a command loads the repository.
 parseable intent, lint with no blocking findings (`lint.none_blocking`), and
 open direct or transitive blockers where policy selects them.
 
-Merge gates protect terminal committed scope, fresh passing evidence,
-independent current approval or a visible trivial exemption, finding
+Merge gates protect terminal committed scope, the absence of an uncleared
+failing receipt (and fresh passing evidence where a policy's
+`evidence.attached` asks for it), independent current approval or a visible trivial exemption, finding
 dispositions, and absence of open blockers. Policy can add read-only shell
 checks at merge, using this top-level YAML shape:
 

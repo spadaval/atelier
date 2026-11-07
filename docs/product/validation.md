@@ -10,6 +10,26 @@ commit. Results are `pass`, `fail`, `blocked`, or `not-applicable`. The last
 three never count as a passing check. Describe the method, artifacts, and limits
 in the body; a broad test run does not establish every acceptance claim.
 
+## What gets a receipt
+
+A receipt records a check that leaves no other record:
+
+- a manual, browser, device or deployed check, such as a page at phone width,
+  a run on a real build host, or a live service;
+- a mission success criterion (see below);
+- a measurement, such as a latency or a count;
+- a failure, including a test that fails before its fix.
+
+Suites, formatting and lint that CI or the policy's `merge_checks` run need
+no receipt, and nothing in Atelier asks for one after a review fix or a base
+merge. Run the check fresh after the last change and read its output all the
+same; the item's Close Reason names the targeted test or check that proves
+each claim and its result. CI and the merge checks test the merged tree
+where a repository has them; a repository without CI puts its suite in the
+policy's `merge_checks` (a `shell.check`; see [workflow
+configuration](workflow-configuration.md)), or nothing tests its merged tree
+([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
+
 ## Recording proof
 
 `atelier evidence record --target issue/<id> --kind <kind>` creates and attaches a new receipt. Manual proof
@@ -83,8 +103,17 @@ work may rely on.
 
 A receipt must identify a real full commit, not a short revision, branch name,
 or the word `HEAD`. A passing receipt older than the item's last relevant
-change does not satisfy the check. Later implementation, policy, or acceptance changes require new proof. A newer failure blocks
-completion even when an older passing receipt exists.
+change is stale: later implementation, policy, or acceptance changes make it
+stale, and `evidence list` marks it so. A stale pass does not satisfy an
+`evidence.attached` gate a policy configures, but no other gate asks for a
+fresh one.
+
+A failure blocks completion (close, `land` and `merge` refuse with
+`evidence.no_newer_failure`) until a pass is recorded after it. Any pass
+recorded after it clears it for good, whatever its command or pin, even once
+later commits make the pass stale. Command capture refuses uncommitted code,
+so a captured pass describes committed state; a manual pass is the
+recorder's judgment.
 
 Record-only bookkeeping, including attachments, Notes, and status updates,
 can follow the checked commit without changing its acceptance claim. Evidence
@@ -95,7 +124,8 @@ has the stricter rule for existing proof and review edits.
 
 ## Handoff
 
-Report each acceptance claim with its result and receipt ID. Name skipped
+Report each acceptance claim with its result and the targeted test or check
+that proves it, with the receipt ID where it has one. Name skipped
 checks and limits explicitly. A blocked check needs an explanation of the
 blocking condition; a not-applicable result needs an explanation of why the
 claim does not apply. Neither is a substitute for a passing requirement.

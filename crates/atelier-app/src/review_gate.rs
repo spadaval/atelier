@@ -23,10 +23,6 @@ pub struct GateNode {
     pub passed: bool,
     pub reason: String,
     pub supports: Vec<String>,
-    /// A failing proof check whose newer pass is stale only because of
-    /// uncommitted changes in the checkout (atelier-x3bj).
-    #[serde(skip)]
-    pub stale_from_checkout: bool,
     /// What a failed check waits on, one entry per record, so a view can
     /// name each with its fix; `--json` leaves it out.
     #[serde(skip)]
@@ -85,7 +81,6 @@ pub fn gate(
         passed,
         reason,
         supports,
-        stale_from_checkout: false,
         gaps: Vec::new(),
         fix: None,
     }
@@ -1028,7 +1023,7 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
                 let effect = if *commit == head {
                     "which brings the record back (record a successor event for any change)"
                 } else {
-                    "which rewrites the commits after it: record fresh proof and review for them"
+                    "which rewrites the commits after it: get them reviewed again"
                 };
                 bail!("review_append_only: {} was rewritten, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}{}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display(), merged_work_dropped(read, edge)?);
             }
@@ -1281,7 +1276,7 @@ fn evaluate_scope(
     {
         if !ancestor(read, &record.commit, "HEAD") {
             bail!(
-                "review {} pins a commit outside the work branch, usually because the branch was rebased or reset after the review. To recover: 1. reset the branch to the tip it had before (find it with `git reflog`); 2. cherry-pick the code and planning commits made since, leaving out the review and evidence records they add, which pin rewritten commits (for a commit that mixes both, run `git cherry-pick -n <commit>`, then `git rm -f` each file that `git diff --cached --name-only --diff-filter=A -- .atelier/reviews .atelier/evidence` lists, then commit); 3. merge the base in with `git merge`; 4. record proof and review again",
+                "review {} pins a commit outside the work branch, usually because the branch was rebased or reset after the review. To recover: 1. reset the branch to the tip it had before (find it with `git reflog`); 2. cherry-pick the code and planning commits made since, leaving out the review and evidence records they add, which pin rewritten commits (for a commit that mixes both, run `git cherry-pick -n <commit>`, then `git rm -f` each file that `git diff --cached --name-only --diff-filter=A -- .atelier/reviews .atelier/evidence` lists, then commit); 3. merge the base in with `git merge`; 4. get the branch reviewed again",
                 record.header.id
             );
         }
@@ -1576,7 +1571,6 @@ fn evaluate_scope(
                 _ => {}
             }
             existing.passed &= node.passed;
-            existing.stale_from_checkout |= node.stale_from_checkout;
             for gap in node.gaps {
                 if !existing.gaps.contains(&gap) {
                     existing.gaps.push(gap);
@@ -1690,22 +1684,17 @@ fn completion_claims(
         {
             continue;
         }
-        if let Some(failure) = read.newest_failure(index, id, !historical)? {
-            let reason = match &failure.stale_pass {
-                Some(pass) if failure.stale_from_checkout => format!("newer failing evidence {}; the later pass {pass} was recorded before the uncommitted changes in this checkout", failure.id),
-                Some(pass) => format!("newer failing evidence {}; the later pass {pass} no longer proves the claim (later commits changed what it covers)", failure.id),
-                None => format!("newer failing evidence {}", failure.id),
-            };
-            let mut node = gate(
-                id,
-                "evidence.no_newer_failure",
-                false,
-                reason,
-                vec![failure.id.clone()],
-            )
-            .with_gaps(vec![Gap::FailingEvidence(failure.id)]);
-            node.stale_from_checkout = failure.stale_from_checkout;
-            nodes.push(node);
+        if let Some(failure) = crate::evidence_freshness::newest_failure(index, id)? {
+            nodes.push(
+                gate(
+                    id,
+                    "evidence.no_newer_failure",
+                    false,
+                    format!("newer failing evidence {failure}"),
+                    vec![failure.clone()],
+                )
+                .with_gaps(vec![Gap::FailingEvidence(failure)]),
+            );
         }
     }
     // Terminal records can also be edited directly; retain the trusted

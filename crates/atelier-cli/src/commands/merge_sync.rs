@@ -1,39 +1,25 @@
 //! `atelier merge <id> --sync`: the catch-up step before a merge, in one
 //! command. It merges the base into the owner's work branch with `git merge`
-//! (never a rebase, which would orphan the commits reviews pin), reruns the
-//! command-backed receipts that were current before, commits their new
-//! receipts, and reports whether the approval survived, by the same rule the
-//! gates apply. It integrates nothing: `atelier merge` still does that.
-use super::evidence::{self, CaptureOptions};
+//! (never a rebase, which would orphan the commits reviews pin) and reports
+//! whether the approval survived, by the same rule the gates apply. It
+//! records no receipts: CI or the policy's merge checks test the merged tree
+//! where the repository has them. It integrates nothing: `atelier merge`
+//! still does that.
 use super::merge::{owned_branch, Owned};
 use crate::commands::git::{resolve, text};
 use anyhow::{bail, Context, Result};
 use atelier_app::{
     committed_snapshot::CommittedSnapshot,
     git_freshness as git,
-    record_index::RecordIndex,
     review_gate::{self, NotCurrent},
 };
-use atelier_core::{count_noun, EvidenceResult};
-use std::collections::{BTreeMap, BTreeSet};
+use atelier_core::count_noun;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 const CONFLICT: &str = "sync_conflict";
-const RERUN_FAILED: &str = "sync_rerun_failed";
-const RERUN_ERROR: &str = "sync_rerun_error";
 const APPROVAL_ERROR: &str = "sync_approval_error";
 const LISTED_PATHS: usize = 20;
-
-/// A command-backed receipt to rerun: the latest passing one for a command on
-/// one item of the owner's scope.
-struct Receipt {
-    target: String,
-    kind: String,
-    summary: String,
-    command: String,
-    role: String,
-    criteria: Vec<String>,
-}
 
 pub fn run(issue_ref: &str, quiet: bool) -> Result<()> {
     let say = |line: String| {
@@ -95,7 +81,6 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
         layout,
         head,
         branch,
-        index,
         owner,
         base,
         ..
@@ -104,25 +89,17 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
     let base_head = resolve(repo, &format!("refs/heads/{base}"))
         .with_context(|| format!("sync_base_missing: base branch {base} does not exist locally"))?;
     let contains = ancestor(repo, &base_head, &head);
-    // The commit whose current receipts get rerun: the head before the merge,
-    // or the merge commit's first parent when the base was just merged in by
-    // hand (a conflict resolved, say) and nothing has been re-proved yet.
+    // Where the branch stood before the base came in: the head before the
+    // merge, or the merge commit's first parent when the base was just merged
+    // in by hand (a conflict resolved, say), so the approval report can say
+    // whether the approval was current before.
     let before = if !contains {
         Some(head.clone())
     } else {
         hand_merge_parent(repo, &head, &base_head)?
     };
-    let receipts = match &before {
-        Some(commit) => current_receipts(repo, &index, &owner, commit)?,
-        None => Receipts::default(),
-    };
 
-    if contains && before.is_some() {
-        say(format!(
-            "Resuming after a merge of {base} made by hand ({}); rerunning the receipts that were current before it.",
-            crate::human_output::short_commit(&head)
-        ));
-    } else if contains {
+    if contains {
         say(format!(
             "{branch} already contains {base}; nothing to merge."
         ));
@@ -146,7 +123,7 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
                 );
             }
             eprintln!(
-                "{CONFLICT}: merging {base} into {branch} conflicts in:\n{}\nNothing was committed and the merge is still in progress. Resolve the conflicts and commit (`git commit`), or `git merge --abort`; then rerun `atelier merge {issue_ref} --sync` to re-prove, and expect the approval to need fresh review of the resolved files.",
+                "{CONFLICT}: merging {base} into {branch} conflicts in:\n{}\nNothing was committed and the merge is still in progress. Resolve the conflicts and commit (`git commit`), or `git merge --abort`; then rerun `atelier merge {issue_ref} --sync`, and expect the approval to need fresh review of the resolved files.",
                 conflicted.lines().map(|path| format!("  {path}")).collect::<Vec<_>>().join("\n")
             );
             return Ok((vec![Some(CONFLICT.into())], false));
@@ -158,86 +135,6 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
     }
 
     let mut failures = Vec::new();
-    if receipts.rerun.is_empty() {
-        say("No command-backed receipts were current before the sync, so none were rerun.".into());
-    } else {
-        say(format!(
-            "Rerunning {}:",
-            count_noun(receipts.rerun.len(), "command-backed receipt")
-        ));
-    }
-    for receipt in &receipts.rerun {
-        // A whole workspace suite can run for minutes: name it before it starts.
-        say(format!("  running {}: {}", receipt.target, receipt.command));
-        let summary = rerun_summary(&receipt.summary, &base);
-        let rerun = evidence::split_command(&receipt.command).and_then(|command| {
-            // Rerun only a command that reads back as the one recorded.
-            if evidence::format_command(&command) != receipt.command {
-                bail!("the recorded command does not read back as the one it was captured from");
-            }
-            evidence::capture_record(CaptureOptions {
-                evidence_kind: &receipt.kind,
-                summary: Some(&summary),
-                path: None,
-                uri: None,
-                producer: Some("atelier merge --sync"),
-                target_kind: Some("issue"),
-                target_id: Some(&receipt.target),
-                role: &receipt.role,
-                command: &command,
-                criteria: &receipt.criteria,
-            })
-        });
-        match rerun {
-            Ok(record) => {
-                let passed = record.data.result == EvidenceResult::Pass;
-                say(format!(
-                    "  {} {} {}: {}",
-                    if passed { "pass" } else { "FAIL" },
-                    record.header.id,
-                    receipt.target,
-                    receipt.command
-                ));
-                if !passed {
-                    failures.push(Some(RERUN_FAILED.to_owned()));
-                }
-            }
-            Err(error) => {
-                eprintln!(
-                    "{RERUN_ERROR}: could not rerun the receipt for {} ({}): {error:#}",
-                    receipt.target, receipt.command
-                );
-                failures.push(Some(RERUN_ERROR.to_owned()));
-            }
-        }
-    }
-    if !receipts.manual.is_empty() {
-        say(format!(
-            "Manual receipts were current before and cannot be rerun; record them again by hand if they still hold: {}.",
-            receipts.manual.join(", ")
-        ));
-    }
-    if !receipts.rerun.is_empty() {
-        let status = text(repo, &["status", "--porcelain", "--", ".atelier"])?;
-        if !status.is_empty() {
-            git::git_output(repo, &["add", "-A", "--", ".atelier"])?;
-            git::git_output(
-                repo,
-                &[
-                    "-c",
-                    "core.hooksPath=/dev/null",
-                    "commit",
-                    "-qm",
-                    &format!("Record evidence rerun after merging {base} into {branch}"),
-                ],
-            )?;
-            say(format!(
-                "Committed the new receipts at {}.",
-                crate::human_output::short_commit(&git::head_commit(repo)?)
-            ));
-        }
-    }
-
     let stale = match report_approval(repo, &layout, &owner, &base_head, before.as_deref(), say) {
         Ok(stale) => stale,
         Err(error) => {
@@ -252,97 +149,8 @@ fn sync(issue_ref: &str, say: &dyn Fn(String)) -> Result<(Vec<Option<String>>, b
     Ok((failures, stale))
 }
 
-#[derive(Default)]
-struct Receipts {
-    rerun: Vec<Receipt>,
-    manual: Vec<String>,
-}
-
-/// The receipts on the owner's scope that proved their item at `commit`: for
-/// each item and command, the latest receipt, if it passed and no commit
-/// since changed what it proves.
-fn current_receipts(
-    repo: &Path,
-    index: &RecordIndex,
-    owner: &str,
-    commit: &str,
-) -> Result<Receipts> {
-    let mut read = git::ReadContext::from_snapshot(repo, commit.to_owned(), &[]);
-    let mut latest = BTreeMap::new();
-    let mut manual = BTreeMap::new();
-    for item in review_gate::scope(index, owner)? {
-        for link in index.list_record_links("issue", &item)? {
-            if link.relation_type != "validates" {
-                continue;
-            }
-            let id = if link.source_kind == "evidence" {
-                link.source_id
-            } else if link.target_kind == "evidence" {
-                link.target_id
-            } else {
-                continue;
-            };
-            let record = index.require_evidence(&id)?;
-            let when = (record.data.captured_at, record.header.id.clone());
-            let slot = match &record.data.command {
-                Some(command) => latest
-                    .entry((
-                        item.clone(),
-                        record.data.evidence_type.clone(),
-                        command.clone(),
-                    ))
-                    .or_insert(None),
-                None => manual
-                    .entry((item.clone(), record.data.evidence_type.clone()))
-                    .or_insert(None),
-            };
-            if slot.as_ref().is_none_or(|(seen, _)| *seen < when) {
-                *slot = Some((when, record));
-            }
-        }
-    }
-    let mut fresh = |item: &str, record: &atelier_core::EvidenceRecord| {
-        record.data.result == EvidenceResult::Pass
-            && index
-                .issue_record(item)
-                .is_some_and(|issue| read.evidence_is_fresh(issue, record).unwrap_or(false))
-    };
-    let mut receipts = Receipts::default();
-    for ((target, kind, command), entry) in latest {
-        let Some((_, record)) = entry else { continue };
-        if fresh(&target, record) {
-            receipts.rerun.push(Receipt {
-                target: target.clone(),
-                kind,
-                summary: atelier_records::evidence_summary_text(&record.summary),
-                command,
-                role: record
-                    .data
-                    .target
-                    .as_ref()
-                    .map_or("validates", |target| target.role.as_str())
-                    .to_owned(),
-                criteria: record
-                    .data
-                    .criteria
-                    .iter()
-                    .map(|c| c.slug.clone())
-                    .collect(),
-            });
-        }
-    }
-    for ((target, _), entry) in manual {
-        if let Some((_, record)) = entry {
-            if fresh(&target, record) {
-                receipts.manual.push(record.header.id.clone());
-            }
-        }
-    }
-    Ok(receipts)
-}
-
 /// Whether `head` is a merge commit that brought the base in and nothing
-/// has been committed since; its first parent is where the proof stood.
+/// has been committed since; its first parent is where the branch stood.
 fn hand_merge_parent(repo: &Path, head: &str, base_head: &str) -> Result<Option<String>> {
     let line = text(repo, &["rev-list", "--parents", "-n", "1", head])?;
     let parts = line.split_whitespace().collect::<Vec<_>>();
@@ -467,55 +275,4 @@ fn report_approval(
         say(format!("  and {} more", paths.len() - LISTED_PATHS));
     }
     Ok(true)
-}
-
-/// A rerun receipt's summary: the old receipt's, with one suffix naming the
-/// base merged; a suffix an earlier sync added is replaced, not stacked
-/// (atelier-ytks).
-fn rerun_summary(old: &str, base: &str) -> String {
-    let mut text = old.trim_end();
-    while let Some(at) = text.rfind(" (rerun after merging ") {
-        let suffix = &text[at..];
-        if !suffix.ends_with(')') || suffix.contains('\n') {
-            break;
-        }
-        text = text[..at].trim_end();
-    }
-    // An empty summary's rerun is the bare suffix; a later rerun of that
-    // reads it as empty again.
-    if text.is_empty()
-        || text
-            .strip_prefix("rerun after merging ")
-            .is_some_and(|base| !base.contains(char::is_whitespace))
-    {
-        format!("rerun after merging {base}")
-    } else {
-        format!("{text} (rerun after merging {base})")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::rerun_summary;
-
-    #[test]
-    fn a_rerun_summary_names_the_merge_once_and_never_starts_with_a_space() {
-        assert_eq!(
-            rerun_summary("Scenario check", "main"),
-            "Scenario check (rerun after merging main)"
-        );
-        assert_eq!(
-            rerun_summary("Scenario check (rerun after merging main)", "main"),
-            "Scenario check (rerun after merging main)"
-        );
-        assert_eq!(
-            rerun_summary("Scenario check (rerun after merging master)", "main"),
-            "Scenario check (rerun after merging main)"
-        );
-        assert_eq!(rerun_summary("", "main"), "rerun after merging main");
-        assert_eq!(
-            rerun_summary("rerun after merging master", "main"),
-            "rerun after merging main"
-        );
-    }
 }
