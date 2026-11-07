@@ -430,7 +430,8 @@ fn every_command_prints_its_documented_quiet_token() {
             "Nit",
         ],
     );
-    review(
+    // A disposition's quiet token is the finding it settles (ADR 0025).
+    let disposed = review(
         &mut q,
         "review disposition",
         &[
@@ -452,9 +453,10 @@ fn every_command_prints_its_documented_quiet_token() {
         "review approve",
         &[&owner, who[0], who[1], "Approved"],
     );
+    assert_eq!(disposed, finding);
     let events = q.ok("review list", &[]);
     assert_ids(&events);
-    assert_eq!(events.lines().count(), 5, "{events}");
+    assert_eq!(events.lines().count(), 4, "{events}");
     assert_eq!(q.ok("review list", &[&owner]), events);
     assert_eq!(
         q.ok("review show", &[&account]),
@@ -497,6 +499,10 @@ fn every_command_prints_its_documented_quiet_token() {
     not_atelier(q.refused_in(outside, "prune", &[]));
     // Nothing to migrate prints nothing; issues.rs pins a migrated ID.
     assert_eq!(q.ok("migrate epics", &[]), "");
+    // The finding above already carries its disposition, so there is no
+    // separate event to fold; session.rs pins migrated IDs.
+    assert_eq!(q.ok("migrate dispositions", &[]), "");
+    not_atelier(q.refused_in(outside, "migrate dispositions", &[]));
     let undeclared = q.refused("migrate epics", &["--to", "nonexistent"]);
     assert!(undeclared.contains("is not declared"), "{undeclared}");
 

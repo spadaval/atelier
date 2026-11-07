@@ -8,7 +8,7 @@ use atelier_app::{
     review_gate::{Gap, GateNode},
     workflow_policy::WorkflowPolicy,
 };
-use atelier_core::{FindingDecision, ReviewEvent};
+use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
 
 /// What the renderer reads besides the nodes.
 pub(crate) struct Gates<'a> {
@@ -631,7 +631,7 @@ impl Gates<'_> {
             return (id.to_owned(), id.to_owned(), None);
         };
         let recommendation = match &record.event {
-            ReviewEvent::Finding { recommendation } => Some(*recommendation),
+            ReviewEvent::Finding { recommendation, .. } => Some(*recommendation),
             _ => None,
         };
         let summary = record.summary.lines().next().unwrap_or_default().trim();
@@ -726,54 +726,48 @@ impl Gates<'_> {
                         Some(fix),
                     ));
                 }
-                Gap::Unresolved {
-                    finding,
-                    disposition,
-                } => {
+                Gap::Unresolved(finding) => {
                     let (target, shown, _) = self.finding(finding);
                     lines.push(Line::new(
                         &target,
                         node,
-                        format!("{shown}: fix_now disposition {disposition} names no resolution commit"),
+                        format!("{shown}: its fix_now disposition names no resolution commit"),
                         Some(format!("atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"")),
                     ));
                 }
                 Gap::AwaitingApproval(id) => awaiting.push(id.clone()),
-                Gap::Unaccepted {
-                    finding,
-                    disposition,
-                } => {
+                Gap::Unaccepted(finding) => {
                     let (target, shown, _) = self.finding(finding);
-                    let decision = self
+                    let set = self
                         .index
-                        .require_review(disposition)
+                        .require_review(finding)
                         .ok()
-                        .and_then(|record| match &record.event {
-                            ReviewEvent::Disposition { decision, .. } => Some(decision.as_str()),
-                            _ => None,
+                        .and_then(ReviewRecord::disposition)
+                        .map(|disposition| {
+                            format!(
+                                "{} disposition by {}",
+                                disposition.decision.as_str(),
+                                disposition.identity
+                            )
                         })
-                        .unwrap_or("its");
+                        .unwrap_or_else(|| "its disposition".into());
                     lines.push(Line::new(
                         &target,
                         node,
-                        format!("{shown}: {decision} disposition {disposition} needs acceptance by a non-author"),
+                        format!("{shown}: {set} needs to be set by a non-author"),
                         Some(format!(
                             "atelier review request {}",
                             self.reviewed_owner(&target)
                         )),
                     ));
                 }
-                Gap::Untraced {
-                    finding,
-                    disposition,
-                    error,
-                } => {
+                Gap::Untraced { finding, error } => {
                     let (target, shown, _) = self.finding(finding);
                     lines.push(Line::new(
                         &target,
                         node,
-                        format!("{shown}: disposition {disposition} could not be traced to the commit that introduced it: {error}"),
-                        Some(format!("atelier review show {disposition}")),
+                        format!("{shown}: its disposition could not be traced to the commit that set it: {error}"),
+                        Some(format!("atelier review show {finding}")),
                     ));
                 }
                 _ => {}

@@ -21,6 +21,9 @@ pub enum RecordChange {
     New,
     /// It is in the commit but not in the checkout.
     Deleted,
+    /// A finding whose working bytes differ from the commit only in its
+    /// disposition (ADR 0025).
+    Disposed,
     /// Its index entry differs while its working bytes match.
     Staged,
     /// The commit holds it as something other than a regular file.
@@ -32,6 +35,7 @@ impl RecordChange {
             Self::Modified => "modified",
             Self::New => "new",
             Self::Deleted => "deleted",
+            Self::Disposed => "disposition changed",
             Self::Staged => "staged",
             Self::NotRegular => "not a regular file in HEAD",
         }
@@ -45,6 +49,12 @@ impl RecordChange {
 #[derive(Debug)]
 pub struct RecordsUncommitted {
     pub records: Vec<(PathBuf, RecordChange)>,
+}
+/// Whether an uncommitted record is a committed review record that has to
+/// be restored rather than committed.
+fn restored((path, change): &&(PathBuf, RecordChange)) -> bool {
+    path.starts_with(".atelier/reviews")
+        && !matches!(change, RecordChange::New | RecordChange::Disposed)
 }
 impl RecordsUncommitted {
     /// `2 tracker records differ from HEAD: a (modified), b (new)`, the
@@ -66,26 +76,23 @@ impl RecordsUncommitted {
             )
         )
     }
-    /// The command that settles them. Review records are append-only, so a
-    /// committed one that was changed or deleted is restored from HEAD,
-    /// never committed: the check would refuse that commit for good
-    /// (atelier-v4rd). The rest are committed, or only staged again when
-    /// each differs only in the index, so their working bytes already match
-    /// HEAD and there is nothing to commit.
+    /// The command that settles them. Review records are append-only apart
+    /// from a finding's disposition (ADR 0025), so a committed one that was
+    /// changed otherwise or deleted is restored from HEAD, never committed:
+    /// the check would refuse that commit for good (atelier-v4rd). The rest,
+    /// a changed disposition among them, are committed, or only staged
+    /// again when each differs only in the index, so their working bytes
+    /// already match HEAD and there is nothing to commit.
     /// What to do with them, before the command that does it.
     pub fn advice(&self) -> &'static str {
-        if self.records.iter().any(|(path, change)| {
-            path.starts_with(".atelier/reviews") && *change != RecordChange::New
-        }) {
+        if self.records.iter().any(|record| restored(&record)) {
             "review records are append-only, so restore the committed ones and commit the rest with the work"
         } else {
             "commit them with the work"
         }
     }
     pub fn commit_command(&self) -> String {
-        let (restore, rest): (Vec<_>, Vec<_>) = self.records.iter().partition(|(path, change)| {
-            path.starts_with(".atelier/reviews") && *change != RecordChange::New
-        });
+        let (restore, rest): (Vec<_>, Vec<_>) = self.records.iter().partition(restored);
         let commit = if rest.is_empty() {
             None
         } else if rest
@@ -352,6 +359,8 @@ fn require_records_match(repo: &Path, entries: &Entries, changed: Vec<PathBuf>) 
                 RecordChange::New
             } else if fs::symlink_metadata(repo.join(&path)).is_err() {
                 RecordChange::Deleted
+            } else if disposition_changed(repo, entries, &path) {
+                RecordChange::Disposed
             } else {
                 RecordChange::Modified
             };
@@ -368,6 +377,26 @@ fn require_records_match(repo: &Path, entries: &Entries, changed: Vec<PathBuf>) 
     }
     records.sort_by(|(left, _), (right, _)| left.cmp(right));
     records_uncommitted(records)
+}
+/// Whether the review record at `path` differs from its committed version
+/// only in a finding's disposition.
+fn disposition_changed(repo: &Path, entries: &Entries, path: &Path) -> bool {
+    let (Some((_, oid)), Ok(relative)) = (entries.get(path), path.strip_prefix(".atelier")) else {
+        return false;
+    };
+    if !path.starts_with(".atelier/reviews") {
+        return false;
+    }
+    let committed = git_output(repo, &["cat-file", "blob", oid])
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok());
+    let working = fs::read_to_string(repo.join(path)).ok();
+    match (committed, working) {
+        (Some(committed), Some(working)) => {
+            crate::review_gate::disposition_only(&committed, &working, relative)
+        }
+        _ => false,
+    }
 }
 /// Records whose index entry differs from the pinned commit, or which the
 /// index lacks.

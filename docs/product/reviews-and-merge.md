@@ -3,7 +3,9 @@
 Reviews are immutable Markdown events under `.atelier/reviews/`. Each command
 adds a new file with an explicit identity, target, full commit, and explanation;
 a [base exemption](#trivial-changes-on-the-base) names its base branch instead
-of a target.
+of a target. The one thing that changes in place is a finding's
+[disposition](#dispositions), a field of the finding
+([ADR 0025](../adr/0025-findings-carry-their-disposition.md)).
 Agent Factory owns review and finding assessment; Atelier checks the recorded
 invariants. There is no external review backend or review room.
 
@@ -48,6 +50,8 @@ Every command that records an event also takes `--commit-records` and
 `--stage-records`, which commit the records it wrote (alone or grouped with the
 rest of a step); see [Committing records](cli-surface.md#committing-records).
 
+### Dispositions
+
 Every finding requires a disposition. Recommendations and decisions use
 `fix_now`, `defer`, or `no_action`:
 
@@ -57,13 +61,37 @@ atelier review disposition <finding-id> --identity "Reviewer" --decision defer -
 atelier review disposition <finding-id> --identity "Reviewer" --decision no_action "Reason accepted"
 ```
 
+The disposition is a field of the finding's own record: the decision, its
+resolution commit or follow-up, the identity that set it, the commit HEAD was
+at, the time and the reason. Setting it again replaces it, so a finding is one
+file for its whole life. The record keeps only the current disposition;
+earlier ones, such as an author's proposal the reviewer replaced or a
+`fix_now` later changed to `defer`, stay in the Git history of the finding's
+file, which `review show` names (`git log -p -- .atelier/reviews/<id>.md`).
+
 A FIX NOW disposition needs a resolution commit later than the finding's pin,
-followed by fresh independent approval. DEFER requires an existing follow-up
-issue. DEFER and NO ACTION need acceptance from a non-author identity. All
-findings without accepted dispositions block merge. A later disposition
-automatically links to the preceding disposition; commit the new
-file rather than editing or deleting an old event. Merge checks review history
-from the base, including edits subsequently reverted.
+followed by fresh independent approval. That re-review may cover only the
+fix's diff (`review request` lists the commits since the last review or
+approval), and the reviewer who raised the finding may do it. DEFER requires
+an existing follow-up issue. DEFER and NO ACTION must be set by a non-author
+identity: the author may propose one, and the reviewer accepts it by setting
+it again. All findings without accepted dispositions block merge.
+
+Who set a disposition is judged at the commit that set the field: the oldest
+commit since which the finding's file has held this disposition, not the
+commit or time the disposition names. Setting it again, or restoring earlier
+bytes by hand, is judged at that later commit. Every other part of a review
+record is append-only: editing it, or deleting a record, is refused, and merge
+checks review history from the base, including edits subsequently reverted.
+
+Repositories whose dispositions are separate events, from before ADR 0025,
+run `atelier migrate dispositions --apply` once on the base and on each open
+work branch, and commit the result. It folds each finding's latest
+disposition event into the finding, naming the event in `migrated_from`, and
+removes every disposition event; Git history keeps them. A migrated
+disposition is judged at the commit that added its event and must match that
+event. Until the migration runs, a disposition event in the checkout fails to
+load and names the command.
 Terminal targets and their eligible review clusters can leave the active tree
 together through [protected prune](retention-and-prune.md); retained events
 remain immutable.
@@ -80,7 +108,7 @@ from records, Git and policy:
 - the range to review: the commits since the last `review` or `approve` on the
   owner (or after `--from`), and the whole branch since it left the base, with
   the full head commit to pin records to;
-- every finding with its latest disposition, open ones first, earlier reviews
+- every finding with its disposition, open ones first, earlier reviews
   and approvals, and the newest recorded proof;
 - the working rules: the built-in ones (read-only on code, run the proof,
   approve only without `fix_now` findings, an identity that differs from the
@@ -97,7 +125,8 @@ change against the requirements, not the author's account of it.
 ## Approval freshness
 
 Code, policy, acceptance, relationship, metadata, or existing proof/review edits
-make approval stale. Later commits may add new review/evidence files, create
+make approval stale. Later commits may add new review/evidence files, set or
+change a finding's disposition (ADR 0025), create
 issues outside the reviewed scope (such as the follow-up a `defer` disposition
 names, atelier-cafy), or change in-scope lifecycle status, timestamps, and
 Close Reason, including the implementer report it carries, without changing

@@ -54,8 +54,11 @@ Reason preserve handoffs and terminal reasoning. See
 
 Evidence is an immutable Markdown receipt with explicit result
 (`pass`, `fail`, `blocked`, `not-applicable`) and a full commit identity. Reviews
-are append-only Markdown receipts. Review identity, approval, findings, and
-dispositions are durable facts rather than provider state. Their exact fields
+are append-only Markdown receipts, except that a finding carries its
+disposition as a field set in place, with Git history keeping earlier ones
+([ADR 0025](../adr/0025-findings-carry-their-disposition.md)). Review identity,
+approval, findings, and dispositions are durable facts rather than provider
+state. Their exact fields
 are owned by the typed record parsers and
 [review contract](../product/reviews-and-merge.md).
 

@@ -7,6 +7,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
+use atelier_records::review::{parse_review_file, parse_review_record, ReviewFile};
 use atelier_records::{parse_issue_record, split_document};
 use serde::Serialize;
 use std::{
@@ -44,25 +45,16 @@ pub enum Gap {
     Blocker(String),
     /// A finding with no disposition.
     Undisposed(String),
-    /// A fix_now disposition that names no resolution commit.
-    Unresolved {
-        finding: String,
-        disposition: String,
-    },
+    /// A finding whose fix_now disposition names no resolution commit.
+    Unresolved(String),
     /// A resolved fix_now finding with no independent approval at or after
     /// its resolution.
     AwaitingApproval(String),
-    /// A defer or no_action disposition that no non-author accepted.
-    Unaccepted {
-        finding: String,
-        disposition: String,
-    },
-    /// A disposition whose acceptance could not be traced, and why.
-    Untraced {
-        finding: String,
-        disposition: String,
-        error: String,
-    },
+    /// A finding whose defer or no_action disposition no non-author set.
+    Unaccepted(String),
+    /// A finding whose disposition could not be traced to the commit that
+    /// set it, and why.
+    Untraced { finding: String, error: String },
     /// Failing evidence newer than the claim's passing proof.
     FailingEvidence(String),
     /// A `shell.check` command that failed, with the last line it printed.
@@ -277,8 +269,13 @@ fn allowed_edge(
         let regular = |entry: &Option<(String, String)>| {
             entry.as_ref().is_some_and(|(mode, _)| mode == "100644")
         };
-        if path.extension().is_some_and(|ext| ext == "md")
-            && (path.starts_with(".atelier/reviews") || path.starts_with(".atelier/evidence"))
+        if path.extension().is_some_and(|ext| ext == "md") && path.starts_with(".atelier/reviews") {
+            if review_change_allowed(read, edge, path, &old, &new)? {
+                continue;
+            }
+            return Ok(false);
+        }
+        if path.extension().is_some_and(|ext| ext == "md") && path.starts_with(".atelier/evidence")
         {
             if old.is_none() && regular(&new) {
                 continue;
@@ -327,6 +324,65 @@ fn allowed_edge(
         return Ok(false);
     }
     Ok(true)
+}
+
+/// Whether `edge`'s change to the review record at `path` leaves every
+/// event as it was: it adds a new event, sets or changes a finding's
+/// disposition and nothing else (ADR 0025), or removes a retired
+/// disposition event, as `atelier migrate dispositions` does once it has
+/// folded the event into its finding. Approval freshness and the
+/// append-only check share this one rule.
+fn review_change_allowed(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    path: &Path,
+    old: &Option<(String, String)>,
+    new: &Option<(String, String)>,
+) -> Result<bool> {
+    let regular =
+        |entry: &Option<(String, String)>| entry.as_ref().is_some_and(|(mode, _)| mode == "100644");
+    let relative = path.strip_prefix(".atelier")?;
+    Ok(match (old, new) {
+        (None, _) => regular(new),
+        (Some(_), None) => {
+            regular(old)
+                && matches!(
+                    parse_review_file(&read.blob(&edge.parent, path)?, relative),
+                    Ok(ReviewFile::RetiredDisposition(_))
+                )
+        }
+        (Some(_), Some(_)) => {
+            regular(old)
+                && regular(new)
+                && disposition_only(
+                    &read.blob(&edge.parent, path)?,
+                    &read.blob(&edge.commit, path)?,
+                    relative,
+                )
+        }
+    })
+}
+
+/// Whether two versions of a review record are the same finding, differing
+/// at most in its disposition and what that derives: its links and update
+/// time. The schema version may differ, since a finding written before
+/// ADR 0025 is rewritten in the new version when it is first disposed.
+pub(crate) fn disposition_only(before: &str, after: &str, relative: &Path) -> bool {
+    let (Ok(mut before), Ok(mut after)) = (
+        parse_review_record(before, relative),
+        parse_review_record(after, relative),
+    ) else {
+        return false;
+    };
+    for record in [&mut before, &mut after] {
+        let ReviewEvent::Finding { disposition, .. } = &mut record.event else {
+            return false;
+        };
+        *disposition = None;
+        record.header.updated_at = record.header.created_at;
+        record.header.relationships = Default::default();
+    }
+    before == after
 }
 
 pub fn approval_is_current(
@@ -786,20 +842,12 @@ pub fn approval_accepted(
         if !ancestor(read, &finding.commit, &record.commit) {
             continue;
         }
-        let accepted = match index.latest_disposition(&finding.header.id) {
-            Some(disposition) => match &disposition.event {
-                ReviewEvent::Disposition {
-                    decision: FindingDecision::FixNow,
-                    resolution_commit,
-                    ..
-                } => resolution_commit
-                    .as_ref()
-                    .is_some_and(|resolution| ancestor(read, resolution, &record.commit)),
-                ReviewEvent::Disposition { .. } => {
-                    original_independent(index, read, disposition).unwrap_or(false)
-                }
-                _ => false,
-            },
+        let accepted = match finding.disposition() {
+            Some(disposition) if disposition.decision == FindingDecision::FixNow => disposition
+                .resolution_commit
+                .as_ref()
+                .is_some_and(|resolution| ancestor(read, resolution, &record.commit)),
+            Some(_) => disposition_independent(index, read, finding).unwrap_or(false),
             None => false,
         };
         if !accepted {
@@ -1023,14 +1071,14 @@ pub fn append_only(read: &mut git::ReadContext<'_>, base_commit: &str) -> Result
             if before.is_some() && after.is_none() && retired_review_cluster(read, edge, path)? {
                 continue;
             }
-            if before.is_some() || after.is_none_or(|(mode, _)| mode != "100644") {
+            if !review_change_allowed(read, edge, path, &before, &after)? {
                 let commit = &edge.commit;
                 let effect = if *commit == head {
-                    "which brings the record back (record a successor event for any change)"
+                    "which brings the record back (only a finding's disposition may change; record a new event for anything else)"
                 } else {
                     "which rewrites the commits after it: record fresh proof and review for them"
                 };
-                bail!("review_append_only: {} was rewritten, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}{}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display(), merged_work_dropped(read, edge)?);
+                bail!("review_append_only: {} was rewritten beyond a finding's disposition, deleted or changed mode in {commit}; a later commit cannot undo it, so leave that commit out of the branch, {effect}{}. Next: git rebase --autostash --onto {commit}~1 {commit}", path.display(), merged_work_dropped(read, edge)?);
             }
         }
     }
@@ -1060,7 +1108,8 @@ fn merged_work_dropped(read: &git::ReadContext<'_>, edge: &git::CommitEdge) -> R
     ))
 }
 
-/// Historical acceptance is valid only while review events remain append-only.
+/// Historical acceptance is valid only while review events remain
+/// append-only, apart from findings' dispositions.
 /// The check starts before the first commit to add a review event, which
 /// may be a merge that resolved one into being (atelier-as7i).
 pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
@@ -1142,7 +1191,11 @@ fn normalize(identity: &str) -> String {
 /// Whether `record`'s identity is none of `authors`, compared as
 /// `review.current` compares them: trimmed and case-insensitive.
 pub fn independent(record: &ReviewRecord, authors: &BTreeSet<String>) -> bool {
-    !authors.contains(&normalize(&record.identity))
+    identity_independent(&record.identity, authors)
+}
+/// Whether `identity`, such as a disposition's, is none of `authors`.
+pub fn identity_independent(identity: &str, authors: &BTreeSet<String>) -> bool {
+    !authors.contains(&normalize(identity))
 }
 fn ancestor(read: &mut git::ReadContext<'_>, earlier: &str, later: &str) -> bool {
     read.ancestor(earlier, later).unwrap_or(false)
@@ -1285,19 +1338,22 @@ fn evaluate_scope(
                 record.header.id
             );
         }
-        if let ReviewEvent::Disposition {
-            finding,
-            resolution_commit: Some(resolution),
-            ..
-        } = &record.event
-        {
-            let original = index.require_review(finding)?;
-            if resolution == &original.commit
-                || !ancestor(read, &original.commit, resolution)
+        let Some(disposition) = record.disposition() else {
+            continue;
+        };
+        if !ancestor(read, &disposition.commit, "HEAD") {
+            bail!(
+                "the disposition of finding {} pins a commit outside the work branch, usually because the branch was rebased or reset after it was recorded; reset the branch to its earlier tip (`git reflog`) or record the disposition again",
+                record.header.id
+            );
+        }
+        if let Some(resolution) = &disposition.resolution_commit {
+            if resolution == &record.commit
+                || !ancestor(read, &record.commit, resolution)
                 || !ancestor(read, resolution, "HEAD")
             {
                 bail!(
-                    "disposition {} resolution is not a later commit on the work branch",
+                    "finding {} resolution is not a later commit on the work branch",
                     record.header.id
                 );
             }
@@ -1416,7 +1472,7 @@ fn evaluate_scope(
     }
     let mut unresolved = Vec::new();
     let mut gaps = Vec::new();
-    let mut dispositions = Vec::new();
+    let mut disposed = Vec::new();
     let mut approval_valid = BTreeMap::new();
     for finding in index.reviews().filter(|record| {
         applicable.contains(&record.target) && matches!(record.event, ReviewEvent::Finding { .. })
@@ -1424,20 +1480,13 @@ fn evaluate_scope(
         let ReviewEvent::Finding { .. } = &finding.event else {
             unreachable!()
         };
-        let Some(disposition) = index.latest_disposition(&finding.header.id) else {
+        let Some(disposition) = finding.disposition() else {
             unresolved.push(format!("{} has no disposition", finding.header.id));
             gaps.push(Gap::Undisposed(finding.header.id.clone()));
             continue;
         };
-        dispositions.push(disposition.header.id.clone());
-        let ReviewEvent::Disposition {
-            decision,
-            resolution_commit,
-            ..
-        } = &disposition.event
-        else {
-            unreachable!()
-        };
+        disposed.push(finding.header.id.clone());
+        let (decision, resolution_commit) = (disposition.decision, &disposition.resolution_commit);
         // Why a defer/no_action disposition's original acceptance could not
         // be checked; it then counts as not accepted (atelier-as7i).
         let mut untraced = None;
@@ -1453,7 +1502,7 @@ fn evaluate_scope(
                                 }))
                             && ancestor(read, resolution, &approval.commit)
                             && (!historical
-                                || retained(read, base_commit, disposition)
+                                || disposition_retained(read, base_commit, finding)
                                 || !retained(read, base_commit, approval))
                             && (!historical
                                 || *approval_valid
@@ -1472,46 +1521,38 @@ fn evaluate_scope(
             }),
             FindingDecision::Defer | FindingDecision::NoAction => {
                 if global {
-                    original_independent(index, read, disposition).unwrap_or_else(|error| {
+                    disposition_independent(index, read, finding).unwrap_or_else(|error| {
                         untraced = Some(format!("{error:#}"));
                         false
                     })
                 } else {
-                    independent(disposition, &authors)
+                    identity_independent(&disposition.identity, &authors)
                 }
             }
         };
         if !accepted {
-            let (finding_id, disposition_id) =
-                (finding.header.id.clone(), disposition.header.id.clone());
+            let finding_id = finding.header.id.clone();
             let (reason, gap) = match (decision, resolution_commit, untraced) {
                 (FindingDecision::FixNow, Some(_), _) => (
                     "fix_now resolution needs a fresh independent approval".to_owned(),
                     Gap::AwaitingApproval(finding_id),
                 ),
                 (FindingDecision::FixNow, None, _) => (
-                    format!("fix_now disposition {disposition_id} names no resolution commit"),
-                    Gap::Unresolved {
-                        finding: finding_id,
-                        disposition: disposition_id,
-                    },
+                    "fix_now disposition names no resolution commit".to_owned(),
+                    Gap::Unresolved(finding_id),
                 ),
                 (_, _, Some(error)) => (
                     format!(
-                        "disposition {disposition_id} could not be traced to the commit that introduced it: {error}"
+                        "its disposition could not be traced to the commit that set it: {error}"
                     ),
                     Gap::Untraced {
                         finding: finding_id,
-                        disposition: disposition_id,
                         error,
                     },
                 ),
                 _ => (
                     "disposition needs independent non-author acceptance".to_owned(),
-                    Gap::Unaccepted {
-                        finding: finding_id,
-                        disposition: disposition_id,
-                    },
+                    Gap::Unaccepted(finding_id),
                 ),
             };
             unresolved.push(format!("{}: {reason}", finding.header.id));
@@ -1528,7 +1569,7 @@ fn evaluate_scope(
             } else {
                 unresolved.join("; ")
             },
-            dispositions,
+            disposed,
         )
         .with_gaps(gaps),
     );
@@ -1830,10 +1871,10 @@ fn add_author(
 /// as the introducer. Git orders the walk by committer date, so while dates
 /// increase along history the branch's own commit, an ancestor of the
 /// merge, comes first after `--reverse`.
-fn introduced_query(head: &str, record: &ReviewRecord) -> PathLog {
+fn introduced_query(head: &str, id: &str) -> PathLog {
     PathLog {
         start: head.to_owned(),
-        paths: vec![format!(".atelier/reviews/{}.md", record.header.id)],
+        paths: vec![format!(".atelier/reviews/{id}.md")],
         listing: Listing::Additions,
         reverse: true,
     }
@@ -1841,13 +1882,9 @@ fn introduced_query(head: &str, record: &ReviewRecord) -> PathLog {
 /// The queries for where a reviewed scope starts, the first commit adding
 /// one of its issue records, and for its owner's record history, both up to
 /// the introducing `event` and oldest first.
-fn scope_queries(
-    index: &RecordIndex,
-    record: &ReviewRecord,
-    event: &str,
-) -> Result<(PathLog, PathLog)> {
-    let issue = index.require_issue(&record.target)?;
-    let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
+fn scope_queries(index: &RecordIndex, target: &str, event: &str) -> Result<(PathLog, PathLog)> {
+    let issue = index.require_issue(target)?;
+    let owner = issue.parent_id.as_deref().unwrap_or(target);
     let ids = scope(index, owner)?;
     let history = PathLog {
         start: event.to_owned(),
@@ -1866,16 +1903,16 @@ fn scope_queries(
     };
     Ok((history, updates))
 }
+/// Whether an approval's identity is independent of the work's authors at
+/// the commit that introduced it, which must still hold it unchanged.
 fn original_independent(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     record: &ReviewRecord,
 ) -> Result<bool> {
-    let issue = index.require_issue(&record.target)?;
-    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(&record.target))?;
     let event_path = format!(".atelier/reviews/{}.md", record.header.id);
     let head = read.pinned("HEAD")?;
-    let introduced = read.path_log(&introduced_query(&head, record))?;
+    let introduced = read.path_log(&introduced_query(&head, &record.header.id))?;
     let event = introduced.first().context("review event history missing")?;
     let path = Path::new(&event_path);
     if read.entry(event, path)? != read.entry("HEAD", path)? {
@@ -1884,10 +1921,99 @@ fn original_independent(
             record.header.id
         );
     }
-    let (history, updates) = scope_queries(index, record, event)?;
+    independent_at(index, read, &record.target, &record.identity, event)
+}
+/// Whether a finding's disposition was set by an identity independent of
+/// the work's authors, judged at the commit that set it rather than at any
+/// commit the disposition names (ADR 0025): the oldest commit since which
+/// the finding's file has held this disposition, or, for one
+/// `atelier migrate dispositions` folded in, the commit that added the
+/// separate event it came from, whose fields it must match.
+fn disposition_independent(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    finding: &ReviewRecord,
+) -> Result<bool> {
+    let disposition = finding
+        .disposition()
+        .with_context(|| format!("finding {} has no disposition", finding.header.id))?;
+    let head = read.pinned("HEAD")?;
+    let set_at = match &disposition.migrated_from {
+        Some(original) => {
+            let introduced = read.path_log(&introduced_query(&head, original))?;
+            let event = introduced
+                .first()
+                .with_context(|| format!("disposition event {original} is not in history"))?
+                .clone();
+            let path = std::path::PathBuf::from(format!(".atelier/reviews/{original}.md"));
+            let folded = match parse_review_file(
+                &read.blob(&event, &path)?,
+                path.strip_prefix(".atelier")?,
+            )? {
+                ReviewFile::RetiredDisposition(old) if old.finding == finding.header.id => {
+                    old.folded()
+                }
+                _ => bail!(
+                    "{original} is not a disposition event of finding {}",
+                    finding.header.id
+                ),
+            };
+            if folded != *disposition {
+                bail!(
+                    "review_append_only: the disposition of finding {} differs from {original}, the event it was migrated from",
+                    finding.header.id
+                );
+            }
+            event
+        }
+        None => disposition_set_at(read, &head, finding)?,
+    };
+    independent_at(index, read, &finding.target, &disposition.identity, &set_at)
+}
+/// The oldest commit, walking back from `head`, since which `finding`'s
+/// file has held its current disposition.
+fn disposition_set_at(
+    read: &mut git::ReadContext<'_>,
+    head: &str,
+    finding: &ReviewRecord,
+) -> Result<String> {
+    let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", finding.header.id));
+    let relative = path.strip_prefix(".atelier")?.to_owned();
+    let changes = read.path_log(&PathLog {
+        start: head.to_owned(),
+        paths: vec![path.display().to_string()],
+        listing: Listing::Changes,
+        reverse: false,
+    })?;
+    let mut set_at = None;
+    for commit in changes.iter() {
+        let held = read
+            .blob(commit, &path)
+            .ok()
+            .and_then(|text| parse_review_record(&text, &relative).ok());
+        if held.as_ref().and_then(ReviewRecord::disposition) != finding.disposition() {
+            break;
+        }
+        set_at = Some(commit.clone());
+    }
+    set_at.with_context(|| format!("finding {} history missing", finding.header.id))
+}
+/// Whether `identity` is independent of the authors of `target`'s work from
+/// where its branch started up to `event`.
+fn independent_at(
+    index: &RecordIndex,
+    read: &mut git::ReadContext<'_>,
+    target: &str,
+    identity: &str,
+    event: &str,
+) -> Result<bool> {
+    let issue = index.require_issue(target)?;
+    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
+    let head = read.pinned("HEAD")?;
+    let (history, updates) = scope_queries(index, target, event)?;
     let history = read.path_log(&history)?;
     let start = history.first().context("review predates its issue scope")?;
-    let owner = issue.parent_id.as_deref().unwrap_or(&record.target);
+    let owner = issue.parent_id.as_deref().unwrap_or(target);
     let updates = read.path_log(&updates)?;
     let branch_start = updates.iter().find(|commit| {
         read.issue_at(commit, owner)
@@ -1911,13 +2037,43 @@ fn original_independent(
         add_author(read, start, &mut authors)?;
         authors
     };
-    Ok(independent(record, &authors))
+    Ok(identity_independent(identity, &authors))
 }
 
 fn retained(read: &mut git::ReadContext<'_>, base: &str, record: &ReviewRecord) -> bool {
     let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
     let old = read.entry(base, &path).ok().flatten();
     old.is_some() && old == read.entry("HEAD", &path).ok().flatten()
+}
+
+/// Whether `base` already held `finding`'s disposition: in the finding's
+/// file, or, for one `atelier migrate dispositions` folded in, as the
+/// separate event it came from.
+fn disposition_retained(
+    read: &mut git::ReadContext<'_>,
+    base: &str,
+    finding: &ReviewRecord,
+) -> bool {
+    let Some(disposition) = finding.disposition() else {
+        return false;
+    };
+    let at_base = |read: &mut git::ReadContext<'_>, id: &str| {
+        let path = std::path::PathBuf::from(format!(".atelier/reviews/{id}.md"));
+        read.entry(base, &path).ok().flatten()?;
+        parse_review_file(
+            &read.blob(base, &path).ok()?,
+            path.strip_prefix(".atelier").ok()?,
+        )
+        .ok()
+    };
+    let held = match at_base(read, &finding.header.id) {
+        Some(ReviewFile::Event(record)) => record.disposition().cloned(),
+        _ => None,
+    };
+    held.as_ref() == Some(disposition)
+        || disposition.migrated_from.as_deref().is_some_and(|event| {
+            matches!(at_base(read, event), Some(ReviewFile::RetiredDisposition(old)) if old.folded() == *disposition)
+        })
 }
 
 fn original_approval_valid(
@@ -1939,19 +2095,19 @@ fn retired_review_cluster(
     path: &Path,
 ) -> Result<bool> {
     // A base exemption has no target to retire with, so it is never removed.
-    let atelier_records::review::ReviewFile::Event(record) =
-        atelier_records::review::parse_review_file(
-            &read.blob(&edge.parent, path)?,
-            path.strip_prefix(".atelier")?,
-        )?
-    else {
+    let Some(target) = parse_review_file(
+        &read.blob(&edge.parent, path)?,
+        path.strip_prefix(".atelier")?,
+    )?
+    .target()
+    .map(str::to_owned) else {
         return Ok(false);
     };
-    let issue_path = std::path::PathBuf::from(format!(".atelier/issues/{}.md", record.target));
+    let issue_path = std::path::PathBuf::from(format!(".atelier/issues/{target}.md"));
     if read.entry(&edge.commit, &issue_path)?.is_some() {
         return Ok(false);
     }
-    let issue = read.issue_at(&edge.parent, &record.target)?;
+    let issue = read.issue_at(&edge.parent, &target)?;
     let policy = crate::base_policy::from_captured(read, &edge.parent)?.policy;
     if !policy.issue_status_is_terminal(&issue.issue.issue_type, &issue.issue.status)? {
         return Ok(false);
@@ -1975,15 +2131,13 @@ fn retired_review_cluster(
         {
             continue;
         }
-        let atelier_records::review::ReviewFile::Event(other) =
-            atelier_records::review::parse_review_file(
-                &read.blob(&edge.parent, other_path)?,
-                other_path.strip_prefix(".atelier")?,
-            )?
-        else {
-            continue;
-        };
-        if other.target == record.target && read.entry(&edge.commit, other_path)?.is_some() {
+        let other = parse_review_file(
+            &read.blob(&edge.parent, other_path)?,
+            other_path.strip_prefix(".atelier")?,
+        )?;
+        if other.target() == Some(target.as_str())
+            && read.entry(&edge.commit, other_path)?.is_some()
+        {
             return Ok(false);
         }
     }

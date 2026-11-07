@@ -3565,7 +3565,8 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
         recorded && warning.contains("identity matches a Git author"),
         "{warning}"
     );
-    let disposition = disposition.trim().to_owned();
+    // The quiet token of a disposition is the finding it settles.
+    assert_eq!(disposition.trim(), deferred);
     let child = ok(
         fixture.path(),
         &["-q", "issue", "create", "Open child", "--parent", &id],
@@ -3578,7 +3579,7 @@ fn merge_check_names_each_finding_and_open_item_with_the_command_that_settles_it
     // unsettled findings keep the approval from covering.
     let mut findings = [
         (finding.clone(), format!("{finding} fix_now finding \"Contract failure in src.rs\" has no disposition"), format!("atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"")),
-        (deferred.clone(), format!("{deferred} defer finding \"Rename later\": defer disposition {disposition} needs acceptance by a non-author"), format!("atelier review request {id}")),
+        (deferred.clone(), format!("{deferred} defer finding \"Rename later\": defer disposition by Author needs to be set by a non-author"), format!("atelier review request {id}")),
     ];
     findings.sort();
     let [(_, first, first_fix), (_, second, second_fix)] = findings;

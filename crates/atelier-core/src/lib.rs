@@ -374,7 +374,8 @@ pub struct EvidenceRecord {
     pub summary: String,
 }
 
-/// Immutable review events. Decisions change by appending a successor.
+/// A review event. Each is immutable once written, except that a finding's
+/// disposition is set and changed in place (ADR 0025).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ReviewRecord {
     pub header: RecordHeader,
@@ -426,13 +427,10 @@ pub enum ReviewEvent {
     Approval,
     Finding {
         recommendation: FindingDecision,
-    },
-    Disposition {
-        finding: String,
-        decision: FindingDecision,
-        supersedes: Option<String>,
-        resolution_commit: Option<String>,
-        follow_up: Option<String>,
+        /// What was decided about the finding, once someone has; the one
+        /// part of a review record that changes (ADR 0025).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        disposition: Option<Disposition>,
     },
     TrivialExemption,
 }
@@ -444,10 +442,46 @@ impl ReviewEvent {
             ReviewEvent::Review => "review",
             ReviewEvent::Approval => "approval",
             ReviewEvent::Finding { .. } => "finding",
-            ReviewEvent::Disposition { .. } => "disposition",
             ReviewEvent::TrivialExemption => "trivial_exemption",
         }
     }
+}
+
+impl ReviewRecord {
+    /// A finding's disposition; `None` for an undisposed finding or any
+    /// other event.
+    pub fn disposition(&self) -> Option<&Disposition> {
+        match &self.event {
+            ReviewEvent::Finding { disposition, .. } => disposition.as_ref(),
+            _ => None,
+        }
+    }
+}
+
+/// What was decided about a finding, by whom and at which commit. Setting it
+/// again replaces it; earlier decisions stay in the Git history of the
+/// finding's file (ADR 0025).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Disposition {
+    pub decision: FindingDecision,
+    /// Who set it, self-declared like every review identity.
+    pub identity: String,
+    /// The full commit the branch was at when it was set.
+    pub commit: String,
+    pub recorded_at: DateTime<Utc>,
+    /// FIX NOW only: the commit that fixed the finding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_commit: Option<String>,
+    /// DEFER only: the issue the work moves to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow_up: Option<String>,
+    /// Why, or what was verified.
+    pub reason: String,
+    /// The separate disposition event `atelier migrate dispositions` folded
+    /// into this field; who set it is traced to that event's commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub migrated_from: Option<String>,
 }
 
 /// Acceptance content is typed by work kind; lifecycle notes are separate.

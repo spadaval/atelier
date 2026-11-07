@@ -211,7 +211,7 @@ pub struct Validation {
     pub trivial: usize,
     pub not_approved: Vec<String>,
     pub unreviewed: Vec<String>,
-    /// Findings on the delivered items, by their latest disposition.
+    /// Findings on the delivered items, by their disposition.
     pub findings: ReviewSummary,
     pub runs: Vec<ValidationRun>,
     /// Criteria not proven, each with the open item that will prove it.
@@ -368,19 +368,16 @@ pub fn debrief(
         .map(|(id, moment)| (id.clone(), moment.time))
         .collect::<BTreeMap<_, _>>();
 
-    // Reviews of each scoped item: findings, their latest dispositions, and
+    // Reviews of each scoped item: findings, their dispositions, and
     // where deferred findings went.
     let mut reviews: BTreeMap<String, ReviewSummary> = BTreeMap::new();
     let mut follow_up_source: BTreeMap<String, String> = BTreeMap::new();
     let mut follow_ups_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut trivial: BTreeMap<String, String> = BTreeMap::new();
     let mut findings: BTreeMap<String, String> = BTreeMap::new();
-    // Each finding's latest disposition, with where it was deferred to.
-    #[allow(clippy::type_complexity)]
-    let mut dispositions: BTreeMap<
-        String,
-        (DateTime<Utc>, FindingDecision, Option<String>, String),
-    > = BTreeMap::new();
+    // Each finding's disposition, with where it was deferred to.
+    let mut dispositions: BTreeMap<String, (FindingDecision, Option<String>, String)> =
+        BTreeMap::new();
     let mut ordered_reviews = index
         .reviews()
         .filter(|review| scope.contains(&review.target) || review.target == mission_id)
@@ -402,25 +399,14 @@ pub fn debrief(
                 summary.trivial = true;
                 trivial.insert(review.target.clone(), review.summary.clone());
             }
-            ReviewEvent::Finding { .. } => {
+            ReviewEvent::Finding { disposition, .. } => {
                 findings.insert(review.header.id.clone(), review.target.clone());
-            }
-            ReviewEvent::Disposition {
-                finding,
-                decision,
-                follow_up,
-                ..
-            } => {
-                let newer = dispositions
-                    .get(finding)
-                    .is_none_or(|(at, ..)| review.header.created_at >= *at);
-                if newer {
+                if let Some(disposition) = disposition {
                     dispositions.insert(
-                        finding.clone(),
+                        review.header.id.clone(),
                         (
-                            review.header.created_at,
-                            *decision,
-                            follow_up.clone(),
+                            disposition.decision,
+                            disposition.follow_up.clone(),
                             review.target.clone(),
                         ),
                     );
@@ -429,7 +415,7 @@ pub fn debrief(
             ReviewEvent::Review => {}
         }
     }
-    for (_, decision, follow_up, target) in dispositions.values() {
+    for (decision, follow_up, target) in dispositions.values() {
         if let (FindingDecision::Defer, Some(follow_up)) = (decision, follow_up) {
             // Deferring a finding to planned work does not file that work:
             // it stays planned. Work the review filed, even a moment before
@@ -479,7 +465,7 @@ pub fn debrief(
     }
     for (finding, target) in &findings {
         let summary = reviews.entry(target.clone()).or_default();
-        match dispositions.get(finding).map(|(_, decision, ..)| *decision) {
+        match dispositions.get(finding).map(|(decision, ..)| *decision) {
             Some(FindingDecision::FixNow) => summary.fixed += 1,
             Some(FindingDecision::Defer) => summary.deferred += 1,
             Some(FindingDecision::NoAction) => summary.no_action += 1,
@@ -1276,7 +1262,6 @@ fn event_name(event: &ReviewEvent) -> &'static str {
         ReviewEvent::Review => "review",
         ReviewEvent::Approval => "approval",
         ReviewEvent::Finding { .. } => "finding",
-        ReviewEvent::Disposition { .. } => "disposition",
         ReviewEvent::TrivialExemption => "trivial",
     }
 }

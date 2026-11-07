@@ -29,7 +29,7 @@ pub const EVIDENCE_KIND: RecordKindSpec = RecordKindSpec {
 pub const REVIEW_KIND: RecordKindSpec = RecordKindSpec {
     kind: "review",
     schema: "atelier.review",
-    schema_version: 1,
+    schema_version: 2,
     canonical_dir: "reviews",
     extension: "md",
 };

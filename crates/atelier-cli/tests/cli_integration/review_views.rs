@@ -106,7 +106,8 @@ fn review_list_shows_rows_in_time_order_then_approval_state_and_finding_tree() {
     fs::write(dir.join("parser.rs"), "fn parse(_: &str) {}\n").unwrap();
     commit_all(dir, "read the input");
     let resolution = git(dir, &["rev-parse", "HEAD"]);
-    let fix = event(
+    // A disposition is a field of its finding, so it adds no row (ADR 0025).
+    event(
         dir,
         &[
             "disposition",
@@ -120,19 +121,19 @@ fn review_list_shows_rows_in_time_order_then_approval_state_and_finding_tree() {
             "Reads the input now",
         ],
     );
-    let first = event(
+    event(
         dir,
         &[
             "disposition",
             &named,
             "--identity",
-            "Reviewer R",
+            "Reviewer Q",
             "--decision",
             "no_action",
             "Fine",
         ],
     );
-    let second = event(
+    event(
         dir,
         &[
             "disposition",
@@ -155,7 +156,7 @@ fn review_list_shows_rows_in_time_order_then_approval_state_and_finding_tree() {
         assert!(!listed.contains(debug), "{debug}: {listed}");
     }
     let lines = listed.lines().collect::<Vec<_>>();
-    let order = [&fixed, &named, &open, &fix, &first, &second, &approval];
+    let order = [&fixed, &named, &open, &approval];
     for (line, event) in lines.iter().zip(order) {
         assert!(line.starts_with(&format!("{event}  ")), "{listed}");
     }
@@ -176,17 +177,9 @@ fn review_list_shows_rows_in_time_order_then_approval_state_and_finding_tree() {
         ["finding no_action", &*format!("on {child}")],
         "an event on a child names it: {listed}"
     );
+    assert_eq!(lines[4], "", "{listed}");
     assert_eq!(
-        columns(lines[3])[1..3],
-        [
-            &*format!("disposition fix_now → {fixed}"),
-            &*format!("@{}", short(&resolution))
-        ],
-        "{listed}"
-    );
-    assert_eq!(lines[7], "", "{listed}");
-    assert_eq!(
-        lines[8..],
+        lines[5..],
         [
             format!(
                 "Approval: ✓ current — {approval} @{} by Reviewer R",
@@ -195,11 +188,13 @@ fn review_list_shows_rows_in_time_order_then_approval_state_and_finding_tree() {
             "Findings: 2 disposed, 1 open".to_owned(),
             format!("  ⚠ {open} defer, no disposition  No error type"),
             format!(
-                "  ✓ {fixed} fix_now → fix_now {fix}, fixed at {}  parse() ignores input",
+                "  ✓ {fixed} fix_now → fix_now by Reviewer R @{0}, fixed at {0}  parse() ignores input",
                 short(&resolution)
             ),
+            // The latest disposition replaced the first, which Git keeps.
             format!(
-                "  ✓ {named} no_action → no_action {first} → no_action {second}  Name could be better"
+                "  ✓ {named} no_action → no_action by Reviewer R @{}  Name could be better",
+                short(&resolution)
             ),
         ],
         "{listed}"
@@ -275,7 +270,7 @@ fn review_show_is_a_brief_view_with_linked_events() {
             "Name could be better\n\nparse is vague.",
         ],
     );
-    let first = event(
+    let disposed = event(
         dir,
         &[
             "disposition",
@@ -287,7 +282,11 @@ fn review_show_is_a_brief_view_with_linked_events() {
             "Fine",
         ],
     );
-    let second = event(
+    assert_eq!(
+        disposed, finding,
+        "a disposition's quiet token is its finding"
+    );
+    event(
         dir,
         &[
             "disposition",
@@ -311,9 +310,16 @@ fn review_show_is_a_brief_view_with_linked_events() {
         short(&pin)
     );
     assert!(shown.starts_with(&header), "{shown}");
+    let (head, tail) = shown
+        .split_once(&format!(
+            "\nDisposition: no_action by Reviewer S @{} | ",
+            short(&pin)
+        ))
+        .expect("the disposition line");
+    assert!(head.starts_with(&header), "{shown}");
     assert!(
-        shown.ends_with(&format!(
-            "\nDispositions:\n  → no_action {first} by Reviewer R: Fine\n  → no_action {second} by Reviewer S: Domain term\n\nName could be better\n\nparse is vague.\n"
+        tail.ends_with(&format!(
+            ": Domain term\nEarlier dispositions: git log -p -- .atelier/reviews/{finding}.md\n\nName could be better\n\nparse is vague.\n"
         )),
         "{shown}"
     );
@@ -321,17 +327,6 @@ fn review_show_is_a_brief_view_with_linked_events() {
     for raw in ["{", "\"labels\"", "created_at"] {
         assert!(!shown.contains(raw), "{raw}: {shown}");
     }
-
-    let shown = ok(dir, &["review", "show", &second]);
-    assert!(
-        shown.starts_with(&format!(
-            "{second} disposition no_action → {finding} on {id} @{} by Reviewer S | ",
-            short(&pin)
-        )) && shown.ends_with(&format!(
-            "\nFinding: {finding} no_action by Reviewer R: Name could be better\nSupersedes: {first}\n\nDomain term\n"
-        )),
-        "{shown}"
-    );
 
     let shown = ok(dir, &["review", "show", &approval]);
     assert!(
@@ -384,7 +379,7 @@ fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
             "Finding {finding} fix_now {at}. Dispose: atelier review disposition {finding} --identity \"...\" --decision fix_now --resolution-commit ... \"...\"\n"
         )
     );
-    let (out, disposition) = record(&[
+    let (out, disposed) = record(&[
         "disposition",
         &finding,
         "--identity",
@@ -396,10 +391,11 @@ fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
     assert_eq!(
         out,
         format!(
-            "Disposition {disposition} no_action {at}: finding {finding} \"parse() ignores input\"\n⚠ identity matches a Git author; this will not satisfy findings.disposed\n"
+            "Disposition no_action of {finding} {at}: \"parse() ignores input\"\n⚠ identity matches a Git author; this will not satisfy findings.disposed\n"
         )
     );
-    let (out, successor) = record(&[
+    assert_eq!(disposed, finding);
+    let (out, _) = record(&[
         "disposition",
         &finding,
         "--identity",
@@ -411,7 +407,7 @@ fn recording_confirms_what_was_recorded_and_warns_on_an_author_identity() {
     assert_eq!(
         out,
         format!(
-            "Disposition {successor} no_action {at}: finding {finding} \"parse() ignores input\", supersedes {disposition}\n"
+            "Disposition no_action of {finding} {at}: \"parse() ignores input\", replacing no_action by {AUTHOR}\n"
         )
     );
     let (out, approval) = record(&[
