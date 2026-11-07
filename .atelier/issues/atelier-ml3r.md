@@ -35,19 +35,27 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
-title: "Say the lifecycle once, plainly, everywhere"
-updated_at: "2026-11-07T09:41:38.991522124+00:00"
+status: "todo"
+title: "Say the lifecycle once, plainly, in the skill and Atelier's own docs"
+updated_at: "2026-11-07T11:19:13.793485566+00:00"
 ---
 
 ## Goal
 
-Make the skill, the CLI and every repository describe the new lifecycle in the same words, with one meaning per word, and nothing left of what this mission removed. A fresh agent read about 1,000 lines across eight files and still could not state the order; "check" alone meant at least six things.
+Make the agent-factory skill, the CLI help and Atelier's own docs describe the new lifecycle in the same words, with one meaning per word and nothing left of what this mission removed. A fresh agent read about 1,000 lines across eight files and still could not state the order; "check" alone meant at least six things. The rollout to the other repositories is atelier-nn67 and follows this item.
 
 ## Done when
 
-- [ ] The agent-factory skill (spadaval/.agents, edited in a worktree there) describes the new lifecycle in its atelier reference and its review, implement, plan and validate procedures, and nothing this mission removed (for example `start --base`, `<issue_type>/<id>` branches, close before review, after-merge markers). Its total line count falls.
-- [ ] check, land, close, review and done each mean one thing across CLI help, the skill and docs; CONTEXT.md defines each.
-- [ ] Every Atelier repository on this host (atelier, astromech, cosplay-studio, demiurge, life-on-rails) runs the new policy, its open after-merge checks are loose ends, and its AGENTS.md describes the lifecycle in the same words (the every-repo criterion); astromech's CI pin (`ATELIER_REV` in `.github/workflows/atelier.yml`) moves to the new binary, after which new ownership records stop writing `branch_base` and `start` drops the ignored `--base` flag. Until then, `start`'s detached-HEAD refusal suggests `git switch -c <id> <base> && atelier start <id>`, which works in a linked worktree, and docs/product/work-model.md no longer says old guidance passing `--base` "does not fail" (finding atelier-ywpf). The skill and each AGENTS.md describe the light path (atelier-4nsl), and astromech starts using it only after its pin moves.
-- [ ] Each repository's `validation` items are settled before its policy moves `validation` to the on-base workflow: done, superseded, or converted to loose ends, so no item is left in a status that workflow lacks (finding atelier-b0uv); docs/product/workflow-configuration.md says how to move a policy without that trap.
-- [ ] `atelier migrate after-merge` names the item when removing its last Done when line would leave the section empty, and keeps that line as an ordinary Done when line instead (finding atelier-z3z1).
+- [ ] The agent-factory skill (spadaval/.agents, edited in a worktree there, reviewed and merged into its `main`) describes the new lifecycle in its atelier reference and its orchestrate, implement, review, plan and validate procedures: start, implement, tick every Done when line and write the Report, review request, fix and re-review, approve, merge (which marks work done); approvals that only code makes stale; loose ends; the light path; records correctable until they reach the base; a `fix_now` finding resolved by the approval after its fix.
+- [ ] Nothing the mission removed is left in the skill: `start --base`, `<issue_type>/<id>` branch names, close before or after review, After merge markers and stand-ins, `carried to`, `fix_now` dispositions with resolution commits, receipts for suite runs, the reviewer-versus-Git-author rule, recorded bases. The skill's total line count falls.
+- [ ] check, land, close, review and done each mean one thing across CLI help, the skill and docs, and CONTEXT.md defines each: `atelier check` validates records and merge checks are the policy's merged-tree commands (nothing else is called a check); `land` is the session handoff command; close applies to missions only; review is independent review; done means merged for work and done on the base for decisions, loose ends and validations.
+- [ ] Atelier's own AGENTS.md and docs/product describe the lifecycle in the same words as the skill.
+- [ ] The legible criterion is ready to be judged: an agent reading only the skill, an AGENTS.md and the CLI help finds one order and no contradiction (checked by the mission's validation, not by this item's author).
+
+## Scope
+
+The agent-factory skill in spadaval/.agents (via `git -C ~/projects/agents-skills worktree add ~/projects/agents-skills-wt/atelier-ml3r -b atelier-ml3r main`; never switch the live checkout's branch), Atelier's CLI help text, CONTEXT.md, AGENTS.md, docs/product. Not other repositories (atelier-nn67).
+
+## Context
+
+docs/adr/0028-simpler-lifecycle.md (decision 8), docs/strategies/simpler-lifecycle.md. Everything else in the mission has merged before this starts, so the skill describes what is built.
