@@ -28,7 +28,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Cut the records and gates that review does not need"
-updated_at: "2026-11-07T08:34:54.029205352+00:00"
+updated_at: "2026-11-07T09:49:14.147260148+00:00"
 ---
 
 ## Goal
@@ -55,6 +55,10 @@ Gates in merge, land and doctor; the Stop hook path; `start`; review and evidenc
 ## Context
 
 docs/adr/0028-simpler-lifecycle.md (decision 5), docs/strategies/simpler-lifecycle.md (Shape: Fewer records and gates), crates/atelier-app/src/review_gate.rs (`independent`, `findings.disposed`, `approval_accepted`), crates/atelier-cli/src/commands/start.rs and git.rs, crates/atelier-app/src/record_index.rs, crates/atelier-core/src/lib.rs (`WorkflowBranch`). atelier-jnrh (merge marks done) and atelier-ilba (write-time validation) land first. A branch with no issue is atelier-4nsl's light path; `start` taking the current branch must not stand in its way.
+
+## Notes
+
+- 2026-11-07 [resolution] Review fixes in 1e6f9b67 change three things the Report states: `start --base` stays as a hidden flag that is ignored with a note (until atelier-ml3r rewrites the skill); a fix_now finding is resolved only by an approval whose pinned commit also holds the finding's record; the suite is now 997 tests, 1003 with test-hooks.
 
 ## Report
 
