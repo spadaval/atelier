@@ -15,13 +15,13 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Add a suite merge check to demiurge and cosplay-studio"
+title: "Add a suite merge check to demiurge, cosplay-studio and life-on-rails"
 updated_at: "2026-11-06T23:39:07.679326401+00:00"
 ---
 
 ## Goal
 
-Give demiurge and cosplay-studio a test of the merged tree. They have no CI and no `merge_checks`; until atelier-s66u ships, the only such test is `merge --sync` rerunning recorded suite receipts, which atelier-s66u removes.
+Give demiurge, cosplay-studio and life-on-rails a test of the merged tree. They have no CI (life-on-rails' Android builds run off-box, so its check may be limited to what runs on this host) and no `merge_checks`; until atelier-s66u ships, the only such test is `merge --sync` rerunning recorded suite receipts, which atelier-s66u removes.
 
 ## Done when
 
