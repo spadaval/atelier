@@ -211,6 +211,7 @@ struct ObjectCache {
     edges: HashMap<(String, String), Rc<Vec<CommitEdge>>>,
     status_only: HashMap<(String, String, PathBuf), bool>,
     first_parents: HashMap<String, Option<String>>,
+    retired_findings: HashMap<String, Rc<std::collections::BTreeSet<String>>>,
     authors: HashMap<String, String>,
     trees: HashMap<String, Rc<Vec<TreeEntry>>>,
     commit_trees: HashMap<String, String>,
@@ -660,6 +661,51 @@ impl<'a> ReadContext<'a> {
             return Ok(None);
         }
         Ok(Some(format!("{name}\n{email}\n")))
+    }
+    /// The findings that `commit` still holds separate disposition events
+    /// for (ADR 0025).
+    pub(crate) fn retired_findings_at(
+        &mut self,
+        commit: &str,
+    ) -> Result<Rc<std::collections::BTreeSet<String>>> {
+        let commit = self.commit_id(commit)?;
+        if let Some(found) = self.cache.retired_findings.get(&commit) {
+            return Ok(found.clone());
+        }
+        let listed = git_output(
+            self.repo,
+            &[
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                &commit,
+                "--",
+                ".atelier/reviews/",
+            ],
+        )?;
+        let mut findings = std::collections::BTreeSet::new();
+        for name in listed
+            .split(|byte| *byte == 0)
+            .filter(|name| !name.is_empty())
+        {
+            let path = PathBuf::from(String::from_utf8_lossy(name).into_owned());
+            let Ok(relative) = path.strip_prefix(".atelier") else {
+                continue;
+            };
+            let text = self.blob(&commit, &path)?;
+            if !text.contains("event: disposition") {
+                continue;
+            }
+            if let Ok(atelier_records::review::ReviewFile::RetiredDisposition(event)) =
+                atelier_records::review::parse_review_file(&text, relative)
+            {
+                findings.insert(event.finding);
+            }
+        }
+        let findings = Rc::new(findings);
+        self.cache.retired_findings.insert(commit, findings.clone());
+        Ok(findings)
     }
     pub(crate) fn blob(&mut self, commit: &str, path: &Path) -> Result<String> {
         let commit = self.commit_id(commit)?;

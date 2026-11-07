@@ -328,10 +328,13 @@ fn allowed_edge(
 
 /// Whether `edge`'s change to the review record at `path` leaves every
 /// event as it was: it adds a new event, sets or changes a finding's
-/// disposition and nothing else (ADR 0025), or removes a retired
-/// disposition event, as `atelier migrate dispositions` does once it has
-/// folded the event into its finding. Approval freshness and the
-/// append-only check share this one rule.
+/// disposition and nothing else (ADR 0025), or removes a separate
+/// disposition event the way `review disposition` and
+/// `atelier migrate dispositions` do, in a commit whose finding carries its
+/// own disposition and keeps none of its events. A separate event is never
+/// added back once removed: either would bring back a decision that was
+/// replaced, which the old append-only events refused (atelier-pfbp).
+/// Approval freshness and the append-only check share this one rule.
 fn review_change_allowed(
     read: &mut git::ReadContext<'_>,
     edge: &git::CommitEdge,
@@ -343,13 +346,15 @@ fn review_change_allowed(
         |entry: &Option<(String, String)>| entry.as_ref().is_some_and(|(mode, _)| mode == "100644");
     let relative = path.strip_prefix(".atelier")?;
     Ok(match (old, new) {
-        (None, _) => regular(new),
+        (None, _) => regular(new) && !retired_event_restored(read, edge, path, relative)?,
         (Some(_), None) => {
             regular(old)
-                && matches!(
-                    parse_review_file(&read.blob(&edge.parent, path)?, relative),
-                    Ok(ReviewFile::RetiredDisposition(_))
-                )
+                && match parse_review_file(&read.blob(&edge.parent, path)?, relative) {
+                    Ok(ReviewFile::RetiredDisposition(event)) => {
+                        folded_by(read, &edge.commit, &event.finding)?
+                    }
+                    _ => false,
+                }
         }
         (Some(_), Some(_)) => {
             regular(old)
@@ -361,6 +366,40 @@ fn review_change_allowed(
                 )
         }
     })
+}
+
+/// Whether `commit` holds `finding` with its own disposition field and none
+/// of its separate disposition events, as the fold writes it.
+fn folded_by(read: &mut git::ReadContext<'_>, commit: &str, finding: &str) -> Result<bool> {
+    let path = std::path::PathBuf::from(format!(".atelier/reviews/{finding}.md"));
+    if read.entry(commit, &path)?.is_none() {
+        return Ok(false);
+    }
+    let carries = parse_review_record(&read.blob(commit, &path)?, path.strip_prefix(".atelier")?)
+        .is_ok_and(|record| record.disposition().is_some());
+    Ok(carries && !read.retired_findings_at(commit)?.contains(finding))
+}
+
+/// Whether `edge` adds back a separate disposition event its first parent's
+/// history already held.
+fn retired_event_restored(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    path: &Path,
+    relative: &Path,
+) -> Result<bool> {
+    let parent = read.commit_id(&edge.parent)?;
+    let earlier = read.path_log(&PathLog {
+        start: parent,
+        paths: vec![path.display().to_string()],
+        listing: Listing::Changes,
+        reverse: false,
+    })?;
+    Ok(!earlier.is_empty()
+        && matches!(
+            parse_review_file(&read.blob(&edge.commit, path)?, relative),
+            Ok(ReviewFile::RetiredDisposition(_))
+        ))
 }
 
 /// Whether two versions of a review record are the same finding, differing

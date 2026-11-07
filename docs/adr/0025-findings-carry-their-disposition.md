@@ -38,7 +38,11 @@ cannot be backdated past work its owner authored later.
    other field of a finding, stays append-only. The append-only check and
    approval freshness share one rule: a change to a review record is
    allowed when it adds an event, changes only a finding's disposition, or
-   removes a retired disposition event.
+   removes a separate disposition event in a commit whose finding carries
+   its own disposition and keeps none of its events, as `review
+   disposition` and the migration write it. A removed separate event is
+   never added back. So a separate event can no more be deleted or restored
+   by hand than before (atelier-pfbp).
 3. **Recording a disposition keeps an approval current**, as adding a
    disposition event did. Editing anything else in an existing review record
    still makes it stale, and the append-only check refuses it.

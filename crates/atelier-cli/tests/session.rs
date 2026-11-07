@@ -8465,3 +8465,97 @@ fn an_uncommitted_disposition_is_committed_not_restored() {
         "{out}"
     );
 }
+
+/// A separate disposition event read as folded keeps the old binary's
+/// refusals (atelier-pfbp): deleting a finding's latest event outside the
+/// fold that `review disposition` or the migration writes is refused, as is
+/// restoring an event a later commit removed.
+#[test]
+fn separate_disposition_events_cannot_be_deleted_or_restored_by_hand() {
+    for case in ["delete_latest", "restore_removed"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        let id = ok(f.path(), &["-q", "issue", "create", "Event history"]);
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Concern",
+            ],
+        );
+        commit(f.path(), "finding");
+        let pin = git(f.path(), &["rev-parse", "HEAD"]);
+        let first = if case == "delete_latest" {
+            "Reviewer"
+        } else {
+            "Helper"
+        };
+        v1_disposition(
+            f.path(),
+            ("atelier-e001", &id, first, &pin, "2026-10-02T00:00:01Z"),
+            &finding,
+            "no_action",
+            None,
+            None,
+            None,
+        );
+        commit(f.path(), "first disposition event");
+        if case == "delete_latest" {
+            v1_disposition(
+                f.path(),
+                (
+                    "atelier-e002",
+                    &id,
+                    "Reviewer",
+                    &pin,
+                    "2026-10-02T00:00:02Z",
+                ),
+                &finding,
+                "fix_now",
+                Some("atelier-e001"),
+                None,
+                None,
+            );
+            commit(f.path(), "the reviewer's later fix_now");
+            f.terminal(&id);
+            let (pass, out) = cli(f.path(), &["doctor"]);
+            assert!(!pass && out.contains("findings.disposed"), "{out}");
+            git(f.path(), &["rm", "-q", ".atelier/reviews/atelier-e002.md"]);
+            commit(f.path(), "delete the latest event");
+        } else {
+            git(f.path(), &["config", "user.name", "Helper"]);
+            fs::write(f.path().join("helper-code"), "work by Helper\n").unwrap();
+            commit(f.path(), "Helper's work");
+            git(f.path(), &["config", "user.name", "Author"]);
+            f.terminal(&id);
+            ok(f.path(), &["doctor"]);
+            ok(
+                f.path(),
+                &[
+                    "review",
+                    "disposition",
+                    &finding,
+                    "--identity",
+                    "Other",
+                    "--decision",
+                    "no_action",
+                    "--commit-records",
+                    "Set again",
+                ],
+            );
+            assert!(!f.path().join(".atelier/reviews/atelier-e001.md").exists());
+            ok(f.path(), &["doctor"]);
+            git(f.path(), &["checkout", "HEAD~1", "--", ".atelier/reviews/"]);
+            commit(f.path(), "restore the removed event by hand");
+        }
+        let (pass, out) = cli(f.path(), &["doctor"]);
+        assert!(!pass && out.contains("review_append_only"), "{case}: {out}");
+    }
+}

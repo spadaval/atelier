@@ -98,7 +98,10 @@ it. The read path for separate events goes once every repository has
 migrated (atelier-42th). A disposition read from an event, or written by the
 migration commit that removed it, is judged at the commit that added the
 event; once the finding's file has held another disposition, the later
-setting counts, even of the same bytes.
+setting counts, even of the same bytes. Separate events stay append-only as
+before: one may be removed only in a commit whose finding carries its own
+disposition and keeps none of its events, as `review disposition` and the
+migration write it, and a removed event is never added back (atelier-pfbp).
 
 Terminal targets and their eligible review clusters can leave the active tree
 together through [protected prune](retention-and-prune.md); retained events
