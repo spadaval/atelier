@@ -138,12 +138,17 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
 
 /// The light-path line for the checked-out branch when no issue owns it and
 /// it is not the base: `3 commits since main, ✓ approved`. `None` on the
-/// base, a detached HEAD or an owned branch.
+/// base, a detached HEAD, an owned branch, or a branch with no commits the
+/// base lacks.
 fn light_state(repo: &Path, index: &RecordIndex, base: &str) -> Option<String> {
     use crate::commands::light_path::{approval_words, checkout, state_facts, Checkout};
     let Ok(Checkout::Light(light)) = checkout(repo, index, base) else {
         return None;
     };
+    // A branch the base already contains has nothing to review.
+    if light.fork == light.head {
+        return None;
+    }
     Some(match state_facts(repo, index, &light) {
         Ok((state, commits)) => format!(
             "{} since {base}, {}",

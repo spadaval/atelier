@@ -1007,11 +1007,32 @@ fn branch_summaries_for(
                     Path::new(".atelier/config.toml"),
                 )?;
             }
-            let owners = match &owners {
-                Ok(owners) if owners.is_empty() => return Ok(None),
+            let mut owners = match &owners {
                 Ok(owners) => owners.clone(),
                 Err(error) => bail!("{error:#}"),
             };
+            // An owner already done on the base no longer owns a branch that
+            // holds commits the base lacks: the branch is on the light path
+            // (atelier-4nsl, finding atelier-4t47). A branch the base already
+            // contains has nothing to review, so its row still says what
+            // merged.
+            let unmerged = base_head.as_deref().is_some_and(|base_head| {
+                git_freshness::git_output(repo, &["merge-base", "--is-ancestor", commit, base_head])
+                    .is_err()
+            });
+            if unmerged {
+                owners.retain(|id| {
+                    !atelier_app::light_path::done_at(
+                        repo,
+                        &branch_policy,
+                        &format!("refs/heads/{base_branch}"),
+                        id,
+                    )
+                });
+            }
+            if owners.is_empty() {
+                return Ok(None);
+            }
             let snapshot = Snapshot::at(repo, state, commit)?;
             snapshot
                 .index

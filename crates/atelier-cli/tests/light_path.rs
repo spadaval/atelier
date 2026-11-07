@@ -810,20 +810,149 @@ fn land_on_the_base_judges_an_approval_of_a_branch_as_merge_does() {
     git(repo, &["push", "-q"]);
 
     // A branch approved on the light path and then taken by `start` was
-    // owned when it merged, so its approval covers nothing on the base.
-    let owner = issue(repo, "Owned later");
-    commit(repo, "Plan the owned work");
-    git(repo, &["push", "-q"]);
-    git(repo, &["switch", "-qc", "taken"]);
-    change(repo, "taken.rs", "fn taken() {}\n", "Add the taken change");
-    approve(repo, "taken");
+    // owned when it merged, so its approval covers nothing on the base,
+    // whatever its name: one YAML would read as a number is written quoted
+    // (finding atelier-lezj).
+    for branch in ["taken", "1.0"] {
+        git(repo, &["switch", "-q", "main"]);
+        let owner = issue(repo, &format!("Owned on {branch}"));
+        commit(repo, "Plan the owned work");
+        git(repo, &["push", "-q"]);
+        git(repo, &["switch", "-qc", branch]);
+        let file = format!("taken-{branch}.rs");
+        change(repo, &file, "fn taken() {}\n", "Add the taken change");
+        approve(repo, branch);
+        ok(repo, &["start", &owner]);
+        commit(repo, "Start the owned work");
+        if branch == "1.0" {
+            let record = fs::read_to_string(issue_path(repo, &owner)).unwrap();
+            assert!(record.contains("work_branch: '1.0'"), "{record}");
+        }
+        git(repo, &["switch", "-q", "main"]);
+        git(repo, &["merge", "-q", "--no-ff", "--no-edit", branch]);
+        let (passed, output) = cli(repo, &["land"]);
+        assert!(
+            !passed && output.contains("land_base_unreviewed") && output.contains(&file),
+            "{branch}: {output}"
+        );
+        git(repo, &["reset", "-q", "--hard", "main@{upstream}"]);
+    }
+}
+
+/// A branch whose recorded owner is already done on the base is on the light
+/// path once it holds new commits, so the branch list shows its review state
+/// rather than the done owner (finding atelier-4t47).
+#[test]
+fn status_lists_a_reused_branch_with_new_commits_by_its_light_path_state() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    let owner = issue(repo, "Feature work");
+    commit(repo, "Plan the feature");
+    git(repo, &["switch", "-qc", "feat"]);
     ok(repo, &["start", &owner]);
-    commit(repo, "Start the owned work");
-    git(repo, &["switch", "-q", "main"]);
-    git(repo, &["merge", "-q", "--no-ff", "--no-edit", "taken"]);
-    let (passed, output) = cli(repo, &["land"]);
-    assert!(
-        !passed && output.contains("land_base_unreviewed") && output.contains("taken.rs"),
-        "{output}"
+    change(repo, "feat.rs", "fn feat() {}\n", "Implement the feature");
+    finish(repo, &owner);
+    commit(repo, "Tick and report");
+    ok(
+        repo,
+        &[
+            "review",
+            "approve",
+            &owner,
+            "--identity",
+            REVIEWER,
+            "--commit-records",
+            "Reviewed",
+        ],
     );
+    ok(repo, &["merge", &owner]);
+    assert_eq!(status_on_main(repo, &owner), "done");
+
+    // The same name again, with a new commit and an approval of it.
+    git(repo, &["switch", "-qc", "feat"]);
+    change(
+        repo,
+        "feat.rs",
+        "fn feat() { more() }\n",
+        "Follow up on the feature",
+    );
+    approve(repo, "feat");
+    git(repo, &["switch", "-q", "main"]);
+    let page = ok(repo, &["status"]);
+    assert!(
+        page.contains("feat  light path, ✓ approved, behind 0, merges cleanly")
+            && !page.contains(&format!("feat  {owner}")),
+        "{page}"
+    );
+}
+
+/// A deferred finding about a branch keeps its follow-up issue from prune,
+/// as one about an issue does, so `prune --apply` still prunes the rest
+/// (finding atelier-tzvy). Records about a branch are never pruned.
+#[test]
+fn prune_keeps_the_follow_up_of_a_deferred_finding_about_a_branch() {
+    let dir = tempdir().unwrap();
+    let upstream = tempdir().unwrap();
+    let repo = dir.path();
+    repository(repo, upstream.path());
+    let retired = issue(repo, "Retired long ago");
+    commit(repo, "Plan work that will be retired");
+    git(repo, &["switch", "-qc", "docs"]);
+    change(repo, "GUIDE.md", "# Guide\n", "Write the guide");
+    let later = finding(repo, "docs", "defer", "low: no examples");
+    let follow_up = issue(repo, "Add examples to the guide");
+    commit(repo, "File the follow-up");
+    ok(
+        repo,
+        &[
+            "review",
+            "disposition",
+            &later,
+            "--identity",
+            AUTHOR,
+            "--decision",
+            "defer",
+            "--follow-up",
+            &follow_up,
+            "--commit-records",
+            "Later",
+        ],
+    );
+    let approval = approve(repo, "docs");
+    ok(repo, &["merge"]);
+
+    // Both issues are retired and past retention on the base.
+    let store = atelier_records::RecordStore::new(repo.join(".atelier"));
+    let long_ago = chrono::Utc::now() - chrono::Duration::days(2000);
+    for id in [&follow_up, &retired] {
+        ok(
+            repo,
+            &[
+                "issue",
+                "transition",
+                id,
+                "supersede",
+                "--reason",
+                "Not needed",
+            ],
+        );
+        let mut record = store.load_issue_by_id(id).unwrap();
+        record.issue.created_at = long_ago;
+        record.issue.updated_at = long_ago;
+        record.issue.closed_at = Some(long_ago);
+        store.write_issue_atomic(&record).unwrap();
+    }
+    commit(repo, "Retire both issues long ago");
+    let output = ok(repo, &["prune", "--apply", "--retention-days", "30"]);
+    assert!(!issue_path(repo, &retired).exists(), "{output}");
+    assert!(issue_path(repo, &follow_up).exists(), "{output}");
+    for id in [&later, &approval] {
+        assert!(
+            repo.join(format!(".atelier/reviews/{id}.md")).exists(),
+            "{output}"
+        );
+    }
+    ok(repo, &["check"]);
 }

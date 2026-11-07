@@ -641,13 +641,15 @@ atelier merge
 - **Records.** A record about a branch is an ordinary review record whose
   front matter names `branch: <name>` instead of a `target`, at review schema
   version 3; an Atelier that predates the light path reports such a record as
-  needing a newer Atelier, and records about issues are still written at
-  version 2. It is written only from a checkout of that branch, unowned
+  needing a newer Atelier and refuses to load the repository's records until
+  it is upgraded, so a repository whose CI pins an older binary waits for the
+  pin to move. Records about issues are still written at version 2. It is written only from a checkout of that branch, unowned
   (`review_branch_owned` names the owner otherwise), and pinned after the
   branch left the base (`review_branch_pin`). `review disposition` decides a
   finding about a branch by its ID, and `review list` and `review show` show
   `on branch <name>`. There is no trivial exemption of a branch: an approval
-  is the only cover.
+  is the only cover. Records about a branch are never pruned, and a deferred
+  finding's follow-up issue is kept while they are.
 - **The current run.** A record counts only when it is pinned to a commit the
   branch holds and the point where it left the base does not, so a later
   branch named `release` inherits none of an earlier `release` branch's

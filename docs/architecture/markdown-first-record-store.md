@@ -21,7 +21,12 @@ are rejected rather than silently converted; a higher version, written by a
 newer Atelier, is reported as needing one, with the reinstall command
 (`workflow_config_schema_newer` for the policy, atelier-u4ql). Workflow policy has version 3 and
 project configuration version 1; these are distinct contracts. Review events
-use `atelier.review` version 1. Only issue, evidence and review are record or
+use `atelier.review` version 2 when they are about an issue (version 1 records,
+with separate disposition events, are still read), and version 3 when they
+name a branch no issue owns ([ADR 0028](../adr/0028-simpler-lifecycle.md),
+decision 6). One version 3 record makes an older binary refuse the
+repository's records as needing a newer Atelier, so a repository whose CI pins
+an older binary does not use the light path until the pin moves. Only issue, evidence and review are record or
 relationship target kinds. `workflow_validator` names mechanical workflow gate
 nodes; it is not a persistent record or link target kind.
 

@@ -50,7 +50,7 @@ pub fn owners(
 }
 
 /// Whether `revision` holds `id` in a done status.
-fn done_at(repo: &Path, policy: &WorkflowPolicy, revision: &str, id: &str) -> bool {
+pub fn done_at(repo: &Path, policy: &WorkflowPolicy, revision: &str, id: &str) -> bool {
     let path = format!(".atelier/issues/{id}.md");
     let Some(commit) = git::git_output(
         repo,
@@ -352,7 +352,11 @@ fn joined_fork(
 /// Whether an issue the branch's merged head `side` records as owning
 /// `branch` was not done on the base at `before`, the merge's first parent:
 /// the branch then followed the issue path, where its own records count for
-/// nothing.
+/// nothing. Every record that names a work branch is parsed and its branch
+/// compared, since a name YAML would read as another type, such as `1.0`, is
+/// written quoted (finding atelier-lezj). A record that does not parse but
+/// mentions the branch counts as an owner, so the approval covers nothing
+/// rather than too much.
 fn owned_when_merged(
     repo: &Path,
     policy: &WorkflowPolicy,
@@ -366,28 +370,34 @@ fn owned_when_merged(
             "-l",
             "-F",
             "-e",
-            &format!("work_branch: {branch}"),
-            "-e",
-            &format!("work_branch: \"{branch}\""),
+            "work_branch:",
             side,
             "--",
             ".atelier/issues/",
         ])
         .output()
         .context("git grep could not read the merged branch's issues")?;
+    // `git grep` exits 1 when nothing matches.
+    if !listed.status.success() && listed.status.code() != Some(1) {
+        anyhow::bail!(
+            "git grep could not read the issues of {side}: {}",
+            String::from_utf8_lossy(&listed.stderr).trim()
+        );
+    }
     for found in String::from_utf8_lossy(&listed.stdout).lines() {
         let Some((_, path)) = found.split_once(':') else {
             continue;
         };
         let path = Path::new(path);
-        let Ok(text) = git::blob(repo, side, path) else {
-            continue;
-        };
+        let text = git::blob(repo, side, path)?;
         let Some(record) = path
             .strip_prefix(".atelier")
             .ok()
             .and_then(|relative| atelier_records::parse_issue_record(&text, relative).ok())
         else {
+            if text.contains(branch) {
+                return Ok(true);
+            }
             continue;
         };
         let names_branch = record
