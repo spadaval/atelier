@@ -1,6 +1,6 @@
 ---
-status: draft
-last_changed: "2026-11-07: planning review fixes; created that day from Sumeet's direction, after an analysis of every Atelier session on this host"
+status: active
+last_changed: "2026-11-07: active on Sumeet's approval; earlier that day, planning review fixes; created that day from Sumeet's direction, after an analysis of every Atelier session on this host"
 ---
 
 # Why

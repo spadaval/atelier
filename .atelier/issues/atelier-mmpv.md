@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "in_progress"
 title: "Take one issue from start to merge in one obvious order, where only a code change makes an approval stale"
-updated_at: "2026-11-07T05:00:04.971587750+00:00"
+updated_at: "2026-11-07T05:20:32.973056491+00:00"
 ---
 
 ## Outcome
