@@ -307,7 +307,11 @@ work merges, it finds the branch from the local branches' own records. An item
 no branch owns refuses with `merge_owner_unstarted` and `atelier start <id>`.
 Once the work is on the base, `merge` and `merge --check` print `<id> is
 already merged into <base> (<commit>).` and pass (atelier-yrlj). Source and any
-separate base checkout must be clean. Canonical record and policy paths, bytes,
+separate base checkout must have no uncommitted changes to tracked files. An
+untracked file is no commit's, so merge leaves it where it is, unless
+integrating would write a file at its path, or a file in place of a directory
+holding it: that refuses with `merge_untracked_overwritten`, naming the paths,
+before anything changes (atelier-l457). Canonical record and policy paths, bytes,
 and modes must match committed HEAD, including ignored canonical files; Git
 index flags such as assume-unchanged or skip-worktree cannot hide changed
 tracked files. Other files follow Git status: with `core.filemode=false`, a
@@ -316,8 +320,9 @@ cannot authorize a different branch, HEAD, base, or canonical snapshot while
 they run. `--check` evaluates the gates without integrating.
 
 A failed precondition does not hide the gates: uncommitted records
-(`canonical_snapshot_uncommitted`, every record named), uncommitted code
-(`merge_checkout_dirty`, every path named) and an invalid candidate policy
+(`canonical_snapshot_uncommitted`, every record named), uncommitted changes
+to tracked code (`merge_checkout_dirty`, every path named), an untracked file
+merging would overwrite (`merge_untracked_overwritten`) and an invalid candidate policy
 (its `workflow_*` code) are each one more failed check with its fix, and the
 gates still run, against HEAD's committed records when the checkout's differ
 and from where the branch left the base. A real merge still refuses before

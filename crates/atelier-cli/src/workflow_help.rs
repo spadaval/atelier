@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn help_lists_the_workflow_statuses_and_categories() {
         let policy = atelier_workflow::parse_policy_text(
-            workflow_policy::STARTER_POLICY_YAML,
+            &workflow_policy::starter_policy_yaml("main"),
             workflow_policy::WORKFLOW_POLICY_PATH,
         )
         .expect("starter policy");

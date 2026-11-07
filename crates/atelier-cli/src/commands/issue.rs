@@ -1513,6 +1513,11 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>, quiet: bool) -> Result<()
     })?;
     if view.findings.is_empty() {
         println!("{}", if quiet { "passed" } else { "Check passed." });
+        if !quiet {
+            for note in &view.notes {
+                println!("{note}");
+            }
+        }
         return Ok(());
     }
     let mut report = format!(

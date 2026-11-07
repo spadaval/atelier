@@ -463,6 +463,16 @@ fn migrate_after_merge_turns_open_lines_into_loose_ends_once() {
     );
     fs::write(&policy, starter).unwrap();
 
+    // `check` passes with a note naming the migration for the open lines
+    // (atelier-l457).
+    assert_eq!(
+        ok(repo, &["check"]),
+        "Check passed.\nNote: 4 open After merge lines in the form before loose ends. `atelier migrate after-merge` turns each into a loose end."
+    );
+    // A scoped check notes the item's own lines.
+    assert!(ok(repo, &["check", &open]).contains("Note: 3 open After merge lines in"));
+    assert!(ok(repo, &["check", &merged]).contains("Note: 1 open After merge line in"));
+
     // The dry run shows each open line, which get needs-human, and writes
     // nothing.
     let output = ok(repo, &["migrate", "after-merge"]);
@@ -486,7 +496,8 @@ fn migrate_after_merge_turns_open_lines_into_loose_ends_once() {
     let made = ok(repo, &["-q", "migrate", "after-merge", "--apply"]);
     let made = made.lines().map(str::to_owned).collect::<Vec<_>>();
     assert_eq!(made.len(), 4, "{made:?}");
-    ok(repo, &["check"]);
+    // Migrated, nothing is left to note.
+    assert_eq!(ok(repo, &["check"]), "Check passed.");
 
     // The item that is not done keeps the stand-in as an ordinary line and
     // the lines that were validated or carried to an issue; the done item
@@ -545,7 +556,7 @@ fn atelier_s_own_policy_shares_the_starter_s_on_base_workflow() {
     )
     .unwrap();
     let starter = atelier_workflow::parse_policy_text(
-        atelier_workflow::STARTER_POLICY_YAML,
+        &atelier_workflow::starter_policy_yaml("main"),
         ".atelier/workflow.yaml",
     )
     .unwrap();

@@ -139,11 +139,14 @@ struct Checkout {
     dirty: Result<Vec<PathBuf>>,
     /// How the branch differs from its upstream, when it has one and differs.
     upstream: Option<String>,
+    /// Whether the branch has no commits yet, as right after `git init`.
+    unborn: bool,
 }
 
 impl Checkout {
     fn read(repo: &Path) -> Self {
         Self {
+            unborn: atelier_app::git_freshness::unborn_branch(repo).is_some(),
             branch: git::current_branch(repo)
                 .map(|branch| branch.unwrap_or_else(|| "detached HEAD".into())),
             head: atelier_app::git_freshness::head_commit(repo),
@@ -454,6 +457,9 @@ fn render_status_page(
                 None => format!("{branch} @ {}", short_commit(head)),
             },
         )),
+        (Ok(branch), Err(_)) if checkout.unborn => {
+            local_state.push(("Branch", format!("{branch} (no commits yet)")))
+        }
         (Ok(branch), Err(_)) => local_state.push(("Branch", branch.clone())),
         _ => {}
     }
@@ -496,7 +502,7 @@ fn render_status_page(
         },
     ));
 
-    let next_actions = if let Ok(Some(owner)) = owner {
+    let mut next_actions = if let Ok(Some(owner)) = owner {
         vec![
             FooterAction::new("Inspect owner work", owner.inspect.clone()),
             FooterAction::new("Check handoff", format!("atelier land {}", owner.id)),
@@ -527,6 +533,17 @@ fn render_status_page(
     } else {
         Vec::new()
     };
+    // Starting or landing work needs a commit, so the install's comes first
+    // (atelier-l457).
+    if checkout.unborn {
+        next_actions.insert(
+            0,
+            FooterAction::new(
+                "Commit the Atelier install",
+                atelier_app::init::INSTALL_COMMIT,
+            ),
+        );
+    }
 
     let mut panels = vec![
         if diagnostics.is_empty() {

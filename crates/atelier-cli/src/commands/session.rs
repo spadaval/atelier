@@ -465,18 +465,25 @@ fn land_gates(
         let done = source
             .policy
             .issue_status_is_terminal(&issue.issue_type, &issue.status)?;
-        if done && !initial_paths.is_empty() {
+        // An untracked file is no commit's, so merge leaves it in place and
+        // it holds nothing up; it is still named, in case it belongs in a
+        // commit (atelier-l457).
+        let untracked = git_freshness::untracked_paths(repo)?;
+        let (untracked, uncommitted) = initial_paths
+            .iter()
+            .partition::<Vec<_>, _>(|path| untracked.contains(path));
+        if done && !uncommitted.is_empty() {
             preconditions.fail(
                 "land_completion_dirty",
                 format!(
                     "done, but the checkout has {}: {}",
-                    crate::human_output::count_noun(initial_paths.len(), "uncommitted path"),
+                    crate::human_output::count_noun(uncommitted.len(), "uncommitted path"),
                     crate::human_output::first_five(
-                        initial_paths.iter().map(|path| path.display().to_string()),
+                        uncommitted.iter().map(|path| path.display().to_string()),
                         ", "
                     )
                 ),
-                Some("commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`".to_owned()),
+                Some("commit them with `git commit -am \"…\"`, or set them aside with `git stash push`".to_owned()),
             );
         }
         let base = branch_base
@@ -497,14 +504,24 @@ fn land_gates(
         let approved = done
             || review_gate::approval_state(&index, &mut read, &id, base)?
                 == review_gate::ApprovalState::Current;
-        if approved && initial_paths.is_empty() {
+        if approved && uncommitted.is_empty() {
             next = Some(format!("Next: atelier merge {id}"));
-        } else if !initial_paths.is_empty() {
+        } else if !uncommitted.is_empty() {
             situation.push(format!(
                 "Unfinished checkout: {}: {}. See `atelier status` before handing off.",
-                crate::human_output::count_noun(initial_paths.len(), "uncommitted path"),
+                crate::human_output::count_noun(uncommitted.len(), "uncommitted path"),
                 crate::human_output::first_five(
-                    initial_paths.iter().map(|path| path.display().to_string()),
+                    uncommitted.iter().map(|path| path.display().to_string()),
+                    ", "
+                )
+            ));
+        }
+        if !untracked.is_empty() {
+            situation.push(format!(
+                "Untracked: {}: {}. No commit holds them, so merge leaves them in place; commit any that belong to the work.",
+                crate::human_output::count_noun(untracked.len(), "path"),
+                crate::human_output::first_five(
+                    untracked.iter().map(|path| path.display().to_string()),
                     ", "
                 )
             ));
@@ -797,6 +814,21 @@ fn in_progress_verdict(failed: &[String]) -> String {
     }
 }
 
+/// The branch HEAD names when it has no commits yet, in an Atelier
+/// repository: there is nothing to land or check until the install is
+/// committed (atelier-l457).
+fn unborn() -> Option<String> {
+    git_freshness::unborn_branch(StorageLayout::discover().ok()?.repo_root())
+}
+
+/// What `land` and the Stop hook report on a branch with no commits yet.
+fn unborn_report(branch: &str) -> String {
+    format!(
+        "No commits yet on {branch}, so there is nothing to land. Next: commit the Atelier install with `{}`",
+        atelier_app::init::INSTALL_COMMIT
+    )
+}
+
 pub fn land(
     requested: Option<&str>,
     hook: bool,
@@ -806,6 +838,21 @@ pub fn land(
 ) -> Result<()> {
     if !hook {
         let nothing_pushed = if push { ", nothing pushed" } else { "" };
+        if let Some(branch) = unborn() {
+            if !quiet {
+                println!("{}", unborn_report(&branch));
+            }
+            let verdict = format!("land: passed{nothing_pushed}");
+            println!(
+                "{}",
+                if quiet {
+                    verdict.trim_start_matches("land: ")
+                } else {
+                    &verdict
+                }
+            );
+            return Ok(());
+        }
         // What a push of work in progress publishes: HEAD as land began, so
         // a check that moves HEAD pushes nothing.
         let began = StorageLayout::discover()
@@ -905,9 +952,14 @@ pub fn land(
                     .unwrap_or_else(|_| "this directory".to_owned())
             )
         }),
-        Ok(repeated) => match land_text(requested, install, false) {
-            Ok(_) => json!({}),
-            Err(error) => stop_hook_refusal(&error, repeated, on_work_branch()),
+        Ok(repeated) => match unborn() {
+            Some(branch) => {
+                json!({"systemMessage": format!("Atelier: {}", unborn_report(&branch))})
+            }
+            None => match land_text(requested, install, false) {
+                Ok(_) => json!({}),
+                Err(error) => stop_hook_refusal(&error, repeated, on_work_branch()),
+            },
         },
     };
     println!("{}", serde_json::to_string(&output)?);
@@ -1413,6 +1465,20 @@ fn touched_claims(
 /// review history, for history that reached the base without the gates
 /// (atelier-37uq).
 pub fn doctor(quiet: bool) -> Result<()> {
+    if let Some(branch) = unborn() {
+        println!(
+            "{}",
+            if quiet {
+                "passed".to_owned()
+            } else {
+                format!(
+                    "No commits yet on {branch}, so there is no history to check. Next: commit the Atelier install with `{}`",
+                    atelier_app::init::INSTALL_COMMIT
+                )
+            }
+        );
+        return Ok(());
+    }
     let output = land_text(None, false, true)?;
     if quiet {
         println!("passed");

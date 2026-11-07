@@ -304,7 +304,7 @@ impl CommittedSnapshot {
         clean: bool,
     ) -> Result<(crate::record_index::RecordFiles, Vec<PathBuf>)> {
         let entries = entries(repo, &self.commit)?;
-        let mut paths = crate::git_freshness::working_status_paths(repo)?;
+        let status = crate::git_freshness::status_entries(repo)?;
         let records = record_paths(repo, &entries)?;
         let relative = records
             .into_iter()
@@ -320,10 +320,14 @@ impl CommittedSnapshot {
             .map(|path| Path::new(".atelier").join(path))
             .collect::<Vec<_>>();
         require_records_match(repo, &entries, changed)?;
-        paths.retain(|path| !canonical(path));
         let hidden = flagged_paths(repo, &entries, |path| !canonical(path))?;
+        let mut paths = status
+            .iter()
+            .map(|(path, _)| path.clone())
+            .filter(|path| !canonical(path))
+            .collect::<Vec<_>>();
         if clean {
-            require_paths_clean(repo, &paths, hidden)?;
+            require_paths_clean(repo, &tracked(&status), hidden)?;
         } else {
             paths.extend(hidden);
         }
@@ -353,15 +357,24 @@ impl CommittedSnapshot {
         verify_records(repo, &entries)?;
         self.require_code_clean(repo)
     }
-    /// Refuses uncommitted paths outside the tracker, without verifying the
-    /// records.
+    /// Refuses uncommitted changes to tracked paths outside the tracker,
+    /// without verifying the records. An untracked path is no commit's, so
+    /// it is left in place (atelier-l457).
     pub fn require_code_clean(&self, repo: &Path) -> Result<()> {
         let entries = entries(repo, &self.commit)?;
-        let mut paths = crate::git_freshness::working_status_paths(repo)?;
-        paths.retain(|path| !canonical(path));
+        let paths = tracked(&crate::git_freshness::status_entries(repo)?);
         let hidden = flagged_paths(repo, &entries, |path| !canonical(path))?;
         require_paths_clean(repo, &paths, hidden)
     }
+}
+
+/// The tracked paths outside the tracker among `git status` entries.
+fn tracked(status: &[(PathBuf, bool)]) -> Vec<PathBuf> {
+    status
+        .iter()
+        .filter(|(path, untracked)| !untracked && !canonical(path))
+        .map(|(path, _)| path.clone())
+        .collect()
 }
 
 fn verify_records(repo: &Path, entries: &Entries) -> Result<()> {
@@ -475,7 +488,7 @@ fn require_paths_clean(repo: &Path, paths: &[PathBuf], hidden: Vec<PathBuf>) -> 
         let mut paths = paths.to_vec();
         paths.sort();
         bail!(
-            "merge_checkout_dirty: {} has {}: {}. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`",
+            "merge_checkout_dirty: {} has {}: {}. Next: commit them with `git commit -am \"…\"`, or set them aside with `git stash push`",
             repo.display(),
             atelier_core::count_noun(paths.len(), "uncommitted path"),
             atelier_core::first_five(paths.iter().map(|path| path.display().to_string()), ", ")
@@ -638,11 +651,16 @@ mod tests {
                         snapshot.read_record_files(repo.path(), false).unwrap().1,
                         [PathBuf::from("unfinished-code")]
                     );
+                    // Untracked, it is no commit's, so a clean read
+                    // passes (atelier-l457); staged, it refuses.
+                    snapshot.read_record_files(repo.path(), true).unwrap();
+                    git_output(repo.path(), &["add", "unfinished-code"]).unwrap();
                     assert!(snapshot
                         .read_record_files(repo.path(), true)
                         .unwrap_err()
                         .to_string()
                         .starts_with("merge_checkout_dirty"));
+                    git_output(repo.path(), &["rm", "-q", "--cached", "unfinished-code"]).unwrap();
                     fs::remove_file(repo.path().join("unfinished-code")).unwrap();
                 }
                 match mutation {
@@ -771,6 +789,9 @@ mod tests {
         assert_eq!(graph_error(), expected);
         fs::write(repo.path().join("unfinished"), "unfinished code").unwrap();
         assert_eq!(graph_error(), expected);
+        // Untracked, it is no commit's; staged, a clean read refuses it.
+        snapshot.read_record_files(repo.path(), true).unwrap();
+        git_output(repo.path(), &["add", "unfinished"]).unwrap();
         let error = snapshot.read_record_files(repo.path(), true).unwrap_err();
         assert!(error.to_string().starts_with("merge_checkout_dirty"));
     }

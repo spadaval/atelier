@@ -21,13 +21,28 @@ mode or global provider credential configuration.
 
 ## Installing Atelier
 
+`atelier init` runs in a Git repository, which may have no commits yet;
+outside one it refuses with `init_no_git` and says to run `git init` first,
+writing nothing. A new policy names the base branch init detects: origin's
+HEAD branch, else whichever one of `main` and `master` exists, else the
+current branch, born or not. `init` prints its choice (`Base branch: master
+(from the current branch)`); a detached HEAD that no other rule settles is
+refused with `init_base_unknown` before anything is written. The starter
+policy then merges as written (atelier-l457).
+
+`init` ends by listing what it wrote and the next steps: review the generated
+policy, commit the install on the base with `git add .atelier .gitignore &&
+git commit -m "Install Atelier"` (it predates the gates, so it needs no
+review), then create the first issue. Until that commit, `status`, `check`,
+`land` and the Stop hook say there are no commits yet and name it.
+
 The commit that runs `atelier init` and imports the first records comes before
 any policy on the base branch, so `atelier merge` has nothing to gate it with.
 Land it in one of two supported ways:
 
 - **On the base branch.** Run `atelier init` there, review the generated
-  policy, and commit. `land` treats the first commit that adds the policy as
-  the install and gates every commit after it.
+  policy, and commit, as `init` prints. `land` treats the first commit that
+  adds the policy as the install and gates every commit after it.
 - **On a branch, through the repository's own review.** Run `atelier init`
   and any bundle import on a branch such as `chore/atelier-tracker`. While no
   copy of the base has a workflow policy, `atelier land --install` on that

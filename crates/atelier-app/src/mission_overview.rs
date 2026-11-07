@@ -199,7 +199,7 @@ mod tests {
     use crate::test_records::Records;
 
     fn policy() -> WorkflowPolicy {
-        policy_from(crate::workflow_policy::STARTER_POLICY_YAML)
+        policy_from(&crate::workflow_policy::starter_policy_yaml("main"))
     }
 
     fn policy_from(yaml: &str) -> WorkflowPolicy {

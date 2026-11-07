@@ -2228,7 +2228,7 @@ fn test_workflow_init_is_removed_and_root_init_owns_starter_policy() {
     let (success, stdout, stderr) = run_atelier(dir.path(), &["init", "--slug", "atelier"]);
     assert!(success, "root init failed: {stderr}");
     assert!(stdout.contains(".atelier/workflow.yaml"));
-    assert!(stdout.contains("atelier check"));
+    assert!(stdout.contains("atelier issue create"));
 
     let policy_path = dir.path().join(".atelier").join("workflow.yaml");
     let policy = std::fs::read_to_string(&policy_path).unwrap();

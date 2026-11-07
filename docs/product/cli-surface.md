@@ -141,7 +141,12 @@ atelier prune --apply
 
 Bundle files are authored input, not durable exports. Preview is non-mutating;
 apply validates the complete staged graph before installation. `check` diagnoses
-records and policy; it does not repair a hidden cache. Every command that
+records and policy; it does not repair a hidden cache. The two old record
+forms Atelier still reads, separate disposition events and open After merge
+lines, pass it with a note naming the migration that rewrites them
+(`atelier migrate dispositions --apply`, `atelier migrate after-merge`).
+Version 1 review records are read as written, since approvals stay as
+committed (atelier-l457). Every command that
 writes records refuses, before writing anything, records that would fail a
 rule `check` applies that the records before them pass (`record_invalid`). Prune is dry-run by default
 and removes only eligible artifacts in apply mode. Commit canonical deletions.

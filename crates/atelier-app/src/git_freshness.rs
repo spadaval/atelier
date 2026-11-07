@@ -841,6 +841,17 @@ pub fn resolve_commit_id(repo: &Path, id: &str) -> Result<String> {
         ),
     }
 }
+/// The branch HEAD names when that branch has no commits yet, as after
+/// `git init`; `None` once HEAD resolves, or when it is detached.
+pub fn unborn_branch(repo: &Path) -> Option<String> {
+    if git_output(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok() {
+        return None;
+    }
+    String::from_utf8(git_output(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).ok()?)
+        .ok()
+        .map(|branch| branch.trim().to_owned())
+        .filter(|branch| !branch.is_empty())
+}
 pub fn head_commit(repo: &Path) -> Result<String> {
     Ok(
         String::from_utf8(git_output(repo, &["rev-parse", "HEAD"])?)?
@@ -967,9 +978,13 @@ pub fn changed_paths(repo: &Path, before: &str, after: &str) -> Result<Vec<PathB
 
 pub fn working_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     let mut changed = working_status_paths(repo)?;
-    changed.extend(crate::committed_snapshot::flagged_modified_paths(
-        repo, "HEAD",
-    )?);
+    // With no commits yet there is no HEAD for index flags to hide a change
+    // from.
+    if unborn_branch(repo).is_none() {
+        changed.extend(crate::committed_snapshot::flagged_modified_paths(
+            repo, "HEAD",
+        )?);
+    }
     changed.sort();
     changed.dedup();
     Ok(changed)
@@ -981,6 +996,22 @@ pub(crate) fn working_code_paths(repo: &Path) -> Result<Vec<PathBuf>> {
         .collect())
 }
 pub fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
+    Ok(status_entries(repo)?
+        .into_iter()
+        .map(|(path, _)| path)
+        .collect())
+}
+/// The untracked paths `git status` lists, which no commit holds: what
+/// `merge` and `land` leave in place rather than refuse (atelier-l457).
+pub fn untracked_paths(repo: &Path) -> Result<Vec<PathBuf>> {
+    Ok(status_entries(repo)?
+        .into_iter()
+        .filter_map(|(path, untracked)| untracked.then_some(path))
+        .collect())
+}
+/// Each path `git status` lists, ignored files aside, with whether it is
+/// untracked.
+pub(crate) fn status_entries(repo: &Path) -> Result<Vec<(PathBuf, bool)>> {
     let status = git_output(
         repo,
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
@@ -993,11 +1024,17 @@ pub fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
         if record.len() < 4 || record[2] != b' ' {
             bail!("invalid Git status record");
         }
-        changed.push(PathBuf::from(std::str::from_utf8(&record[3..])?));
+        changed.push((
+            PathBuf::from(std::str::from_utf8(&record[3..])?),
+            &record[..2] == b"??",
+        ));
         if record[..2].iter().any(|byte| matches!(byte, b'R' | b'C')) {
-            changed.push(PathBuf::from(std::str::from_utf8(
-                records.next().context("missing Git rename source")?,
-            )?));
+            changed.push((
+                PathBuf::from(std::str::from_utf8(
+                    records.next().context("missing Git rename source")?,
+                )?),
+                false,
+            ));
         }
     }
     Ok(changed)

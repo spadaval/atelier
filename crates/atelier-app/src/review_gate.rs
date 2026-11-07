@@ -972,6 +972,10 @@ impl ReviewBase {
 /// it, named by its ID so it holds wherever HEAD has moved since, as other
 /// fixes commit (atelier-v4rd, atelier-61il). At the tip it only drops it,
 /// which brings the record back; below, it rewrites the commits after it.
+///
+/// Only review records, the Markdown files Atelier reads, are judged: a
+/// repository's history can hold the form before them, `<id>.yaml` files
+/// its record migration deleted (cosplay-studio, atelier-l457).
 pub fn append_only(
     read: &mut git::ReadContext<'_>,
     base_commit: &str,
@@ -983,7 +987,7 @@ pub fn append_only(
         for path in edge
             .paths
             .iter()
-            .filter(|path| path.starts_with(".atelier/reviews"))
+            .filter(|path| path.starts_with(".atelier/reviews") && git::is_record_path(path))
         {
             let before = read.entry(&edge.parent, path)?;
             let after = read.entry(&edge.commit, path)?;

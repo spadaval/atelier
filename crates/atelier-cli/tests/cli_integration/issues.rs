@@ -4174,6 +4174,8 @@ fn test_inventory_combines_custom_status_category_and_real_metadata_before_limit
 fn test_status_footer_uses_complete_work_buckets() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
+    // With the install committed, the footer leads with the work.
+    init_git_repo(dir.path());
     // Policies from the earlier starter still declare the `blocked` status.
     fs::write(
         dir.path().join(".atelier/workflow.yaml"),

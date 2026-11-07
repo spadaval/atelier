@@ -140,7 +140,7 @@ mod tests {
             ] {
                 git::git_output(repo.path(), &args).unwrap();
             }
-            let valid = atelier_workflow::STARTER_POLICY_YAML;
+            let valid = &atelier_workflow::starter_policy_yaml("main");
             let root = commit(repo.path(), valid, "valid root");
             let tip = commit(repo.path(), &format!("{valid}\n"), "valid tip");
             fs::remove_file(
@@ -177,7 +177,7 @@ mod tests {
             ] {
                 git::git_output(repo.path(), &args).unwrap();
             }
-            let valid = atelier_workflow::STARTER_POLICY_YAML;
+            let valid = &atelier_workflow::starter_policy_yaml("main");
             let base = commit(repo.path(), valid, "valid root policy");
             let mut read = git::ReadContext::new(repo.path());
             let source = from_captured(&mut read, &base).unwrap();

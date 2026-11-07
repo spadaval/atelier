@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:01:01.226766008+00:00"
 id: "atelier-l457"
 issue_type: "feature"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-l457
 priority: "P2"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Adopt and upgrade Atelier without hand repair"
-updated_at: "2026-11-07T10:18:49.576212265+00:00"
+updated_at: "2026-11-07T10:31:03.146735599+00:00"
 ---
 
 ## Goal
