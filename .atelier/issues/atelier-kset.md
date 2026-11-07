@@ -17,29 +17,29 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Print each check finding once, on one line, against the owning record"
-updated_at: "2026-10-17T01:10:57.971709219+00:00"
+title: "Print each check finding once, on one line, against its record, and say what check checked"
+updated_at: "2026-11-07T21:03:25.446176563+00:00"
 ---
 
 ## Goal
 
-`atelier check` findings are noisy and mislabelled (reproduced in a scratch clone):
-
-- A bad status in atelier-uyuu is printed twice, once under `(canonical)` and once under `atelier-uyuu`.
-- Missing references are labelled `(canonical)` instead of the linking record.
-- Workflow diagnostics render as a five-line block, `error: workflow_issue_status_invalid` / `path: /home/.../.atelier/workflow.yaml` / `reference:` / `message:`. The path is absolute and points at workflow.yaml even when the fault is in an issue file.
-- Every finding is prefixed `Tracker record files are invalid:`.
-- The missing-Goal message repeats the ID twice and the path three times: `Invalid record file .atelier/issues/atelier-wtnp.md: Missing required issue body section 'Goal' for issue atelier-wtnp, section Goal, path .atelier/issues/atelier-wtnp.md`.
-- YAML line numbers count from the start of the front matter, so they are one less than the file line (17 vs 18).
+`atelier check` findings are noisy and mislabelled. Checked 2026-11-07 on a record with an invalid status and another with an `advances` link to a missing issue:
+- The invalid status is printed twice, once labelled `records:` and once under the issue's ID (crates/atelier-app/src/lint.rs). An invalid issue_type is the same (atelier-ry7d, merged here).
+- The missing reference is labelled `records:` instead of the linking record.
+- Every `records:` finding is prefixed `Tracker record files are invalid:`.
+- Workflow diagnostics render as a four-line block (`error: workflow_issue_status_invalid` / `path:` / `reference:` / `message:`).
+- YAML line numbers count from the start of the front matter, so they are one less than the file line.
 - An invalid workflow policy is printed twice, once as the `Invalid working policy` load warning and once as the finding.
-- The header `Lint found 1 issue(s)` uses "issue" for a problem and names a `lint` command that does not exist.
+
+A passing check says only `Check passed.`, the same for the whole repository and for `check <id>`, naming neither the record nor the count; a failure's last line is `Error: check_findings: check failed with N findings…`, so `| tail -1` keeps the count and drops the finding (atelier-4t5l, merged here). Agents piped `atelier check` through `tail` 166 of 323 times in the transcripts.
 
 ## Done when
 
-- Each fault prints once on one line: `✗ atelier-uyuu  .atelier/issues/atelier-uyuu.md:18  status 'frobnicated' is not valid for validation; use backlog, todo, …`.
-- The header reads `check: 2 problems in 2 records`.
-- Tests cover a duplicate-prone status fault, a missing reference attributed to its linking record, and a file-relative YAML line number.
+- [ ] Each fault prints once, on one line, against the record to fix: `✗ atelier-uyuu  .atelier/issues/atelier-uyuu.md:18  status 'frobnicated' is not valid for task; use backlog, todo, …`. A test pins the count for an invalid status and an invalid issue_type.
+- [ ] A missing reference is attributed to its linking record, and YAML line numbers are file-relative; tests cover both.
+- [ ] A whole-repository pass prints `✓ check: 742 records valid` (the actual count), and `check <id>` prints `✓ atelier-wtnp valid`.
+- [ ] A failure's last line names the first problem and the next step, not only a count; a test asserts it.
 
 ## Context
 
-crates/atelier-cli/src/commands/issue.rs:1026-1043; the diagnostic block format also appears in status and transition output, so fix it at the shared formatter.
+The diagnostic block also appears in status and transition output, so fix it at the shared formatter. The `Lint found N issue(s)` header the audit reported is now `Check found N findings:`. atelier-sfd9 adds the file and field to a missing-reference finding; share the format.

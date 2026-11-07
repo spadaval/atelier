@@ -17,23 +17,23 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Let issue update replace one body section"
-updated_at: "2026-10-17T19:00:36.344655499+00:00"
+updated_at: "2026-11-07T21:03:34.464399543+00:00"
 ---
 
 ## Goal
 
-`atelier issue update --body` replaces every typed section, so agents rewrite a single section by script. On 2026-10-16 there were about 20 Python `str.replace` or section-splice edits of `.atelier/issues/*.md`, changing a Done when, a Design section, a Close Reason or one Scope line. One script split on the first `## Context` and duplicated sections, which `evidence record` then refused: "Duplicate issue body section 'Context'". Editing records directly stays supported for bulk work. This item covers the one-section case.
+`atelier issue update --body` replaces every typed section, so agents rewrite a single section by script. On 2026-10-16 there were about 20 Python `str.replace` or section-splice edits of `.atelier/issues/*.md`, changing a Done when, a Design section, a Report or one Scope line. One script split on the first `## Context` and duplicated sections, which a later command refused ("Duplicate issue body section 'Context'"). Editing records directly stays supported for bulk work; this item covers the one-section case.
 
 ## Done when
 
-- `atelier issue update <id> --section "Done when"` replaces only that section. The text comes from stdin or a file, so Markdown never passes through shell quoting. The result is validated like `atelier check`.
-- An unknown or disallowed section is refused, and the error names the allowed sections for the record's type.
-- Notes stay append-only through `issue note`. Done records follow the existing rules for editing a completion claim (atelier-jy9t).
-- The confirmation follows atelier-7ebi. Tests cover a replace, an unknown section, and a done record.
+- [ ] `atelier issue update <id> --section "Done when"` replaces only that section, with the text from stdin or a file so Markdown never passes through shell quoting; the result is validated like `atelier check`, and Notes and the Report are kept.
+- [ ] An unknown or disallowed section is refused, and the error names the allowed sections for the record's type.
+- [ ] A done record is refused, as `--body` refuses it today.
+- [ ] The confirmation follows atelier-7ebi. Tests cover a replace, an unknown section and a done record.
 
 ## Context
 
-From the 2026-10-16 transcript retrospective.
+From the 2026-10-16 transcript retrospective. Pairs with atelier-sxcj (`--body-file`). Dropped in decision atelier-mzpn: the rule for editing a completion claim (atelier-jy9t), since done now means merged.
 
 ## Notes
 

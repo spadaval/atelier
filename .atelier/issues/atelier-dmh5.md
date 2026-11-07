@@ -23,24 +23,27 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Store the direction of directional context links"
-updated_at: "2026-10-17T06:57:31.852566483+00:00"
+title: "Treat a reversed directional link as a different link"
+updated_at: "2026-11-07T21:03:29.337341527+00:00"
 ---
 
 ## Goal
 
-`atelier issue link xmtr qkmr --role supersedes` writes `type: "supersedes"` onto both records (`add_issue_relation`, `crates/atelier-records/src/lib.rs:469-498`). `issue show qkmr` then prints `supersedes atelier-xmtr`, which is backwards: xmtr supersedes qkmr. Once stored, the records can't say which side is which. The same applies to `duplicates`, `implements`, `derived_from`, `part_of`, `falsifies` and directional custom roles. This repo only uses `related` and `advances` (22 each), so adopters are the ones affected now.
+Since atelier-ihss each new link is stored only on the record that declares it, so a directional role such as `supersedes` keeps its direction. Two places still treat a link in the reverse direction as the same link (finding atelier-3ewf, note below): the duplicate check in `RecordStore::add_issue_relation` (crates/atelier-records/src/lib.rs) prints 'already exists' for `issue link A B --role supersedes` when B already declares `supersedes A`, and the two-sided dedupe in `index_issue_graph` (crates/atelier-app/src/record_index.rs) indexes only one of two records that declare the role toward each other. Records written before ihss that store the same directional type on both sides leave the direction ambiguous. The same applies to `duplicates`, `implements`, `derived_from`, `part_of`, `falsifies` and directional custom roles.
 
 ## Done when
 
-- Directional roles keep their direction: the target stores an inverse (`superseded_by`, …) or a direction marker, and each side renders correctly (`superseded by atelier-xmtr`).
-- Symmetric roles (`related`) and `advances` are unchanged.
-- `atelier check` flags existing records that store the same directional type on both sides, or a migration rewrites them.
-- Tests link in each direction and check both `issue show` outputs, and unlink removes both sides.
+- [ ] `issue link A B --role supersedes` succeeds when B already declares `supersedes A`, and both links are indexed and shown with the right direction on each side (`supersedes` and `superseded by`).
+- [ ] Records that store the same directional type on both sides are read with a defined direction, or `atelier check` names them with the edit that fixes them.
+- [ ] Symmetric roles (`related`) and `advances` are unchanged; tests link in each direction.
+
+## Context
+
+Narrowed in decision atelier-mzpn to what ihss left.
 
 ## Unknowns
 
-Whether custom roles from `.atelier/config.toml` need a declared inverse or direction flag.
+Whether custom roles from `.atelier/config.toml` need a declared direction.
 
 ## Notes
 

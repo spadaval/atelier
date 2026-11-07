@@ -19,18 +19,18 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Show the mission's own close report and item notes in the debrief"
-updated_at: "2026-11-05T06:07:19.198719+00:00"
+title: "Show the mission's own Report and item notes in the debrief"
+updated_at: "2026-11-07T21:03:32.556519855+00:00"
 ---
 
 ## Goal
 
-The mission's own Close Reason report (outcome, deviations, decisions, surprises, open items) is not shown, including vt8q's explanation that two later code commits don't affect S1, S3 or S4; item notes such as g8cn's v0.3.1 publication note are missing although Left open points at them.
+The debrief does not show the mission's own Report, the report written when it closes (outcome, deviations, decisions, surprises, open items; read from `## Report`, or `## Close Reason` in older records), including vt8q's explanation that two later code commits don't affect S1, S3 or S4. Item notes such as g8cn's v0.3.1 publication note are missing too, although Left open points at them. Under atelier-jnrh each item's Report is written before review and carried into the merge, and a mission closes once all its work is merged and its validation, if it has one, is done.
 
 ## Done when
 
-A CLI fixture that reproduces the case in a scratch repository shows the problem fixed in both the Markdown and HTML debrief. (Rewritten 2026-11-05: atelier-vt8q's records become prunable after 2026-11-11, so its debrief cannot stay the check.)
+- [ ] A CLI fixture in a scratch repository shows the mission's Report and the item notes Left open points at, in both the Markdown and HTML debrief, for a mission closed under the current lifecycle and for one whose records use `## Close Reason`.
 
 ## Context
 
-Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
+Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8. vt8q's records become prunable after 2026-11-11, so a fixture is the check. Its mission, atelier-gg6b, was superseded in decision atelier-mzpn; this item stands alone until loose end atelier-jdpf reviews a debrief generated under the new lifecycle.

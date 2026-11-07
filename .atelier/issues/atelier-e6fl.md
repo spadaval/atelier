@@ -17,22 +17,19 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Keep or reject --reason on transitions that aren't done transitions"
-updated_at: "2026-10-17T01:10:57.965486113+00:00"
+title: "Refuse --reason on transitions that write no Report"
+updated_at: "2026-11-07T21:03:34.812629181+00:00"
 ---
 
 ## Goal
 
-`atelier issue transition db6h block --reason "waiting on vendor"` succeeds and the reason is stored nowhere: `grep -c vendor .atelier/issues/atelier-db6h.md` returns 0. `apply_transition` (`crates/atelier-cli/src/commands/workflow.rs:266-281`) writes `close_reason` only when the target status is in the done category. Any other transition drops it silently. For `block`, the reason is the only information the transition carries.
+`atelier issue transition <id> defer --reason "waiting on vendor"` succeeds and the reason is stored nowhere (checked 2026-11-07: the record does not contain it). `apply_transition` (crates/atelier-cli/src/commands/workflow.rs) writes the Report only on transitions that require `close_reason`; on any other, such as `plan`, `defer` or `start`, it drops `--reason` silently.
 
 ## Done when
 
-On a transition that doesn't end in a done status, `--reason` either:
-- is appended as a typed note (`[blocker]` for transitions into the blocked category, `[note]` otherwise) and echoed in the confirmation, or
-- is refused with `--reason applies to done transitions; use atelier issue note <id> --kind blocker "…"`.
+- [ ] On a transition that does not require `close_reason`, `--reason` is refused before anything is written, with a message that names the transition and points at `atelier issue note <id> "…"`.
+- [ ] CLI tests cover `defer --reason` (refused, record unchanged) and `supersede --reason` (unchanged).
 
-A CLI test covers `block --reason`, and `close --reason` behaviour is unchanged.
+## Context
 
-## Unknowns
-
-Which of the two. Recording is friendlier; refusing keeps `--reason` meaning Close Reason only.
+Decision atelier-mzpn chose the refuse option, so `--reason` keeps one meaning: it writes the Report (CONTEXT.md, atelier-ml3r). The original's `block` example is gone; no policy on this host has a blocked status.

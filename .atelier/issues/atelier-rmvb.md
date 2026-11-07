@@ -17,29 +17,25 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Keep prune rows to one line with a one-line title"
-updated_at: "2026-10-17T01:10:57.973536770+00:00"
+title: "Make prune's output one line per record, grouped by the root that keeps it, ending with a step that works"
+updated_at: "2026-11-07T21:03:25.934579588+00:00"
 ---
 
 ## Goal
 
-Prune uses an evidence or review record's summary or body as its `title` (crates/atelier-cli/src/commands/prune.rs:1333-1335). One evidence row (atelier-kf2p) printed four paragraphs, including `DISCARD: no reliable wall improvement…`, and many review rows are 1,000+ character lines. Each eligible record takes three lines:
-
-```
-  eligible issue atelier-0349 (done, latest 2026-10-16, path .atelier/issues/atelier-0349.md)
-    recover: git log --all -- .atelier/issues/atelier-0349.md; git show <commit>:.atelier/issues/atelier-0349.md
-    title: Make atelier land fast enough for the Stop hook
-```
-
-The path repeats what the ID implies. Protected rows leave out the title, which is what helps decide whether a record matters. `(recorded, …)` status is noise on evidence and reviews.
+`atelier prune` output is hard to read, and its last step can mislead. Checked 2026-11-07 on this repository (1,683 record candidates: 486 eligible, 1,203 protected):
+- Each record takes three lines (the row, a `recover:` recipe with a `<commit>` placeholder, and `title:`), and the title is an evidence or review record's whole summary, so many rows are 1,000-character paragraphs (crates/atelier-cli/src/commands/prune.rs). Protected rows leave out the title, which is what helps decide whether a record matters.
+- The header says `Candidates: 1683` with no eligible/protected split, and nothing says which retained root keeps a cluster or when it becomes prunable. A hard-coded `Deferred Cleanup Classes` section always prints `none` (atelier-rp1c, merged here).
+- The dry run always ends `Next: atelier prune --apply`, even when nothing is eligible or the checkout is dirty, where apply then refuses (atelier-pxyz, merged here).
+- `prune --apply` prints the same list and stops, with no total and no commit step, though docs/product/retention-and-prune.md says the deletions must be committed; the owner reason reads `owner … has active workflow state` for a todo issue (atelier-08rc, merged here).
 
 ## Done when
 
-- Every candidate is one line, `eligible issue atelier-0349  done 2026-10-16  Make atelier land fast enough…`, with titles cut to the first line and truncated.
-- Protected rows include the title.
-- The recovery recipe prints once in a footer.
-- A test with a multi-paragraph evidence summary asserts one line per row.
+- [ ] Every candidate is one line, e.g. `eligible issue atelier-0349  done 2026-10-16  Make atelier land fast enough…`, with titles cut to their first line and truncated; protected rows include the title; the recovery recipe prints once in a footer. A test with a multi-paragraph evidence summary asserts one line per row.
+- [ ] The header reads `Canonical records: 486 to remove, 1203 kept (cutoff <date>, 7 days)`, and kept records are grouped by the root that keeps them, e.g. `atelier-1ioo  … · closed 2026-10-15, within 7 days (prunable after 2026-10-22) · keeps 46: 3 issues, 31 reviews, 12 evidence`, with per-record lines only under `--full`. The Deferred Cleanup Classes section prints only when a class is deferred. A test covers grouping by a recent root.
+- [ ] The dry run ends `Nothing to prune` when nothing is eligible, `⚠ apply needs a clean checkout: commit or stash N paths first` on a dirty checkout, and otherwise `Next: atelier prune --apply`; tests cover all three.
+- [ ] Apply ends with `Removed 651 (512 issues, 90 evidence, 49 reviews). Next: git commit -am "Prune …"; undo before committing: git restore .atelier`, using the real counts, and the owner reason reads `owner atelier-bw0b is open (todo)`; a test asserts the summary and footer.
 
 ## Context
 
-Applies the one-line rule from ADR 0022 and atelier-deyy to prune.
+Applies the one-line rule from ADR 0022 and atelier-deyy to prune. docs/product/retention-and-prune.md (protection follows links in both directions; atelier-r7cd). Merged from four prune items in decision atelier-mzpn; low priority, outside any mission.

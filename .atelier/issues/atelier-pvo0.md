@@ -26,18 +26,21 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Name the command for the remaining silent or bare truncations"
-updated_at: "2026-10-17T09:14:09.736875227+00:00"
+updated_at: "2026-11-07T21:03:29.640338083+00:00"
 ---
 
 ## Goal
 
 atelier-ytxg made the work-view lists name the command that shows the rest. Its review found more cuts outside that item:
-- `issue show`'s Recently Updated rollup stops at 8 rows with no count or command (`crates/atelier-cli/src/commands/issue.rs`, about line 521; finding atelier-hrfh).
-- Two `land` errors list 5 paths then "and N more" with no command (`session.rs`, about lines 363 and 391; finding atelier-wslw); `git status` or `git diff --name-only <base> -- .atelier` would show the rest.
-- "Did you mean a, b, c (and N more)?" names no command (`crates/atelier-app/src/record_ref.rs`, about line 90; finding atelier-378y).
-- Also noted: `status` on an owner's branch silently cuts scoped work at 8 (undocumented), and `evidence list`'s `Showing: N of M` names no command.
+- `issue show`'s Recently Updated rollup stops at 8 rows with no count or command (crates/atelier-cli/src/commands/issue.rs; finding atelier-hrfh).
+- "Did you mean a, b, c (and N more)?" names no command (crates/atelier-app/src/record_ref.rs; finding atelier-378y).
+- `status` on an owner's branch silently cuts the owner's scoped work at 8, and `evidence list`'s `Showing: N of M` names no command.
 
 ## Done when
 
-- Each of these names the command that shows the rest, or is documented as a bounded window.
-- Rendering tests cover each.
+- [ ] Each of these names the command that shows the rest, or is documented as a bounded window.
+- [ ] Rendering tests cover each.
+
+## Context
+
+Dropped in decision atelier-mzpn: `land`'s path lists (finding atelier-wslw), which atelier-md0v reshaped when `land` became report-only on work branches.
