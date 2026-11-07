@@ -10,9 +10,6 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-4nsl"
-    type: "blocked_by"
-  - kind: "issue"
     id: "atelier-md0v"
     type: "blocked_by"
   - kind: "issue"
@@ -45,4 +42,4 @@ Life-on-rails hit about ten refusals between `atelier init` and its first merge,
 
 ## Context
 
-docs/strategies/simpler-lifecycle.md (Shape: Small repositories work out of the box), ADR 0028 decision 7. The draft-mission items atelier-0vp3 (base detection), atelier-6tmk (no Git, unborn HEAD) and atelier-t3ko (init next steps) cover the same ground; whether they are superseded is part of Sumeet's decision on atelier-mzpn. This item does not take 0vp3's `--base` override or t3ko's full list of created paths, re-run message, `-q` and `setup claude` step. atelier-md0v (no recorded base; report-only `land` on work branches) and atelier-4nsl (light path) land first.
+docs/strategies/simpler-lifecycle.md (Shape: Small repositories work out of the box), ADR 0028 decision 7. The draft-mission items atelier-0vp3 (base detection), atelier-6tmk (no Git, unborn HEAD) and atelier-t3ko (init next steps) cover the same ground; whether they are superseded is part of Sumeet's decision on atelier-mzpn. This item does not take 0vp3's `--base` override or t3ko's full list of created paths, re-run message, `-q` and `setup claude` step. atelier-md0v (no recorded base; report-only `land` on work branches) has landed. atelier-4nsl (light path) runs in parallel and also changes `merge.rs`; keep edits there focused.
