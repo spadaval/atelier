@@ -48,4 +48,4 @@ Make the skill, the CLI and every repository describe the new lifecycle in the s
 
 - [ ] The agent-factory skill (spadaval/.agents, edited in a worktree there) describes the new lifecycle in its atelier reference and its review, implement, plan and validate procedures, and nothing this mission removed. Its total line count falls.
 - [ ] check, land, close, review and done each mean one thing across CLI help, the skill and docs; CONTEXT.md defines each.
-- [ ] Every Atelier repository on this host (atelier, astromech, cosplay-studio, demiurge, life-on-rails) runs the new policy, its open after-merge checks are loose ends, and its AGENTS.md describes the lifecycle in the same words (the every-repo criterion).
+- [ ] Every Atelier repository on this host (atelier, astromech, cosplay-studio, demiurge, life-on-rails) runs the new policy, its open after-merge checks are loose ends, and its AGENTS.md describes the lifecycle in the same words (the every-repo criterion); astromech's CI pin (`ATELIER_REV` in `.github/workflows/atelier.yml`) moves to the new binary, after which new ownership records stop writing `branch_base`.

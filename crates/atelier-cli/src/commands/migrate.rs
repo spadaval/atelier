@@ -107,6 +107,16 @@ pub fn epics(to: &str, apply: bool, quiet: bool) -> Result<()> {
         );
         return Ok(());
     }
+    // The retyped records pass the rules `atelier check` applies before any
+    // is written (atelier-ilba).
+    let changes = plans
+        .iter()
+        .map(|plan| atelier_records::guard::Change {
+            path: Path::new("issues").join(plan.path.file_name().unwrap_or_default()),
+            text: Some(plan.text.clone()),
+        })
+        .collect::<Vec<_>>();
+    atelier_app::record_guard::check_changes(&layout.canonical_dir(), &changes)?;
     for plan in &plans {
         fs::write(&plan.path, &plan.text)
             .with_context(|| format!("cannot write {}", plan.path.display()))?;
@@ -205,12 +215,17 @@ pub fn dispositions(apply: bool, quiet: bool) -> Result<()> {
         return Ok(());
     }
     let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
-    for (finding, folded, events) in &plans {
-        store.set_disposition(finding, folded.clone())?;
-        for event in events {
-            store.remove_retired_disposition(&event.id)?;
+    // Every rewrite is checked together, and none is written unless the
+    // records they leave pass (atelier-ilba).
+    store.batch(|| {
+        for (finding, folded, events) in &plans {
+            store.set_disposition(finding, folded.clone())?;
+            for event in events {
+                store.remove_retired_disposition(&event.id)?;
+            }
         }
-    }
+        Ok(())
+    })?;
     if !quiet {
         println!(
             "Migrated {}. Run atelier check and commit the changes.",

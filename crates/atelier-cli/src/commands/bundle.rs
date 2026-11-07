@@ -861,9 +861,18 @@ fn apply_bundle_to_state(
     bundle: &BundleFile,
     plan: &BundleGraphPlan<'_>,
 ) -> Result<Value> {
+    let store = RecordStore::for_project(state_dir, project_slug);
+    // The bundle's records are checked together, as one write (atelier-ilba).
+    store.batch(|| apply_bundle_records(&store, bundle, plan))
+}
+
+fn apply_bundle_records(
+    store: &RecordStore,
+    bundle: &BundleFile,
+    plan: &BundleGraphPlan<'_>,
+) -> Result<Value> {
     let mut resolved = BTreeMap::<String, ResolvedRef>::new();
     let mut created = BTreeMap::<String, Vec<Value>>::new();
-    let store = RecordStore::for_project(state_dir, project_slug);
 
     for issue in &plan.issues {
         if let Some(id) = &issue.id {
@@ -1016,7 +1025,7 @@ fn apply_bundle_to_state(
         let source = resolve_planned_ref(&resolved, &relationship.source)?;
         let target = resolve_planned_ref(&resolved, &relationship.target)?;
         apply_planned_relationship(
-            &store,
+            store,
             &source,
             &target,
             &relationship.role,

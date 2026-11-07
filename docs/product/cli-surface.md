@@ -136,7 +136,9 @@ atelier prune --apply
 
 Bundle files are authored input, not durable exports. Preview is non-mutating;
 apply validates the complete staged graph before installation. `check` diagnoses
-records and policy; it does not repair a hidden cache. Prune is dry-run by default
+records and policy; it does not repair a hidden cache. Every command that
+writes records refuses, before writing anything, records that would fail a
+rule `check` applies that the records before them pass (`record_invalid`). Prune is dry-run by default
 and removes only eligible artifacts in apply mode. Commit canonical deletions.
 
 Removed surfaces include provider review, review rooms, transition actions,

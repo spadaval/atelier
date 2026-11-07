@@ -564,7 +564,7 @@ fn plan_canonical_records(
         || reviews.iter().any(CanonicalCandidate::eligible);
     if apply && has_eligible {
         ensure_clean_for_canonical_prune(&tracker.repo_root)?;
-        ensure_survivors_load(tracker, &issues, &evidence, &reviews)?;
+        ensure_survivors_valid(tracker, &issues, &evidence, &reviews)?;
     }
 
     Ok(CanonicalPruneSummary {
@@ -771,44 +771,27 @@ fn protect_referenced_candidates(
     }
 }
 
-/// Refuses an apply whose surviving records would not load.
-fn ensure_survivors_load(
+/// Refuses an apply whose surviving records would fail a rule `atelier
+/// check` applies that the records before it pass (atelier-ilba).
+fn ensure_survivors_valid(
     tracker: &TrackerContext,
     issues: &[CanonicalCandidate],
     evidence: &[CanonicalCandidate],
     reviews: &[CanonicalCandidate],
 ) -> Result<()> {
-    let removed = |candidates: &[CanonicalCandidate], id: &str| {
-        candidates
-            .iter()
-            .any(|candidate| candidate.eligible() && candidate.id == id)
-    };
-    let surviving_issues = tracker
-        .index
-        .issue_records()
-        .filter(|record| !removed(issues, &record.issue.id))
-        .cloned()
-        .collect();
-    let surviving_evidence = tracker
-        .index
-        .evidence_records()
-        .into_iter()
-        .filter(|record| !removed(evidence, &record.header.id))
-        .cloned()
-        .collect();
-    RecordIndex::from_project_records(
-        &tracker.state_dir,
-        surviving_issues,
-        surviving_evidence,
-        tracker
-            .index
-            .reviews()
-            .filter(|record| !removed(reviews, &record.header.id))
-            .cloned()
-            .collect(),
+    let changes = issues
+        .iter()
+        .chain(evidence)
+        .chain(reviews)
+        .filter(|candidate| candidate.eligible())
+        .map(|candidate| atelier_records::guard::Change {
+            path: candidate.path.clone(),
+            text: None,
+        })
+        .collect::<Vec<_>>();
+    atelier_app::record_guard::check_changes(&tracker.state_dir, &changes).context(
+        "prune refused: the records left after pruning would not pass `atelier check`; nothing was removed",
     )
-    .map(|_| ())
-    .context("prune refused: the records left after pruning would not load; nothing was removed")
 }
 
 fn canonical_retention_cutoff(

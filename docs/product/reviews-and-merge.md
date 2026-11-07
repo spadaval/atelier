@@ -1,10 +1,13 @@
 # Reviews and Merge
 
-Reviews are immutable Markdown events under `.atelier/reviews/`. Each command
+Reviews are Markdown events under `.atelier/reviews/`. Each command
 adds a new file with an explicit identity, target, full commit, and explanation;
 a [base exemption](#trivial-changes-on-the-base) names its base branch instead
-of a target. The one thing that changes in place is a finding's
-[disposition](#dispositions), a field of the finding
+of a target. Until a finding reaches the base branch it can be
+[corrected or deleted](#correcting-review-records), while an approval or
+trivial exemption stays as first committed; on the base, the one thing that
+changes in place is a finding's [disposition](#dispositions), a field of the
+finding
 ([ADR 0025](../adr/0025-findings-carry-their-disposition.md)).
 Agent Factory owns review and finding assessment; Atelier checks the recorded
 invariants. There is no external review backend or review room.
@@ -80,9 +83,46 @@ it again. All findings without accepted dispositions block merge.
 Who set a disposition is judged at the commit that set the field: the oldest
 commit since which the finding's file has held this disposition, not the
 commit or time the disposition names. Setting it again, or restoring earlier
-bytes by hand, is judged at that later commit. Every other part of a review
-record is append-only: editing it, or deleting a record, is refused, and merge
-checks review history from the base, including edits subsequently reverted.
+bytes by hand, is judged at that later commit. On the base, every other part
+of a review record is append-only: editing it, or deleting a record, is
+refused, and merge checks review history from the base, including edits
+subsequently reverted.
+
+## Correcting review records
+
+A finding, or a review record that is not an approval or trivial exemption,
+can be edited or deleted by hand, by any agent on the branch, until it
+reaches the base; commit the change with the work. Each change is
+judged against the base as it stood where the change joined it, so a
+correction is not refused after the branch merges (ADR 0028 decision 4,
+atelier-ilba):
+
+- a commit not on the base yet, by whether the tip of the policy's base
+  branch holds the record;
+- a commit a merge brought into the base, by whether the merge's first
+  parent held it;
+- a commit on the base's first-parent line, such as one made on the base
+  itself, by whether its own first parent held it.
+
+A change the base already holds is refused with `review_append_only`, at the
+commit that made it (`land`, `doctor` and `merge` apply the same check).
+Since `merge` always creates a merge commit, this holds under every policy
+(atelier-jnrh); a commit an earlier fast-forward put on the base's
+first-parent line is judged at its own first parent, as above. When the base
+branch cannot be read, every commit is judged at its own first parent and a
+review record is final once committed. A change must leave a regular file,
+and a removed separate disposition event is never added back.
+
+Approvals and trivial exemptions stay append-only from when they are first
+committed, on a branch as on the base: re-pinning an approval's commit, or
+changing its target or identity, would move it onto code its reviewer never
+saw. `land` restores an uncommitted edit to one, and refuses a committed edit
+with `review_append_only`; record a new approval instead.
+
+Identity is self-declared, so no rule says who may correct a finding: an
+implementer could delete a reviewer's finding before merge, leaving no
+decision on it. That cannot let unreviewed code merge, since approvals cannot
+be edited and one still has to cover the code.
 
 Repositories whose dispositions are separate events, from before ADR 0025,
 keep working unmigrated: Atelier reads each finding's latest disposition
@@ -94,15 +134,15 @@ writes the field and removes its events. `atelier migrate dispositions
 removes the events, on the base or a work branch, and keeps approvals
 current; Git history keeps the events. Events that continue a folded
 disposition, as a branch recorded with an older Atelier brings in, replace
-it. To bring such a branch up to date with a base that has migrated, merge
-without committing and migrate before the commit: `git merge --no-commit
-<base>`, `atelier migrate dispositions --apply`, `git add .atelier`, `git
-commit --no-edit`. A plain merge removes the base's migrated event while the
-branch's later event remains, and `land` refuses it with
-`review_append_only`, naming that sequence after the step that leaves the
-merge out (atelier-j5oq). At the branch tip that step drops only the merge;
-below it, it rewrites the commits after the merge, which then need review
-again, since review and evidence records pinned to them no longer count. The read path for separate events goes once every repository has
+it. Such a branch takes a base that has migrated with a plain merge: the
+base never held the branch's later event, so the branch may still correct it
+(atelier-ilba), and `atelier migrate dispositions --apply` on the branch then
+folds it. Under `fast_forward_only`, before every merge was a merge commit
+(atelier-jnrh), a review record was final once committed, so `land` refused
+the plain merge with `review_append_only` and named a merge without
+committing, migrated before the commit (atelier-j5oq); a branch whose
+records are final, as when the base branch cannot be read, still gets that
+advice. The read path for separate events goes once every repository has
 migrated (atelier-42th). A disposition read from an event, or written by the
 migration commit that removed it, is judged at the commit that added the
 event; once the finding's file has held another disposition, the later
@@ -112,8 +152,8 @@ disposition and keeps none of its events, as `review disposition` and the
 migration write it, and a removed event is never added back (atelier-pfbp).
 
 Terminal targets and their eligible review clusters can leave the active tree
-together through [protected prune](retention-and-prune.md); retained events
-remain immutable.
+together through [protected prune](retention-and-prune.md); retained events on
+the base remain immutable.
 
 ## Requesting a review
 
@@ -174,8 +214,9 @@ links, writing the Report, a status change, another issue's record, a
 finding's disposition, a new receipt, a new child or follow-up. Each commit after the pin is checked, so changing
 code and then restoring it does not recover an old approval, and a fix made
 after a `fix_now` finding makes the approval stale, so the fix is reviewed
-again. Review records stay append-only apart from a finding's disposition,
-but that is a check of its own (`review_append_only`), not part of freshness.
+again. Review records on the base stay append-only apart from a finding's
+disposition, but that is a check of its own (`review_append_only`), not part
+of freshness.
 
 A Done when changed after the item was started is still shown to whoever
 judges the work (see [A Done when edited after the

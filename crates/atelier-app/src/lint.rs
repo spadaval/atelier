@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use atelier_records::{issue_record_path, CanonicalIssueRecord};
 
-use crate::record_index::{read_record_files, RecordIndex};
+use crate::record_index::{read_record_files, RecordFiles, RecordIndex};
 use crate::record_ref::{match_id, not_found, wrong_kind, RecordKind};
 
 /// Reserved size labels (atelier-b7hb): `size-s`, `size-m`, `size-l`,
@@ -63,17 +63,34 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         state_dir,
         issue_ref,
     } = request;
+    let files = read_record_files(state_dir)?;
+    let scoped_id = issue_ref
+        .map(|issue_ref| resolve_issue_id(&files, issue_ref))
+        .transpose()?;
+    let findings = lint_files(state_dir, files, scoped_id.as_deref(), true)?;
+    Ok(LintView {
+        scoped_id,
+        findings,
+    })
+}
+
+/// The findings `atelier check` reports for `files`, the records read from
+/// `state_dir` or as a write would leave them (atelier-ilba). `explain`
+/// says where a record missing from them is instead; without it, two sets
+/// of records compare by their findings alone.
+pub(crate) fn lint_files(
+    state_dir: &Path,
+    files: RecordFiles,
+    scoped_id: Option<&str>,
+    explain: bool,
+) -> Result<Vec<LintFinding>> {
     let repo_root = state_dir.parent().ok_or_else(|| {
         anyhow!(
             "Cannot determine repository root for {}",
             state_dir.display()
         )
     })?;
-    let files = read_record_files(state_dir)?;
     let policy_error = atelier_workflow::load(repo_root).err();
-    let scoped_id = issue_ref
-        .map(|issue_ref| resolve_issue_id(&files, issue_ref))
-        .transpose()?;
 
     let mut findings = Vec::new();
     if let Some(error) = policy_error {
@@ -94,39 +111,47 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
             message: format!("Tracker record files are invalid: {:#}", file_error.error),
             id: stem,
         };
-        match &scoped_id {
+        match scoped_id {
             Some(id) if file_error.path != issue_record_path(id) => other_file_errors.push(finding),
             _ => findings.push(finding),
         }
     }
-    let scoped_record_missing = scoped_id.as_ref().is_some_and(|id| {
-        !files.issues.iter().any(|record| &record.issue.id == id)
+    let scoped_record_missing = scoped_id.is_some_and(|id| {
+        !files.issues.iter().any(|record| record.issue.id == id)
             && !files
                 .errors
                 .iter()
                 .any(|error| error.path == issue_record_path(id))
     });
-    if let (Some(id), true) = (&scoped_id, scoped_record_missing) {
+    if let (Some(id), true) = (scoped_id, scoped_record_missing) {
         findings.push(LintFinding {
-            id: id.clone(),
+            id: id.to_owned(),
             message: format!(
                 "Tracker record files are invalid: Missing record file .atelier/{}",
                 issue_record_path(id).display()
             ),
         });
     }
+    // The record graph, when every file parsed, which the receipt criteria
+    // read once it is valid.
+    let mut graph = None;
     if findings.is_empty() {
         let integrity_errors = match other_file_errors.into_iter().next() {
             Some(first) => vec![first.message],
-            None => RecordIndex::validation_errors(
-                state_dir,
-                files.issues.clone(),
-                files.evidence.clone(),
-                files.reviews.clone(),
-            )
-            .into_iter()
-            .map(|error| format!("Tracker record files are invalid: {error:#}"))
-            .collect(),
+            None => {
+                let (index, errors) = RecordIndex::checked(
+                    state_dir,
+                    files.issues.clone(),
+                    files.evidence.clone(),
+                    files.reviews.clone(),
+                    explain,
+                );
+                graph = Some(index);
+                errors
+                    .into_iter()
+                    .map(|error| format!("Tracker record files are invalid: {error:#}"))
+                    .collect()
+            }
         };
         findings.extend(integrity_errors.into_iter().map(|message| LintFinding {
             id: "records".to_string(),
@@ -140,25 +165,20 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     let scoped_records = files
         .issues
         .iter()
-        .filter(|record| scoped_id.as_ref().is_none_or(|id| &record.issue.id == id));
+        .filter(|record| scoped_id.is_none_or(|id| record.issue.id == id));
     findings.extend(issue_findings(
         scoped_records.clone(),
         repo_root,
         scoped_id.is_some(),
     ));
     findings.extend(strategy_findings(&files.issues, scoped_records, repo_root));
-    if records_valid {
-        findings.extend(criteria_findings(
-            state_dir,
-            repo_root,
-            scoped_id.as_deref(),
-        )?);
+    if let (true, Some(index)) = (records_valid, graph) {
+        let index = index
+            .with_base_exemptions(files.base_exemptions)?
+            .with_retired_dispositions(files.retired_dispositions)?;
+        findings.extend(criteria_findings(&index, repo_root, scoped_id)?);
     }
-
-    Ok(LintView {
-        scoped_id,
-        findings,
-    })
+    Ok(findings)
 }
 
 /// Per-issue findings: empty titles, workflow-policy violations, and
@@ -256,18 +276,17 @@ pub fn issue_findings<'a>(
 /// targeting it or stored against it as their mission; for a mission, also
 /// receipts targeting an item in its scope.
 fn criteria_findings(
-    state_dir: &Path,
+    index: &RecordIndex,
     repo_root: &Path,
     scoped_id: Option<&str>,
 ) -> Result<Vec<LintFinding>> {
-    let index = RecordIndex::load(state_dir)?;
     let scope = match scoped_id {
         Some(id)
             if index
                 .issue_record(id)
                 .is_some_and(|record| record.issue.issue_type == "mission") =>
         {
-            let mut scope = crate::objective_graph::mission_issue_ids(&index, id)?;
+            let mut scope = crate::objective_graph::mission_issue_ids(index, id)?;
             scope.insert(id.to_string());
             Some(scope)
         }
@@ -295,7 +314,7 @@ fn criteria_findings(
             .iter()
             .map(|criterion| criterion.slug.as_str())
             .collect::<Vec<_>>();
-        for problem in crate::criteria::undefined_criteria(&index, repo_root, mission, &slugs)? {
+        for problem in crate::criteria::undefined_criteria(index, repo_root, mission, &slugs)? {
             findings.push(LintFinding {
                 id: record.header.id.clone(),
                 message: format!("Evidence {problem}"),

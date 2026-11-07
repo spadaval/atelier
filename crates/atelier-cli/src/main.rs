@@ -817,6 +817,9 @@ fn load_dotenv() -> Result<()> {
 
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
+    // Every record write passes the rules `atelier check` applies before it
+    // lands, and is refused before anything is written (atelier-ilba).
+    atelier_app::record_guard::install();
     // Hold an association transaction across every repository command's
     // complete read/validate/write lifetime. Reads share it; every writer owns
     // it exclusively so read-modify-write commands cannot lose concurrent edits.

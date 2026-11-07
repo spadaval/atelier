@@ -262,13 +262,17 @@ pub fn disposition(
     // as folded into the finding (ADR 0025); writing the field removes them.
     let previous = original.disposition().cloned();
     let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
-    let (updated, _) = store.set_disposition(&finding, disposition.clone())?;
-    for event in index
-        .retired_dispositions()
-        .filter(|event| event.finding == finding)
-    {
-        store.remove_retired_disposition(&event.id)?;
-    }
+    // The finding and the events it replaces are checked as one write.
+    let updated = store.batch(|| {
+        let (updated, _) = store.set_disposition(&finding, disposition.clone())?;
+        for event in index
+            .retired_dispositions()
+            .filter(|event| event.finding == finding)
+        {
+            store.remove_retired_disposition(&event.id)?;
+        }
+        Ok(updated)
+    })?;
     let mut line = format!(
         "Disposition {} of {} on {} @{}: \"{}\"{}",
         decision.as_str(),

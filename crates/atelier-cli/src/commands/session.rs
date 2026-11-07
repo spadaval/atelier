@@ -398,8 +398,8 @@ fn land_gates(
             git::text(repo, &["merge-base", &tip, since]).ok()
         });
     match &trusted {
-        Some(point) => review_gate::append_only(&mut read, point)?,
-        None => review_gate::append_only_history(&mut read)?,
+        Some(point) => review_gate::append_only(&mut read, point, &source.policy.branch_policy)?,
+        None => review_gate::append_only_history(&mut read, &source.policy.branch_policy)?,
     }
     let touched = match &trusted {
         Some(point) => touched_claims(repo, &mut read, &index, point, &head)?,

@@ -155,8 +155,8 @@ freshness compares the target's title, type, strategy, and typed body and reject
 intervening non-record changes. Correct receipts by appending new proof rather
 than rewriting old observations. Record edits, receipts included, never make
 an approval stale (see [approval
-freshness](reviews-and-merge.md#approval-freshness)); review records stay
-append-only by their own check.
+freshness](reviews-and-merge.md#approval-freshness)); review records on the
+base stay append-only by their own check.
 
 ## Handoff
 

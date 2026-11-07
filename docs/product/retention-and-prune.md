@@ -38,19 +38,21 @@ it, and shows the `git restore --source=<commit>^` command that brings it back
 missing from the checkout, it suggests `git restore` instead. Alternatively,
 delete the link from the linking issue by hand, or remove a review or
 evidence record whose only target is gone. Apply requires a clean tracked checkout and valid
-records. It must not leave missing links or an invalid retained graph.
+records. It must not leave missing links or an invalid retained graph: apply
+refuses, before removing anything, when the records left would fail a rule
+`atelier check` applies that the records before pass.
 
 Branch and worktree cleanup protects the current checkout, base branch, active
 owners, dirty or locked worktrees, and unintegrated or unpushed commits. Output
 names eligible, protected, removed, failed, and deferred classes. A deferred
-class is never silently deleted. Reviews are append-only proof; do not delete
-review records by hand to bypass gates. External payload deletion is outside
+class is never silently deleted. Review records on the base are append-only
+proof; do not delete them by hand to bypass gates. External payload deletion is outside
 prune's scope.
 
 Protected prune removes a terminal target and its eligible review cluster
-together. Git preserves their audit trail. Retained review events stay immutable,
-apart from a finding's disposition (ADR 0025); rewrites, partial review
-deletions, and edits later reverted fail landing.
+together. Git preserves their audit trail. Retained review events on the base
+stay immutable, apart from a finding's disposition (ADR 0025); rewrites,
+partial review deletions, and edits later reverted fail landing.
 
 Commit canonical record removals yourself. After a partial cleanup, inspect Git
 and rerun the dry run; do not assume every candidate was removed. Recover a

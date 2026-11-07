@@ -44,12 +44,13 @@ pub fn change_issue_link(
         )?;
     }
     let store = RecordStore::new(state_dir);
-    let changed = match (unlink, role == BLOCKED_BY_ROLE) {
-        (false, true) => store.add_issue_block(&source, &target, declared_by_blocker)?,
-        (false, false) => store.add_issue_relation(&source, &target, role)?,
-        (true, true) => store.remove_issue_block(&source, &target)?,
-        (true, false) => store.remove_issue_relation(&source, &target, role)?,
-    };
+    // Removing a link stored on both records writes both, checked as one.
+    let changed = store.batch(|| match (unlink, role == BLOCKED_BY_ROLE) {
+        (false, true) => store.add_issue_block(&source, &target, declared_by_blocker),
+        (false, false) => store.add_issue_relation(&source, &target, role),
+        (true, true) => store.remove_issue_block(&source, &target),
+        (true, false) => store.remove_issue_relation(&source, &target, role),
+    })?;
     if quiet {
         println!(
             "{}",

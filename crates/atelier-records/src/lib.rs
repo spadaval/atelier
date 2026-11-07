@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ pub use atelier_core::{
     IssueSectionState, IssueSections, IssueStrategy, RecordHeader, WorkflowBranch,
 };
 
+pub mod guard;
 pub mod mutation_lock;
 pub mod review;
 pub mod written;
@@ -160,9 +162,19 @@ pub fn issue_section_diagnostic(
     )
 }
 
+/// Reads and writes the record files under one state directory. Every
+/// write passes the installed [`guard`] first, and is refused before any
+/// file changes when the guard refuses it.
 pub struct RecordStore {
     state_dir: PathBuf,
     project_slug: Option<String>,
+    /// Whether writes pass the installed guard. A staging copy's do not: the
+    /// command that stages them checks them against the records they will
+    /// join.
+    guarded: bool,
+    /// The writes a [`RecordStore::batch`] holds back, by path relative to
+    /// the state directory; `None` removes the file. Reads see them.
+    held: RefCell<Option<BTreeMap<PathBuf, Option<String>>>>,
 }
 
 impl RecordStore {
@@ -171,6 +183,8 @@ impl RecordStore {
         Self {
             state_dir: state_dir.into(),
             project_slug: None,
+            guarded: true,
+            held: RefCell::new(None),
         }
     }
 
@@ -178,9 +192,41 @@ impl RecordStore {
     /// configured slug.
     pub fn for_project(state_dir: impl Into<PathBuf>, project_slug: impl Into<String>) -> Self {
         Self {
-            state_dir: state_dir.into(),
             project_slug: Some(project_slug.into()),
+            ..Self::new(state_dir)
         }
+    }
+
+    /// A store over a staging copy that holds only part of the records,
+    /// whose writes the installed guard does not see: the command checks
+    /// them against the records they will join before staging them.
+    pub fn staging(state_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            guarded: false,
+            ..Self::new(state_dir)
+        }
+    }
+
+    /// Runs `write` with this store's writes held back, then checks them
+    /// together with the installed guard and writes them all, or none when
+    /// the guard refuses (atelier-ilba). Reads through this store see the
+    /// held writes, so a command can build on its own. A batch inside a
+    /// batch joins it.
+    pub fn batch<T>(&self, write: impl FnOnce() -> Result<T>) -> Result<T> {
+        if self.held.borrow().is_some() {
+            return write();
+        }
+        let _transaction = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
+        *self.held.borrow_mut() = Some(BTreeMap::new());
+        let result = write();
+        let held = self.held.borrow_mut().take().unwrap_or_default();
+        let value = result?;
+        let changes = held
+            .into_iter()
+            .map(|(path, text)| guard::Change { path, text })
+            .collect::<Vec<_>>();
+        self.publish(changes)?;
+        Ok(value)
     }
 
     pub fn discover_issue_paths(&self) -> Result<Vec<PathBuf>> {
@@ -192,18 +238,27 @@ impl RecordStore {
     pub fn discover_record_paths(&self, kind: &str) -> Result<Vec<PathBuf>> {
         let spec = canonical_record_kind(kind)?;
         let record_dir = self.state_dir.join(spec.canonical_dir);
-        if !record_dir.exists() {
-            return Ok(Vec::new());
-        }
-
         let mut records = Vec::new();
-        collect_record_paths(
-            &self.state_dir,
-            &record_dir,
-            spec.extension,
-            spec.kind,
-            &mut records,
-        )?;
+        if record_dir.exists() {
+            collect_record_paths(
+                &self.state_dir,
+                &record_dir,
+                spec.extension,
+                spec.kind,
+                &mut records,
+            )?;
+        }
+        if let Some(held) = self.held.borrow().as_ref() {
+            for (path, text) in held {
+                if !path.starts_with(spec.canonical_dir) {
+                    continue;
+                }
+                records.retain(|known| known != path);
+                if text.is_some() {
+                    records.push(path.clone());
+                }
+            }
+        }
         records.sort();
         Ok(records)
     }
@@ -255,12 +310,24 @@ impl RecordStore {
 
     pub fn canonical_id_exists(&self, id: &str) -> Result<bool> {
         for spec in CANONICAL_RECORD_KINDS {
-            let relative = canonical_record_path(spec, id)?;
-            if self.state_dir.join(relative).exists() {
+            if self.exists(&canonical_record_path(spec, id)?) {
                 return Ok(true);
             }
         }
         Ok(false)
+    }
+
+    /// Whether a record file is at `relative`, counting held writes.
+    fn exists(&self, relative: &Path) -> bool {
+        match self
+            .held
+            .borrow()
+            .as_ref()
+            .and_then(|held| held.get(relative))
+        {
+            Some(text) => text.is_some(),
+            None => self.state_dir.join(relative).symlink_metadata().is_ok(),
+        }
     }
 
     pub fn write_issue_atomic(&self, record: &CanonicalIssueRecord) -> Result<()> {
@@ -567,8 +634,52 @@ impl RecordStore {
         Ok(true)
     }
 
+    /// Writes one record file, or holds it back inside a batch. Outside a
+    /// batch it is checked on its own first.
     fn write_atomic(&self, relative: &Path, contents: String) -> Result<()> {
+        self.change(relative, Some(contents))
+    }
+
+    /// Removes one record file, or holds the removal back inside a batch.
+    fn remove(&self, relative: &Path) -> Result<()> {
+        self.change(relative, None)
+    }
+
+    fn change(&self, relative: &Path, text: Option<String>) -> Result<()> {
+        if let Some(held) = self.held.borrow_mut().as_mut() {
+            held.insert(relative.to_owned(), text);
+            return Ok(());
+        }
+        self.publish(vec![guard::Change {
+            path: relative.to_owned(),
+            text,
+        }])
+    }
+
+    /// Checks `changes` with the installed guard, then writes every one.
+    fn publish(&self, changes: Vec<guard::Change>) -> Result<()> {
+        if changes.is_empty() {
+            return Ok(());
+        }
         let _lock = mutation_lock::CanonicalMutationLock::exclusive(&self.state_dir)?;
+        if self.guarded {
+            guard::check(&self.state_dir, &changes)?;
+        }
+        for change in changes {
+            match change.text {
+                Some(text) => self.write_file(&change.path, text)?,
+                None => {
+                    let path = self.state_dir.join(&change.path);
+                    fs::remove_file(&path)
+                        .with_context(|| format!("Failed to remove {}", path.display()))?;
+                    written::note(&path);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn write_file(&self, relative: &Path, contents: String) -> Result<()> {
         let path = self.state_dir.join(relative);
         let parent = path
             .parent()
@@ -591,6 +702,16 @@ impl RecordStore {
     }
 
     fn read_record_file(&self, relative: &Path) -> Result<String> {
+        if let Some(held) = self
+            .held
+            .borrow()
+            .as_ref()
+            .and_then(|held| held.get(relative))
+        {
+            return held
+                .clone()
+                .with_context(|| format!("Missing record file {}", display_state_path(relative)));
+        }
         let bytes = fs::read(self.state_dir.join(relative))
             .with_context(|| format!("Missing record file {}", display_state_path(relative)))?;
         String::from_utf8(bytes)
@@ -3919,5 +4040,52 @@ Legacy evidence summary.
                 .to_string();
             assert!(error.contains("atelier migrate epics"), "{error}");
         }
+    }
+
+    /// A batch's writes are checked together and written all or none, and
+    /// reads inside it see them; a write outside a batch is checked alone
+    /// (atelier-ilba). The guard refuses only this test's marker, so other
+    /// tests sharing the process write as before.
+    #[test]
+    fn a_batch_writes_every_change_or_none() {
+        const MARKER: &str = "Refused by the batch test guard";
+        guard::install(|_, changes| {
+            if changes.iter().any(|change| {
+                change
+                    .text
+                    .as_deref()
+                    .is_some_and(|text| text.contains(MARKER))
+            }) {
+                bail!("the test guard refused the batch");
+            }
+            Ok(())
+        });
+        let dir = tempdir().unwrap();
+        let store = RecordStore::new(dir.path());
+        let first = issue_record("atelier-bat1");
+        let mut refused = issue_record("atelier-bat2");
+        refused.issue.title = MARKER.to_string();
+        let path = |id: &str| dir.path().join(format!("issues/{id}.md"));
+
+        let error = store
+            .batch(|| {
+                store.write_issue_atomic(&first)?;
+                assert_eq!(store.load_issue_by_id("atelier-bat1")?, first);
+                assert!(!path("atelier-bat1").exists());
+                store.write_issue_atomic(&refused)
+            })
+            .unwrap_err();
+        assert!(error.to_string().contains("refused the batch"), "{error}");
+        assert!(!path("atelier-bat1").exists() && !path("atelier-bat2").exists());
+
+        store.batch(|| store.write_issue_atomic(&first)).unwrap();
+        assert_eq!(store.load_issue_by_id("atelier-bat1").unwrap(), first);
+        assert!(store.write_issue_atomic(&refused).is_err());
+        assert!(!path("atelier-bat2").exists());
+        // A staging copy's writes pass no guard.
+        RecordStore::staging(dir.path())
+            .write_issue_atomic(&refused)
+            .unwrap();
+        assert!(path("atelier-bat2").exists());
     }
 }

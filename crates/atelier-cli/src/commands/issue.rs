@@ -1046,10 +1046,14 @@ pub fn create_lifecycle(
         &record.issue,
         parent_id.as_deref(),
     )?;
-    store.write_issue_atomic(&record)?;
-    if let Some(parent_id) = &parent_id {
-        store.add_issue_child(parent_id, &id)?;
-    }
+    // The new issue and its parent's child link are checked as one write.
+    store.batch(|| {
+        store.write_issue_atomic(&record)?;
+        if let Some(parent_id) = &parent_id {
+            store.add_issue_child(parent_id, &id)?;
+        }
+        Ok(())
+    })?;
 
     if input.quiet {
         println!("{}", record.issue.id);
@@ -1390,17 +1394,20 @@ pub fn update_lifecycle(
         &record.issue,
         parent_id.as_deref(),
     )?;
-    if let Some(old_parent) = old_parent_for_update {
-        if old_parent.as_deref() != parent_id.as_deref() {
-            if let Some(old_parent) = old_parent {
-                store.remove_issue_child(&old_parent, &id)?;
-            }
-            if let Some(parent_id) = &parent_id {
-                store.add_issue_child(parent_id, &id)?;
+    // A parent change and the record are checked as one write.
+    store.batch(|| {
+        if let Some(old_parent) = old_parent_for_update {
+            if old_parent.as_deref() != parent_id.as_deref() {
+                if let Some(old_parent) = old_parent {
+                    store.remove_issue_child(&old_parent, &id)?;
+                }
+                if let Some(parent_id) = &parent_id {
+                    store.add_issue_child(parent_id, &id)?;
+                }
             }
         }
-    }
-    store.write_issue_atomic(&record)?;
+        store.write_issue_atomic(&record)
+    })?;
 
     changed_fields.sort_unstable();
     changed_fields.dedup();

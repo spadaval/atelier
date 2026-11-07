@@ -6983,7 +6983,7 @@ fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
         records.sort();
         assert!(
             out.contains(&format!(
-                "land_records_uncommitted: 2 tracker records differ from HEAD: {}; review records are append-only, so restore the committed ones and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- {path} && git add .atelier && git commit -m \"…\"\n",
+                "land_records_uncommitted: 2 tracker records differ from HEAD: {}; approvals, trivial exemptions and review records on the base are append-only, so restore those and commit the rest with the work. Next: git restore --source=HEAD --staged --worktree -- {path} && git add .atelier && git commit -m \"…\"\n",
                 records.join(", ")
             )),
             "{change}: {out}"
@@ -8189,9 +8189,12 @@ fn a_disposition_after_approval_keeps_it_current() {
         text.replace("\nConcern\n", "\nA different concern\n"),
     )
     .unwrap();
+    // The finding has not reached the base, so it may still be corrected
+    // (atelier-ilba); every merge is a merge commit, so no fast-forward made
+    // it final (atelier-jnrh).
     commit(f.path(), "rewrite the finding");
     let (pass, out) = cli(f.path(), &["merge", &id, "--check"]);
-    assert!(!pass && out.contains("review_append_only"), "{out}");
+    assert!(pass && !out.contains("review_append_only"), "{out}");
 }
 
 /// An approved work branch whose dispositions are separate events passes
@@ -8358,9 +8361,13 @@ fn separate_disposition_events_cannot_be_deleted_or_restored_by_hand() {
     }
 }
 
-/// A branch whose older Atelier recorded a successor disposition event is
-/// brought up to date with a migrated base by merging without committing and
-/// migrating; a plain merge is refused, naming that step (atelier-j5oq).
+/// A branch whose older Atelier recorded a successor disposition event takes
+/// a migrated base with a plain merge: the base never held the successor
+/// event, so the branch may still correct it (atelier-ilba), and since every
+/// merge is a merge commit no fast-forward makes it final first
+/// (atelier-jnrh). Migrating the branch then folds it. Under
+/// `fast_forward_only` the plain merge was refused, naming a migrating merge
+/// (atelier-j5oq).
 #[test]
 fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
     let f = Fixture::new();
@@ -8419,45 +8426,13 @@ fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
     commit(f.path(), "migrate dispositions on the base");
     git(f.path(), &["switch", "-q", &f.branch]);
     git(f.path(), &["merge", "-q", "--no-edit", "main"]);
-    let merge = git(f.path(), &["rev-parse", "HEAD"]);
-    let main = git(f.path(), &["rev-parse", "main"]);
-    let next = format!(
-        "Next: git rebase --autostash --onto {merge}~1 {merge} && git merge --no-commit {main} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit\n"
-    );
-    let rewrites = "rewrites the commits after it: get them reviewed again";
     let (pass, out) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && out.contains(&next) && !out.contains(rewrites),
-        "{out}"
-    );
-    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
-    // Below the tip, the same step rewrites the later commits, and says so.
-    fs::write(f.path().join("later"), "later work\n").unwrap();
-    commit(f.path(), "later work");
-    let (pass, below) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && below.contains(&next) && below.contains(rewrites),
-        "{below}"
-    );
-    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
-    // The documented sequence, run here, leaves a branch the check accepts.
-    git(
-        f.path(),
-        &[
-            "rebase",
-            "-q",
-            "--autostash",
-            "--onto",
-            &format!("{merge}~1"),
-            &merge,
-        ],
-    );
-    git(f.path(), &["merge", "-q", "--no-commit", "main"]);
+    assert!(pass && !out.contains("review_append_only"), "{out}");
+    ok(f.path(), &["check"]);
     ok(f.path(), &["migrate", "dispositions", "--apply"]);
-    git(f.path(), &["add", ".atelier"]);
-    git(f.path(), &["commit", "-q", "--no-edit"]);
+    commit(f.path(), "migrate the branch's successor event");
     assert!(!f.path().join(".atelier/reviews/atelier-e002.md").exists());
-    let (_, out) = cli(f.path(), &["land"]);
-    assert!(!out.contains("review_append_only"), "{out}");
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(pass && !out.contains("review_append_only"), "{out}");
     ok(f.path(), &["check"]);
 }

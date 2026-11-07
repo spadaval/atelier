@@ -27,7 +27,10 @@ mechanical guards at the point of action. The governing decision is
 - Parse those records directly on each command. No database or query cache.
 - Guard valid records, dependency closure, traceable active work, fresh honest
   evidence, independent approval, visible trivial exemptions, and dispositions
-  for findings. Do not encode a complete agent choreography.
+  for findings. Valid records are guarded when they are written: every
+  command that writes records refuses, before writing anything, records that
+  would fail a rule `atelier check` applies, so an invalid record does not
+  block later commands. Do not encode a complete agent choreography.
 - Let agents commit records with the code. Atelier creates one commit: the
   merge commit `merge` integrates reviewed work with, which also marks that
   work done.
@@ -40,10 +43,19 @@ mechanical guards at the point of action. The governing decision is
   the wrong place ([ADR 0028](docs/adr/0028-simpler-lifecycle.md), decision
   2).
 - Evaluate merge gates from the base branch's reviewed policy.
-- Keep review and evidence append-only and tied to full Git commit identities.
-  The one exception is a finding's disposition, a field of the finding that is
-  set and changed in place, with who set it and at which commit; Git history
-  keeps earlier ones ([ADR 0025](docs/adr/0025-findings-carry-their-disposition.md)).
+- Keep review records append-only once they reach the base branch, approvals
+  and trivial exemptions from when they are first committed, and review and
+  evidence tied to full Git commit identities. Until a finding or another
+  review record reaches the base, any agent on the branch may correct or
+  delete it, each change judged against the base as it stood where the
+  change joined it. On the base, the one exception is a finding's disposition, a
+  field of the finding that is set and changed in place, with who set it and
+  at which commit; Git history keeps earlier ones
+  ([ADR 0025](docs/adr/0025-findings-carry-their-disposition.md)). Identity
+  is self-declared, so an implementer could delete a reviewer's finding before
+  merge and leave no decision on it; that cannot let unreviewed code merge,
+  since approvals cannot be edited and one still has to cover the code
+  ([ADR 0028](docs/adr/0028-simpler-lifecycle.md) decision 4).
 - Prefer concise command output and inspectable Markdown to a second UI or an
   external review service. A static HTML review page, such as `debrief
   --html` writes, is a document a human reads, not a second UI: it holds no

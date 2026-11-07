@@ -829,7 +829,7 @@ fn merge_gates(
         preconditions.fail(&code, cause, Some(fix));
     }
     index.validate_policy(&source.policy, records_root)?;
-    review_gate::append_only(&mut read, &fork_point)?;
+    review_gate::append_only(&mut read, &fork_point, &source.policy.branch_policy)?;
     let base_tree = base_checkout(repo, base)?;
     let base_snapshot = base_tree
         .as_ref()
@@ -881,6 +881,10 @@ fn merge_gates(
         &fork_point,
         &checkout.path,
     )?;
+    // The records merging puts on the base, the done marks it writes
+    // included, pass `atelier check` there, as every other write of records
+    // does (atelier-ilba).
+    atelier_app::record_guard::check_merge(repo, &base_head, &commit)?;
     // The records merging puts on the base can break a done claim outside
     // the item, such as one the base completed after the fork point, which no
     // checkout held before (atelier-m4gv). Those claims are read at the merge
