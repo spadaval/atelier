@@ -21,7 +21,7 @@ updated_at: "2026-11-06T23:39:07.679326401+00:00"
 
 ## Goal
 
-Give demiurge, cosplay-studio and life-on-rails a test of the merged tree. They have no CI (life-on-rails' Android builds run off-box, so its check may be limited to what runs on this host) and no `merge_checks`; until atelier-s66u ships, the only such test is `merge --sync` rerunning recorded suite receipts, which atelier-s66u removes.
+Give demiurge, cosplay-studio and life-on-rails a test of the merged tree. They have no CI (life-on-rails' Android builds run off-box, so its check may be limited to what runs on this host) and no suite merge check (life-on-rails has only a whitespace check); until atelier-s66u ships, the only such test is `merge --sync` rerunning recorded suite receipts, which atelier-s66u removes.
 
 ## Done when
 

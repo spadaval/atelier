@@ -1,6 +1,6 @@
 ---
 status: active
-last_changed: "2026-11-06: on Sumeet's direction, dropped the fix re-check cut (atelier-8s1m), turned the after-merge refusals into things shown, and added evidence that records only what nothing else records (after an evidence audit); earlier that day, planning review fixes; created that day from Sumeet's direction (LoR thread 'Launcher usability vs Smart Launcher')"
+last_changed: "2026-11-06: noted life-on-rails adopting Atelier ahead of the mission, and old-format reads for record changes; earlier that day, on Sumeet's direction, dropped the fix re-check cut (atelier-8s1m), turned the after-merge refusals into things shown, and added evidence that records only what nothing else records (after an evidence audit); earlier that day, planning review fixes; created that day from Sumeet's direction (LoR thread 'Launcher usability vs Smart Launcher')"
 ---
 
 # Why
@@ -75,7 +75,7 @@ In this strategy and the mission's items, a **Done when check** is one line of a
 - **Show, don't enforce.** What this mission adds is shown where work is judged (the review brief, `status`, `work` views, the mission debrief) and judged by the reviewer, not refused by a command.
 - **Fewer records, then fewer commits.** Record-only commits are cut first by needing fewer records. What remains is cut by letting records ride with the commit they describe, or batching them, wherever pinning a record to a commit allows.
 - **Statuses and types follow use.** Each status and issue type is kept only if records across these repositories use it, or a gate needs it. They are counted (atelier-rkxm) before the after-merge model is designed. A post-merge state replaces whatever it makes redundant rather than being added on top.
-- **Existing records keep working.** Each record change ships with an `atelier migrate` step, as the epics change did.
+- **Existing records keep working.** Each record change ships with an `atelier migrate` step, as the epics change did, and the new binary keeps reading the old format until then (expand and contract), because every repository on this host shares one installed `atelier`.
 - **Simplicity wins within this Shape.** When one of the rules above can be kept only by adding a new rule about when it applies, prefer removing it, unless removing it reopens a shortcut that atelier-ll3p documents. This does not extend to rules outside this Shape or to anything the Authority section returns to Sumeet.
 
 # Scope
@@ -88,7 +88,7 @@ In:
 
 Out:
 - Adopting Atelier in other repositories. life-on-rails adopted it on 2026-11-06 ahead of this mission, on Sumeet's direction, and follows the evidence and after-merge rules voluntarily through its AGENTS.md. Re-measuring adopting repositories after release is atelier-akkp, outside the mission.
-- Adding merge checks to repositories without CI. demiurge, cosplay-studio and life-on-rails have neither CI nor `merge_checks`, so once `merge --sync` stops rerunning receipts nothing tests their merged tree until they add a suite merge check (atelier-bp3s, outside the mission). The ADR for the evidence change says so.
+- Adding merge checks to repositories without CI. demiurge, cosplay-studio and life-on-rails have no CI and no suite merge check (life-on-rails has only a whitespace check), so once `merge --sync` stops rerunning receipts nothing tests their merged tree until they add a suite merge check (atelier-bp3s, outside the mission). The ADR for the evidence change says so.
 - atelier-ll3p's own work. It is complementary; where its showing of shortcuts would cover a rule this mission removes, this mission keeps the showing.
 - Catch-up merges of the base into a branch (143 of atelier's 200 merges). They come from keeping a branch in sync with the base for CI and conflicts, not from record bookkeeping, so this mission does not target them.
 - External review backends.
@@ -109,7 +109,7 @@ These come back to Sumeet:
 # Risks and Unknowns
 
 - **Pinning may need record-only commits.** A review event or receipt pins a commit and so cannot be part of that commit, which puts a floor under record-only commits. Keeping the fresh approval after a fix (atelier-8s1m dropped) removes one source of savings, so the cut now rests mostly on atelier-5822. atelier-5fus measures how much of the baseline is that floor, and says whether "at most half" is reachable.
-- **Every repository on this host shares one installed `atelier`.** A record format change (atelier-hwxm) must keep reading the old format, so reinstalling does not break repositories that have not migrated.
+- **Every repository on this host shares one installed `atelier`.** Reinstalling after a record format change could break every repository that has not migrated, which this mission cannot do for them; hence the old-format reads in Shape.
 - **Repositories without CI lose their merged-tree check.** Accepted by Sumeet on 2026-11-06 and tracked in atelier-bp3s.
 - **Most of the evidence saving is behavior, not code.** Agents recorded suite receipts because the text told them to; the scenario cannot show that change. It shows in real repositories, which atelier-akkp re-measures after release.
 - **Fewer records may reopen shortcuts.** atelier-ll3p found agents getting past gates in form rather than substance. Each removal is checked against its findings. Several ll3p items depend on the shapes this mission changes: open fix-now findings in readiness (atelier-efnf) and review history (atelier-ma4a). Whichever mission lands second adapts to the first. atelier-n0qh waits on atelier-r9hb, because a check moved after merge is a shortcut nothing shows until r9hb ships. If atelier-ll3p has not scheduled r9hb when n0qh is next, the orchestrator may do r9hb as this mission's work, leaving it in ll3p, rather than stall.
