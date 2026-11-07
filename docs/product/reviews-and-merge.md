@@ -94,7 +94,13 @@ writes the field and removes its events. `atelier migrate dispositions
 removes the events, on the base or a work branch, and keeps approvals
 current; Git history keeps the events. Events that continue a folded
 disposition, as a branch recorded with an older Atelier brings in, replace
-it. The read path for separate events goes once every repository has
+it. To bring such a branch up to date with a base that has migrated, merge
+without committing and migrate before the commit: `git merge --no-commit
+<base>`, `atelier migrate dispositions --apply`, `git add .atelier`, `git
+commit --no-edit`. A plain merge removes the base's migrated event while the
+branch's later event remains, and `land` refuses it with
+`review_append_only`, naming that sequence after the step that leaves the
+merge out; there is no need to reset the branch (atelier-j5oq). The read path for separate events goes once every repository has
 migrated (atelier-42th). A disposition read from an event, or written by the
 migration commit that removed it, is judged at the commit that added the
 event; once the finding's file has held another disposition, the later

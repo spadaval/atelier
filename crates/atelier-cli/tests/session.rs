@@ -8559,3 +8559,97 @@ fn separate_disposition_events_cannot_be_deleted_or_restored_by_hand() {
         assert!(!pass && out.contains("review_append_only"), "{case}: {out}");
     }
 }
+
+/// A branch whose older Atelier recorded a successor disposition event is
+/// brought up to date with a migrated base by merging without committing and
+/// migrating; a plain merge is refused, naming that step (atelier-j5oq).
+#[test]
+fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Concern",
+        ],
+    );
+    let pin = git(f.path(), &["rev-parse", "HEAD"]);
+    v1_disposition(
+        f.path(),
+        (
+            "atelier-e001",
+            &f.id,
+            "Reviewer",
+            &pin,
+            "2026-10-02T00:00:01Z",
+        ),
+        &finding,
+        "no_action",
+        None,
+        None,
+        None,
+    );
+    commit(f.path(), "finding and its disposition event on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    v1_disposition(
+        f.path(),
+        (
+            "atelier-e002",
+            &f.id,
+            "Reviewer",
+            &pin,
+            "2026-10-02T00:00:02Z",
+        ),
+        &finding,
+        "no_action",
+        Some("atelier-e001"),
+        None,
+        None,
+    );
+    commit(f.path(), "an older Atelier's successor event on the branch");
+    git(f.path(), &["switch", "-q", "main"]);
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    commit(f.path(), "migrate dispositions on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let merge = git(f.path(), &["rev-parse", "HEAD"]);
+    let main = git(f.path(), &["rev-parse", "main"]);
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && out.contains(&format!(
+                "Next: git rebase --autostash --onto {merge}~1 {merge} && git merge --no-commit {main} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit\n"
+            )),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    // The documented sequence, run here, leaves a branch the check accepts.
+    git(
+        f.path(),
+        &[
+            "rebase",
+            "-q",
+            "--autostash",
+            "--onto",
+            &format!("{merge}~1"),
+            &merge,
+        ],
+    );
+    git(f.path(), &["merge", "-q", "--no-commit", "main"]);
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    git(f.path(), &["add", ".atelier"]);
+    git(f.path(), &["commit", "-q", "--no-edit"]);
+    assert!(!f.path().join(".atelier/reviews/atelier-e002.md").exists());
+    let (_, out) = cli(f.path(), &["land"]);
+    assert!(!out.contains("review_append_only"), "{out}");
+    ok(f.path(), &["check"]);
+}

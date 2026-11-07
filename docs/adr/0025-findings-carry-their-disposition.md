@@ -72,7 +72,11 @@ cannot be backdated past work its owner authored later.
      gate judges it so, the non-author rules included. Atelier writes no new
      events: `review disposition` writes the field and removes the finding's
      events. Events that continue an already folded disposition, as a branch
-     recorded with an older Atelier brings in, replace it.
+     recorded with an older Atelier brings in, replace it. Such a branch
+     takes a migrated base by merging without committing and migrating
+     before the commit (`git merge --no-commit <base>`, then `atelier migrate
+     dispositions --apply`); a plain merge is refused with
+     `review_append_only`, and the refusal names that sequence.
    - *Optional cleanup.* `atelier migrate dispositions --apply` writes that
      fold into each finding and removes every event, superseded ones
      included; history keeps them. Results read the same before and after.
