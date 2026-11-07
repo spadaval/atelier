@@ -19,7 +19,8 @@ process ownership, review providers, transition actions, and the cache.
   [atelier-kgcr](../.atelier/issues/atelier-kgcr.md) on 2026-10-15. Open
   missions are listed by `atelier work missions`.
 - [ADRs](adr/0019-verified-repo-native-tracker.md): decision history; consult each
-  decision's status and ADR 0019's supersession list before applying older rules.
+  decision's status and the supersession lists of ADR 0019 and
+  [ADR 0028](adr/0028-simpler-lifecycle.md#supersession) before applying older rules.
 - [Development setup](product/development-setup.md): local tools and verification.
 - [Repository contribution](product/repository-contribution.md): ownership and
   integration policy.

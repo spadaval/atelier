@@ -1,6 +1,6 @@
 # ADR 0016: Canonical Work Branches And Mission Integration
 
-Status: Accepted. **Amended by [ADR 0019](0019-verified-repo-native-tracker.md):** transition actions, review providers, and the SQLite cache described here are removed.
+Status: Accepted. **Amended by [ADR 0019](0019-verified-repo-native-tracker.md):** transition actions, review providers, and the SQLite cache described here are removed. **Partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession) when atelier-md0v lands:** the recorded branch base, with the rejected alternative's conclusion that it is the review target, and the `<issue_type>/<issue_id>` branch-name rule go, and whether a target is recomputed from the hierarchy is open there; until then they apply, and the rest stands.
 Date: 2026-06-30
 
 ## Context

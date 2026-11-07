@@ -6,6 +6,19 @@ Accepted (2026-09-30, human-directed). Decision 6 is partially superseded by
 [ADR 0025](0025-findings-carry-their-disposition.md): a finding carries its
 disposition as a field rather than a separate append-only event.
 
+Partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession),
+each part when the item ADR 0028 names for it lands; until then it applies.
+In decision 2: the gates that read evidence (a receipt stays tied to a commit
+with an explicit result), the comparison of reviewer and Git authors, a
+disposition for every finding, and agent-owned statuses and transitions for
+the two steps Atelier now enforces (`review request` refuses an unticked Done
+when line, and `merge` marks the issue done). In decision 3: the recorded
+branch base; whether "Atelier never creates commits" still holds is open
+there. In decision 4: the done claim committed on the work branch, "merging
+writes no tracker state", and approval freshness judged by which records
+changed. In decision 6: append-only for records not yet on the base, and a
+disposition for a `fix_now` finding. Decisions 1, 5 and 7 stand.
+
 Supersedes [ADR 0006](0006-agent-guidance-ownership-boundary.md),
 [ADR 0007](0007-mission-workspaces-and-epic-review-branches.md),
 [ADR 0010](0010-session-aware-pr-coordination-boundaries.md),

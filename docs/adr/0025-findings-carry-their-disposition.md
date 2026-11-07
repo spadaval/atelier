@@ -10,6 +10,15 @@ decision 6: findings and their dispositions are no longer two append-only
 events. Every other review event stays append-only, and the rest of ADR
 0019 stands.
 
+Partially superseded by [ADR 0028](0028-simpler-lifecycle.md#supersession),
+each part when its item lands; until then it applies. The approval that
+follows a `fix_now` finding resolves it, so `fix_now` is no longer a
+disposition (decision 1, atelier-md0v); append-only applies only once a
+record is on the base (decision 2, atelier-ilba); and no record edit makes an
+approval stale (decisions 2 and 3, atelier-3jdm). Whether decision 4's
+comparison with the Git authors goes is open (atelier-md0v); decisions 5 and
+6 stand.
+
 ## Context
 
 ADR 0019 made reviews append-only Markdown events, including a finding's
