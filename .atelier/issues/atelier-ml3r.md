@@ -83,7 +83,7 @@ docs/adr/0028-simpler-lifecycle.md (decision 8), docs/strategies/simpler-lifecyc
 
 ## Report
 
-The agent-factory skill, Atelier's CLI help, CONTEXT.md, AGENTS.md, docs/product and ADR 0028 now describe one lifecycle in the same words: start, implement, tick every Done when line and write the Report, `review request`, fix and re-review, approve, `merge`, which marks the work done, with no close step; approvals only code makes stale; records correctable until they reach the base; a `fix_now` finding resolved by the approval after its fix; loose ends; the light path. The skill to review is spadaval/.agents branch `atelier-ml3r` at `fc5e397779c9b99e88c67f4f672fd751f43eaae4` (one commit on `main` 6f42764), together with this branch's diff from `417e9e0c`. Skill and evals went from 4326 lines to 4311 (`git ls-files skills/agent-factory evals/agent-factory | xargs wc -l`; skill 2662 to 2648, evals 1664 to 1663). Proof: a residue search of the skill and evals finds none of the removed concepts; `cargo fmt -- --check` and `cargo nextest run -j 4 --workspace` pass (1019 tests); the new `the_detached_head_step_works_in_a_linked_worktree` test runs the refusal's step in a linked worktree, and it and the updated detached-HEAD test fail against the old hint; `test_root_help_lists_every_command_and_lifecycle_common_commands` pins the order in root help; all four eval setups run against the installed binary. The eighth fresh cold read reported no contradiction (result note).
+The agent-factory skill, Atelier's CLI help, CONTEXT.md, AGENTS.md, docs/product and ADR 0028 now describe one lifecycle in the same words: start, implement, tick every Done when line and write the Report, `review request`, fix and re-review, approve, `merge`, which marks the work done, with no close step; approvals only code makes stale; records correctable until they reach the base; a `fix_now` finding resolved by the approval after its fix; loose ends; the light path. The skill to review is spadaval/.agents branch `atelier-ml3r` at `67151360091c48e0084c3305417ffd4d0f861dd3` (two commits on `main` 6f42764: fc5e397, and 6715136 answering the review), together with this branch's diff from `417e9e0c`. Skill and evals went from 4326 lines to 4321 (`git ls-files skills/agent-factory evals/agent-factory | xargs wc -l`; skill 2662 to 2650, evals 1664 to 1671, the grader gaining a function that ignores box state). Proof: a residue search of the skill and evals finds none of the removed concepts; `cargo fmt -- --check` and `cargo nextest run -j 4 --workspace` pass (1019 tests); the new `the_detached_head_step_works_in_a_linked_worktree` test runs the refusal's step in a linked worktree, and it and the updated detached-HEAD test fail against the old hint; `test_root_help_lists_every_command_and_lifecycle_common_commands` pins the order in root help; all four eval setups run against the installed binary, and done-when-rewrite's grader passes the untouched fixture and one whose line is ticked and fails one whose criterion is loosened (the old grader failed the ticked one). The eighth fresh cold read reported no contradiction (result note).
 
 ### Deviations
 
@@ -92,6 +92,8 @@ The agent-factory skill, Atelier's CLI help, CONTEXT.md, AGENTS.md, docs/product
 - Beyond help text and the start hint, three small strings changed for the same words: init's next step reads "Read the generated policy" (two tests follow), and the starter policy's and Atelier's own `decide` description says decisions "are decided", not "may close", on the base.
 - ADR 0028 decision 2 said the reviewer reads the implementer report; the strategy and the CLI leave it out of the brief, so the ADR now says so.
 - The cold read took eight rounds. Rounds 1 to 7 each found contradictions, fixed in the skill, AGENTS.md and help before the next round (listed in the result note). After the clean eighth read, fc5e397 clarified its two top ambiguities: a failed loose end's line is not ticked, and merge needs an approval recorded after every `fix_now` finding left without a disposition.
+
+- The first review's seven fix_now findings (atelier-8ljp, atelier-iup5, atelier-h2i8, atelier-ggic, atelier-qt4c, atelier-bzic, atelier-ejwl) are fixed in agents-skills 6715136 and in this branch's commit after 5581c979: the eval fixture's boxed line, the remaining help and docs wording, the plain `git merge` rule, ADR 0028's owner of `--base`, the validation item's definition, the narrowed uses of check, and this Report.
 
 ### Decisions
 
@@ -104,9 +106,9 @@ See the item's decision notes: land defined without check; the skill keeps its o
 
 ### Open items
 
-- Done when line 1 (astromech's CI pin) is the orchestrator's (astromech-5sp5) and is left unticked.
+- Done when line 1 holds: astromech-5sp5 moved astromech's CI pin to atelier 12efdfd9, atelier-4nsl's merge (result note).
 - atelier-xz5c: command output words.
 - `start_branch_owned`'s step, `git switch <base> && atelier start <id>`, fails in a linked worktree just as the detached-HEAD one did; not changed here (scope).
-- `start --base` stays accepted and hidden; the skill no longer passes it, so it can go once atelier-nn67 confirms no other guidance does.
+- `start --base` stays accepted and hidden; the skill no longer passes it, and ADR 0028 now leaves dropping it to atelier-nn67.
 - The last cold read's ambiguities stand (result note), notably whether this repository's CI tests the merged tree once master moves, and that the short orders in help and AGENTS.md omit dispositions.
-- The eval scenarios were not rerun with an agent against the new skill; only their setups and the done-when-rewrite grader on an untouched fixture were run.
+- The eval scenarios were not rerun with an agent against the new skill; only their setups and the done-when-rewrite grader on fixtures were run.

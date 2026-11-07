@@ -1498,7 +1498,7 @@ fn test_evidence_record_help_shows_issue_targeted_manual_and_command_flows() {
     assert!(success, "evidence record help failed: {stderr}");
     assert!(stdout.contains("issue/<id>"));
     assert!(stdout.contains(
-        "atelier evidence record --target issue/<id> --kind validation --result pass \"checked claim X\""
+        "atelier evidence record --target issue/<id> --kind validation --result pass \"verified claim X\""
     ));
     assert!(stdout.contains("atelier evidence record --target issue/<id> --kind test -- <command>"));
     assert!(stdout.contains("Use `evidence attach` only when you need to reuse"));

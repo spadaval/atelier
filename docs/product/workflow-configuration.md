@@ -30,7 +30,7 @@ current branch, born or not. `init` prints its choice (`Base branch: master
 refused with `init_base_unknown` before anything is written. The starter
 policy then merges as written (atelier-l457).
 
-`init` ends by listing what it wrote and the next steps: review the generated
+`init` ends by listing what it wrote and the next steps: read the generated
 policy, commit the install on the base with `git add .atelier .gitignore &&
 git commit -m "Install Atelier"` (it predates the gates, so it needs no
 review), then create the first issue. Until that commit, `status`, `land`,
@@ -39,9 +39,9 @@ passes.
 
 The commit that runs `atelier init` and imports the first records comes before
 any policy on the base branch, so `atelier merge` has nothing to gate it with.
-Land it in one of two supported ways:
+Commit it in one of two ways:
 
-- **On the base branch.** Run `atelier init` there, review the generated
+- **On the base branch.** Run `atelier init` there, read the generated
   policy, and commit, as `init` prints. `land` treats the first commit that
   adds the policy as the install and gates every commit after it.
 - **On a branch, through the repository's own review.** Run `atelier init`

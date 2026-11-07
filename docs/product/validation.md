@@ -65,9 +65,10 @@ atelier issue transition <loose-end> done --reason "Pushed v1."
 Record a receipt for a device or deployed observation, which leaves no other record.
 A bad result files a linked bug (`atelier issue create --discovered-from
 <loose-end>`) rather than reopening the merged item. A `validation`, an
-independent assessment of a mission's criteria before it closes, shares the
-loose end's workflow: it advances its mission, and is done on the base the
-same way.
+independent assessment of a mission's criteria or of an increment's
+user-facing outcome, is not a loose end, though it shares the loose end's
+workflow: it advances its mission, and is done on the base the same way
+before the mission closes.
 
 Records written under [ADR 0027](../adr/0027-proof-has-a-time.md) may hold a
 Done when line marked `After merge (<reason>): <text>. Stand-in: <...>`.

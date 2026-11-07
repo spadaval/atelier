@@ -366,8 +366,10 @@ Built by atelier-md0v:
   it refuses with `start_detached_head`; on any other branch it takes the
   current branch. `start_base_mismatch` and `start_branch_prefix_mismatch`
   go; `--base` is accepted, hidden and ignored, with a note that the base
-  comes from policy, until atelier-ml3r updates the guidance that still
-  passes it. A printed fix that starts work outside
+  comes from policy, until atelier-nn67 drops it once no guidance on this
+  host passes it (atelier-ml3r removed it from the skill). From a detached
+  HEAD the refusal names `git switch -c <id> <base> && atelier start <id>`
+  (atelier-ml3r, finding atelier-ywpf). A printed fix that starts work outside
   the owner's scope from its branch reads `git switch <base> && atelier
   start <id>`.
 - **Short commit IDs.** Wherever a command takes a commit (`--commit`,
@@ -618,7 +620,7 @@ until the item that changes the behaviour lands.
   atelier-ml3r (8, with the skill and Atelier's own AGENTS.md and docs) and
   atelier-nn67 (every other repository on this host: its policy and
   AGENTS.md, astromech's CI pin and validation items, and dropping
-  `branch_base`). Each must name what it deletes before it starts (decision
+  `branch_base` and `start --base`). Each must name what it deletes before it starts (decision
   9).
 - The six draft missions hold items planned under the old model, some
   contradicting this one. Which are superseded is Sumeet's call

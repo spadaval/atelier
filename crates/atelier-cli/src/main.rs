@@ -167,9 +167,9 @@ enum ReviewCommands {
     /// and it refuses while the item it names, or for the owner a started
     /// child, has an unticked Done when line or an empty Report.
     ///
-    /// With no ID it reviews the checked-out branch: its owner's work, or,
-    /// on a branch no issue owns, the branch's commits since it left the base
-    /// (the light path), with their messages and diff stat.
+    /// With no ID it prints the brief for the checked-out branch: its owner's
+    /// work, or, on a branch no issue owns, the branch's commits since it left
+    /// the base (the light path), with their messages and diff stat.
     Request {
         /// Branch owner, or an item of the owner's parent, to be reviewed
         /// [default: the checked-out branch]
@@ -277,18 +277,18 @@ enum Commands {
         #[arg(long, value_parser = ["claude"])]
         hook: Option<String>,
         /// Confirm that this unowned branch installs Atelier: the base has no
-        /// workflow policy yet, so it lands through the repository's usual review
+        /// workflow policy yet, so it merges through the repository's usual review
         #[arg(long)]
         install: bool,
-        /// Push the current branch to its own configured upstream when the
-        /// checks pass, or when land reports work in progress on a work
+        /// Push the current branch to its own configured upstream when its
+        /// gates pass, or when land reports work in progress on a work
         /// branch; a refusal (on the base or a detached HEAD) pushes nothing,
         /// and it or a failed push exits non-zero
         #[arg(long, conflicts_with = "hook")]
         push: bool,
     },
 
-    /// Check merge gates, then integrate with one merge commit that marks the owner's open work done
+    /// Evaluate the merge gates, then merge with one merge commit that marks the owner's open work done
     Merge {
         /// Issue, or child of the parent, that owns the checked-out work
         /// branch [default: the branch's owner, or, on a branch no issue
@@ -689,7 +689,7 @@ enum BundleCommands {
 enum EvidenceCommands {
     /// Record proof manually or by capturing a command transcript
     #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation --result pass \"checked claim X\"
+  atelier evidence record --target issue/<id> --kind validation --result pass \"verified claim X\"
   atelier evidence record --target issue/<id> --kind test -- <command>
 
 Use `evidence attach` only when you need to reuse an existing evidence record on
