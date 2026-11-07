@@ -25,7 +25,9 @@ it stands. Both forms follow the same order:
   its line (its outcome and any Deviations, Surprises, Decisions and, unless
   review filed follow-ups, Open items), what changed from the plan (the
   report's Deviations and derived facts: a done claim later withdrawn,
-  failing newest proof, a trivial exemption), what surprised the
+  failing newest proof, a trivial exemption, a Done when [edited after the
+  item was started](reviews-and-merge.md#a-done-when-edited-after-the-start)
+  with the finding or failing receipt before it), what surprised the
   implementer, the decisions made in it (the report's Decisions part, then
   its decision notes), any decision record
   cues (its ADR, the records it replaces), how review went and who approved

@@ -1941,3 +1941,87 @@ fn a_done_childs_report_sits_with_its_child_line() {
         "no parent decision after the children: {entry}"
     );
 }
+
+#[test]
+fn a_done_when_edit_counts_as_after_the_start_by_ancestry_not_time() {
+    let dir = tempdir().unwrap();
+    let (mission, planned) = started(dir.path());
+    let main = String::from_utf8(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["branch", "--show-current"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    let head = |dir: &Path| {
+        String::from_utf8(
+            Command::new("git")
+                .current_dir(dir)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+        .trim()
+        .to_string()
+    };
+    git(dir.path(), &["switch", "-q", "-c", "feature"]);
+    ok(dir.path(), &["issue", "transition", &planned, "start"]);
+    commit_all(dir.path(), "start on the branch");
+    edit_canonical_issue(dir.path(), &planned, |markdown| {
+        markdown.replace("## Done when\n\nD", "## Done when\n\nD, mostly")
+    });
+    commit_all(dir.path(), "loosen the Done when on the branch");
+    let on_branch = head(dir.path());
+    ok(
+        dir.path(),
+        &[
+            "issue",
+            "transition",
+            &planned,
+            "close",
+            "--reason",
+            "Done on the branch.",
+        ],
+    );
+    commit_all(dir.path(), "close on the branch");
+    // Later by the clock than the start, but not after it in Git.
+    git(dir.path(), &["switch", "-q", &main]);
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    edit_canonical_issue(dir.path(), &planned, |markdown| {
+        markdown.replace("## Done when\n\nD", "## Done when\n\nD, on main")
+    });
+    commit_all(dir.path(), "edit the Done when on main later");
+    let on_main = head(dir.path());
+    git(
+        dir.path(),
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "--no-edit",
+            "-X",
+            "theirs",
+            "feature",
+        ],
+    );
+    let page = ok(dir.path(), &["debrief", &mission]);
+    let edits = page
+        .lines()
+        .filter(|line| line.contains("Done when edited"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        edits,
+        [format!(
+            "  Changed: Done when edited at {} after the item was started.",
+            &on_branch[..8]
+        )],
+        "{page}"
+    );
+    assert!(!page.contains(&on_main[..8]), "{page}");
+}

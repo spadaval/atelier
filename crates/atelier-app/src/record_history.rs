@@ -8,10 +8,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use anyhow::Result;
+use atelier_core::{EvidenceResult, IssueSectionName, ReviewEvent};
 use atelier_records::{issue_record_path, CanonicalIssueRecord};
 use chrono::{DateTime, TimeZone, Utc};
 
 use crate::git_freshness::{git_output, ReadContext};
+use crate::record_index::RecordIndex;
 use crate::workflow_policy::{status_is_done, WorkflowPolicy};
 
 /// One committed version of an issue record; `record` is `None` where the
@@ -451,4 +453,160 @@ fn advances(record: &CanonicalIssueRecord, other: &str) -> bool {
         .relates
         .iter()
         .any(|link| link.relation_type == "advances" && link.id == other)
+}
+
+/// A Done when edited after its item was started (atelier-r9hb): shown
+/// where closing is judged, so a criterion changed once work began is seen
+/// by whoever judges the work. It refuses nothing.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct DoneWhenEdit {
+    pub issue: String,
+    /// The commit that changed the Done when.
+    pub commit: String,
+    /// The newest finding or failing receipt on the item pinned to an
+    /// ancestor of `commit`, which the edit may answer.
+    pub after: Option<Precedent>,
+}
+
+/// A record that judged the item before its Done when changed.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Precedent {
+    Finding(String),
+    FailingReceipt(String),
+}
+
+/// Every edit to the Done when of `ids` that HEAD holds, made in a commit
+/// descending from one that started the item: moved its status into an
+/// `active` category (`in_progress` without a policy). Edits, starts,
+/// findings and receipts are ordered by Git ancestry, never by time, so
+/// work merged from another branch is judged where it was written. Merges
+/// are not read: the commit that made an edit is in HEAD's history itself.
+pub fn done_when_edits(
+    read: &mut ReadContext<'_>,
+    policy: Option<&WorkflowPolicy>,
+    index: &RecordIndex,
+    ids: &BTreeSet<String>,
+) -> Result<Vec<DoneWhenEdit>> {
+    let mut edits = Vec::new();
+    let Ok(head) = read.pinned("HEAD") else {
+        return Ok(edits);
+    };
+    let active = |record: &CanonicalIssueRecord| match policy {
+        Some(policy) => policy.status_category(&record.issue.status) == Some("active"),
+        None => record.issue.status == "in_progress",
+    };
+    let done_when = |record: &CanonicalIssueRecord| {
+        record
+            .sections
+            .section(IssueSectionName::DoneWhen)
+            .map(|text| text.trim().to_string())
+    };
+    for id in ids {
+        let path = Path::new(".atelier")
+            .join(issue_record_path(id))
+            .to_string_lossy()
+            .into_owned();
+        let commits = read.history(&[
+            "log",
+            "--reverse",
+            "--full-history",
+            "--no-merges",
+            "--format=%H %P",
+            &head,
+            "--",
+            &path,
+        ])?;
+        let version = |read: &mut ReadContext<'_>, commit: &str| {
+            read.issue_at(commit, id)
+                .ok()
+                .or_else(|| retired_epic_at(read, commit, id))
+        };
+        let mut starts = Vec::new();
+        // Each edit, with its parent: an ancestor of the parent is a strict
+        // ancestor of the edit.
+        let mut changed = Vec::new();
+        for line in commits.lines() {
+            let mut parts = line.split_whitespace();
+            let Some(commit) = parts.next() else {
+                continue;
+            };
+            let Some(after) = version(read, commit) else {
+                continue;
+            };
+            let before = match parts.next() {
+                Some(parent) => version(read, parent).map(|record| (parent.to_string(), record)),
+                None => None,
+            };
+            if active(&after) && before.as_ref().is_none_or(|(_, record)| !active(record)) {
+                starts.push(commit.to_string());
+            }
+            if let Some((parent, before)) = before {
+                if done_when(&before) != done_when(&after) {
+                    changed.push((commit.to_string(), parent));
+                }
+            }
+        }
+        for (commit, parent) in changed {
+            let mut started = false;
+            for start in &starts {
+                if read.ancestor(start, &parent)? {
+                    started = true;
+                    break;
+                }
+            }
+            if started {
+                let after = precedent(read, index, id, &parent)?;
+                edits.push(DoneWhenEdit {
+                    issue: id.clone(),
+                    commit,
+                    after,
+                });
+            }
+        }
+    }
+    Ok(edits)
+}
+
+/// The newest finding or failing receipt on `id` pinned to an ancestor of
+/// `parent`, by when it was recorded.
+fn precedent(
+    read: &mut ReadContext<'_>,
+    index: &RecordIndex,
+    id: &str,
+    parent: &str,
+) -> Result<Option<Precedent>> {
+    let mut candidates = index
+        .reviews()
+        .filter(|review| review.target == id && matches!(review.event, ReviewEvent::Finding { .. }))
+        .map(|review| {
+            (
+                review.header.created_at,
+                review.commit.clone(),
+                Precedent::Finding(review.header.id.clone()),
+            )
+        })
+        .collect::<Vec<_>>();
+    for link in index.list_record_links("issue", id)? {
+        let evidence = match (link.relation_type.as_str(), &link) {
+            ("validates", link) if link.source_kind == "evidence" => &link.source_id,
+            ("validates", link) if link.target_kind == "evidence" => &link.target_id,
+            _ => continue,
+        };
+        let record = index.require_evidence(evidence)?;
+        if record.data.result == EvidenceResult::Fail {
+            candidates.push((
+                record.header.created_at,
+                record.data.commit.clone(),
+                Precedent::FailingReceipt(record.header.id.clone()),
+            ));
+        }
+    }
+    candidates.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, pin, found) in candidates {
+        // A pin that is not a full commit ID judged nothing in this history.
+        if read.ancestor(&pin, parent).unwrap_or(false) {
+            return Ok(Some(found));
+        }
+    }
+    Ok(None)
 }

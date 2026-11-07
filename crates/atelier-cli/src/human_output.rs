@@ -372,6 +372,21 @@ pub(crate) fn short_commit(commit: &str) -> &str {
     commit.get(..8).unwrap_or(commit)
 }
 
+/// A Done when edited after its item was started, as `merge` and the
+/// debrief say it (atelier-r9hb).
+pub(crate) fn done_when_edit(edit: &atelier_app::record_history::DoneWhenEdit) -> String {
+    use atelier_app::record_history::Precedent;
+    let after = match &edit.after {
+        Some(Precedent::Finding(id)) => format!(", after finding {id}"),
+        Some(Precedent::FailingReceipt(id)) => format!(", after failing receipt {id}"),
+        None => String::new(),
+    };
+    format!(
+        "Done when edited at {} after the item was started{after}.",
+        short_commit(&edit.commit)
+    )
+}
+
 /// A timestamp as views show it: local time, `YYYY-MM-DD HH:MM ±hh:mm`.
 /// Records keep RFC 3339.
 pub(crate) fn display_timestamp(timestamp: chrono::DateTime<chrono::Utc>) -> String {

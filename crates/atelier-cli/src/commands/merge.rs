@@ -918,9 +918,34 @@ fn merge_gates(
         uncommitted: uncommitted.as_ref(),
     }
     .report(&nodes);
+    // A Done when edited after its item was started is shown to whoever
+    // judges the work, and changes no verdict (atelier-r9hb).
+    let edited = atelier_app::record_history::done_when_edits(
+        &mut read,
+        Some(&source.policy),
+        tip_index,
+        &review_gate::scope(tip_index, owner)?,
+    )?
+    .iter()
+    .map(|edit| {
+        format!(
+            "Note: {} {}",
+            edit.issue,
+            crate::human_output::done_when_edit(edit)
+        )
+    })
+    .collect::<Vec<_>>();
     // Failures print with the passes; a passing check prints its passes and
-    // next step, and a passing merge only what it did (atelier-2tux).
+    // next step, and a passing merge only what it did (atelier-2tux). Each
+    // edited Done when follows them, whatever the verdict.
     let report = || -> Result<()> {
+        let say = |line: &str| {
+            if quiet {
+                eprintln!("{line}");
+            } else {
+                println!("{line}");
+            }
+        };
         if json {
             println!("{}", serde_json::to_string_pretty(&nodes)?);
         } else if gates.failed.is_empty() {
@@ -928,15 +953,16 @@ fn merge_gates(
                 for line in &gates.passes {
                     println!("{line}");
                 }
+            }
+            for line in &edited {
+                say(line);
+            }
+            if check_only && !quiet {
                 println!("Next: atelier merge {id}");
             }
         } else {
-            for line in gates.failures.iter().chain(&gates.passes) {
-                if quiet {
-                    eprintln!("{line}");
-                } else {
-                    println!("{line}");
-                }
+            for line in gates.failures.iter().chain(&gates.passes).chain(&edited) {
+                say(line);
             }
         }
         Ok(())

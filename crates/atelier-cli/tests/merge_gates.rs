@@ -48,6 +48,11 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
+        Self::with(|_, _| {})
+    }
+    /// The fixture, with `plan` run on the owner before the base plan is
+    /// committed and the owner started.
+    fn with(plan: impl FnOnce(&Path, &str)) -> Self {
         let dir = tempdir().unwrap();
         git(dir.path(), &["init", "-qb", "main"]);
         git(dir.path(), &["config", "user.name", "Author"]);
@@ -72,6 +77,7 @@ impl Fixture {
                 "## Goal\n\nShip change.\n\n## Done when\n\nScenario passes.",
             ],
         );
+        plan(dir.path(), &id);
         commit(dir.path(), "base plan");
         ok(dir.path(), &["start", &id]);
         fs::write(dir.path().join("src.rs"), "tested code\n").unwrap();
@@ -4032,4 +4038,180 @@ fn a_gate_on_a_record_that_differs_from_head_is_fixed_by_committing_it() {
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
         2
     );
+}
+
+/// A mission the owner advances, for `plan`.
+fn mission(dir: &Path, id: &str) -> String {
+    let mission = ok(
+        dir,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Mission",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShip change.",
+        ],
+    );
+    ok(dir, &["issue", "link", "-q", id, &mission]);
+    mission
+}
+
+/// Edits the owner's Done when and commits it, returning the commit.
+fn edit_done_when(dir: &Path, id: &str, from: &str, to: &str) -> String {
+    let path = dir.join(format!(".atelier/issues/{id}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains(from), "{text}");
+    fs::write(&path, text.replace(from, to)).unwrap();
+    commit(dir, "edit the Done when");
+    git(dir, &["rev-parse", "HEAD"])
+}
+
+/// The output's lines that report an edited Done when.
+fn edit_lines(output: &str) -> Vec<&str> {
+    output
+        .lines()
+        .filter(|line| line.contains("Done when edited"))
+        .collect()
+}
+
+#[test]
+fn a_done_when_edited_after_the_start_is_shown_without_changing_the_verdict() {
+    let mut mission_id = String::new();
+    let fixture = Fixture::with(|dir, id| mission_id = mission(dir, id));
+    let finding = fixture.finding();
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "The criterion was wrong, not the code",
+        ],
+    );
+    commit(fixture.path(), "disposition");
+    let edit = edit_done_when(
+        fixture.path(),
+        &fixture.id,
+        "Scenario passes.",
+        "Scenario mostly passes.",
+    );
+    fixture.approval("Reviewer");
+    let line = format!(
+        "Note: {} Done when edited at {} after the item was started, after finding {finding}.",
+        fixture.id,
+        &edit[..8]
+    );
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert_eq!(edit_lines(&output), [line.as_str()], "{output}");
+    assert!(output.contains("Next: atelier merge"), "{output}");
+    let debrief = ok(fixture.path(), &["debrief", &mission_id]);
+    let said = format!(
+        "Done when edited at {} after the item was started, after finding {finding}.",
+        &edit[..8]
+    );
+    assert_eq!(
+        edit_lines(&debrief)
+            .iter()
+            .filter(|row| row.contains(&said))
+            .count(),
+        1,
+        "{debrief}"
+    );
+    let wrote = ok(fixture.path(), &["debrief", &mission_id, "--html"]);
+    let page = wrote
+        .split_whitespace()
+        .find(|word| word.ends_with(".html"))
+        .unwrap();
+    let html = fs::read_to_string(page).unwrap();
+    assert!(
+        html.contains(&format!("Done when edited at {}", &edit[..8])),
+        "{html}"
+    );
+    // The merge itself says it too, and integrates.
+    let merged = ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(edit_lines(&merged), [line.as_str()], "{merged}");
+    assert!(merged.contains("Merged"), "{merged}");
+    assert_eq!(
+        git(fixture.path(), &["rev-parse", "main"]),
+        git(fixture.path(), &["rev-parse", "HEAD"])
+    );
+}
+
+#[test]
+fn a_done_when_edited_after_a_failing_receipt_names_the_receipt() {
+    let fixture = Fixture::new();
+    let record = |result: &str, summary: &str| {
+        let receipt = ok(
+            fixture.path(),
+            &[
+                "-q",
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{}", fixture.id),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                summary,
+            ],
+        );
+        commit(fixture.path(), summary);
+        receipt
+    };
+    let failing = record("fail", "Scenario fails at the edge");
+    let edit = edit_done_when(
+        fixture.path(),
+        &fixture.id,
+        "Scenario passes.",
+        "Scenario passes away from the edge.",
+    );
+    record("pass", "Scenario passes away from the edge");
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert_eq!(
+        edit_lines(&output),
+        [format!(
+            "Note: {} Done when edited at {} after the item was started, after failing receipt {failing}.",
+            fixture.id,
+            &edit[..8]
+        )],
+        "{output}"
+    );
+}
+
+#[test]
+fn a_done_when_edited_only_before_the_start_is_not_shown() {
+    let mut mission_id = String::new();
+    let fixture = Fixture::with(|dir, id| {
+        mission_id = mission(dir, id);
+        commit(dir, "first plan");
+        let path = dir.join(format!(".atelier/issues/{id}.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            text.replace("Scenario passes.", "Scenario passes twice."),
+        )
+        .unwrap();
+    });
+    assert!(fixture
+        .issue()
+        .sections
+        .section(atelier_core::IssueSectionName::DoneWhen)
+        .is_some_and(|text| text.contains("twice")));
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert!(edit_lines(&output).is_empty(), "{output}");
+    let debrief = ok(fixture.path(), &["debrief", &mission_id]);
+    assert!(edit_lines(&debrief).is_empty(), "{debrief}");
 }
