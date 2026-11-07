@@ -54,9 +54,10 @@ Reason preserve handoffs and terminal reasoning. See
 
 Evidence is an immutable Markdown receipt with explicit result
 (`pass`, `fail`, `blocked`, `not-applicable`) and a full commit identity. Reviews
-are Markdown receipts that can be corrected until they reach the base and are
-append-only there, except that a finding carries its disposition as a field
-set in place, with Git history keeping earlier ones
+are Markdown receipts. Findings can be corrected until they reach the base,
+approvals and trivial exemptions are append-only once committed, and every
+review record is append-only on the base, except that a finding carries its
+disposition as a field set in place, with Git history keeping earlier ones
 ([ADR 0025](../adr/0025-findings-carry-their-disposition.md),
 [ADR 0028](../adr/0028-simpler-lifecycle.md) decision 4). Review identity,
 approval, findings, and dispositions are durable facts rather than provider

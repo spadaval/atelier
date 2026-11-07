@@ -3,10 +3,11 @@
 Reviews are Markdown events under `.atelier/reviews/`. Each command
 adds a new file with an explicit identity, target, full commit, and explanation;
 a [base exemption](#trivial-changes-on-the-base) names its base branch instead
-of a target. Until a review record reaches the base branch it can be
-[corrected or deleted](#correcting-review-records); once it is there, the one
-thing that changes in place is a finding's [disposition](#dispositions), a
-field of the finding
+of a target. Until a finding reaches the base branch it can be
+[corrected or deleted](#correcting-review-records), while an approval or
+trivial exemption stays as first committed; on the base, the one thing that
+changes in place is a finding's [disposition](#dispositions), a field of the
+finding
 ([ADR 0025](../adr/0025-findings-carry-their-disposition.md)).
 Agent Factory owns review and finding assessment; Atelier checks the recorded
 invariants. There is no external review backend or review room.
@@ -89,8 +90,9 @@ subsequently reverted.
 
 ## Correcting review records
 
-A review record can be edited or deleted by hand, by any agent on the branch,
-until it reaches the base; commit the change with the work. Each change is
+A finding, or a review record that is not an approval or trivial exemption,
+can be edited or deleted by hand, by any agent on the branch, until it
+reaches the base; commit the change with the work. Each change is
 judged against the base as it stood where the change joined it, so a
 correction is not refused after the branch merges (ADR 0028 decision 4,
 atelier-ilba):
@@ -107,14 +109,19 @@ commit that made it (`land`, `doctor` and `merge` apply the same check). Under
 `merge_strategy: fast_forward_only`, history cannot show where a fast-forward
 began, so every commit is judged at its own first parent and a review record
 is final once committed, as it is when the base branch cannot be read. A
-corrected approval counts as it reads now, with its identity judged at the
-commit that last set it. A change must leave a regular file, and a removed
-separate disposition event is never added back.
+change must leave a regular file, and a removed separate disposition event is
+never added back.
 
-Identity is self-declared, so no rule says who may correct a record: an
+Approvals and trivial exemptions stay append-only from when they are first
+committed, on a branch as on the base: re-pinning an approval's commit, or
+changing its target or identity, would move it onto code its reviewer never
+saw. `land` restores an uncommitted edit to one, and refuses a committed edit
+with `review_append_only`; record a new approval instead.
+
+Identity is self-declared, so no rule says who may correct a finding: an
 implementer could delete a reviewer's finding before merge, leaving no
-decision on it. That cannot let unreviewed code merge, since an approval
-still has to cover the code.
+decision on it. That cannot let unreviewed code merge, since approvals cannot
+be edited and one still has to cover the code.
 
 Repositories whose dispositions are separate events, from before ADR 0025,
 keep working unmigrated: Atelier reads each finding's latest disposition

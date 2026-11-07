@@ -51,12 +51,12 @@ A failed precondition is one more failed check, and land still runs every gate
 it can: `land_records_uncommitted` names every tracker record that differs from
 HEAD (the first five, then a count) as modified, disposition changed, new,
 deleted or staged, with
-`git add .atelier && git commit -m "…"`, except that a review record the base
-already holds that was deleted, or changed in anything but a finding's
-disposition, is restored with `git restore --source=HEAD --staged --worktree
--- <path>`, since review records on the base are append-only apart from
-dispositions (ADR 0025); a correction to one the base does not hold is
-committed (see [correcting review
+`git add .atelier && git commit -m "…"`, except that a committed approval or
+trivial exemption, or a review record the base already holds, that was
+deleted, or changed in anything but a finding's disposition, is restored with
+`git restore --source=HEAD --staged --worktree -- <path>`, since those are
+append-only apart from dispositions (ADR 0025); a correction to a finding the
+base does not hold is committed (see [correcting review
 records](reviews-and-merge.md#correcting-review-records)). The gates read
 HEAD's committed records instead. A rewrite already committed
 refuses with `review_append_only`, whose fix leaves that commit out with
@@ -165,8 +165,8 @@ a review or evidence record
 about it was added, removed, or retargeted; when the workflow policy at HEAD
 or on the base differs from the trusted point; or, under a policy that gates
 on `lint.none_blocking`, which reads every record, when any record changed.
-Review history is checked from the same point for edits to review records
-the base already held.
+Review history is checked from the same point for edits to approvals and
+exemptions, and to review records the base already held.
 `atelier doctor` checks every completed claim and the whole review history,
 for history that reached the base without the gates, such as a direct push
 (atelier-37uq).

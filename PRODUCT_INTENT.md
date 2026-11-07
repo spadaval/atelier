@@ -37,18 +37,19 @@ mechanical guards at the point of action. The governing decision is
 - Commit done claims on the work branch. Merge writes no tracker state, so the
   base branch sees completion together with the implementation.
 - Evaluate merge gates from the base branch's reviewed policy.
-- Keep review records append-only once they reach the base branch, and
-  review and evidence tied to full Git commit identities. Until a review
-  record reaches the base, any agent on the branch may correct or delete it,
-  each change judged against the base as it stood where the change joined it
-  (under `fast_forward_only`, a review record is final once committed). On
-  the base, the one exception is a finding's disposition, a field of the
-  finding that is set and changed in place, with who set it and at which
-  commit; Git history keeps earlier ones
+- Keep review records append-only once they reach the base branch, approvals
+  and trivial exemptions from when they are first committed, and review and
+  evidence tied to full Git commit identities. Until a finding or another
+  review record reaches the base, any agent on the branch may correct or
+  delete it, each change judged against the base as it stood where the
+  change joined it (under `fast_forward_only`, a review record is final once
+  committed). On the base, the one exception is a finding's disposition, a
+  field of the finding that is set and changed in place, with who set it and
+  at which commit; Git history keeps earlier ones
   ([ADR 0025](docs/adr/0025-findings-carry-their-disposition.md)). Identity
   is self-declared, so an implementer could delete a reviewer's finding before
   merge and leave no decision on it; that cannot let unreviewed code merge,
-  since an approval still has to cover the code
+  since approvals cannot be edited and one still has to cover the code
   ([ADR 0028](docs/adr/0028-simpler-lifecycle.md) decision 4).
 - Prefer concise command output and inspectable Markdown to a second UI or an
   external review service. A static HTML review page, such as `debrief

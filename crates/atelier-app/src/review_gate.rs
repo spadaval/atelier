@@ -759,15 +759,41 @@ fn work_edges(
 pub enum Held {
     /// The base held it.
     OnBase,
-    /// It was committed before the change, and the base takes each commit
-    /// by itself or cannot be read, so it is final once committed.
+    /// It was committed before the change and is final once committed: an
+    /// approval or trivial exemption, or any record when the base takes
+    /// each commit by itself or cannot be read.
     Committed,
 }
 
+/// Whether a review file is an approval or a trivial exemption, either
+/// kind, which stays as first committed wherever it is (atelier-ilba): a
+/// hand edit of its commit, target or identity would move it onto work its
+/// reviewer never saw. A file that does not parse is neither.
+fn final_once_committed(text: &str, relative: &Path) -> bool {
+    match parse_review_file(text, relative) {
+        Ok(ReviewFile::Event(record)) => matches!(
+            record.event,
+            ReviewEvent::Approval | ReviewEvent::TrivialExemption
+        ),
+        Ok(ReviewFile::BaseExemption(_)) => true,
+        _ => false,
+    }
+}
+
+/// Whether `commit` holds an approval or a trivial exemption at `path`, as
+/// [`final_once_committed`] reads it.
+pub fn approval_or_exemption_at(repo: &Path, commit: &str, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(".atelier") else {
+        return false;
+    };
+    git::blob(repo, commit, path).is_ok_and(|text| final_once_committed(&text, relative))
+}
+
 /// Where review records stop being correctable: the policy's base branch
-/// (atelier-ilba). Until a review record reaches the base, any agent on the
-/// branch may edit or delete it; once it is there, it stays as it is apart
-/// from a finding's disposition. Each change is judged against the base as
+/// (atelier-ilba). Until a finding or another review record reaches the
+/// base, any agent on the branch may edit or delete it; once it is there,
+/// it stays as it is apart from a finding's disposition. Approvals and
+/// trivial exemptions stay as first committed wherever they are. Each change is judged against the base as
 /// it stood where the change joined it, so a correction made on a branch is
 /// not refused after it merges.
 pub struct ReviewBase {
@@ -906,8 +932,8 @@ impl ReviewBase {
 }
 
 /// Keeps review records on the base as they are, apart from a finding's
-/// disposition, and lets any other review record be corrected or deleted
-/// (atelier-ilba). Every commit from `base_commit` to HEAD is checked, each
+/// disposition, and approvals and trivial exemptions as first committed,
+/// and lets any other review record be corrected or deleted (atelier-ilba). Every commit from `base_commit` to HEAD is checked, each
 /// against the base as it stood where the commit joined it ([`ReviewBase`]).
 ///
 /// A later commit cannot undo a rewrite, since every commit in the range is
@@ -935,10 +961,14 @@ pub fn append_only(
             }
             if !review_change_allowed(read, edge, path, &before, &after)? {
                 // A record not yet on the base may change in any way that
-                // leaves it a regular file, or go. Adding one is judged as
-                // before.
+                // leaves it a regular file, or go, unless it is an approval
+                // or exemption. Adding one is judged as before.
                 let regular = after.as_ref().is_none_or(|(mode, _)| mode == "100644");
+                let relative = path.strip_prefix(".atelier")?;
                 let held = match before {
+                    Some(_) if final_once_committed(&read.blob(&edge.parent, path)?, relative) => {
+                        Some(Held::Committed)
+                    }
                     Some(_) => base.held(read, &edge.commit, path)?,
                     None => Some(Held::Committed),
                 };
@@ -1814,33 +1844,24 @@ fn scope_queries(index: &RecordIndex, target: &str, event: &str) -> Result<(Path
     Ok((history, updates))
 }
 /// Whether an approval's identity is independent of the work's authors at
-/// the commit that set it as it reads now: the oldest commit since which its
-/// file has held these bytes, which is the commit that added it unless it
-/// was corrected before it reached the base (atelier-ilba). `merge`'s
-/// `review.current` reads it as it reads now too, so the two agree.
+/// the commit that introduced it, which must still hold it unchanged.
 fn original_independent(
     index: &RecordIndex,
     read: &mut git::ReadContext<'_>,
     record: &ReviewRecord,
 ) -> Result<bool> {
-    let path = std::path::PathBuf::from(format!(".atelier/reviews/{}.md", record.header.id));
+    let event_path = format!(".atelier/reviews/{}.md", record.header.id);
     let head = read.pinned("HEAD")?;
-    let held = read.entry(&head, &path)?;
-    let changes = read.path_log(&PathLog {
-        start: head.clone(),
-        paths: vec![path.display().to_string()],
-        listing: Listing::Changes,
-        reverse: false,
-    })?;
-    let mut set_at = None;
-    for commit in changes.iter() {
-        if read.entry(commit, &path)? != held {
-            break;
-        }
-        set_at = Some(commit.clone());
+    let introduced = read.path_log(&introduced_query(&head, &record.header.id))?;
+    let event = introduced.first().context("review event history missing")?;
+    let path = Path::new(&event_path);
+    if read.entry(event, path)? != read.entry("HEAD", path)? {
+        bail!(
+            "review_append_only: {} differs from its original event",
+            record.header.id
+        );
     }
-    let set_at = set_at.context("review event history missing")?;
-    independent_at(index, read, &record.target, &record.identity, &set_at)
+    independent_at(index, read, &record.target, &record.identity, event)
 }
 /// Whether a finding's disposition was set by an identity independent of
 /// the work's authors, judged at the commit that set it rather than at any

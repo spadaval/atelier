@@ -153,7 +153,8 @@ Built by atelier-ilba:
   checkout, deleted in a named commit, or present only on a named branch. A
   command given the full ID of an issue, review or receipt that only another
   branch holds names that branch.
-- A review record may be edited or deleted until it reaches the base. Each
+- A finding, or another review record that is not an approval or trivial
+  exemption, may be edited or deleted until it reaches the base. Each
   change is judged against the base as it stood where the change joined it:
   a commit a merge brought in, at that merge's first parent; a commit on the
   base's first-parent line, at its own first parent; a commit not on the
@@ -162,21 +163,23 @@ Built by atelier-ilba:
   refused. `land`, `doctor` and `merge` apply it, and `land` advises
   committing an uncommitted correction rather than restoring it. A change
   must leave a regular file. Adding a record is judged as before, so a
-  removed separate disposition event is still never added back. A corrected
-  approval counts as it reads now, its identity judged at the commit that
-  last set it, so `merge`'s `review.current` and the claim checks on the
-  base agree about it.
+  removed separate disposition event is still never added back.
+- Approvals and trivial exemptions stay append-only from when they are first
+  committed, wherever they are, as before (review finding atelier-oyh0): a
+  hand edit of an approval's commit, target or identity would re-point it
+  at code its reviewer never saw, and `merge`, `land` and `check` would
+  accept it.
 - Under `fast_forward_only`, history does not show where a fast-forward
   began, and an unmerged commit will join the base by itself, so each commit
   is judged at its own first parent: a review record is final once committed,
   as before. The same holds when the base branch cannot be read. atelier-jnrh
   makes every merge a merge commit, which ends the exception.
-- No identity rule: before a record reaches the base, any agent on the
+- No identity rule: before a finding reaches the base, any agent on the
   branch may correct it. Identity is self-declared, so an author check would
   add a rule without stopping anyone. Accepted risk (planning review finding
   R13): an implementer could delete a reviewer's finding before merge, so no
-  decision on it is recorded. It cannot let unreviewed code merge, since an
-  approval still has to cover the code.
+  decision on it is recorded. That cannot let unreviewed code merge, since
+  approvals cannot be edited and one still has to cover the code.
 
 ### 5. Fewer records and gates
 

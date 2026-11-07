@@ -49,16 +49,16 @@ impl RecordChange {
 #[derive(Debug)]
 pub struct RecordsUncommitted {
     pub records: Vec<(PathBuf, RecordChange)>,
-    /// The review records among them that are on the base already, which
-    /// stay as they are (atelier-ilba).
+    /// The review records among them that stay as they are: approvals and
+    /// trivial exemptions, and records on the base already (atelier-ilba).
     pub on_base: BTreeSet<PathBuf>,
     /// Whether a review record is final once committed, as under
     /// `fast_forward_only`, rather than once it reaches the base.
     pub final_once_committed: bool,
 }
 impl RecordsUncommitted {
-    /// Whether an uncommitted record is a review record on the base that
-    /// has to be restored rather than committed.
+    /// Whether an uncommitted record is a review record that stays as it is
+    /// and has to be restored rather than committed.
     fn restored(&self, (path, change): &(PathBuf, RecordChange)) -> bool {
         self.on_base.contains(path) && !matches!(change, RecordChange::New | RecordChange::Disposed)
     }
@@ -81,12 +81,13 @@ impl RecordsUncommitted {
             )
         )
     }
-    /// The command that settles them. Review records on the base are
-    /// append-only apart from a finding's disposition (ADR 0025,
-    /// atelier-ilba), so one there that was changed otherwise or deleted is
-    /// restored from HEAD, never committed: the check would refuse that
-    /// commit for good (atelier-v4rd). The rest, a changed disposition and
-    /// a correction to a review record not yet on the base among them, are
+    /// The command that settles them. Approvals and trivial exemptions, and
+    /// review records on the base, are append-only apart from a finding's
+    /// disposition (ADR 0025, atelier-ilba), so one of those that was
+    /// changed otherwise or deleted is restored from HEAD, never committed:
+    /// the check would refuse that commit for good (atelier-v4rd). The rest,
+    /// a changed disposition and a correction to a finding not yet on the
+    /// base among them, are
     /// committed, or only staged again when each differs only in the index,
     /// so their working bytes already match HEAD and there is nothing to
     /// commit.
@@ -97,7 +98,7 @@ impl RecordsUncommitted {
         } else if self.final_once_committed {
             "review records are append-only, so restore the committed ones and commit the rest with the work"
         } else {
-            "review records on the base are append-only, so restore those and commit the rest with the work"
+            "approvals, trivial exemptions and review records on the base are append-only, so restore those and commit the rest with the work"
         }
     }
     pub fn commit_command(&self) -> String {
@@ -145,8 +146,9 @@ impl std::fmt::Display for RecordsUncommitted {
 
 impl std::error::Error for RecordsUncommitted {}
 
-/// Fails naming `records`, each review record among them judged on the
-/// base or not by the working policy's base branch; without a policy to
+/// Fails naming `records`, each review record among them judged as one
+/// that stays as it is or not: an approval or trivial exemption at HEAD, or
+/// one on the base by the working policy's base branch; without a policy to
 /// read, every one is.
 fn records_uncommitted<T>(repo: &Path, records: Vec<(PathBuf, RecordChange)>) -> Result<T> {
     let base = atelier_workflow::load(repo)
@@ -162,6 +164,7 @@ fn records_uncommitted<T>(repo: &Path, records: Vec<(PathBuf, RecordChange)>) ->
         .filter(|path| {
             base.as_ref()
                 .is_none_or(|base| base.holds_uncommitted(repo, path))
+                || crate::review_gate::approval_or_exemption_at(repo, "HEAD", path)
         })
         .cloned()
         .collect();
