@@ -3,6 +3,9 @@ created_at: "2026-11-07T05:00:24.456556181+00:00"
 id: "atelier-3jdm"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-3jdm
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Judge an approval by the code it saw, not the records around it"
-updated_at: "2026-11-07T05:00:24.456556181+00:00"
+updated_at: "2026-11-07T05:20:49.363147493+00:00"
 ---
 
 ## Goal

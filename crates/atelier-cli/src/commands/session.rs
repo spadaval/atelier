@@ -358,7 +358,7 @@ fn land_gates(
     };
     let (branch_base, behind) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let behind_note = behind.map(|(base, count)| format!(
-        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
+        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` before atelier merge; a merge keeps an approval unless it resolves or edits code by hand, and then review.current names the merge and the files.",
         crate::human_output::count_noun(count, "commit")
     ));
     index.validate_policy(&source.policy, records_root)?;

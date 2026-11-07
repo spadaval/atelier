@@ -209,7 +209,6 @@ struct ObjectCache {
     ancestor_sets: HashMap<String, Rc<HashSet<String>>>,
     changed: HashMap<(String, String), Vec<PathBuf>>,
     edges: HashMap<(String, String), Rc<Vec<CommitEdge>>>,
-    status_only: HashMap<(String, String, PathBuf), bool>,
     first_parents: HashMap<String, Option<String>>,
     retired_findings: HashMap<String, Rc<std::collections::BTreeSet<String>>>,
     authors: HashMap<String, String>,
@@ -220,7 +219,7 @@ struct ObjectCache {
     record_graph: Option<Rc<RecordGraph>>,
     path_logs: HashMap<PathLog, Rc<[String]>>,
     commits: HashMap<String, Vec<u8>>,
-    merge_resolutions: HashMap<String, Option<MergeResolution>>,
+    hand_resolved: HashMap<String, Option<Vec<PathBuf>>>,
     /// Whether tree diffs matched `git diff` on this read phase's first
     /// edge; `None` until checked, `false` to use `git diff` throughout.
     tree_diff_matches: Option<bool>,
@@ -516,17 +515,15 @@ impl<'a> ReadContext<'a> {
         self.cache.first_parents.insert(commit, parent.clone());
         Ok(parent)
     }
-    /// Memoized [`merge_resolution`] for a full commit ID.
-    pub(crate) fn merge_resolution(&mut self, commit: &str) -> Result<Option<MergeResolution>> {
+    /// Memoized [`hand_resolved_paths`] for a full commit ID.
+    pub(crate) fn hand_resolved_paths(&mut self, commit: &str) -> Result<Option<Vec<PathBuf>>> {
         let commit = self.commit_id(commit)?;
-        if let Some(resolution) = self.cache.merge_resolutions.get(&commit) {
-            return Ok(resolution.clone());
+        if let Some(paths) = self.cache.hand_resolved.get(&commit) {
+            return Ok(paths.clone());
         }
-        let resolution = merge_resolution(self.repo, &commit)?;
-        self.cache
-            .merge_resolutions
-            .insert(commit, resolution.clone());
-        Ok(resolution)
+        let paths = hand_resolved_paths(self.repo, &commit)?;
+        self.cache.hand_resolved.insert(commit, paths.clone());
+        Ok(paths)
     }
     /// Commits reachable from `tips` but not from `not`.
     pub(crate) fn only_in(&mut self, tips: &[String], not: &str) -> Result<HashSet<String>> {
@@ -548,22 +545,6 @@ impl<'a> ReadContext<'a> {
         let output = String::from_utf8(git_output(self.repo, args)?)?;
         self.cache.histories.insert(key, output.clone());
         Ok(output)
-    }
-    /// Memoized answer for a pure comparison of two blobs at one path.
-    pub(crate) fn status_only(
-        &mut self,
-        before: &str,
-        after: &str,
-        path: &Path,
-        compare: impl FnOnce(&mut Self) -> Result<bool>,
-    ) -> Result<bool> {
-        let key = (before.to_owned(), after.to_owned(), path.to_path_buf());
-        if let Some(known) = self.cache.status_only.get(&key) {
-            return Ok(*known);
-        }
-        let answer = compare(self)?;
-        self.cache.status_only.insert(key, answer);
-        Ok(answer)
     }
     /// The commits a path-limited `git log` over records lists. Every such
     /// query in this read phase is answered from one load of HEAD's history,
@@ -912,86 +893,24 @@ pub fn head_commit(repo: &Path) -> Result<String> {
 /// of them produces: no conflicts and no edits made while merging, so it
 /// introduces nothing that is not on one side or the other (atelier-n7g1).
 pub fn clean_merge(repo: &Path, commit: &str) -> Result<bool> {
-    Ok(merge_resolution(repo, commit)?.is_some_and(|merge| merge.conflicted.is_empty()))
-}
-
-/// A two-parent merge that matches Git's own merge of its parents except in
-/// records whose conflicts were resolved by hand (atelier-1isk).
-#[derive(Clone)]
-pub struct MergeResolution {
-    /// The record paths Git could not merge; the merge commit may differ from
-    /// Git's result only here.
-    pub conflicted: Vec<PathBuf>,
-    /// The parents' merge base, set when there are conflicts.
-    pub merge_base: Option<String>,
-}
-
-/// `None` when `commit` is not a two-parent merge, a non-record path
-/// conflicted, or the commit differs from Git's merge outside the conflicts.
-pub fn merge_resolution(repo: &Path, commit: &str) -> Result<Option<MergeResolution>> {
-    let line = String::from_utf8(git_output(
-        repo,
-        &["rev-list", "--parents", "-n", "1", commit],
-    )?)?;
-    let parts = line.split_whitespace().collect::<Vec<_>>();
-    let [_, first, second] = parts.as_slice() else {
-        return Ok(None);
-    };
-    let Some((merged, conflicted)) = merge_tree(repo, first, second)? else {
-        return Ok(None);
-    };
-    if conflicted.iter().any(|path| !is_record_path(path)) {
-        return Ok(None);
-    }
-    let tree = String::from_utf8(git_output(
-        repo,
-        &["rev-parse", &format!("{commit}^{{tree}}")],
-    )?)?;
-    let differing = nul_paths(&git_output(
-        repo,
-        &[
-            "diff-tree",
-            "-r",
-            "--no-renames",
-            "--name-only",
-            "-z",
-            &merged,
-            tree.trim(),
-        ],
-    )?);
-    if differing.iter().any(|path| !conflicted.contains(path)) {
-        return Ok(None);
-    }
-    let merge_base = if conflicted.is_empty() {
-        None
-    } else {
-        let bases = String::from_utf8(git_output(repo, &["merge-base", "--all", first, second])?)?;
-        let bases = bases.lines().collect::<Vec<_>>();
-        let [base] = bases.as_slice() else {
-            return Ok(None);
-        };
-        Some((*base).to_owned())
-    };
-    Ok(Some(MergeResolution {
-        conflicted,
-        merge_base,
-    }))
+    Ok(hand_resolved_paths(repo, commit)?.is_some_and(|paths| paths.is_empty()))
 }
 
 /// The paths a two-parent merge commit differs from Git's own merge of its
 /// parents in, plus the paths that conflicted: what a person resolved or
-/// edited by hand. Empty for any other commit.
-pub fn hand_resolved_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
+/// edited by hand, sorted. `None` when `commit` is not a two-parent merge or
+/// Git cannot merge its parents.
+pub fn hand_resolved_paths(repo: &Path, commit: &str) -> Result<Option<Vec<PathBuf>>> {
     let line = String::from_utf8(git_output(
         repo,
         &["rev-list", "--parents", "-n", "1", commit],
     )?)?;
     let parts = line.split_whitespace().collect::<Vec<_>>();
     let [_, first, second] = parts.as_slice() else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     let Some((merged, mut paths)) = merge_tree(repo, first, second)? else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
     let differing = nul_paths(&git_output(
         repo,
@@ -1008,7 +927,7 @@ pub fn hand_resolved_paths(repo: &Path, commit: &str) -> Result<Vec<PathBuf>> {
     paths.extend(differing);
     paths.sort();
     paths.dedup();
-    Ok(paths)
+    Ok(Some(paths))
 }
 
 /// Git's own merge of two commits, with the repository's configuration and
@@ -1124,7 +1043,10 @@ pub fn working_status_paths(repo: &Path) -> Result<Vec<PathBuf>> {
     }
     Ok(changed)
 }
-/// Record-only paths; policy and project config are intentionally excluded.
+/// The tracker records: Markdown files under `.atelier/issues`, `evidence`
+/// and `reviews`. Everything else is code, the workflow policy and project
+/// config included; approval freshness and the clean-checkout checks split
+/// paths here.
 pub fn is_record_path(path: &Path) -> bool {
     let mut parts = path.components();
     parts

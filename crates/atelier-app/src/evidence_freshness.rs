@@ -574,7 +574,7 @@ impl EvidenceReadContext<'_> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
     use crate::test_records::{evidence_record, issue_record};
     use std::{fs, path::PathBuf};
@@ -708,7 +708,7 @@ pub(crate) mod tests {
     }
 
     /// A done record in the retired epic shape, and its `migrate epics` form.
-    pub(crate) fn approved_epic() -> (String, String) {
+    fn approved_epic() -> (String, String) {
         let mut record = issue_record("atelier-e001", "feature", "done");
         record.sections.close_reason = Some("Shipped.".into());
         let rendered = atelier_records::render_issue_record(&record).unwrap();

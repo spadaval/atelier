@@ -285,7 +285,7 @@ fn a_check_after_merge_is_briefed_shown_until_validated_and_refuses_nothing() {
 }
 
 #[test]
-fn carrying_a_check_on_the_base_lands_but_editing_what_done_means_does_not() {
+fn carrying_a_check_or_editing_a_done_record_on_the_base_lands() {
     let dir = tempdir().unwrap();
     let upstream = tempdir().unwrap();
     let repo = dir.path();
@@ -333,8 +333,8 @@ fn carrying_a_check_on_the_base_lands_but_editing_what_done_means_does_not() {
     assert!(landed, "{output}");
     git(repo, &["push", "-q"]);
 
-    // Any other edit of the done record is judged as before: it changes what
-    // the approval covered.
+    // Any other edit of the done record changes no code, so the approval
+    // still covers it (atelier-3jdm).
     edit(
         repo,
         &item,
@@ -343,7 +343,7 @@ fn carrying_a_check_on_the_base_lands_but_editing_what_done_means_does_not() {
     );
     commit(repo, &format!("Loosen {item}'s Done when"));
     let (landed, output) = cli(repo, &["land"]);
-    assert!(!landed && output.contains("findings.disposed"), "{output}");
+    assert!(landed, "{output}");
 }
 
 #[test]

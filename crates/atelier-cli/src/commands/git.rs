@@ -446,11 +446,11 @@ impl BaseReviews {
         changed: &[std::path::PathBuf],
     ) -> Result<Option<String>> {
         'claims: for id in base_done_claims(repo, policy, commit, tip, trusted, changed)? {
-            for (pin, ids) in self.approvals.iter().filter(|(_, ids)| ids.contains(&id)) {
+            for (pin, _) in self.approvals.iter().filter(|(_, ids)| ids.contains(&id)) {
                 let follows =
                     git_freshness::git_output(repo, &["merge-base", "--is-ancestor", pin, commit])
                         .is_ok();
-                if follows && review_gate::approval_is_current_to(read, pin, ids, commit, tip)? {
+                if follows && review_gate::approval_is_current_to(read, pin, commit, tip)? {
                     continue 'claims;
                 }
             }

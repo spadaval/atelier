@@ -90,10 +90,14 @@ facts and author identities come from Git.
 
 Merge policy is read from the base branch's `.atelier/workflow.yaml`, so a work
 branch cannot weaken its own gate. Invalid base policy produces a visible error
-and uses the last valid policy from base history. Freshness compares commits and
-semantic record changes. Evidence freshness guards code, policy, and target
-acceptance; approval freshness also guards relationships, metadata, and existing
-proof/review rewrites. See the product contracts for each boundary.
+and uses the last valid policy from base history. Evidence freshness compares
+commits and semantic record changes: it guards code, policy, and target
+acceptance. Approval freshness reads no record contents: an approval is stale
+only when code, meaning anything outside the tracker records (`.atelier/issues`,
+`reviews`, `evidence`), changed since the approved commit, not counting a clean
+merge from the base, so workflow policy and config count as code. Review records
+stay append-only by a check of their own. See the product contracts for each
+boundary.
 
 Terminal records may be removed by explicit prune after protection checks.
 Git history is the audit and recovery source. There is no tracked archive index

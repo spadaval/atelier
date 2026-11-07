@@ -1,4 +1,4 @@
-//! Review integrity, semantic freshness and derived merge gate graph nodes.
+//! Review integrity, approval freshness and derived merge gate graph nodes.
 use crate::{
     git_freshness as git,
     path_log::{Listing, PathLog},
@@ -8,7 +8,6 @@ use crate::{
 use anyhow::{bail, Context, Result};
 use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
 use atelier_records::review::{parse_review_file, parse_review_record, ReviewFile};
-use atelier_records::{parse_issue_record, split_document};
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -186,141 +185,6 @@ pub fn scope(index: &RecordIndex, owner: &str) -> Result<BTreeSet<String>> {
     Ok(ids)
 }
 
-fn issue_status_only(before: &str, after: &str, path: &Path) -> Result<bool> {
-    let relative = path.strip_prefix(".atelier")?;
-    if parse_issue_record(before, relative).is_err() {
-        // An exact `atelier migrate epics` rewrite of an approved epic changes
-        // its shape, not its content, so it does not author the record.
-        if let Ok(record) = parse_issue_record(after, relative) {
-            if let Ok(Some(migrated)) = crate::epic_migration::migrate_epic_text(
-                before,
-                &record.issue.issue_type,
-                &record.issue.status,
-            ) {
-                if parse_issue_record(&migrated.text, relative).is_ok() {
-                    return issue_status_only(&migrated.text, after, path);
-                }
-            }
-        }
-    }
-    // Preserve unknown front-matter changes too: only this explicit whitelist
-    // can be ignored, even when an issue parser has no use for another key.
-    let front = |text: &str| -> Result<serde_yaml::Value> {
-        let (yaml, _) = split_document(text).context("missing issue front matter")?;
-        let mut value: serde_yaml::Value = serde_yaml::from_str(yaml)?;
-        let map = value
-            .as_mapping_mut()
-            .context("issue front matter is not a mapping")?;
-        for key in ["status", "updated_at", "closed_at"] {
-            map.remove(serde_yaml::Value::String(key.into()));
-        }
-        Ok(value)
-    };
-    if front(before)? != front(after)? {
-        return Ok(false);
-    }
-    match (
-        parse_issue_record(before, relative),
-        parse_issue_record(after, relative),
-    ) {
-        (Ok(mut left), Ok(mut right)) => {
-            left.sections.close_reason = None;
-            right.sections.close_reason = None;
-            Ok(left.sections == right.sections)
-        }
-        // History can hold records in a retired shape, such as pre-migration
-        // epics. Compare their bodies as text, ignoring only Close Reason.
-        _ => Ok(body_without_close_reason(before) == body_without_close_reason(after)),
-    }
-}
-
-fn body_without_close_reason(text: &str) -> Option<String> {
-    let (_, body) = split_document(text)?;
-    let mut kept = String::new();
-    let mut skipping = false;
-    for line in body.lines() {
-        if let Some(heading) = line.strip_prefix("## ") {
-            skipping = heading.trim() == "Close Reason";
-        }
-        if !skipping {
-            kept.push_str(line.trim_end());
-            kept.push('\n');
-        }
-    }
-    Some(kept.trim_end().to_owned())
-}
-
-/// Whether `edge` changes only what an approval of `ids` pinned at `pin`
-/// keeps current (see `approval_is_current_to`).
-fn allowed_edge(
-    read: &mut git::ReadContext<'_>,
-    edge: &git::CommitEdge,
-    ids: &BTreeSet<String>,
-    pin: &str,
-) -> Result<bool> {
-    for path in &edge.paths {
-        let old = read.entry(&edge.parent, path)?;
-        let new = read.entry(&edge.commit, path)?;
-        let regular = |entry: &Option<(String, String)>| {
-            entry.as_ref().is_some_and(|(mode, _)| mode == "100644")
-        };
-        if path.extension().is_some_and(|ext| ext == "md") && path.starts_with(".atelier/reviews") {
-            if review_change_allowed(read, edge, path, &old, &new)? {
-                continue;
-            }
-            return Ok(false);
-        }
-        if path.extension().is_some_and(|ext| ext == "md") && path.starts_with(".atelier/evidence")
-        {
-            if old.is_none() && regular(&new) {
-                continue;
-            }
-            return Ok(false);
-        }
-        let issue_id = (path.parent() == Some(Path::new(".atelier/issues"))
-            && path.extension().is_some_and(|ext| ext == "md"))
-        .then(|| path.file_stem().and_then(|name| name.to_str()))
-        .flatten();
-        // An issue outside the scope that is not in the approval's pinned
-        // tree is planning, not reviewed work, in every later commit: whether
-        // it was created on the branch, such as the follow-up a deferred
-        // finding needs (atelier-cafy, atelier-iaas), or on the base, before
-        // or after the approval, and merged in (atelier-g0mh, atelier-kotb).
-        // Such records may be committed to the
-        // base without review anyway. Its own done claim is judged by
-        // `claims.reviewed` and `land`, not by the approval.
-        if issue_id.is_some_and(|id| !ids.contains(id))
-            && (old.is_none() || regular(&old))
-            && regular(&new)
-            && read.entry(pin, path)?.is_none()
-        {
-            continue;
-        }
-        if path.starts_with(".atelier/issues") && regular(&old) && regular(&new) {
-            let id = path
-                .file_stem()
-                .and_then(|name| name.to_str())
-                .unwrap_or("");
-            let (Some((_, before)), Some((_, after))) = (&old, &new) else {
-                unreachable!("regular entries exist")
-            };
-            if ids.contains(id)
-                && read.status_only(before, after, path, |read| {
-                    issue_status_only(
-                        &read.blob(&edge.parent, path)?,
-                        &read.blob(&edge.commit, path)?,
-                        path,
-                    )
-                })?
-            {
-                continue;
-            }
-        }
-        return Ok(false);
-    }
-    Ok(true)
-}
-
 /// Whether `edge`'s change to the review record at `path` leaves every
 /// event as it was: it adds a new event, sets or changes a finding's
 /// disposition and nothing else (ADR 0025), or removes a separate
@@ -329,7 +193,6 @@ fn allowed_edge(
 /// own disposition and keeps none of its events. A separate event is never
 /// added back once removed: either would bring back a decision that was
 /// replaced, which the old append-only events refused (atelier-pfbp).
-/// Approval freshness and the append-only check share this one rule.
 fn review_change_allowed(
     read: &mut git::ReadContext<'_>,
     edge: &git::CommitEdge,
@@ -419,52 +282,51 @@ pub(crate) fn disposition_only(before: &str, after: &str, relative: &Path) -> bo
     before == after
 }
 
-pub fn approval_is_current(
-    read: &mut git::ReadContext<'_>,
-    pin: &str,
-    ids: &BTreeSet<String>,
-    base: &str,
-) -> Result<bool> {
-    approval_is_current_to(read, pin, ids, "HEAD", base)
+pub fn approval_is_current(read: &mut git::ReadContext<'_>, pin: &str, base: &str) -> Result<bool> {
+    approval_is_current_to(read, pin, "HEAD", base)
 }
 /// The one rule for what an approval or trivial exemption covers
-/// (atelier-n642). Pinned at `pin`, it stays current at `end` when every
-/// commit after the pin only adds review or evidence records, files or edits
-/// issues outside the approved scope `ids` that are new since the pin (a
-/// follow-up and its links, atelier-iaas), changes a record in `ids` by status,
-/// timestamps and Close Reason alone, or cleanly merges commits already on
-/// `base`. So a close commit that changes only the scope's own records keeps
-/// it current, and one that also edits code or another field does not.
-/// `merge`'s `review.current`, the session gates and `land`'s check of done
-/// claims on the base all ask this; `end` must contain `pin`.
+/// (atelier-n642, atelier-3jdm): the code. Pinned at `pin`, it stays current
+/// at `end` while no commit after the pin changes code, which is everything
+/// outside the tracker records (`git::is_record_path`), so workflow policy
+/// and config count. Record edits never make it stale, whatever record they
+/// touch. A merge that brings in only commits already on `base` keeps it
+/// current when it matches Git's own merge of its parents everywhere outside
+/// the records: those commits were reviewed on their own branches. Each
+/// commit is checked, so changing code and then restoring it does not
+/// recover an approval. `merge`'s `review.current`, the session gates and
+/// `land`'s check of done claims on the base all ask this; `end` must
+/// contain `pin`.
 pub fn approval_is_current_to(
     read: &mut git::ReadContext<'_>,
     pin: &str,
-    ids: &BTreeSet<String>,
     end: &str,
     base: &str,
 ) -> Result<bool> {
-    for (edge, merge) in work_edges(read, pin, end, base)? {
-        if !edge_allowed(read, &edge, merge.as_ref(), ids, pin)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+    Ok(work_edges(read, pin, end, base)?
+        .iter()
+        .all(|(edge, clean_base_merge)| edge_allowed(edge, *clean_base_merge)))
 }
 
-/// Whether one edge after `pin` keeps an approval of `ids` current: the one
-/// edge check `approval_is_current_to` and `approval_stale_edges` share.
-fn edge_allowed(
-    read: &mut git::ReadContext<'_>,
-    edge: &git::CommitEdge,
-    merge: Option<&git::MergeResolution>,
-    ids: &BTreeSet<String>,
-    pin: &str,
-) -> Result<bool> {
-    match merge {
-        Some(merge) => allowed_base_merge(read, edge, merge, ids, pin),
-        None => allowed_edge(read, edge, ids, pin),
-    }
+/// Whether one edge after a pin keeps an approval current: it is a clean
+/// merge of the base, or it changes no code. The one edge check
+/// `approval_is_current_to` and `approval_stale_edges` share.
+fn edge_allowed(edge: &git::CommitEdge, clean_base_merge: bool) -> bool {
+    clean_base_merge || !changes_code(edge)
+}
+
+/// Whether `edge` changes anything outside the tracker records.
+fn changes_code(edge: &git::CommitEdge) -> bool {
+    edge.paths.iter().any(|path| !git::is_record_path(path))
+}
+
+/// The code among `paths`: those outside the tracker records.
+fn code_paths(paths: &[std::path::PathBuf]) -> Vec<std::path::PathBuf> {
+    paths
+        .iter()
+        .filter(|path| !git::is_record_path(path))
+        .cloned()
+        .collect()
 }
 
 /// A commit after an approval's pin that makes it stale, with the paths a
@@ -476,11 +338,11 @@ pub struct StaleEdge {
     pub subject: String,
     /// Set for a merge: whether every commit it brings in is on the base.
     pub merge: Option<BaseMerge>,
-    /// What a new review has to read: for a merge, the paths it resolved or
-    /// edited by hand and the in-scope records it changed, or all it changed
-    /// when it did neither; for any other commit, what it changed.
+    /// What a new review has to read, which is code only: for a merge, the
+    /// code it resolved or edited by hand, or all the code it changed when it
+    /// did neither; for any other commit, the code it changed.
     pub paths: Vec<std::path::PathBuf>,
-    /// The paths a merge resolved or edited beyond Git's own merge.
+    /// The code a merge resolved or edited beyond Git's own merge.
     pub by_hand: Vec<std::path::PathBuf>,
 }
 /// Whether a merge brings in only commits already on the base.
@@ -490,18 +352,17 @@ pub enum BaseMerge {
     Other,
 }
 
-/// Every commit of the branch (not of the base) after `pin` that makes the approval stale at `end`, oldest
-/// first, each with the paths a new review has to look at; empty while the
-/// approval is current. It applies the rule of [`approval_is_current_to`] to
-/// each edge, so what `merge --sync` reports as needing review is exactly
-/// what makes the approval stale, but unlike that check it computes the
-/// paths. For a merge they are those it resolved by hand or edited beyond
-/// Git's own merge, plus in-scope records it changed; for any other commit,
-/// what it changed.
+/// Every commit of the branch (not of the base) after `pin` that makes the
+/// approval stale at `end`, oldest first, each with the code a new review has
+/// to look at; empty while the approval is current. It applies the rule of
+/// [`approval_is_current_to`] to each edge, so what `merge --sync` reports as
+/// needing review is exactly what makes the approval stale, but unlike that
+/// check it computes the paths. For a merge they are the code it resolved by
+/// hand or edited beyond Git's own merge; for any other commit, the code it
+/// changed.
 pub fn approval_stale_edges(
     read: &mut git::ReadContext<'_>,
     pin: &str,
-    ids: &BTreeSet<String>,
     end: &str,
     base: &str,
 ) -> Result<Vec<StaleEdge>> {
@@ -512,15 +373,13 @@ pub fn approval_stale_edges(
     // itself changes nothing against the branch, such as a conflict
     // resolved to the branch's side.
     let mut unaccepted_base = HashSet::new();
-    for (edge, merge) in &edges {
-        if ancestor(read, &edge.commit, base)
-            && !edge_allowed(read, edge, merge.as_ref(), ids, pin)?
-        {
+    for (edge, clean_base_merge) in &edges {
+        if ancestor(read, &edge.commit, base) && !edge_allowed(edge, *clean_base_merge) {
             unaccepted_base.insert(edge.commit.clone());
         }
     }
     // Edges come newest first.
-    for (edge, merge) in edges.into_iter().rev() {
+    for (edge, clean_base_merge) in edges.into_iter().rev() {
         if ancestor(read, &edge.commit, base) {
             continue;
         }
@@ -530,27 +389,17 @@ pub fn approval_stale_edges(
                 .only_in(&edge.sides, &edge.parent)?
                 .iter()
                 .any(|commit| unaccepted_base.contains(commit));
-        if !brings_unaccepted && edge_allowed(read, &edge, merge.as_ref(), ids, pin)? {
+        if !brings_unaccepted && edge_allowed(&edge, clean_base_merge) {
             continue;
         }
-        let mut by_hand = Vec::new();
-        let paths = if edge.sides.is_empty() {
-            edge.paths
+        let (paths, by_hand) = if edge.sides.is_empty() {
+            (code_paths(&edge.paths), Vec::new())
         } else {
-            by_hand = git::hand_resolved_paths(read.repo, &edge.commit)?;
-            let mut paths = by_hand.clone();
-            paths.extend(
-                edge.paths
-                    .iter()
-                    .filter(|path| in_scope_issue(path, ids))
-                    .cloned(),
-            );
-            paths.sort();
-            paths.dedup();
-            if paths.is_empty() {
-                edge.paths
+            let by_hand = code_paths(&read.hand_resolved_paths(&edge.commit)?.unwrap_or_default());
+            if by_hand.is_empty() {
+                (code_paths(&edge.paths), by_hand)
             } else {
-                paths
+                (by_hand.clone(), by_hand)
             }
         };
         let subject = String::from_utf8(git::git_output(
@@ -577,14 +426,6 @@ pub fn approval_stale_edges(
     Ok(stale)
 }
 
-fn in_scope_issue(path: &Path, ids: &BTreeSet<String>) -> bool {
-    path.parent() == Some(Path::new(".atelier/issues"))
-        && path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .is_some_and(|id| ids.contains(id))
-}
-
 /// Whether `record`, an approval or trivial exemption on a work branch that
 /// left the base at `fork_point`, is current at the branch's HEAD as
 /// `merge`'s `review.current` judges it. An approval from before the base
@@ -593,11 +434,10 @@ fn in_scope_issue(path: &Path, ids: &BTreeSet<String>) -> bool {
 pub fn current_on_branch(
     read: &mut git::ReadContext<'_>,
     record: &ReviewRecord,
-    ids: &BTreeSet<String>,
     fork_point: &str,
 ) -> bool {
     (ancestor(read, fork_point, &record.commit) || !ancestor(read, &record.commit, fork_point))
-        && approval_is_current(read, &record.commit, ids, fork_point).unwrap_or(false)
+        && approval_is_current(read, &record.commit, fork_point).unwrap_or(false)
 }
 
 /// Where a work branch owner's review stands.
@@ -666,16 +506,14 @@ pub fn approval_standing<'i>(
     owner: &str,
     fork_point: &str,
 ) -> Result<Standing<'i>> {
-    let ids = scope(index, owner)?;
-    let authors = author_identities(read, fork_point, &ids)?;
-    standing(index, read, owner, &ids, authors, fork_point)
+    let authors = author_identities(read, fork_point)?;
+    standing(index, read, owner, authors, fork_point)
 }
 
 fn standing<'i>(
     index: &'i RecordIndex,
     read: &mut git::ReadContext<'_>,
     owner: &str,
-    ids: &BTreeSet<String>,
     authors: BTreeSet<String>,
     fork_point: &str,
 ) -> Result<Standing<'i>> {
@@ -699,7 +537,7 @@ fn standing<'i>(
             }
             continue;
         }
-        if current_on_branch(read, record, ids, fork_point) {
+        if current_on_branch(read, record, fork_point) {
             return Ok(Standing {
                 state: ApprovalState::Current,
                 record: Some(record),
@@ -713,7 +551,7 @@ fn standing<'i>(
     }
     Ok(match (stale, by_author) {
         (Some(record), _) => {
-            let edges = approval_stale_edges(read, &record.commit, ids, "HEAD", fork_point)?;
+            let edges = approval_stale_edges(read, &record.commit, "HEAD", fork_point)?;
             Standing {
                 state: ApprovalState::Stale,
                 record: Some(record),
@@ -736,7 +574,7 @@ fn standing<'i>(
 
 /// `review.current`'s reason when it fails: the approval it considered and
 /// why it does not count, or that there is none.
-fn not_current_reason(standing: &Standing<'_>, ids: &BTreeSet<String>) -> String {
+fn not_current_reason(standing: &Standing<'_>) -> String {
     const LISTED: usize = 3;
     let authors = standing.shown_authors();
     let (Some(record), Some(why)) = (standing.record, &standing.not_current) else {
@@ -786,43 +624,19 @@ fn not_current_reason(standing: &Standing<'_>, ids: &BTreeSet<String>) -> String
         NotCurrent::Stale(edges) => {
             let first = &edges[0];
             let cause = match first.merge {
-                Some(kind) => {
-                    let records = first
-                        .paths
-                        .iter()
-                        .filter(|path| in_scope_issue(path, ids))
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let by_hand = first
-                        .by_hand
-                        .iter()
-                        .filter(|path| !records.contains(path))
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let mut parts = Vec::new();
-                    if !records.is_empty() {
-                        parts.push(format!(
-                            "changed in-scope {} {} beyond status",
-                            if records.len() == 1 { "record" } else { "records" },
-                            listed(&records)
-                        ));
+                Some(kind) => format!(
+                    "{} {} {}",
+                    match kind {
+                        BaseMerge::Base => "base merge",
+                        BaseMerge::Other => "merge",
+                    },
+                    short(&first.commit),
+                    if first.by_hand.is_empty() {
+                        format!("changed {}", listed(&first.paths))
+                    } else {
+                        format!("resolved or edited {} by hand", listed(&first.by_hand))
                     }
-                    if !by_hand.is_empty() {
-                        parts.push(format!("resolved or edited {} by hand", listed(&by_hand)));
-                    }
-                    if parts.is_empty() {
-                        parts.push(format!("changed {}", listed(&first.paths)));
-                    }
-                    format!(
-                        "{} {} {}",
-                        match kind {
-                            BaseMerge::Base => "base merge",
-                            BaseMerge::Other => "merge",
-                        },
-                        short(&first.commit),
-                        parts.join(" and ")
-                    )
-                }
+                ),
                 None => format!(
                     "{} \"{}\" changed {}",
                     short(&first.commit),
@@ -890,154 +704,6 @@ pub fn approval_accepted(
     }
     Ok(true)
 }
-/// A merge of base content into the work branch, checked against the branch
-/// side. Paths Git merged on its own came from the base, except that an
-/// in-scope issue record may still change only in status, so base planning
-/// cannot rewrite the approved scope. A record conflict resolved by hand must
-/// be a three-way merge of its sides, so it cannot drop a blocker or a child
-/// either side added; in-scope ones are status-only too (atelier-n7g1,
-/// atelier-1isk).
-fn allowed_base_merge(
-    read: &mut git::ReadContext<'_>,
-    edge: &git::CommitEdge,
-    merge: &git::MergeResolution,
-    ids: &BTreeSet<String>,
-    pin: &str,
-) -> Result<bool> {
-    // A conflict resolved to the branch side's version changes nothing
-    // against it, yet may drop the base's side, so every conflict is checked.
-    let paths = edge
-        .paths
-        .iter()
-        .chain(&merge.conflicted)
-        .collect::<BTreeSet<_>>();
-    for path in paths {
-        let issue = path.parent() == Some(Path::new(".atelier/issues"));
-        let in_scope_issue = issue
-            && path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .is_some_and(|id| ids.contains(id));
-        let conflicted = merge.conflicted.contains(path);
-        if !in_scope_issue && !conflicted {
-            continue;
-        }
-        if conflicted && issue {
-            let (Some(base), [side]) = (&merge.merge_base, edge.sides.as_slice()) else {
-                return Ok(false);
-            };
-            if !record_three_way(read, path, base, &edge.parent, side, &edge.commit)? {
-                return Ok(false);
-            }
-            if !in_scope_issue {
-                continue;
-            }
-        }
-        let single = git::CommitEdge {
-            paths: vec![path.clone()],
-            ..edge.clone()
-        };
-        if !allowed_edge(read, &single, ids, pin)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-/// Whether `resolved` is a three-way merge of an issue record's `ours` and
-/// `theirs` from `base`: each front-matter field and the body take the side
-/// that changed them, lists merge as sets of whole entries (each side's
-/// additions kept and removals respected), and a value both sides changed
-/// differently is a real conflict that needs review. Timestamps may take
-/// either side.
-fn record_three_way(
-    read: &mut git::ReadContext<'_>,
-    path: &Path,
-    base: &str,
-    ours: &str,
-    theirs: &str,
-    resolved: &str,
-) -> Result<bool> {
-    use serde_yaml::Value;
-    let mut parts = |commit: &str| -> Result<(Value, Value)> {
-        if read.entry(commit, path)?.is_none() {
-            return Ok((Value::Null, Value::Null));
-        }
-        let text = read.blob(commit, path)?;
-        Ok(match split_document(&text) {
-            Some((front, body)) => (
-                serde_yaml::from_str(front).unwrap_or(Value::String(front.to_owned())),
-                Value::String(body.to_owned()),
-            ),
-            None => (Value::Null, Value::String(text)),
-        })
-    };
-    let (base, ours, theirs, resolved) =
-        (parts(base)?, parts(ours)?, parts(theirs)?, parts(resolved)?);
-    Ok(merged(&base.0, &ours.0, &theirs.0, &resolved.0, "")
-        && merged(&base.1, &ours.1, &theirs.1, &resolved.1, ""))
-}
-fn merged(
-    base: &serde_yaml::Value,
-    ours: &serde_yaml::Value,
-    theirs: &serde_yaml::Value,
-    resolved: &serde_yaml::Value,
-    key: &str,
-) -> bool {
-    use serde_yaml::Value;
-    if matches!(key, "updated_at" | "closed_at") {
-        return resolved == ours || resolved == theirs;
-    }
-    if ours == theirs {
-        return resolved == ours;
-    }
-    if ours == base {
-        return resolved == theirs;
-    }
-    if theirs == base {
-        return resolved == ours;
-    }
-    match (ours, theirs, resolved) {
-        (Value::Mapping(ours), Value::Mapping(theirs), Value::Mapping(resolved)) => {
-            let empty = serde_yaml::Mapping::new();
-            let base = base.as_mapping().unwrap_or(&empty);
-            let null = Value::Null;
-            base.keys()
-                .chain(ours.keys())
-                .chain(theirs.keys())
-                .chain(resolved.keys())
-                .all(|field| {
-                    merged(
-                        base.get(field).unwrap_or(&null),
-                        ours.get(field).unwrap_or(&null),
-                        theirs.get(field).unwrap_or(&null),
-                        resolved.get(field).unwrap_or(&null),
-                        field.as_str().unwrap_or(""),
-                    )
-                })
-        }
-        (Value::Sequence(ours), Value::Sequence(theirs), Value::Sequence(resolved)) => {
-            let empty = Vec::new();
-            let base = base.as_sequence().unwrap_or(&empty);
-            let expected = ours
-                .iter()
-                .filter(|entry| !base.contains(entry) || theirs.contains(entry))
-                .chain(
-                    theirs
-                        .iter()
-                        .filter(|entry| !base.contains(entry) && !ours.contains(entry)),
-                )
-                .collect::<Vec<_>>();
-            // The same entries, each as many times, so a duplicate cannot
-            // make room for one nobody wrote (atelier-wgil).
-            resolved.len() == expected.len()
-                && resolved.iter().all(|entry| {
-                    resolved.iter().filter(|other| *other == entry).count()
-                        == expected.iter().filter(|other| **other == entry).count()
-                })
-        }
-        _ => false,
-    }
-}
 /// The merges in `edges` (from `pin`) that bring in commits already on
 /// `base`, each with the commits only its other sides hold. Those commits
 /// were reviewed on their own branches, so they are neither work the
@@ -1059,29 +725,32 @@ fn base_merges<'e>(
     Ok(merges)
 }
 /// The edges from `pin` to `end` that can change approved work, each with
-/// its merge resolution when it merges commits already on `base`. Those base
-/// commits are left out; the merge itself is checked with
-/// `allowed_base_merge`.
+/// whether it is a clean merge of commits already on `base`: one that matches
+/// Git's own merge of its parents everywhere outside the records. The base
+/// commits a clean merge brings in are left out; a merge that resolved or
+/// edited code by hand is checked like any other commit, and so are the base
+/// commits it brings in.
 fn work_edges(
     read: &mut git::ReadContext<'_>,
     pin: &str,
     end: &str,
     base: &str,
-) -> Result<Vec<(git::CommitEdge, Option<git::MergeResolution>)>> {
+) -> Result<Vec<(git::CommitEdge, bool)>> {
     let edges = read.edges(pin, end)?;
     let mut merged_base = HashSet::new();
-    let mut merges = BTreeMap::new();
+    let mut clean = HashSet::new();
     for (edge, only_in_sides) in base_merges(read, pin, &edges, base)? {
-        let Some(merge) = read.merge_resolution(&edge.commit)? else {
+        let by_hand = read.hand_resolved_paths(&edge.commit)?;
+        if !by_hand.is_some_and(|paths| paths.iter().all(|path| git::is_record_path(path))) {
             continue;
-        };
+        }
         merged_base.extend(only_in_sides);
-        merges.insert(edge.commit.clone(), merge);
+        clean.insert(edge.commit.clone());
     }
     Ok(edges
         .iter()
         .filter(|edge| !merged_base.contains(&edge.commit))
-        .map(|edge| (edge.clone(), merges.get(&edge.commit).cloned()))
+        .map(|edge| (edge.clone(), clean.contains(&edge.commit)))
         .collect())
 }
 
@@ -1216,14 +885,13 @@ pub fn append_only_history(read: &mut git::ReadContext<'_>) -> Result<()> {
 pub fn author_identities(
     read: &mut git::ReadContext<'_>,
     base_commit: &str,
-    ids: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>> {
-    author_identities_to(read, base_commit, ids, "HEAD", base_commit)
+    author_identities_to(read, base_commit, "HEAD", base_commit)
 }
 /// The author set review independence is judged against (atelier-0cj6):
-/// the authors of the commits from `start` to `end` that change more than an
-/// approval keeps current, leaving out the commits merges bring in from
-/// `base`. A reviewer who authored work on the base that the branch merged in
+/// the authors of the commits from `start` to `end` that change code, by the
+/// rule an approval goes stale by, leaving out the commits merges bring in
+/// from `base`. A reviewer who authored work on the base that the branch merged in
 /// is still independent of the branch. `merge`'s `review.current` passes the
 /// branch's fork point with the base as `base`, so it counts the authors of a
 /// merged side branch not on the base; `land` judges from history and passes the tip, so it leaves
@@ -1232,7 +900,6 @@ pub fn author_identities(
 fn author_identities_to(
     read: &mut git::ReadContext<'_>,
     start: &str,
-    ids: &BTreeSet<String>,
     end: &str,
     base: &str,
 ) -> Result<BTreeSet<String>> {
@@ -1247,7 +914,7 @@ fn author_identities_to(
         .iter()
         .filter(|edge| !merged_base.contains(&edge.commit))
     {
-        if !allowed_edge(read, edge, ids, start)? && inspected.insert(edge.commit.clone()) {
+        if changes_code(edge) && inspected.insert(edge.commit.clone()) {
             add_author(read, &edge.commit, &mut authors)?;
         }
     }
@@ -1394,7 +1061,7 @@ fn evaluate_scope(
     let authors = if global {
         BTreeSet::new()
     } else {
-        author_identities(read, base_commit, &ids)?
+        author_identities(read, base_commit)?
     };
     for record in index
         .reviews()
@@ -1503,10 +1170,9 @@ fn evaluate_scope(
             accepted_identity
                 && ((historical && retained(read, base_commit, record))
                     || if global {
-                        approval_is_current(read, &record.commit, &ids, base_commit)
-                            .unwrap_or(false)
+                        approval_is_current(read, &record.commit, base_commit).unwrap_or(false)
                     } else {
-                        current_on_branch(read, record, &ids, base_commit)
+                        current_on_branch(read, record, base_commit)
                     })
         })
         .collect::<Vec<_>>();
@@ -1526,10 +1192,9 @@ fn evaluate_scope(
             {
                 // Only the owner's approvals count here, as `standing` judges
                 // them, so it names the one considered and why it does not.
-                None => not_current_reason(
-                    &standing(index, read, owner, &ids, authors.clone(), base_commit)?,
-                    &ids,
-                ),
+                None => {
+                    not_current_reason(&standing(index, read, owner, authors.clone(), base_commit)?)
+                }
                 Some(record) if matches!(record.event, ReviewEvent::Approval) => {
                     format!("current independent approval {}", record.header.id)
                 }
@@ -2098,7 +1763,6 @@ fn independent_at(
     event: &str,
 ) -> Result<bool> {
     let issue = index.require_issue(target)?;
-    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
     let head = read.pinned("HEAD")?;
     let (history, updates) = scope_queries(index, target, event)?;
     let history = read.path_log(&history)?;
@@ -2115,15 +1779,15 @@ fn independent_at(
     // (atelier-p5qp).
     let authors = if let Some(origin) = branch_start {
         match read.first_parent(origin)? {
-            Some(parent) => author_identities_to(read, &parent, &ids, event, &head)?,
+            Some(parent) => author_identities_to(read, &parent, event, &head)?,
             None => {
-                let mut authors = author_identities_to(read, origin, &ids, event, &head)?;
+                let mut authors = author_identities_to(read, origin, event, &head)?;
                 add_author(read, origin, &mut authors)?;
                 authors
             }
         }
     } else {
-        let mut authors = author_identities_to(read, start, &ids, event, &head)?;
+        let mut authors = author_identities_to(read, start, event, &head)?;
         add_author(read, start, &mut authors)?;
         authors
     };
@@ -2173,10 +1837,8 @@ fn original_approval_valid(
     target: &str,
     base: &str,
 ) -> Result<bool> {
-    let issue = index.require_issue(target)?;
-    let ids = scope(index, issue.parent_id.as_deref().unwrap_or(target))?;
     let end = read.claim_endpoint(index, target, &approval.commit)?;
-    approval_is_current_to(read, &approval.commit, &ids, &end, base)
+    approval_is_current_to(read, &approval.commit, &end, base)
 }
 
 fn retired_review_cluster(
@@ -2232,61 +1894,4 @@ fn retired_review_cluster(
         }
     }
     Ok(true)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn list_resolutions_keep_both_sides_and_add_nothing_even_with_duplicates() {
-        let list = |items: &[&str]| {
-            serde_yaml::Value::Sequence(items.iter().map(|item| (*item).into()).collect())
-        };
-        let (base, ours, theirs) = (
-            list(&["dup", "dup"]),
-            list(&["dup", "dup", "branch"]),
-            list(&["dup", "dup", "base"]),
-        );
-        assert!(merged(
-            &base,
-            &ours,
-            &theirs,
-            &list(&["dup", "dup", "branch", "base"]),
-            ""
-        ));
-        assert!(!merged(
-            &base,
-            &ours,
-            &theirs,
-            &list(&["dup", "branch", "base", "smuggled"]),
-            ""
-        ));
-        assert!(!merged(
-            &base,
-            &ours,
-            &theirs,
-            &list(&["dup", "dup", "branch"]),
-            ""
-        ));
-        assert!(!merged(
-            &base,
-            &ours,
-            &theirs,
-            &list(&["dup", "branch", "base", "base"]),
-            ""
-        ));
-    }
-
-    #[test]
-    fn exact_epic_migration_is_status_only_but_content_edits_are_not() {
-        let (epic, migrated) = crate::evidence_freshness::tests::approved_epic();
-        let path = Path::new(".atelier/issues/atelier-e001.md");
-        assert!(issue_status_only(&epic, &migrated, path).unwrap());
-        let edited = migrated.replace("Checked.", "Checked differently.");
-        assert!(!issue_status_only(&epic, &edited, path).unwrap());
-        // `migrate epics --to` chooses the type, so any declared type counts.
-        let retyped = migrated.replace("issue_type: \"feature\"", "issue_type: \"bug\"");
-        assert!(issue_status_only(&epic, &retyped, path).unwrap());
-    }
 }

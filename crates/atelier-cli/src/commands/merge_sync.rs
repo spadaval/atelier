@@ -185,7 +185,6 @@ fn report_approval(
             .0
             .into_index()?
     };
-    let ids = review_gate::scope(&index, owner)?;
     let mut read = git::ReadContext::from_snapshot(repo, head.clone(), &[]);
     // `merge`'s `review.current` also requires that the approval not predate
     // where the branch left the base (atelier-ns03); ask it the same way.
@@ -237,14 +236,8 @@ fn report_approval(
             let was_current = match (before, fork) {
                 (Some(before), Some(fork)) => {
                     let mut earlier = git::ReadContext::from_snapshot(repo, before.to_owned(), &[]);
-                    review_gate::approval_is_current_to(
-                        &mut earlier,
-                        &review.commit,
-                        &ids,
-                        "HEAD",
-                        &fork,
-                    )
-                    .unwrap_or(false)
+                    review_gate::approval_is_current_to(&mut earlier, &review.commit, "HEAD", &fork)
+                        .unwrap_or(false)
                 }
                 _ => false,
             };
