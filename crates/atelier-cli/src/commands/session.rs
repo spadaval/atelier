@@ -358,7 +358,7 @@ fn land_gates(
     };
     let (branch_base, behind) = branch_base(repo, base_pin.as_ref(), id.as_deref(), &head)?;
     let behind_note = behind.map(|(base, count)| format!(
-        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` and record fresh proof before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
+        "Base {base} has {} this branch does not. Merge them in with `git merge {base}` before atelier merge; a clean merge keeps an approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.",
         crate::human_output::count_noun(count, "commit")
     ));
     index.validate_policy(&source.policy, records_root)?;
@@ -613,23 +613,6 @@ fn land_gates(
         report.passes.insert(0, "✓ records committed".to_owned());
     }
     if !report.failed.is_empty() {
-        // Uncommitted code makes passing proof stale; name it (atelier-749l),
-        // unless the dirty completion already does.
-        let stale_proof = nodes
-            .iter()
-            .any(|node| !node.passed && node.stale_from_checkout);
-        let dirty_named = nodes
-            .iter()
-            .any(|node| node.check == "land_completion_dirty");
-        let dirty_note = (stale_proof && !dirty_named && !initial_paths.is_empty()).then(|| {
-            format!(
-                "Uncommitted changes make passing proof stale: {}. Commit or remove them, or rerun the check after committing.",
-                crate::human_output::first_five(
-                    initial_paths.iter().map(|path| path.display().to_string()),
-                    ", "
-                )
-            )
-        });
         let ran_on = match (&id, &ownership) {
             (Some(id), Some(_)) => crate::gate_report::RanOn::Owner(id.clone()),
             (None, _) if branch == source.policy.branch_policy.base_branch => {
@@ -643,7 +626,6 @@ fn land_gates(
             notes: lines
                 .into_iter()
                 .filter(|line| line.starts_with("Invalid ") || line.starts_with("Using last valid"))
-                .chain(dirty_note)
                 .chain(behind_note)
                 .collect(),
         }
@@ -664,7 +646,7 @@ fn land_gates(
         || git::checkout_branch(repo)?.unwrap_or_default() != branch
         || final_paths != initial_paths
     {
-        bail!("land_state_changed: checks changed the checkout; inspect git status, record fresh proof, and retry");
+        bail!("land_state_changed: checks changed the checkout; inspect git status and retry");
     }
     lines.extend(report.passes);
     lines.extend(situation);

@@ -2618,9 +2618,15 @@ fn evidence_list_by_item_marks_each_receipt_as_the_gates_judge_it() {
         shown[0].contains(&format!(" · ⚠ stale (code changed in {code_commit}) · ")),
         "{out}"
     );
-    assert!(shown[1].contains(" · ⚠ blocks completion · "), "{out}");
+    // The stale pass still supersedes the older fail (atelier-s66u).
     assert!(
-        out.contains(&format!("\nProof: ⚠ newest is fail {fail}\n")),
+        shown[1].contains(&format!(" · superseded by newer pass {second_pass} · ")),
+        "{out}"
+    );
+    assert!(
+        out.contains(&format!(
+            "\nProof: no fresh pass; newest pass {second_pass} is stale\n"
+        )),
         "{out}"
     );
 
@@ -2795,8 +2801,8 @@ fn evidence_attach_takes_the_target_forms_record_takes() {
 
 /// `evidence list`'s verdict agrees with the evidence gates the close
 /// transition runs on the same receipts: a newer fail blocks both, a fresh
-/// pass after it clears both, and once a code commit makes that pass stale
-/// the fail blocks both again (atelier-u0ig).
+/// pass after it clears both, and a code commit that makes that pass stale
+/// leaves the fail cleared in both (atelier-u0ig, atelier-s66u).
 #[test]
 fn evidence_list_verdict_agrees_with_the_close_gate() {
     let dir = tempdir().unwrap();
@@ -2861,11 +2867,50 @@ fn evidence_list_verdict_agrees_with_the_close_gate() {
 
     fs::write(dir.path().join("code.txt"), "changed code\n").unwrap();
     commit_all(dir.path(), "Change code");
-    assert_eq!(verdict(), format!("Proof: ⚠ newest is fail {fail}"));
-    // The later pass no longer proves the claim, so the fail blocks again.
-    let refusal = close_refusal();
-    assert!(
-        refusal.contains(&format!("newer failing evidence {fail}")),
-        "{refusal}"
+    assert_eq!(
+        verdict(),
+        format!("Proof: no fresh pass; newest pass {second} is stale")
     );
+    // The later pass is stale, but it still supersedes the older fail.
+    let refusal = close_refusal();
+    assert!(!refusal.contains("newer failing evidence"), "{refusal}");
+}
+
+/// With no `evidence.attached` gate, `evidence list`'s verdict states a
+/// missing or stale pass plainly; the gate is what makes it a gap, marked ⚠
+/// (atelier-s66u).
+#[test]
+fn evidence_list_marks_a_missing_pass_only_under_an_evidence_attached_gate() {
+    let dir = tempdir().unwrap();
+    init_atelier(dir.path());
+    let issue_id = create_task(dir.path(), "Unreceipted issue");
+    let verdict = || {
+        let (success, out, stderr) = run_atelier(dir.path(), &["evidence", "list", &issue_id]);
+        assert!(success, "list failed: {stderr}");
+        out.lines()
+            .find(|line| line.starts_with("Proof: "))
+            .unwrap_or_else(|| panic!("{out}"))
+            .to_string()
+    };
+    assert_eq!(verdict(), "Proof: no passing proof");
+    attach_pass_evidence(dir.path(), "issue", &issue_id, "Checked by hand");
+    fs::write(dir.path().join("code.txt"), "later code\n").unwrap();
+    commit_all(dir.path(), "Later code");
+    let stale = verdict();
+    assert!(
+        stale.starts_with("Proof: no fresh pass; newest pass "),
+        "{stale}"
+    );
+
+    write_evidence_gated_workflow(dir.path());
+    commit_all(dir.path(), "Gate close on evidence");
+    let gated = verdict();
+    assert!(
+        gated.starts_with("Proof: ⚠ no fresh pass; newest pass "),
+        "{gated}"
+    );
+    let other = create_task(dir.path(), "Gated, unreceipted issue");
+    let (success, out, stderr) = run_atelier(dir.path(), &["evidence", "list", &other]);
+    assert!(success, "{stderr}");
+    assert!(out.contains("\nProof: ⚠ no passing proof"), "{out}");
 }

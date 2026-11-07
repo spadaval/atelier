@@ -1377,7 +1377,7 @@ fn test_issue_show_surfaces_evidence_status() {
     assert!(transitions.contains("fail  evidence.attached"));
     assert!(transitions.contains("expected at least 1 fresh passing evidence record; found 0"));
     assert!(
-        transitions.contains(&format!("Hint: Record fresh proof with `atelier evidence record --target issue/{issue_id} --kind test -- <command>`")),
+        transitions.contains(&format!("Hint: This policy requires a passing receipt: record one with `atelier evidence record --target issue/{issue_id} --kind test -- <command>`")),
         "{transitions}"
     );
 
@@ -3235,7 +3235,7 @@ fn test_work_mission_dashboard_is_scoped_and_operational() {
         "{dashboard}"
     );
     assert!(!dashboard.contains("Work Mission"), "{dashboard}");
-    assert!(!dashboard.contains("Proof gaps"), "{dashboard}");
+    assert!(!dashboard.contains("Failing evidence"), "{dashboard}");
     assert!(!dashboard.contains("Health"), "{dashboard}");
     assert!(!dashboard.contains("Close readiness"), "{dashboard}");
     assert!(!dashboard.contains("Closeout"), "{dashboard}");
@@ -6224,10 +6224,12 @@ fn test_work_parent_all_shows_every_child_its_summary_omits() {
     assert_eq!(all.matches("Wide child").count(), 10, "{all}");
 }
 
-// ============ Parent proof gaps and done-record hints (atelier-0sia) ============
+// ============ Parent failing evidence and done-record hints (atelier-0sia) ============
 
+/// `work parent` counts scope items whose newest failing receipt has no
+/// pass after it; an item with no receipts reads as clean (atelier-s66u).
 #[test]
-fn test_work_parent_proof_gaps_count_its_scope_not_the_parent() {
+fn test_work_parent_failing_evidence_counts_its_scope_not_the_parent() {
     let dir = tempdir().unwrap();
     init_atelier(dir.path());
     let (success, _, stderr) = run_atelier(dir.path(), &["issue", "create", "Gapped parent"]);
@@ -6241,29 +6243,39 @@ fn test_work_parent_proof_gaps_count_its_scope_not_the_parent() {
         children.push(issue_id_by_title(dir.path(), title));
     }
 
-    let proof_gaps = |view: &str| {
+    let failing = |view: &str| {
         view.lines()
-            .find(|line| line.starts_with("Proof gaps"))
+            .find(|line| line.starts_with("Failing evidence"))
             .map(|line| line.rsplit(": ").next().unwrap().to_string())
     };
-    let (success, view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
-    assert!(success, "{stderr}");
+    let views = || {
+        let (success, view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
+        assert!(success, "{stderr}");
+        let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "work", "parent", &parent]);
+        assert!(success, "{stderr}");
+        (view, quiet)
+    };
+    // No receipts anywhere: clean.
+    let (view, quiet) = views();
     assert!(view.contains("Scope               : 2 issues"), "{view}");
-    assert_eq!(proof_gaps(&view).as_deref(), Some("2"), "{view}");
-    let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "work", "parent", &parent]);
-    assert!(success, "{stderr}");
-    assert!(quiet.trim_end().ends_with(" proof_gaps=2"), "{quiet}");
+    assert_eq!(failing(&view), None, "{view}");
+    assert!(!view.contains("Proof gaps"), "{view}");
+    assert!(quiet.trim_end().ends_with(" failing_evidence=0"), "{quiet}");
 
-    // Proof on every child closes the gaps, though the parent has none.
-    for child in &children {
-        attach_issue_pass_evidence(dir.path(), child);
+    // A failing receipt on each child, and one on the parent, which is not
+    // its own scope.
+    for id in children.iter().chain([&parent]) {
+        attach_non_pass_evidence(dir.path(), "issue", id, "fail", &format!("fail {id}"));
     }
-    let (success, view, stderr) = run_atelier(dir.path(), &["work", "parent", &parent]);
-    assert!(success, "{stderr}");
-    assert_eq!(proof_gaps(&view), None, "{view}");
-    let (success, quiet, stderr) = run_atelier(dir.path(), &["-q", "work", "parent", &parent]);
-    assert!(success, "{stderr}");
-    assert!(quiet.trim_end().ends_with(" proof_gaps=0"), "{quiet}");
+    let (view, quiet) = views();
+    assert_eq!(failing(&view).as_deref(), Some("2"), "{view}");
+    assert!(quiet.trim_end().ends_with(" failing_evidence=2"), "{quiet}");
+
+    // A later pass clears a child's failure.
+    attach_issue_pass_evidence(dir.path(), &children[0]);
+    let (view, quiet) = views();
+    assert_eq!(failing(&view).as_deref(), Some("1"), "{view}");
+    assert!(quiet.trim_end().ends_with(" failing_evidence=1"), "{quiet}");
 }
 
 #[test]

@@ -142,8 +142,8 @@ pub(crate) enum RanOn {
 #[derive(Debug)]
 pub(crate) struct GatesRefused {
     pub report: GateReport,
-    /// Facts that bear on the failures, such as uncommitted changes that make
-    /// passing proof stale; printed after the passes.
+    /// Facts that bear on the failures, such as the base having commits the
+    /// branch lacks; printed after the passes.
     pub notes: Vec<String>,
     pub ran_on: RanOn,
 }
@@ -647,7 +647,7 @@ impl Gates<'_> {
         )
     }
 
-    /// Fresh proof for `target`: the failing receipt's command again when
+    /// A pass to clear `target`'s failing receipt: its command again when
     /// it captured one.
     fn rerun_command(&self, target: &str, evidence: &str) -> String {
         match self.index.evidence(evidence) {

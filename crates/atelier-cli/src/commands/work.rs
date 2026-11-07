@@ -374,8 +374,8 @@ fn scoped_dashboard(
         _ => {}
     }
     let work = ScopedWork::new(index, &issue)?;
-    let proof_gaps = if issue_type == "parent" {
-        Some(proof_gap_count(index, &id, &work.rows)?)
+    let failing = if issue_type == "parent" {
+        Some(failing_count(index, &id, &work.rows)?)
     } else {
         None
     };
@@ -392,8 +392,8 @@ fn scoped_dashboard(
                 counts.done,
                 counts.backlog
             );
-            if let Some(gaps) = proof_gaps {
-                summary.push_str(&format!(" proof_gaps={gaps}"));
+            if let Some(failing) = failing {
+                summary.push_str(&format!(" failing_evidence={failing}"));
             }
             println!("{summary}");
         } else {
@@ -412,14 +412,14 @@ fn scoped_dashboard(
     let mut metadata = vec![("Scope", scope_counts(work.size, counts))];
     // The title is the item line, so no metadata repeats its status.
     let category = policy_category(&issue.status)?;
-    let title = if let Some(proof_gaps) = proof_gaps {
+    let title = if let Some(failing) = failing {
         metadata.push((
             "Mission",
             atelier_app::objective_graph::containing_mission(index, &id)?
                 .unwrap_or_else(|| "(none)".to_string()),
         ));
-        if proof_gaps > 0 {
-            metadata.push(("Proof gaps", proof_gaps.to_string()));
+        if failing > 0 {
+            metadata.push(("Failing evidence", failing.to_string()));
         }
         // A done parent has no transitions out, and its title says so.
         if category.as_deref() != Some("done") {
@@ -689,18 +689,17 @@ fn objective_footer(
     Ok(render_footer_section(context, actions))
 }
 
-/// Scope items without passing proof; the parent's own row is not its scope,
-/// as the scope size leaves it out.
-fn proof_gap_count(
+/// Scope items whose newest failing receipt has no pass after it; an item
+/// with no receipts has no gap. The parent's own row is not its scope, as
+/// the scope size leaves it out.
+fn failing_count(
     index: &RecordIndex,
     parent_id: &str,
     rows: &[(Issue, ClassifiedWork)],
 ) -> Result<usize> {
-    let layout = atelier_app::storage_layout::StorageLayout::discover()?;
-    let mut proofs = atelier_app::evidence_freshness::EvidenceReadContext::new(layout.repo_root());
     let mut count = 0;
     for (issue, _) in rows.iter().filter(|(issue, _)| issue.id != parent_id) {
-        if !proofs.issue_gate(index, &issue.id, 1, None)?.passed {
+        if atelier_app::evidence_freshness::newest_failure(index, &issue.id)?.is_some() {
             count += 1;
         }
     }

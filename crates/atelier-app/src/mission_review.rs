@@ -20,7 +20,7 @@ use crate::criteria::{mission_proof_until, CriterionMark, MissionProof};
 use crate::decisions::{mission_decisions, Decisions, MalformedDecision, NoteDecision};
 use crate::git_freshness::ReadContext;
 use crate::objective_graph::{mission_issue_ids, mission_objective_kind};
-use crate::record_history::{mission_timeline, MissionTimeline};
+use crate::record_history::{done_when_edits, mission_timeline, DoneWhenEdit, MissionTimeline};
 use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
@@ -74,6 +74,8 @@ pub enum Change {
     },
     /// Review was waived as trivial.
     TrivialExemption { summary: String },
+    /// The Done when was edited after the item was started.
+    DoneWhenEdited(DoneWhenEdit),
 }
 
 /// How review of one item went.
@@ -511,6 +513,7 @@ pub fn debrief(
     }
 
     let decisions = mission_decisions(index, policy, mission_id)?;
+    let edits = done_when_edits(read, policy, index, &scope)?;
     let changes_of = |id: &str| -> Result<Vec<Change>> {
         let mut changes = Vec::new();
         if let Some((_, moment)) = timeline
@@ -534,6 +537,13 @@ pub fn debrief(
                 summary: summary.clone(),
             });
         }
+        changes.extend(
+            edits
+                .iter()
+                .filter(|edit| edit.issue == id)
+                .cloned()
+                .map(Change::DoneWhenEdited),
+        );
         Ok(changes)
     };
     let open_entry = |id: &str, parent: Option<String>| -> Result<OpenEntry> {

@@ -14,6 +14,11 @@ struct Fixture {
 }
 impl Fixture {
     fn new() -> Self {
+        Self::with(|_, _| {})
+    }
+    /// The fixture, with `plan` run on the owner before the base plan is
+    /// committed and the owner started.
+    fn with(plan: impl FnOnce(&Path, &str)) -> Self {
         let dir = tempdir().unwrap();
         git(dir.path(), &["init", "-qb", "main"]);
         git(dir.path(), &["config", "user.name", "Author"]);
@@ -38,6 +43,7 @@ impl Fixture {
                 "## Goal\n\nShip change.\n\n## Done when\n\nScenario passes.",
             ],
         );
+        plan(dir.path(), &id);
         commit(dir.path(), "base plan");
         ok(dir.path(), &["start", &id]);
         fs::write(dir.path().join("src.rs"), "tested code\n").unwrap();
@@ -647,13 +653,13 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
             && output.contains("2. cherry-pick the code and planning commits made since")
             && output.contains("git rm -f")
             && output.contains("3. merge the base in")
-            && output.contains("4. record proof and review again"),
+            && output.contains("4. get the branch reviewed again"),
         "{output}"
     );
 
     // The advised recovery: restore the reviewed tip, cherry-pick the fix
-    // without the review record it added, merge the base, then record proof
-    // and review again.
+    // without the review record it added, merge the base, then get the
+    // branch reviewed again.
     git(fixture.path(), &["reset", "-q", "--hard", &reviewed]);
     git(fixture.path(), &["cherry-pick", "-n", &fix]);
     let added = git(
@@ -3007,7 +3013,7 @@ fn synced_fixture(strategy: &str, command: &str, landed: (&str, &str)) -> Fixtur
 }
 
 #[test]
-fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() {
+fn sync_merges_the_base_records_no_receipts_and_reports_the_approval_kept() {
     for strategy in ["fast_forward_only", "merge_commit"] {
         let fixture = synced_fixture(strategy, "test -f src.rs", ("other.rs", "landed\n"));
         let old = git(fixture.path(), &["rev-parse", "HEAD"]);
@@ -3016,16 +3022,13 @@ fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() 
             passed && verdict(&out) == "merge: passed",
             "{strategy}: {out}\n{err}"
         );
-        for expected in [
-            "Merged main into",
-            "Rerunning 1 command-backed receipt:",
-            "pass ",
-            "test -f src.rs",
-            "Manual receipts were current before and cannot be rerun",
-            "Approval kept:",
-            "Next: atelier merge",
-        ] {
+        for expected in ["Merged main into", "Approval kept:", "Next: atelier merge"] {
             assert!(out.contains(expected), "{strategy}: {expected}: {out}");
+        }
+        // CI or the merge checks test the merged tree; the sync reruns and
+        // records nothing (atelier-s66u).
+        for unexpected in ["Rerunning", "running", "Manual receipts", "receipt"] {
+            assert!(!out.contains(unexpected), "{strategy}: {unexpected}: {out}");
         }
         // Merged, never rebased: the old head is still an ancestor.
         git(
@@ -3037,10 +3040,18 @@ fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() 
             &["merge-base", "--is-ancestor", "main", "HEAD"],
         );
         assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
-        let subject = git(fixture.path(), &["log", "-1", "--format=%s"]);
-        assert!(subject.starts_with("Record evidence rerun"), "{subject}");
+        // The head is the base merge itself, with no receipt commit after it.
+        let parents = git(
+            fixture.path(),
+            &["rev-list", "--parents", "-n", "1", "HEAD"],
+        );
+        assert_eq!(
+            parents.split_whitespace().nth(1),
+            Some(old.as_str()),
+            "{parents}"
+        );
         let commands = command_receipts(&fixture);
-        assert_eq!(commands, ["sh -c 'test -f src.rs'"; 2], "{commands:?}");
+        assert_eq!(commands, ["sh -c 'test -f src.rs'"], "{commands:?}");
         // What the sync reported kept is what the gates accept.
         let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
         assert!(
@@ -3050,7 +3061,7 @@ fn sync_merges_the_base_reruns_current_receipts_and_reports_the_approval_kept() 
         // Syncing again has nothing to do.
         let (passed, again, _) = sync(fixture.path(), &fixture.id);
         assert!(passed && again.contains("already contains main"), "{again}");
-        assert!(again.contains("none were rerun") && verdict(&again) == "merge: passed");
+        assert!(verdict(&again) == "merge: passed", "{again}");
         let head = git(fixture.path(), &["rev-parse", "HEAD"]);
         ok(fixture.path(), &["merge", &fixture.id]);
         assert!(git(
@@ -3126,8 +3137,8 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
         assert!(fixture.path().join(".git/MERGE_HEAD").exists());
         assert!(git(fixture.path(), &["status", "--porcelain"]).contains("AA src.rs"));
 
-        // Resolve by hand, commit, and sync again: the receipts are rerun and
-        // the approval is reported stale with the resolved file.
+        // Resolve by hand, commit, and sync again: the approval is reported
+        // stale with the resolved file, and no receipt is rerun.
         fs::write(fixture.path().join("src.rs"), "resolved code\n").unwrap();
         git(fixture.path(), &["add", "."]);
         git(fixture.path(), &["commit", "-q", "--no-edit"]);
@@ -3139,19 +3150,10 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
             "{strategy}: {out}\n{err}"
         );
         assert!(
-            out.contains(&format!(
-                "Resuming after a merge of main made by hand ({}); rerunning the receipts that were current before it.",
-                &merge[..8]
-            )) && !out.contains("nothing to merge"),
+            out.contains("already contains main; nothing to merge.") && !out.contains("Rerunning"),
             "{out}"
         );
-        assert!(out.contains("Rerunning 1 command-backed receipt:"), "{out}");
-        // The command is named before it starts running.
-        let running = format!("  running {}: sh -c 'test -f src.rs'", fixture.id);
-        assert!(
-            out.find(&running).unwrap() < out.find("  pass ").unwrap(),
-            "{out}"
-        );
+        assert_eq!(git(fixture.path(), &["rev-parse", "HEAD"]), merge);
         let line = format!(
             "Approval needs fresh review: {} first went stale at {} (it was current before this sync). Review 1 path, then record a fresh approval:",
             fixture_approval_id(&fixture),
@@ -3169,39 +3171,6 @@ fn sync_stops_at_conflicts_with_nothing_committed_and_resumes_after_the_resoluti
                 &fixture_approval_id(&fixture),
                 &cause
             )),
-            "{checked}"
-        );
-    }
-}
-
-#[test]
-fn sync_records_a_failing_rerun_and_refuses() {
-    for strategy in ["fast_forward_only", "merge_commit"] {
-        // Passes on the branch alone; the merged tree has the forbidden file.
-        let fixture = synced_fixture(strategy, "test ! -f other.rs", ("other.rs", "landed\n"));
-        let (passed, out, err) = sync(fixture.path(), &fixture.id);
-        assert!(!passed, "{strategy}: {out}");
-        assert_eq!(
-            verdict(&out),
-            "merge: refused — 1 check (sync_rerun_failed)",
-            "{err}"
-        );
-        assert!(
-            out.contains("FAIL ") && out.contains("Approval kept:"),
-            "{out}"
-        );
-        assert!(!out.contains("Next: atelier merge"), "{out}");
-        // The failure is on the record, committed, so the gates see it.
-        assert!(git(fixture.path(), &["status", "--porcelain"]).is_empty());
-        let index =
-            atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-        assert!(index
-            .evidence_records()
-            .iter()
-            .any(|record| record.data.result == atelier_core::EvidenceResult::Fail));
-        let (passed, checked) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-        assert!(
-            !passed && checked.contains("⚠ ") && checked.contains("evidence.no_newer_failure"),
             "{checked}"
         );
     }
@@ -3334,27 +3303,91 @@ fn sync_names_the_commit_that_staled_the_approval_before_the_sync_and_every_path
     assert!(out.contains(&format!("{line}\n  b.rs\n  src.rs")), "{out}");
 }
 
+/// A pass recorded after a failure clears it for good: once a base merge
+/// brings in code, the pass is stale, yet close and merge still succeed, and
+/// nothing asks for the proof to be recorded again (atelier-s66u).
 #[test]
-fn sync_reports_a_rerun_that_errors_with_a_code_and_still_reports_the_approval() {
-    let fixture = synced_fixture(
-        "fast_forward_only",
-        "if test -f other.rs; then touch stray.txt; fi",
-        ("other.rs", "landed\n"),
+fn a_later_pass_clears_an_older_fail_across_a_base_merge_so_close_and_merge_succeed() {
+    let dir = tempdir().unwrap();
+    let path = dir.path();
+    git(path, &["init", "-qb", "main"]);
+    git(path, &["config", "user.name", "Author"]);
+    git(path, &["config", "user.email", "author@example.test"]);
+    ok(path, &["init", "--slug", "atelier"]);
+    let id = ok(
+        path,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Owner",
+            "--body",
+            "## Goal\n\nShip change.\n\n## Done when\n\nScenario passes.",
+        ],
     );
-    let (passed, out, err) = sync(fixture.path(), &fixture.id);
-    assert!(!passed, "{out}");
-    assert_eq!(verdict(&out), "merge: refused — 1 check (sync_rerun_error)");
+    commit(path, "base plan");
+    ok(path, &["start", &id]);
+    let branch = git(path, &["branch", "--show-current"]);
+    let receipt = |result: &str, summary: &str| {
+        ok(
+            path,
+            &[
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{id}"),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                summary,
+            ],
+        );
+        commit(path, summary);
+    };
+    fs::write(path.join("src.rs"), "broken code\n").unwrap();
+    commit(path, "first attempt");
+    receipt("fail", "Scenario fails before the fix");
+    fs::write(path.join("src.rs"), "fixed code\n").unwrap();
+    commit(path, "the fix");
+    receipt("pass", "Scenario passes after the fix");
+
+    // The base gains code, and the sync merges it in: the pass goes stale.
+    git(path, &["switch", "-q", "main"]);
+    fs::write(path.join("other.rs"), "landed\n").unwrap();
+    commit(path, "work landed on the base");
+    git(path, &["switch", "-q", &branch]);
+    let (passed, out, err) = sync(path, &id);
+    assert!(passed && out.contains("Merged main into"), "{out}\n{err}");
+    let listed = ok(path, &["evidence", "list", &id]);
+    assert!(listed.contains("stale (code changed in"), "{listed}");
+    assert!(!listed.contains("blocks completion"), "{listed}");
+
+    ok(
+        path,
+        &["issue", "transition", &id, "close", "--reason", "complete"],
+    );
+    commit(path, "completion claim");
+    ok(
+        path,
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Reviewed the committed change",
+        ],
+    );
+    commit(path, "approval record");
+    let checked = ok(path, &["merge", &id, "--check"]);
     assert!(
-        err.contains("sync_rerun_error: could not rerun the receipt for")
-            && err.contains("changed code or policy"),
-        "{err}"
+        !checked.contains("evidence.no_newer_failure") && !checked.contains("fresh proof"),
+        "{checked}"
     );
-    assert!(out.contains("Approval kept:"), "{out}");
-    // No receipt is left uncommitted.
-    assert_eq!(
-        git(fixture.path(), &["status", "--porcelain"]),
-        "?? stray.txt"
-    );
+    let head = git(path, &["rev-parse", "HEAD"]);
+    ok(path, &["merge", &id]);
+    git(path, &["merge-base", "--is-ancestor", &head, "main"]);
 }
 
 #[test]
@@ -3621,7 +3654,7 @@ fn merge_check_on_a_diverged_base_also_reports_the_review_and_claim_gates() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
+            "⚠ {id} merge_diverged: main gained {moved}, which changes base.rs, not a record. Merge it in with `git merge main` on {branch}, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin. Next: git merge main\n\
              ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test> (also claims.reviewed). Next: atelier review request {id}\n\
              ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in src.rs\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, required_field.close_reason, work.terminal)\n\
@@ -3871,100 +3904,6 @@ fn gates_name_an_approval_whose_identity_matches_a_git_author() {
     );
 }
 
-/// A rerun receipt's Summary is the old receipt's Summary text with the
-/// rerun suffix, not the old receipt's whole body (atelier-3xq4).
-#[test]
-fn sync_rerun_receipt_summary_is_the_old_summary_with_the_rerun_suffix() {
-    let fixture = synced_fixture(
-        "fast_forward_only",
-        "test -f src.rs",
-        ("other.rs", "landed\n"),
-    );
-    let (passed, out, err) = sync(fixture.path(), &fixture.id);
-    assert!(passed, "{out}\n{err}");
-    let index =
-        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-    let rerun = index
-        .evidence_records()
-        .into_iter()
-        .find(|record| record.data.agent_identity.as_deref() == Some("atelier merge --sync"))
-        .unwrap_or_else(|| panic!("no rerun receipt: {out}"));
-    let text = fs::read_to_string(
-        fixture
-            .path()
-            .join(format!(".atelier/evidence/{}.md", rerun.header.id)),
-    )
-    .unwrap();
-    let body = text.split_once("\n---\n\n").unwrap().1;
-    assert!(
-        body.starts_with(
-            "## Summary\n\nScenario check (rerun after merging main)\n\n## Command\n\n"
-        ),
-        "{body}"
-    );
-    assert_eq!(body.matches("## Command").count(), 1, "{body}");
-    assert_eq!(body.matches("## Stdout").count(), 1, "{body}");
-}
-
-/// A receipt in the shape the sync before atelier-3xq4 left, its Summary
-/// nesting the old body with the suffix at the end, as in atelier-qmti, is
-/// rerun with its real summary and one suffix (atelier-ytks).
-#[test]
-fn sync_reruns_a_legacy_nested_receipt_with_its_real_summary_and_one_suffix() {
-    let fixture = synced_fixture(
-        "fast_forward_only",
-        "test -f src.rs",
-        ("other.rs", "landed\n"),
-    );
-    let index =
-        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-    let receipt = index
-        .evidence_records()
-        .into_iter()
-        .find(|record| record.data.command.is_some())
-        .unwrap()
-        .header
-        .id
-        .clone();
-    let file = fixture
-        .path()
-        .join(format!(".atelier/evidence/{receipt}.md"));
-    let text = fs::read_to_string(&file).unwrap();
-    let (front, body) = text.split_once("\n---\n\n").unwrap();
-    fs::write(
-        &file,
-        format!(
-            "{front}\n---\n\n## Summary\n\n{} (rerun after merging main)\n",
-            body.trim_end()
-        ),
-    )
-    .unwrap();
-    commit(fixture.path(), "a receipt in the legacy rerun shape");
-    let (passed, out, err) = sync(fixture.path(), &fixture.id);
-    assert!(passed, "{out}\n{err}");
-    let index =
-        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-    let rerun = index
-        .evidence_records()
-        .into_iter()
-        .find(|record| record.data.agent_identity.as_deref() == Some("atelier merge --sync"))
-        .unwrap_or_else(|| panic!("no rerun receipt: {out}"));
-    let text = fs::read_to_string(
-        fixture
-            .path()
-            .join(format!(".atelier/evidence/{}.md", rerun.header.id)),
-    )
-    .unwrap();
-    let body = text.split_once("\n---\n\n").unwrap().1;
-    assert!(
-        body.starts_with(
-            "## Summary\n\nScenario check (rerun after merging main)\n\n## Command\n\n"
-        ),
-        "{body}"
-    );
-    assert_eq!(body.matches("## Summary").count(), 1, "{body}");
-}
-
 /// With records uncommitted the gates read HEAD's copies, so a line about a
 /// record whose checkout copy differs says so and its fix is the records
 /// commit, not a transition the checkout may already have made; and no pass
@@ -3999,4 +3938,181 @@ fn a_gate_on_a_record_that_differs_from_head_is_fixed_by_committing_it() {
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
         2
     );
+}
+
+/// A mission the owner advances, for `plan`.
+fn mission(dir: &Path, id: &str) -> String {
+    let mission = ok(
+        dir,
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Mission",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nShip change.",
+        ],
+    );
+    ok(dir, &["issue", "link", "-q", id, &mission]);
+    mission
+}
+
+/// Edits the owner's Done when and commits it, returning the commit.
+fn edit_done_when(dir: &Path, id: &str, from: &str, to: &str) -> String {
+    let path = dir.join(format!(".atelier/issues/{id}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains(from), "{text}");
+    fs::write(&path, text.replace(from, to)).unwrap();
+    commit(dir, "edit the Done when");
+    git(dir, &["rev-parse", "HEAD"])
+}
+
+/// The output's lines that report an edited Done when.
+fn edit_lines(output: &str) -> Vec<&str> {
+    output
+        .lines()
+        .filter(|line| line.contains("Done when edited"))
+        .collect()
+}
+
+#[test]
+fn a_done_when_edited_after_the_start_is_shown_without_changing_the_verdict() {
+    let mut mission_id = String::new();
+    let fixture = Fixture::with(|dir, id| mission_id = mission(dir, id));
+    let finding = fixture.finding();
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "The criterion was wrong, not the code",
+        ],
+    );
+    commit(fixture.path(), "disposition");
+    let edit = edit_done_when(
+        fixture.path(),
+        &fixture.id,
+        "Scenario passes.",
+        "Scenario mostly passes.",
+    );
+    fixture.approval("Reviewer");
+    let line = format!(
+        "Note: {} Done when edited at {} after the item was started, after finding {finding}.",
+        fixture.id,
+        &edit[..8]
+    );
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert_eq!(edit_lines(&output), [line.as_str()], "{output}");
+    assert!(output.contains("Next: atelier merge"), "{output}");
+    let debrief = ok(fixture.path(), &["debrief", &mission_id]);
+    let said = format!(
+        "{} Done when edited at {} after the item was started, after finding {finding}.",
+        fixture.id,
+        &edit[..8]
+    );
+    assert_eq!(
+        edit_lines(&debrief)
+            .iter()
+            .filter(|row| row.contains(&said))
+            .count(),
+        1,
+        "{debrief}"
+    );
+    let wrote = ok(fixture.path(), &["debrief", &mission_id, "--html"]);
+    let page = wrote
+        .split_whitespace()
+        .find(|word| word.ends_with(".html"))
+        .unwrap();
+    let html = fs::read_to_string(page).unwrap();
+    assert!(
+        html.contains(&format!("Done when edited at {}", &edit[..8])),
+        "{html}"
+    );
+    // The merge itself says it too, and integrates.
+    let merged = ok(fixture.path(), &["merge", &fixture.id]);
+    assert_eq!(edit_lines(&merged), [line.as_str()], "{merged}");
+    assert!(merged.contains("Merged"), "{merged}");
+    assert_eq!(
+        git(fixture.path(), &["rev-parse", "main"]),
+        git(fixture.path(), &["rev-parse", "HEAD"])
+    );
+}
+
+#[test]
+fn a_done_when_edited_after_a_failing_receipt_names_the_receipt() {
+    let fixture = Fixture::new();
+    let record = |result: &str, summary: &str| {
+        let receipt = ok(
+            fixture.path(),
+            &[
+                "-q",
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{}", fixture.id),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                summary,
+            ],
+        );
+        commit(fixture.path(), summary);
+        receipt
+    };
+    let failing = record("fail", "Scenario fails at the edge");
+    let edit = edit_done_when(
+        fixture.path(),
+        &fixture.id,
+        "Scenario passes.",
+        "Scenario passes away from the edge.",
+    );
+    record("pass", "Scenario passes away from the edge");
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert_eq!(
+        edit_lines(&output),
+        [format!(
+            "Note: {} Done when edited at {} after the item was started, after failing receipt {failing}.",
+            fixture.id,
+            &edit[..8]
+        )],
+        "{output}"
+    );
+}
+
+#[test]
+fn a_done_when_edited_only_before_the_start_is_not_shown() {
+    let mut mission_id = String::new();
+    let fixture = Fixture::with(|dir, id| {
+        mission_id = mission(dir, id);
+        commit(dir, "first plan");
+        let path = dir.join(format!(".atelier/issues/{id}.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            text.replace("Scenario passes.", "Scenario passes twice."),
+        )
+        .unwrap();
+    });
+    assert!(fixture
+        .issue()
+        .sections
+        .section(atelier_core::IssueSectionName::DoneWhen)
+        .is_some_and(|text| text.contains("twice")));
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(passed, "{output}");
+    assert!(edit_lines(&output).is_empty(), "{output}");
+    let debrief = ok(fixture.path(), &["debrief", &mission_id]);
+    assert!(edit_lines(&debrief).is_empty(), "{debrief}");
 }

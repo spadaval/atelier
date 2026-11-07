@@ -786,7 +786,7 @@ fn active_epic_hands_off_completed_children_without_batch_approval() {
     f.refusal("findings.disposed");
 }
 #[test]
-fn land_names_uncommitted_files_that_make_a_newer_pass_stale() {
+fn uncommitted_code_does_not_revive_a_failure_a_later_pass_cleared() {
     let f = Fixture::new();
     let child = epic_child(&f);
     f.terminal(&child);
@@ -809,16 +809,15 @@ fn land_names_uncommitted_files_that_make_a_newer_pass_stale() {
     }
     ok(f.path(), &["land", &f.id]);
     fs::write(f.path().join("code"), "uncommitted change\n").unwrap();
-    let (pass, output) = cli(f.path(), &["land", &f.id]);
+    let (_, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass
-            && output.contains("was recorded before the uncommitted changes in this checkout")
-            && output.contains("Uncommitted changes make passing proof stale: code."),
+        !output.contains("newer failing evidence")
+            && !output.contains("Uncommitted changes make passing proof stale"),
         "{output}"
     );
 }
 #[test]
-fn a_current_claim_whose_pass_a_later_commit_staled_does_not_blame_the_checkout() {
+fn a_current_claim_whose_pass_a_later_commit_staled_keeps_its_failure_cleared() {
     let f = Fixture::new();
     let child = epic_child(&f);
     f.terminal(&child);
@@ -845,18 +844,15 @@ fn a_current_claim_whose_pass_a_later_commit_staled_does_not_blame_the_checkout(
         if dirty {
             fs::write(f.path().join("unrelated"), "uncommitted\n").unwrap();
         }
-        let (pass, output) = cli(f.path(), &["land", &f.id]);
-        assert!(
-            !pass
-                && output.contains("no longer proves the claim")
-                && !output.contains("uncommitted changes in this checkout")
-                && !output.contains("Uncommitted changes make passing proof stale"),
-            "{output}"
-        );
+        let (_, output) = cli(f.path(), &["land", &f.id]);
+        assert!(!output.contains("newer failing evidence"), "{output}");
+        if !dirty {
+            ok(f.path(), &["land", &f.id]);
+        }
     }
 }
 #[test]
-fn a_retained_claim_whose_pass_later_commits_staled_does_not_blame_the_checkout() {
+fn a_retained_claim_whose_pass_later_commits_staled_keeps_its_failure_cleared() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
     let done = ok(f.path(), &["-q", "issue", "create", "Done on the base"]);
@@ -884,13 +880,8 @@ fn a_retained_claim_whose_pass_later_commits_staled_does_not_blame_the_checkout(
     ok(f.path(), &["-q", "issue", "create", "Later planning"]);
     commit(f.path(), "later planning");
     fs::write(f.path().join("unrelated"), "uncommitted\n").unwrap();
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(
-        !pass
-            && output.contains("no longer proves the claim")
-            && !output.contains("Uncommitted changes make passing proof stale"),
-        "{output}"
-    );
+    let (_, output) = cli(f.path(), &["land"]);
+    assert!(!output.contains("newer failing evidence"), "{output}");
 }
 #[test]
 fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fields() {
@@ -4984,7 +4975,7 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("task/{finished}  {finished} ✓ done, not merged, ⚠ not approved, behind 0, no proof at head, merges cleanly  Finished elsewhere"),
+        format!("task/{finished}  {finished} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Finished elsewhere"),
         format!("task/{stuck}  {stuck} ⚠ blocked  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
@@ -5042,12 +5033,12 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
     f.terminal(&f.id);
     approve(&f, &f.id);
     git(f.path(), &["switch", "-q", "main"]);
-    // Clean: approved, proven at its head, and the base has not moved.
+    // Clean: approved, and the base has not moved.
     let status = ok(f.path(), &["status"]);
     assert_eq!(
         branch_row(&status, &f.branch),
         format!(
-            "{}  {} ✓ done, not merged, ✓ approved, behind 0, proof at head, merges cleanly  Session owner",
+            "{}  {} ✓ done, not merged, ✓ approved, behind 0, merges cleanly  Session owner",
             f.branch, f.id
         ),
         "{status}"
@@ -5061,13 +5052,14 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
     assert_eq!(
         branch_row(&status, &f.branch),
         format!(
-            "{}  {} ✓ done, not merged, ✓ approved, behind 1, proof at head, conflicts: code  Session owner",
+            "{}  {} ✓ done, not merged, ✓ approved, behind 1, conflicts: code  Session owner",
             f.branch, f.id
         ),
         "{status}"
     );
 
-    // Another waiting branch, unapproved and unproven, changes the same file.
+    // Another waiting branch, unapproved and with no receipts, changes the
+    // same file; having no receipt is no gap (atelier-s66u).
     let other = ok(f.path(), &["-q", "issue", "create", "Other work"]);
     commit(f.path(), "plan other work");
     ok(f.path(), &["start", &other]);
@@ -5080,8 +5072,46 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
     assert_eq!(
         branch_row(&status, &format!("task/{other}")),
         format!(
-            "task/{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, no proof at head, merges cleanly  Other work"
+            "task/{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Other work"
         ),
+        "{status}"
+    );
+    // A failing receipt with no pass after it is the one proof fact shown,
+    // and a later pass clears it.
+    let receipt = |result: &str| {
+        git(f.path(), &["switch", "-q", &format!("task/{other}")]);
+        let id = ok(
+            f.path(),
+            &[
+                "-q",
+                "evidence",
+                "record",
+                "--target",
+                &format!("issue/{other}"),
+                "--kind",
+                "test",
+                "--result",
+                result,
+                "Other proof",
+            ],
+        );
+        commit(f.path(), &format!("{result}ing receipt"));
+        git(f.path(), &["switch", "-q", "main"]);
+        id.split_whitespace().next().unwrap().to_owned()
+    };
+    let fail = receipt("fail");
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(
+        branch_row(&status, &format!("task/{other}")),
+        format!(
+            "task/{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, ⚠ failing evidence {fail}, merges cleanly  Other work"
+        ),
+        "{status}"
+    );
+    receipt("pass");
+    let status = ok(f.path(), &["status"]);
+    assert!(
+        branch_row(&status, &format!("task/{other}")).contains("behind 0, merges cleanly"),
         "{status}"
     );
     // Branches are listed in name order.
@@ -5094,7 +5124,7 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
         "{status}"
     );
 
-    // Stale: code after the approval and the proof.
+    // Stale: code after the approval.
     git(f.path(), &["switch", "-q", &f.branch]);
     fs::write(f.path().join("code"), "changed after review\n").unwrap();
     commit(f.path(), "late change");
@@ -5103,7 +5133,7 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
     assert_eq!(
         branch_row(&status, &f.branch),
         format!(
-            "{}  {} ✓ done, not merged, ⚠ approval stale, behind 2, no proof at head, conflicts: code  Session owner",
+            "{}  {} ✓ done, not merged, ⚠ approval stale, behind 2, conflicts: code  Session owner",
             f.branch, f.id
         ),
         "{status}"
@@ -7208,7 +7238,7 @@ fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
     assert!(!pass);
     assert!(
         out.contains(&format!(
-            "which rewrites the commits after it: record fresh proof and review for them. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+            "which rewrites the commits after it: get them reviewed again. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
         )),
         "{out}"
     );

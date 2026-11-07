@@ -335,6 +335,7 @@ fn change_text(change: &Change) -> String {
         Change::TrivialExemption { summary } => {
             format!("Review waived as trivial: {}", first_sentence(summary))
         }
+        Change::DoneWhenEdited(edit) => crate::human_output::done_when_edit(edit),
     }
 }
 

@@ -167,8 +167,8 @@ A done owner that is not merged is waiting to land, and its row adds its
 readiness against the current base (atelier-tciw):
 
 ```
-task/atelier-cmhv  atelier-cmhv ✓ done, not merged, ✓ approved, behind 3, no proof at head, merges cleanly  Title
-task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind 3, proof at head, conflicts: Cargo.lock, src/lib.rs  Title
+task/atelier-cmhv  atelier-cmhv ✓ done, not merged, ✓ approved, behind 3, ⚠ failing evidence atelier-v1ab, merges cleanly  Title
+task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind 3, conflicts: Cargo.lock, src/lib.rs  Title
 ```
 
 - The approval mark: `✓ approved` when `merge`'s `review.current` would pass
@@ -178,9 +178,10 @@ task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind
   `⚠ not approved` otherwise. `review list <id>` and `merge <id> --check`
   name the cause.
 - `behind <n>`: base commits the branch does not have.
-- `proof at head` when every done item in the owner's scope, except
-  superseded ones, has fresh passing proof at the branch head; otherwise
-  `no proof at head`.
+- `⚠ failing evidence <id>` when a done item in the owner's scope, except
+  superseded ones, has a failing receipt with no pass after it, which
+  `evidence.no_newer_failure` refuses. An item with no receipts has no gap,
+  so nothing is shown (atelier-s66u).
 - `merges cleanly`, or `conflicts: <path>, <path>` naming the files
   `git merge-tree` cannot merge into the current base. It comes last, so its
   commas end the part.
@@ -253,8 +254,9 @@ Counts by work state use the state words in one order: active, ready, needs a
 human (`2 need a human`), context, blocked, done, backlog. A scope's counts
 follow its size, and `work missions`, `work mission`, `work parent` and
 `issue show` all write them alike: `Scope: 3 issues: 1 ready, 2 blocked`.
-A parent is not in its own scope, so `work parent`'s `Proof gaps` counts its
-scope items without passing proof and leaves the parent out.
+A parent is not in its own scope, so `work parent`'s `Failing evidence`
+counts its scope items whose newest failing receipt has no pass after it, and
+leaves the parent out; an item with no receipts is not counted.
 Text that says whether work is finished calls work that is not closed `open`
 and closed work `closed`, never `nonterminal` or `terminal`: `Unassigned: 6
 open issues`, `closed ancestor <id> retires open descendant <id>`. Workflow
@@ -385,7 +387,7 @@ merge: refused — 5 checks (review.current, findings.disposed, claims.reviewed,
   transitions, said as such, and the `atelier issue unlink` that drops the
   link if it is wrong, from the record that declares it and with its role
   (`--role blocked_by`, or `--role blocks` from the blocker); the failing receipt's own
-  command to record proof again; the shell check to rerun, after `atelier
+  command, to record a pass after the fail; the shell check to rerun, after `atelier
   merge <owner> --sync` when it failed on the merged tree under
   `merge_strategy: merge_commit`, which holds the base's changes the work
   checkout lacks; and `atelier review request <owner>` for what needs an
@@ -409,8 +411,11 @@ owner ends with `Next: atelier merge <owner>`, and an active owner with
 uncommitted changes names the first five paths and the count, and points to
 `atelier status`. On the base it says `No unpushed base commits need
 review.`, or how many record-only commits it found. `merge --check` passes
-with its passes and `Next: atelier merge <id>`. A successful `merge` prints
-no gate lines, only what it did and the next step:
+with its passes and `Next: atelier merge <id>`. Under any verdict, `merge` and
+`merge --check` add a `Note: <id> Done when edited at <commit> after the item
+was started` line for each such edit, before `Next:` (see [reviews and
+merge](reviews-and-merge.md#a-done-when-edited-after-the-start)). A successful
+`merge` prints no gate lines, only those notes, what it did and the next step:
 `✓ Merged task/atelier-nqgr into master at c24af21a; branch deleted. Next:
 atelier land, then git push.` It notes that Git hooks did not run only when
 the repository has hooks of its own.
@@ -469,8 +474,11 @@ list with the omitted-rows line below. With an item, it lists the receipts
 validating that item under `Evidence for <item>`, its rows leave that item
 out of `for`, and the list ends with the gates' verdict on the item's proof:
 `Proof: ✓ fresh pass <id>`, `Proof: ✓ pass <id> held at close <commit>`,
-`Proof: ⚠ newest is fail <id>`, `Proof: ⚠ no
-fresh pass; newest pass <id> is stale`, or `Proof: ⚠ no passing proof`.
+`Proof: ⚠ newest is fail <id>`, `Proof: no
+fresh pass; newest pass <id> is stale`, or `Proof: no passing proof`. The
+last two are marked ⚠ only when the policy runs an `evidence.attached` gate
+on the item's workflow; otherwise no gate needs a pass, so having none is no
+gap (atelier-s66u).
 Without one, each row's standing is judged against its own first item. The
 `Next` steps repeat the item and `--result` filters given.
 
@@ -560,7 +568,7 @@ refusal of it leaves stdout empty:
 | `work decisions` | the IDs of the items holding current decisions, one per line |
 | `brief` | `criteria=<n> items=<n> blocked=<n> unknowns=<n> human_decisions=<n> approvals=<n>`; with `--html`, the page's path |
 | `debrief` | `criteria=<n> proven=<n> failing=<n> unproven=<n> items=<n> decisions=<n> deviations=<n> follow_ups=<n>`; with `--html`, the page's path |
-| `work mission`, `work parent` | their counts as `key=value` numbers, `active=<n> ready=<n> human=<n> context=<n> blocked=<n> done=<n> backlog=<n>`, with `proof_gaps=<n>` for a parent; with a filter such as `--ready`, its IDs |
+| `work mission`, `work parent` | their counts as `key=value` numbers, `active=<n> ready=<n> human=<n> context=<n> blocked=<n> done=<n> backlog=<n>`, with `failing_evidence=<n>` for a parent; with a filter such as `--ready`, its IDs |
 | `issue create`, `update`, `note`, `link`, `unlink` | the ID; for `link` and `unlink`, the first ID given |
 | `issue show` | `<id> <status>`, one line per ID |
 | `issue list` | IDs, one per line |
@@ -692,7 +700,8 @@ repository workflow's values, read when help is shown. Global options, such as
 Every command's description is its one-line `about`, and help lists are
 generated from it, so no list is written by hand. Root help lists every
 command that is not hidden, then `Common commands` in lifecycle order: orient,
-pick work, start it, record proof, close it, review, land and check the merge.
+pick work, start it, record any receipt it needs, close it, review, land and
+check the merge.
 Bare `atelier work` prints `atelier work --help`, and with `--quiet` the view
 names.
 
@@ -741,7 +750,7 @@ and freshness. Branch summaries must name the branch and remain separate from
 current-checkout state.
 
 Next actions come from actual state: inspect a blocker, select ready work,
-record proof, resolve a finding, or commit record changes. Avoid generic command
+rerun a failed check, resolve a finding, or commit record changes. Avoid generic command
 menus in every row. Errors name the failed invariant or path and give a useful
 recovery step. The recovery step is an inline sentence in the error,
 `Next: <step>`, not a `Next` footer. Optional verbosity may show check

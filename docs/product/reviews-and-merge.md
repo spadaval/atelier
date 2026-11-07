@@ -235,10 +235,10 @@ trivial exemption; authors: ...`.
 
 ## Integration
 
-Commit the implementation, proof, branch ownership, and done claim on the work
-branch. The owner and its scoped children must be terminal with no open
-transitive blockers. Evidence must satisfy the base policy's completion checks;
-a newer failure blocks success. Review must have current independent approval
+Commit the implementation, any receipts, branch ownership, and done claim on
+the work branch. The owner and its scoped children must be terminal with no
+open transitive blockers. Evidence must satisfy the base policy's completion
+checks; a failing receipt with no pass recorded after it blocks success. Review must have current independent approval
 or an explicit trivial exemption and accepted finding dispositions.
 
 The implementer report parts a done claim needs come from the base's policy
@@ -288,9 +288,41 @@ Merge uses the base branch's committed policy and its
 include a `shell.check` and `fast_forward_only` otherwise (see [workflow
 configuration](workflow-configuration.md)). Under `fast_forward_only`, merge
 fast-forwards only. If the base has moved on, merge it into the work branch,
-record fresh proof, and renew review only if the merge needed resolving or
-brought in a change to an in-scope record beyond its status (see approval
-freshness).
+and renew review only if the merge needed resolving or brought in a change to
+an in-scope record beyond its status (see approval freshness). The merge
+records no new proof: CI or the merge checks test the merged tree where the
+repository has them (see [what gets a receipt](validation.md#what-gets-a-receipt)).
+
+### A Done when edited after the start
+
+`merge` and `merge --check` show each edit to the Done when of the owner or a
+scoped child made after the item was started, whatever the verdict, after the
+gate lines (atelier-r9hb):
+
+```
+Note: atelier-2xx5 Done when edited at 4adb9ff6 after the item was started, after finding atelier-h7l3.
+```
+
+The trigger is the start, not a finding: in the usage review that motivated
+it, most narrowed criteria had no finding recorded before them. An edit
+counts when the commit that made it descends in Git from one that moved the
+item into an `active` status, such as `atelier start` or the `start`
+transition; clock times are not compared, so an edit made on the base while
+a branch worked on the item is not shown. The line names the newest finding
+or `fail` receipt on the item pinned to an ancestor of the edit, when there
+is one, so the reader can check whether the edit answers it or loosens the
+criterion to let the item close. Merge commits are not read: the commit that
+wrote an edit is in the history itself. The approval still has to cover the
+edit, as for any record change beyond status.
+
+The line refuses nothing and changes neither the verdict nor the exit status.
+A Done when is sometimes rightly corrected after a finding, and refusing it
+would need an override or a human-only record, which [ADR
+0018](../adr/0018-strategy-draft-epics-and-adaptive-expansion.md) keeps
+Atelier from becoming. Under `-q` the line goes to stderr, so stdout keeps
+its token; `--json` leaves it out. The [debrief](mission-reviews.md#debrief)
+lists the same edit under the item. Mission success criteria are not
+covered.
 
 ### Catching up with `--sync`
 
@@ -300,8 +332,8 @@ atelier merge <owner-or-child-id> --sync
 
 `--sync` is the catch-up step as one command, run from the clean work branch.
 It merges the base into the branch with `git merge <base>`, never a rebase,
-which would orphan the commits reviews pin; reruns the recorded evidence
-commands; commits the new receipts; and ends in a verdict line, `merge:
+which would orphan the commits reviews pin; reports whether the approval
+survived; and ends in a verdict line, `merge:
 passed`, `merge: synced — approval needs fresh review`, or `merge: refused —
 1 check (<code>)` (see [verdict line](human-cli-output.md#verdict-line)). It integrates nothing, so the
 branch still lands with `atelier merge`. It cannot be combined with `--check`
@@ -310,17 +342,14 @@ or `--json`.
 - **Conflicts.** `git merge` stops, nothing is committed, and the output lists
   the conflicted files (`sync_conflict`). Resolve and commit them, or
   `git merge --abort`. Running `--sync` again after the resolution commit
-  says `Resuming after a merge of <base> made by hand (<merge commit>)` and
-  reruns the receipts that were current before the merge.
-- **Reruns.** Only command-backed receipts on the owner's scope that were
-  current before the sync are rerun: for each item and command, the latest
-  receipt, if it passed and nothing it proves had changed. Each rerun records
-  a new receipt with the same command, kind, target and criteria, and the old
-  receipt's summary followed by `(rerun after merging <base>)`, passing or
-  failing; a failing one stays on the record and the verdict is `refused`
-  (`sync_rerun_failed`). Each command is printed (`running <item>: <command>`)
-  before it starts, since a workspace suite can run for minutes. Manual receipts have no command, so they are named
-  and left as recorded.
+  finds nothing to merge and reports the approval, judged from where the
+  branch stood before the merge.
+- **No receipts.** The sync runs and records no evidence. CI or the policy's
+  `merge_checks` test the merged tree where the repository has them; a
+  repository with neither has no merged-tree check until it adds a suite to
+  `merge_checks` ([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
+  Before atelier-s66u the sync reran the command-backed receipts that were
+  current before it and committed them.
 - **Approval.** The output says `Approval kept`, judged as `review.current`
   judges it (`review_gate::approval_standing`), or `Approval needs fresh
   review` with the first commit that made it stale and the paths of every stale commit to review,
@@ -400,7 +429,7 @@ approvals pin, and `merge` then refuses with "pins a commit outside the work
 branch". To recover: reset the branch to its pre-rebase tip (from `git
 reflog`); cherry-pick the code and planning commits made since, leaving out the
 review and evidence records they add, which pin rewritten commits; merge the
-base in; then record proof and review again (atelier-j48s, atelier-v9ve). For a
+base in; then get the branch reviewed again (atelier-j48s, atelier-v9ve). For a
 commit that mixes code and such records, run `git cherry-pick -n <commit>`,
 `git rm -f` each file that `git diff --cached --name-only --diff-filter=A --
 .atelier/reviews .atelier/evidence` lists, and commit the rest (atelier-imbo).

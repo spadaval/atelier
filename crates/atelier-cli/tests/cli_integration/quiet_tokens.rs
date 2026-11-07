@@ -329,7 +329,7 @@ fn every_command_prints_its_documented_quiet_token() {
         ],
     );
     let mut parent_counts = counts.to_vec();
-    parent_counts.push("proof_gaps");
+    parent_counts.push("failing_evidence");
     assert_counts(&q.ok("work parent", &[&parent]), &parent_counts);
 
     // Lifecycle on the owner's branch.
@@ -352,7 +352,7 @@ fn every_command_prints_its_documented_quiet_token() {
     let unproven = q.refused("issue transition", &[&owner, "close", "--reason", "done"]);
     assert!(
         unproven.contains(&format!(
-            "Next: Record fresh proof with `atelier evidence record --target {target}"
+            "Next: This policy requires a passing receipt: record one with `atelier evidence record --target {target}"
         )),
         "{unproven}"
     );

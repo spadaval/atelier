@@ -137,7 +137,7 @@ fn merged_tree(
         .with_context(|| format!("git merge-tree could not merge {branch} into {base}"))?;
     if !conflicted.is_empty() {
         bail!(
-            "merge_conflict: {branch} does not merge cleanly into {base}; conflicts in {}. Merge it in with `git merge {base}` on {branch}, resolve the conflicts, record fresh proof and get the resolution reviewed, then retry.",
+            "merge_conflict: {branch} does not merge cleanly into {base}; conflicts in {}. Merge it in with `git merge {base}` on {branch}, resolve the conflicts and get the resolution reviewed, then retry.",
             conflicted
                 .iter()
                 .map(|path| path.display().to_string())
@@ -334,16 +334,16 @@ fn base_moved(
     (from, to): (&str, &str),
 ) -> anyhow::Error {
     let named = |commit: &str, path: &Path| {
-        anyhow::anyhow!("merge_snapshot_changed: {base} moved while checks ran, and {} changes {}, which is not a record. Next: rerun `atelier merge {id}` with fresh proof and review", crate::human_output::short_commit(commit), path.display())
+        anyhow::anyhow!("merge_snapshot_changed: {base} moved while checks ran, and {} changes {}, which is not a record. Next: rerun `atelier merge {id}`", crate::human_output::short_commit(commit), path.display())
     };
     let ancestor = git::git_output(repo, &["merge-base", "--is-ancestor", from, to]).is_ok();
     if !ancestor {
-        return anyhow::anyhow!("merge_snapshot_changed: {base} was rewritten while checks ran, from {} to {}. Next: rerun `atelier merge {id}` with fresh proof and review", crate::human_output::short_commit(from), crate::human_output::short_commit(to));
+        return anyhow::anyhow!("merge_snapshot_changed: {base} was rewritten while checks ran, from {} to {}. Next: rerun `atelier merge {id}`", crate::human_output::short_commit(from), crate::human_output::short_commit(to));
     }
     match first_code_commit(repo, from, to) {
         Err(error) => error,
         Ok(Some((commit, path))) => named(&commit, &path),
-        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
+        Ok(None) if strategy == MergeStrategy::FastForwardOnly => anyhow::anyhow!("merge_diverged: {base} gained only records-only commits ({} to {}) while checks ran, but merge_strategy fast_forward_only creates no merge commit. Merge it in with `git merge {base}` on the work branch, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record.", crate::human_output::short_commit(from), crate::human_output::short_commit(to)),
         Ok(None) => RetryOnMovedBase(format!("{base} moved from {} to {} while checks ran, only by records-only commits", crate::human_output::short_commit(from), crate::human_output::short_commit(to))).into(),
     }
 }
@@ -755,7 +755,7 @@ fn merge_gates(
             };
             preconditions.fail(
                 "merge_diverged",
-                format!("{moved} Merge it in with `git merge {base}` on {branch}, record fresh proof, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin."),
+                format!("{moved} Merge it in with `git merge {base}` on {branch}, then retry; a clean merge keeps the approval unless it changes an in-scope issue record beyond its status, and then review.current names the merge and the record. Do not rebase once review records exist: rebasing rewrites the commits they pin."),
                 Some(format!("git merge {base}")),
             );
         }
@@ -918,9 +918,28 @@ fn merge_gates(
         uncommitted: uncommitted.as_ref(),
     }
     .report(&nodes);
+    // A Done when edited after its item was started is shown to whoever
+    // judges the work, and changes no verdict (atelier-r9hb).
+    let edited = atelier_app::record_history::done_when_edits(
+        &mut read,
+        Some(&source.policy),
+        tip_index,
+        &review_gate::scope(tip_index, owner)?,
+    )?
+    .iter()
+    .map(|edit| format!("Note: {}", crate::human_output::done_when_edit(edit)))
+    .collect::<Vec<_>>();
     // Failures print with the passes; a passing check prints its passes and
-    // next step, and a passing merge only what it did (atelier-2tux).
+    // next step, and a passing merge only what it did (atelier-2tux). Each
+    // edited Done when follows them, whatever the verdict.
     let report = || -> Result<()> {
+        let say = |line: &str| {
+            if quiet {
+                eprintln!("{line}");
+            } else {
+                println!("{line}");
+            }
+        };
         if json {
             println!("{}", serde_json::to_string_pretty(&nodes)?);
         } else if gates.failed.is_empty() {
@@ -928,15 +947,16 @@ fn merge_gates(
                 for line in &gates.passes {
                     println!("{line}");
                 }
+            }
+            for line in &edited {
+                say(line);
+            }
+            if check_only && !quiet {
                 println!("Next: atelier merge {id}");
             }
         } else {
-            for line in gates.failures.iter().chain(&gates.passes) {
-                if quiet {
-                    eprintln!("{line}");
-                } else {
-                    println!("{line}");
-                }
+            for line in gates.failures.iter().chain(&gates.passes).chain(&edited) {
+                say(line);
             }
         }
         Ok(())
@@ -970,7 +990,7 @@ fn merge_gates(
     let moved = match crate::commands::git::resolve(repo, &base_ref) {
         Ok(current) if current == base_head => None,
         Ok(current) => Some(base_moved(repo, &id, strategy, base, (&base_head, &current))),
-        Err(_) => Some(anyhow::anyhow!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review")),
+        Err(_) => Some(anyhow::anyhow!("merge_snapshot_changed: {base} disappeared while checks ran. Next: rerun `atelier merge {id}`")),
     };
     if let Some(moved) = moved {
         if moved.downcast_ref::<RetryOnMovedBase>().is_none() {
@@ -990,10 +1010,10 @@ fn merge_gates(
             &["rev-parse", "--verify", &format!("refs/heads/{branch}")],
         )? != head
     {
-        bail!("merge_snapshot_changed: Git refs changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
+        bail!("merge_snapshot_changed: Git refs changed while checks ran. Next: rerun `atelier merge {id}`");
     }
     if base_checkout(repo, base)? != base_tree {
-        bail!("merge_snapshot_changed: base checkout ownership changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
+        bail!("merge_snapshot_changed: base checkout ownership changed while checks ran. Next: rerun `atelier merge {id}`");
     }
     if let Some(path) = &base_tree {
         base_snapshot
@@ -1003,7 +1023,7 @@ fn merge_gates(
         if git::head_commit(path)? != base_head
             || crate::commands::git::checkout_branch(path)?.as_deref() != Some(base.as_str())
         {
-            bail!("merge_snapshot_changed: base checkout changed while checks ran. Next: rerun `atelier merge {id}` with fresh proof and review");
+            bail!("merge_snapshot_changed: base checkout changed while checks ran. Next: rerun `atelier merge {id}`");
         }
     }
     if let Some((_, commit, checkout, _)) = &merge {
