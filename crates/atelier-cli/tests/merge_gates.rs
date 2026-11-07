@@ -3,44 +3,10 @@ use std::{fs, path::Path, process::Command};
 use tempfile::{tempdir, TempDir};
 #[path = "support/next_steps.rs"]
 mod next_steps;
+#[path = "support/cli.rs"]
+mod support_cli;
+use support_cli::{cli, commit, git, ok};
 
-fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).unwrap().trim().to_owned()
-}
-fn cli(dir: &Path, args: &[&str]) -> (bool, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
-        .current_dir(dir)
-        .args(args)
-        .output()
-        .unwrap();
-    (
-        output.status.success(),
-        format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ),
-    )
-}
-fn ok(dir: &Path, args: &[&str]) -> String {
-    let (passed, output) = cli(dir, args);
-    assert!(passed, "atelier {args:?}: {output}");
-    output.trim().into()
-}
-fn commit(dir: &Path, message: &str) {
-    git(dir, &["add", "."]);
-    git(dir, &["commit", "-qm", message]);
-}
 struct Fixture {
     dir: TempDir,
     id: String,
