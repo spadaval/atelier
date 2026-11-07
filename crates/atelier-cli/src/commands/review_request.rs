@@ -53,6 +53,14 @@ pub struct Receipt {
     pub summary: String,
 }
 
+/// A Done when check marked to run after the merge, on the item that holds
+/// it (ADR 0027).
+#[derive(Debug, PartialEq)]
+pub struct LateCheck {
+    pub item: String,
+    pub check: atelier_app::after_merge::AfterMergeCheck,
+}
+
 /// Everything the brief says, gathered; [`render`] only lays it out.
 #[derive(Debug, PartialEq)]
 pub struct Facts {
@@ -60,6 +68,10 @@ pub struct Facts {
     pub issue_type: String,
     pub goal: Option<String>,
     pub children: Vec<Item>,
+    /// The owner's and children's after-merge checks, in that order.
+    pub after_merge: Vec<LateCheck>,
+    /// Done when edits made after an item was started (atelier-r9hb).
+    pub edits: Vec<String>,
     pub branch: String,
     pub base: String,
     pub head: String,
@@ -108,6 +120,7 @@ fn gather(
     let owner = index
         .issue_record(&owner_id)
         .with_context(|| format!("{owner_id} is not an issue"))?;
+    let owner_item = item(owner);
     let branch = owner.issue.workflow_branch.as_ref().with_context(|| {
         format!("review_request_unstarted: {owner_id} has no branch ownership, so there is no work to review. Next: run `atelier start {owner_id}`")
     })?;
@@ -255,6 +268,20 @@ fn gather(
             children.push(item(record));
         }
     }
+    let after_merge = std::iter::once(&owner_item)
+        .chain(&children)
+        .flat_map(|item| {
+            item.done_when
+                .as_deref()
+                .map(atelier_app::after_merge::checks)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|check| LateCheck {
+                    item: item.id.clone(),
+                    check,
+                })
+        })
+        .collect();
     let mut proof = index
         .evidence_records()
         .into_iter()
@@ -283,6 +310,17 @@ fn gather(
         .collect();
 
     let policy = atelier_app::workflow_policy::load(repo)?;
+    // A check moved to after merge once work began shows here, as in
+    // `merge --check`.
+    let edits = atelier_app::record_history::done_when_edits(
+        &mut atelier_app::git_freshness::ReadContext::new(repo),
+        Some(&policy),
+        &index,
+        &scope,
+    )?
+    .iter()
+    .map(crate::human_output::done_when_edit)
+    .collect();
     let checks = policy
         .merge_checks
         .iter()
@@ -302,13 +340,15 @@ fn gather(
         .lines()
         .count();
     Ok(Facts {
-        owner: item(owner),
+        owner: owner_item,
         issue_type: owner.issue.issue_type.clone(),
         goal: owner
             .sections
             .section(IssueSectionName::Goal)
             .map(str::to_owned),
         children,
+        after_merge,
+        edits,
         branch: branch.work_branch.clone(),
         base: branch.branch_base.clone(),
         head,
@@ -418,6 +458,22 @@ pub fn render(facts: &Facts) -> String {
         }
     }
 
+    if !facts.edits.is_empty() {
+        out.push_str("\n## Done when edited after start\n\n");
+        for edit in &facts.edits {
+            out.push_str(&format!("- {edit}\n"));
+        }
+    }
+    if !facts.after_merge.is_empty() {
+        out.push_str(&format!(
+            "\n## After merge\n\nThese checks are marked to run after the merge. Each needs {}, and its nearest stand-in runs before merge. Record a finding for any that could be checked before merge.\n\n",
+            atelier_app::after_merge::REASONS
+        ));
+        for late in &facts.after_merge {
+            out.push_str(&format!("- {}\n", late_line(late)));
+        }
+    }
+
     out.push_str("\n## Findings so far\n\n");
     if facts.findings.is_empty() {
         out.push_str("None.\n");
@@ -500,6 +556,28 @@ pub fn render(facts: &Facts) -> String {
     out
 }
 
+/// `<item>: <check> | reason: <reason> | stand-in: <stand-in>`, saying
+/// which is missing and when the check is no longer open.
+fn late_line(late: &LateCheck) -> String {
+    use atelier_app::after_merge::CheckState;
+    let check = &late.check;
+    let mut line = format!("{}: {}", late.item, flat(&check.check));
+    line.push_str(&match &check.reason {
+        Some(reason) => format!(" | reason: {reason}"),
+        None => " | reason missing".to_owned(),
+    });
+    line.push_str(&match &check.stand_in {
+        Some(stand_in) => format!(" | stand-in: {}", flat(stand_in)),
+        None => " | stand-in missing".to_owned(),
+    });
+    match &check.state {
+        CheckState::Open => {}
+        CheckState::Validated => line.push_str(" | validated"),
+        CheckState::Carried(id) => line.push_str(&format!(" | carried to {id}")),
+    }
+    line
+}
+
 fn count(commits: usize) -> String {
     atelier_core::count_noun(commits, "commit")
 }
@@ -525,6 +603,29 @@ mod tests {
                 title: "Part one".into(),
                 done_when: Some("Part one works.".into()),
             }],
+            after_merge: vec![
+                LateCheck {
+                    item: "atelier-own1".into(),
+                    check: atelier_app::after_merge::AfterMergeCheck {
+                        check: "It opens on the phone.".into(),
+                        reason: Some("device".into()),
+                        stand_in: Some("the emulator test passes.".into()),
+                        state: atelier_app::after_merge::CheckState::Open,
+                    },
+                },
+                LateCheck {
+                    item: "atelier-chd1".into(),
+                    check: atelier_app::after_merge::AfterMergeCheck {
+                        check: "Users like it.".into(),
+                        reason: None,
+                        stand_in: None,
+                        state: atelier_app::after_merge::CheckState::Carried("atelier-fol1".into()),
+                    },
+                },
+            ],
+            edits: vec![
+                "atelier-chd1 Done when edited at 11111111 after the item was started.".into(),
+            ],
             branch: "feature/atelier-own1".into(),
             base: "main".into(),
             head: head.clone(),
@@ -604,6 +705,17 @@ Second line.
 
 - atelier-chd1 done Part one
   Done when: Part one works.
+
+## Done when edited after start
+
+- atelier-chd1 Done when edited at 11111111 after the item was started.
+
+## After merge
+
+These checks are marked to run after the merge. Each needs the deployed or merged system, a device or place no agent can reach, the human's judgment, or time and real use, and its nearest stand-in runs before merge. Record a finding for any that could be checked before merge.
+
+- atelier-own1: It opens on the phone. | reason: device | stand-in: the emulator test passes.
+- atelier-chd1: Users like it. | reason missing | stand-in missing | carried to atelier-fol1
 
 ## Findings so far
 

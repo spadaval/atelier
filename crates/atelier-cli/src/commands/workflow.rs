@@ -131,11 +131,22 @@ pub fn transition_issue(
 
     let mut record = RecordStore::new(state_dir).load_issue_by_id(&before.id)?;
     apply_transition_record(&policy, state_dir, &mut record, transition, close_reason)?;
+    let warning = if closing && before.issue_type == "mission" {
+        open_validation_warning(index, &policy, &before.id)?
+    } else {
+        None
+    };
     if quiet {
         println!("{}", transition.to);
+        if let Some(warning) = warning {
+            eprintln!("{warning}");
+        }
         return Ok(());
     }
     print_applied_transition(transition_name, &before.id, &before.status, &transition.to);
+    if let Some(warning) = warning {
+        println!("{warning}");
+    }
     if let Some(outcome) = close_reason
         .filter(|_| closing && reused)
         .map(|text| atelier_core::CloseReport::parse(text).outcome)
@@ -160,6 +171,34 @@ pub fn transition_issue(
     }
     human_output::print_footer(next);
     Ok(())
+}
+
+/// A mission closing while work in its scope still awaits validation after
+/// merge is told which, and closes anyway (ADR 0027).
+fn open_validation_warning(
+    index: &RecordIndex,
+    policy: &WorkflowPolicy,
+    mission: &str,
+) -> Result<Option<String>> {
+    let open = atelier_app::objective_graph::mission_issue_ids(index, mission)?
+        .into_iter()
+        .filter_map(|id| {
+            let record = index.issue_record(&id)?;
+            atelier_app::after_merge::awaiting_validation(record, Some(policy)).then(|| {
+                let checks = atelier_app::after_merge::open_checks(record).len();
+                format!(
+                    "{id} ({})",
+                    atelier_core::count_noun(checks, "open after-merge check")
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok((!open.is_empty()).then(|| {
+        format!(
+            "Warning: {mission} closes with validation still open: {}. Validate each check on the base by ticking its box (`- [x] After merge ...`), or carry it to another item with `carried to <id>` on its line.",
+            open.join(", ")
+        )
+    }))
 }
 
 /// After a done claim the work is handed off, not moved again: check the

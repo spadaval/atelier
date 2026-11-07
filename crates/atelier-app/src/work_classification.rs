@@ -105,7 +105,7 @@ pub fn human_children_note(owner: &str, children: &[String]) -> String {
         ("are each", "them", "standalone validations")
     };
     format!(
-        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child closed, so the branch cannot integrate until the human finishes {pronoun}. If a check runs after the merge (a game, device or release check), make {pronoun} {shape} instead: {commands}.",
+        "{} labelled needs-human {verb} a child of {owner}, and atelier merge needs every child closed, so the branch cannot integrate until the human finishes {pronoun}. If a check can run only after the merge (a device, the deployed system, the human's judgment), write it as a line of {owner}'s Done when instead, `- [ ] After merge (<reason>): <check>. Stand-in: <what runs before merge>.`, and supersede the child; or make {pronoun} {shape}: {commands}.",
         children.join(", "),
     )
 }
@@ -127,6 +127,9 @@ pub struct WorkBuckets {
     pub blocked: Vec<WorkRow>,
     pub backlog: Vec<WorkRow>,
     pub done: Vec<WorkRow>,
+    /// Done work with an after-merge check still open (ADR 0027); also in
+    /// `done`.
+    pub awaiting_validation: Vec<WorkRow>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -160,6 +163,12 @@ pub fn work_buckets_for<'a>(
     let mut buckets = WorkBuckets::default();
     for issue in issues {
         let row = work_row(index, workflow_policy, issue.clone())?;
+        if index
+            .issue_record(&issue.id)
+            .is_some_and(|record| crate::after_merge::awaiting_validation(record, workflow_policy))
+        {
+            buckets.awaiting_validation.push(row.clone());
+        }
         match row.state_label() {
             "active" => buckets.active.push(row),
             "ready" => buckets.ready.push(row),
@@ -177,6 +186,7 @@ pub fn work_buckets_for<'a>(
     sort_work_rows(&mut buckets.blocked);
     sort_work_rows(&mut buckets.backlog);
     sort_work_rows(&mut buckets.done);
+    sort_work_rows(&mut buckets.awaiting_validation);
     Ok(buckets)
 }
 

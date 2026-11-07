@@ -148,10 +148,12 @@ notes the label when someone starts one.
 Do not make a `needs-human` check a child of a branch owner when the check runs
 after the merge, such as a game, headset or Windows check on the released
 build. `atelier merge` needs every child closed, so the owner's branch could
-not integrate until the human acts. Model the check as a standalone
-validation `blocked_by` the parent instead (and `advances` the mission, if
-any). `atelier start` and `atelier status` warn when a branch owner has an open
-`needs-human` child and give the two commands that detach it (atelier-1jll).
+not integrate until the human acts. Write it as an [after-merge
+line](validation.md#before-and-after-merge) of the owner's Done when instead,
+with its reason and the stand-in that runs before merge; a standalone
+validation `blocked_by` the parent (and `advances` the mission, if any) also
+works. `atelier start` and `atelier status` warn when a branch owner has an open
+`needs-human` child, and give the two commands that detach it (atelier-1jll).
 A `needs-human` child that must finish before the merge, such as an account
 approval the code depends on, can stay a child.
 

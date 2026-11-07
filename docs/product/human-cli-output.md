@@ -64,7 +64,7 @@ view is a choice of rows, fields and grouping over the shared order. That
 keeps views expressible as declarations later (atelier-e95f).
 
 Every view that lists items uses this line: the `work` views, `status`
-(Current Work, Owner, Mission, Owner Work, Ready Work and unassigned work;
+(Current Work, Awaiting Validation, Owner, Mission, Owner Work, Ready Work and unassigned work;
 its `Branches` rows use the branch row below), `work missions`, `issue list`, and `issue show` (title
 line, Mission, Parent, Children, Blocked by, Blocking, Linked Issues, Impact,
 Subissues and the Mission Rollup or Parent Rollup). So the Current Work row

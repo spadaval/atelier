@@ -30,6 +30,37 @@ policy's `merge_checks` (a `shell.check`; see [workflow
 configuration](workflow-configuration.md)), or nothing tests its merged tree
 ([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
 
+## Before and after merge
+
+Each line of an item's Done when is checked before merge, on the work branch,
+unless it is marked to run after merge. Post-merge validation is only what
+cannot be checked before the merge: a check that needs the deployed or merged
+system, a device or place no agent can reach, the human's judgment, or time
+and real use. Its nearest stand-in still runs before merge (an emulator for a
+device, a test server for production), and the after-merge check covers only
+the gap between the stand-in and the real thing
+([ADR 0027](../adr/0027-proof-has-a-time.md)):
+
+```text
+- [ ] After merge (device): the launcher opens on the phone. Stand-in: the emulator test passes.
+```
+
+Mark the split when the work is planned. Moving a check to after merge once
+the item has started is a Done when edit that `merge --check` and the review
+brief show (see [reviews and merge](reviews-and-merge.md#a-done-when-edited-after-the-start)).
+The item closes on its work branch and merges as usual; while a check is
+open, `status`, `work all`, and `work mission` and `work parent` list it
+under Awaiting Validation, the debrief says so under the item, and closing
+its mission warns and names it.
+
+Validate on the base, as a planning change that needs no reviewer identity:
+run the check, record its receipt (a device or deployed check leaves no other
+record), tick the box (`- [x] After merge ...`) and commit the record. If it
+fails, file a follow-up bug with `atelier issue create --discovered-from
+<item>` and add `carried to <bug>` to the line, rather than reopening the
+merged item; the bug's Done when holds the check from then on. Nothing
+refuses an open after-merge check.
+
 ## Recording proof
 
 `atelier evidence record --target issue/<id> --kind <kind>` creates and attaches a new receipt. Manual proof

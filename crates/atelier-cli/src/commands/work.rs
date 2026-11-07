@@ -82,6 +82,7 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
             ("Parents and Missions (context)", &buckets.context),
             ("Blocked Work", &buckets.blocked),
             ("Backlog Work", &buckets.backlog),
+            ("Awaiting Validation", &buckets.awaiting_validation),
         ],
         other => bail!("unknown work bucket '{other}'"),
     };
@@ -296,6 +297,7 @@ fn print_quiet(bucket: &str, buckets: &WorkBuckets) {
             &buckets.context,
             &buckets.blocked,
             &buckets.backlog,
+            &buckets.awaiting_validation,
         ],
         _ => &[&buckets.ready],
     };
@@ -505,6 +507,8 @@ struct ScopedWork {
     rows: Vec<(Issue, ClassifiedWork)>,
     size: usize,
     totals: ObjectiveBucketTotals,
+    /// Done work in scope with an after-merge check still open (ADR 0027).
+    awaiting: BTreeSet<String>,
 }
 
 impl ScopedWork {
@@ -520,7 +524,13 @@ impl ScopedWork {
         let mut rows = Vec::new();
         let mut totals = ObjectiveBucketTotals::default();
         let mut size = 0;
+        let mut awaiting = BTreeSet::new();
         for issue in issues {
+            if index.issue_record(&issue.id).is_some_and(|record| {
+                atelier_app::after_merge::awaiting_validation(record, policy.as_ref())
+            }) {
+                awaiting.insert(issue.id.clone());
+            }
             let classified =
                 atelier_app::work_classification::classify_issue(index, policy.as_ref(), &issue)?;
             if issue.id == objective.id {
@@ -546,7 +556,12 @@ impl ScopedWork {
         let order = crate::commands::work_order::ordered_work_indices(&scope);
         let mut scope = scope.into_iter().map(Some).collect::<Vec<_>>();
         rows.extend(order.into_iter().filter_map(|index| scope[index].take()));
-        Ok(Self { rows, size, totals })
+        Ok(Self {
+            rows,
+            size,
+            totals,
+            awaiting,
+        })
     }
 
     /// The first ready item in work order that no other branch has started.
@@ -582,7 +597,7 @@ impl ScopedWork {
             DashboardFilter::Done => &[(filter.classification(), "Done Work")],
             DashboardFilter::All => &[(None, "Scoped Work")],
         };
-        groups
+        let mut panels = groups
             .iter()
             .filter_map(|(state, title)| {
                 let rows = self
@@ -629,7 +644,28 @@ impl ScopedWork {
                     panel
                 })
             })
-            .collect()
+            .collect::<Vec<_>>();
+        if matches!(filter, DashboardFilter::Summary | DashboardFilter::All)
+            && !self.awaiting.is_empty()
+        {
+            let rows = self
+                .rows
+                .iter()
+                .filter(|(issue, _)| self.awaiting.contains(&issue.id))
+                .map(|(issue, work)| IssueListRow {
+                    id: issue.id.clone(),
+                    status: issue.status.clone(),
+                    status_category: work.status_category.clone(),
+                    classification: work.classification,
+                    priority: issue.priority.clone(),
+                    title: issue.title.clone(),
+                    blockers: 0,
+                    depth: 1,
+                })
+                .collect();
+            panels.push(IssueListPanel::new("Awaiting Validation", rows));
+        }
+        panels
     }
 }
 

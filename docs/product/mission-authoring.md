@@ -43,7 +43,11 @@ questions; keep later increments in `backlog` until their predecessor's
 evidence arrives. Keep Design as a link to the owning document.
 
 An executable issue has Goal and Done when. Done when names a check or scenario
-that could fail if the slice were missing or wrong. Scope and Context give the
+that could fail if the slice were missing or wrong. Each check runs before
+merge unless its line is marked `After merge (<reason>):` with the stand-in that
+runs before merge; post-merge validation is only what cannot be checked before
+the merge (see [before and after merge](validation.md#before-and-after-merge)).
+Decide the split when planning. Scope and Context give the
 worker enough boundaries and interfaces to act without the author's context.
 A validation item follows the executable issue shape: it references the claims
 it checks in Goal and its method in Context, and records each result as an
