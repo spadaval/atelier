@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-07T15:34:47.521016066+00:00"
+status: "done"
 title: "Validate the simpler-lifecycle mission's success criteria"
-updated_at: "2026-11-07T15:21:12.591218395+00:00"
+updated_at: "2026-11-07T15:34:47.521016066+00:00"
 ---
 
 ## Goal
