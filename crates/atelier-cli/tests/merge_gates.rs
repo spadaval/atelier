@@ -804,17 +804,50 @@ fn defer_and_no_action_findings_need_a_decision_by_any_identity() {
     ok(fixture.path(), &["merge", &fixture.id, "--check"]);
 }
 
+/// The merge base is the `base_branch` of the branch's committed policy,
+/// checked against that base's own policy; no recorded base is read
+/// (atelier-md0v).
 #[test]
-fn an_old_fix_now_disposition_with_a_resolution_commit_still_counts() {
+fn the_merge_base_is_the_branch_policys_base_checked_against_its_own_policy() {
     let fixture = Fixture::new();
-    let finding = fixture.finding();
-    fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
-    commit(fixture.path(), "fix contract");
-    let resolution = git(fixture.path(), &["rev-parse", "HEAD"]);
-    // `fix_now` stays accepted, though never asked for.
-    ok(
-        fixture.path(),
-        &[
+    git(fixture.path(), &["branch", "other", "main"]);
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    assert!(policy.contains("base_branch: main"), "{policy}");
+    fs::write(
+        &path,
+        policy.replace("base_branch: main", "base_branch: other"),
+    )
+    .unwrap();
+    commit(fixture.path(), "point the policy at another base");
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        !passed
+            && output.contains(
+                "merge_base_policy_unsupported: the base policy on other names main as the base branch, not other"
+            ),
+        "{output}"
+    );
+    assert_eq!(
+        git(fixture.path(), &["rev-parse", "other"]),
+        git(fixture.path(), &["rev-parse", "main"])
+    );
+}
+
+/// `review disposition --decision fix_now` stays accepted, though never
+/// asked for: an older Atelier's fix_now disposition counts, resolved as it
+/// was by an approval at or after its resolution commit, or, without one, by
+/// an approval of a later commit recorded after the finding (atelier-md0v).
+#[test]
+fn old_fix_now_dispositions_still_count_with_or_without_a_resolution_commit() {
+    for with_resolution in [true, false] {
+        let fixture = Fixture::new();
+        let finding = fixture.finding();
+        fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
+        commit(fixture.path(), "fix contract");
+        let resolution = git(fixture.path(), &["rev-parse", "HEAD"]);
+        let mut args = vec![
             "review",
             "disposition",
             &finding,
@@ -822,15 +855,18 @@ fn an_old_fix_now_disposition_with_a_resolution_commit_still_counts() {
             "Author",
             "--decision",
             "fix_now",
-            "--resolution-commit",
-            &resolution,
-            "Fixed current contract",
-        ],
-    );
-    commit(fixture.path(), "resolution record");
-    fixture.refusal("review.current");
-    fixture.approval("Reviewer");
-    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+        ];
+        if with_resolution {
+            args.extend(["--resolution-commit", &resolution]);
+        }
+        args.push("Fixed current contract");
+        ok(fixture.path(), &args);
+        commit(fixture.path(), "resolution record");
+        fixture.refusal("review.current");
+        fixture.refusal("findings.disposed");
+        fixture.approval("Reviewer");
+        ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    }
 }
 
 #[test]

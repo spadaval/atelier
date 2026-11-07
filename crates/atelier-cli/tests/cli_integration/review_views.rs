@@ -633,4 +633,27 @@ fn short_commit_ids_are_resolved_and_stored_in_full() {
         !success && stderr.contains("ffffffff names no commit in this repository"),
         "{stderr}"
     );
+    // A base exemption takes a short ID of a commit on the base too.
+    commit_all(dir, "review records");
+    git(dir, &["switch", "-q", "main"]);
+    let base = git(dir, &["rev-parse", "HEAD"]);
+    let exemption = ok(
+        dir,
+        &[
+            "-q",
+            "review",
+            "trivial",
+            "--base",
+            &base[..9],
+            "--identity",
+            "Reviewer R",
+            "Evident from the diff",
+        ],
+    )
+    .trim()
+    .to_owned();
+    assert_eq!(
+        canonical_record_front_matter(dir, "reviews", &exemption)["commit"],
+        base
+    );
 }
