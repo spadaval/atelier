@@ -3,6 +3,9 @@ created_at: "2026-11-06T21:26:18.892841983+00:00"
 id: "atelier-bqbz"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/atelier-bqbz
 priority: "P2"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "in_progress"
 title: "Keep only the statuses and issue types repositories use"
-updated_at: "2026-11-06T22:08:52.775970858+00:00"
+updated_at: "2026-11-07T02:52:55.178833338+00:00"
 ---
 
 ## Goal
@@ -31,7 +34,7 @@ Each workflow status and issue type is kept only if atelier-rkxm's counts show r
 
 ## Done when
 
-Provisional: the starter workflow policy drops what is unused, with each drop justified from atelier-rkxm's note; an atelier migrate step retypes existing records; existing repository policies keep working; the choice is recorded under this item.
+the starter workflow policy drops what is unused, with each drop justified from atelier-rkxm's note; an atelier migrate step retypes existing records; existing repository policies keep working; the choice is recorded under this item.
 
 ## Unknowns
 
