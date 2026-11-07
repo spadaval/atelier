@@ -24,6 +24,9 @@ mechanical guards at the point of action. The governing decision is
   base branch sees completion together with the implementation.
 - Evaluate merge gates from the base branch's reviewed policy.
 - Keep review and evidence append-only and tied to full Git commit identities.
+  The one exception is a finding's disposition, a field of the finding that is
+  set and changed in place, with who set it and at which commit; Git history
+  keeps earlier ones ([ADR 0025](docs/adr/0025-findings-carry-their-disposition.md)).
 - Prefer concise command output and inspectable Markdown to a second UI or an
   external review service. A static HTML review page, such as `debrief
   --html` writes, is a document a human reads, not a second UI: it holds no
@@ -41,8 +44,11 @@ represent mission membership, hierarchy, blockers, and proof attachments.
 Evidence reports `pass`, `fail`, `blocked`, or `not-applicable`, the commit
 checked, the check performed, and its limits. A receipt's presence does not
 prove success. Reviews record who examined which commit, their findings,
-dispositions, and approval. Identity is self-declared; the guards prevent
-routine mistakes rather than defend against malicious actors.
+each with its disposition, and approval. A fix of a `fix_now` finding is
+reviewed again before merge: that re-review may cover only the fix's diff,
+and the reviewer who raised the finding may do it. Identity is self-declared;
+the guards prevent routine mistakes rather than defend against malicious
+actors.
 
 `status` orients a fresh session; `land` checks that the session can
 be handed off with committed records and intact invariants. Harness hooks call

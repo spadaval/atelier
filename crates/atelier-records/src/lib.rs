@@ -424,9 +424,10 @@ impl RecordStore {
                 let mut relationships = match review::parse_review_file(&text, &relative)? {
                     review::ReviewFile::Event(record) => record.header.relationships,
                     review::ReviewFile::BaseExemption(record) => record.header.relationships,
+                    review::ReviewFile::RetiredDisposition(_) => Relationships::default(),
                 };
                 if mutate(&mut relationships) {
-                    bail!("review records are append-only; create a successor event");
+                    bail!("review links are derived from the event and never edited");
                 }
                 return Ok(false);
             }
@@ -2603,7 +2604,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             canonical_contracts,
             vec![
                 ("issue", "atelier.issue", 2, "issues"),
-                ("review", "atelier.review", 1, "reviews"),
+                ("review", "atelier.review", 2, "reviews"),
                 ("evidence", "atelier.evidence", 2, "evidence"),
             ]
         );
@@ -2936,7 +2937,7 @@ updated_at: "2026-06-10T13:00:00+00:00"
             .unwrap_err();
         assert_eq!(
             error.to_string(),
-            "review records are append-only; create a successor event"
+            "review links are derived from the event and never edited"
         );
         assert_eq!(fs::read(&path).unwrap(), original);
 

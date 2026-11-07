@@ -1,6 +1,6 @@
 ---
 schema: atelier.review
-schema_version: 1
+schema_version: 2
 id: atelier-ufqs
 title: This repository's own .claude/settings.json runs 'bd prime' (beads) on SessionStart and PreCompact, unchanged since 'bd init' (b824aac4); no atelier hook is installed, and CLAUDE.md carries a bd-doctor marker. Decision 1's hook change therefore does not reach this repo's own Claude sessions, and the dogfooding that sdb0 or ADR 0022's 'raises its bar' consequence implies cannot happen here until setup claude is run. Pre-existing, so not caused by this change; file a follow-up to replace the beads hook.
 target: atelier-bw0b
@@ -10,6 +10,14 @@ created_at: 2026-10-16T23:21:54.455836028Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: fix_now
+    identity: Claude Opus 5.5 (author)
+    commit: a485ef023556583b5731cad57ec897adc820948c
+    recorded_at: 2026-10-16T23:44:13.023705756Z
+    resolution_commit: a485ef023556583b5731cad57ec897adc820948c
+    reason: 'Fixed here rather than deferred: bd prime hooks replaced by atelier setup claude'
+    migrated_from: atelier-ykaw
 ---
 
 This repository's own .claude/settings.json runs 'bd prime' (beads) on SessionStart and PreCompact, unchanged since 'bd init' (b824aac4); no atelier hook is installed, and CLAUDE.md carries a bd-doctor marker. Decision 1's hook change therefore does not reach this repo's own Claude sessions, and the dogfooding that sdb0 or ADR 0022's 'raises its bar' consequence implies cannot happen here until setup claude is run. Pre-existing, so not caused by this change; file a follow-up to replace the beads hook.

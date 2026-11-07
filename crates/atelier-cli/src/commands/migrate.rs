@@ -1,8 +1,11 @@
-//! One-shot migration of retired epic records to parent issues (atelier-9vq3).
+//! One-shot record migrations: retired epic records to parent issues
+//! (atelier-9vq3), and separate disposition events into their findings
+//! (ADR 0025).
 //!
-//! Epic records no longer parse, so this reads the raw Markdown instead of
-//! loading the record index, plans every rewrite, validates each result with
-//! the record parser, and writes nothing unless all of them are valid.
+//! Epic records no longer load, so that migration reads the raw Markdown
+//! instead of loading the record index; separate disposition events still
+//! load, folded into their findings, and that migration writes the fold.
+//! Each plans every rewrite and writes nothing unless all of them are valid.
 use anyhow::{bail, Context, Result};
 use std::{fs, path::Path};
 
@@ -181,4 +184,82 @@ fn plan_epic(path: &Path, text: &str, to: &str, draft_status: &str) -> Result<Op
         text: migrated.text,
         status_change: migrated.status_change,
     }))
+}
+
+/// Writes the fold Atelier reads separate disposition events as (ADR 0025):
+/// each finding with events takes its latest one as its disposition field,
+/// naming the event, and every disposition event is removed, superseded ones
+/// included. The gates read only the latest, and Git history keeps them all.
+/// A finding migrated already takes the events that continue from its
+/// folded one. Optional cleanup: the result reads the same before and after.
+/// Quiet output is the IDs of the findings that take a disposition, one per
+/// line.
+pub fn dispositions(apply: bool, quiet: bool) -> Result<()> {
+    let layout = StorageLayout::discover()?;
+    let files = atelier_app::record_index::read_record_files(&layout.canonical_dir())?;
+    if let Some(first) = files.errors.into_iter().next() {
+        return Err(first.error);
+    }
+    let mut plans = Vec::new();
+    for finding in &files.reviews {
+        let events = files
+            .retired_dispositions
+            .iter()
+            .filter(|event| event.finding == finding.header.id)
+            .collect::<Vec<_>>();
+        if events.is_empty() {
+            continue;
+        }
+        let disposition = finding
+            .disposition()
+            .context("a finding with disposition events reads as disposed")?;
+        plans.push((finding.header.id.clone(), disposition.clone(), events));
+    }
+    for (finding, folded, events) in &plans {
+        if quiet {
+            println!("{finding}");
+            continue;
+        }
+        let dropped = match events.len() - 1 {
+            0 => String::new(),
+            n => format!(
+                ", removing {} it superseded",
+                crate::human_output::count_noun(n, "earlier event")
+            ),
+        };
+        println!(
+            "{finding}: {} by {} from {}{dropped}",
+            folded.decision.as_str(),
+            folded.identity,
+            folded.migrated_from.as_deref().unwrap_or_default()
+        );
+    }
+    if plans.is_empty() {
+        if !quiet {
+            println!("No disposition events to migrate.");
+        }
+        return Ok(());
+    }
+    if !apply {
+        if !quiet {
+            println!(
+                "Dry run: rerun with --apply to write these changes, then review and commit them."
+            );
+        }
+        return Ok(());
+    }
+    let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
+    for (finding, folded, events) in &plans {
+        store.set_disposition(finding, folded.clone())?;
+        for event in events {
+            store.remove_retired_disposition(&event.id)?;
+        }
+    }
+    if !quiet {
+        println!(
+            "Migrated {}. Run atelier check and commit the changes.",
+            crate::human_output::count_noun(plans.len(), "finding")
+        );
+    }
+    Ok(())
 }

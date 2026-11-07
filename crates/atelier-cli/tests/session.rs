@@ -2257,8 +2257,7 @@ fn integration_base_refuses_review_rewrites_deletion_and_reverted_edits() {
 
 #[test]
 fn root_review_introductions_cannot_be_hidden_by_log_configuration() {
-    for (original_identity, rewritten_identity) in [("Reviewer", "Author"), ("Author", "Reviewer")]
-    {
+    for original_identity in ["Reviewer", "Author"] {
         let f = Fixture::new();
         git(f.path(), &["switch", "main"]);
         let finding = ok(
@@ -2297,11 +2296,14 @@ fn root_review_introductions_cannot_be_hidden_by_log_configuration() {
         commit(f.path(), "root canonical records and review events");
         git(f.path(), &["config", "log.showRoot", "false"]);
         ok(f.path(), &["land"]);
-        let path = f.path().join(format!(".atelier/reviews/{disposition}.md"));
+        // The disposition is a field of the finding (ADR 0025), so rewrite
+        // the finding's own identity, which never changes.
+        assert_eq!(disposition, finding);
+        let path = f.path().join(format!(".atelier/reviews/{finding}.md"));
         let original = fs::read_to_string(&path).unwrap();
         fs::write(
             &path,
-            original.replace(original_identity, rewritten_identity),
+            original.replacen("identity: Reviewer", "identity: Rewritten", 1),
         )
         .unwrap();
         commit(f.path(), "rewrite root event identity");
@@ -2413,7 +2415,8 @@ fn a_disposition_without_findable_history_fails_its_gate_by_name() {
         !pass
             && output.contains("findings.disposed")
             && output.contains(&finding)
-            && output.contains(&format!("disposition {disposition} could not be traced")),
+            && output.contains(&disposition)
+            && output.contains("its disposition could not be traced"),
         "{output}"
     );
 }
@@ -2591,9 +2594,11 @@ fn retirement_cannot_hide_prior_rewrites_or_active_target_events() {
             }
         }
         fs::remove_file(f.path().join(format!(".atelier/issues/{id}.md"))).unwrap();
-        fs::remove_file(path).unwrap();
+        // The disposition is the finding's own file (ADR 0025); a partial
+        // cluster keeps it while its issue goes.
+        assert_eq!(disposition, finding);
         if mutation != "partial" {
-            fs::remove_file(f.path().join(format!(".atelier/reviews/{finding}.md"))).unwrap();
+            fs::remove_file(path).unwrap();
         }
         commit(
             f.path(),
@@ -7222,7 +7227,7 @@ fn a_changed_review_record_is_restored_and_a_committed_rewrite_is_dropped() {
     commit(f.path(), "delete the approval");
     let bad = git(f.path(), &["rev-parse", "HEAD"]);
     let line = format!(
-        "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (record a successor event for any change). Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+        "⚠ {id} review_append_only: {path} was rewritten beyond a finding's disposition, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (only a finding's disposition may change; record a new event for anything else). Next: git rebase --autostash --onto {bad}~1 {bad}\n"
     );
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass && out.contains(&line), "{out}");
@@ -7277,7 +7282,7 @@ fn leaving_out_a_merge_that_rewrote_a_review_warns_that_its_work_goes_too() {
     assert!(!pass);
     assert!(
         out.contains(&format!(
-            "⚠ {id} review_append_only: {path} was rewritten, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (record a successor event for any change); it is a merge, so this also drops the 1 commit it merged in: merge or redo any of that work that should stay. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
+            "⚠ {id} review_append_only: {path} was rewritten beyond a finding's disposition, deleted or changed mode in {bad}; a later commit cannot undo it, so leave that commit out of the branch, which brings the record back (only a finding's disposition may change; record a new event for anything else); it is a merge, so this also drops the 1 commit it merged in: merge or redo any of that work that should stay. Next: git rebase --autostash --onto {bad}~1 {bad}\n"
         )),
         "{out}"
     );
@@ -8001,4 +8006,690 @@ fn a_resolved_fix_now_awaiting_approval_blocks_no_turn() {
         hook(f.path(), "land", stop(f.path())),
         serde_json::json!({"decision": "block", "reason": out.trim_end()})
     );
+}
+
+/// Writes a review event in schema version 1, as Atelier wrote it before
+/// ADR 0025: `event` is the event's YAML under `event:`.
+fn v1_review(dir: &Path, id: &str, target: &str, identity: &str, pin: &str, at: &str, event: &str) {
+    fs::write(
+        dir.join(format!(".atelier/reviews/{id}.md")),
+        format!(
+            "---\nschema: atelier.review\nschema_version: 1\nid: {id}\ntitle: {id}\ntarget: {target}\nidentity: {identity}\ncommit: {pin}\ncreated_at: {at}\nevent:\n{event}---\n\n{id} text\n"
+        ),
+    )
+    .unwrap();
+}
+/// A separate disposition event in schema version 1.
+#[allow(clippy::too_many_arguments)]
+fn v1_disposition(
+    dir: &Path,
+    (id, target, identity, pin, at): (&str, &str, &str, &str, &str),
+    finding: &str,
+    decision: &str,
+    supersedes: Option<&str>,
+    resolution: Option<&str>,
+    follow_up: Option<&str>,
+) {
+    let value = |field: Option<&str>| field.unwrap_or("null").to_owned();
+    v1_review(
+        dir,
+        id,
+        target,
+        identity,
+        pin,
+        at,
+        &format!(
+            "  event: disposition\n  finding: {finding}\n  decision: {decision}\n  supersedes: {}\n  resolution_commit: {}\n  follow_up: {}\n",
+            value(supersedes),
+            value(resolution),
+            value(follow_up)
+        ),
+    );
+}
+
+/// A repository from before ADR 0025: a lifecycle merged into the base with
+/// findings in schema version 1 and separate disposition events, the defer
+/// proposed by the author and accepted by the reviewer in a successor.
+/// Unless `merged`, the approved branch is left unmerged. Returns the
+/// fixture and the three findings (fix_now, defer, no_action).
+fn pre_adr_0025_repository(no_action_identity: &str, merged: bool) -> (Fixture, [String; 3]) {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let follow_up = ok(f.path(), &["-q", "issue", "create", "Follow up later"]);
+    commit(f.path(), "plan the follow-up");
+    let pin = git(f.path(), &["rev-parse", "HEAD"]);
+    let findings = ["atelier-f001", "atelier-f002", "atelier-f003"].map(str::to_owned);
+    for (finding, recommendation) in findings.iter().zip(["fix_now", "defer", "no_action"]) {
+        v1_review(
+            f.path(),
+            finding,
+            &id,
+            "Reviewer",
+            &pin,
+            "2026-10-01T00:00:00Z",
+            &format!("  event: finding\n  recommendation: {recommendation}\n"),
+        );
+    }
+    commit(f.path(), "findings");
+    fs::write(f.path().join("code"), "fixed code\n").unwrap();
+    commit(f.path(), "fix");
+    let fix = git(f.path(), &["rev-parse", "HEAD"]);
+    let at = |second: u32| format!("2026-10-02T00:00:{second:02}Z");
+    v1_disposition(
+        f.path(),
+        ("atelier-d001", &id, "Author", &fix, &at(1)),
+        &findings[0],
+        "fix_now",
+        None,
+        Some(&fix),
+        None,
+    );
+    v1_disposition(
+        f.path(),
+        ("atelier-d002", &id, "Author", &fix, &at(2)),
+        &findings[1],
+        "defer",
+        None,
+        None,
+        Some(&follow_up),
+    );
+    v1_disposition(
+        f.path(),
+        ("atelier-d003", &id, "Reviewer", &fix, &at(3)),
+        &findings[1],
+        "defer",
+        Some("atelier-d002"),
+        None,
+        Some(&follow_up),
+    );
+    v1_disposition(
+        f.path(),
+        ("atelier-d004", &id, no_action_identity, &fix, &at(4)),
+        &findings[2],
+        "no_action",
+        None,
+        None,
+        None,
+    );
+    commit(f.path(), "dispositions");
+    f.terminal(&id);
+    let head = git(f.path(), &["rev-parse", "HEAD"]);
+    v1_review(
+        f.path(),
+        "atelier-a001",
+        &id,
+        "Reviewer",
+        &head,
+        &at(5),
+        "  event: approval\n",
+    );
+    commit(f.path(), "approval");
+    if merged {
+        // The old binary's merge, a fast-forward under this policy.
+        git(f.path(), &["switch", "-q", "main"]);
+        git(f.path(), &["merge", "-q", "--ff-only", &f.branch]);
+    }
+    (f, findings)
+}
+
+/// `atelier migrate dispositions` folds each finding's latest disposition
+/// event into the finding and removes the events; the migrated repository
+/// passes `doctor` and `land`, and each migrated defer or no_action is
+/// still judged by who set it, traced to the event it came from (ADR 0025).
+#[test]
+fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
+    let (f, findings) = pre_adr_0025_repository("Reviewer", true);
+    // Unmigrated, the events read as folded into their findings.
+    ok(f.path(), &["check"]);
+    ok(f.path(), &["doctor"]);
+    ok(f.path(), &["land"]);
+    let reviews = f.path().join(".atelier/reviews");
+    let before = fs::read_dir(&reviews).unwrap().count();
+    // A dry run lists the findings and writes nothing.
+    assert_eq!(
+        ok(f.path(), &["-q", "migrate", "dispositions"]),
+        findings.join("\n")
+    );
+    let dry = ok(f.path(), &["migrate", "dispositions"]);
+    assert!(
+        dry.contains(&format!(
+            "{}: defer by Reviewer from atelier-d003, removing 1 earlier event it superseded",
+            findings[1]
+        )) && dry.contains("Dry run"),
+        "{dry}"
+    );
+    assert_eq!(git(f.path(), &["status", "--porcelain"]), "");
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    commit(f.path(), "migrate dispositions");
+    // Four disposition events are gone; the findings and approval remain.
+    assert_eq!(fs::read_dir(&reviews).unwrap().count(), before - 4);
+    let deferred = fs::read_to_string(reviews.join(format!("{}.md", findings[1]))).unwrap();
+    assert!(
+        deferred.contains("schema_version: 2")
+            && deferred.contains("    identity: Reviewer\n")
+            && deferred.contains("    migrated_from: atelier-d003\n")
+            && deferred.contains("    reason: atelier-d003 text\n"),
+        "{deferred}"
+    );
+    ok(f.path(), &["doctor"]);
+    ok(f.path(), &["land"]);
+    assert_eq!(ok(f.path(), &["-q", "migrate", "dispositions"]), "");
+    // A successor event an older binary recorded, as a branch brings in
+    // when it merges the migrated base, continues the folded one.
+    let fix = git(f.path(), &["rev-parse", "HEAD"]);
+    v1_disposition(
+        f.path(),
+        (
+            "atelier-d005",
+            &f.id,
+            "Reviewer",
+            &fix,
+            "2026-10-03T00:00:00Z",
+        ),
+        &findings[2],
+        "no_action",
+        Some("atelier-d004"),
+        None,
+        None,
+    );
+    commit(f.path(), "a successor disposition event");
+    assert_eq!(
+        ok(f.path(), &["-q", "migrate", "dispositions", "--apply"]),
+        findings[2]
+    );
+    commit(f.path(), "migrate the successor");
+    ok(f.path(), &["doctor"]);
+    // Once the file has held another disposition, the migrated one is
+    // judged where it is set again, even by restoring its bytes by hand
+    // (ADR 0025 decision 4): the reviewer has authored work by then.
+    let path = reviews.join(format!("{}.md", findings[2]));
+    let migrated = fs::read_to_string(&path).unwrap();
+    git(f.path(), &["config", "user.name", "Reviewer"]);
+    fs::write(f.path().join("reviewer-code"), "work by Reviewer\n").unwrap();
+    commit(f.path(), "Reviewer's work");
+    git(f.path(), &["config", "user.name", "Author"]);
+    ok(f.path(), &["doctor"]);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &findings[2],
+            "--identity",
+            "Someone",
+            "--decision",
+            "no_action",
+            "--commit-records",
+            "Changed",
+        ],
+    );
+    ok(f.path(), &["doctor"]);
+    fs::write(&path, migrated).unwrap();
+    commit(f.path(), "restore the migrated disposition by hand");
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass
+            && out.contains("findings.disposed")
+            && out.contains(&findings[2])
+            && out.contains("needs to be set by a non-author"),
+        "{out}"
+    );
+}
+
+/// The non-author rule survives the migration: a no_action the author set
+/// in a separate event is refused once folded in, as it was before.
+#[test]
+fn a_migrated_author_no_action_is_still_refused() {
+    let (f, findings) = pre_adr_0025_repository("Author", true);
+    // Unmigrated, it is refused the same way, and the reviewer setting it
+    // writes the field and removes the event it replaces.
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass && out.contains(&findings[2]) && out.contains("needs to be set by a non-author"),
+        "{out}"
+    );
+    {
+        let (f, findings) = pre_adr_0025_repository("Author", true);
+        ok(
+            f.path(),
+            &[
+                "review",
+                "disposition",
+                &findings[2],
+                "--identity",
+                "Reviewer",
+                "--decision",
+                "no_action",
+                "--commit-records",
+                "Accepted",
+            ],
+        );
+        assert!(!f.path().join(".atelier/reviews/atelier-d004.md").exists());
+        ok(f.path(), &["doctor"]);
+    }
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    commit(f.path(), "migrate dispositions");
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass
+            && out.contains("findings.disposed")
+            && out.contains(&findings[2])
+            && out.contains("needs to be set by a non-author"),
+        "{out}"
+    );
+    // Nor can the migration commit launder it: a fold edited before it is
+    // committed no longer matches its event.
+    let (f, findings) = pre_adr_0025_repository("Author", true);
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    let path = f
+        .path()
+        .join(format!(".atelier/reviews/{}.md", findings[2]));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("    identity: Author\n", "    identity: Reviewer\n"),
+    )
+    .unwrap();
+    commit(f.path(), "migrate dispositions, edited");
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(
+        !pass
+            && out.contains("findings.disposed")
+            && out.contains("differs from atelier-d004, the event it was migrated from"),
+        "{out}"
+    );
+}
+
+/// Who set a disposition is judged at the commit that set the field, not at
+/// the commit it names (ADR 0025): a no_action set before its identity
+/// authored any of the work counts, the same no_action set again after
+/// does not, and restoring the earlier bytes by hand is a later setting too.
+#[test]
+fn a_disposition_is_judged_at_the_commit_that_set_it() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let id = ok(f.path(), &["-q", "issue", "create", "Judged work"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Concern",
+        ],
+    );
+    commit(f.path(), "finding");
+    let dispose = || {
+        ok(
+            f.path(),
+            &[
+                "review",
+                "disposition",
+                &finding,
+                "--identity",
+                "Helper",
+                "--decision",
+                "no_action",
+                "Not a problem",
+            ],
+        );
+        commit(f.path(), "dispose");
+    };
+    dispose();
+    let path = f.path().join(format!(".atelier/reviews/{finding}.md"));
+    let first = fs::read_to_string(&path).unwrap();
+    git(f.path(), &["config", "user.name", "Helper"]);
+    fs::write(f.path().join("helper-code"), "work by Helper\n").unwrap();
+    commit(f.path(), "Helper's work");
+    git(f.path(), &["config", "user.name", "Author"]);
+    f.terminal(&id);
+    ok(f.path(), &["doctor"]);
+    dispose();
+    let refused = |out: &str| out.contains("findings.disposed") && out.contains(&finding);
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(!pass && refused(&out), "{out}");
+    fs::write(&path, first).unwrap();
+    commit(f.path(), "restore the earlier disposition by hand");
+    let (pass, out) = cli(f.path(), &["doctor"]);
+    assert!(!pass && refused(&out), "{out}");
+}
+
+/// Setting or changing a disposition after approval keeps the approval
+/// current, and editing anything else in the finding does not (ADR 0025).
+#[test]
+fn a_disposition_after_approval_keeps_it_current() {
+    let f = Fixture::new();
+    let id = f.id.clone();
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Concern",
+        ],
+    );
+    commit(f.path(), "finding");
+    f.terminal(&id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "Reviewer",
+            "Approved",
+        ],
+    );
+    commit(f.path(), "approval");
+    for (identity, decision) in [("Author", "fix_now"), ("Reviewer", "no_action")] {
+        let mut args = vec![
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            identity,
+            "--decision",
+            decision,
+        ];
+        let fix = git(f.path(), &["rev-parse", "HEAD~2"]);
+        if decision == "fix_now" {
+            args.extend(["--resolution-commit", &fix]);
+        }
+        args.extend(["--commit-records", "Decided"]);
+        ok(f.path(), &args);
+        let (_, out) = cli(f.path(), &["merge", &id, "--check"]);
+        assert!(out.contains("review.current via"), "{decision}: {out}");
+    }
+    let (pass, out) = cli(f.path(), &["merge", &id, "--check"]);
+    assert!(pass, "{out}");
+    let path = f.path().join(format!(".atelier/reviews/{finding}.md"));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("\nConcern\n", "\nA different concern\n"),
+    )
+    .unwrap();
+    commit(f.path(), "rewrite the finding");
+    let (pass, out) = cli(f.path(), &["merge", &id, "--check"]);
+    assert!(!pass && out.contains("review_append_only"), "{out}");
+}
+
+/// An approved work branch whose dispositions are separate events passes
+/// check, land and the merge gates exactly as it does once migrated, and
+/// migrating keeps its approval current (ADR 0025).
+#[test]
+fn migrating_dispositions_on_an_approved_branch_keeps_the_approval() {
+    let mut reports = Vec::new();
+    for migrated in [false, true] {
+        let (f, _) = pre_adr_0025_repository("Reviewer", false);
+        if migrated {
+            ok(f.path(), &["migrate", "dispositions", "--apply"]);
+            commit(f.path(), "migrate dispositions");
+        }
+        ok(f.path(), &["check"]);
+        let land = ok(f.path(), &["land", &f.id]);
+        let out = ok(f.path(), &["merge", &f.id, "--check"]);
+        assert!(
+            out.contains("review.current via atelier-a001") && out.contains("merge: passed"),
+            "{out}"
+        );
+        reports.push(format!("{land}\n{out}").replace(&f.id, "<owner>"));
+        ok(f.path(), &["merge", &f.id]);
+        ok(f.path(), &["doctor"]);
+        ok(f.path(), &["land"]);
+    }
+    assert_eq!(reports[0], reports[1]);
+}
+
+/// An uncommitted disposition is committed with the work, not restored: it
+/// is the one change a review record gets (ADR 0025).
+#[test]
+fn an_uncommitted_disposition_is_committed_not_restored() {
+    let f = Fixture::new();
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Concern",
+        ],
+    );
+    commit(f.path(), "finding");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Reviewer",
+            "--decision",
+            "no_action",
+            "Fine",
+        ],
+    );
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass
+            && out.contains(&format!(
+                "land_records_uncommitted: 1 tracker record differs from HEAD: .atelier/reviews/{finding}.md (disposition changed); commit them with the work. Next: git add .atelier && git commit -m \"…\"\n"
+            )),
+        "{out}"
+    );
+}
+
+/// A separate disposition event read as folded keeps the old binary's
+/// refusals (atelier-pfbp): deleting a finding's latest event outside the
+/// fold that `review disposition` or the migration writes is refused, as is
+/// restoring an event a later commit removed.
+#[test]
+fn separate_disposition_events_cannot_be_deleted_or_restored_by_hand() {
+    for case in ["delete_latest", "restore_removed"] {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "-q", "main"]);
+        let id = ok(f.path(), &["-q", "issue", "create", "Event history"]);
+        let finding = ok(
+            f.path(),
+            &[
+                "-q",
+                "review",
+                "finding",
+                &id,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "Concern",
+            ],
+        );
+        commit(f.path(), "finding");
+        let pin = git(f.path(), &["rev-parse", "HEAD"]);
+        let first = if case == "delete_latest" {
+            "Reviewer"
+        } else {
+            "Helper"
+        };
+        v1_disposition(
+            f.path(),
+            ("atelier-e001", &id, first, &pin, "2026-10-02T00:00:01Z"),
+            &finding,
+            "no_action",
+            None,
+            None,
+            None,
+        );
+        commit(f.path(), "first disposition event");
+        if case == "delete_latest" {
+            v1_disposition(
+                f.path(),
+                (
+                    "atelier-e002",
+                    &id,
+                    "Reviewer",
+                    &pin,
+                    "2026-10-02T00:00:02Z",
+                ),
+                &finding,
+                "fix_now",
+                Some("atelier-e001"),
+                None,
+                None,
+            );
+            commit(f.path(), "the reviewer's later fix_now");
+            f.terminal(&id);
+            let (pass, out) = cli(f.path(), &["doctor"]);
+            assert!(!pass && out.contains("findings.disposed"), "{out}");
+            git(f.path(), &["rm", "-q", ".atelier/reviews/atelier-e002.md"]);
+            commit(f.path(), "delete the latest event");
+        } else {
+            git(f.path(), &["config", "user.name", "Helper"]);
+            fs::write(f.path().join("helper-code"), "work by Helper\n").unwrap();
+            commit(f.path(), "Helper's work");
+            git(f.path(), &["config", "user.name", "Author"]);
+            f.terminal(&id);
+            ok(f.path(), &["doctor"]);
+            ok(
+                f.path(),
+                &[
+                    "review",
+                    "disposition",
+                    &finding,
+                    "--identity",
+                    "Other",
+                    "--decision",
+                    "no_action",
+                    "--commit-records",
+                    "Set again",
+                ],
+            );
+            assert!(!f.path().join(".atelier/reviews/atelier-e001.md").exists());
+            ok(f.path(), &["doctor"]);
+            git(f.path(), &["checkout", "HEAD~1", "--", ".atelier/reviews/"]);
+            commit(f.path(), "restore the removed event by hand");
+        }
+        let (pass, out) = cli(f.path(), &["doctor"]);
+        assert!(!pass && out.contains("review_append_only"), "{case}: {out}");
+    }
+}
+
+/// A branch whose older Atelier recorded a successor disposition event is
+/// brought up to date with a migrated base by merging without committing and
+/// migrating; a plain merge is refused, naming that step (atelier-j5oq).
+#[test]
+fn a_migrated_base_merges_into_a_branch_with_events_by_migrating_the_merge() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let finding = ok(
+        f.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Concern",
+        ],
+    );
+    let pin = git(f.path(), &["rev-parse", "HEAD"]);
+    v1_disposition(
+        f.path(),
+        (
+            "atelier-e001",
+            &f.id,
+            "Reviewer",
+            &pin,
+            "2026-10-02T00:00:01Z",
+        ),
+        &finding,
+        "no_action",
+        None,
+        None,
+        None,
+    );
+    commit(f.path(), "finding and its disposition event on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    v1_disposition(
+        f.path(),
+        (
+            "atelier-e002",
+            &f.id,
+            "Reviewer",
+            &pin,
+            "2026-10-02T00:00:02Z",
+        ),
+        &finding,
+        "no_action",
+        Some("atelier-e001"),
+        None,
+        None,
+    );
+    commit(f.path(), "an older Atelier's successor event on the branch");
+    git(f.path(), &["switch", "-q", "main"]);
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    commit(f.path(), "migrate dispositions on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    let merge = git(f.path(), &["rev-parse", "HEAD"]);
+    let main = git(f.path(), &["rev-parse", "main"]);
+    let next = format!(
+        "Next: git rebase --autostash --onto {merge}~1 {merge} && git merge --no-commit {main} && atelier migrate dispositions --apply && git add .atelier && git commit --no-edit\n"
+    );
+    let rewrites = "rewrites the commits after it: get them reviewed again";
+    let (pass, out) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && out.contains(&next) && !out.contains(rewrites),
+        "{out}"
+    );
+    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
+    // Below the tip, the same step rewrites the later commits, and says so.
+    fs::write(f.path().join("later"), "later work\n").unwrap();
+    commit(f.path(), "later work");
+    let (pass, below) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && below.contains(&next) && below.contains(rewrites),
+        "{below}"
+    );
+    git(f.path(), &["reset", "-q", "--hard", "HEAD~1"]);
+    // The documented sequence, run here, leaves a branch the check accepts.
+    git(
+        f.path(),
+        &[
+            "rebase",
+            "-q",
+            "--autostash",
+            "--onto",
+            &format!("{merge}~1"),
+            &merge,
+        ],
+    );
+    git(f.path(), &["merge", "-q", "--no-commit", "main"]);
+    ok(f.path(), &["migrate", "dispositions", "--apply"]);
+    git(f.path(), &["add", ".atelier"]);
+    git(f.path(), &["commit", "-q", "--no-edit"]);
+    assert!(!f.path().join(".atelier/reviews/atelier-e002.md").exists());
+    let (_, out) = cli(f.path(), &["land"]);
+    assert!(!out.contains("review_append_only"), "{out}");
+    ok(f.path(), &["check"]);
 }

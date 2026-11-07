@@ -10,9 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use atelier_core::{
-    BaseExemption, EvidenceRecord, Issue, RecordLink, Relation, ReviewEvent, ReviewRecord,
-};
+use atelier_core::{BaseExemption, EvidenceRecord, Issue, RecordLink, Relation, ReviewRecord};
+use atelier_records::review::RetiredDisposition;
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
     validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships, BLOCKED_BY,
@@ -31,6 +30,9 @@ pub struct RecordFiles {
     pub reviews: Vec<ReviewRecord>,
     /// Trivial exemptions of base commits, which name no issue.
     pub base_exemptions: Vec<BaseExemption>,
+    /// Separate disposition events from before ADR 0025, already folded
+    /// into their findings in `reviews`.
+    pub retired_dispositions: Vec<RetiredDisposition>,
     /// One error per unreadable, unparsable, or unsupported file, in path
     /// order. Each error names the file.
     pub errors: Vec<RecordFileError>,
@@ -41,7 +43,8 @@ impl RecordFiles {
             return Err(error.error);
         }
         RecordIndex::from_records(self.issues, self.evidence, self.reviews)?
-            .with_base_exemptions(self.base_exemptions)
+            .with_base_exemptions(self.base_exemptions)?
+            .with_retired_dispositions(self.retired_dispositions)
     }
 }
 
@@ -88,6 +91,9 @@ pub(crate) fn read_record_paths(
             Ok(Some(ParsedRecord::Evidence(record))) => files.evidence.push(*record),
             Ok(Some(ParsedRecord::Review(record))) => files.reviews.push(*record),
             Ok(Some(ParsedRecord::BaseExemption(record))) => files.base_exemptions.push(*record),
+            Ok(Some(ParsedRecord::RetiredDisposition(record))) => {
+                files.retired_dispositions.push(*record)
+            }
             Ok(None) => {}
             Err(error) => files.errors.push(RecordFileError {
                 error: name_record_file(error, &relative),
@@ -95,6 +101,22 @@ pub(crate) fn read_record_paths(
             }),
         }
     }
+    // Read separate disposition events as folded into their findings, as
+    // `atelier migrate dispositions` would write them (ADR 0025).
+    let (_, fold_errors) = atelier_records::review::fold_retired_dispositions(
+        &mut files.reviews,
+        &files.retired_dispositions,
+    );
+    for (id, error) in fold_errors {
+        let path = PathBuf::from("reviews").join(format!("{id}.md"));
+        files.errors.push(RecordFileError {
+            error: name_record_file(error, &path),
+            path,
+        });
+    }
+    files
+        .errors
+        .sort_by(|left, right| left.path.cmp(&right.path));
     Ok((files, changed))
 }
 
@@ -115,6 +137,7 @@ enum ParsedRecord {
     Evidence(Box<EvidenceRecord>),
     Review(Box<ReviewRecord>),
     BaseExemption(Box<BaseExemption>),
+    RetiredDisposition(Box<RetiredDisposition>),
 }
 
 fn read_record_file(
@@ -165,6 +188,9 @@ fn read_record_file(
             }
             atelier_records::review::ReviewFile::BaseExemption(record) => {
                 ParsedRecord::BaseExemption(Box::new(record))
+            }
+            atelier_records::review::ReviewFile::RetiredDisposition(record) => {
+                ParsedRecord::RetiredDisposition(Box::new(record))
             }
         }
     } else {
@@ -227,6 +253,7 @@ pub struct RecordIndex {
     evidence: BTreeMap<String, EvidenceRecord>,
     reviews: BTreeMap<String, ReviewRecord>,
     base_exemptions: BTreeMap<String, BaseExemption>,
+    retired_dispositions: BTreeMap<String, RetiredDisposition>,
     /// Evidence attachments and issue-to-issue relations, sorted.
     links: Vec<RecordLink>,
     /// `(kind, id)` to indices into `links` touching that record.
@@ -282,7 +309,45 @@ impl RecordIndex {
             return Err(first.error);
         }
         Self::from_project_records(state_dir, files.issues, files.evidence, files.reviews)?
-            .with_base_exemptions(files.base_exemptions)
+            .with_base_exemptions(files.base_exemptions)?
+            .with_retired_dispositions(files.retired_dispositions)
+    }
+
+    /// Adds the separate disposition events read beside the other records,
+    /// already folded into their findings, so their IDs still resolve as
+    /// the reviews they were (ADR 0025).
+    pub fn with_retired_dispositions(mut self, events: Vec<RetiredDisposition>) -> Result<Self> {
+        for record in events {
+            let id = record.id.clone();
+            if self.record_exists("review", &id)
+                || self.issues.contains_key(&id)
+                || self.evidence.contains_key(&id)
+                || self.base_exemptions.contains_key(&id)
+            {
+                bail!("Duplicate record ID in record files: {id}");
+            }
+            self.retired_dispositions.insert(id, record);
+        }
+        Ok(self)
+    }
+
+    /// Separate disposition events from before ADR 0025, which the
+    /// findings they name already carry.
+    pub fn retired_dispositions(&self) -> impl Iterator<Item = &RetiredDisposition> {
+        self.retired_dispositions.values()
+    }
+
+    /// The issue a review file is about: an event's target, or a separate
+    /// disposition event's.
+    pub fn review_target(&self, id: &str) -> Option<&str> {
+        self.reviews
+            .get(id)
+            .map(|record| record.target.as_str())
+            .or_else(|| {
+                self.retired_dispositions
+                    .get(id)
+                    .map(|record| record.target.as_str())
+            })
     }
 
     /// Adds the base exemptions read beside the other records. They name no
@@ -466,31 +531,17 @@ impl RecordIndex {
             .get(id)
             .ok_or_else(|| self.not_found(RecordKind::Review, id))
     }
-    pub fn latest_disposition(&self, finding: &str) -> Option<&ReviewRecord> {
-        self.reviews.values().find(|record| matches!(&record.event, ReviewEvent::Disposition { finding: target, .. } if target == finding) && !self.reviews.values().any(|successor| matches!(&successor.event, ReviewEvent::Disposition { supersedes: Some(previous), .. } if previous == &record.header.id)))
-    }
     fn validate_reviews(&self, errors: &mut Vec<anyhow::Error>) {
-        let mut successors = BTreeMap::new();
-        let mut chains = BTreeMap::<String, Vec<String>>::new();
-        let mut roots = BTreeSet::new();
         for record in self.reviews.values() {
-            if let Err(error) =
-                self.validate_review(record, &mut successors, &mut chains, &mut roots, errors)
-            {
+            if let Err(error) = self.validate_review(record, errors) {
                 errors.push(error);
             }
         }
-        if let Err(error) = validate_acyclic(&chains, "disposition supersedes") {
-            errors.push(error);
-        }
     }
 
-    fn validate_review<'a>(
+    fn validate_review(
         &self,
-        record: &'a ReviewRecord,
-        successors: &mut BTreeMap<&'a String, &'a String>,
-        chains: &mut BTreeMap<String, Vec<String>>,
-        roots: &mut BTreeSet<&'a String>,
+        record: &ReviewRecord,
         errors: &mut Vec<anyhow::Error>,
     ) -> Result<()> {
         // Every missing reference is reported here before any other check,
@@ -501,49 +552,11 @@ impl RecordIndex {
                 .is_ok()
         };
         exists("review target", "issue", &record.target);
-        if let ReviewEvent::Disposition {
-            finding,
-            supersedes,
-            follow_up,
-            ..
-        } = &record.event
+        if let Some(issue) = record
+            .disposition()
+            .and_then(|disposition| disposition.follow_up.as_ref())
         {
-            let follow_up_exists = follow_up
-                .as_ref()
-                .map(|issue| exists("follow-up", "issue", issue));
-            let finding_exists = exists("finding", "review", finding);
-            let supersedes_exists = supersedes
-                .as_ref()
-                .is_none_or(|previous| exists("supersedes", "review", previous));
-            if !finding_exists || !supersedes_exists {
-                return Ok(());
-            }
-            let original = &self.reviews[finding];
-            if !matches!(original.event, ReviewEvent::Finding { .. })
-                || original.target != record.target
-            {
-                bail!(
-                    "disposition {} must reference a finding for the same target",
-                    record.header.id
-                );
-            }
-            if let Some(previous) = supersedes {
-                let previous_record = &self.reviews[previous];
-                if !matches!(&previous_record.event, ReviewEvent::Disposition { finding: other, .. } if other == finding)
-                {
-                    bail!("disposition supersedes a decision for another finding");
-                }
-                if successors.insert(previous, &record.header.id).is_some() {
-                    bail!("competing disposition successors for {previous}");
-                }
-                chains
-                    .entry(record.header.id.clone())
-                    .or_default()
-                    .push(previous.clone());
-            } else if !roots.insert(finding) {
-                bail!("competing disposition roots for {finding}");
-            }
-            if let (Some(issue), Some(true)) = (follow_up, follow_up_exists) {
+            if exists("follow-up", "issue", issue) {
                 self.check_follow_up_source(issue, record)?;
             }
         }
@@ -553,7 +566,7 @@ impl RecordIndex {
     /// A follow-up that declares where it was discovered must name the item
     /// its deferring review is about: a review deferral and the follow-up's
     /// own `discovered_from` link are two stores of one fact.
-    fn check_follow_up_source(&self, follow_up: &str, disposition: &ReviewRecord) -> Result<()> {
+    fn check_follow_up_source(&self, follow_up: &str, finding: &ReviewRecord) -> Result<()> {
         let Some(issue) = self.issues.get(follow_up) else {
             return Ok(());
         };
@@ -572,7 +585,7 @@ impl RecordIndex {
         if sources.is_empty()
             || sources
                 .iter()
-                .any(|(_, source)| source.as_deref() == Some(disposition.target.as_str()))
+                .any(|(_, source)| source.as_deref() == Some(finding.target.as_str()))
         {
             return Ok(());
         }
@@ -582,10 +595,10 @@ impl RecordIndex {
             .collect::<Vec<_>>()
             .join(", ");
         bail!(
-            "review_follow_up_source_mismatch: disposition {} defers a finding on {} to {follow_up}, which says it was discovered from {named}; discovered_from must name {} or one of its findings or receipts",
-            disposition.header.id,
-            disposition.target,
-            disposition.target
+            "review_follow_up_source_mismatch: finding {} on {} is deferred to {follow_up}, which says it was discovered from {named}; discovered_from must name {} or one of its findings or receipts",
+            finding.header.id,
+            finding.target,
+            finding.target
         )
     }
 
@@ -594,7 +607,7 @@ impl RecordIndex {
     pub fn discovery_source(&self, kind: &str, id: &str) -> Option<String> {
         match kind {
             "issue" => self.issues.contains_key(id).then(|| id.to_owned()),
-            "review" => self.reviews.get(id).map(|review| review.target.clone()),
+            "review" => self.review_target(id).map(str::to_owned),
             "evidence" => self
                 .evidence
                 .get(id)?
@@ -1264,7 +1277,7 @@ impl RecordIndex {
         match kind {
             "issue" => self.issues.contains_key(id),
             "evidence" => self.evidence.contains_key(id),
-            "review" => self.reviews.contains_key(id),
+            "review" => self.reviews.contains_key(id) || self.retired_dispositions.contains_key(id),
             _ => false,
         }
     }
@@ -1739,16 +1752,11 @@ mod tests {
         );
     }
 
-    fn disposition(
-        id: &str,
-        target: &str,
-        finding: &str,
-        supersedes: &str,
-        follow_up: &str,
-    ) -> ReviewRecord {
+    /// A deferred finding: its follow-up is a reference like its target.
+    fn deferred_finding(id: &str, target: &str, follow_up: &str) -> ReviewRecord {
         let commit = "a".repeat(40);
         let text = format!(
-            "---\nschema: atelier.review\nschema_version: 1\nid: {id}\ntitle: decided\ntarget: {target}\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: disposition\n  finding: {finding}\n  decision: fix_now\n  supersedes: {supersedes}\n  resolution_commit: {commit}\n  follow_up: {follow_up}\n---\n\ndecided\n"
+            "---\nschema: atelier.review\nschema_version: 2\nid: {id}\ntitle: found\ntarget: {target}\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n  event: finding\n  recommendation: defer\n  disposition:\n    decision: defer\n    identity: reviewer\n    commit: {commit}\n    recorded_at: 2026-10-18T00:00:00Z\n    follow_up: {follow_up}\n    reason: later\n---\n\nfound\n"
         );
         atelier_records::review::parse_review_record(&text, Path::new(&format!("reviews/{id}.md")))
             .unwrap()
@@ -1768,31 +1776,10 @@ mod tests {
     }
 
     #[test]
-    fn disposition_missing_finding_and_supersedes_reports_each_once() {
-        let errors = review_validation_errors(vec![disposition(
-            "atelier-dsp1",
-            "atelier-real",
-            "atelier-nofi",
-            "atelier-nosu",
-            "null",
-        )]);
-        let path = ".atelier/reviews/atelier-dsp1.md";
-        assert_eq!(
-            errors,
-            [
-                format!("Review atelier-dsp1 in {path} has finding reference to missing review atelier-nofi"),
-                format!("Review atelier-dsp1 in {path} has supersedes reference to missing review atelier-nosu"),
-            ]
-        );
-    }
-
-    #[test]
-    fn review_with_every_reference_missing_reports_each_once() {
-        let errors = review_validation_errors(vec![disposition(
+    fn a_deferred_finding_reports_each_missing_reference_once() {
+        let errors = review_validation_errors(vec![deferred_finding(
             "atelier-dsp2",
             "atelier-gone",
-            "atelier-nofi",
-            "atelier-nosu",
             "atelier-nofu",
         )]);
         let path = ".atelier/reviews/atelier-dsp2.md";
@@ -1801,9 +1788,62 @@ mod tests {
             [
                 format!("Review atelier-dsp2 in {path} has review target reference to missing issue atelier-gone"),
                 format!("Review atelier-dsp2 in {path} has follow-up reference to missing issue atelier-nofu"),
-                format!("Review atelier-dsp2 in {path} has finding reference to missing review atelier-nofi"),
-                format!("Review atelier-dsp2 in {path} has supersedes reference to missing review atelier-nosu"),
             ]
+        );
+        assert!(review_validation_errors(vec![deferred_finding(
+            "atelier-dsp3",
+            "atelier-real",
+            "atelier-real",
+        )])
+        .is_empty());
+    }
+
+    /// A separate disposition event reads as folded into its finding, as
+    /// the migration would write it, and still resolves as a review; one
+    /// naming a missing finding is reported (ADR 0025).
+    #[test]
+    fn a_separate_disposition_event_reads_as_folded_into_its_finding() {
+        let dir = tempdir().unwrap();
+        let state = dir.path().join(".atelier");
+        fs::create_dir_all(state.join("reviews")).unwrap();
+        fs::create_dir_all(state.join("issues")).unwrap();
+        let store = atelier_records::RecordStore::new(state.clone());
+        store
+            .write_issue_atomic(&issue_record("atelier-real", "task", "todo"))
+            .unwrap();
+        let commit = "a".repeat(40);
+        let review = |id: &str, event: &str| {
+            fs::write(
+                state.join(format!("reviews/{id}.md")),
+                format!("---\nschema: atelier.review\nschema_version: 1\nid: {id}\ntitle: t\ntarget: atelier-real\nidentity: reviewer\ncommit: {commit}\ncreated_at: 2026-10-17T00:00:00Z\nevent:\n{event}---\n\n{id} text\n"),
+            )
+            .unwrap();
+        };
+        review(
+            "atelier-fnd1",
+            "  event: finding\n  recommendation: no_action\n",
+        );
+        review("atelier-dsp1", "  event: disposition\n  finding: atelier-fnd1\n  decision: no_action\n  supersedes: null\n  resolution_commit: null\n  follow_up: null\n");
+        let index = RecordIndex::load_structural(&state).unwrap();
+        let disposition = index
+            .require_review("atelier-fnd1")
+            .unwrap()
+            .disposition()
+            .cloned()
+            .unwrap();
+        assert_eq!(
+            (
+                disposition.reason.as_str(),
+                disposition.migrated_from.as_deref()
+            ),
+            ("atelier-dsp1 text", Some("atelier-dsp1"))
+        );
+        assert_eq!(index.review_target("atelier-dsp1"), Some("atelier-real"));
+        review("atelier-dsp2", "  event: disposition\n  finding: atelier-gone\n  decision: no_action\n  supersedes: null\n  resolution_commit: null\n  follow_up: null\n");
+        let error = format!("{:#}", RecordIndex::load_structural(&state).unwrap_err());
+        assert!(
+            error.contains("atelier-dsp2") && error.contains("name a finding that does not exist"),
+            "{error}"
         );
     }
 

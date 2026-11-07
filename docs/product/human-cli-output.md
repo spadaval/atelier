@@ -105,11 +105,12 @@ A review event is one row, oldest first, in `review list` and in `status`'s
 Reviews (newest first there):
 
 ```
-atelier-1isf  disposition fix_now → atelier-xs5u  @d1c3b1bf  Reviewer R  2026-10-16  Done when: setup claude warns…
+atelier-xs5u  finding fix_now  @d1c3b1bf  Reviewer R  2026-10-16  Done when: setup claude warns…
 ```
 
-The ID, the kind (a finding adds its recommendation, a disposition its
-decision and finding), `on <issue>` unless the list is for that issue, the
+The ID, the kind (a finding adds its recommendation; its disposition is a
+field of the finding, shown with the findings below, not a row of its own),
+`on <issue>` unless the list is for that issue, the
 pinned commit, the identity, the local date and the summary's first line, cut
 at 100 characters. A base exemption reads `trivial_exemption  of <base>`.
 `review list <id>` lists the events of the issue's branch owner and its
@@ -122,8 +123,8 @@ Approval: ⚠ stale — atelier-x16l @e2562bd6 by Independent reviewer 3; change
   1a2b3c4d Tweak the sample: proof-sample.txt
 Findings: 21 disposed, 1 open
   ⚠ atelier-4cid defer, no disposition  The Stop hook runs at the end of every turn…
-  ✓ atelier-ul0a no_action → no_action atelier-ul3r → no_action atelier-6o75  Name could be better
-  ✓ atelier-1ia7 defer → fix_now atelier-g6fd, fixed at a485ef02  docs/adr/0022…
+  ✓ atelier-ul0a no_action → no_action by Reviewer R @c24af21a  Name could be better
+  ✓ atelier-1ia7 defer → fix_now by Author @a485ef02, fixed at a485ef02  docs/adr/0022…
 ```
 
 On the owner's work branch, while it holds commits the base does not, the
@@ -138,14 +139,18 @@ identity matches a Git author of the branch`. Merged
 work is judged on the base as `land` judges history: `✓ accepted on <base>`
 or `⚠ not accepted on <base>`. The views read whichever records the checkout
 has. A
-finding is open until it has a disposition; its chain lists every
-disposition, the latest last.
+finding is open until it has a disposition; its line shows the current one,
+with who set it and the commit it was set at.
 
 `review show <id>` is brief: a header line,
 `<id> <kind> on <issue> @<pin> by <identity> | <timestamp>`, ending
-`| ✓ current` (or the base's word) for an approval or exemption; then a
-finding's `Dispositions:`, or a disposition's `Finding:`, `Fixed at:`,
-`Follow-up:` and `Supersedes:` lines; then the text once.
+`| ✓ current` (or the base's word) for an approval or exemption; then, for a
+finding, `Disposition: <decision> by <identity> @<pin>[, fixed at
+<commit>][, follow-up <id>] | <timestamp>: <reason>` (or `Disposition: ⚠
+none`), `Migrated from: <event>` for one read from, or migrated from, a
+separate disposition event, and
+`Earlier dispositions: git log -p -- .atelier/reviews/<id>.md`; then the text
+once.
 
 ### Branches
 
@@ -426,12 +431,14 @@ update`, `note` and `link`; atelier-8bve for `issue create`).
 
 A command that adds a review event, which changes no existing value,
 confirms it in one line naming its kind, ID, issue and pinned commit, and
-what a disposition settled or the step a finding needs:
+the step a finding needs. `review disposition` sets a field of the finding,
+so its line names the decision, the finding, its issue and the commit HEAD
+was at, the finding's first line, and the disposition it replaced, if any:
 
 ```
 Approval atelier-hleo on atelier-nqgr @c24af21a
 Finding atelier-45rc fix_now on atelier-nqgr @fed2d571. Dispose: atelier review disposition atelier-45rc --identity "..." --decision fix_now --resolution-commit ... "..."
-Disposition atelier-6o75 no_action on atelier-nqgr @c24af21a: finding atelier-rm9e "Name could be better", supersedes atelier-ul3r
+Disposition no_action of atelier-rm9e on atelier-nqgr @c24af21a: "Name could be better", replacing no_action by Author
 ```
 
 `evidence record` adds a receipt, which also changes no existing value, so
@@ -571,12 +578,14 @@ refusal of it leaves stdout empty:
 | `evidence record`, `attach` | the record's ID |
 | `evidence show` | `<id> <result>` |
 | `evidence list`, `review list` | IDs, one per line; for `review list <id>`, those of the rows it lists |
-| `review record`, `approve`, `finding`, `trivial`, `disposition` | the new event's ID |
+| `review record`, `approve`, `finding`, `trivial` | the new event's ID |
+| `review disposition` | the ID of the finding it settles |
 | `review request` | the range to review, `<from>..<head>` in full commits |
 | `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |
 | `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit |
 | `bundle apply` | the IDs of the records it created or updated, one per line |
 | `migrate epics` | the IDs of the epic records it retypes, or would retype in a dry run |
+| `migrate dispositions` | the IDs of the findings it folds a disposition event into, or would in a dry run |
 | `prune` | `mode=<dry-run or apply> eligible=<n> protected=<n> removed=<n> failures=<n>` |
 
 Values are numbers except `prune`'s `mode`. A failure still exits non-zero

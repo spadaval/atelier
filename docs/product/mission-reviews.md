@@ -47,7 +47,7 @@ it stands. Both forms follow the same order:
   as `fast` counts as named only when written as code.
 - **Validation:** how the mission was checked. Item review: how many
   delivered items were approved, how many were waived as trivial, the
-  findings on delivered items by their latest disposition, and the items
+  findings on delivered items by their disposition, and the items
   reviewed without approval or not reviewed at all. Each validation run: the
   receipts one producer recorded against one commit, with each receipt's
   criteria, results and summary, and, while one of its receipts still decides

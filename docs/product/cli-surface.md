@@ -14,7 +14,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `start` | Prepare the branch owner and start selected work. |
 | `bundle` | Preview and apply one-shot graph input. |
 | `evidence` | Record, show, list, and attach commit-bound proof. |
-| `review` | Append approvals, findings, dispositions, and explicit trivial exemptions. |
+| `review` | Append approvals, findings, and explicit trivial exemptions; set findings' dispositions. |
 | `merge` | Check base policy and fast-forward reviewed work, or merge it under `merge_commit`. |
 | `land` | Check handoff invariants and committed records. |
 | `doctor` | Check every done claim and the whole review history. |
@@ -23,7 +23,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `setup` | Install supported harness hooks. |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |
-| `migrate` | Apply one-shot record migrations, such as `migrate epics`. |
+| `migrate` | Apply one-shot record migrations: `migrate epics`, `migrate dispositions`. |
 
 ## Orientation and ordinary work
 
@@ -81,7 +81,8 @@ branch records. Run `atelier land` before a session handoff and
 ## Review and session commands
 
 `review record`, `approve`, `finding`, and `trivial` require an owner, explicit
-`--identity`, and summary. `review disposition` appends a finding decision.
+`--identity`, and summary. `review disposition` sets a finding's disposition,
+replacing any earlier one ([dispositions](reviews-and-merge.md#dispositions)).
 `review request <id>` prints the reviewer brief for an owner (see
 [requesting a review](reviews-and-merge.md#requesting-a-review)).
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.

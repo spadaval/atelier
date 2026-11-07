@@ -32,7 +32,7 @@ pub struct Item {
     pub done_when: Option<String>,
 }
 
-/// A line of review history: a finding with its latest disposition, or an
+/// A line of review history: a finding with its disposition, or an
 /// account or approval.
 #[derive(Debug, PartialEq)]
 pub struct HistoryLine {
@@ -161,28 +161,26 @@ fn gather(
             summary: record.summary.clone(),
         };
         match &record.event {
-            ReviewEvent::Finding { recommendation } => {
-                let state = match index.latest_disposition(&record.header.id) {
+            ReviewEvent::Finding {
+                recommendation,
+                disposition,
+            } => {
+                let state = match disposition {
                     None => "open, no disposition".to_owned(),
-                    Some(disposition) => match &disposition.event {
-                        ReviewEvent::Disposition {
-                            decision,
-                            resolution_commit,
-                            follow_up,
-                            ..
-                        } => {
-                            let mut state =
-                                format!("{} by {}", decision.as_str(), disposition.identity);
-                            if let Some(commit) = resolution_commit {
-                                state.push_str(&format!(" at {}", short(commit)));
-                            }
-                            if let Some(follow_up) = follow_up {
-                                state.push_str(&format!(" to {follow_up}"));
-                            }
-                            state
+                    Some(disposition) => {
+                        let mut state = format!(
+                            "{} by {}",
+                            disposition.decision.as_str(),
+                            disposition.identity
+                        );
+                        if let Some(commit) = &disposition.resolution_commit {
+                            state.push_str(&format!(" at {}", short(commit)));
                         }
-                        _ => "open, no disposition".to_owned(),
-                    },
+                        if let Some(follow_up) = &disposition.follow_up {
+                            state.push_str(&format!(" to {follow_up}"));
+                        }
+                        state
+                    }
                 };
                 findings.push(line(format!("{} | {state}", recommendation.as_str())));
             }
@@ -197,7 +195,6 @@ fn gather(
                 }
                 reviews.push(line(what.to_owned()));
             }
-            ReviewEvent::Disposition { .. } => {}
         }
     }
     // Open findings first; the rest keep their order.

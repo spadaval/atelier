@@ -96,7 +96,11 @@ enum ReviewCommands {
         override_usage = "atelier review trivial [OPTIONS] --identity <IDENTITY> <ID> <SUMMARY>\n       atelier review trivial [OPTIONS] --identity <IDENTITY> --base <COMMIT> <SUMMARY>"
     )]
     Trivial(TrivialArgs),
-    /// Record the decision on a finding
+    /// Set the decision on a finding, replacing any earlier one
+    ///
+    /// The disposition is a field of the finding, with who set it and the
+    /// commit it was set at; Git keeps earlier ones in the finding file's
+    /// history.
     Disposition {
         /// The finding's review event ID
         finding: String,
@@ -324,6 +328,17 @@ enum MigrateCommands {
         /// Issue type for migrated epics
         #[arg(long, default_value = "feature")]
         to: String,
+        /// Write the changes; without this flag the command only reports them
+        #[arg(long)]
+        apply: bool,
+    },
+    /// Write separate disposition events into their findings; dry run unless --apply
+    ///
+    /// Optional cleanup: Atelier already reads each finding's latest
+    /// disposition event as its disposition. This writes it as the finding's
+    /// field, naming the event, and removes every disposition event; Git
+    /// history keeps them (ADR 0025).
+    Dispositions {
         /// Write the changes; without this flag the command only reports them
         #[arg(long)]
         apply: bool,
@@ -960,7 +975,10 @@ fn run() -> Result<()> {
                 ReviewCommands::Finding {
                     args,
                     recommendation,
-                } => append(args, ReviewEvent::Finding { recommendation }),
+                } => append(args, ReviewEvent::Finding {
+                        recommendation,
+                        disposition: None,
+                    }),
                 ReviewCommands::Disposition {
                     finding,
                     identity,
@@ -1148,6 +1166,9 @@ fn run() -> Result<()> {
         Commands::Migrate {
             action: MigrateCommands::Epics { to, apply },
         } => commands::migrate::epics(&to, apply, quiet),
+        Commands::Migrate {
+            action: MigrateCommands::Dispositions { apply },
+        } => commands::migrate::dispositions(apply, quiet),
 
         Commands::Prune {
             apply,
@@ -1217,7 +1238,9 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         Commands::Start { .. } => CanonicalTransactionMode::Exclusive,
         Commands::Prune { apply: true, .. } => CanonicalTransactionMode::Exclusive,
         Commands::Migrate {
-            action: MigrateCommands::Epics { apply: true, .. },
+            action:
+                MigrateCommands::Epics { apply: true, .. }
+                | MigrateCommands::Dispositions { apply: true },
         } => CanonicalTransactionMode::Exclusive,
         Commands::Review {
             action:

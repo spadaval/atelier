@@ -1287,12 +1287,12 @@ fn touched_claims(
                     return Ok(None);
                 };
                 // A base exemption is about no issue.
-                if let atelier_records::review::ReviewFile::Event(record) = record {
-                    touched.insert(record.target);
+                if let Some(target) = record.target() {
+                    touched.insert(target.to_owned());
                 }
             }
-            if let Ok(review) = index.require_review(id) {
-                touched.insert(review.target.clone());
+            if let Some(target) = index.review_target(id) {
+                touched.insert(target.to_owned());
             }
         } else {
             if before {

@@ -1,11 +1,12 @@
-//! Creation and inspection of immutable, self-declared review events.
+//! Creation and inspection of self-declared review events, and of the
+//! dispositions findings carry (ADR 0025).
 use crate::commands::git::{resolve, text};
 use crate::human_output::{count_noun, display_timestamp, local_date, short_commit};
 use anyhow::{bail, Result};
 use atelier_app::record_ref::RecordKind;
 use atelier_app::review_gate::{self, ApprovalState, NotCurrent};
 use atelier_app::{git_freshness as git, record_index::RecordIndex, storage_layout::StorageLayout};
-use atelier_core::{BaseExemption, FindingDecision, ReviewEvent, ReviewRecord};
+use atelier_core::{BaseExemption, Disposition, FindingDecision, ReviewEvent, ReviewRecord};
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -30,66 +31,31 @@ pub fn append(
     let pin = commit.map(str::to_owned).unwrap_or(git::head_commit(repo)?);
     atelier_records::review::validate_commit(&pin)?;
     require_on_branch(repo, &pin)?;
-    let mut finding_line = None;
-    if let ReviewEvent::Disposition {
-        finding,
-        supersedes,
-        resolution_commit,
-        follow_up,
-        ..
-    } = &event
-    {
-        let record = index.require_review(finding)?;
-        if !matches!(record.event, ReviewEvent::Finding { .. }) || record.target != owner {
-            bail!("disposition must target the finding's owner");
-        }
-        if supersedes.as_ref().map(String::as_str)
-            != index
-                .latest_disposition(finding)
-                .map(|record| record.header.id.as_str())
-        {
-            bail!("disposition successor is not current");
-        }
-        if let Some(commit) = resolution_commit {
-            atelier_records::review::validate_commit(commit)?;
-            require_on_branch(repo, commit)?;
-            if commit == &record.commit
-                || git::git_output(
-                    repo,
-                    &["merge-base", "--is-ancestor", &record.commit, commit],
-                )
-                .is_err()
-            {
-                bail!(
-                    "resolution commit {commit} does not follow {}, the commit finding {} reviewed. Next: git log --format=%H {}..HEAD",
-                    short_commit(&record.commit),
-                    record.header.id,
-                    record.commit
-                );
-            }
-        }
-        if let Some(id) = follow_up {
-            index.require_issue(id)?;
-        }
-        finding_line = Some(first_line(&record.summary));
-    }
     // Read before the record exists, so a failure here writes nothing.
     let authors = authors_at_head(repo, &index, &owner)?;
     let created = atelier_app::project_config::record_store(&layout.canonical_dir())?
         .create_review(&owner, identity, &pin, event, summary)?;
-    let warning = author_warning(&created, &authors);
+    let warning = (created.event == ReviewEvent::Approval
+        && !review_gate::independent(&created, &authors))
+    .then(|| author_warning("review.current"));
+    confirm(&created.header.id, &confirmation(&created), warning, quiet);
+    Ok(())
+}
+
+/// Prints a recording command's one-line confirmation and any warning;
+/// quiet output is `id`, with the warning on stderr.
+fn confirm(id: &str, line: &str, warning: Option<String>, quiet: bool) {
     if quiet {
-        println!("{}", created.header.id);
+        println!("{id}");
         if let Some(warning) = warning {
             eprintln!("{warning}");
         }
-        return Ok(());
+        return;
     }
-    println!("{}", confirmation(&created, finding_line.as_deref()));
+    println!("{line}");
     if let Some(warning) = warning {
         println!("{warning}");
     }
-    Ok(())
 }
 
 /// A pin given on the command line must be a commit this branch holds.
@@ -132,32 +98,23 @@ fn branch_owner(index: &RecordIndex, id: &str) -> String {
     }
 }
 
-/// The warning for an event the gates will refuse because its identity is
+/// The warning for a record the gates will refuse because its identity is
 /// one of the work's authors: an approval (`review.current`), or a defer or
 /// no_action disposition (`findings.disposed`).
-fn author_warning(record: &ReviewRecord, authors: &BTreeSet<String>) -> Option<String> {
-    let gate = match &record.event {
-        ReviewEvent::Approval => "review.current",
-        ReviewEvent::Disposition {
-            decision: FindingDecision::Defer | FindingDecision::NoAction,
-            ..
-        } => "findings.disposed",
-        _ => return None,
-    };
-    (!review_gate::independent(record, authors))
-        .then(|| format!("⚠ identity matches a Git author; this will not satisfy {gate}"))
+fn author_warning(gate: &str) -> String {
+    format!("⚠ identity matches a Git author; this will not satisfy {gate}")
 }
 
 /// One line saying what was recorded: the kind, ID, owner and short pin,
-/// then what a disposition settled, or the step a finding needs next.
-fn confirmation(record: &ReviewRecord, finding_line: Option<&str>) -> String {
+/// or the step a finding needs next.
+fn confirmation(record: &ReviewRecord) -> String {
     let id = &record.header.id;
     let on = format!("on {} @{}", record.target, short_commit(&record.commit));
     match &record.event {
         ReviewEvent::Review => format!("Review account {id} {on}"),
         ReviewEvent::Approval => format!("Approval {id} {on}"),
         ReviewEvent::TrivialExemption => format!("Trivial exemption {id} {on}"),
-        ReviewEvent::Finding { recommendation } => {
+        ReviewEvent::Finding { recommendation, .. } => {
             let decision = recommendation.as_str();
             let resolution = if *recommendation == FindingDecision::FixNow {
                 " --resolution-commit ..."
@@ -170,46 +127,32 @@ fn confirmation(record: &ReviewRecord, finding_line: Option<&str>) -> String {
                 "Finding {id} {decision} {on}. Dispose: atelier review disposition {id} --identity \"...\" --decision {decision}{resolution} \"...\""
             )
         }
-        ReviewEvent::Disposition {
-            finding,
-            decision,
-            supersedes,
-            resolution_commit,
-            follow_up,
-        } => {
-            let mut line = format!(
-                "Disposition {id} {} {on}: finding {finding} \"{}\"",
-                decision.as_str(),
-                finding_line.unwrap_or_default()
-            );
-            line.push_str(&disposition_extras(
-                resolution_commit.as_deref(),
-                follow_up.as_deref(),
-                supersedes.as_deref(),
-            ));
-            line
-        }
     }
 }
 
-/// `, fixed at <commit>`, `, follow-up <id>` and `, supersedes <id>`, as
-/// far as a disposition has them.
-fn disposition_extras(
-    resolution: Option<&str>,
-    follow_up: Option<&str>,
-    supersedes: Option<&str>,
-) -> String {
+/// `, fixed at <commit>` and `, follow-up <id>`, as far as a disposition
+/// has them.
+fn disposition_extras(disposition: &Disposition) -> String {
     let mut extras = String::new();
-    if let Some(commit) = resolution {
+    if let Some(commit) = &disposition.resolution_commit {
         extras.push_str(&format!(", fixed at {}", short_commit(commit)));
     }
-    if let Some(issue) = follow_up {
+    if let Some(issue) = &disposition.follow_up {
         extras.push_str(&format!(", follow-up {issue}"));
     }
-    if let Some(previous) = supersedes {
-        extras.push_str(&format!(", supersedes {previous}"));
-    }
     extras
+}
+
+/// A disposition as a finding's line shows it:
+/// `<decision> by <identity> @<pin>[, fixed at <commit>][, follow-up <id>]`.
+fn disposition_step(disposition: &Disposition) -> String {
+    format!(
+        "{} by {} @{}{}",
+        disposition.decision.as_str(),
+        disposition.identity,
+        short_commit(&disposition.commit),
+        disposition_extras(disposition)
+    )
 }
 
 /// Records a trivial exemption of one commit on the base branch, with no
@@ -249,6 +192,8 @@ pub fn exempt_base(commit: &str, identity: &str, summary: &str, quiet: bool) -> 
     Ok(())
 }
 
+/// Sets a finding's disposition, pinned at HEAD, replacing any earlier one;
+/// Git keeps the earlier ones in the finding file's history (ADR 0025).
 pub fn disposition(
     finding: &str,
     identity: &str,
@@ -262,6 +207,7 @@ pub fn disposition(
         bail!("DEFER requires --follow-up <issue-id>");
     }
     let layout = StorageLayout::discover()?;
+    let repo = layout.repo_root();
     let index = RecordIndex::load_structural(&layout.canonical_dir())?;
     let finding = index.resolve(RecordKind::Review, finding)?;
     let original = index.require_review(&finding)?;
@@ -279,19 +225,73 @@ pub fn disposition(
             original.target
         );
     }
+    let pin = git::head_commit(repo)?;
+    if let Some(commit) = &resolution {
+        atelier_records::review::validate_commit(commit)?;
+        require_on_branch(repo, commit)?;
+        if commit == &original.commit
+            || git::git_output(
+                repo,
+                &["merge-base", "--is-ancestor", &original.commit, commit],
+            )
+            .is_err()
+        {
+            bail!(
+                "resolution commit {commit} does not follow {}, the commit finding {} reviewed. Next: git log --format=%H {}..HEAD",
+                short_commit(&original.commit),
+                original.header.id,
+                original.commit
+            );
+        }
+    }
     let follow_up = follow_up
         .map(|id| index.resolve(RecordKind::Issue, &id))
         .transpose()?;
-    let event = ReviewEvent::Disposition {
+    let disposition = Disposition {
         decision,
-        supersedes: index
-            .latest_disposition(&finding)
-            .map(|record| record.header.id.clone()),
-        finding,
+        identity: identity.to_owned(),
+        commit: pin,
+        recorded_at: chrono::Utc::now(),
         resolution_commit: resolution,
         follow_up,
+        reason: summary.to_owned(),
+        migrated_from: None,
     };
-    append(&original.target, identity, None, summary, event, quiet)
+    atelier_records::review::validate_disposition(&disposition)?;
+    // Read before the record changes, so a failure here writes nothing.
+    let authors = authors_at_head(repo, &index, &original.target)?;
+    // The disposition an older Atelier recorded as separate events is read
+    // as folded into the finding (ADR 0025); writing the field removes them.
+    let previous = original.disposition().cloned();
+    let store = atelier_app::project_config::record_store(&layout.canonical_dir())?;
+    let (updated, _) = store.set_disposition(&finding, disposition.clone())?;
+    for event in index
+        .retired_dispositions()
+        .filter(|event| event.finding == finding)
+    {
+        store.remove_retired_disposition(&event.id)?;
+    }
+    let mut line = format!(
+        "Disposition {} of {} on {} @{}: \"{}\"{}",
+        decision.as_str(),
+        updated.header.id,
+        updated.target,
+        short_commit(&disposition.commit),
+        first_line(&updated.summary),
+        disposition_extras(&disposition)
+    );
+    if let Some(previous) = previous {
+        line.push_str(&format!(
+            ", replacing {} by {}",
+            previous.decision.as_str(),
+            previous.identity
+        ));
+    }
+    let warning = (decision != FindingDecision::FixNow
+        && !review_gate::identity_independent(identity, &authors))
+    .then(|| author_warning("findings.disposed"));
+    confirm(&updated.header.id, &line, warning, quiet);
+    Ok(())
 }
 
 /// Lists review events oldest first, one row each. For an issue, the rows
@@ -344,7 +344,7 @@ pub fn list(reference: Option<&str>, json: bool, quiet: bool) -> Result<()> {
     for line in approval_lines(repo, &index, &owner)? {
         println!("{line}");
     }
-    for line in finding_lines(&index, &records) {
+    for line in finding_lines(&records) {
         println!("{line}");
     }
     Ok(())
@@ -391,14 +391,13 @@ fn first_line(summary: &str) -> String {
     crate::utils::truncate(line, SUMMARY_LIMIT)
 }
 
-/// What an event is, as a row names it: its stored kind, a finding's
-/// recommendation, or a disposition's decision and finding.
+/// What an event is, as a row names it: its stored kind, with a finding's
+/// recommendation.
 fn event_kind(event: &ReviewEvent) -> String {
     match event {
-        ReviewEvent::Finding { recommendation } => format!("finding {}", recommendation.as_str()),
-        ReviewEvent::Disposition {
-            finding, decision, ..
-        } => format!("disposition {} → {finding}", decision.as_str()),
+        ReviewEvent::Finding { recommendation, .. } => {
+            format!("finding {}", recommendation.as_str())
+        }
         other => other.name().to_owned(),
     }
 }
@@ -630,76 +629,32 @@ fn listed_paths(paths: &[std::path::PathBuf]) -> String {
     listed.join(", ")
 }
 
-/// A finding's dispositions, oldest first, following each successor's
-/// `supersedes` back from the latest.
-fn disposition_chain<'i>(index: &'i RecordIndex, finding: &str) -> Vec<&'i ReviewRecord> {
-    let mut chain = Vec::new();
-    let mut next = index.latest_disposition(finding);
-    while let Some(record) = next {
-        chain.push(record);
-        next = match &record.event {
-            ReviewEvent::Disposition {
-                supersedes: Some(previous),
-                ..
-            } => index.reviews().find(|record| &record.header.id == previous),
-            _ => None,
-        };
-    }
-    chain.reverse();
-    chain
-}
-
-/// A disposition as a finding's chain shows it:
-/// `<decision> <id>[, fixed at <commit>][, follow-up <id>]`.
-fn disposition_step(record: &ReviewRecord) -> String {
-    match &record.event {
-        ReviewEvent::Disposition {
-            decision,
-            resolution_commit,
-            follow_up,
-            ..
-        } => format!(
-            "{} {}{}",
-            decision.as_str(),
-            record.header.id,
-            disposition_extras(resolution_commit.as_deref(), follow_up.as_deref(), None)
-        ),
-        _ => record.header.id.clone(),
-    }
-}
-
 /// The findings among `records`, open ones first, each with its
-/// disposition chain: `⚠ <id> <recommendation>, no disposition  <summary>`
-/// or `✓ <id> <recommendation> → <decision> <id> → ...  <summary>`.
-fn finding_lines(index: &RecordIndex, records: &[&ReviewRecord]) -> Vec<String> {
+/// disposition: `⚠ <id> <recommendation>, no disposition  <summary>` or
+/// `✓ <id> <recommendation> → <decision> by <identity> @<pin>...  <summary>`.
+fn finding_lines(records: &[&ReviewRecord]) -> Vec<String> {
     let mut rows = records
         .iter()
         .filter_map(|record| match &record.event {
-            ReviewEvent::Finding { recommendation } => {
-                let chain = disposition_chain(index, &record.header.id);
+            ReviewEvent::Finding {
+                recommendation,
+                disposition,
+            } => {
                 let summary = first_line(&record.summary);
-                Some(if chain.is_empty() {
-                    (
+                let id = &record.header.id;
+                let recommendation = recommendation.as_str();
+                Some(match disposition {
+                    None => (
                         false,
-                        format!(
-                            "  ⚠ {} {}, no disposition  {summary}",
-                            record.header.id,
-                            recommendation.as_str()
-                        ),
-                    )
-                } else {
-                    let steps = chain
-                        .iter()
-                        .map(|step| format!(" → {}", disposition_step(step)))
-                        .collect::<String>();
-                    (
+                        format!("  ⚠ {id} {recommendation}, no disposition  {summary}"),
+                    ),
+                    Some(disposition) => (
                         true,
                         format!(
-                            "  ✓ {} {}{steps}  {summary}",
-                            record.header.id,
-                            recommendation.as_str()
+                            "  ✓ {id} {recommendation} → {}  {summary}",
+                            disposition_step(disposition)
                         ),
-                    )
+                    ),
                 })
             }
             _ => None,
@@ -767,50 +722,26 @@ pub fn show(id: &str, quiet: bool) -> Result<()> {
             let mut judge = Judge::new(layout.repo_root(), &index, &owner)?;
             header.push_str(&format!(" | {}", judge.standing(&index, record)?));
         }
-        ReviewEvent::Finding { .. } => {
-            let chain = disposition_chain(&index, &record.header.id);
-            if chain.is_empty() {
-                links.push("Dispositions: ⚠ none".to_owned());
-            } else {
-                links.push("Dispositions:".to_owned());
-                for step in chain {
-                    links.push(format!(
-                        "  → {} by {}: {}",
-                        disposition_step(step),
-                        step.identity,
-                        first_line(&step.summary)
-                    ));
-                }
-            }
-        }
-        ReviewEvent::Disposition {
-            finding,
-            resolution_commit,
-            follow_up,
-            supersedes,
+        ReviewEvent::Finding {
+            disposition: None, ..
+        } => links.push("Disposition: ⚠ none".to_owned()),
+        ReviewEvent::Finding {
+            disposition: Some(disposition),
             ..
         } => {
-            if let Ok(original) = index.require_review(finding) {
-                let recommendation = match &original.event {
-                    ReviewEvent::Finding { recommendation } => recommendation.as_str(),
-                    _ => "",
-                };
-                links.push(format!(
-                    "Finding: {} {recommendation} by {}: {}",
-                    original.header.id,
-                    original.identity,
-                    first_line(&original.summary)
-                ));
+            links.push(format!(
+                "Disposition: {} | {}: {}",
+                disposition_step(disposition),
+                display_timestamp(disposition.recorded_at),
+                first_line(&disposition.reason)
+            ));
+            if let Some(event) = &disposition.migrated_from {
+                links.push(format!("Migrated from: {event}"));
             }
-            if let Some(commit) = resolution_commit {
-                links.push(format!("Fixed at: {}", short_commit(commit)));
-            }
-            if let Some(issue) = follow_up {
-                links.push(format!("Follow-up: {issue}"));
-            }
-            if let Some(previous) = supersedes {
-                links.push(format!("Supersedes: {previous}"));
-            }
+            links.push(format!(
+                "Earlier dispositions: git log -p -- .atelier/reviews/{}.md",
+                record.header.id
+            ));
         }
         ReviewEvent::Review => {}
     }

@@ -204,8 +204,13 @@ fn a_review_step_and_the_close_each_commit_their_own_records() {
         ],
     );
     assert_eq!(commit_count(dir), before + 1);
+    // The staged finding and its disposition are one file (ADR 0025).
     let changed = changed_in_head(dir);
-    assert_eq!(changed.len(), 2, "{changed:?}");
+    assert_eq!(
+        changed,
+        [format!(".atelier/reviews/{finding}.md")],
+        "{changed:?}"
+    );
     assert!(changed
         .iter()
         .all(|path| path.starts_with(".atelier/reviews/")));

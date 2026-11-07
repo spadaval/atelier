@@ -778,6 +778,16 @@ fn protect_referenced_candidates(
             edges.push((("review", record.header.id.as_str()), (kind, id), role));
         }
     }
+    // A separate disposition event from before ADR 0025 goes with its
+    // finding and target, and keeps its follow-up.
+    for event in index.retired_dispositions() {
+        let source = ("review", event.id.as_str());
+        edges.push((source, ("issue", event.target.as_str()), "reviews"));
+        edges.push((source, ("review", event.finding.as_str()), "disposes"));
+        if let Some(follow_up) = &event.follow_up {
+            edges.push((source, ("issue", follow_up.as_str()), "follow_up"));
+        }
+    }
     loop {
         let eligible = issues
             .iter()
@@ -995,6 +1005,21 @@ fn review_candidates(tracker: &TrackerContext, cutoff: NaiveDate) -> Vec<Canonic
             latest_at: record.header.created_at,
             protection: None,
         })
+        .chain(
+            tracker
+                .index
+                .retired_dispositions()
+                .filter(|event| local_date(event.created_at) < cutoff)
+                .map(|event| CanonicalCandidate {
+                    kind: "review-record",
+                    id: event.id.clone(),
+                    title: format!("disposition of {}", event.finding),
+                    status: "recorded".into(),
+                    path: PathBuf::from("reviews").join(format!("{}.md", event.id)),
+                    latest_at: event.created_at,
+                    protection: None,
+                }),
+        )
         .collect()
 }
 

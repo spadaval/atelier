@@ -18,9 +18,9 @@ use support_cli::{commit, git, ok};
 const RECORD_ONLY_COMMITS: usize = 13;
 
 /// For each finding, by its recommendation: the finding plus every review
-/// event that names it.
+/// event that names it. A finding carries its disposition (atelier-hwxm).
 const REVIEW_FILES_PER_FINDING: [(&str, usize); 3] =
-    [("fix_now", 2), ("defer", 3), ("no_action", 3)];
+    [("fix_now", 1), ("defer", 1), ("no_action", 1)];
 
 const AUTHOR: &str = "Author";
 const REVIEWER: &str = "Reviewer";

@@ -49,10 +49,12 @@ resolves its owner; otherwise ownership is inferred from the current branch.
 
 A failed precondition is one more failed check, and land still runs every gate
 it can: `land_records_uncommitted` names every tracker record that differs from
-HEAD (the first five, then a count) as modified, new, deleted or staged, with
+HEAD (the first five, then a count) as modified, disposition changed, new,
+deleted or staged, with
 `git add .atelier && git commit -m "…"`, except that a committed review record
-that was changed or deleted is restored with `git restore --source=HEAD
---staged --worktree -- <path>`, since review records are append-only; the
+that was deleted, or changed in anything but a finding's disposition, is
+restored with `git restore --source=HEAD --staged --worktree -- <path>`, since
+review records are append-only apart from dispositions (ADR 0025); the
 gates read HEAD's committed records instead. A rewrite already committed
 refuses with `review_append_only`, whose fix leaves that commit out with
 `git rebase --autostash --onto <commit>~1 <commit>`, named by the commit so it

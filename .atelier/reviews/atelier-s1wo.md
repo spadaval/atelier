@@ -1,6 +1,6 @@
 ---
 schema: atelier.review
-schema_version: 1
+schema_version: 2
 id: atelier-s1wo
 title: 'crates/atelier-cli/src/commands/issue.rs:840: issue update --body only checks section parse/required-for-type, not the record rules atelier check enforces, so it writes records that then fail check. Repro (scratch repo): epic created with Outcome+Proof, transitioned ready (todo), then ''issue update <epic> --body $"## Outcome\nO2"'' succeeds and ''atelier check'' fails with ''Ready epic requires Proof''; likewise a mission''s Success criteria can be dropped (''Mission requires Success criteria or a linked strategy''). This violates the constraint that update --body is validated the same as atelier check. Fix: before write_issue_atomic, run the same per-record lint used by check (lint.rs:136-188 section/Proof/Success criteria rules) on the updated record and refuse on any finding; add tests for ready-epic Proof removal and mission Success criteria removal.'
 target: atelier-kaor
@@ -10,6 +10,14 @@ created_at: 2026-10-15T23:46:43.731294556Z
 event:
   event: finding
   recommendation: fix_now
+  disposition:
+    decision: fix_now
+    identity: Claude Opus 5.5 (orchestrator)
+    commit: 0f489f2f14870835465001d44cd3f6e024830c81
+    recorded_at: 2026-10-15T23:50:09.343901332Z
+    resolution_commit: 0f489f2f14870835465001d44cd3f6e024830c81
+    reason: Fixed in 0f489f2f14870835465001d44cd3f6e024830c81
+    migrated_from: atelier-rz47
 ---
 
 crates/atelier-cli/src/commands/issue.rs:840: issue update --body only checks section parse/required-for-type, not the record rules atelier check enforces, so it writes records that then fail check. Repro (scratch repo): epic created with Outcome+Proof, transitioned ready (todo), then 'issue update <epic> --body $"## Outcome\nO2"' succeeds and 'atelier check' fails with 'Ready epic requires Proof'; likewise a mission's Success criteria can be dropped ('Mission requires Success criteria or a linked strategy'). This violates the constraint that update --body is validated the same as atelier check. Fix: before write_issue_atomic, run the same per-record lint used by check (lint.rs:136-188 section/Proof/Success criteria rules) on the updated record and refuse on any finding; add tests for ready-epic Proof removal and mission Success criteria removal.
