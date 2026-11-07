@@ -36,8 +36,15 @@ claude` warns, with that fix, when AGENTS.md exists and the repository has a
 `CLAUDE.md` or `.claude/CLAUDE.md` but neither imports `@AGENTS.md`.
 
 `land` checks a handoff without writing records, committing, switching, or
-merging; a failed plain command exits nonzero with the failed invariant and
-recovery step.
+merging. On a named branch other than the base, as HEAD's committed policy
+names it, where work is in progress, it
+reports what is open and refuses nothing: each failed check is a line with its
+recovery step, the verdict reads `land: work in progress — N checks open (…)`,
+and it exits 0, since nothing there reaches the base without `merge`'s gates
+(ADR 0028 decision 5). On the base, and on a detached HEAD, a failed plain
+command exits nonzero with the failed invariant and recovery step, since that
+is where unreviewed code would reach the base. `atelier doctor` refuses any
+failure wherever it runs.
 
 Canonical records and policy must match committed HEAD, including ignored
 canonical paths and files hidden by Git index flags. Active work must have a
@@ -72,10 +79,10 @@ as `land_rebase_in_progress`, `land_merge_in_progress`,
 --abort` or `git revert --abort` (atelier-vlhn, atelier-zegg); `land_completion_dirty` names a done owner's uncommitted
 paths, to commit (`git add -A && git commit -m "…"`) or set aside (`git stash
 push --include-untracked`); an invalid committed policy is reported once, as
-its `workflow_*` code, and `land_base_mismatch`, whose fix records the
-policy's base in the owner's record and commits it, also lets the gates run
-(atelier-kiry, atelier-grsi, atelier-7ts2, atelier-y0en). `land <id>` away from
-the owner's branch refuses with `land_branch_mismatch: owned on <branch>, not
+its `workflow_*` code, which also lets the gates run (atelier-kiry,
+atelier-grsi, atelier-7ts2, atelier-y0en). The base is the policy's
+`base_branch`; a `branch_base` an owner record carries is not read. `land <id>`
+away from the owner's branch reports `land_branch_mismatch: owned on <branch>, not
 on <here>` and `git switch <branch> && atelier land`, finding the branch from
 the local branches' own records when this checkout's do not name it; a done
 owner whose branch is gone says to land the checkout as it is; a mission says
@@ -98,29 +105,31 @@ tracker files (anything under `.atelier/`) since its merge base with the base
 branch. A path counts only if it changed relative to every local and
 remote-tracking copy of the base, so a stale local base does not blame the
 branch for upstream records. If the branch does change tracker files, or
-shares no history with the base, `land` refuses with `land_work_untraceable`,
+shares no history with the base, `land` reports `land_work_untraceable`,
 names the changed paths (the first five, then a count), and points to
 `atelier start`. A branch that installs Atelier says so: while no copy of the
 base has a workflow policy, `land --install` passes with a note on how to land
 it (see [installing Atelier](workflow-configuration.md#installing-atelier)), and
-plain `land` refuses with `land_install_unconfirmed` and points to the flag.
+plain `land` reports `land_install_unconfirmed` and points to the flag.
 `land` does not infer an install from the branch's own policy, which the branch
 can edit (atelier-bibd). `--install` is refused on an owner's branch, on the
-base, and when the base already has a policy. The Stop hook runs plain `land`,
-so on an installing branch it blocks each turn's stop with
-`land_install_unconfirmed`, warning instead on a repeated stop, until the
-install merges.
+base, and when the base already has a policy. On a named branch these are work
+in progress, reported with exit 0 and without blocking the Stop hook; on a
+detached HEAD they refuse.
 
 `land` ends with a verdict line, the last line of its combined output (see
-[verdict line](human-cli-output.md#verdict-line)): `land: passed`, or `land:
+[verdict line](human-cli-output.md#verdict-line)): `land: passed`; `land: work
+in progress — N checks open (…)` on a work branch, with exit 0; or `land:
 refused — N checks (…)` with a non-zero exit. The Stop hook's block reason
 is the refusal as `land` prints it, ending with that verdict, with no
 sentence of its own, so each failure carries its one recovery step; its
 message on a repeated stop is one sentence, then the same refusal
 (atelier-467y, atelier-ft88). `land --push` runs the same
-checks and, only when they pass, pushes the checked HEAD to the current
-branch's own configured upstream (`branch.<name>.remote` and `.merge`) through
-git, then ends `land: passed, pushed to <remote>/<branch>`. A refusal pushes
+checks and, when they pass or report work in progress on a branch, pushes the
+checked HEAD to the current branch's own configured upstream
+(`branch.<name>.remote` and `.merge`) through git, then ends `land: passed,
+pushed to <remote>/<branch>` or `land: work in progress — N checks open (…),
+pushed to <remote>/<branch>`. A refusal pushes
 nothing and ends `land: refused — 1 check (<code>), nothing pushed`; a branch
 with no upstream or a detached HEAD refuses (`land_push_no_upstream`,
 `land_push_detached`), as does an upstream on remote `.` or on a branch of
@@ -132,7 +141,7 @@ URL or path, so unreviewed base commits could not be checked
 (`land_push_base_upstream_unresolved`; fix it with `git fetch --prune` and
 `git branch -u <remote>/<base> <base>`).
 What is pushed is the commit land checked: if HEAD moved during the checks
-land refuses (`land_state_changed`). A push git rejects exits non-zero with
+nothing is pushed (`land_state_changed`). A push git rejects exits non-zero with
 git's message and `land: refused — 1 check (land_push_failed), nothing
 pushed`. `--push` does not combine with
 `--hook`. Prefer it to `atelier land && git push`, and never push behind a
@@ -173,9 +182,10 @@ exemptions, and to review records the base already held.
 for history that reached the base without the gates, such as a direct push
 (atelier-37uq).
 
-Checked integrated claims retain proof and independent acceptance that were
-valid when completion was claimed. Historical acceptance preserves the original work's
-author scope and requires immutable review history. Without an owner, a claim
+Checked integrated claims retain the acceptance that was valid when completion
+was claimed. Historical acceptance requires immutable review history: an
+approval counts only as first committed, and its identity is recorded, not
+compared with the work's authors (atelier-md0v). Without an owner, a claim
 counts as unchanged when any parent of HEAD already has it, so a merge tip, such
 as a branch that merged the base in last, keeps the claims it brings in through
 its other parents (atelier-kqt9).
@@ -195,14 +205,13 @@ Installed commands are `atelier status --hook claude` and
 `atelier land --hook claude`, with the selected executable. Rerunning setup
 replaces an earlier managed `prime --hook claude` handler. The adapters read
 JSON stdin and use its `cwd` to find the checkout. SessionStart returns context
-through `hookSpecificOutput.additionalContext`. A failed Stop returns
-`decision: "block"` and a reason at exit 0. When `stop_hook_active` signals a
-repeated failure, it emits a warning and allows stopping to avoid a loop; plain
-`land` continues to fail until the invariant is fixed.
+through `hookSpecificOutput.additionalContext`. A Stop that `land` refuses
+returns `decision: "block"` and a reason at exit 0. When `stop_hook_active`
+signals a repeated failure, it emits a warning and allows stopping to avoid a
+loop; plain `land` continues to fail until the invariant is fixed.
 
-The Stop hook blocks only for a refusal the agent must act on now, judged
-from land's failed checks by code and where land ran; plain `land` still
-refuses, and exits non-zero, in every case. Each case below returns a
+The Stop hook blocks only for a refusal on the base or a detached HEAD, where
+`land` itself refuses (ADR 0028 decision 5). Each case below returns a
 `systemMessage` at exit 0 instead of a block:
 
 - A payload the adapter cannot use, such as input that is not JSON, another
@@ -210,20 +219,18 @@ refuses, and exits non-zero, in every case. Each case below returns a
   misconfiguration, not a landing failure: `Atelier hook misconfigured:
   <error>; check .claude/settings.json`. SessionStart returns the same text
   as its context (atelier-ft88).
+- A Stop run from a directory outside any Atelier repository says so,
+  `Atelier: <dir> is not in an Atelier repository, so there is nothing to
+  land.`
+- On a named branch other than the base, whatever land reports is work in
+  progress: the message is `Atelier: work in progress; land reports it and
+  refuses nothing on a work branch.`, then land's report ending with its
+  verdict. A missing review, an open finding, uncommitted records or code and
+  any other open check report the same way.
 - On the base branch, when every failed check is `land_records_uncommitted`,
   the message says the base has uncommitted records and does not block, then
   gives land's refusal, which names the records and the commit that commits
-  them (atelier-mp6v). On a work branch uncommitted records belong with the
-  work, so they block; so does any other failure on the base.
-- On the owner's own work branch, when every failed check is the owner's
-  `review.current` or `claims.reviewed`, or its `findings.disposed` where
-  every failing finding is a fix_now that a later commit resolved and that
-  waits only for a fresh independent approval, the review is pending: the
-  message names the owner as awaiting an independent review, then gives
-  land's refusal with its `atelier review request <owner>` step
-  (atelier-i80r). A finding with no disposition, a fix_now with no
-  resolution commit, or a defer or no_action awaiting acceptance blocks, as
-  does any other failure with the review.
+  them (atelier-mp6v). Any other failure on the base blocks.
 
 A record whose `schema_version` is higher than the installed binary reads was
 written by a newer Atelier. Every command, `status` and its SessionStart
@@ -232,7 +239,8 @@ context, `land` and the Stop hook say so in one line instead of a parse error,
 atelier`, whose one step upgrades to the latest release with the installer
 one-liner from the [README](../../README.md#install), or from Atelier's source
 checkout runs `cargo install --path crates/atelier-cli --locked`. Like any record that fails
-to parse, it carries no code, and `land` ends `land: refused`. A newer
+to parse, it carries no code, and `land` ends `land: refused`, or `land: work
+in progress` on a work branch. A newer
 workflow policy fails `workflow_config_schema_newer` with the same step,
 said once: a command that falls back to the last valid policy notes the
 fallback without also saying to edit the policy. A

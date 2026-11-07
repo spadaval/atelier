@@ -202,18 +202,26 @@ fn captured_checkout_refs_preserve_head_tags_aliases_and_base_worktrees() {
 }
 
 #[test]
-fn missing_self_approval_and_git_email_aliases_are_refused() {
+fn a_missing_approval_is_refused_and_no_identity_is_compared_with_the_authors() {
+    let fixture = Fixture::new();
+    fixture.refusal("review.current");
+    // An approval's identity is recorded, not compared with the work's Git
+    // authors (atelier-md0v): one named as the author, by name, email or
+    // both, is a current approval.
     for identity in [
-        None,
-        Some("Author"),
-        Some("author@example.test"),
-        Some("Author <author@example.test>"),
+        "Author",
+        "author@example.test",
+        "Author <author@example.test>",
     ] {
         let fixture = Fixture::new();
-        if let Some(identity) = identity {
-            fixture.approval(identity);
-        }
-        fixture.refusal("review.current");
+        let approval = fixture.approval(identity);
+        let checked = ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+        assert!(
+            checked.contains(&format!("review.current via {approval}")),
+            "{identity}: {checked}"
+        );
+        let shown = ok(fixture.path(), &["review", "show", &approval]);
+        assert!(shown.contains(&format!("by {identity} |")), "{shown}");
     }
 }
 
@@ -604,7 +612,7 @@ fn ticking_and_reporting_after_approval_merges_on_that_approval() {
 }
 
 #[test]
-fn edit_then_revert_and_second_author_cannot_reuse_an_approval() {
+fn edit_then_revert_cannot_reuse_an_approval() {
     let fixture = Fixture::new();
     fixture.approval("Reviewer");
     fs::write(fixture.path().join("src.rs"), "broken\n").unwrap();
@@ -612,11 +620,8 @@ fn edit_then_revert_and_second_author_cannot_reuse_an_approval() {
     fs::write(fixture.path().join("src.rs"), "tested code\n").unwrap();
     commit(fixture.path(), "revert");
     fixture.refusal("review.current");
-    git(fixture.path(), &["config", "user.name", "Reviewer"]);
-    fs::write(fixture.path().join("src.rs"), "Reviewer authored this\n").unwrap();
-    commit(fixture.path(), "second author");
     fixture.approval("Reviewer");
-    fixture.refusal("review.current");
+    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
 }
 
 /// A finding the base holds stays as it is apart from its disposition, so a
@@ -663,12 +668,214 @@ fn review_rewrites_deletions_and_modes_are_rejected_even_before_new_approval() {
     }
 }
 
+/// A fix_now finding is resolved by the approval after its fix, with no
+/// disposition command (atelier-md0v): finding, fix commit, approval, merge.
 #[test]
-fn findings_require_dispositions_and_author_cannot_clear_fix_now() {
+fn a_fix_now_finding_is_resolved_by_the_approval_after_its_fix() {
     let fixture = Fixture::new();
-    fixture.approval("Reviewer");
     let finding = fixture.finding();
     fixture.refusal("findings.disposed");
+    fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
+    commit(fixture.path(), "fix contract");
+    // The fix is not resolved until it is reviewed.
+    fixture.refusal("findings.disposed");
+    fixture.approval("Reviewer");
+    let listed = ok(fixture.path(), &["review", "list", &fixture.id]);
+    assert!(
+        listed.contains(&format!("✓ {finding} fix_now → approved since by ")),
+        "{listed}"
+    );
+    let output = ok(fixture.path(), &["merge", &fixture.id]);
+    assert!(output.ends_with("merge: passed"), "{output}");
+    assert_eq!(status_on_main(fixture.path(), &fixture.id), "done");
+    let finding_text = git(
+        fixture.path(),
+        &["show", &format!("main:.atelier/reviews/{finding}.md")],
+    );
+    assert!(!finding_text.contains("disposition:"), "{finding_text}");
+    git(fixture.path(), &["switch", "-q", "main"]);
+    ok(fixture.path(), &["land"]);
+    ok(fixture.path(), &["doctor"]);
+}
+
+/// An approval that never saw a finding does not resolve it: one recorded
+/// before the finding, of an earlier commit, leaves it open, and so does one
+/// of the finding's own commit recorded after it (atelier-md0v).
+#[test]
+fn an_approval_that_never_saw_a_finding_does_not_resolve_it() {
+    let fixture = Fixture::new();
+    fixture.approval("Reviewer");
+    // A finding recorded after that approval, on the code commit before
+    // its pin (the approval pins the implementer report's commit).
+    let pinned_before = git(fixture.path(), &["rev-parse", "HEAD~2"]);
+    let finding = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &fixture.id,
+            "--identity",
+            "Second reviewer",
+            "--commit",
+            &pinned_before,
+            "--recommendation",
+            "fix_now",
+            "Missed contract failure",
+        ],
+    );
+    commit(fixture.path(), "late finding");
+    // The approval is current, since records keep it current, but it did not
+    // see the finding.
+    fixture.refusal("findings.disposed");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        output.contains("review.current via ")
+            && output.contains("1 fix_now finding came after the current approval"),
+        "{output}"
+    );
+    // An approval of the finding's own commit, recorded after it, saw no fix.
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "approve",
+            &fixture.id,
+            "--identity",
+            "Reviewer",
+            "--commit",
+            &pinned_before,
+            "Approved the finding's commit",
+        ],
+    );
+    commit(fixture.path(), "approval of the finding's commit");
+    fixture.refusal("findings.disposed");
+    // An approval of a later commit, recorded after the finding, resolves it.
+    fixture.approval("Reviewer");
+    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    let _ = finding;
+}
+
+/// Parallel reviewers whose briefs were printed at different heads: R1's
+/// fix_now finding, pinned to C1, is not resolved by R2's approval of C2,
+/// which never held the finding's record, though it is pinned later and
+/// recorded later; `review list` and the brief agree. A fix and an approval
+/// that saw the finding resolve it (findings atelier-6xiw, atelier-kby7).
+#[test]
+fn a_parallel_reviewers_approval_does_not_resolve_a_finding_it_never_saw() {
+    let fixture = Fixture::new();
+    let id = fixture.id.clone();
+    let brief = || ok(fixture.path(), &["review", "request", &id]);
+    // R1's brief at C1.
+    let c1 = git(fixture.path(), &["rev-parse", "HEAD"]);
+    assert!(brief().contains(&c1));
+    // The author commits a note: C2, and R2's brief there.
+    ok(fixture.path(), &["issue", "note", &id, "Author note"]);
+    commit(fixture.path(), "a note");
+    let c2 = git(fixture.path(), &["rev-parse", "HEAD"]);
+    let r2_brief = brief();
+    assert!(
+        r2_brief.contains(&c2) && r2_brief.contains("## Findings so far\n\nNone."),
+        "{r2_brief}"
+    );
+    let finding = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "R1",
+            "--commit",
+            &c1,
+            "--recommendation",
+            "fix_now",
+            "--commit-records",
+            "R1's contract failure",
+        ],
+    );
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "approve",
+            &id,
+            "--identity",
+            "R2",
+            "--commit",
+            &c2,
+            "--commit-records",
+            "R2 approves what it saw",
+        ],
+    );
+    fixture.refusal("findings.disposed");
+    let listed = ok(fixture.path(), &["review", "list", &id]);
+    assert!(
+        listed.contains(&format!(
+            "⚠ {finding} fix_now, open until an approval after its fix"
+        )),
+        "{listed}"
+    );
+    assert!(
+        brief().contains(&format!(
+            "- {finding} fix_now | open until an approval after its fix @ "
+        )),
+        "{}",
+        brief()
+    );
+
+    fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
+    commit(fixture.path(), "fix the contract");
+    let approval = fixture.approval("R2");
+    ok(fixture.path(), &["merge", &id, "--check"]);
+    let listed = ok(fixture.path(), &["review", "list", &id]);
+    assert!(
+        listed.contains(&format!(
+            "✓ {finding} fix_now → approved since by {approval} @"
+        )),
+        "{listed}"
+    );
+    assert!(
+        brief().contains(&format!(
+            "- {finding} fix_now | approved since by {approval} @ "
+        )),
+        "{}",
+        brief()
+    );
+}
+
+/// A finding recommended defer or no_action still needs a recorded
+/// decision, even when it was fixed instead; any identity may record it
+/// (atelier-md0v).
+#[test]
+fn defer_and_no_action_findings_need_a_decision_by_any_identity() {
+    let fixture = Fixture::new();
+    let finding = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &fixture.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Name could be better",
+        ],
+    );
+    commit(fixture.path(), "finding record");
+    fs::write(fixture.path().join("src.rs"), "renamed\n").unwrap();
+    commit(fixture.path(), "fixed anyway");
+    fixture.approval("Reviewer");
+    fixture.refusal("findings.disposed");
+    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        output.contains(&format!("{finding} no_action finding"))
+            && output.contains("needs a decision"),
+        "{output}"
+    );
     ok(
         fixture.path(),
         &[
@@ -679,38 +886,57 @@ fn findings_require_dispositions_and_author_cannot_clear_fix_now() {
             "Author",
             "--decision",
             "no_action",
-            "Author's unsupported rebuttal",
+            "The author's decision is recorded as it is",
         ],
     );
-    commit(fixture.path(), "author rebuttal");
-    fixture.refusal("findings.disposed");
-    ok(
-        fixture.path(),
-        &[
-            "review",
-            "disposition",
-            &finding,
-            "--identity",
-            "Reviewer",
-            "--decision",
-            "no_action",
-            "Reviewer accepts the code evidence",
-        ],
-    );
-    commit(fixture.path(), "independent acceptance");
+    commit(fixture.path(), "author decision");
     ok(fixture.path(), &["merge", &fixture.id, "--check"]);
 }
 
+/// The merge base is the `base_branch` of the branch's committed policy,
+/// checked against that base's own policy; no recorded base is read
+/// (atelier-md0v).
 #[test]
-fn fixed_finding_requires_a_resolution_commit_and_current_independent_approval() {
+fn the_merge_base_is_the_branch_policys_base_checked_against_its_own_policy() {
     let fixture = Fixture::new();
-    let finding = fixture.finding();
-    fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
-    commit(fixture.path(), "fix contract");
-    let resolution = git(fixture.path(), &["rev-parse", "HEAD"]);
-    ok(
-        fixture.path(),
-        &[
+    git(fixture.path(), &["branch", "other", "main"]);
+    let path = fixture.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    assert!(policy.contains("base_branch: main"), "{policy}");
+    fs::write(
+        &path,
+        policy.replace("base_branch: main", "base_branch: other"),
+    )
+    .unwrap();
+    commit(fixture.path(), "point the policy at another base");
+    fixture.approval("Reviewer");
+    let (passed, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
+    assert!(
+        !passed
+            && output.contains(
+                "merge_base_policy_unsupported: the base policy on other names main as the base branch, not other"
+            ),
+        "{output}"
+    );
+    assert_eq!(
+        git(fixture.path(), &["rev-parse", "other"]),
+        git(fixture.path(), &["rev-parse", "main"])
+    );
+}
+
+/// `review disposition --decision fix_now` stays accepted, though never
+/// asked for: an older Atelier's fix_now disposition counts, resolved as it
+/// was by an approval at or after its resolution commit, or, without one, by
+/// an approval of a later commit recorded after the finding (atelier-md0v).
+#[test]
+fn old_fix_now_dispositions_still_count_with_or_without_a_resolution_commit() {
+    for with_resolution in [true, false] {
+        let fixture = Fixture::new();
+        let finding = fixture.finding();
+        fs::write(fixture.path().join("src.rs"), "fixed code\n").unwrap();
+        commit(fixture.path(), "fix contract");
+        let resolution = git(fixture.path(), &["rev-parse", "HEAD"]);
+        let mut args = vec![
             "review",
             "disposition",
             &finding,
@@ -718,15 +944,18 @@ fn fixed_finding_requires_a_resolution_commit_and_current_independent_approval()
             "Author",
             "--decision",
             "fix_now",
-            "--resolution-commit",
-            &resolution,
-            "Fixed current contract",
-        ],
-    );
-    commit(fixture.path(), "resolution record");
-    fixture.refusal("review.current");
-    fixture.approval("Reviewer");
-    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+        ];
+        if with_resolution {
+            args.extend(["--resolution-commit", &resolution]);
+        }
+        args.push("Fixed current contract");
+        ok(fixture.path(), &args);
+        commit(fixture.path(), "resolution record");
+        fixture.refusal("review.current");
+        fixture.refusal("findings.disposed");
+        fixture.approval("Reviewer");
+        ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    }
 }
 
 #[test]
@@ -868,19 +1097,16 @@ fn dirty_candidate_or_base_checkout_is_refused_and_a_diverged_base_takes_a_merge
 #[test]
 fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     let fixture = Fixture::new();
-    // The base requires proof for completion, so stale proof matters.
+    // The base changes its policy, which the branch merges in.
     git(fixture.path(), &["switch", "-q", "main"]);
     let policy = fixture.path().join(".atelier/workflow.yaml");
     let text = fs::read_to_string(&policy).unwrap();
     fs::write(
         &policy,
-        with_work_close(
-            &text,
-            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
-        ),
+        with_work_close(&text, "        - blockers.none_open\n"),
     )
     .unwrap();
-    commit(fixture.path(), "base requires proof");
+    commit(fixture.path(), "base adds a work close");
     git(fixture.path(), &["switch", "-q", &fixture.branch]);
     git(fixture.path(), &["merge", "-q", "--no-edit", "main"]);
     let proof = |summary: &str| {
@@ -966,14 +1192,6 @@ fn rebasing_a_reviewed_branch_explains_the_cause_and_recovery() {
     );
     fixture.refusal("is stale: ");
     fixture.refusal("\"fix after recovery\" changed src.rs");
-    let (_, output) = cli(fixture.path(), &["merge", &fixture.id, "--check"]);
-    assert!(
-        output.contains(&format!(
-            "⚠ {} evidence.attached: expected at least 1 fresh passing evidence record",
-            fixture.id
-        )),
-        "{output}"
-    );
     proof("Proof after recovery");
     fixture.approval("Reviewer");
     ok(fixture.path(), &["merge", &fixture.id]);
@@ -1499,7 +1717,7 @@ fn an_approval_from_before_the_branch_left_the_base_is_refused_after_a_base_merg
     // The start is committed on the base, then approved there, before the
     // work branch takes it over.
     ok(fixture.path(), &["start", &owner]);
-    let branch = format!("task/{owner}");
+    let branch = owner.clone();
     git(fixture.path(), &["stash", "-q"]);
     git(fixture.path(), &["switch", "-q", "main"]);
     git(fixture.path(), &["stash", "pop", "-q"]);
@@ -1718,19 +1936,17 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
     git(fixture.path(), &["switch", "main"]);
     let path = fixture.path().join(".atelier/workflow.yaml");
     let policy = fs::read_to_string(&path).unwrap();
-    // An older policy's work close still governs what done needs.
+    // An older policy's work close still governs what done needs; here it
+    // runs a check this task cannot pass, which the candidate drops.
     fs::write(
         &path,
         with_work_close(
             &policy,
-            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+            "        - blockers.none_open\n        - decision.recorded\n",
         ),
     )
     .unwrap();
-    commit(
-        fixture.path(),
-        "base requires honest evidence for completion",
-    );
+    commit(fixture.path(), "base adds a completion check");
     git(fixture.path(), &["switch", &fixture.branch]);
     git(fixture.path(), &["rebase", "main"]);
     fs::write(&path, &policy).unwrap();
@@ -1746,9 +1962,9 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
             "claim without proof",
         ],
     );
-    assert!(!passed && output.contains("evidence.attached"), "{output}");
+    assert!(!passed && output.contains("decision.recorded"), "{output}");
     fixture.approval("Reviewer");
-    fixture.refusal("evidence.attached");
+    fixture.refusal("decision.recorded");
     let mut record = fixture.issue();
     record.issue.status = "done".into();
     record.issue.closed_at = Some(chrono::Utc::now());
@@ -1756,7 +1972,7 @@ fn candidate_cannot_remove_base_completion_checks_for_transitions_or_direct_done
     fixture.write_issue(&record);
     commit(fixture.path(), "direct terminal claim");
     fixture.approval("Reviewer");
-    fixture.refusal("evidence.attached");
+    fixture.refusal("decision.recorded");
 }
 
 #[test]
@@ -3633,7 +3849,7 @@ fn a_later_pass_clears_an_older_fail_across_a_base_merge_so_merge_succeeds() {
     assert!(passed && out.contains("Merged main into"), "{out}\n{err}");
     let listed = ok(path, &["evidence", "list", &id]);
     assert!(listed.contains("stale (code changed in"), "{listed}");
-    assert!(!listed.contains("blocks completion"), "{listed}");
+    assert!(!listed.contains("no pass since"), "{listed}");
 
     report(path, &id, "complete");
     commit(path, "implementer report");
@@ -3700,11 +3916,12 @@ fn split(dir: &Path, args: &[&str]) -> (bool, String, String) {
 }
 
 /// The bw0b case (atelier-6rh7): an approval gone stale and 21 fix_now
-/// findings resolved after it. Failures come first, each with its fix; the
+/// findings fixed after it, with the fix_now dispositions an older Atelier
+/// asked for, which still count. Failures come first, each with its fix; the
 /// findings that only wait on a fresh approval collapse to one line; the
-/// verdict counts every failed check. A trivial exemption does not count for
-/// a fix_now resolution, and a fresh approval passes with what was checked
-/// and the next step.
+/// verdict counts every failed check. A trivial exemption does not resolve
+/// a fix_now finding, and a fresh approval passes with what was checked and
+/// the next step.
 #[test]
 fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_findings() {
     let fixture = Fixture::new();
@@ -3754,7 +3971,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
 
     let refusal = format!(
         "{}\n\
-         ⚠ {id} findings.disposed: 21 fix_now findings resolved; they need a fresh approval (see review.current). Next: atelier review request {id}\n\
+         ⚠ {id} findings.disposed: 21 fix_now findings await an approval after their fix (see review.current). Next: atelier review request {id}\n\
          ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, claims.reviewed)\n\
          merge: refused — 2 checks (review.current, findings.disposed)\n",
         stale_line(
@@ -3801,7 +4018,7 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     assert_eq!(
         out,
         format!(
-            "⚠ {id} findings.disposed: 21 fix_now findings resolved; a fix_now resolution needs an independent approval, which a trivial exemption is not. Next: atelier review request {id}\n\
+            "⚠ {id} findings.disposed: 21 fix_now findings await an independent approval after their fix, which a trivial exemption is not. Next: atelier review request {id}\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, review.current via {exemption}, claims.reviewed)\n\
              merge: refused — 1 check (findings.disposed)\n"
         )
@@ -3821,14 +4038,32 @@ fn merge_check_lists_failures_first_with_fixes_and_collapses_resolved_fix_now_fi
     );
 }
 
-/// Each finding without an accepted disposition is its own line, with its
-/// recommendation, first summary line and the disposition that settles it;
-/// an open child names the transition that closes it (atelier-6rh7).
+/// Each finding recommended no_action or defer with no decision is its own
+/// line, with its recommendation, first summary line and the decision that
+/// settles it; fix_now findings no approval has seen since collapse to one
+/// line. A decision by any identity counts (atelier-md0v), and an open child
+/// holds nothing (atelier-6rh7).
 #[test]
 fn merge_check_names_each_finding_with_the_command_that_settles_it() {
     let fixture = Fixture::new();
     let id = fixture.id.clone();
+    let approval = fixture.approval("Reviewer");
+    // Findings after the approval, which it never saw.
     let finding = fixture.finding();
+    let named = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "no_action",
+            "Name could be better\n\nThe old name still reads.",
+        ],
+    );
     let deferred = ok(
         fixture.path(),
         &[
@@ -3840,12 +4075,12 @@ fn merge_check_names_each_finding_with_the_command_that_settles_it() {
             "Reviewer",
             "--recommendation",
             "defer",
-            "Rename later\n\nThe old name still reads.",
+            "Rename later",
         ],
     );
     let follow_up = ok(fixture.path(), &["-q", "issue", "create", "Rename it"]);
-    // The author's own defer is recorded, with its warning on stderr; quiet
-    // stdout is the ID alone.
+    // The author's own defer is recorded, with no warning; quiet stdout is
+    // the ID alone.
     let (recorded, disposition, warning) = split(
         fixture.path(),
         &[
@@ -3862,10 +4097,7 @@ fn merge_check_names_each_finding_with_the_command_that_settles_it() {
             "Later",
         ],
     );
-    assert!(
-        recorded && warning.contains("identity matches a Git author"),
-        "{warning}"
-    );
+    assert!(recorded && warning.is_empty(), "{warning}");
     // The quiet token of a disposition is the finding it settles.
     assert_eq!(disposition.trim(), deferred);
     // Merge marks an open child done with its parent, so the child holds
@@ -3876,32 +4108,24 @@ fn merge_check_names_each_finding_with_the_command_that_settles_it() {
     );
     report(fixture.path(), &child, "Done.");
     commit(fixture.path(), "findings and an open child");
-    let approval = fixture.approval("Reviewer");
     let (passed, out, _) = split(fixture.path(), &["merge", &id, "--check"]);
     assert!(!passed);
-    // Findings are listed in ID order.
-    let mut findings = [
-        (finding.clone(), format!("{finding} fix_now finding \"Contract failure in src.rs\" has no disposition"), format!("atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"")),
-        (deferred.clone(), format!("{deferred} defer finding \"Rename later\": defer disposition by Author needs to be set by a non-author"), format!("atelier review request {id}")),
-    ];
-    findings.sort();
-    let [(_, first, first_fix), (_, second, second_fix)] = findings;
     assert_eq!(
         out,
         format!(
-            "⚠ {id} findings.disposed: {first}. Next: {first_fix}\n\
-             ⚠ {id} findings.disposed: {second}. Next: {second_fix}\n\
+            "⚠ {id} findings.disposed: {named} no_action finding \"Name could be better\" needs a decision: defer it to a follow-up, or no_action, or fix it and record fix_now. Next: atelier review disposition {named} --decision no_action --identity <identity> \"…\"\n\
+             ⚠ {id} findings.disposed: 1 fix_now finding came after the current approval; it needs an approval after its fix. Next: atelier review request {id}\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, review.current via {approval}, claims.reviewed)\n\
              ✓ 1 done claim holds\n\
              merge: refused — 1 check (findings.disposed)\n"
         )
     );
-    // Each printed fix runs as printed: the review request and the
-    // disposition.
+    // Each printed fix runs as printed: the decision and the review request.
     assert_eq!(
         next_steps::assert_fixes_run(fixture.path(), &out, &["merge", &id, "--check"]),
         2
     );
+    let _ = finding;
 }
 
 /// A base the branch has not merged in does not stop `merge --check`: it is
@@ -3914,7 +4138,7 @@ fn merge_check_on_a_moved_base_reports_the_review_and_finding_gates() {
     // onto it (atelier-jnrh).
     let fixture = Fixture::new();
     let id = fixture.id.clone();
-    let finding = fixture.finding();
+    fixture.finding();
     git(fixture.path(), &["switch", "-q", "main"]);
     fs::write(fixture.path().join("base.rs"), "base code\n").unwrap();
     commit(fixture.path(), "base code");
@@ -3924,8 +4148,8 @@ fn merge_check_on_a_moved_base_reports_the_review_and_finding_gates() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
-             ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in src.rs\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
+            "⚠ {id} review.current: no independent approval or trivial exemption. Next: atelier review request {id}\n\
+             ⚠ {id} findings.disposed: 1 fix_now finding awaits an approval after its fix (see review.current). Next: atelier review request {id}\n\
              ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, claims.reviewed)\n\
              merge: refused — 2 checks (review.current, findings.disposed)\n"
         )
@@ -4141,38 +4365,6 @@ fn gates_name_the_base_merge_that_resolved_code_by_hand() {
             &merge[..8]
         )),
         "{synced}"
-    );
-}
-
-#[test]
-fn gates_name_an_approval_whose_identity_matches_a_git_author() {
-    let fixture = Fixture::new();
-    // Recording it warns that it will not count; the ID is the first line.
-    let approval = fixture.approval("Author");
-    let approval = approval.lines().next().unwrap().to_owned();
-    let index =
-        atelier_app::record_index::RecordIndex::load(&fixture.path().join(".atelier")).unwrap();
-    let pin = index.require_review(&approval).unwrap().commit.clone();
-    let line = format!(
-        "⚠ {id} review.current: approval {approval} @{} by Author is not independent: the identity matches a Git author of the branch (authors: author <author@example.test>). Next: atelier review request {id}",
-        &pin[..8],
-        id = fixture.id
-    );
-    let synced = approval_explained(&fixture, &line);
-    assert!(
-        synced.contains(&format!(
-            "No independent approval covers {}'s scope yet: {approval} by Author is not independent, as the identity matches a Git author of the branch (author <author@example.test>).",
-            fixture.id
-        )),
-        "{synced}"
-    );
-    let listed = ok(fixture.path(), &["review", "list", &fixture.id]);
-    assert!(
-        listed.contains(&format!(
-            "Approval: ⚠ missing — {approval} @{} by Author is not independent: the identity matches a Git author of the branch",
-            &pin[..8]
-        )),
-        "{listed}"
     );
 }
 

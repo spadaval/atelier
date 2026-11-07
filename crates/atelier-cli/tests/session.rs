@@ -21,20 +21,28 @@ fn git(dir: &Path, args: &[&str]) -> String {
     );
     String::from_utf8(out.stdout).unwrap().trim().into()
 }
+/// Runs atelier, with whether it passed and its combined output. `land`
+/// reports work in progress on a work branch and exits successfully
+/// (atelier-md0v); these tests read that report, whose verdict is `land:
+/// work in progress`, as not passed, as they read a refusal. Tests of the
+/// exit status itself run the binary directly.
 fn cli(dir: &Path, args: &[&str]) -> (bool, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_atelier"))
         .current_dir(dir)
         .args(args)
         .output()
         .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
     (
-        out.status.success(),
-        format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        ),
+        out.status.success() && !in_progress(&stdout),
+        format!("{stdout}{}", String::from_utf8_lossy(&out.stderr)),
     )
+}
+/// Whether `stdout` ends in land's verdict for work in progress.
+fn in_progress(stdout: &str) -> bool {
+    stdout.lines().last().is_some_and(|line| {
+        line.starts_with("land: work in progress") || line.starts_with("work in progress")
+    })
 }
 /// A `git` command that may fail, with its success and combined output.
 fn cli_git(dir: &Path, args: &[&str]) -> (bool, String) {
@@ -286,6 +294,14 @@ fn done_owner_requires_approval_and_active_failures_can_handoff() {
     f.refusal("review.current");
 }
 
+/// The Stop hook's answer to work in progress on a work branch, which it
+/// reports without blocking a turn (atelier-md0v): `out` is land's report.
+fn in_progress_message(out: &str) -> serde_json::Value {
+    serde_json::json!({"systemMessage": format!(
+        "Atelier: work in progress; land reports it and refuses nothing on a work branch.\n{}",
+        out.trim_end()
+    )})
+}
 fn hook(dir: &Path, command: &str, payload: serde_json::Value) -> serde_json::Value {
     hook_input(dir, command, &serde_json::to_string(&payload).unwrap())
 }
@@ -339,15 +355,27 @@ fn documented_hook_events_use_nested_cwd_and_stop_loop_protection() {
         hook(unrelated.path(), "land", input.clone()),
         serde_json::json!({})
     );
+    // Work in progress on the work branch is reported, not blocked.
     ok(f.path(), &["issue", "note", &f.id, "Uncommitted handoff"]);
     let result = hook(unrelated.path(), "land", input.clone());
-    assert_eq!(result["decision"], "block");
-    let reason = result["reason"].as_str().unwrap();
+    assert!(result.get("decision").is_none(), "{result}");
+    let message = result["systemMessage"].as_str().unwrap();
     assert!(
-        reason.contains("land_records_uncommitted")
-            && reason.ends_with("\nland: refused — 1 check (land_records_uncommitted)"),
-        "{reason}"
+        message.contains("land_records_uncommitted")
+            && message
+                .ends_with("\nland: work in progress — 1 check open (land_records_uncommitted)"),
+        "{message}"
     );
+    // On the base, a refusal blocks once, and a repeated stop is not
+    // blocked again.
+    git(f.path(), &["checkout", "-q", "--", "."]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let policy = f.path().join(".atelier/workflow.yaml");
+    let valid = fs::read_to_string(&policy).unwrap();
+    fs::write(&policy, format!("{valid}garbage: [\n")).unwrap();
+    commit(f.path(), "broken policy");
+    let result = hook(unrelated.path(), "land", input.clone());
+    assert_eq!(result["decision"], "block", "{result}");
     let mut repeated = input;
     repeated["stop_hook_active"] = true.into();
     let result = hook(unrelated.path(), "land", repeated);
@@ -800,107 +828,62 @@ fn active_epic_hands_off_completed_children_without_batch_approval() {
     commit(f.path(), "finding on done child");
     f.refusal("findings.disposed");
 }
+/// No gate reads receipts (atelier-md0v): a fail receipt with no pass after
+/// it, on a done child and on the owner, blocks neither merge nor land, on
+/// the branch or on the base.
 #[test]
-fn uncommitted_code_does_not_revive_a_failure_a_later_pass_cleared() {
+fn a_fail_receipt_blocks_neither_merge_nor_land() {
     let f = Fixture::new();
     let child = epic_child(&f);
     f.terminal(&child);
-    for result in ["fail", "pass"] {
+    for target in [&child, &f.id] {
         ok(
             f.path(),
             &[
                 "evidence",
                 "record",
                 "--target",
-                &format!("issue/{child}"),
+                &format!("issue/{target}"),
                 "--kind",
                 "test",
                 "--result",
-                result,
-                "Done claim proof",
+                "fail",
+                "Proof failed",
             ],
         );
-        commit(f.path(), &format!("{result}ing proof"));
     }
-    ok(f.path(), &["land", &f.id]);
-    fs::write(f.path().join("code"), "uncommitted change\n").unwrap();
-    let (_, output) = cli(f.path(), &["land", &f.id]);
-    assert!(
-        !output.contains("newer failing evidence")
-            && !output.contains("Uncommitted changes make passing proof stale"),
-        "{output}"
+    commit(f.path(), "failing proof");
+    let mut owner = f.store().load_issue_by_id(&f.id).unwrap();
+    owner.sections.report = Some("complete".into());
+    f.store().write_issue_atomic(&owner).unwrap();
+    commit(f.path(), "implementer report");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
     );
+    commit(f.path(), "approval");
+    let landed = ok(f.path(), &["land"]);
+    assert!(
+        landed.ends_with("land: passed") && !landed.contains("evidence"),
+        "{landed}"
+    );
+    let checked = ok(f.path(), &["merge", &f.id, "--check"]);
+    assert!(!checked.contains("evidence"), "{checked}");
+    ok(f.path(), &["merge", &f.id]);
+    let landed = ok(f.path(), &["land"]);
+    assert!(landed.ends_with("land: passed"), "{landed}");
+    ok(f.path(), &["doctor"]);
 }
 #[test]
-fn a_current_claim_whose_pass_a_later_commit_staled_keeps_its_failure_cleared() {
-    let f = Fixture::new();
-    let child = epic_child(&f);
-    f.terminal(&child);
-    for result in ["fail", "pass"] {
-        ok(
-            f.path(),
-            &[
-                "evidence",
-                "record",
-                "--target",
-                &format!("issue/{child}"),
-                "--kind",
-                "test",
-                "--result",
-                result,
-                "Done claim proof",
-            ],
-        );
-        commit(f.path(), &format!("{result}ing proof"));
-    }
-    fs::write(f.path().join("code"), "committed after the pass\n").unwrap();
-    commit(f.path(), "code after the pass");
-    for dirty in [false, true] {
-        if dirty {
-            fs::write(f.path().join("unrelated"), "uncommitted\n").unwrap();
-        }
-        let (_, output) = cli(f.path(), &["land", &f.id]);
-        assert!(!output.contains("newer failing evidence"), "{output}");
-        if !dirty {
-            ok(f.path(), &["land", &f.id]);
-        }
-    }
-}
-#[test]
-fn a_retained_claim_whose_pass_later_commits_staled_keeps_its_failure_cleared() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "-q", "main"]);
-    let done = ok(f.path(), &["-q", "issue", "create", "Done on the base"]);
-    commit(f.path(), "file it");
-    for result in ["fail", "pass"] {
-        ok(
-            f.path(),
-            &[
-                "evidence",
-                "record",
-                "--target",
-                &format!("issue/{done}"),
-                "--kind",
-                "test",
-                "--result",
-                result,
-                "Proof",
-            ],
-        );
-        commit(f.path(), &format!("{result}ing proof"));
-    }
-    fs::write(f.path().join("later"), "code after the pass\n").unwrap();
-    commit(f.path(), "code after the pass");
-    f.terminal(&done);
-    ok(f.path(), &["-q", "issue", "create", "Later planning"]);
-    commit(f.path(), "later planning");
-    fs::write(f.path().join("unrelated"), "uncommitted\n").unwrap();
-    let (_, output) = cli(f.path(), &["land"]);
-    assert!(!output.contains("newer failing evidence"), "{output}");
-}
-#[test]
-fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fields() {
-    for violation in ["dependency", "failure", "required_field"] {
+fn done_child_cannot_hide_open_dependencies_or_missing_required_fields() {
+    for violation in ["dependency", "required_field"] {
         // Work done claims answer to required fields only under an older
         // policy whose work `close` set them (atelier-jnrh).
         let f = if violation == "required_field" {
@@ -920,22 +903,6 @@ fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fiel
                     .push(atelier_records::issue_relationship_target(&child));
                 f.store().write_issue_atomic(&record).unwrap();
             }
-            "failure" => {
-                ok(
-                    f.path(),
-                    &[
-                        "evidence",
-                        "record",
-                        "--target",
-                        &format!("issue/{child}"),
-                        "--kind",
-                        "test",
-                        "--result",
-                        "fail",
-                        "Done claim proof failed",
-                    ],
-                );
-            }
             _ => {
                 let mut record = f.store().load_issue_by_id(&child).unwrap();
                 record.sections.report = None;
@@ -945,15 +912,15 @@ fn done_child_cannot_hide_open_dependencies_new_failure_or_missing_required_fiel
         commit(f.path(), "invalid done child");
         f.refusal(match violation {
             "dependency" => "blockers.transitive_none_open",
-            "failure" => "evidence.no_newer_failure",
             _ => "required_field.close_reason",
         });
     }
 }
 #[test]
-fn trusted_base_child_proof_cannot_be_removed_on_candidate() {
-    // An older policy whose work `close` runs the proof validator; merge
-    // marks work done under the current one (atelier-jnrh).
+fn trusted_base_child_checks_cannot_be_removed_on_candidate() {
+    // An older policy whose work `close` runs a check this child cannot
+    // pass; merge marks work done under the current one (atelier-jnrh), and
+    // the base's checks, not the candidate's, judge the done claim.
     let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     git(f.path(), &["switch", "main"]);
     let path = f.path().join(".atelier/workflow.yaml");
@@ -962,36 +929,17 @@ fn trusted_base_child_proof_cannot_be_removed_on_candidate() {
         &path,
         policy.replace(
             "        - blockers.none_open\n",
-            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
+            "        - blockers.none_open\n        - decision.recorded\n",
         ),
     )
     .unwrap();
-    commit(f.path(), "base requires completion proof");
+    commit(f.path(), "base adds a completion check");
     git(f.path(), &["switch", &f.branch]);
     git(f.path(), &["rebase", "main"]);
     fs::write(&path, policy).unwrap();
     let child = epic_child(&f);
     f.terminal(&child);
-    f.refusal("evidence.attached");
-    ok(
-        f.path(),
-        &[
-            "evidence",
-            "record",
-            "--target",
-            &format!("issue/{child}"),
-            "--kind",
-            "test",
-            "--result",
-            "pass",
-            "Fresh explicit child proof",
-        ],
-    );
-    commit(f.path(), "child proof");
-    ok(f.path(), &["land"]);
-    fs::write(f.path().join("code"), "relevant code changed\n").unwrap();
-    commit(f.path(), "changed code after proof");
-    f.refusal("evidence.attached");
+    f.refusal("decision.recorded");
 }
 #[test]
 fn done_owner_full_gates_and_invalid_policies_are_checked_without_writes() {
@@ -1050,6 +998,9 @@ fn hidden_tracked_record_edits_and_executable_modes_refuse_landing() {
 fn start_child_installs_owner_metadata_and_child_transition_together() {
     let f = Fixture::new();
     git(f.path(), &["switch", "main"]);
+    // Without the fixture's branch, whose own record names it the owner's,
+    // start creates the owner's branch from main.
+    git(f.path(), &["branch", "-qD", &f.branch]);
     let child = epic_child(&f);
     ok(f.path(), &["start", &child]);
     let owner = f.store().load_issue_by_id(&f.id).unwrap();
@@ -1424,7 +1375,7 @@ fn landing_rechecks_unrelated_active_branches_after_arbitrary_checks() {
     let f = Fixture::new();
     git(f.path(), &["switch", "main"]);
     let other = ok(f.path(), &["-q", "issue", "create", "Other active owner"]);
-    let branch = format!("task/{other}");
+    let branch = other.clone();
     let mut record = f.store().load_issue_by_id(&other).unwrap();
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
@@ -1467,7 +1418,7 @@ fn landing_rechecks_unrelated_active_branches_after_arbitrary_checks() {
 fn review_regression_identical_tracker_trees_keep_each_branch_owner_visible() {
     let f = Fixture::new();
     let other = ok(f.path(), &["-q", "issue", "create", "Other active owner"]);
-    let branch = format!("task/{other}");
+    let branch = other.clone();
     let mut record = f.store().load_issue_by_id(&other).unwrap();
     record.issue.status = "in_progress".into();
     record.issue.workflow_branch = Some(atelier_core::WorkflowBranch {
@@ -1779,7 +1730,9 @@ fn retained_completion_keeps_valid_historical_proof_and_resolution_after_unrelat
     }
     f.store().write_issue_atomic(&record).unwrap();
     commit(f.path(), "changed terminal acceptance");
-    f.refusal("evidence.attached");
+    // The changed claim is judged again, at HEAD, where the branch's code
+    // made its approval stale.
+    f.refusal("findings.disposed");
     git(
         f.path(),
         &[
@@ -1817,97 +1770,19 @@ fn retained_completion_keeps_valid_historical_proof_and_resolution_after_unrelat
         ],
     );
     commit(f.path(), "new failure and finding on retained claim");
+    // The new fail receipt gates nothing (atelier-md0v); the new finding does.
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
-        !pass
-            && output.contains("evidence.no_newer_failure")
-            && output.contains("findings.disposed"),
-        "{output}"
-    );
-}
-#[test]
-fn integration_base_new_completion_cannot_omit_required_proof() {
-    // An older policy whose work `close` runs the proof validator; merge
-    // marks work done under the current one (atelier-jnrh).
-    let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
-    git(f.path(), &["switch", "main"]);
-    let path = f.path().join(".atelier/workflow.yaml");
-    let policy = fs::read_to_string(&path).unwrap();
-    fs::write(
-        &path,
-        policy.replace(
-            "        - blockers.none_open\n",
-            "        - blockers.none_open\n        - evidence.attached: { min_count: 1 }\n",
-        ),
-    )
-    .unwrap();
-    let id = ok(f.path(), &["-q", "issue", "create", "Missing global proof"]);
-    commit(f.path(), "base requires proof");
-    f.terminal(&id);
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass && output.contains("evidence.attached"), "{output}");
-    fs::write(f.path().join("later-code"), "unrelated\n").unwrap();
-    commit(f.path(), "unrelated later code");
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(!pass && output.contains("evidence.attached"), "{output}");
-    ok(
-        f.path(),
-        &[
-            "evidence",
-            "record",
-            "--target",
-            &format!("issue/{id}"),
-            "--kind",
-            "test",
-            "--result",
-            "pass",
-            "Valid retained proof",
-        ],
-    );
-    commit(f.path(), "valid proof for earlier completion");
-    ok(f.path(), &["land"]);
-    let stale = ok(
-        f.path(),
-        &["-q", "issue", "create", "Never valid old proof"],
-    );
-    commit(f.path(), "new task before old proof");
-    ok(
-        f.path(),
-        &[
-            "evidence",
-            "record",
-            "--target",
-            &format!("issue/{stale}"),
-            "--kind",
-            "test",
-            "--result",
-            "pass",
-            "Proof before later implementation",
-        ],
-    );
-    commit(f.path(), "premature proof");
-    fs::write(f.path().join("later-code"), "implementation after proof\n").unwrap();
-    commit(f.path(), "changed code before completion");
-    f.terminal(&stale);
-    fs::write(f.path().join("later-unrelated-code"), "age invalid claim\n").unwrap();
-    commit(
-        f.path(),
-        "later unrelated commit cannot legitimate stale claim",
-    );
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && output.contains(&format!("{stale} evidence.attached")),
+        !pass && !output.contains("evidence.") && output.contains("findings.disposed"),
         "{output}"
     );
 }
 
 #[test]
-fn retained_invalid_dispositions_and_approvals_never_age_into_acceptance() {
-    for (fix_now, approver, stale) in [
-        (false, "Author", false),
-        (true, "Author", false),
-        (true, "Reviewer", true),
-    ] {
+fn retained_stale_approvals_never_age_into_acceptance() {
+    // A decision or approval by an author identity is accepted now
+    // (atelier-md0v); a fix_now resolution whose approval went stale is not.
+    for (fix_now, approver, stale) in [(true, "Reviewer", true)] {
         let f = Fixture::new();
         git(f.path(), &["switch", "main"]);
         let id = ok(
@@ -2260,59 +2135,6 @@ fn review_records_first_added_by_a_conflict_resolving_merge_are_found() {
     f.terminal(&id);
     ok(f.path(), &["land"]);
     ok(f.path(), &["doctor"]);
-}
-
-#[test]
-fn a_disposition_without_findable_history_fails_its_gate_by_name() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "main"]);
-    let id = ok(f.path(), &["-q", "issue", "create", "Untraceable review"]);
-    let finding = ok(
-        f.path(),
-        &[
-            "-q",
-            "review",
-            "finding",
-            &id,
-            "--identity",
-            "Reviewer",
-            "--recommendation",
-            "fix_now",
-            "Concern",
-        ],
-    );
-    let disposition = ok(
-        f.path(),
-        &[
-            "-q",
-            "review",
-            "disposition",
-            &finding,
-            "--identity",
-            "Reviewer",
-            "--decision",
-            "no_action",
-            "Dismissal",
-        ],
-    );
-    // The review events are committed before their issue, so the history of
-    // the scope they review cannot be found.
-    git(f.path(), &["add", ".atelier/reviews"]);
-    git(
-        f.path(),
-        &["commit", "-qm", "review events before their issue"],
-    );
-    commit(f.path(), "the issue they review");
-    f.terminal(&id);
-    let (pass, output) = cli(f.path(), &["land"]);
-    assert!(
-        !pass
-            && output.contains("findings.disposed")
-            && output.contains(&finding)
-            && output.contains(&disposition)
-            && output.contains("its disposition could not be traced"),
-        "{output}"
-    );
 }
 
 #[cfg(unix)]
@@ -2684,7 +2506,9 @@ fn unowned_branch_lands_unless_it_changes_records() {
         "{output}"
     );
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), head);
-    assert_eq!(hook(f.path(), "land", stop)["decision"], "block");
+    // Off the base, it is work in progress: reported, not blocked
+    // (atelier-md0v).
+    assert_eq!(hook(f.path(), "land", stop), in_progress_message(&output));
 }
 #[test]
 fn unowned_branch_landing_tolerates_stale_base_detached_head_and_reports_unrelated_history() {
@@ -3315,6 +3139,10 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "base_issue_edited",
         "with_goal",
         "with_note",
+        // An approval's identity is not compared with the authors, and the
+        // approval after a fix_now finding resolves it (atelier-md0v).
+        "self_approval",
+        "open_fix_now",
     ];
     let stale_cases = [
         "with_code",
@@ -3322,8 +3150,6 @@ fn a_close_after_approval_is_covered_by_merge_and_land_alike() {
         "follow_up_done",
         "base_issue_edited_done",
         "sibling_close",
-        "self_approval",
-        "open_fix_now",
     ];
     for case in covered_cases.iter().chain(&stale_cases).copied() {
         close_after_approval(case, covered_cases.contains(&case));
@@ -3661,7 +3487,7 @@ fn land_recovery_advice_for_direct_base_code_ends_in_a_clean_merge() {
     commit(f.path(), "code straight on the base");
 
     // A branch made with plain Git still carries the direct commit.
-    git(f.path(), &["switch", "-q", "-c", &format!("task/{owner}")]);
+    git(f.path(), &["switch", "-q", "-c", &owner]);
     let (pass, output) = cli(f.path(), &["start", &owner]);
     assert!(!pass && output.contains("land_base_unreviewed"), "{output}");
 
@@ -3985,7 +3811,7 @@ fn base_land_retains_claims_a_merge_tip_brings_in_through_its_other_parent() {
 
     // The second owner merges the base in last, so the base's new tip is a
     // merge whose first parent is the second owner's side.
-    git(f.path(), &["switch", "-q", &format!("task/{second}")]);
+    git(f.path(), &["switch", "-q", &second]);
     git(f.path(), &["merge", "-q", "--no-edit", "main"]);
     ok(f.path(), &["merge", &second]);
     git(f.path(), &["switch", "-q", "main"]);
@@ -4163,14 +3989,23 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     let f = Fixture::new();
     git(f.path(), &["switch", "-q", "main"]);
     ok(f.path(), &["doctor"]);
-    // A done claim with failing proof reaches the base without the gates,
+    // A done claim with an open blocker reaches the base without the gates,
     // as a direct push would.
     let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Still open"]);
     commit(f.path(), "plan it");
     ok(f.path(), &["issue", "transition", &old, "start"]);
     mark_done(f.path(), &old);
     commit(f.path(), "done without the gates");
-    let fail = |summary: &str| {
+    let mut record = f.store().load_issue_by_id(&blocker).unwrap();
+    record
+        .relationships
+        .blocks
+        .push(atelier_records::issue_relationship_target(&old));
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "an open blocker, also without the gates");
+    // A record about the claim: a receipt, which gates nothing itself.
+    let receipt = |summary: &str| {
         ok(
             f.path(),
             &[
@@ -4181,13 +4016,11 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
                 "--kind",
                 "test",
                 "--result",
-                "fail",
+                "pass",
                 summary,
             ],
         );
     };
-    fail("Proof that failed");
-    commit(f.path(), "failing proof");
     let upstream = tempdir().unwrap();
     git(upstream.path(), &["init", "-q", "--bare"]);
     git(
@@ -4200,7 +4033,7 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     ok(f.path(), &["land"]);
     let (pass, output) = cli(f.path(), &["doctor"]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
     git(f.path(), &["switch", "-q", &f.branch]);
@@ -4220,7 +4053,7 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     git(f.path(), &["switch", "-q", &f.branch]);
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
     git(f.path(), &["switch", "-q", "main"]);
@@ -4228,11 +4061,11 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     git(f.path(), &["switch", "-q", &f.branch]);
 
     // A branch that adds a record about it, or edits it, checks it again.
-    fail("Another failing run");
-    commit(f.path(), "more failing proof on the branch");
+    receipt("Another run");
+    commit(f.path(), "a receipt on the branch");
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
     git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
@@ -4247,7 +4080,7 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     commit(f.path(), "edit the old claim");
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
 
@@ -4258,7 +4091,7 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     );
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
 
@@ -4271,7 +4104,7 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     commit(f.path(), "revise the policy");
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
     git(f.path(), &["reset", "-q", "--hard", "HEAD^"]);
@@ -4285,13 +4118,13 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
             "Reviewer",
             "--recommendation",
             "fix_now",
-            "The proof never passed",
+            "The blocker is still open",
         ],
     );
     commit(f.path(), "finding on the old claim");
     let (pass, output) = cli(f.path(), &["land", &f.id]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
 
@@ -4310,12 +4143,12 @@ fn land_checks_only_changed_claims_and_doctor_checks_every_claim() {
     );
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.transitive_none_open")),
         "{output}"
     );
 }
 #[test]
-fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
+fn land_checks_claims_that_linked_records_affect() {
     // An older policy, whose work `close` validators judge the claims; merge
     // marks work done under the current one (atelier-jnrh).
     let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
@@ -4330,23 +4163,6 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
         ok(f.path(), &["issue", "transition", id, "start"]);
         mark_done(f.path(), id);
     }
-    let record = |result: &str, summary: &str| {
-        ok(
-            f.path(),
-            &[
-                "-q",
-                "evidence",
-                "record",
-                "--target",
-                &format!("issue/{old}"),
-                "--kind",
-                "test",
-                "--result",
-                result,
-                summary,
-            ],
-        )
-    };
     // A done child of an open parent, and a done item behind a superseded
     // blocker.
     let parent = ok(f.path(), &["-q", "issue", "create", "Open parent"]);
@@ -4383,9 +4199,6 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
         ok(f.path(), &["issue", "transition", id, "start"]);
         mark_done(f.path(), id);
     }
-    record("fail", "Proof that failed");
-    let passed = record("pass", "Proof that passed later");
-    let passed = passed.split_whitespace().next().unwrap();
     commit(f.path(), "done without the gates");
     let upstream = tempdir().unwrap();
     git(upstream.path(), &["init", "-q", "--bare"]);
@@ -4448,23 +4261,19 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     commit(f.path(), "reopen the child");
     refused("work.terminal");
 
-    // Removing proof changes no record that names the claim any more.
-    git(
-        f.path(),
-        &["rm", "-q", &format!(".atelier/evidence/{passed}.md")],
-    );
-    commit(f.path(), "remove the passing proof");
-    refused("evidence.no_newer_failure");
-
     // Off the base, history is trusted only up to the base's upstream: the
     // local base can hold commits that no land has checked.
     git(f.path(), &["switch", "-q", "main"]);
-    record("fail", "A newer failure");
-    commit(f.path(), "unpushed failing proof");
+    let unpushed = ok(f.path(), &["-q", "issue", "create", "Unpushed blocker"]);
+    ok(
+        f.path(),
+        &["issue", "link", &old, &unpushed, "--role", "blocked_by"],
+    );
+    commit(f.path(), "unpushed blocker of the done claim");
     git(f.path(), &["switch", "-q", "-c", "feature"]);
     let (pass, output) = cli(f.path(), &["land"]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.none_open")),
         "{output}"
     );
 
@@ -4476,7 +4285,7 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     commit(f.path(), "start owned work");
     let (pass, output) = cli(f.path(), &["land", &owner]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.none_open")),
         "{output}"
     );
 
@@ -4484,7 +4293,7 @@ fn land_checks_claims_that_linked_records_or_removed_proof_affect() {
     git(f.path(), &["branch", "--unset-upstream", "main"]);
     let (pass, output) = cli(f.path(), &["land", &owner]);
     assert!(
-        !pass && output.contains(&format!("{old} evidence.no_newer_failure")),
+        !pass && output.contains(&format!("{old} blockers.none_open")),
         "{output}"
     );
 }
@@ -4793,11 +4602,8 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     git(f.path(), &["switch", "-q", "main"]);
     let marks = [
         (&f.id, format!("    ↳ in_progress on {}", f.branch)),
-        (
-            &finished,
-            format!("    ↳ ✓ done on task/{finished}, not merged"),
-        ),
-        (&stuck, format!("    ↳ ⚠ blocked on task/{stuck}")),
+        (&finished, format!("    ↳ ✓ done on {finished}, not merged")),
+        (&stuck, format!("    ↳ ⚠ blocked on {stuck}")),
     ];
     for args in [&["work", "ready"][..], &["work", "all"], &["status"]] {
         let output = ok(f.path(), args);
@@ -4825,8 +4631,8 @@ fn ready_work_in_flight_on_another_branch_is_marked_with_its_state_there() {
     // The branch rows mark the same states as the marks.
     let status = ok(f.path(), &["status"]);
     for row in [
-        format!("task/{finished}  {finished} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Finished elsewhere"),
-        format!("task/{stuck}  {stuck} ⚠ blocked, ⚠ not approved, behind 0, merges cleanly  Stuck elsewhere"),
+        format!("{finished}  {finished} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Finished elsewhere"),
+        format!("{stuck}  {stuck} ⚠ blocked, ⚠ not approved, behind 0, merges cleanly  Stuck elsewhere"),
     ] {
         assert!(status.contains(&row), "{row}: {status}");
     }
@@ -4920,16 +4726,16 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
     git(f.path(), &["switch", "-q", "main"]);
     let status = ok(f.path(), &["status"]);
     assert_eq!(
-        branch_row(&status, &format!("task/{other}")),
+        branch_row(&status, &other),
         format!(
-            "task/{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Other work"
+            "{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, merges cleanly  Other work"
         ),
         "{status}"
     );
     // A failing receipt with no pass after it is the one proof fact shown,
     // and a later pass clears it.
     let receipt = |result: &str| {
-        git(f.path(), &["switch", "-q", &format!("task/{other}")]);
+        git(f.path(), &["switch", "-q", &other]);
         let id = ok(
             f.path(),
             &[
@@ -4952,20 +4758,20 @@ fn waiting_branches_show_merge_readiness_against_the_base() {
     let fail = receipt("fail");
     let status = ok(f.path(), &["status"]);
     assert_eq!(
-        branch_row(&status, &format!("task/{other}")),
+        branch_row(&status, &other),
         format!(
-            "task/{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, ⚠ failing evidence {fail}, merges cleanly  Other work"
+            "{other}  {other} ✓ done, not merged, ⚠ not approved, behind 0, ⚠ failing evidence {fail}, merges cleanly  Other work"
         ),
         "{status}"
     );
     receipt("pass");
     let status = ok(f.path(), &["status"]);
     assert!(
-        branch_row(&status, &format!("task/{other}")).contains("behind 0, merges cleanly"),
+        branch_row(&status, &other).contains("behind 0, merges cleanly"),
         "{status}"
     );
     // Branches are listed in name order.
-    let mut pair = [f.branch.clone(), format!("task/{other}")];
+    let mut pair = [f.branch.clone(), other.clone()];
     pair.sort();
     assert!(
         status.lines().any(
@@ -5267,7 +5073,7 @@ fn a_task_parent_owns_its_children_through_start_land_and_merge() {
     commit(path, "plan a parent task");
 
     ok(path, &["start", &first]);
-    let branch = format!("task/{parent}");
+    let branch = parent.clone();
     assert_eq!(git(path, &["branch", "--show-current"]), branch);
     fs::write(path.join("code"), "first slice\n").unwrap();
     commit(path, "first slice");
@@ -5378,7 +5184,7 @@ fn one_approval_on_the_parent_covers_follow_ups_closed_on_its_branch() {
 
     // Each follow-up starts on the parent's branch, with its own code and no
     // review of its own.
-    let branch = format!("task/{parent}");
+    let branch = parent.clone();
     for (number, child) in children.iter().enumerate() {
         ok(path, &["start", child]);
         assert_eq!(git(path, &["branch", "--show-current"]), branch);
@@ -5744,7 +5550,7 @@ fn last_line(output: &str) -> &str {
 }
 
 #[test]
-fn land_ends_with_a_verdict_line_and_push_follows_only_a_pass() {
+fn land_ends_with_a_verdict_line_and_push_follows_a_pass_or_work_in_progress() {
     let f = Fixture::new();
     let remote = with_remote(&f);
     let tip = |dir: &Path, branch: &str| git(dir, &["rev-parse", &format!("refs/heads/{branch}")]);
@@ -5763,21 +5569,38 @@ fn land_ends_with_a_verdict_line_and_push_follows_only_a_pass() {
         tip(remote.path(), &f.branch),
         git(f.path(), &["rev-parse", "HEAD"])
     );
-    // A refusal pushes nothing, exits non-zero, and ends with the refusal even
-    // when the output is piped.
+    // Work in progress on the branch is reported, and --push publishes the
+    // committed branch to its own upstream (atelier-md0v).
     fs::write(f.path().join("unpushed"), "unpushed\n").unwrap();
     commit(f.path(), "unpushed code");
-    let before = tip(remote.path(), &f.branch);
     let mut record = f.store().load_issue_by_id(&f.id).unwrap();
     record.issue.priority = "low".into();
     f.store().write_issue_atomic(&record).unwrap();
+    let (_, out) = cli(f.path(), &["land", "--push"]);
+    assert_eq!(
+        last_line(&out),
+        format!(
+            "land: work in progress — 1 check open (land_records_uncommitted), pushed to origin/{}",
+            f.branch
+        )
+    );
+    assert_eq!(
+        tip(remote.path(), &f.branch),
+        git(f.path(), &["rev-parse", "HEAD"])
+    );
+    // On the base a refusal pushes nothing, exits non-zero, and ends with
+    // the refusal even when the output is piped.
+    git(f.path(), &["checkout", "-q", "--", "."]);
+    git(f.path(), &["switch", "-q", "main"]);
+    ok(f.path(), &["issue", "note", &f.id, "Uncommitted base note"]);
+    let before = tip(remote.path(), "main");
     let (pass, out) = cli(f.path(), &["land", "--push"]);
     assert!(!pass, "{out}");
     assert_eq!(
         last_line(&out),
         "land: refused — 1 check (land_records_uncommitted), nothing pushed"
     );
-    assert_eq!(tip(remote.path(), &f.branch), before);
+    assert_eq!(tip(remote.path(), "main"), before);
     // pipefail is not POSIX; older dash (ubuntu-24.04's sh) rejects it.
     let piped = Command::new("bash")
         .args(["-c", "set -o pipefail; \"$0\" land --push 2>&1 | tail -1"])
@@ -5889,96 +5712,91 @@ fn recorded_branch(f: &Fixture, id: &str) -> Option<(String, String)> {
 }
 
 #[test]
-fn start_refuses_a_branch_whose_type_prefix_does_not_match_the_issue() {
+fn start_takes_an_unowned_current_branch_whatever_its_name() {
+    // Branch names carry no issue type (atelier-md0v): off the base, on a
+    // branch no item owns, start takes it.
     let f = Fixture::new();
     let id = unstarted_on_main(&f);
-    let wrong = format!("feature/{id}");
-    git(f.path(), &["switch", "-q", "-c", &wrong]);
-    let before = git(f.path(), &["status", "--porcelain"]);
-    let (pass, out) = cli(f.path(), &["start", &id]);
-    assert!(
-        !pass && out.contains("start_branch_prefix_mismatch"),
-        "{out}"
-    );
-    assert!(
-        out.contains(&format!("its branch is 'task/{id}'")) && out.contains("--base main"),
-        "{out}"
-    );
-    assert_eq!(git(f.path(), &["branch", "--show-current"]), wrong);
-    assert_eq!(git(f.path(), &["status", "--porcelain"]), before);
-    assert_eq!(recorded_branch(&f, &id), None);
+    let named = format!("feature/{id}");
+    git(f.path(), &["switch", "-q", "-c", &named]);
+    let out = ok(f.path(), &["start", &id]);
+    assert!(out.contains(&format!("Already on branch {named}")), "{out}");
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), named);
+    assert_eq!(recorded_branch(&f, &id), Some((named, "main".into())));
 }
 
 #[test]
-fn start_with_a_base_creates_the_owner_branch_from_a_detached_head() {
+fn start_refuses_a_detached_head_and_on_the_base_creates_the_bare_id_branch() {
     let f = Fixture::new();
     let id = unstarted_on_main(&f);
     let tip = git(f.path(), &["rev-parse", "main"]);
     git(f.path(), &["switch", "-q", "--detach", "main"]);
     let (pass, out) = cli(f.path(), &["start", &id]);
     assert!(
-        !pass && out.contains("start_detached_head") && out.contains("--base"),
+        !pass
+            && out.contains("start_detached_head")
+            && out.contains(&format!("git switch main && atelier start {id}")),
         "{out}"
     );
-    ok(f.path(), &["start", &id, "--base", "main"]);
-    assert_eq!(
-        git(f.path(), &["branch", "--show-current"]),
-        format!("task/{id}")
+    assert_eq!(recorded_branch(&f, &id), None);
+    git(f.path(), &["switch", "-q", "main"]);
+    // `--base`, which older guidance still passes, is accepted and ignored.
+    let out = ok(f.path(), &["start", &id, "--base", "main"]);
+    assert!(
+        out.contains("Note: start --base is deprecated and ignored"),
+        "{out}"
     );
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), id);
     assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
-    assert_eq!(
-        recorded_branch(&f, &id),
-        Some((format!("task/{id}"), "main".into()))
-    );
+    assert_eq!(recorded_branch(&f, &id), Some((id.clone(), "main".into())));
     assert_eq!(
         f.store().load_issue_by_id(&id).unwrap().issue.status,
         "in_progress"
     );
 }
 
+/// On the base, an uncommitted edit of `base_branch` does not make land read
+/// the base as a work branch: land judges it by HEAD's committed policy, so
+/// its refusal of unreviewed code stands, nothing is pushed and the Stop
+/// hook blocks (finding atelier-bo2i).
 #[test]
-fn start_with_a_base_ignores_the_current_branch_and_checks_the_base() {
+fn an_uncommitted_base_branch_edit_on_the_base_leaves_its_refusal_standing() {
     let f = Fixture::new();
-    let id = unstarted_on_main(&f);
-    let tip = git(f.path(), &["rev-parse", "main"]);
-    git(f.path(), &["switch", "-q", "-c", &format!("feature/{id}")]);
-    fs::write(f.path().join("stray"), "unrelated commit\n").unwrap();
-    commit(f.path(), "stray work");
-    ok(f.path(), &["start", &id, "--base", "main"]);
-    assert_eq!(
-        git(f.path(), &["branch", "--show-current"]),
-        format!("task/{id}")
+    let remote = with_remote(&f);
+    git(f.path(), &["switch", "-q", "main"]);
+    fs::write(f.path().join("unreviewed"), "code nobody reviewed\n").unwrap();
+    commit(f.path(), "unreviewed code on the base");
+    let path = f.path().join(".atelier/workflow.yaml");
+    let policy = fs::read_to_string(&path).unwrap();
+    assert!(policy.contains("base_branch: main"), "{policy}");
+    fs::write(
+        &path,
+        policy.replace("base_branch: main", "base_branch: renamed"),
+    )
+    .unwrap();
+    let before = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .args(["land", "--push"])
+        .output()
+        .unwrap();
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), tip);
-    assert!(!f.path().join("stray").exists());
-    assert_eq!(recorded_branch(&f, &id).unwrap().1, "main");
-    // Another branch cannot be recorded as the base, and a missing one is named.
-    let second = {
-        git(f.path(), &["switch", "-q", "main"]);
-        git(f.path(), &["branch", "-q", "elsewhere"]);
-        ok(
-            f.path(),
-            &[
-                "-q",
-                "issue",
-                "create",
-                "Third item",
-                "--body",
-                "## Goal\n\nx\n\n## Done when\n\ny",
-            ],
-        )
-    };
-    commit(f.path(), "plan third item");
-    git(f.path(), &["branch", "-qf", "elsewhere", "main"]);
-    let (pass, out) = cli(f.path(), &["start", &second, "--base", "elsewhere"]);
+    assert!(!output.status.success(), "{out}");
     assert!(
-        !pass && out.contains("start_base_mismatch") && out.contains("--base main"),
+        out.contains("land_base_unreviewed")
+            && last_line(&out).starts_with("land: refused")
+            && last_line(&out).ends_with(", nothing pushed"),
         "{out}"
     );
-    let (pass, out) = cli(f.path(), &["start", &second, "--base", "nope"]);
-    assert!(!pass && out.contains("start_base_missing"), "{out}");
-    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
-    assert_eq!(recorded_branch(&f, &second), None);
+    assert_eq!(
+        git(remote.path(), &["rev-parse", "refs/heads/main"]),
+        before
+    );
+    assert_eq!(hook(f.path(), "land", stop(f.path()))["decision"], "block");
 }
 
 #[test]
@@ -6120,43 +5938,6 @@ fn land_push_pushes_nothing_when_a_check_moves_head_during_land() {
     );
 }
 
-#[test]
-fn start_with_a_base_works_from_a_checkout_without_the_issue_record() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "-q", "main"]);
-    git(f.path(), &["branch", "-q", "old"]);
-    let id = unstarted_on_main(&f);
-    let planned = git(f.path(), &["rev-parse", "main"]);
-    // A branch forked before the issue existed.
-    git(f.path(), &["switch", "-q", "old"]);
-    ok(f.path(), &["start", &id, "--base", "main"]);
-    assert_eq!(
-        git(f.path(), &["branch", "--show-current"]),
-        format!("task/{id}")
-    );
-    assert_eq!(git(f.path(), &["rev-parse", "HEAD"]), planned);
-    // A detached commit older than the plan.
-    git(f.path(), &["switch", "-q", "main"]);
-    let other = ok(
-        f.path(),
-        &[
-            "-q",
-            "issue",
-            "create",
-            "Later item",
-            "--body",
-            "## Goal\n\nx\n\n## Done when\n\ny",
-        ],
-    );
-    commit(f.path(), "plan later item");
-    git(f.path(), &["switch", "-q", "--detach", &planned]);
-    ok(f.path(), &["start", &other, "--base", "main"]);
-    assert_eq!(
-        git(f.path(), &["branch", "--show-current"]),
-        format!("task/{other}")
-    );
-}
-
 fn lease_path(f: &Fixture) -> std::path::PathBuf {
     f.path()
         .join(".atelier/runtime/leases")
@@ -6260,15 +6041,12 @@ fn start_warns_instead_of_failing_when_the_lease_cannot_be_written() {
     let leases = lease_path(&f).parent().unwrap().to_path_buf();
     fs::remove_dir_all(&leases).unwrap();
     fs::write(&leases, "not a directory\n").unwrap();
-    let (pass, out) = cli(f.path(), &["start", &id, "--base", "main"]);
+    let (pass, out) = cli(f.path(), &["start", &id]);
     assert!(
         pass && out.contains("Warning") && out.contains("session lease"),
         "{out}"
     );
-    assert_eq!(
-        git(f.path(), &["branch", "--show-current"]),
-        format!("task/{id}")
-    );
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), id);
     assert_eq!(
         f.store().load_issue_by_id(&id).unwrap().issue.status,
         "in_progress"
@@ -6332,6 +6110,7 @@ fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
         ],
     );
     let old = ok(f.path(), &["-q", "issue", "create", "Pushed directly"]);
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Still open"]);
     ok(
         f.path(),
         &["issue", "link", &old, &mission, "--role", "advances"],
@@ -6339,20 +6118,12 @@ fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
     commit(f.path(), "plan the mission");
     ok(f.path(), &["issue", "transition", &old, "start"]);
     mark_done(f.path(), &old);
-    ok(
-        f.path(),
-        &[
-            "evidence",
-            "record",
-            "--target",
-            &format!("issue/{old}"),
-            "--kind",
-            "test",
-            "--result",
-            "fail",
-            "Proof that failed",
-        ],
-    );
+    let mut record = f.store().load_issue_by_id(&blocker).unwrap();
+    record
+        .relationships
+        .blocks
+        .push(atelier_records::issue_relationship_target(&old));
+    f.store().write_issue_atomic(&record).unwrap();
     commit(f.path(), "done without the gates");
     let upstream = tempdir().unwrap();
     git(upstream.path(), &["init", "-q", "--bare"]);
@@ -6361,7 +6132,7 @@ fn adding_an_issue_to_a_mission_rechecks_no_old_done_claim_in_it() {
         &["remote", "add", "origin", upstream.path().to_str().unwrap()],
     );
     git(f.path(), &["push", "-q", "-u", "origin", "main"]);
-    let reported = |output: &str| output.contains(&format!("{old} evidence.no_newer_failure"));
+    let reported = |output: &str| output.contains(&format!("{old} blockers.transitive_none_open"));
 
     let add_to_mission = |title: &str| {
         let id = ok(f.path(), &["-q", "issue", "create", title]);
@@ -6487,7 +6258,7 @@ fn merge_refuses_a_done_mission_the_branch_gives_open_work() {
 fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
     let f = Fixture::new();
     let id = f.id.clone();
-    let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+    let blocker = blocker_on_base(&f);
     let child = ok(
         f.path(),
         &["-q", "issue", "create", "Blocked child", "--parent", &id],
@@ -6519,40 +6290,26 @@ fn land_refusal_lists_each_failed_check_with_its_fix_and_counts_every_check() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
-             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.transitive_none_open). Next: start it with `atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
-             ⚠ {id} findings.disposed: {finding} fix_now finding \"Contract failure in code\" has no disposition. Next: atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"\n\
+            "⚠ {id} review.current: no independent approval or trivial exemption. Next: atelier review request {id}\n\
+             ⚠ {id} blockers.none_open: done but blocked by {blocker} todo medium Open blocker (also {child} blockers.transitive_none_open). Next: start it with `git switch main && atelier start {blocker}`, or drop the link with `atelier issue unlink {child} {blocker} --role blocked_by` if it is wrong\n\
+             ⚠ {id} findings.disposed: 1 fix_now finding awaits an approval after its fix (see review.current). Next: atelier review request {id}\n\
              ✓ records committed\n\
              ✓ 1 check passes (blockers.transitive_none_open)\n\
-             land: refused — 4 checks (review.current, blockers.none_open, findings.disposed, {child} blockers.transitive_none_open)\n"
+             land: work in progress — 4 checks open (review.current, blockers.none_open, findings.disposed, {child} blockers.transitive_none_open)\n"
         )
     );
-    // Every fix it prints runs as printed: review request, start or unlink
-    // the blocker, and the disposition.
+    // Every fix it prints runs as printed: the review requests, and start or
+    // unlink the blocker.
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 4);
-    // The Stop hook's reason is the same lines, ending with the verdict, so
-    // no fix command runs into other text.
+    // The Stop hook reports the same lines, ending with the verdict, so no
+    // fix command runs into other text, and blocks no turn (atelier-md0v).
     let output = hook(
         f.path(),
         "land",
         serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": false}),
     );
-    // The reason is the refusal verbatim: one recovery step per failure,
-    // and no sentence of its own (atelier-467y, atelier-ft88).
-    assert_eq!(output["decision"], "block");
-    assert_eq!(output["reason"].as_str().unwrap(), out.trim_end());
-    let output = hook(
-        f.path(),
-        "land",
-        serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": true}),
-    );
-    assert_eq!(
-        output["systemMessage"].as_str().unwrap(),
-        format!(
-            "Atelier landing still fails. Stopping to avoid a hook loop; unfinished work must be handed off honestly.\n{}",
-            out.trim_end()
-        )
-    );
+    assert_eq!(output, in_progress_message(&out));
+    let _ = finding;
 }
 
 /// A passing land says what it checked and, for a done owner, what comes
@@ -6611,6 +6368,18 @@ fn land_pass_lists_what_it_checked_and_the_next_step() {
     assert_eq!(ok(f.path(), &["land", "-q"]), "passed");
 }
 
+/// An open item planned on the base and merged into the fixture's branch,
+/// which is checked out again: a blocker whose own work starts from the
+/// base (atelier-md0v).
+fn blocker_on_base(f: &Fixture) -> String {
+    git(f.path(), &["switch", "-q", "main"]);
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+    commit(f.path(), "plan a blocker on the base");
+    git(f.path(), &["switch", "-q", &f.branch]);
+    git(f.path(), &["merge", "-q", "--no-edit", "main"]);
+    blocker
+}
+
 /// An item's status set directly, as a stored record would hold it.
 fn set_status(f: &Fixture, id: &str, status: &str) {
     let mut record = f.store().load_issue_by_id(id).unwrap();
@@ -6654,22 +6423,19 @@ fn land_reports_uncommitted_records_dirty_paths_and_the_gates_in_one_run() {
         format!(
             "⚠ {id} land_records_uncommitted: 6 tracker records differ from HEAD: {records} and 1 more; commit them with the work. Next: git add .atelier && git commit -m \"…\"\n\
              ⚠ {id} land_completion_dirty: done, but the checkout has 6 uncommitted paths: p1, p2, p3, p4, p5 and 1 more. Next: commit them with `git add -A && git commit -m \"…\"`, or set them aside with `git stash push --include-untracked`\n\
-             ⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n\
-             land: refused — 3 checks (land_records_uncommitted, land_completion_dirty, review.current)\n"
+             ⚠ {id} review.current: no independent approval or trivial exemption, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n\
+             land: work in progress — 3 checks open (land_records_uncommitted, land_completion_dirty, review.current)\n"
         )
     );
     // Each fix runs as printed and clears its own failure.
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 4);
-    // The Stop hook reports the same run.
+    // The Stop hook reports the same run without blocking.
     let output = hook(
         f.path(),
         "land",
         serde_json::json!({"hook_event_name": "Stop", "cwd": f.path(), "stop_hook_active": false}),
     );
-    assert!(
-        output["reason"].as_str().unwrap().ends_with(out.trim_end()),
-        "{output}"
-    );
+    assert_eq!(output, in_progress_message(&out));
 }
 
 /// `land <id>` away from the owner's branch says where it is owned and how
@@ -6684,10 +6450,18 @@ fn land_with_an_id_points_to_the_owners_branch() {
     // The base's record of the item says nothing of its branch.
     let (pass, out) = cli(f.path(), &["land", &id]);
     assert!(!pass);
+    // On the base it is a refusal; on another branch, work in progress
+    // (atelier-md0v).
     let mismatch = |here: &str| {
         format!(
-            "⚠ {id} land_branch_mismatch: owned on {}, not on {here}. Next: git switch {} && atelier land\n{not_checked}\nland: refused — 1 check (land_branch_mismatch)\n",
-            f.branch, f.branch
+            "⚠ {id} land_branch_mismatch: owned on {}, not on {here}. Next: git switch {} && atelier land\n{not_checked}\n{}\n",
+            f.branch,
+            f.branch,
+            if here == "main" {
+                "land: refused — 1 check (land_branch_mismatch)"
+            } else {
+                "land: work in progress — 1 check open (land_branch_mismatch)"
+            }
         )
     };
     assert_eq!(out, mismatch("main"));
@@ -6758,7 +6532,7 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
     fs::write(f.path().join(".atelier/workflow.yaml"), "invalid: [").unwrap();
     commit(f.path(), "invalid policy");
     let cause = "workflow_config_parse_error: .atelier/workflow.yaml: did not find expected node content at line 2 column 1, while parsing a flow node. Next: fix .atelier/workflow.yaml and commit it";
-    let review = format!("⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}");
+    let review = format!("⚠ {id} review.current: no independent approval or trivial exemption. Next: atelier review request {id}");
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass);
     assert_eq!(
@@ -6767,7 +6541,7 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
             "⚠ {id} {cause}\n{review}\n\
              ✓ records committed\n\
              ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed)\n\
-             land: refused — 2 checks (workflow_config_parse_error, review.current)\n"
+             land: work in progress — 2 checks open (workflow_config_parse_error, review.current)\n"
         )
     );
     let (pass, out) = cli(f.path(), &["merge", &id, "--check"]);
@@ -6808,7 +6582,8 @@ fn land_and_merge_check_report_an_invalid_policy_once() {
 fn land_fixes_for_a_blocks_link_clear_their_failures() {
     let f = Fixture::under(Some(STARTER_WITH_BLOCKED_AND_REVIEW));
     let id = f.id.clone();
-    let blocker = ok(f.path(), &["-q", "issue", "create", "Open blocker"]);
+    // The blocker is planned on the base, where its own work starts.
+    let blocker = blocker_on_base(&f);
     ok(
         f.path(),
         &["issue", "link", &blocker, &id, "--role", "blocks"],
@@ -6843,7 +6618,7 @@ fn land_shows_no_pass_for_an_owner_whose_checkout_record_differs() {
     assert!(!out.contains("✓ "), "{out}");
     assert!(
         out.contains(&format!(
-            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n"
+            "⚠ {id} review.current: no independent approval or trivial exemption, judged on HEAD's copy; the checkout's differs. Next: git add .atelier && git commit -m \"…\"\n"
         )),
         "{out}"
     );
@@ -6855,36 +6630,48 @@ fn land_shows_no_pass_for_an_owner_whose_checkout_record_differs() {
 /// in the owner's record, for any legal branch name (atelier-9a6e,
 /// atelier-hen4).
 #[test]
-fn land_base_mismatch_prints_a_runnable_fix() {
-    for other in ["other", "a|b", "it$s", "a@b", "q'q"] {
-        let f = Fixture::new();
-        git(f.path(), &["switch", "-q", "main"]);
-        let id = ok(f.path(), &["-q", "issue", "create", "From another branch"]);
-        commit(f.path(), "plan");
-        git(f.path(), &["switch", "-q", "-c", other]);
-        fs::write(f.path().join("other"), "other\n").unwrap();
-        commit(f.path(), "other work");
-        ok(f.path(), &["start", &id]);
-        commit(f.path(), "start from another branch");
-        let (pass, out) = cli(f.path(), &["land"]);
-        assert!(!pass);
-        let path = format!(".atelier/issues/{id}.md");
-        let line = out
-            .lines()
-            .find(|line| line.contains("land_base_mismatch"))
-            .unwrap_or_else(|| panic!("{other}: {out}"));
-        assert!(
-            line.starts_with(&format!(
-                "⚠ {id} land_base_mismatch: recorded base {other} disagrees with trusted policy base main. Next: perl -pi -e "
-            )) && line.ends_with(&format!(" {path} && git commit -m \"…\" -- {path}")),
-            "{other}: {out}"
-        );
-        assert_eq!(
-            next_steps::assert_fixes_run(f.path(), &out, &["land"]),
-            1,
-            "{other}"
-        );
-    }
+fn a_recorded_branch_base_is_ignored_and_the_policy_base_is_the_base() {
+    // An older Atelier recorded the branch `start` ran on as the base, and
+    // land refused it; the base is the policy's now, and the field is
+    // written but not read (atelier-md0v).
+    let f = Fixture::new();
+    let path = f.path().join(format!(".atelier/issues/{}.md", f.id));
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("  branch_base: main\n"), "{text}");
+    fs::write(
+        &path,
+        text.replace("  branch_base: main\n", "  branch_base: gone\n"),
+    )
+    .unwrap();
+    commit(f.path(), "a base an older Atelier recorded");
+    let (_, out) = cli(f.path(), &["land"]);
+    assert!(
+        !out.contains("land_base_mismatch") && !out.contains("gone"),
+        "{out}"
+    );
+    let mut record = f.store().load_issue_by_id(&f.id).unwrap();
+    record.sections.report = Some("complete".into());
+    f.store().write_issue_atomic(&record).unwrap();
+    commit(f.path(), "implementer report");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    let landed = ok(f.path(), &["land"]);
+    assert!(landed.ends_with("land: passed"), "{landed}");
+    let status = ok(f.path(), &["status"]);
+    assert_eq!(field(&status, "Integration base"), Some("main"), "{status}");
+    let merged = ok(f.path(), &["merge", &f.id]);
+    assert!(merged.contains("into main"), "{merged}");
+    assert_eq!(git(f.path(), &["branch", "--show-current"]), "main");
 }
 
 /// An unowned branch that changes an item owned on a local branch is told
@@ -6934,7 +6721,7 @@ fn an_uncommitted_approval_is_fixed_by_committing_it() {
     );
     // `merge` folds the done claim the approval would cover into the line.
     let judged = format!(
-        "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>, judged on HEAD's copy; the checkout's differs"
+        "⚠ {id} review.current: no independent approval or trivial exemption, judged on HEAD's copy; the checkout's differs"
     );
     for gate in [vec!["land"], vec!["merge", id.as_str(), "--check"]] {
         let (pass, out) = cli(f.path(), &gate);
@@ -7191,8 +6978,13 @@ fn an_operation_left_in_progress_is_reported_before_any_gate() {
                 )),
                 "{gate:?}: {out}"
             );
+            // On a work branch land reports it; a rebase leaves HEAD
+            // detached, where land refuses (atelier-md0v).
             assert!(
-                out.ends_with(&format!("refused — 1 check ({code})\n")),
+                out.ends_with(&format!("refused — 1 check ({code})\n"))
+                    || gate[0] == "land"
+                        && operation != "rebase"
+                        && out.ends_with(&format!("work in progress — 1 check open ({code})\n")),
                 "{gate:?}: {out}"
             );
             assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &gate), 1);
@@ -7312,15 +7104,16 @@ fn evidence_views_judge_a_merged_claim_as_land_and_doctor_do() {
 /// later code commit staled reads stale there, where land refuses
 /// evidence.attached (atelier-yr1n).
 #[test]
-fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
+fn evidence_views_judge_an_unmerged_claim_at_head() {
     let dir = tempdir().unwrap();
     let path = dir.path();
     git(path, &["init", "-qb", "main"]);
     git(path, &["config", "user.name", "Author"]);
     git(path, &["config", "user.email", "author@example.test"]);
     ok(path, &["init", "--slug", "atelier"]);
-    // An older policy whose work `close` requires proof: the claims it makes
-    // are judged by its validators, as before atelier-jnrh.
+    // An older policy whose work `close` names evidence.attached, which is
+    // read and ignored (atelier-md0v): the claims it makes are judged by
+    // its other validators, as before atelier-jnrh.
     let policy = path.join(".atelier/workflow.yaml");
     let text = STARTER_WITH_BLOCKED_AND_REVIEW.replace(
         "        - blockers.none_open\n",
@@ -7382,7 +7175,7 @@ fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
             .unwrap()
             .to_string()
     };
-    let stale = |proof: &str| proof.starts_with("Proof: ⚠ no fresh pass; newest pass ");
+    let stale = |proof: &str| proof.starts_with("Proof: no fresh pass; newest pass ");
 
     // A sibling branch that merged the owner's unmerged work.
     git(path, &["switch", "-q", "main"]);
@@ -7391,16 +7184,11 @@ fn evidence_views_judge_an_unmerged_claim_at_head_as_land_does() {
     ok(path, &["start", &sibling]);
     commit(path, "start sibling");
     git(path, &["merge", "-q", "--no-edit", &owner_branch]);
-    let (landed, land) = cli(path, &["land"]);
-    assert!(
-        !landed && land.contains(&format!("⚠ {child} evidence.attached: ")),
-        "{land}"
-    );
-    let (merged, check) = cli(path, &["merge", &sibling, "--check"]);
-    assert!(
-        !merged && check.contains(&format!("{child} evidence.attached")),
-        "{check}"
-    );
+    // The view marks the child's pass stale; no gate reads it.
+    let (_, land) = cli(path, &["land"]);
+    assert!(!land.contains("evidence."), "{land}");
+    let (_, check) = cli(path, &["merge", &sibling, "--check"]);
+    assert!(!check.contains("evidence."), "{check}");
     assert!(stale(&proof()), "{}", proof());
 
     // A detached checkout of the owner's tip: land refuses the untraceable
@@ -7464,20 +7252,36 @@ fn hook_payload_errors_are_reported_apart_from_landing_failures() {
             missing.display()
         ))
     );
-    // A real failure still blocks, with land's refusal as its reason.
+    // A failure on a work branch is work in progress: reported, with land's
+    // report, and not blocked (atelier-md0v).
     f.terminal(&f.id);
     fs::write(f.path().join("scratch"), "unfinished\n").unwrap();
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass);
     assert_eq!(
         hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+        in_progress_message(&out)
+    );
+    // Outside any Atelier repository there is nothing to land: the hook says
+    // so and exits successfully.
+    let outside = tempdir().unwrap();
+    let outside = outside.path().canonicalize().unwrap();
+    assert_eq!(
+        hook(
+            f.path(),
+            "land",
+            serde_json::json!({"hook_event_name": "Stop", "cwd": outside})
+        ),
+        serde_json::json!({"systemMessage": format!(
+            "Atelier: {} is not in an Atelier repository, so there is nothing to land.",
+            outside.display()
+        )})
     );
 }
 
 /// On the base, uncommitted records alone are reported without blocking a
-/// turn, while `land` still refuses; on a work branch they block, and on the
-/// base any other failure blocks (atelier-mp6v).
+/// turn, while `land` still refuses, and any other failure blocks
+/// (atelier-mp6v); on a work branch nothing blocks (atelier-md0v).
 #[test]
 fn uncommitted_records_alone_block_no_turn_on_the_base() {
     let f = Fixture::new();
@@ -7530,50 +7334,55 @@ fn uncommitted_records_alone_block_no_turn_on_the_base() {
         hook(f.path(), "land", stop(f.path())),
         serde_json::json!({"decision": "block", "reason": out.trim_end()})
     );
-    // On a work branch, uncommitted records belong with the work: they block.
+    // On a work branch, uncommitted records are work in progress: land
+    // reports them and exits successfully, and the hook does not block.
     git(f.path(), &["checkout", "-q", "--", "."]);
     git(f.path(), &["switch", "-q", &f.branch]);
     ok(f.path(), &["issue", "note", &f.id, "Work-branch note"]);
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(
-        !pass && out.ends_with("land: refused — 1 check (land_records_uncommitted)\n"),
+        !pass
+            && out.ends_with("land: work in progress — 1 check open (land_records_uncommitted)\n"),
         "{out}"
     );
     assert_eq!(
         hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+        in_progress_message(&out)
     );
 }
 
-/// On the owner's own branch, a refusal whose only failed check is the
-/// owner's missing review is reported without blocking a turn, while `land`
-/// still refuses; with an open finding or any other failure it blocks
-/// (atelier-i80r).
+/// On a work branch, land reports what is open and exits successfully, and
+/// the Stop hook reports it without blocking a turn, whatever is open: the
+/// owner's missing review, uncommitted code, an open finding (atelier-md0v).
 #[test]
-fn a_pending_review_on_the_owners_branch_blocks_no_turn() {
+fn work_in_progress_on_a_branch_is_reported_and_blocks_no_turn() {
     let f = Fixture::new();
     let id = f.id.clone();
     f.terminal(&id);
-    let (pass, out) = cli(f.path(), &["land"]);
-    assert!(!pass);
+    // `land` itself exits successfully, with the report on stdout.
+    let output = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .arg("land")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let out = String::from_utf8(output.stdout).unwrap();
     assert_eq!(
         out,
         format!(
-            "⚠ {id} review.current: no independent approval or trivial exemption; authors: author <author@example.test>. Next: atelier review request {id}\n\
+            "⚠ {id} review.current: no independent approval or trivial exemption. Next: atelier review request {id}\n\
              ✓ records committed\n\
              ✓ 3 checks pass (blockers.none_open, blockers.transitive_none_open, findings.disposed)\n\
-             land: refused — 1 check (review.current)\n"
+             land: work in progress — 1 check open (review.current)\n"
         )
     );
+    assert!(output.stderr.is_empty());
     assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 1);
     assert_eq!(
         hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"systemMessage": format!(
-            "Atelier: {id} awaits an independent review; land refuses until it is approved, but waiting does not block a turn.\n{}",
-            out.trim_end()
-        )})
+        in_progress_message(&out)
     );
-    // Another failure with it blocks: uncommitted code in a done checkout.
+    // Uncommitted code in a done checkout is reported too.
     fs::write(f.path().join("scratch"), "unfinished\n").unwrap();
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(
@@ -7582,10 +7391,10 @@ fn a_pending_review_on_the_owners_branch_blocks_no_turn() {
     );
     assert_eq!(
         hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+        in_progress_message(&out)
     );
     fs::remove_file(f.path().join("scratch")).unwrap();
-    // So does an open finding: the agent has to dispose of it.
+    // So is an open finding.
     ok(
         f.path(),
         &[
@@ -7602,12 +7411,26 @@ fn a_pending_review_on_the_owners_branch_blocks_no_turn() {
     commit(f.path(), "finding");
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(
-        !pass && out.ends_with("land: refused — 2 checks (review.current, findings.disposed)\n"),
+        !pass
+            && out.ends_with(
+                "land: work in progress — 2 checks open (review.current, findings.disposed)\n"
+            ),
         "{out}"
     );
     assert_eq!(
         hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+        in_progress_message(&out)
+    );
+    // `--quiet` prints the verdict alone.
+    let quiet = Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .current_dir(f.path())
+        .args(["-q", "land"])
+        .output()
+        .unwrap();
+    assert!(quiet.status.success());
+    assert_eq!(
+        String::from_utf8(quiet.stdout).unwrap(),
+        "work in progress — 2 checks open (review.current, findings.disposed)\n"
     );
 }
 
@@ -7641,12 +7464,13 @@ fn a_record_from_a_newer_atelier_says_to_reinstall() {
         context["hookSpecificOutput"]["additionalContext"],
         format!("Atelier context unavailable: {newer}")
     );
+    // On a work branch it is reported and blocks no turn (atelier-md0v).
     let (pass, out) = cli(f.path(), &["land"]);
     assert!(!pass);
-    assert_eq!(out, format!("Error: {newer}\nland: refused\n"));
+    assert_eq!(out, format!("Error: {newer}\nland: work in progress\n"));
     assert_eq!(
         hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+        in_progress_message(&out)
     );
 }
 
@@ -7696,96 +7520,11 @@ fn a_git_failure_during_land_is_not_called_uncommitted_records() {
         "{out}"
     );
     let output = hook(f.path(), "land", stop(f.path()));
-    let reason = output["reason"].as_str().unwrap();
-    assert_eq!(output["decision"], "block");
+    let message = output["systemMessage"].as_str().unwrap();
+    assert!(output.get("decision").is_none(), "{output}");
     assert!(
-        !reason.contains("land_records_uncommitted") && reason.ends_with("land: refused"),
-        "{reason}"
-    );
-}
-
-/// A fix_now finding a later commit resolved, waiting only for a fresh
-/// independent approval, is a pending review too: the hook reports it
-/// without blocking while land refuses; an undisposed finding with it
-/// blocks (atelier-i80r, atelier-rc8j decision).
-#[test]
-fn a_resolved_fix_now_awaiting_approval_blocks_no_turn() {
-    let f = Fixture::new();
-    let id = f.id.clone();
-    f.terminal(&id);
-    let finding = ok(
-        f.path(),
-        &[
-            "-q",
-            "review",
-            "finding",
-            &id,
-            "--identity",
-            "Reviewer",
-            "--recommendation",
-            "fix_now",
-            "Contract failure in code",
-        ],
-    );
-    commit(f.path(), "finding");
-    fs::write(f.path().join("code"), "fixed code\n").unwrap();
-    commit(f.path(), "fix the finding");
-    let fix = git(f.path(), &["rev-parse", "HEAD"]);
-    ok(
-        f.path(),
-        &[
-            "review",
-            "disposition",
-            &finding,
-            "--decision",
-            "fix_now",
-            "--resolution-commit",
-            &fix,
-            "--identity",
-            "Author",
-            "Fixed",
-        ],
-    );
-    commit(f.path(), "disposition");
-    let (pass, out) = cli(f.path(), &["land"]);
-    assert!(
-        !pass && out.ends_with("land: refused — 2 checks (review.current, findings.disposed)\n"),
-        "{out}"
-    );
-    assert!(
-        out.contains(&format!(
-            "⚠ {id} findings.disposed: 1 fix_now finding resolved; it needs a fresh approval (see review.current). Next: atelier review request {id}\n"
-        )),
-        "{out}"
-    );
-    assert_eq!(next_steps::assert_fixes_run(f.path(), &out, &["land"]), 2);
-    assert_eq!(
-        hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"systemMessage": format!(
-            "Atelier: {id} awaits an independent review; land refuses until it is approved, but waiting does not block a turn.\n{}",
-            out.trim_end()
-        )})
-    );
-    // An undisposed finding with it is the agent's to act on: it blocks.
-    ok(
-        f.path(),
-        &[
-            "review",
-            "finding",
-            &id,
-            "--identity",
-            "Reviewer",
-            "--recommendation",
-            "fix_now",
-            "Another failure",
-        ],
-    );
-    commit(f.path(), "second finding");
-    let (pass, out) = cli(f.path(), &["land"]);
-    assert!(!pass && out.contains("has no disposition"), "{out}");
-    assert_eq!(
-        hook(f.path(), "land", stop(f.path())),
-        serde_json::json!({"decision": "block", "reason": out.trim_end()})
+        !message.contains("land_records_uncommitted") && message.contains("index"),
+        "{message}"
     );
 }
 
@@ -7980,16 +7719,10 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     );
     commit(f.path(), "migrate the successor");
     ok(f.path(), &["doctor"]);
-    // Once the file has held another disposition, the migrated one is
-    // judged where it is set again, even by restoring its bytes by hand
-    // (ADR 0025 decision 4): the reviewer has authored work by then.
+    // Restoring the migrated disposition by hand is one more decision,
+    // judged by no identity (atelier-md0v).
     let path = reviews.join(format!("{}.md", findings[2]));
     let migrated = fs::read_to_string(&path).unwrap();
-    git(f.path(), &["config", "user.name", "Reviewer"]);
-    fs::write(f.path().join("reviewer-code"), "work by Reviewer\n").unwrap();
-    commit(f.path(), "Reviewer's work");
-    git(f.path(), &["config", "user.name", "Author"]);
-    ok(f.path(), &["doctor"]);
     ok(
         f.path(),
         &[
@@ -8007,137 +7740,19 @@ fn migrating_dispositions_folds_events_into_findings_and_passes_doctor() {
     ok(f.path(), &["doctor"]);
     fs::write(&path, migrated).unwrap();
     commit(f.path(), "restore the migrated disposition by hand");
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(
-        !pass
-            && out.contains("findings.disposed")
-            && out.contains(&findings[2])
-            && out.contains("needs to be set by a non-author"),
-        "{out}"
-    );
+    ok(f.path(), &["doctor"]);
 }
 
-/// The non-author rule survives the migration: a no_action the author set
-/// in a separate event is refused once folded in, as it was before.
+/// No identity is compared with the work's authors (atelier-md0v): a
+/// no_action the author set in a separate event is accepted, unmigrated
+/// and once folded in.
 #[test]
-fn a_migrated_author_no_action_is_still_refused() {
-    let (f, findings) = pre_adr_0025_repository("Author", true);
-    // Unmigrated, it is refused the same way, and the reviewer setting it
-    // writes the field and removes the event it replaces.
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(
-        !pass && out.contains(&findings[2]) && out.contains("needs to be set by a non-author"),
-        "{out}"
-    );
-    {
-        let (f, findings) = pre_adr_0025_repository("Author", true);
-        ok(
-            f.path(),
-            &[
-                "review",
-                "disposition",
-                &findings[2],
-                "--identity",
-                "Reviewer",
-                "--decision",
-                "no_action",
-                "--commit-records",
-                "Accepted",
-            ],
-        );
-        assert!(!f.path().join(".atelier/reviews/atelier-d004.md").exists());
-        ok(f.path(), &["doctor"]);
-    }
+fn a_migrated_author_no_action_is_accepted() {
+    let (f, _) = pre_adr_0025_repository("Author", true);
+    ok(f.path(), &["doctor"]);
     ok(f.path(), &["migrate", "dispositions", "--apply"]);
     commit(f.path(), "migrate dispositions");
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(
-        !pass
-            && out.contains("findings.disposed")
-            && out.contains(&findings[2])
-            && out.contains("needs to be set by a non-author"),
-        "{out}"
-    );
-    // Nor can the migration commit launder it: a fold edited before it is
-    // committed no longer matches its event.
-    let (f, findings) = pre_adr_0025_repository("Author", true);
-    ok(f.path(), &["migrate", "dispositions", "--apply"]);
-    let path = f
-        .path()
-        .join(format!(".atelier/reviews/{}.md", findings[2]));
-    let text = fs::read_to_string(&path).unwrap();
-    fs::write(
-        &path,
-        text.replace("    identity: Author\n", "    identity: Reviewer\n"),
-    )
-    .unwrap();
-    commit(f.path(), "migrate dispositions, edited");
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(
-        !pass
-            && out.contains("findings.disposed")
-            && out.contains("differs from atelier-d004, the event it was migrated from"),
-        "{out}"
-    );
-}
-
-/// Who set a disposition is judged at the commit that set the field, not at
-/// the commit it names (ADR 0025): a no_action set before its identity
-/// authored any of the work counts, the same no_action set again after
-/// does not, and restoring the earlier bytes by hand is a later setting too.
-#[test]
-fn a_disposition_is_judged_at_the_commit_that_set_it() {
-    let f = Fixture::new();
-    git(f.path(), &["switch", "-q", "main"]);
-    let id = ok(f.path(), &["-q", "issue", "create", "Judged work"]);
-    let finding = ok(
-        f.path(),
-        &[
-            "-q",
-            "review",
-            "finding",
-            &id,
-            "--identity",
-            "Reviewer",
-            "--recommendation",
-            "no_action",
-            "Concern",
-        ],
-    );
-    commit(f.path(), "finding");
-    let dispose = || {
-        ok(
-            f.path(),
-            &[
-                "review",
-                "disposition",
-                &finding,
-                "--identity",
-                "Helper",
-                "--decision",
-                "no_action",
-                "Not a problem",
-            ],
-        );
-        commit(f.path(), "dispose");
-    };
-    dispose();
-    let path = f.path().join(format!(".atelier/reviews/{finding}.md"));
-    let first = fs::read_to_string(&path).unwrap();
-    git(f.path(), &["config", "user.name", "Helper"]);
-    fs::write(f.path().join("helper-code"), "work by Helper\n").unwrap();
-    commit(f.path(), "Helper's work");
-    git(f.path(), &["config", "user.name", "Author"]);
-    f.terminal(&id);
     ok(f.path(), &["doctor"]);
-    dispose();
-    let refused = |out: &str| out.contains("findings.disposed") && out.contains(&finding);
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(!pass && refused(&out), "{out}");
-    fs::write(&path, first).unwrap();
-    commit(f.path(), "restore the earlier disposition by hand");
-    let (pass, out) = cli(f.path(), &["doctor"]);
-    assert!(!pass && refused(&out), "{out}");
 }
 
 /// Setting or changing a disposition after approval keeps the approval

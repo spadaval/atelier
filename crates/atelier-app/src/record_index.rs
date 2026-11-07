@@ -15,7 +15,7 @@ use atelier_records::review::RetiredDisposition;
 use atelier_records::{
     canonical_record_dirs, is_local_atelier_path, parse_evidence_record_file, parse_issue_record,
     validate_record_id, validate_record_kind, CanonicalIssueRecord, Relationships, BLOCKED_BY,
-    DISCOVERED_FROM, WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
+    WELL_KNOWN_LINK_TYPES, WELL_KNOWN_RELATION_TYPES,
 };
 
 use crate::record_ref::{self, RecordKind};
@@ -719,50 +719,9 @@ impl RecordIndex {
             .disposition()
             .and_then(|disposition| disposition.follow_up.as_ref())
         {
-            if exists("follow-up", "issue", issue) {
-                self.check_follow_up_source(issue, record)?;
-            }
+            exists("follow-up", "issue", issue);
         }
         Ok(())
-    }
-
-    /// A follow-up that declares where it was discovered must name the item
-    /// its deferring review is about: a review deferral and the follow-up's
-    /// own `discovered_from` link are two stores of one fact.
-    fn check_follow_up_source(&self, follow_up: &str, finding: &ReviewRecord) -> Result<()> {
-        let Some(issue) = self.issues.get(follow_up) else {
-            return Ok(());
-        };
-        let sources = issue
-            .relationships
-            .relates
-            .iter()
-            .filter(|relation| relation.relation_type == DISCOVERED_FROM)
-            .map(|relation| {
-                (
-                    relation,
-                    self.discovery_source(&relation.kind, &relation.id),
-                )
-            })
-            .collect::<Vec<_>>();
-        if sources.is_empty()
-            || sources
-                .iter()
-                .any(|(_, source)| source.as_deref() == Some(finding.target.as_str()))
-        {
-            return Ok(());
-        }
-        let named = sources
-            .iter()
-            .map(|(relation, _)| format!("{} {}", relation.kind, relation.id))
-            .collect::<Vec<_>>()
-            .join(", ");
-        bail!(
-            "review_follow_up_source_mismatch: finding {} on {} is deferred to {follow_up}, which says it was discovered from {named}; discovered_from must name {} or one of its findings or receipts",
-            finding.header.id,
-            finding.target,
-            finding.target
-        )
     }
 
     /// The work item a `discovered_from` link names: the item itself, the

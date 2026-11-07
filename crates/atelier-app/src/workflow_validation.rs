@@ -41,7 +41,7 @@ pub(crate) fn evaluate_with_context(
             continue;
         }
         let started = Instant::now();
-        let (passed, reason, help) = evaluate_builtin(&request, definition, fresh, read)?;
+        let (passed, reason, help) = evaluate_builtin(&request, definition, read)?;
         results.push(ValidatorResult {
             validator: definition.builtin.clone(),
             passed,
@@ -56,7 +56,6 @@ pub(crate) fn evaluate_with_context(
 fn evaluate_builtin(
     request: &ValidatorRequest<'_>,
     definition: &ValidatorDefinition,
-    fresh: bool,
     read: &mut crate::git_freshness::ReadContext<'_>,
 ) -> Result<(bool, String, Option<String>)> {
     let ValidatorRequest {
@@ -79,9 +78,6 @@ fn evaluate_builtin(
             }
         }
         "blockers.transitive_none_open" => transitive_blockers_none_open(index, policy, issue_id),
-        "evidence.attached" => {
-            evidence_attached(index, read, issue_id, definition.params.as_ref(), fresh)
-        }
         "lint.none_blocking" => Ok(without_validator_help(lint_none_blocking(index, repo_root))),
         "git.worktree_clean" => git_worktree_clean(repo_root).map(without_validator_help),
         "shell.check" => {
@@ -111,23 +107,6 @@ fn evaluate_builtin(
 
 fn without_validator_help((passed, reason): (bool, String)) -> (bool, String, Option<String>) {
     (passed, reason, None)
-}
-
-fn evidence_attached(
-    index: &RecordIndex,
-    read: &mut crate::git_freshness::ReadContext<'_>,
-    issue_id: &str,
-    params: Option<&ValidatorParams>,
-    fresh: bool,
-) -> Result<(bool, String, Option<String>)> {
-    let (min_count, kind) = match params {
-        Some(ValidatorParams::EvidenceAttached { min_count, kind }) => {
-            (*min_count as usize, kind.as_deref())
-        }
-        _ => (1, None),
-    };
-    let gate = read.issue_gate_with_freshness(index, issue_id, min_count, kind, fresh)?;
-    Ok((gate.passed, gate.reason, (!gate.passed).then(|| format!("This policy requires a passing receipt: record one with `atelier evidence record --target issue/{issue_id} --kind {} -- <command>`", kind.unwrap_or("test")))))
 }
 
 fn lint_none_blocking(index: &RecordIndex, repo_root: &Path) -> (bool, String) {

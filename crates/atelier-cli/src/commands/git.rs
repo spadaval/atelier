@@ -331,7 +331,7 @@ pub(crate) fn check_base_commits(
             .collect::<Vec<_>>();
         if let Some(first) = other.first() {
             bail!(
-                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: `git switch -c <issue_type>/<id>`, `git branch -f {base} {base}@{{upstream}}`, then `atelier start <id>` there; get it reviewed and integrate it with `atelier merge`.",
+                "land_base_unreviewed: commit {} on {base} changes {}{} without recorded review; only records and mission strategies may be committed on {base} directly. Move it to a work branch: `git switch -c <id>`, `git branch -f {base} {base}@{{upstream}}`, then `atelier start <id>` there; get it reviewed and integrate it with `atelier merge`.",
                 &commit[..8.min(commit.len())],
                 first.display(),
                 match other.len() {
@@ -363,8 +363,8 @@ pub(crate) fn check_base_commits(
 
 /// The approvals and trivial exemptions that cover commits not yet on a
 /// trusted point of the base (its upstream for `land`, its head for
-/// `merge`): those of completed owners that branched from this base and are
-/// not done at the trusted point, that `merge` would accept (atelier-n90q).
+/// `merge`): those of completed started owners not done at the trusted
+/// point, that `merge` would accept (atelier-n90q).
 struct BaseReviews {
     /// Commits a covering pin contains.
     covered: BTreeSet<String>,
@@ -402,10 +402,9 @@ impl BaseReviews {
             let Some(owner) = index.get_issue(&review.target) else {
                 continue;
             };
-            if !owner
-                .workflow_branch
-                .as_ref()
-                .is_some_and(|branch| branch.branch_base == *base)
+            // Every started owner's work merges into the policy's base; a
+            // recorded `branch_base` is not read (atelier-md0v).
+            if owner.workflow_branch.is_none()
                 || policy.status_category(&owner.status) != Some("done")
                 || resolve(repo, &review.commit).is_err()
             {
@@ -1123,10 +1122,10 @@ fn branch_merge(repo: &Path, tip: &str, base_head: &str) -> Result<BranchMerge> 
 }
 
 /// The owner's readiness on a branch at `tip`, judged from the branch's
-/// committed records: approval as `merge`'s `review.current` judges it, and
-/// the failing receipt, if any, that `evidence.no_newer_failure` would
-/// refuse on an item in the owner's scope that is done or that merge marks
-/// done. Superseded work is skipped, as `merge` skips it.
+/// committed records: approval as `merge`'s `review.current` judges it, and,
+/// as a note that gates nothing (atelier-md0v), the failing receipt, if any,
+/// on an item in the owner's scope that is done or that merge marks done.
+/// Superseded work is skipped, as `merge` skips it.
 fn readiness(
     repo: &Path,
     index: &RecordIndex,

@@ -129,8 +129,11 @@ fn gather(
     let policy = atelier_app::workflow_policy::load(repo)?;
     refuse_unfinished(&index, &policy, &id, &owner_id)?;
     let scope = atelier_app::review_gate::scope(&index, &owner_id)?;
-    let base_head = resolve(repo, &format!("refs/heads/{}", branch.branch_base))
-        .with_context(|| format!("base branch {} not found", branch.branch_base))?;
+    // The base is the policy's `base_branch`; a recorded `branch_base` is not
+    // read (atelier-md0v).
+    let base = policy.branch_policy.base_branch.clone();
+    let base_head = resolve(repo, &format!("refs/heads/{base}"))
+        .with_context(|| format!("base branch {base} not found"))?;
     let fork = text(repo, &["merge-base", &base_head, &head])?;
     // Only the branch's own commits: those the base has merged in are not.
     let count = |from: &str| -> Result<usize> {
@@ -161,6 +164,7 @@ fn gather(
     let mut findings = Vec::new();
     let mut reviews = Vec::new();
     let mut last_account = None;
+    let mut read = atelier_app::git_freshness::ReadContext::new(repo);
     for record in &events {
         let line = |what: String| HistoryLine {
             id: record.header.id.clone(),
@@ -174,24 +178,61 @@ fn gather(
                 recommendation,
                 disposition,
             } => {
-                let state = match disposition {
-                    None => "open, no disposition".to_owned(),
-                    Some(disposition) => {
-                        let mut state = format!(
-                            "{} by {}",
-                            disposition.decision.as_str(),
-                            disposition.identity
-                        );
-                        if let Some(commit) = &disposition.resolution_commit {
-                            state.push_str(&format!(" at {}", short(commit)));
-                        }
-                        if let Some(follow_up) = &disposition.follow_up {
-                            state.push_str(&format!(" to {follow_up}"));
-                        }
-                        state
+                // A fix_now finding needs no decision: the approval after
+                // its fix resolves it, judged as `review list` judges it
+                // (atelier-md0v, finding atelier-kby7).
+                let fixed =
+                    atelier_app::review_gate::fix_approval(&index, &mut read, &owner_id, record)
+                        .map(|approval| {
+                            format!(
+                                "approved since by {} @ {}",
+                                approval.header.id,
+                                short(&approval.commit)
+                            )
+                        });
+                let fix_now = disposition
+                    .as_ref()
+                    .map_or(*recommendation == FindingDecision::FixNow, |disposition| {
+                        disposition.decision == FindingDecision::FixNow
+                    });
+                let mut parts = Vec::new();
+                if let Some(disposition) = disposition {
+                    let mut state = format!(
+                        "{} by {}",
+                        disposition.decision.as_str(),
+                        disposition.identity
+                    );
+                    if let Some(commit) = &disposition.resolution_commit {
+                        state.push_str(&format!(" at {}", short(commit)));
                     }
+                    if let Some(follow_up) = &disposition.follow_up {
+                        state.push_str(&format!(" to {follow_up}"));
+                    }
+                    parts.push(state);
+                }
+                let open = match (fix_now, fixed) {
+                    (true, Some(fixed)) => {
+                        parts.push(fixed);
+                        false
+                    }
+                    (true, None) => {
+                        parts.push("open until an approval after its fix".to_owned());
+                        true
+                    }
+                    (false, _) if disposition.is_none() => {
+                        parts.push("open, no decision".to_owned());
+                        true
+                    }
+                    (false, _) => false,
                 };
-                findings.push(line(format!("{} | {state}", recommendation.as_str())));
+                findings.push((
+                    open,
+                    line(format!(
+                        "{} | {}",
+                        recommendation.as_str(),
+                        parts.join(", ")
+                    )),
+                ));
             }
             ReviewEvent::Review | ReviewEvent::Approval | ReviewEvent::TrivialExemption => {
                 let what = match &record.event {
@@ -207,7 +248,11 @@ fn gather(
         }
     }
     // Open findings first; the rest keep their order.
-    findings.sort_by_key(|finding| !finding.what.contains("open, no disposition"));
+    findings.sort_by_key(|(open, _)| !open);
+    let findings = findings
+        .into_iter()
+        .map(|(_, finding)| finding)
+        .collect::<Vec<_>>();
 
     let since = match from {
         Some(reference) => {
@@ -330,7 +375,7 @@ fn gather(
         children,
         edits,
         branch: branch.work_branch.clone(),
-        base: branch.branch_base.clone(),
+        base,
         head,
         since,
         whole,
@@ -590,7 +635,7 @@ pub fn render(facts: &Facts) -> String {
             out.push_str(&format!("  - `{check}`\n"));
         }
     }
-    out.push_str("- Approve only when you recommend no `fix_now` finding and the proof passes. An approval identity must differ from the code's Git authors.\n");
+    out.push_str("- Approve only when you recommend no `fix_now` finding and the proof passes. Your approval of a later commit resolves the `fix_now` findings recorded before it.\n");
     if let Some(rules) = &facts.rules {
         out.push_str(&format!(
             "\n### This repository's rules\n\n{}\n",
@@ -661,7 +706,7 @@ mod tests {
             findings: vec![
                 HistoryLine {
                     id: "atelier-fnd1".into(),
-                    what: "fix_now | open, no disposition".into(),
+                    what: "fix_now | open until an approval after its fix".into(),
                     commit: "1".repeat(40),
                     identity: "Rae".into(),
                     summary: "high: src/a.rs:3 panics\non empty input".into(),
@@ -729,7 +774,7 @@ Second line.
 
 ## Findings so far
 
-- atelier-fnd1 fix_now | open, no disposition @ 11111111 Rae: high: src/a.rs:3 panics on empty input
+- atelier-fnd1 fix_now | open until an approval after its fix @ 11111111 Rae: high: src/a.rs:3 panics on empty input
 - atelier-fnd2 defer | defer by Lee to atelier-fol1 @ 11111111 Rae: low: nit
 
 ## Earlier reviews
@@ -746,7 +791,7 @@ Second line.
 - Judge in order: does it do what Done when says, then is it fit to integrate. Check the proof exercises the claims.
 - Run the proof yourself and read the full output. The merge checks are:
   - `cargo test`
-- Approve only when you recommend no `fix_now` finding and the proof passes. An approval identity must differ from the code's Git authors.
+- Approve only when you recommend no `fix_now` finding and the proof passes. Your approval of a later commit resolves the `fix_now` findings recorded before it.
 
 ### This repository's rules
 

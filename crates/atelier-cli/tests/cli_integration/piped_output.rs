@@ -80,7 +80,7 @@ fn a_cat_file_child_that_exits_is_reported_instead_of_ending_on_sigpipe() {
     );
     assert!(success, "create failed: {stderr}");
     commit_all(dir.path(), "records");
-    let branch = format!("task/{}", id.trim());
+    let branch = id.trim().to_owned();
     let status = Command::new("git")
         .current_dir(dir.path())
         .args(["branch", &branch])

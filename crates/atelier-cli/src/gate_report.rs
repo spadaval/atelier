@@ -8,7 +8,7 @@ use atelier_app::{
     review_gate::{Gap, GateNode},
     workflow_policy::WorkflowPolicy,
 };
-use atelier_core::{FindingDecision, ReviewEvent, ReviewRecord};
+use atelier_core::{FindingDecision, ReviewEvent};
 
 /// What the renderer reads besides the nodes.
 pub(crate) struct Gates<'a> {
@@ -590,11 +590,21 @@ impl Gates<'_> {
                     })
             });
         let merging = self.merging_owner(blocker);
+        // Work outside the owner's scope starts on its own branch, created
+        // from the base: `start` takes no branch another item owns
+        // (atelier-md0v).
+        let start = match self.owner {
+            Some(owner) if self.reviewed_owner(blocker) != owner => format!(
+                "git switch {} && atelier start {blocker}",
+                self.policy.branch_policy.base_branch
+            ),
+            _ => format!("atelier start {blocker}"),
+        };
         let (verb, command) = match (merging, self.closing_path(blocker).as_deref()) {
-            (Some(_), _) if startable => ("start it with", format!("atelier start {blocker}")),
+            (Some(_), _) if startable => ("start it with", start),
             (Some(owner), _) => ("merge it with", format!("atelier merge {owner}")),
             (None, Some([name])) => ("close it with", self.transition_command(blocker, name)),
-            _ if startable => ("start it with", format!("atelier start {blocker}")),
+            _ if startable => ("start it with", start),
             _ => (
                 "list its transitions with",
                 format!("atelier issue transition {blocker}"),
@@ -675,47 +685,6 @@ impl Gates<'_> {
         )
     }
 
-    /// A pass to clear `target`'s failing receipt: its command again when
-    /// it captured one.
-    fn rerun_command(&self, target: &str, evidence: &str) -> String {
-        match self.index.evidence(evidence) {
-            Some(record) => match &record.data.command {
-                Some(command) => format!(
-                    "atelier evidence record --target issue/{target} --kind {} -- {command}",
-                    record.data.evidence_type
-                ),
-                None => format!(
-                    "atelier evidence record --target issue/{target} --kind {} --result pass \"…\"",
-                    record.data.evidence_type
-                ),
-            },
-            None => format!("atelier evidence show {evidence}"),
-        }
-    }
-
-    /// The latest command `target`'s proof captured, recorded again.
-    fn recapture_command(&self, target: &str) -> Option<String> {
-        let record = self
-            .index
-            .evidence_records()
-            .into_iter()
-            .filter(|record| {
-                record.data.command.is_some()
-                    && record
-                        .header
-                        .relationships
-                        .attachments
-                        .iter()
-                        .any(|link| link.kind == "issue" && link.id == target)
-            })
-            .max_by_key(|record| record.data.captured_at)?;
-        Some(format!(
-            "atelier evidence record --target issue/{target} --kind {} -- {}",
-            record.data.evidence_type,
-            record.data.command.as_deref()?
-        ))
-    }
-
     /// Whether the owner's review passes only by trivial exemption.
     fn exempted_only(&self, nodes: &[GateNode]) -> bool {
         nodes
@@ -738,62 +707,18 @@ impl Gates<'_> {
             match gap {
                 Gap::Undisposed(id) => {
                     let (target, shown, recommendation) = self.finding(id);
-                    let fix = match recommendation.unwrap_or(FindingDecision::FixNow) {
-                        FindingDecision::FixNow => format!("atelier review disposition {id} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\""),
-                        FindingDecision::Defer => format!("atelier review disposition {id} --decision defer --follow-up <issue> --identity <reviewer> \"…\""),
-                        FindingDecision::NoAction => format!("atelier review disposition {id} --decision no_action --identity <reviewer> \"…\""),
+                    let fix = match recommendation.unwrap_or(FindingDecision::Defer) {
+                        FindingDecision::NoAction => format!("atelier review disposition {id} --decision no_action --identity <identity> \"…\""),
+                        _ => format!("atelier review disposition {id} --decision defer --follow-up <issue> --identity <identity> \"…\""),
                     };
                     lines.push(Line::new(
                         &target,
                         node,
-                        format!("{shown} has no disposition"),
+                        format!("{shown} needs a decision: defer it to a follow-up, or no_action, or fix it and record fix_now"),
                         Some(fix),
                     ));
                 }
-                Gap::Unresolved(finding) => {
-                    let (target, shown, _) = self.finding(finding);
-                    lines.push(Line::new(
-                        &target,
-                        node,
-                        format!("{shown}: its fix_now disposition names no resolution commit"),
-                        Some(format!("atelier review disposition {finding} --decision fix_now --resolution-commit <commit> --identity <identity> \"…\"")),
-                    ));
-                }
                 Gap::AwaitingApproval(id) => awaiting.push(id.clone()),
-                Gap::Unaccepted(finding) => {
-                    let (target, shown, _) = self.finding(finding);
-                    let set = self
-                        .index
-                        .require_review(finding)
-                        .ok()
-                        .and_then(ReviewRecord::disposition)
-                        .map(|disposition| {
-                            format!(
-                                "{} disposition by {}",
-                                disposition.decision.as_str(),
-                                disposition.identity
-                            )
-                        })
-                        .unwrap_or_else(|| "its disposition".into());
-                    lines.push(Line::new(
-                        &target,
-                        node,
-                        format!("{shown}: {set} needs to be set by a non-author"),
-                        Some(format!(
-                            "atelier review request {}",
-                            self.reviewed_owner(&target)
-                        )),
-                    ));
-                }
-                Gap::Untraced { finding, error } => {
-                    let (target, shown, _) = self.finding(finding);
-                    lines.push(Line::new(
-                        &target,
-                        node,
-                        format!("{shown}: its disposition could not be traced to the commit that set it: {error}"),
-                        Some(format!("atelier review show {finding}")),
-                    ));
-                }
                 _ => {}
             }
         }
@@ -811,17 +736,19 @@ impl Gates<'_> {
             };
             let owner = self.reviewed_owner(targets.first().map_or(&record, |target| target));
             let count = count_noun(awaiting.len(), "fix_now finding");
-            let they = if awaiting.len() == 1 {
-                "it needs"
+            let (they, their, await_) = if awaiting.len() == 1 {
+                ("it needs", "its", "awaits")
             } else {
-                "they need"
+                ("they need", "their", "await")
             };
             let cause = if self.owner_failed(nodes, "review.current") {
-                format!("{count} resolved; {they} a fresh approval (see review.current)")
+                format!("{count} {await_} an approval after {their} fix (see review.current)")
             } else if self.exempted_only(nodes) {
-                format!("{count} resolved; a fix_now resolution needs an independent approval, which a trivial exemption is not")
+                format!("{count} {await_} an independent approval after {their} fix, which a trivial exemption is not")
             } else {
-                format!("{count} resolved after the current approval; {they} a fresh approval")
+                format!(
+                    "{count} came after the current approval; {they} an approval after {their} fix"
+                )
             };
             lines.push(Line::new(
                 &record,
@@ -895,19 +822,6 @@ impl Gates<'_> {
                 Some(format!("atelier review request {target}")),
             )],
             "findings.disposed" => self.finding_lines(node, nodes),
-            "evidence.no_newer_failure" => node
-                .gaps
-                .iter()
-                .filter_map(|gap| match gap {
-                    Gap::FailingEvidence(id) => Some(Line::new(
-                        target,
-                        node,
-                        node.reason.clone(),
-                        Some(self.rerun_command(target, id)),
-                    )),
-                    _ => None,
-                })
-                .collect(),
             "shell.check" => node
                 .gaps
                 .iter()
@@ -932,12 +846,6 @@ impl Gates<'_> {
                     _ => None,
                 })
                 .collect(),
-            "evidence.attached" => vec![Line::new(
-                target,
-                node,
-                first_line(),
-                self.recapture_command(target).or_else(|| node.fix.clone()),
-            )],
             check if check.starts_with("required_field.") => {
                 let field = &check["required_field.".len()..];
                 let fix = format!(

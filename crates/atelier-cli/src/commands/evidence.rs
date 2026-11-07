@@ -163,10 +163,9 @@ pub fn manual_criteria(values: &[String]) -> Result<Vec<EvidenceCriterion>> {
 /// Kinds every repository knows, as `evidence record --help` names them.
 const DEFAULT_KINDS: [&str; 2] = ["test", "validation"];
 
-/// Warns on stderr when `kind` is one no receipt, workflow gate or default
-/// uses: a typo would make a kind no gate or filter matches. The receipt is
-/// still recorded.
-pub fn warn_unknown_kind(index: &RecordIndex, state_dir: &Path, kind: &str) {
+/// Warns on stderr when `kind` is one no receipt or default uses: a typo
+/// would make a kind no filter matches. The receipt is still recorded.
+pub fn warn_unknown_kind(index: &RecordIndex, kind: &str) {
     let mut known = DEFAULT_KINDS
         .iter()
         .map(|kind| kind.to_string())
@@ -177,30 +176,9 @@ pub fn warn_unknown_kind(index: &RecordIndex, state_dir: &Path, kind: &str) {
             .into_iter()
             .map(|record| record.data.evidence_type.clone()),
     );
-    if let Some(policy) = state_dir
-        .parent()
-        .and_then(|repo_root| atelier_app::workflow_policy::load(repo_root).ok())
-    {
-        let validators = policy.merge_checks.iter().chain(
-            policy
-                .workflows
-                .values()
-                .flat_map(|workflow| workflow.transitions.values())
-                .flat_map(|transition| transition.validators.iter()),
-        );
-        for validator in validators {
-            if let Some(atelier_workflow::ValidatorParams::EvidenceAttached {
-                kind: Some(kind),
-                ..
-            }) = &validator.params
-            {
-                known.insert(kind.clone());
-            }
-        }
-    }
     if !known.contains(kind) {
         eprintln!(
-            "⚠ evidence kind '{kind}' is new: no receipt, gate or default uses it, so no gate or filter for another kind matches it. Known kinds: {}",
+            "⚠ evidence kind '{kind}' is new: no receipt or default uses it, so no filter for another kind matches it. Known kinds: {}",
             known.into_iter().collect::<Vec<_>>().join(", ")
         );
     }
@@ -808,9 +786,8 @@ pub fn list(index: &RecordIndex, repo_root: &Path, options: ListOptions<'_>) -> 
         );
     }
     if let Some(item) = item.as_deref() {
-        let gated = marks.attached_gate(index, item);
         let proof = marks.item(index, item)?;
-        println!("Proof: {}", proof_verdict(proof, gated));
+        println!("Proof: {}", proof_verdict(proof));
     }
     let mut actions = Vec::new();
     if let Some(first) = shown.first() {
@@ -848,12 +825,10 @@ fn list_filters(item: Option<&str>, result: Option<EvidenceResult>) -> String {
     filters
 }
 
-/// The gates' verdict on one item's proof, for the line ending its list.
-/// Having no fresh pass is a gap, marked ⚠, only when a policy's
-/// `evidence.attached` gate asks for one (`gated`); otherwise it is stated
-/// plainly, since no other gate needs a receipt (atelier-s66u).
-fn proof_verdict(proof: &ItemProof, gated: bool) -> String {
-    let warn = if gated { "⚠ " } else { "" };
+/// One item's proof, for the line ending its list. Having no fresh pass is
+/// stated plainly, since no gate reads receipts (atelier-s66u,
+/// atelier-md0v).
+fn proof_verdict(proof: &ItemProof) -> String {
     let held = |pass: &str| {
         proof.receipts.iter().find_map(|(id, mark)| match mark {
             ProofMark::HeldAtClose(claim) if id == pass => Some(claim.clone()),
@@ -873,8 +848,8 @@ fn proof_verdict(proof: &ItemProof, gated: bool) -> String {
             ),
             None => format!("✓ fresh pass {pass}"),
         },
-        (None, None, Some(pass)) => format!("{warn}no fresh pass; newest pass {pass} is stale"),
-        (None, None, None) => format!("{warn}no passing proof"),
+        (None, None, Some(pass)) => format!("no fresh pass; newest pass {pass} is stale"),
+        (None, None, None) => "no passing proof".to_owned(),
     }
 }
 
@@ -931,25 +906,6 @@ impl<'a> ProofMarks<'a> {
         Ok(&self.items[issue_id])
     }
 
-    /// Whether the policy runs an `evidence.attached` gate on any transition
-    /// of `issue_id`'s workflow; without a readable policy, none does.
-    fn attached_gate(&self, index: &RecordIndex, issue_id: &str) -> bool {
-        let (Some(policy), Some(issue)) = (self.policy.as_ref(), index.issue_record(issue_id))
-        else {
-            return false;
-        };
-        policy
-            .workflow_for_issue_type(&issue.issue.issue_type)
-            .is_ok_and(|workflow| {
-                workflow.transitions.values().any(|transition| {
-                    transition
-                        .validators
-                        .iter()
-                        .any(|validator| validator.builtin == "evidence.attached")
-                })
-            })
-    }
-
     /// The mark of `evidence_id` as proof of `issue_id`, or `None` when it
     /// does not validate that item.
     fn mark(
@@ -987,7 +943,7 @@ fn mark_text(result: EvidenceResult, mark: &ProofMark) -> String {
         ProofMark::Stale(staleness) => attention(format!("stale ({})", staleness_text(staleness))),
         ProofMark::SupersededByFail(fail) => format!("⚠ superseded by newer fail {fail}"),
         ProofMark::SupersededByPass(pass) => format!("superseded by newer pass {pass}"),
-        ProofMark::BlocksCompletion => "⚠ blocks completion".to_string(),
+        ProofMark::NoPassSince => "⚠ no pass since".to_string(),
     }
 }
 
@@ -1104,9 +1060,9 @@ fn print_confirmation(
             mark_text(data.result, &mark)
         ),
         (EvidenceResult::Pass, _, _) => crate::gate_report::verdict("evidence record", &[]),
-        (EvidenceResult::Fail, Some(issue), _) => format!(
-            "evidence record: recorded fail — {issue} cannot merge or be done until a later pass"
-        ),
+        (EvidenceResult::Fail, Some(issue), _) => {
+            format!("evidence record: recorded fail — a note on {issue}; no gate reads receipts")
+        }
         (EvidenceResult::Fail, None, _) => "evidence record: recorded fail".to_string(),
         (result, _, _) => format!(
             "evidence record: recorded {} — it never counts as a pass",

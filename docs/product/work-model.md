@@ -192,10 +192,13 @@ children done together (see [Completion](#completion)), so no rule orders a
 parent after its children. Superseding a parent retires the parent with any
 open children, which then show as context only. Superseding needs no open blockers resolved, its own or a
 parent's, and `land` does not hold a superseded item to them: the work will
-not happen (atelier-lq42). The default branch name is
-`<issue_type>/<id>`; typed `workflow_branch`
-metadata records an explicit `work_branch` and `branch_base` on the owner.
-Missions coordinate work rather than own a work branch.
+not happen (atelier-lq42). Branch names carry no issue type: on the base,
+`start` names a new branch with the owner's bare ID. Typed `workflow_branch`
+metadata records the owner's `work_branch`, and a `branch_base` that `start`
+sets to the policy's base branch and nothing reads: the base is always the
+policy's `base_branch`, and the field stays only so an older Atelier can parse
+the record, until atelier-ml3r drops it (ADR 0028 decision 5). Missions
+coordinate work rather than own a work branch.
 
 `atelier start <id>` resolves the owner, checks the target branch's records,
 checks out or creates its work branch, records branch metadata, and applies the
@@ -205,21 +208,24 @@ or validation, takes no branch: `start` and `merge` refuse it with
 `start_done_on_base` or `merge_done_on_base` and name the transition that
 marks it done on the base (atelier-8bh4).
 
-A new work branch is created from the current branch, which `start` records
-as the branch base without checking it; `land` later refuses with
-`land_base_mismatch` unless that base is the policy's base branch, the one it
-trusts. `atelier start <id> --base <branch>` creates the branch from that local
-branch instead, from any checkout including a detached HEAD, resolves the issue and reads and
-checks the records as they are on that base (the checkout need not hold them), and records it. `--base` names
-the policy's base branch only (`start_base_mismatch` otherwise; a branch that
-does not exist is `start_base_missing`), and a base without the issue's
-committed record is refused with `start_branch_missing_record`. Without
-`--base`, a detached HEAD refuses with `start_detached_head`, and a new branch
-is not created from a current branch named `<prefix>/<owner id>` whose prefix
-is not the owner's type, such as `task/<id>` for a feature: `start` refuses
-with `start_branch_prefix_mismatch` and names the right branch to create, since
-it would record the wrong branch as the base and `land` would later fail with
-`land_base_mismatch` (atelier-mhx0, atelier-yc4d).
+Which branch `start` uses depends on where it runs (atelier-md0v):
+
+- An owner with a recorded branch, in this checkout's records or in a local
+  branch's own record of it (as on the base before the work merges), switches
+  to that branch, checking and changing the records as they are there; a
+  branch without the issue's committed record is refused with
+  `start_branch_missing_record`.
+- On the base, `start` creates a branch named with the owner's bare ID from
+  the base, or switches to an existing branch of that name.
+- On a branch another item owns, it refuses with `start_branch_owned`, naming
+  that item, with `git switch <base> && atelier start <id>` as the step.
+- From a detached HEAD it refuses with `start_detached_head`.
+- On any other branch, such as one created by hand, it takes the current
+  branch as the owner's work branch.
+
+`start` runs from where it is. An older `--base <branch>` is accepted,
+hidden and ignored, with a note that the base comes from policy, so
+guidance that still passes it does not fail.
 
 `start` also leaves a runtime lease for the owner, so a second session can
 learn the item is taken (atelier-81e5). The lease is a small file under
@@ -236,9 +242,9 @@ two sessions in one worktree cannot be told apart.
 
 Begin work with `atelier start`, not `atelier issue transition <id> start`.
 The bare transition only changes the record: it creates no branch and records
-no owner. While such work is active, `atelier land` refuses it with
-`land_work_untraceable`; if it is set done on the base branch without a
-branch, `land` there refuses the done claim (atelier-fj1t). Use the bare
+no owner. While such work is active, `atelier land` reports it with
+`land_work_untraceable` (on the base, a refusal); if it is set done on the base
+branch without a branch, `land` there refuses the done claim (atelier-fj1t). Use the bare
 transition when the owner branch already exists and is checked out, for
 example to start a further child on its parent's branch.
 
@@ -252,7 +258,8 @@ commit, push, open reviews, or merge.
 Work is done when its change is merged
 ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2). The order is:
 start, implement, tick every Done when line and write the implementer report,
-ask for review, fix and re-review, approve, merge. There is no close step for
+ask for review, fix and re-review, approve, merge. A `fix_now` finding needs
+no disposition: the approval of the fix resolves it. There is no close step for
 work: the `work` workflow has `supersede` for work that will not happen, and
 no `close`.
 

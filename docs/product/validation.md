@@ -2,8 +2,9 @@
 
 Evidence is a durable receipt for a particular claim. Agent Factory decides when
 proof needs a tracker record and when independent validation is necessary.
-Atelier checks that receipts are honest, commit-bound, and fresh enough for the
-boundary that consumes them.
+Atelier checks that receipts are honest and commit-bound, and marks how fresh
+they are. No gate reads them: a receipt is a note for what nothing else
+records ([ADR 0028](../adr/0028-simpler-lifecycle.md) decision 5).
 
 Every receipt names its subject, producer, kind, summary, result, and full Git
 commit. Results are `pass`, `fail`, `blocked`, or `not-applicable`. The last
@@ -135,13 +136,13 @@ followed the deciding proof, and the `Criteria:` line counts proven criteria
 whose proof came before later code commits.
 
 Use `atelier evidence list <id>` to see an item's receipts, each marked
-fresh, held at close, stale or superseded as the evidence gates judge it
-(a merged done claim at its close, other work at HEAD), ending with the
+fresh, held at close, stale or superseded (a merged done claim at its close,
+other work at HEAD), ending with the
 item's proof verdict; `--result fail` filters for one explicit result, and
 `--limit`/`--all` set how many rows. `atelier evidence show <evidence-id>` is
 brief, with `--full` for the stored record. `evidence record` confirms in
 one line and ends with its verdict line; a recorded fail exits zero, and its
-verdict names the item it blocks. A `--target` is an issue ID, or
+verdict says it is a note on the item that no gate reads. A `--target` is an issue ID, or
 `issue/<id>` or `evidence/<id>`. Use `attach` only when the existing proof
 also supports another item. See [Human CLI Output](human-cli-output.md#evidence-views).
 Correct a claim by adding a new receipt, not by rewriting a receipt that later
@@ -152,14 +153,15 @@ work may rely on.
 A receipt must identify a real full commit, not a short revision, branch name,
 or the word `HEAD`. A passing receipt older than the item's last relevant
 change is stale: later implementation, policy, or acceptance changes make it
-stale, and `evidence list` marks it so. A stale pass does not satisfy an
-`evidence.attached` gate a policy configures, but no other gate asks for a
-fresh one.
+stale, and `evidence list` marks it so. No gate asks for a fresh pass: a
+policy naming the `evidence.attached` validator parses, and the name is
+ignored.
 
-A failure blocks completion (`merge`, `land` and a done transition refuse
-with `evidence.no_newer_failure`) until a pass is recorded after it. Any pass
-recorded after it clears it for good, whatever its command or pin, even once
-later commits make the pass stale. Command capture refuses uncommitted code,
+A failure with no pass recorded after it is marked `⚠ no pass since` in
+`evidence list` and noted in the branch views; it blocks nothing, neither
+`merge`, `land` nor a done transition. Any pass recorded after it clears the
+mark for good, whatever its command or pin, even once later commits make the
+pass stale. Command capture refuses uncommitted code,
 so a captured pass describes committed state; a manual pass is the
 recorder's judgment.
 

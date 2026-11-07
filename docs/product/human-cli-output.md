@@ -81,11 +81,11 @@ The ID, the result marked as a status word is (`✓ pass`, `⚠ fail`,
 `⚠ blocked`, `not-applicable`), the kind, `for` the records it is attached
 to (a role appears only when it is not `validates`), the pinned commit, the
 capture time, its standing, and last the command, or a manual receipt's
-summary. The standing is the one the `evidence.*` gates give it against its
-item: `✓ fresh`, `⚠ stale (code changed in <commit>)` (or `acceptance
+summary. The standing is judged against its item, as a note no gate reads
+(ADR 0028 decision 5): `✓ fresh`, `⚠ stale (code changed in <commit>)` (or `acceptance
 changed in <commit>`, `uncommitted code changes`, `pin not in HEAD's
 history`), `⚠ superseded by newer fail <id>` for a pass, and for a fail
-`⚠ blocks completion` or `superseded by newer pass <id>`. A done claim the
+`⚠ no pass since` or `superseded by newer pass <id>`. A done claim the
 base already holds, outside the checkout owner's scope, is judged as land
 and doctor judge it, at its close: a pass that nothing between its pin and
 the claim commit invalidated reads `✓ held at close <commit>` however much
@@ -121,10 +121,12 @@ owner's approval state and its findings:
 ```
 Approval: ⚠ stale — atelier-x16l @e2562bd6 by Independent reviewer 3; changed since by 1 commit:
   1a2b3c4d Tweak the sample: proof-sample.txt
-Findings: 21 disposed, 1 open
-  ⚠ atelier-4cid defer, no disposition  The Stop hook runs at the end of every turn…
+Findings: 21 settled, 2 open
+  ⚠ atelier-4cid defer, no decision  The Stop hook runs at the end of every turn…
+  ⚠ atelier-9rq2 fix_now, open until an approval after its fix  parse() ignores input
   ✓ atelier-ul0a no_action → no_action by Reviewer R @c24af21a  Name could be better
-  ✓ atelier-1ia7 defer → fix_now by Author @a485ef02, fixed at a485ef02  docs/adr/0022…
+  ✓ atelier-3hc1 fix_now → approved since by atelier-x16l @e2562bd6  Wrong exit code
+  ✓ atelier-1ia7 defer → fix_now by Author @a485ef02, fixed at a485ef02, approved since by atelier-x16l @e2562bd6  docs/adr/0022…
 ```
 
 On the owner's work branch, while it holds commits the base does not, the
@@ -132,15 +134,18 @@ approval is `✓ current`, `⚠ stale` or `⚠ missing` as `merge`'s
 `review.current` judges it at the branch tip, and a stale approval lists the
 commits that made it stale with the paths a new review has to read, from
 the same `review_gate::approval_standing` that explains a failed
-`review.current` in the gates. With no independent approval, the newest
-approval by an author is named:
-`Approval: ⚠ missing — <id> @<pin> by <identity> is not independent: the
-identity matches a Git author of the branch`. Merged
+`review.current` in the gates. No identity is compared with the work's Git
+authors (atelier-md0v). Merged
 work is judged on the base as `land` judges history: `✓ accepted on <base>`
 or `⚠ not accepted on <base>`. The views read whichever records the checkout
 has. A
-finding is open until it has a disposition; its line shows the current one,
-with who set it and the commit it was set at.
+finding recommended defer or no_action is open until it has a decision; its
+line shows the current one, with who set it and the commit it was set at. A
+`fix_now` finding, or one decided `fix_now`, is open until an approval of a
+later commit that holds the finding's record, recorded after the finding,
+resolves it, and its line then
+names that approval; whether the approval is still current is the approval
+line's.
 
 `review show <id>` is brief: a header line,
 `<id> <kind> on <issue> @<pin> by <identity> | <timestamp>`, ending
@@ -168,8 +173,8 @@ base (atelier-tciw): open work, which merge marks done, and work an older
 Atelier closed on its branch (atelier-jnrh):
 
 ```
-task/atelier-cmhv  atelier-cmhv in_progress, ✓ approved, behind 3, ⚠ failing evidence atelier-v1ab, merges cleanly  Title
-task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind 3, conflicts: Cargo.lock, src/lib.rs  Title
+atelier-cmhv  atelier-cmhv in_progress, ✓ approved, behind 3, ⚠ failing evidence atelier-v1ab, merges cleanly  Title
+atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind 3, conflicts: Cargo.lock, src/lib.rs  Title
 ```
 
 - The approval mark: `✓ approved` when `merge`'s `review.current` would pass
@@ -181,8 +186,8 @@ task/atelier-sfys  atelier-sfys ✓ done, not merged, ⚠ approval stale, behind
 - `behind <n>`: base commits the branch does not have.
 - `⚠ failing evidence <id>` when an item in the owner's scope that is done
   or that merge marks done, except superseded ones, has a failing receipt
-  with no pass after it, which `evidence.no_newer_failure` refuses. An item with no receipts has no gap,
-  so nothing is shown (atelier-s66u).
+  with no pass after it: a note, since no gate reads receipts (atelier-md0v).
+  An item with no receipts shows nothing (atelier-s66u).
 - `merges cleanly`, or `conflicts: <path>, <path>` naming the files
   `git merge-tree` cannot merge into the current base. It comes last, so its
   commas end the part.
@@ -237,8 +242,8 @@ Decisions: 6 current:
 ### Commits and Timestamps
 
 - A commit is shown by its first 8 characters. The full 40 appear only where
-  the value must be passed back to a command, such as `--commit` or
-  `--resolution-commit`.
+  the value is passed back to a command, such as `--commit` or
+  `--resolution-commit`, which also take a unique short ID.
 - A timestamp is shown in one form, local time `YYYY-MM-DD HH:MM ±hh:mm`, as
   in `2026-10-16 20:31 -04:00`. Records keep RFC 3339; a date alone is
   `YYYY-MM-DD` and is the local day that form shows, as in note bullets and
@@ -299,9 +304,13 @@ The line is the command name, `passed` or `refused`, and on refusal the count
 and codes of the checks that failed. A command that finished its work but
 leaves a gate it does not own unmet says so in the line instead of `passed`:
 `merge --sync` ends `merge: synced — approval needs fresh review` (exit
-status zero) when the approval it reported is stale. `land --push` appends what happened to
-the push: `land: passed, pushed to origin/<branch>` or `land: refused — 1
-check (land_push_failed), nothing pushed`. It is the last line of the combined
+status zero) when the approval it reported is stale, and `land` on a work
+branch ends `land: work in progress — 2 checks open (review.current,
+findings.disposed)` (exit status zero), since it refuses nothing there
+(ADR 0028 decision 5). `land --push` appends what happened to
+the push: `land: passed, pushed to origin/<branch>`, `land: work in progress —
+1 check open (review.current), pushed to origin/<branch>` or `land: refused —
+1 check (land_push_failed), nothing pushed`. It is the last line of the combined
 output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
 command's exit status is the pipe's last command's, so check `$?` before
 acting on it. Each command adopts the line in its own item: `land` prints it since
@@ -311,8 +320,8 @@ refused — 1 check (sync_conflict)`),
 `merge` and `merge --check` since atelier-6rh7 (`merge: passed`, or `merge:
 refused — 2 checks (review.current, findings.disposed)`),
 `evidence record` since atelier-3ekh (`evidence record: passed`, or
-`evidence record: recorded fail — <item> cannot merge or be done until a
-later pass`, which exits zero because recording succeeded; a blocked or
+`evidence record: recorded fail — a note on <item>; no gate reads receipts`,
+which exits zero because recording succeeded; a blocked or
 not-applicable result ends `recorded <result> — it never counts as a pass`;
 a capture that refuses to run still fails with an error and no verdict line),
 `check` in atelier-4t5l, `start` in
@@ -338,9 +347,8 @@ merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blo
 ```
 
 - `review.current` names the approval it considered and why it does not
-  count: stale by a commit or merge (with paths), predating the branch's
-  fork, or recorded by an identity that matches a Git author (see
-  [approval freshness](reviews-and-merge.md#approval-freshness)).
+  count: stale by a commit or merge (with paths), or predating the branch's
+  fork (see [approval freshness](reviews-and-merge.md#approval-freshness)).
 - Failed preconditions lead, in the order found, then the owner's failures,
   `review.current` first since other lines point to it, then other records' in
   the order the gates ran. A check on the owner, or on no record, is named bare
@@ -362,17 +370,20 @@ merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blo
   before them.`, then the verdict:
 
   ```
-  ⚠ atelier-7b6e land_branch_mismatch: owned on task/atelier-7b6e, not on master. Next: git switch task/atelier-7b6e && atelier land
+  ⚠ atelier-7b6e land_branch_mismatch: owned on atelier-7b6e, not on master. Next: git switch atelier-7b6e && atelier land
   Not checked: the owner's review, findings, proof and blocker gates and the done claims; land_branch_mismatch stops land before them.
   land: refused — 1 check (land_branch_mismatch)
   ```
 
 - A list of paths, records or commits names the first five, then `and N
   more`, through one helper (`first_five` in `atelier-core`).
-- Each finding, open item and blocker is its own line. Resolved fix_now
-  findings that only wait on a fresh approval share one line; when a trivial
-  exemption carries `review.current`, the line says it does not cover a
-  fix_now resolution.
+- Each finding, open item and blocker is its own line. Fix_now findings
+  that wait on an approval after their fix share one line (`<n> fix_now
+  findings await an approval after their fix`, or `came after the current
+  approval` when one is current but never saw them); when a trivial
+  exemption carries `review.current`, the line says it resolves no fix_now
+  finding. A defer or no_action finding without a decision reads `needs a
+  decision` and names the `review disposition` that records one.
 - A failure with the same cause as another is folded into that line as
   `(also <check>, ...)` and still counted in the verdict: a blocker check that
   repeats the owner's `blockers.none_open`, `claims.reviewed` for a claim in
@@ -390,8 +401,9 @@ merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blo
   one step, else the listing of its transitions, said as such, and the
   `atelier issue unlink` that drops the link if it is wrong, from the record
   that declares it and with its role (`--role blocked_by`, or `--role blocks`
-  from the blocker); the failing receipt's own command, to record a pass after
-  the fail; the shell check to rerun, after `atelier merge <owner> --sync` when
+  from the blocker), with `git switch <base> && atelier start <id>` for a
+  blocker outside the owner's scope, since `start` takes no other item's
+  branch; the shell check to rerun, after `atelier merge <owner> --sync` when
   it failed on the merged tree, which holds the base's changes the work
   checkout lacks; and `atelier review request <owner>` for what needs an
   independent reviewer; for a precondition, the git command that commits or
@@ -406,7 +418,7 @@ merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blo
   placeholder (`<identity>`, `<commit>`, `"…"`).
 - The passes are one line for the owner's checks, naming the approval or
   exemption `review.current` passed with, and a count of the other done
-  claims that hold. The authors `review.current` lists name each person once.
+  claims that hold.
 
 A passing `land` starts with `✓ records committed`, then the passes; a done
 owner ends with `Next: atelier merge <owner>`, and an active owner with
@@ -418,7 +430,7 @@ with its passes and `Next: atelier merge <id>`. Under any verdict, `merge` and
 was started` line for each such edit, before `Next:` (see [reviews and
 merge](reviews-and-merge.md#a-done-when-edited-after-the-start)). A successful
 `merge` prints no gate lines, only those notes, what it did and the next step:
-`✓ Merged task/atelier-nqgr into master at c24af21a; branch deleted. Next:
+`✓ Merged atelier-nqgr into master at c24af21a; branch deleted. Next:
 atelier land, then git push.` It notes that Git hooks did not run only when
 the repository has hooks of its own.
 
@@ -439,7 +451,8 @@ was at, the finding's first line, and the disposition it replaced, if any:
 
 ```
 Approval atelier-hleo on atelier-nqgr @c24af21a
-Finding atelier-45rc fix_now on atelier-nqgr @fed2d571. Dispose: atelier review disposition atelier-45rc --identity "..." --decision fix_now --resolution-commit ... "..."
+Finding atelier-45rc fix_now on atelier-nqgr @fed2d571. Fix it in a later commit; an approval after the fix resolves it.
+Finding atelier-7d2k defer on atelier-nqgr @fed2d571. Decide: atelier review disposition atelier-7d2k --identity "..." --decision defer --follow-up ... "..."
 Disposition no_action of atelier-rm9e on atelier-nqgr @c24af21a: "Name could be better", replacing no_action by Author
 ```
 
@@ -458,15 +471,10 @@ atelier-az3w ✓ pass test for issue/atelier-nqgr @be418737: grep -q goodbye pro
 evidence record: passed
 ```
 
-An `evidence record` whose `--kind` no receipt, workflow gate or default
-(`test`, `validation`) uses warns on stderr and lists the known kinds, and
-still records the receipt.
-
-An approval, or a defer or no_action disposition, whose identity is one of
-the substantive Git authors `review.current` counts is still recorded, and a
-second line warns `⚠ identity matches a Git author; this will not satisfy
-review.current` (or `findings.disposed`); under `--quiet` the warning goes to
-stderr.
+An `evidence record` whose `--kind` no receipt or default (`test`,
+`validation`) uses warns on stderr and lists the known kinds, and still
+records the receipt. A fail ends `evidence record: recorded fail — a note on
+<item>; no gate reads receipts`.
 
 ### Evidence Views
 
@@ -474,13 +482,12 @@ stderr.
 20 unless `--limit <n>` or `--all` says otherwise; leaving rows out ends the
 list with the omitted-rows line below. With an item, it lists the receipts
 validating that item under `Evidence for <item>`, its rows leave that item
-out of `for`, and the list ends with the gates' verdict on the item's proof:
+out of `for`, and the list ends with a verdict on the item's proof:
 `Proof: ✓ fresh pass <id>`, `Proof: ✓ pass <id> held at close <commit>`,
 `Proof: ⚠ newest is fail <id>`, `Proof: no
 fresh pass; newest pass <id> is stale`, or `Proof: no passing proof`. The
-last two are marked ⚠ only when the policy runs an `evidence.attached` gate
-on the item's workflow; otherwise no gate needs a pass, so having none is no
-gap (atelier-s66u).
+last two are stated plainly: no gate needs a pass, so having none is no gap
+(atelier-s66u, atelier-md0v).
 Without one, each row's standing is judged against its own first item. The
 `Next` steps repeat the item and `--result` filters given.
 
@@ -585,7 +592,7 @@ refusal of it leaves stdout empty:
 | `review disposition` | the ID of the finding it settles |
 | `review request` | the range to review, `<from>..<head>` in full commits |
 | `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |
-| `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit |
+| `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit; `land` on a work branch prints `work in progress — <n> checks open (<checks>)` and exits 0 |
 | `bundle apply` | the IDs of the records it created or updated, one per line |
 | `migrate epics` | the IDs of the epic records it retypes, or would retype in a dry run |
 | `migrate dispositions` | the IDs of the findings it folds a disposition event into, or would in a dry run |

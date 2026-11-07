@@ -165,13 +165,16 @@ pub struct WorkBranch {
     /// The parent or standalone issue that owns the branch.
     pub owner_id: String,
     pub branch: String,
-    /// The base recorded by `atelier start` on the owner, if it was started.
-    pub recorded_base: Option<String>,
+    /// Whether `atelier start` recorded the branch on the owner. The base
+    /// is the policy's `base_branch`; a recorded base is not read
+    /// (atelier-md0v).
+    pub recorded: bool,
 }
 
 /// Resolves the branch owner and branch for an issue: a child works on its
-/// parent's branch, and a parent or standalone issue owns `<issue_type>/<id>`. A branch recorded on the owner
-/// by `atelier start` wins over the derived name. Missions have no branch.
+/// parent's branch, and a parent or standalone issue owns a branch named
+/// with its bare ID (atelier-md0v). A branch recorded on the owner by
+/// `atelier start` wins over the derived name. Missions have no branch.
 pub fn resolve_work_branch(
     policy: &WorkflowPolicy,
     index: &RecordIndex,
@@ -193,14 +196,14 @@ pub fn resolve_work_branch(
     }
     // Loaded graphs already guarantee that any parent is a direct, one-level owner.
     let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
-    let (branch, recorded_base) = match &owner.workflow_branch {
-        Some(branch) => (branch.work_branch.clone(), Some(branch.branch_base.clone())),
-        None => (policy.branch_name_for_owner(&owner)?, None),
+    let (branch, recorded) = match &owner.workflow_branch {
+        Some(branch) => (branch.work_branch.clone(), true),
+        None => (policy.branch_name_for_owner(&owner)?, false),
     };
     Ok(WorkBranch {
         owner_id: owner.id,
         branch,
-        recorded_base,
+        recorded,
     })
 }
 
@@ -208,8 +211,10 @@ pub fn load(repo: &std::path::Path) -> anyhow::Result<WorkflowPolicy> {
     Ok(crate::base_policy::working(repo)?.policy)
 }
 
-/// Guards for started work use the committed integration base's policy.
-/// Unstarted planning records retain ordinary working-policy semantics.
+/// Guards for started work use the committed policy of the base branch the
+/// working policy names, as `merge` does; a recorded `branch_base` is not
+/// read (atelier-md0v). Unstarted planning records retain ordinary
+/// working-policy semantics.
 pub fn action_policy(
     repo: &std::path::Path,
     index: &RecordIndex,
@@ -217,10 +222,14 @@ pub fn action_policy(
 ) -> anyhow::Result<crate::base_policy::PolicySource> {
     let issue = index.require_issue(issue_id)?;
     let owner = index.require_issue(issue.parent_id.as_deref().unwrap_or(issue_id))?;
-    if let Some(branch) = &owner.workflow_branch {
-        crate::base_policy::from_ref(repo, &format!("refs/heads/{}", branch.branch_base))
+    let working = crate::base_policy::working(repo)?;
+    if owner.workflow_branch.is_some() {
+        crate::base_policy::from_ref(
+            repo,
+            &format!("refs/heads/{}", working.policy.branch_policy.base_branch),
+        )
     } else {
-        crate::base_policy::working(repo)
+        Ok(working)
     }
 }
 
@@ -264,8 +273,8 @@ mod tests {
             resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
         assert_eq!(work_branch.owner_id, "atelier-epic");
-        assert_eq!(work_branch.branch, "feature/atelier-epic");
-        assert_eq!(work_branch.recorded_base, None);
+        assert_eq!(work_branch.branch, "atelier-epic");
+        assert!(!work_branch.recorded);
     }
 
     #[test]
@@ -281,14 +290,14 @@ mod tests {
 
         assert_eq!(
             (bug.owner_id.as_str(), bug.branch.as_str()),
-            ("atelier-bug1", "bug/atelier-bug1")
+            ("atelier-bug1", "atelier-bug1")
         );
         let task = resolve_work_branch(&policy(), &index, "atelier-task").unwrap();
         assert_eq!(task.owner_id, "atelier-task");
-        assert_eq!(task.branch, "task/atelier-task");
+        assert_eq!(task.branch, "atelier-task");
         assert_eq!(
             (epic.owner_id.as_str(), epic.branch.as_str()),
-            ("atelier-epic", "feature/atelier-epic")
+            ("atelier-epic", "atelier-epic")
         );
     }
 
@@ -309,7 +318,7 @@ mod tests {
             resolve_work_branch(&policy(), &records.index(), "atelier-child").unwrap();
 
         assert_eq!(work_branch.branch, "feature/renamed");
-        assert_eq!(work_branch.recorded_base.as_deref(), Some("trunk"));
+        assert!(work_branch.recorded);
     }
 
     #[test]

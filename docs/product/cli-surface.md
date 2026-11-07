@@ -16,7 +16,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `evidence` | Record, show, list, and attach commit-bound proof. |
 | `review` | Append approvals, findings, and explicit trivial exemptions; set findings' dispositions. |
 | `merge` | Check base policy and integrate reviewed work with a merge commit that marks it done. |
-| `land` | Check handoff invariants and committed records. |
+| `land` | Check handoff invariants and committed records; report work in progress on a branch. |
 | `doctor` | Check every done claim and the whole review history. |
 | `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `debrief` | Review a mission's outcome as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
@@ -38,7 +38,7 @@ atelier work decisions <mission-id>
 atelier work parent <parent-id> [--all]
 atelier issue show <id>... [--full]
 atelier issue transition <id>
-atelier start <id> [--base <branch>] [--take-over]
+atelier start <id> [--take-over]
 ```
 
 `issue list` is flat inventory, including objective records; `work` is operational
@@ -84,14 +84,19 @@ merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
 ## Review and session commands
 
 `review record`, `approve`, `finding`, and `trivial` require an owner, explicit
-`--identity`, and summary. `review disposition` sets a finding's disposition,
-replacing any earlier one ([dispositions](reviews-and-merge.md#dispositions)).
+`--identity`, and summary; a commit they take (`--commit`, `--base`) may be a
+unique short ID, stored in full. `review disposition` sets a finding's
+disposition, replacing any earlier one: a deferred or dismissed finding needs
+one, and a `fix_now` finding is resolved by the approval after its fix
+([dispositions](reviews-and-merge.md#dispositions)).
 `review request <id>` prints the reviewer brief for an owner (see
 [requesting a review](reviews-and-merge.md#requesting-a-review)).
 Use the [review guide](reviews-and-merge.md) for commit pins and acceptance rules.
 
 `status` orients a session; `land [id] [--install]` checks committed records and
-the claims that changed since the base; `doctor` checks every claim. `prime` is
+the claims that changed since the base, and on a work branch reports what is
+open and exits 0 (`land: work in progress — N checks open (…)`, quiet `work in
+progress — …`); `doctor` checks every claim. `prime` is
 a deprecated alias for `status`, kept for installed hooks.
 `setup claude [--binary <path>]` installs the supported hooks. See
 [sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.

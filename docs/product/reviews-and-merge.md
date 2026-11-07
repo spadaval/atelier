@@ -15,8 +15,8 @@ invariants. There is no external review backend or review room.
 ## Review commands
 
 Record decisions against the branch owner, a parent issue or a standalone
-issue. The commit defaults to current HEAD; `--commit` supplies a full ancestor
-commit on the work branch.
+issue. The commit defaults to current HEAD; `--commit` supplies an ancestor
+commit on the work branch, as a full ID or a unique abbreviation.
 
 ```text
 atelier review record <owner-id> --identity "Reviewer" "Checks and limits"
@@ -28,9 +28,11 @@ atelier review list <owner-id>
 atelier review show <review-id>
 ```
 
-`record` stores a review account; `approve` stores approval. Approval must come
-from an identity other than the substantive Git authors. Identity is
-self-declared and compared with author names and email addresses. `trivial`
+`record` stores a review account; `approve` stores approval. Identity is
+self-declared and recorded with each event; it is not compared with the work's
+Git authors (ADR 0028 decision 5, atelier-md0v). Independent review is Agent
+Factory's practice, and Atelier checks that an approval covers the current
+code. `trivial`
 is an explicit visible exemption with a reason, never an implicit fallback.
 It is for a change whose correctness is evident from the diff, code or prose
 alike; it is the only route that skips independent review, and there is no
@@ -41,27 +43,35 @@ dispositions; `review show <id>` is a brief view of one event (see
 [review rows](human-cli-output.md#review-rows)). `review list` accepts
 `--json`, which keeps the stored records of the issue alone, and can omit the
 owner to list all events, base exemptions included. Each recording command
-confirms the event in one line and warns when an approval's, or a defer or
-no_action disposition's, identity is a Git author the gates will refuse (see
+confirms the event in one line (see
 [mutation confirmation](human-cli-output.md#mutation-confirmation)). A new
 record's title is generated, as in `finding on atelier-nqgr @fed2d571`, so
 its text is stored once; earlier records keep the text's first line.
-`--commit` and `--resolution-commit` take a full commit ID: anything else is
-an invalid value (exit 2), and a commit the branch does not hold is refused
-with `git log --format=%H` as the recovery step.
+`--commit`, `--resolution-commit` and `review trivial --base` take a full
+commit ID or a unique abbreviation of at least four hexadecimal digits, which
+is resolved on input and stored in full; anything else is an invalid value
+(exit 2), except that `review trivial --base` also takes a revision such as
+`HEAD`. A prefix no commit has, or one several commits share, is refused,
+naming the commits it matches, and a commit the branch does not hold is
+refused; both give `git log --format=%H` as the recovery step.
 Every command that records an event also takes `--commit-records` and
 `--stage-records`, which commit the records it wrote (alone or grouped with the
 rest of a step); see [Committing records](cli-surface.md#committing-records).
 
 ### Dispositions
 
-Every finding requires a disposition. Recommendations and decisions use
+A finding recommended `fix_now` needs no disposition: an approval pinned to a
+later commit than the finding, one that holds the finding's record, and
+recorded after it resolves it, so the fix's re-review is what settles it, and
+an approval that never saw the finding cannot, such as a parallel reviewer's
+approval of a head that did not hold it. A finding recommended `defer` or `no_action` needs a recorded
+decision, even if it was fixed instead. Recommendations and decisions use
 `fix_now`, `defer`, or `no_action`:
 
 ```text
-atelier review disposition <finding-id> --identity "Reviewer" --decision fix_now --resolution-commit <full-commit> "Fix verified"
 atelier review disposition <finding-id> --identity "Reviewer" --decision defer --follow-up <issue-id> "Follow-up accepted"
 atelier review disposition <finding-id> --identity "Reviewer" --decision no_action "Reason accepted"
+atelier review disposition <finding-id> --identity "Reviewer" --decision fix_now --resolution-commit <commit> "Fix verified"
 ```
 
 The disposition is a field of the finding's own record: the decision, its
@@ -72,21 +82,21 @@ earlier ones, such as an author's proposal the reviewer replaced or a
 `fix_now` later changed to `defer`, stay in the Git history of the finding's
 file, which `review show` names (`git log -p -- .atelier/reviews/<id>.md`).
 
-A FIX NOW disposition needs a resolution commit later than the finding's pin,
-followed by fresh independent approval. That re-review may cover only the
-fix's diff (`review request` lists the commits since the last review or
-approval), and the reviewer who raised the finding may do it. DEFER requires
-an existing follow-up issue. DEFER and NO ACTION must be set by a non-author
-identity: the author may propose one, and the reviewer accepts it by setting
-it again. All findings without accepted dispositions block merge.
+The re-review that resolves a `fix_now` finding may cover only the fix's diff
+(`review request` lists the commits since the last review or approval), and
+the reviewer who raised the finding may do it. A trivial exemption resolves
+no finding. `--decision fix_now` stays accepted and is never asked for; an
+older Atelier's FIX NOW disposition with a resolution commit is resolved, as
+before, by an approval at or after that commit, and one without by the rule
+above. DEFER requires an existing follow-up issue. Any identity may record a
+DEFER or NO ACTION; the identity is recorded, not compared with the work's
+Git authors. A deferral's follow-up may say it was discovered elsewhere.
+A defer or no_action finding without a decision, or a fix_now finding no
+current approval has resolved, blocks merge.
 
-Who set a disposition is judged at the commit that set the field: the oldest
-commit since which the finding's file has held this disposition, not the
-commit or time the disposition names. Setting it again, or restoring earlier
-bytes by hand, is judged at that later commit. On the base, every other part
-of a review record is append-only: editing it, or deleting a record, is
-refused, and merge checks review history from the base, including edits
-subsequently reverted.
+On the base, every part of a review record but a finding's disposition is
+append-only: editing it, or deleting a record, is refused, and merge checks
+review history from the base, including edits subsequently reverted.
 
 ## Correcting review records
 
@@ -126,9 +136,8 @@ be edited and one still has to cover the code.
 
 Repositories whose dispositions are separate events, from before ADR 0025,
 keep working unmigrated: Atelier reads each finding's latest disposition
-event as its disposition, with `migrated_from` naming the event, and judges
-it at the commit that added the event, so check, land, merge and doctor give
-the same results as after migration. `review disposition` on such a finding
+event as its disposition, with `migrated_from` naming the event, so check,
+land, merge and doctor give the same results as after migration. `review disposition` on such a finding
 writes the field and removes its events. `atelier migrate dispositions
 --apply` is the optional cleanup: it writes that fold into every finding and
 removes the events, on the base or a work branch, and keeps approvals
@@ -143,10 +152,7 @@ the plain merge with `review_append_only` and named a merge without
 committing, migrated before the commit (atelier-j5oq); a branch whose
 records are final, as when the base branch cannot be read, still gets that
 advice. The read path for separate events goes once every repository has
-migrated (atelier-42th). A disposition read from an event, or written by the
-migration commit that removed it, is judged at the commit that added the
-event; once the finding's file has held another disposition, the later
-setting counts, even of the same bytes. Separate events stay append-only as
+migrated (atelier-42th). Separate events stay append-only as
 before: one may be removed only in a commit whose finding carries its own
 disposition and keeps none of its events, as `review disposition` and the
 migration write it, and a removed event is never added back (atelier-pfbp).
@@ -169,11 +175,15 @@ from records, Git and policy:
 - the range to review: the commits since the last `review` or `approve` on the
   owner (or after `--from`), and the whole branch since it left the base, with
   the full head commit to pin records to;
-- every finding with its disposition, open ones first, earlier reviews
-  and approvals, and the newest recorded proof;
+- every finding with its disposition, open ones first (a `fix_now` finding
+  reads `open until an approval after its fix`, or `approved since by
+  <approval>` once one resolves it, judged as `review list` judges it; a
+  defer or no_action one `open, no decision`), earlier reviews and approvals,
+  and the newest recorded proof;
 - the working rules: the built-in ones (read-only on code, run the proof,
-  approve only without `fix_now` findings, an identity that differs from the
-  authors), the base policy's `merge_checks` commands, and the text of the
+  approve only without `fix_now` findings, and that the approval of a later
+  commit resolves the `fix_now` findings recorded before it), the base
+  policy's `merge_checks` commands, and the text of the
   file named by `[review] rules_file` in `.atelier/config.toml`, a
   repository-relative Markdown path where a repository keeps rules the
   reviewer needs, such as where to put scratch files;
@@ -254,16 +264,14 @@ even if it drops one side's change. Review merge drivers like other policy
 as one on the base itself, never counts for the branch.
 
 When `review.current` fails, it names the approval it considered and why it
-does not count (atelier-cisa): the newest stale independent approval or
-exemption, or else the newest approval whose identity matches a Git author of
-the branch. One function,
+does not count (atelier-cisa): the newest stale approval or exemption. One
+function,
 `review_gate::approval_standing`, judges and explains it for `land`, `merge`,
 `merge --check`, `merge --sync` and `review list`:
 
 ```text
 ⚠ atelier-7l79 review.current: approval atelier-x16l @e2562bd6 is stale: 1a2b3c4d "Tweak after approval" changed proof-sample.txt. Next: atelier review request atelier-7l79
 ⚠ atelier-bw0b review.current: approval atelier-x16l @e2562bd6 is stale: base merge 4f1e2a3b resolved or edited src/gate.rs by hand. Next: atelier review request atelier-bw0b
-⚠ atelier-i3ay review.current: approval atelier-q2m8 @4c79d30b by author@example.com is not independent: the identity matches a Git author of the branch (authors: author a <author@example.com>). Next: atelier review request atelier-i3ay
 ```
 
 A stale line names the first commit that made the approval stale, with up to
@@ -272,16 +280,18 @@ changed are not listed. A merge reads `base merge <commit>` (or `merge
 <commit>` when it brings in a branch not on the base) with the code it
 resolved or edited by hand, or the code it changed when it did neither. An approval that predates the point where the branch left the base
 says so. With no approval at all, the line reads `no independent approval or
-trivial exemption; authors: ...`.
+trivial exemption`.
 
 ## Integration
 
 Commit the implementation, any receipts, branch ownership, the ticked Done
 when and the Report on the work branch. Merge marks the owner and its open
-children done; none of them may have an open transitive blocker. Evidence
-must satisfy the base policy's completion checks; a failing receipt with no
-pass recorded after it blocks success. Review must have current independent
-approval or an explicit trivial exemption and accepted finding dispositions.
+children done; none of them may have an open transitive blocker, and the done
+marks must pass the base policy's completion checks. No gate reads evidence:
+a failing receipt is a note and blocks nothing (ADR 0028 decision 5). Review
+must have a current independent approval or an explicit trivial exemption, a
+decision on each deferred or dismissed finding, and an approval since each
+`fix_now` finding.
 
 ```text
 atelier merge <owner-or-child-id> --check
@@ -315,7 +325,11 @@ integrating. A precondition the gates cannot run past, such as the wrong
 branch or a merge conflict, is reported after the ones found before it, with
 a `Not checked:` line naming the gates it skipped (atelier-kiry).
 
-Merge uses the base branch's committed policy, and always creates a merge
+Merge integrates into the `branch_policy.base_branch` of the branch's
+committed policy, which must match the base branch's own committed policy
+(`merge_base_policy_unsupported` otherwise); a `branch_base` an owner record
+carries is not read (ADR 0028 decision 5). It uses the base branch's
+committed policy, and always creates a merge
 commit, so a base that moved on needs no catch-up merge on the branch first
 ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2). An older policy's
 `merge_strategy: fast_forward_only` or `squash` is read as `merge_commit` (see
@@ -408,8 +422,7 @@ or `--json`.
   judges it (`review_gate::approval_standing`), or `Approval needs fresh
   review` with the first commit that made it stale and the code paths of
   every stale commit to review, for a merge the code it resolved or edited by
-  hand. An approval whose identity matches a Git
-  author of the branch is named as not independent. A stale approval does
+  hand. A stale approval does
   not refuse the sync, which exits zero, but the verdict reads `merge: synced
   — approval needs fresh review` instead of `passed`, because `merge --check`
   will refuse until a fresh approval is recorded.
@@ -515,17 +528,15 @@ change](#trivial-changes-on-the-base).
 `atelier land` on the base branch checks this before you push. It looks at
 the base commits that are not yet on the base's upstream. A commit counts as
 reviewed when a commit pinned by an approval or trivial exemption contains it,
-for completed owners that branched from this base and are not already done
-upstream, and only an approval `merge` would accept counts (atelier-n90q). Its
-identity must be independent of the branch's own authors: authors of base
-commits the branch merged in do not count, as in `review.current`
-(atelier-0cj6). Judging from history, `land` cannot tell a side branch that
-was never on the base from one that was, so it leaves out the authors of every
-branch merged into the work branch, where `review.current` counts a side
-branch not on the base. `merge` may therefore refuse an approval that `land`
-would accept, never the reverse (atelier-p5qp). Every finding pinned at or before it needs an
-accepted disposition, and a FIX NOW's resolution commit must be at or before
-the approval's pin; the disposition itself may be recorded later. That is what `atelier merge` integrates. A commit a [base
+for completed started owners that are not already done upstream, and only an
+approval `merge` would accept counts (atelier-n90q): one as first committed,
+whose identity is recorded and not compared with any author (atelier-md0v).
+Every finding pinned at or before it must be settled by the rules merge
+applies: a defer or no_action finding has a decision; a `fix_now` finding is
+resolved by this approval when it pins a later commit holding the finding's
+record and was recorded after the finding, or, for an older Atelier's FIX NOW
+disposition, when its
+resolution commit is at or before the approval's pin. That is what `atelier merge` integrates. A commit a [base
 exemption](#trivial-changes-on-the-base) pins is covered too. Every other commit may touch only records and the
 strategies linked from missions, or `land` refuses with
 `land_base_unreviewed`. Those record-only commits also may not take a work
@@ -551,7 +562,7 @@ existing one. A branch started while the base holds an unreviewed commit
 would carry it in, and a review of `<base>...<branch>` would never show it.
 `start` skips the check when the base has no upstream or no workflow policy
 yet, as when Atelier is being adopted on a branch. To
-recover, move the commit to a work branch (`git switch -c <type>/<id>`, then
+recover, move the commit to a work branch (`git switch -c <id>`, then
 `git branch -f <base> <base>@{upstream}`) and run `atelier start <id>` there.
 This is a handoff check, not an access control. Review identities are
 self-declared, so an exemption recorded on the base for an owner that merged

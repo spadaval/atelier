@@ -199,9 +199,7 @@ fn prune_git_artifacts(
                     .or_default()
                     .push(GitBranchOwner {
                         id: issue.id.clone(),
-                        base: resolution
-                            .recorded_base
-                            .unwrap_or_else(|| policy.branch_policy.base_branch.clone()),
+                        base: policy.branch_policy.base_branch.clone(),
                         protection,
                         active_descendants: BTreeSet::new(),
                     });
