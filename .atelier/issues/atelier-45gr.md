@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Warn in doctor and status when the binary or skill is out of date, without blocking"
-updated_at: "2026-11-08T06:14:27.426542820+00:00"
+updated_at: "2026-11-08T06:31:48.373573191+00:00"
 ---
 
 ## Goal
@@ -50,6 +50,24 @@ Strategy: docs/strategies/agent-factory-in-atelier.md (freshness, not versioning
 
 - How to start a detached refresh from `status` portably (a re-exec of the binary with a hidden flag is one way). Record the choice as a decision note.
 
+## Notes
+
+- 2026-11-08 [decision] status starts its refresh by re-executing the binary as the hidden `atelier refresh-update-check`, with no stdio and in its own process group, and starts at most one every 10 minutes (a stamp file in the cache directory).
+  Reason: It is portable across Linux and macOS with std alone, needs no daemon or shell, the hook runner never waits on it since it holds no pipe, and the stamp stops several sessions opening at once from each starting a check.
+  Rejected: fork/daemonize through libc: unsafe and Unix-only for no gain
+  Rejected: `sh -c '... &'`: depends on a shell and quoting
+- 2026-11-08 [decision] A symlinked skill is detected before any `npx` call, and only counts as linked when its resolved target is a Git work tree outside `~/.agents/skills`. Its base branch is the one `origin/HEAD` names, else `master`, else `main`. The detection is `freshness::linked_checkout(home, path)`, a public function the setup --link work can call.
+  Reason: A linked checkout needs only local refs, so it works without Node. `skills add` links agents' copies (`~/.claude/skills/<name>`) into its own store, so a link into the store is a tracked install, not a checkout. This host's checkout's origin/HEAD is `main`, so a fixed `master` would compare with a missing branch.
+  Rejected: Letting `skills ls` decide first: it needs npx for a case that needs none
+- 2026-11-08 [decision] The cache stores the latest release version and the skill's warning line, not a binary verdict; `status` compares the cached latest release with its own version. A plain `key: value` file at `<cache>/atelier/update-check`, written to a temporary file and renamed.
+  Reason: Upgrading the binary clears its warning at once instead of up to a day later; the rename means `status` never reads half a file.
+- 2026-11-08 [decision] `ATELIER_NO_UPDATE_CHECK` is set for every test by `.cargo/config.toml`'s `[env]` (nextest honours it) and for CI by the workflow's `env`. When set, `status` does not even read the cache.
+  Reason: About 40 test call sites spawn the binary; one setting covers them all and every future test. Not reading the cache keeps a developer's real cache from changing test output. The update-check tests remove the variable and fake the network and npx; making them pass without `env_remove` fails all ten that need it, which shows the setting reaches the tests.
+  Rejected: Setting the variable at each spawn site: about 40 edits, and new tests would miss it
+- 2026-11-08 [decision] Timeouts: 5 s for `git ls-remote`, 10 s for each `npx` call, killing the child's whole process group. Doctor runs the update check in a thread beside its history checks. Quiet `doctor` and `status` keep stdout unchanged and print only ⚠ lines to stderr.
+  Reason: A cold `npx` download alone takes about 2.5 s, so 5 s would fail first runs on a slow link; killing the group also stops the `node` process npx starts, whose open pipe would otherwise hang the read. Quiet output is a parsed token contract.
+- 2026-11-08 [handoff] Implemented at 29c80985; see ## Report. Review outstanding: not yet requested (no reviewer under this assignment). Scratch dirs under ~/.cache/atelier-tmp removed.
+
 ## Report
 
 All seven Done when lines hold. `atelier doctor` prints an `Updates` section after its history checks, with one line for the binary and one for the skill, and its exit status still comes from those checks alone; `atelier status` and its hook show an `Updates` section only when the cache says something is behind. The tests are in `crates/atelier-cli/tests/update_check.rs` (11, all pass), each with its own home, cache, fake `npx` on `PATH` and a local release repository that Git's `url.<path>.insteadOf` puts in place of GitHub: stale binary and tracked-stale skill with doctor still passing (`doctor_warns_of_a_stale_binary_and_skill_and_still_passes`, which also checks the `-y skills@1.7.6` arguments, `DISABLE_TELEMETRY=1` and the cache it writes), current binary and tracked-current (`doctor_reports_a_current_binary_and_skill`), network failure plus "Failed to check" with exit 0 (`doctor_says_when_the_checks_cannot_run`), a linked checkout 2 commits behind `master` and then current, with no `npx` call (`doctor_reports_a_skill_linked_to_a_checkout_from_local_refs`, `doctor_finds_a_link_in_the_claude_skills_directory`), untracked, missing and no `npx` (three `doctor_*` tests), `status` reading a stale cache in plain, quiet and hook form while every live check would fail (`status_shows_the_cached_warnings_without_checking`), a day-old cache that `status` does not show but refreshes in the background (`status_refreshes_a_day_old_cache_in_the_background`), and the variable (`the_variable_turns_the_check_off`). Unit tests in `commands/freshness.rs` cover version parsing (`+<sha>` ignored, pre-releases rejected), the timeout killing a child and its children (`a_command_that_outlives_its_timeout_is_stopped`, 0.2 s), the cache format, and the ANSI-coloured "Failed to check" line. Breaking the stale, "Failed to check", version-order and behind-count logic made 6 of the 11 fail; dropping the tests' `env_remove` made all 10 that need the check fail, which shows `.cargo/config.toml`'s `ATELIER_NO_UPDATE_CHECK=1` reaches every test. Full `cargo nextest run -j 4 -p atelier-cli`: 816 passed; with `--features test-hooks`: 822 passed. `docs/product/sessions-and-hooks.md#update-check` describes the check and the variable, with pointers from `cli-surface.md` and `development-setup.md`.
@@ -70,20 +88,3 @@ See the decision notes below: the detached refresh (a hidden `atelier refresh-up
 - The tracked cases ran only against a fake `npx`. The real `skills` CLI's tracked output was taken from this item's Context and the 1.7.6 source, not from a live tracked install, because `spadaval/atelier` does not publish the skill yet (atelier-hrgx checks that).
 - The `git ls-remote` timeout is proven through the shared runner's unit test, not with a hanging Git server.
 - macOS's cache path (`~/Library/Caches/atelier`) is untested here; CI runs the suite on macOS with the variable set.
-
-## Notes
-
-- 2026-11-08 [decision] status starts its refresh by re-executing the binary as the hidden `atelier refresh-update-check`, with no stdio and in its own process group, and starts at most one every 10 minutes (a stamp file in the cache directory).
-  Reason: It is portable across Linux and macOS with std alone, needs no daemon or shell, the hook runner never waits on it since it holds no pipe, and the stamp stops several sessions opening at once from each starting a check.
-  Rejected: fork/daemonize through libc: unsafe and Unix-only for no gain
-  Rejected: `sh -c '... &'`: depends on a shell and quoting
-- 2026-11-08 [decision] A symlinked skill is detected before any `npx` call, and only counts as linked when its resolved target is a Git work tree outside `~/.agents/skills`. Its base branch is the one `origin/HEAD` names, else `master`, else `main`. The detection is `freshness::linked_checkout(home, path)`, a public function the setup --link work can call.
-  Reason: A linked checkout needs only local refs, so it works without Node. `skills add` links agents' copies (`~/.claude/skills/<name>`) into its own store, so a link into the store is a tracked install, not a checkout. This host's checkout's origin/HEAD is `main`, so a fixed `master` would compare with a missing branch.
-  Rejected: Letting `skills ls` decide first: it needs npx for a case that needs none
-- 2026-11-08 [decision] The cache stores the latest release version and the skill's warning line, not a binary verdict; `status` compares the cached latest release with its own version. A plain `key: value` file at `<cache>/atelier/update-check`, written to a temporary file and renamed.
-  Reason: Upgrading the binary clears its warning at once instead of up to a day later; the rename means `status` never reads half a file.
-- 2026-11-08 [decision] `ATELIER_NO_UPDATE_CHECK` is set for every test by `.cargo/config.toml`'s `[env]` (nextest honours it) and for CI by the workflow's `env`. When set, `status` does not even read the cache.
-  Reason: About 40 test call sites spawn the binary; one setting covers them all and every future test. Not reading the cache keeps a developer's real cache from changing test output. The update-check tests remove the variable and fake the network and npx; making them pass without `env_remove` fails all ten that need it, which shows the setting reaches the tests.
-  Rejected: Setting the variable at each spawn site: about 40 edits, and new tests would miss it
-- 2026-11-08 [decision] Timeouts: 5 s for `git ls-remote`, 10 s for each `npx` call, killing the child's whole process group. Doctor runs the update check in a thread beside its history checks. Quiet `doctor` and `status` keep stdout unchanged and print only ⚠ lines to stderr.
-  Reason: A cold `npx` download alone takes about 2.5 s, so 5 s would fail first runs on a slow link; killing the group also stops the `node` process npx starts, whose open pipe would otherwise hang the read. Quiet output is a parsed token contract.
