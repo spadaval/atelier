@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Let Agent Factory say no: merge verdicts, won't-fix, stop signals and backlog sweeps"
-updated_at: "2026-11-08T21:03:21.422304639+00:00"
+updated_at: "2026-11-08T22:18:18.400348365+00:00"
 ---
 
 ## Goal
@@ -38,7 +38,7 @@ Change the agent-factory skill (spadaval/.agents, `skills/agent-factory`) so tha
 - [x] references/atelier.md covers won't-fix, declined and the one-step defer as the binary's help describes them (installed from the sibling item before evals run).
 - [x] The agent-facing skill stays within atelier-qj9d's limits, counted by its rule (a role's read path is SKILL.md, its procedure and every file the procedure links, counted whole, plus the Atelier reference for roles that run `atelier`): at most 1,000 lines, SKILL.md at most 100, each role's read path at most 300 and the orchestrator's 450. The Report gives the counts before and after; an overrun needs a reason there.
 - [x] New eval scenarios in `evals/agent-factory/scenarios/` built from the audit, each with setup, prompt and grader: a rare-edge chain modelled on astromech-of26 (a low-severity finding the reviewer called rare and deferred; pass when it is won't-fix or deferred, not fixed); a costly hardening diff modelled on atelier-hwxm (a large fix for a low-severity finding on a path planned for deletion; pass when review returns shrink or reject); and two controls, a real cross-repository regression modelled on atelier-2ygf and a plan defect modelled on lor-0rnt (pass when each is found and recommended fix now).
-- [x] All eight scenarios (the four new and the four existing) run at the current skill (main) and at the new one, 3 runs each with Opus on the skill arm, with the same installed atelier binary built with atelier-stnv. Every run is read by hand. Results are recorded in `evals/agent-factory/results/`. The new skill passes more runs than main on the rare-edge chain and the costly hardening scenarios, and no fewer on every other scenario. If main already passes one of those two, it shows nothing: tighten that scenario's pressure until main fails, and rerun both refs.
+- [ ] All eight scenarios (the four new and the four existing) run at the current skill (main) and at the new one, 3 runs each with Opus on the skill arm, with the same installed atelier binary built with atelier-stnv. Every run is read by hand. Results are recorded in `evals/agent-factory/results/`. The new skill passes more runs than main on the rare-edge chain and the costly hardening scenarios, and no fewer on every other scenario. If main already passes one of those two, it shows nothing: tighten that scenario's pressure until main fails, and rerun both refs.
 
 ## Scope
 
@@ -64,14 +64,15 @@ Agreed with Sumeet in conversation on 2026-11-08 after an audit of review record
 - 2026-11-08 [decision] Move the gardener (procedures/garden.md) and the verify-skill standard to atelier-3sk9, and give plan.md a backlog sweep instead.
   Reason: Sumeet's direction on 2026-11-08: the gardener tends the conditions agents work in rather than owning the product, and gardening takes his taste, so it needs a triage flow this item does not cover. Neither file had an eval here; the backlog sweep is the product side the draft gardener carried, and it belongs with the planner.
   Rejected: Keep the gardener here with its backlog sweep: it would merge untested and mix product ownership into maintenance.
+- 2026-11-08 [handoff] Review fixes for atelier-fq99, atelier-0avz and atelier-tv8e: skill branch atelier-l58v at bd98a83, not pushed. The rare-edge-chain rerun with the fixture corrected gave main 2/3 and new 2/3, so it stopped and Done when's last line is unticked for the plan owner's decision; the corrected fixture's catch_up has a defect of its own (results file). Fix re-review outstanding. Details in the Report.
 
 ## Report
 
-Every Done when line holds, with one reported overrun. The skill change is on agents-skills branch `atelier-l58v`, committed and not pushed: scenarios 703b9ca, e574874 and 5edb32b, the skill b0d3726, results and the grader fix 9f775bb, and eb5fffd, which adds plan.md's backlog sweep and moves the gardener and the verify-skill standard to atelier-3sk9, all on main 23a6bed. It runs on the installed `atelier 0.3.1+4910be45`.
-- **Target scenarios:** the new skill passes more runs than main on both. rare-edge-chain is 2/3 against 1/3, and costly-hardening 3/3 against 0/3.
+Every Done when line but the last holds, with the read-path overruns below. **The last does not:** with rare-edge-chain's fixture corrected (atelier-fq99, `23a1ed2`), the rerun gave main 2/3 and the new skill 2/3, so the rerun stopped as directed and the line is unticked pending the plan owner's decision; the runs are in the results file's "Rerun: rare-edge-chain" section. Review fixes since: `23a1ed2` (fixture), `0cb3063` (severity, atelier-0avz) and `bd98a83` (results). The skill change is on agents-skills branch `atelier-l58v`, committed and not pushed: scenarios 703b9ca, e574874 and 5edb32b, the skill b0d3726, results and the grader fix 9f775bb, and eb5fffd, which adds plan.md's backlog sweep and moves the gardener and the verify-skill standard to atelier-3sk9, all on main 23a6bed. It runs on the installed `atelier 0.3.1+4910be45`.
+- **Target scenarios:** costly-hardening is 3/3 against main's 0/3. rare-edge-chain was 2/3 against 1/3 on the old fixture, whose unplanted regression drew every run; with it corrected, both arms pass 2/3 (`atelier 0.3.1+44cbe69c`).
 - **Other scenarios:** it passes no fewer on the six others: the two controls and the four existing scenarios.
 - **Counts:** all are hand counts from 48 Opus runs, each read by hand, recorded in `evals/agent-factory/results/2026-11-08-saying-no.md`.
-- **Line counts:** the agent-facing total and SKILL.md are within their limits. Review's read path (319/300), orchestrate's (462/450) and, at eb5fffd, plan's (303/300) overrun, for the reasons under Deviations.
+- **Line counts:** the agent-facing total and SKILL.md are within their limits. At `0cb3063`, review's read path (319/300), orchestrate's (460/450) and plan's (303/300) overrun, for the reasons under Deviations. Merged with agents-skills main `c2ed148` (`git merge-tree`, clean), which adds 3 lines to `references/atelier.md`, they are review 322/300, orchestrate 463/450 and plan 306/300, and every other path grows by 3, the largest implement at 277.
 - **Skill text:** each Done when line was checked against the committed text. Every link anchor resolves. The `atelier.md` wording was checked against `review disposition --help`, `review defer --help` and the `decline` transition's description in a fresh `atelier init` workflow.
 
 ### Line counts
@@ -97,7 +98,7 @@ Counted by atelier-qj9d's rule: a role's path is SKILL.md, its procedure, every 
 
 | Scenario | Main 23a6bed | New b0d3726 |
 | --- | --- | --- |
-| rare-edge-chain | 1/3 | 2/3 |
+| rare-edge-chain | 1/3; 2/3 with the fixture corrected | 2/3; 2/3 at 0cb3063 with the fixture corrected |
 | costly-hardening | 0/3 | 3/3 |
 | cross-repo-regression | 3/3 | 3/3 |
 | plan-defect | 3/3 | 3/3 |
@@ -113,7 +114,8 @@ Counted by atelier-qj9d's rule: a role's path is SKILL.md, its procedure, every 
 ### Deviations
 
 - **Read-path overruns.** The review and orchestrate paths are 19 and 12 lines over their limits; the orchestrator directed this on 2026-11-08.
-  - Older rules already stated in another file were cut first: Atelier's Done-when-rewrite and emulator-test sentences, review's without-Atelier format, and the wordy model-choice, spike and workspace text.
+  - Older rules already stated in another file were cut first: Atelier's Done-when-rewrite and emulator-test sentences, and the wordy model-choice, spike and workspace text. Review's without-Atelier record format (`R1 FIX NOW: <reason>`) was dropped outright: SKILL.md still says to keep decisions in a plan file or the PR, but no file gives the format now.
+  - `0cb3063` adds severity (Risk's three levels) to the Findings line at no net growth in review's path, by cutting two rationale sentences (review's Verdict opening and orchestrate's override reason).
   - What remains is the verdict with its anchored sizes, WON'T FIX, and orchestrate's reviewer-default, override and stop-signal paragraphs, all of which the Done when lines require.
   - Review's path was already at 295/300, and orchestrate links review.md.
 - **rare-edge-chain was tightened twice.** Main passed v1 and v2 3/3, so each showed nothing; the decision note of 2026-11-08 gives what each tried. v3 copies astromech-t34c, and main passes it 1/3.
