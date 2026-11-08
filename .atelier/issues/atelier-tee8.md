@@ -27,7 +27,7 @@ Mission atelier-g6rp's outcome says spadaval/.agents no longer holds Agent Facto
 
 ## Done when
 
-- [ ] Sumeet has reviewed and pushed `~/projects/agents-skills` `main` (`dfa5f3e`, 17 commits ahead of `origin/main`). It holds:
+- [ ] Sumeet has reviewed and pushed `~/projects/agents-skills` `main` (`dfa5f3e`, 19 commits ahead of `origin/main`). It holds:
   - atelier-l58v's skill change (`c75a9b1`);
   - atelier-dkul's README and frozen notice (`aef856d`);
   - atelier-6oxt's deletion of `skills/agent-factory`, `evals/agent-factory` and the four Codex skills (`dfa5f3e`).
