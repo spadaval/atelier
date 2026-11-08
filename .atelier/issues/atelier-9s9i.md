@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Fold codex-reflect's harness-neutral retrospective method into audit.md before it is deleted"
-updated_at: "2026-11-08T22:46:57.486287325+00:00"
+updated_at: "2026-11-08T22:48:07.284727760+00:00"
 ---
 
 ## Goal
@@ -43,6 +43,10 @@ updated_at: "2026-11-08T22:46:57.486287325+00:00"
 ## Context
 
 The gardener (atelier-3sk9) reads transcripts too and comes after this item; it moves or links this method, so this item does not wait for it.
+
+## Notes
+
+- 2026-11-08 [handoff] Implemented in 519398e3: audit.md gains a 12-line Session Retrospectives section. See ## Report for proof and what was left out. Review outstanding.
 
 ## Report
 
