@@ -37,7 +37,7 @@ Reviewers find real defects but have no recorded way to say the change as a whol
 
 ## Scope
 
-Atelier's code, `docs/product` and this item's records. Not the skill: the guidance that tells reviewers to use the command lands after the skill moves here (`atelier-<opening id>`) or in `atelier-l58v`, whichever is open when this merges.
+Atelier's code, `docs/product` and this item's records. Not the skill: the guidance that tells reviewers to use the command lands after the skill moves here (`atelier-7iq0`).
 
 ## Context
 
