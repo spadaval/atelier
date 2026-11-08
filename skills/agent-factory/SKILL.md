@@ -1,6 +1,6 @@
 ---
 name: agent-factory
-description: "Use in repositories tracked with Atelier, or to set a repository up with Atelier: planning or running a mission, delegating work to subagents, making a consequential product or architecture decision, diagnosing an unexplained failure, or independently reviewing or validating agent-written code."
+description: "Use in repositories tracked with Atelier, or to set a repository up with Atelier: planning or running a mission, grooming a backlog, delegating work to subagents, making a consequential product or architecture decision, diagnosing an unexplained failure, or independently reviewing or validating agent-written code."
 ---
 
 # Agent Factory
@@ -90,7 +90,8 @@ append it as a note pointing at its Report.
 Say which you use, and why, before starting it: the one named, else the one that
 fits, else work under the core rules. Each is `procedures/<name>.md`:
 `orchestrate` (run a mission or workstream), `plan` (shape strategy and issues),
-`decide` (a consequential choice), `implement` (build one slice, code or docs),
-`diagnose` (find a failure's cause), `review` (review someone else's change),
-`validate` (test claims independently), `migrate` (a breaking change), `audit`
-(findings on architecture or process) and `install` (set up or assess a repo).
+`groom` (re-sequence the backlog and find work not to do), `decide` (a
+consequential choice), `implement` (build one slice, code or docs), `diagnose`
+(find a failure's cause), `review` (review someone else's change), `validate`
+(test claims independently), `migrate` (a breaking change), `audit` (findings
+on architecture or process) and `install` (set up or assess a repo).

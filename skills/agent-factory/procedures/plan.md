@@ -37,10 +37,9 @@ A mission is one thing a person can hold in their head, plan against and finish:
   other repositories or people adopting a change, or on measuring behavior after
   it ships goes in its own backlog item that says when to pick it up, or in a
   loose end if it can only follow a merge or release, so the mission can close.
-- **Swept backlog first.** Before planning, read the backlog in the mission's
-  area. Fold in what belongs, and give whoever owns the plan one list of items
-  to decline, each superseded, moot or not worth its cost, with the reason.
-  Propose declining a planned item on the same grounds.
+- **Swept backlog first.** Before planning, run `groom` on the mission's area
+  and plan with its proposals; its digest is answered before the mission is
+  ready.
 - **Sized to finish:** one reviewer can judge it in one debrief, usually days to
   weeks of work. Split a larger one along the outcome's seams, not item count.
 - **Success criteria are optional.** Add one only for a claim about the whole

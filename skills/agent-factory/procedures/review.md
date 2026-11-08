@@ -20,21 +20,11 @@ re-running acceptance scenarios is `validate`.
 
 ## Verdict
 
-First size the whole change against the outcome it serves:
-
-- **Complexity:** *low*, held in one sitting, no new moving part; *medium*, a
-  new moving part or several owners; *high*, new state, a subsystem or a
-  contract others must keep, or too big to review in one pass.
-- **Value:** *low*, a rare case, a hypothetical or a path planned for removal;
-  *medium*, a path in current use; *high*, the outcome needs it (a Done when
-  line, a regression, a current hazard).
-- **Risk** of merging as is: *low*, a failure shows and is cheap to undo;
-  *medium*, it reaches users or other repositories but shows and can be undone;
-  *high*, silent wrong results, lost data or a security hole.
-
-Then say **merge** if the value is worth the rest, **shrink** if a much smaller
-change gets most of it (name that change), or **reject** if the cost outweighs
-it (name the outcome served and why). Record a shrink or reject as a `fix_now`
+First size the whole change, as it is, on the [three
+scales](../references/sizing.md): complexity, value and risk. Then say
+**merge** if the value is worth the rest, **shrink** if a much smaller change
+gets most of it (name that change), or **reject** if the cost outweighs it
+(name the outcome served and why). Record a shrink or reject as a `fix_now`
 finding opening `Shrink:` or `Reject:`, its severity the change's risk; merge
 then waits for the smaller change and a fresh approval or, for a reject that
 stands, the item's decline. The accountable agent, never the author, may
