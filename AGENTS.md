@@ -49,8 +49,8 @@ rebuilt model.
 - A branch that changes anything besides tracker records (`.atelier/issues`,
   `reviews`, `evidence`; the workflow policy and config count as code) merges
   only after CI has passed on its latest code: push the work branch, open a
-  pull request (a draft until it is approved), wait for the CI workflow to
-  pass, then run `atelier merge` and `atelier land`, and push `master`.
+  pull request, wait for the CI workflow to pass, then run `atelier merge`
+  and `atelier land`, and push `master`.
   Record-only commits after that run, such as approvals, need no new run; a
   commit that changes code does, including an `atelier merge --sync` that
   brings in code from `master` (a clean one still keeps the approval).
