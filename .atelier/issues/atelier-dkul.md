@@ -4,6 +4,9 @@ id: "atelier-dkul"
 issue_type: "task"
 labels:
 - "agent-factory"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-dkul
 priority: "P1"
 relationships:
   blocks: []
@@ -21,9 +24,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Move the skill and its evals here with their history, so a command and its guidance change in one commit"
-updated_at: "2026-11-08T06:01:08.705740965+00:00"
+updated_at: "2026-11-08T22:28:40.135053564+00:00"
 ---
 
 ## Goal
