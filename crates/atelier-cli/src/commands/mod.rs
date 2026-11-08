@@ -1,6 +1,7 @@
 pub(crate) mod bulk_canonical;
 pub mod bundle;
 pub mod evidence;
+pub mod freshness;
 pub mod init;
 pub mod issue;
 pub mod issue_workflow;
