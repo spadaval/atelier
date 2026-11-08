@@ -1504,13 +1504,24 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     }
 }
 
-/// Quiet output is `passed`; findings still print, on stderr, so a failure
-/// leaves stdout empty.
+/// Quiet output is `passed`; findings and warnings still print, on stderr,
+/// so a failure leaves stdout empty.
 pub fn lint(state_dir: &Path, issue_ref: Option<&str>, quiet: bool) -> Result<()> {
     let view = atelier_app::lint::lint(atelier_app::lint::LintRequest {
         state_dir,
         issue_ref,
     })?;
+    // Warnings never change the exit code; quiet output keeps them off
+    // stdout (atelier-edaj).
+    let print_warnings = || {
+        for warning in &view.warnings {
+            if quiet {
+                eprintln!("{warning}");
+            } else {
+                println!("{warning}");
+            }
+        }
+    };
     if view.findings.is_empty() {
         println!("{}", if quiet { "passed" } else { "Check passed." });
         if !quiet {
@@ -1518,6 +1529,7 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>, quiet: bool) -> Result<()
                 println!("{note}");
             }
         }
+        print_warnings();
         return Ok(());
     }
     let mut report = format!(
@@ -1532,6 +1544,7 @@ pub fn lint(state_dir: &Path, issue_ref: Option<&str>, quiet: bool) -> Result<()
     } else {
         println!("{report}");
     }
+    print_warnings();
     let rerun = view.scoped_id.map_or("atelier check".to_string(), |id| {
         format!("atelier check {id}")
     });

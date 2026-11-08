@@ -50,6 +50,9 @@ pub struct LintView {
     /// Old record forms Atelier still reads, each naming the migration that
     /// rewrites them; they pass the check (atelier-l457).
     pub notes: Vec<String>,
+    /// Mechanical plan problems (atelier-edaj). They print whether or not
+    /// the check passes and never fail it.
+    pub warnings: Vec<crate::plan_checks::PlanWarning>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -70,6 +73,21 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
     let scoped_id = issue_ref
         .map(|issue_ref| resolve_issue_id(&files, issue_ref))
         .transpose()?;
+    let warnings = match state_dir.parent() {
+        Some(repo_root) => {
+            let policy = crate::workflow_policy::load(repo_root).ok();
+            crate::plan_checks::plan_warnings(
+                state_dir,
+                repo_root,
+                &files.issues,
+                scoped_id.as_deref(),
+                |record| {
+                    !crate::workflow_policy::status_is_done(policy.as_ref(), &record.issue.status)
+                },
+            )
+        }
+        None => Vec::new(),
+    };
     let (findings, index) = lint_records(state_dir, files, scoped_id.as_deref(), true)?;
     let notes = index
         .map(|index| old_form_notes(&index, state_dir, scoped_id.as_deref()))
@@ -78,6 +96,7 @@ pub fn lint(request: LintRequest<'_>) -> Result<LintView> {
         scoped_id,
         findings,
         notes,
+        warnings,
     })
 }
 

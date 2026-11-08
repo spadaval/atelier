@@ -155,7 +155,13 @@ forms Atelier still reads, separate disposition events and open After merge
 lines, pass it with a note naming the migration that rewrites them
 (`atelier migrate dispositions --apply`, `atelier migrate after-merge`).
 Version 1 review records are read as written, since approvals stay as
-committed (atelier-l457). Every command that
+committed (atelier-l457). `check` also warns, at the file and line, about
+mechanical plan problems: an open work item whose Done when has no `- [ ]`
+line, a `- [ ]` line with no text, and a Markdown link in an issue record or
+in a strategy a mission links whose repository-relative target exists
+neither beside that file nor from the repository root (URLs and anchors are
+not checked). Warnings print whether or not the check passes, on stderr with
+`-q`, and never change its exit code (atelier-edaj). Every command that
 writes records refuses, before writing anything, records that would fail a
 rule `check` applies that the records before them pass (`record_invalid`). Prune is dry-run by default
 and removes only eligible artifacts in apply mode. Commit canonical deletions.

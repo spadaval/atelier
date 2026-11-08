@@ -489,7 +489,16 @@ fn migrate_after_merge_turns_open_lines_into_loose_ends_once() {
     let upstream = tempdir().unwrap();
     let repo = dir.path();
     repository(repo, upstream.path());
-    let bug = create(repo, &["The launcher crashes", "--issue-type", "bug"]);
+    let bug = create(
+        repo,
+        &[
+            "The launcher crashes",
+            "--issue-type",
+            "bug",
+            "--body",
+            "## Goal\n\nFix the crash.\n\n## Done when\n\n- [ ] The crash test passes.",
+        ],
+    );
     let open = create(
         repo,
         &[
