@@ -24,9 +24,9 @@ Review of atelier changes caught cross-repository regressions by hand (atelier-2
 ## Done when
 
 - [ ] A script in this repository builds the current tree's binary, makes scratch clones of each local Atelier repository (discovered from a list in the script or a directory scan, including atelier, astromech, life-on-rails, cosplay-studio, demiurge and worldcrafter), and runs read-only commands with both the new and the installed binary: at least `check`, `doctor`, `status`, `work missions` and `review request` for an open item where one exists.
-- [ ] It prints a per-repository summary and exits non-zero when the new binary errors or refuses where the installed one does not. It never writes to the real repositories.
+- [ ] It prints a per-repository summary and exits non-zero when the new binary errors or refuses where the installed one does not. It never writes to the repositories it clones; build output in this repository's `target/` is fine.
 - [ ] Run once on the current base: the Report shows its output.
-- [ ] The install step in this repository's docs (or AGENTS.md) says to run it before installing a new binary.
+- [ ] This repository's AGENTS.md says to run it before requesting review of a change to atelier's commands or records, and before installing a new binary.
 
 ## Scope
 

@@ -26,7 +26,7 @@ Run the gardener procedure daily through a T3 Code scheduled task once the skill
 
 ## Done when
 
-- [ ] A T3 scheduled task runs the gardener daily on atelier, astromech and life-on-rails (others on Sumeet's say), with heavy builds sent to boat, and its first run's output is checked by hand.
+- [ ] A T3 scheduled task runs the gardener daily on atelier, astromech and life-on-rails (others on Sumeet's say), one gardener run per repository, with heavy builds sent to boat, and its first run's output is checked by hand.
 
 ## Context
 

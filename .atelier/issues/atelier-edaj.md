@@ -26,7 +26,7 @@ Plan review spends reviewer time on mechanical problems a script can find. Have 
 - [ ] `atelier check` reports an open work item with no Done when lines, and a Done when line with no text.
 - [ ] `atelier check` reports a repository-relative Markdown link in an issue record or a strategy file that a mission links when the target file does not exist (anchors need not be checked).
 - [ ] Each report names the record, the line and what to do instead.
-- [ ] On the current base of each local Atelier repository (atelier, astromech, life-on-rails, cosplay-studio, demiurge, worldcrafter), `atelier check` and `atelier land` still exit as they do with the installed binary: problems already present are warnings, or are refused only for records changed on the branch being landed. The Report lists what the new checks find in each repository today.
+- [ ] The new problems print as warnings and do not change `atelier check`'s exit code, so on the current base of each local Atelier repository (atelier, astromech, life-on-rails, cosplay-studio, demiurge, worldcrafter) it exits as it does with the installed binary. The Report lists what the new checks find in each repository today.
 - [ ] Tests cover each new report and the existing-records case.
 
 ## Scope
