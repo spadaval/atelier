@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Make the skill step aside outside Atelier repositories, and give its install lines first"
-updated_at: "2026-11-08T22:46:55.629916577+00:00"
+updated_at: "2026-11-08T23:04:52.062510764+00:00"
 ---
 
 ## Goal
@@ -47,6 +47,10 @@ Stop the skill loading where it does not apply, and tell a new user how to insta
 ## Context
 
 Strategy: docs/strategies/agent-factory-in-atelier.md. The skill stays global; repository-specific guidance stays in the repository's `.atelier/`, `AGENTS.md` and verify skill.
+
+## Notes
+
+- 2026-11-08 [note] Handoff: implementation done at d6f61fe on branch atelier-nz6a (skill commit db05a14b; later commits are records only). Every scenario passed once on the skill arm with Opus, read by hand. See ## Report. Review outstanding; not merged or pushed. Follow-up atelier-wl6u.
 
 ## Report
 
