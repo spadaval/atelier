@@ -28,11 +28,11 @@ Reviewers find real defects but have no recorded way to say the change as a whol
 
 - [ ] A reviewer can record a verdict on an item: `merge`, `shrink` or `reject`, plus complexity, value and risk each `S`, `M` or `L`, and a justification. Each is required when a verdict is given. It is pinned to a commit like other review events (proposed: flags on `review record`).
 - [ ] `atelier merge <id>` refuses while the latest verdict on the item is `shrink` or `reject` and has no decision, and the refusal names the verdict and the command that decides it.
-- [ ] Someone other than the author can decide an open shrink or reject (proposed: `review disposition` on the verdict event): uphold it, or override it with a required reason. An override lets merge proceed. The author's identity is refused, as for finding dispositions.
+- [ ] An open shrink or reject can be decided (proposed: `review disposition` on the verdict event): uphold it, or override it with a required reason. An override lets merge proceed. The decision records its identity; like finding dispositions, Atelier does not compare it with the Git authors (atelier-md0v), and the skill says the author does not decide.
 - [ ] Upholding a reject moves the item to `declined` with the reason. Upholding a shrink leaves merge refused until a later verdict on a newer commit says `merge` or `shrink` is overridden.
 - [ ] `review list`, `review show`, the review brief, `debrief` and `doctor` show the verdict and its sizes, and any decision on it.
 - [ ] A repository whose records have no verdicts behaves as before: no verdict means merge is not blocked by this gate.
-- [ ] Tests cover: a verdict with a missing size refused; merge refused under an open reject; author override refused; override with a reason lets merge pass; an upheld reject declines the item; an older repository without verdicts merges unchanged.
+- [ ] Tests cover: a verdict with a missing size refused; merge refused under an open reject; override without a reason refused; override with a reason lets merge pass; an upheld reject declines the item; an older repository without verdicts merges unchanged.
 - [ ] `docs/product` describes the verdict and its sizes (S/M/L anchors as `atelier-l58v` writes them for the skill).
 
 ## Scope
@@ -41,7 +41,7 @@ Atelier's code, `docs/product` and this item's records. Not the skill: the guida
 
 ## Context
 
-Agreed with Sumeet on 2026-11-08 in the review audit thread: the reviewer opens with merge, shrink or reject, then complexity, value and risk sized S/M/L with written anchors; shrink and reject block merge until the accountable agent (never the author) decides; overriding needs a recorded reason; a reject that stands ends the work. `atelier-stnv` adds won't-fix and the `declined` status but not the verdict, and `atelier-l58v`'s review.md line ("Shrink and reject are recorded so they block merge") needs this command to be true.
+Agreed with Sumeet on 2026-11-08 in the review audit thread: the reviewer opens with merge, shrink or reject, then complexity, value and risk sized S/M/L with written anchors; shrink and reject block merge until the accountable agent (never the author) decides; overriding needs a recorded reason; a reject that stands ends the work. `atelier-stnv` adds won't-fix and the `declined` status but not the verdict, `atelier-l58v` records shrink and reject as `fix_now` findings whose text opens with the verdict, which needs no binary change; this item makes the verdict and its sizes a record of their own, and `atelier-7iq0` moves the skill onto it.
 
 ## Unknowns
 
