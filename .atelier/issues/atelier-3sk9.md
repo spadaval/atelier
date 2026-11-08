@@ -34,7 +34,7 @@ Give Agent Factory a gardener (`procedures/garden.md`) that tends the conditions
 - [ ] A run covers one repository, never touches a branch in flight, and reports the window, the trips found, the routine fixes merged, the recommendations made, and the rules and checks added and removed.
 - [ ] `references/verify-skill.md` sets the verify-skill standard, starting from atelier-l58v's draft, which the Design section below copies. The gardener keeps a repository's verify skill working when agents trip on it; authors keep its feature map current with their features.
 - [ ] SKILL.md lists `garden`, and garden's read path stays within atelier-qj9d's 300 lines, counted by its rule; the Report gives the count.
-- [ ] Trial: a fresh agent given only the skill runs the gardener on this repository, and its output is read by hand. Each trip it reports is checked against its transcript, no change it calls routine should have been a recommendation, and its digest is in the Report. The trial merges and files nothing.
+- [ ] Trial: a fresh agent given only the skill runs the gardener on this repository, and its output is read by hand. Each trip it reports is checked against its transcript, no change it calls routine should have been a recommendation, and its digest is in the Report. The trial proposes removing at least one rule or check, or says why it found none. The trial merges and files nothing.
 
 ## Scope
 
