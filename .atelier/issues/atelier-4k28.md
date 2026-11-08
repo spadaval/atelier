@@ -4,6 +4,9 @@ id: "atelier-4k28"
 issue_type: "task"
 labels:
 - "tooling"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-4k28
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Smoke-test a new atelier binary against every local Atelier repository before installing it"
-updated_at: "2026-11-08T05:35:32.055259750+00:00"
+updated_at: "2026-11-08T06:03:55.223078722+00:00"
 ---
 
 ## Goal
