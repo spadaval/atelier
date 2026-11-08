@@ -28,17 +28,17 @@ updated_at: "2026-11-08T05:52:15.560910590+00:00"
 
 ## Goal
 
-Leave spadaval/.agents holding only skills that are still used, once the skill has moved and this host's symlinks point at the new copy.
+Remove from spadaval/.agents everything that has moved or is unused, once the skill has moved and this host's symlinks point at the new copy. That leaves it with no skills; what happens to it then is decision `atelier-rfxf`.
 
 ## Done when
 
-- [ ] On a branch in spadaval/.agents (made with `git -C ~/projects/agents-skills worktree add`; the live checkout never changes branch), `skills/agent-factory`, `evals/agent-factory`, `skills/artifact-hub`, `skills/generate-html-plan`, `skills/pr-review-explorer` and `skills/codex-reflect` are deleted, and the README says Agent Factory lives in spadaval/atelier, with its install line.
+- [ ] On a branch in spadaval/.agents (made with `git -C ~/projects/agents-skills worktree add`; the live checkout never changes branch), `skills/agent-factory`, `evals/agent-factory`, `skills/artifact-hub`, `skills/generate-html-plan`, `skills/pr-review-explorer` and `skills/codex-reflect` are deleted, and the README (added by `atelier-dkul`) says Agent Factory lives in spadaval/atelier, with its install line.
 - [ ] Nothing on this host links into a deleted path: `find ~/.claude/skills ~/.agents/skills -maxdepth 1 -type l -exec readlink -f {} \;` lists no path under `~/projects/agents-skills/skills/` that the branch deletes.
 - [ ] The branch is independently reviewed and merged into spadaval/.agents `main`; pushing waits for Sumeet.
 
 ## Scope
 
-spadaval/.agents. The `firecrawl*` skills and the repository itself stay; Sumeet decides those separately.
+spadaval/.agents. Whether to retire the repository is `atelier-rfxf`, which Sumeet decides. The `firecrawl*` skills live only in `~/.agents/skills`, not in this repository, and are untouched.
 
 ## Context
 
