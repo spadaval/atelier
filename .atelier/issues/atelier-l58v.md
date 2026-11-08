@@ -142,6 +142,6 @@ Six decision notes of 2026-11-08 on this item:
 
 - **Stop-signal over-application.** In new rare-edge run 2, the user's "third round on clock skew" was read as the third-review-round signal on an item reviewed once. Watch for it before rewording orchestrate's Stop signals.
 - **Sample size.** At N = 3, the rare-edge margin of one run is within noise.
-- **Unverified in use:** plan.md's backlog sweep (eb5fffd) has no eval, and the matrix ran at b0d3726, before it. eb5fffd changes only plan.md and SKILL.md's subskill list and deletes files no scenario reads.
+- **Unverified in use:** plan.md's backlog sweep (eb5fffd) has no eval. The matrix ran at b0d3726; plan-defect, the scenario closest to plan.md, was rerun at eb5fffd and passed 3/3 by hand (recorded in the results file at eb14a31), but no run opened plan.md. eb5fffd changes only plan.md and SKILL.md's subskill list and deletes files no scenario reads.
 - **Not pushed.** agents-skills `atelier-l58v` is not pushed (Sumeet's remote), and the live checkout `~/projects/agents-skills` is untouched.
 - **Review outstanding.** Independent review of the skill branch and these records has not been requested.
