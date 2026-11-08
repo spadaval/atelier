@@ -437,12 +437,13 @@ impl Gates<'_> {
     }
 
     /// The transitions, by name, that take `id` from its status to a closed
-    /// status other than superseded, shortest first: the workflow's own
-    /// moves, so no transition name is assumed. `None` when none does within
-    /// three steps.
+    /// status other than superseded or declined, shortest first: the
+    /// workflow's own moves, so no transition name is assumed. `None` when
+    /// none does within three steps.
     ///
     /// Under a closed ancestor an item cannot enter an active status, so the
-    /// path skips those and may end in superseded, which also closes it.
+    /// path skips those and may end in superseded or declined, which also
+    /// close it.
     fn closing_path(&self, id: &str) -> Option<Vec<String>> {
         let issue = self.index.get_issue(id)?;
         let workflow = self
@@ -451,7 +452,7 @@ impl Gates<'_> {
             .ok()?;
         let retired = self.closed_ancestor(id).is_some();
         let closed = |status: &str| {
-            (retired || status != "superseded")
+            (retired || !atelier_core::closes_undone(status))
                 && self
                     .policy
                     .issue_status_is_terminal(&issue.issue_type, status)
@@ -726,12 +727,13 @@ impl Gates<'_> {
                     let (target, shown, recommendation) = self.finding(id);
                     let fix = match recommendation.unwrap_or(FindingDecision::Defer) {
                         FindingDecision::NoAction => format!("atelier review disposition {id} --decision no_action --identity <identity> \"…\""),
+                        FindingDecision::WontFix => format!("atelier review disposition {id} --decision wont_fix --identity <identity> \"…\""),
                         _ => format!("atelier review disposition {id} --decision defer --follow-up <issue> --identity <identity> \"…\""),
                     };
                     lines.push(Line::new(
                         &target,
                         node,
-                        format!("{shown} needs a decision: defer it to a follow-up, or no_action, or fix it and record fix_now"),
+                        format!("{shown} needs a decision: defer it to a follow-up, wont_fix if it is real but not worth fixing, no_action if it is wrong, or fix it and record fix_now"),
                         Some(fix),
                     ));
                 }
