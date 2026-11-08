@@ -22,6 +22,7 @@ pub mod mission_readiness;
 pub mod mission_review;
 pub mod objective_graph;
 pub(crate) mod path_log;
+pub mod plan_checks;
 pub mod project_config;
 pub mod record_guard;
 pub mod record_history;
