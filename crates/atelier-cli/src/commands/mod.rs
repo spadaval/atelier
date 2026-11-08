@@ -25,3 +25,4 @@ pub mod lease;
 pub(crate) mod light_path;
 pub mod session;
 pub mod setup;
+pub mod skill_link;

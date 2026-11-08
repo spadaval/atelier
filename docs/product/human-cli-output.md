@@ -580,6 +580,8 @@ refusal of it leaves stdout empty:
 | --- | --- |
 | `init` | the project slug, new or already configured |
 | `setup claude` | the settings file path |
+| `setup --link` | the linked skill directory, `<checkout>/skills/agent-factory` |
+| `setup --unlink` | the links it removed, one per line |
 | `status` (and its alias `prime`) | `work=<n> current_missions=<n> ready=<n> human=<n>`, where `work` counts active work |
 | `work` | the view names, one per line |
 | `work ready`, `blocked`, `human`, `active`, `all`, `missions` | IDs, one per line |
