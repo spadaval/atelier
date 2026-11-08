@@ -11,13 +11,17 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-l58v"
+    type: "supersedes"
+  - kind: "issue"
     id: "atelier-stnv"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-08T05:57:29.150279118+00:00"
+status: "superseded"
 title: "Record a review verdict, so a reviewer can stop a change that costs more than it buys"
-updated_at: "2026-11-08T05:51:19.282116207+00:00"
+updated_at: "2026-11-08T05:57:29.150279118+00:00"
 ---
 
 ## Goal
@@ -46,3 +50,7 @@ Agreed with Sumeet on 2026-11-08 in the review audit thread: the reviewer opens 
 ## Unknowns
 
 - Whether the verdict is a field on `review record` or its own event. Choose the one that keeps `review --help` shortest; record the choice as a decision note.
+
+## Report
+
+Superseded by atelier-l58v. Sumeet chose on 2026-11-08 to record shrink and reject as fix_now findings whose text opens with the verdict, as l58v plans, with no new record or merge gate. The sizes live in the finding's text.

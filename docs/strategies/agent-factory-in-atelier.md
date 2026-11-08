@@ -31,7 +31,7 @@ The skill is also global, and its description matches almost any multi-step soft
 
 In: this repository's code, docs, ADRs and records; `skills/` and `evals/` once moved; spadaval/.agents (deleting what moved and the Codex-only skills); the symlinks `~/.claude/skills/agent-factory` and `~/.agents/skills/agent-factory` on this host.
 
-Out: the review verdict record (`atelier-9mdj` and `atelier-7iq0`, the "review can say no" work); the `firecrawl*` skills and retiring the spadaval/.agents repository, which Sumeet decides; moving `file-pr` (decided against; see the mission's decision note).
+Out: review verdicts, which `atelier-l58v` records as `fix_now` findings (`atelier-9mdj` and `atelier-7iq0`, a separate verdict record, were superseded on Sumeet's choice); the `firecrawl*` skills and retiring the spadaval/.agents repository, which Sumeet decides; moving `file-pr` (decided against; see the mission's decision note).
 
 Target environment: Linux and macOS, Claude Code and Codex reading `~/.claude/skills` and `~/.agents/skills`, `npx` from Node available on the machines that install the skill.
 
@@ -41,6 +41,6 @@ The orchestrator may reorder and split items, and change flag names and cache de
 
 # Risks and Unknowns
 
-- A symlink to a checkout makes the live skill follow whatever that checkout has checked out. This checkout switches branches during `atelier start`, so the linked skill would too. `setup --link` takes a path, and the docs say to link a checkout that stays on `master`.
+- A symlink to a checkout makes the live skill follow whatever that checkout has checked out, and `~/projects/atelier` switches branches during `atelier start`. Sumeet chose on 2026-11-08 to link a dedicated worktree kept on `master` (for example `~/projects/atelier-skill`), pulled after merges.
 - Merging spadaval/.agents history brings unrelated root commits into this repository. Whether `atelier land` and `doctor` accept that history is checked before the import merges; a plain copy that names the source commit is the fallback.
 - `npx skills check` may be slow or need the network; `status` only reads its cached result.
