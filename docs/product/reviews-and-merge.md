@@ -70,14 +70,36 @@ A finding recommended `fix_now` needs no disposition: an approval pinned to a
 later commit than the finding, one that holds the finding's record, and
 recorded after it resolves it, so the fix's re-review is what settles it, and
 an approval that never saw the finding cannot, such as a parallel reviewer's
-approval of a head that did not hold it. A finding recommended `defer` or `no_action` needs a recorded
-decision, even if it was fixed instead. Recommendations and decisions use
-`fix_now`, `defer`, or `no_action`:
+approval of a head that did not hold it. A finding recommended `defer`,
+`no_action` or `wont_fix` needs a recorded decision, even if it was fixed
+instead. Recommendations and decisions use one of four values:
+
+- `fix_now`: fix it on this branch.
+- `defer`: fix it later, in the follow-up issue the decision names.
+- `no_action`: the finding is wrong: mistaken, a duplicate, or without
+  consequence.
+- `wont_fix`: the finding is real, but not worth fixing (atelier-stnv). It
+  needs a reason and no follow-up issue, so a real no costs nothing to
+  record.
 
 ```text
 atelier review disposition <finding-id> --identity "Reviewer" --decision defer --follow-up <issue-id> "Follow-up accepted"
-atelier review disposition <finding-id> --identity "Reviewer" --decision no_action "Reason accepted"
+atelier review disposition <finding-id> --identity "Reviewer" --decision no_action "Why the finding is wrong"
+atelier review disposition <finding-id> --identity "Reviewer" --decision wont_fix "Why it is not worth fixing"
+atelier review defer <id> --identity "Reviewer" [--dry-run] [--commit-records]
 ```
+
+`review defer <id>` defers, in one step, every finding on the item and its
+children that was recommended `defer` and has no decision yet. Each gets a
+`backlog` task discovered from the finding, carrying its text, with the
+finding's leading severity (`high:` and so on) as its priority, and a
+`defer` disposition naming that task. The tasks go under one parent per
+item, a `backlog` task labelled `deferred-findings` and discovered from the
+item: the first run creates it, and later runs find it again by that label
+and link, while it is open. A finding already decided is left alone, so a
+second run files nothing twice. `--dry-run` lists the findings and the
+follow-ups it would file and writes nothing; `--commit-records` commits
+everything it wrote in one commit.
 
 The disposition is a field of the finding's own record: the decision, its
 follow-up for a deferral, the identity that set it, the commit HEAD was
@@ -94,10 +116,14 @@ no finding. `--decision fix_now` stays accepted and is never asked for; an
 older Atelier's FIX NOW disposition with a resolution commit is resolved, as
 before, by an approval at or after that commit, and one without by the rule
 above. DEFER requires an existing follow-up issue. Any identity may record a
-DEFER or NO ACTION; the identity is recorded, not compared with the work's
-Git authors. A deferral's follow-up may say it was discovered elsewhere.
-A defer or no_action finding without a decision, or a fix_now finding no
-current approval has resolved, blocks merge.
+DEFER, NO ACTION or WON'T FIX; the identity is recorded, not compared with
+the work's Git authors. Who ought to decide is Agent Factory's rule, not a
+gate. A deferral's follow-up may say it was discovered elsewhere.
+A defer, no_action or wont_fix finding without a decision, or a fix_now
+finding no current approval has resolved, blocks merge. `review list`,
+`review show`, the review brief and the gates show a won't-fix decision as
+`wont_fix`, and the [debrief](mission-reviews.md#debrief) counts it as
+`won't fix`, apart from no_action's `left as is`.
 
 On the base, every part of a review record but a finding's disposition is
 append-only: editing it, or deleting a record, is refused, and merge examines
@@ -567,8 +593,8 @@ current at that commit by the rule in [Approval
 freshness](#approval-freshness), as is a claim an older Atelier made after an
 approval's pin. Revert an outside claim (a claim no longer done at the tip is
 withdrawn), then `atelier start` the item and merge it (atelier-fj1t).
-Closing a mission, deciding a `decision` record and superseding work stay
-allowed on the base. A merge commit, such as a non-rebasing pull or the one
+Closing a mission, deciding a `decision` record, and superseding or
+[declining](work-model.md#completion) work stay allowed on the base. A merge commit, such as a non-rebasing pull or the one
 `atelier merge` creates, is judged by the paths that differ from all of its
 parents and from Git's own merge of them, so a line Git merged cleanly is not
 counted, while a conflict resolved by hand is (atelier-jnrh). The install predates the gates and is exempt: commits

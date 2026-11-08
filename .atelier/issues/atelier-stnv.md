@@ -4,6 +4,9 @@ id: "atelier-stnv"
 issue_type: "feature"
 labels:
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-stnv
 priority: "P1"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Let review say no: a won't-fix decision, a declined status, and deferring an item's findings in one command"
-updated_at: "2026-11-08T05:35:31.390561285+00:00"
+updated_at: "2026-11-08T06:12:35.935100246+00:00"
 ---
 
 ## Goal

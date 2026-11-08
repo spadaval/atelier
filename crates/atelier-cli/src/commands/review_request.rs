@@ -676,13 +676,9 @@ pub fn render(facts: &Facts) -> String {
         "\n## Record\n\nPin every record to the head. `--commit-records` commits the record it writes, with any records staged earlier by `--stage-records`.\n\n```\natelier review finding {id} --identity \"{who}\" --commit {head} --recommendation {rec} --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"\natelier review approve {id} --identity \"{who}\" --commit {head} --commit-records \"<what you checked>\"\n```\n",
         id = owner.id,
         head = facts.head,
-        rec = [
-            FindingDecision::FixNow,
-            FindingDecision::Defer,
-            FindingDecision::NoAction
-        ]
-        .map(FindingDecision::as_str)
-        .join("|"),
+        rec = FindingDecision::ALL
+            .map(FindingDecision::as_str)
+            .join("|"),
     ));
     out.push_str("\nReport: Contract and Fitness verdicts, findings (R-number, severity, recommendation), open questions, residual risk, and the IDs of the records you created.\n");
     out
@@ -830,7 +826,7 @@ Use the repo's scratch directory.
 Pin every record to the head. `--commit-records` commits the record it writes, with any records staged earlier by `--stage-records`.
 
 ```
-atelier review finding atelier-own1 --identity \"Independent reviewer\" --commit 2222222222222222222222222222222222222222 --recommendation fix_now|defer|no_action --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"
+atelier review finding atelier-own1 --identity \"Independent reviewer\" --commit 2222222222222222222222222222222222222222 --recommendation fix_now|defer|no_action|wont_fix --commit-records \"<severity>: <path:line> <problem, impact, suggested fix>\"
 atelier review approve atelier-own1 --identity \"Independent reviewer\" --commit 2222222222222222222222222222222222222222 --commit-records \"<what you checked>\"
 ```
 

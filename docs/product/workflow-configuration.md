@@ -73,11 +73,14 @@ model](work-model.md)). Categories support queries; the exact status remains
 the stored lifecycle state.
 
 The starter policy has draft objectives, someday `backlog` work, todo
-executable work, active `in_progress`, and terminal `done` or `superseded`.
+executable work, active `in_progress`, and terminal `done`, `superseded` or
+`declined`.
 `backlog` is for work that is recorded but not near-term: it shares the todo
 category but has no `start` transition, so `work ready` leaves it out. `defer`
-parks todo work in `backlog`, `plan` brings it back to `todo`, and `supersede`
-retires it. The `work` workflow has no `close`: `atelier merge` marks work
+parks todo work in `backlog`, `plan` brings it back to `todo`, `supersede`
+retires it once it is obsolete or replaced, and `decline`, from `backlog`,
+`todo` or `in_progress` with a Report, records that real work will not be
+done (atelier-stnv). The `work` workflow has no `close`: `atelier merge` marks work
 done in the merge commit that integrates it, which is how work reaches its
 first done status ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision
 2). The objective workflow's `close` describes when a mission closes: once
@@ -97,7 +100,7 @@ before the decision type existed can copy its `issue_types` entry and
 share the `on_base` workflow, which has no start either: `done` takes one from
 `todo` to `done` once nothing blocks it, and requires a Report, a one-line
 result; `defer` parks one in `backlog` and `plan` brings it back, as for work;
-`supersede` retires it. Any item whose workflow has no `start`
+`supersede` retires it and `decline`, from `backlog` or `todo`, declines it. Any item whose workflow has no `start`
 transition takes no branch, review or merge: `atelier start` and `atelier
 merge` refuse it and name its done transition, and `land` accepts it marked
 done on the base, as it does a mission closed there (atelier-8bh4). This is

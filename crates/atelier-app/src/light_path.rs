@@ -184,7 +184,7 @@ pub fn evaluate(
             Settlement::Decided => disposed.push(id),
             Settlement::Undecided => {
                 unresolved.push(format!(
-                    "{id} needs a decision: a finding recommended defer or no_action records one"
+                    "{id} needs a decision: a finding recommended defer, no_action or wont_fix records one"
                 ));
                 gaps.push(Gap::Undisposed(id));
             }

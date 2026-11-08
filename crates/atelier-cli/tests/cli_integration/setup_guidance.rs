@@ -2436,7 +2436,7 @@ fn test_issue_transition_rejects_unknown_transition_name() {
         run_atelier(dir.path(), &["issue", "transition", &issue_id, "ship_it"]);
     assert!(!success, "unknown transition should fail");
     assert!(
-        stderr.contains("Invalid transition 'ship_it'. Valid values: defer, start"),
+        stderr.contains("Invalid transition 'ship_it'. Valid values: decline, defer, start"),
         "{stderr}"
     );
 }

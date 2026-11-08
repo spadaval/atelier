@@ -101,6 +101,11 @@ fn mark_done(dir: &Path, id: &str) {
 const STARTER_WITH_BLOCKED_AND_REVIEW: &str =
     include_str!("../../atelier-workflow/fixtures/starter-policy-with-blocked-and-review.yaml");
 
+/// The starter policy before atelier-stnv added `declined` and `decline`;
+/// repository policies written from it lack them.
+const STARTER_BEFORE_DECLINED: &str =
+    include_str!("../../atelier-workflow/fixtures/starter-policy-before-declined.yaml");
+
 impl Fixture {
     fn new() -> Self {
         Self::under(None)
@@ -3461,6 +3466,135 @@ fn close_after_approval(case: &str, covered: bool) {
         );
     }
 }
+/// Declined work will not be done, so a base commit that only declines it is
+/// no done claim, as for superseded work, and its open blockers do not hold
+/// it: a blocked task and a loose end waiting on it both decline on the base
+/// and land (atelier-stnv). The decline needs a Report.
+#[test]
+fn a_base_commit_that_only_declines_work_or_a_loose_end_lands() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Prerequisite"]);
+    let work = ok(
+        f.path(),
+        &["-q", "issue", "create", "Real but not worth it"],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &work, &blocker, "--role", "blocked_by"],
+    );
+    let loose_end = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Tag the release",
+            "--issue-type",
+            "loose_end",
+        ],
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "link",
+            &loose_end,
+            &blocker,
+            "--role",
+            "blocked_by",
+        ],
+    );
+    commit(f.path(), "plan on the base");
+    git(f.path(), &["push", "-q"]);
+
+    let (pass, output) = cli(f.path(), &["issue", "transition", &work, "decline"]);
+    assert!(
+        !pass && output.contains("missing required field close_reason"),
+        "{output}"
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &work,
+            "decline",
+            "--reason",
+            "Real, but it costs more than it buys.",
+        ],
+    );
+    commit(f.path(), "decline the work on the base");
+    ok(f.path(), &["land"]);
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &loose_end,
+            "decline",
+            "--reason",
+            "No release this cycle.",
+        ],
+    );
+    commit(f.path(), "decline the loose end on the base");
+    ok(f.path(), &["land"]);
+    ok(f.path(), &["doctor"]);
+    for id in [&work, &loose_end] {
+        let show = ok(f.path(), &["issue", "show", id]);
+        assert!(show.contains("declined"), "{show}");
+    }
+}
+/// A repository whose policy predates `declined` loads and works as before:
+/// check and land pass, no decline is offered or accepted, and superseding
+/// on the base still lands (atelier-stnv).
+#[test]
+fn a_policy_without_declined_loads_and_works_unchanged() {
+    let f = Fixture::under(Some(STARTER_BEFORE_DECLINED));
+    ok(f.path(), &["check"]);
+    git(f.path(), &["switch", "-q", "main"]);
+    let upstream = tempdir().unwrap();
+    git(upstream.path(), &["init", "-q", "--bare"]);
+    git(
+        f.path(),
+        &["remote", "add", "origin", upstream.path().to_str().unwrap()],
+    );
+    git(f.path(), &["push", "-q", "-u", "origin", "main"]);
+    let work = ok(f.path(), &["-q", "issue", "create", "Not needed"]);
+    commit(f.path(), "plan on the base");
+    let options = ok(f.path(), &["issue", "transition", &work]);
+    assert!(
+        options.contains("supersede") && !options.contains("decline"),
+        "{options}"
+    );
+    let (pass, output) = cli(
+        f.path(),
+        &["issue", "transition", &work, "decline", "--reason", "no"],
+    );
+    assert!(!pass && output.contains("decline"), "{output}");
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &work,
+            "supersede",
+            "--reason",
+            "obsolete",
+        ],
+    );
+    commit(f.path(), "supersede on the base");
+    ok(f.path(), &["land"]);
+    ok(f.path(), &["doctor"]);
+    ok(f.path(), &["work", "missions"]);
+}
 #[test]
 fn superseding_a_child_of_a_blocked_parent_lands() {
     let f = Fixture::new();
@@ -3516,6 +3650,48 @@ fn a_superseded_childs_own_blockers_do_not_hold_its_parents_merge() {
         ],
     );
     commit(f.path(), "retire a blocked child");
+    f.terminal(&f.id);
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &f.id,
+            "--identity",
+            "Reviewer",
+            "Independent review",
+        ],
+    );
+    commit(f.path(), "approval");
+    ok(f.path(), &["land", &f.id]);
+    ok(f.path(), &["merge", &f.id]);
+}
+/// Declined like superseded: the child will not be done, so its blockers
+/// do not hold the parent's merge (atelier-stnv).
+#[test]
+fn a_declined_childs_own_blockers_do_not_hold_its_parents_merge() {
+    let f = Fixture::new();
+    let blocker = ok(f.path(), &["-q", "issue", "create", "Prerequisite"]);
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child", "--parent", &f.id],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &child, &blocker, "--role", "blocked_by"],
+    );
+    ok(
+        f.path(),
+        &[
+            "issue",
+            "transition",
+            &child,
+            "decline",
+            "--reason",
+            "not needed",
+        ],
+    );
+    commit(f.path(), "decline a blocked child");
     f.terminal(&f.id);
     ok(
         f.path(),
