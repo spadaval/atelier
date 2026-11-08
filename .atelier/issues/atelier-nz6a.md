@@ -75,4 +75,3 @@ Each Done when line, checked against the committed text:
 - atelier-wl6u, above.
 - One run per scenario shows nothing broke. It cannot show a small change in pass rates.
 - Whether `npx skills add` installs the published skill is not checked here; atelier-hrgx covers it.
-
