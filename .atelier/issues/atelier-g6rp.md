@@ -26,5 +26,5 @@ Agent Factory's only copy lives in this repository under `skills/agent-factory`,
 ## Notes
 
 - 2026-11-08 [decision] file-pr stays a personal skill in ~/.claude/skills, not part of Agent Factory.
-  Reason: It is about PR prose for any repository, Agent Factory targets Atelier repositories only, and its rule to open a real PR rather than a draft conflicts with Atelier repositories that keep a PR draft until review approves it.
+  Reason: It is about PR prose for any repository, Agent Factory targets Atelier repositories only. Sumeet confirmed on 2026-11-08 to keep it separate for now. (An earlier reason, that its ready-PR rule conflicts with draft PRs here, was wrong: drafts gated nothing, and docs/no-draft-prs drops them from AGENTS.md.)
 - 2026-11-08 [note] 2026-11-08: merged atelier-pmib (ADR 0029, PR #49), atelier-8bj8 (setup --link, PR #50) and atelier-45gr (freshness in doctor and status, PR #51); each reviewed independently and smoke-tested across 5 repositories where code changed. Follow-ups filed: atelier-67ay, atelier-muac, atelier-taxm. Next: atelier-dkul once atelier-l58v merges into spadaval/.agents.
