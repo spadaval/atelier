@@ -11,6 +11,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-45gr"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-nz6a"
     type: "blocked_by"
 schema: "atelier.issue"
