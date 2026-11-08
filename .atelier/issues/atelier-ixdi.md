@@ -14,7 +14,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Start every child agent with T3's delegate_task, whatever its provider"
-updated_at: "2026-11-08T21:40:08.085314652+00:00"
+updated_at: "2026-11-08T21:46:30.333588789+00:00"
 ---
 
 ## Goal
