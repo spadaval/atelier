@@ -1,11 +1,19 @@
 ---
 name: agent-factory
-description: "Use for software work that spans multiple steps, sessions, or agents: planning or running a mission or a multi-issue increment, grooming a backlog, delegating work to subagents, making a consequential product or architecture decision, diagnosing an unexplained failure, or independently reviewing or validating agent-written code. Also use to connect a repository's tracker and docs for agent work."
+description: "Use in repositories tracked with Atelier, or to set a repository up with Atelier: planning or running a mission, grooming a backlog, delegating work to subagents, making a consequential product or architecture decision, diagnosing an unexplained failure, or independently reviewing or validating agent-written code."
 ---
 
 # Agent Factory
 
-Say which subskill you are using, and why, before you start it.
+Run `atelier status` first, and continue if it succeeds. If it fails with "Not
+an Atelier repository" or `atelier` is not found, stop using this skill; offer
+`install` only if the user asked to set up Atelier. If `atelier` is not found,
+also give the install lines: `curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh`
+and `npx skills add spadaval/atelier --skill agent-factory -g`.
+
+Small work (one agent, one session) needs only a clear commit and PR
+description, multi-step work uses [Atelier](references/atelier.md) issues, and
+a mission adds a strategy and increments (`plan`).
 
 ## Core Rules
 
@@ -31,14 +39,6 @@ Say which subskill you are using, and why, before you start it.
   destructive or irreversible actions policy does not authorize. A mission's
   strategy (outcome, target shape, boundaries, governing tradeoffs) changes only
   by human direction or authority written into the strategy.
-
-## Scale
-
-Small work (one agent, one session) needs only a clear commit and PR
-description, multi-step work uses tracker issues, and a mission adds a strategy
-and increments (`plan`). The tracker is [Atelier](references/atelier.md);
-without it, keep the plan, follow-ups and decisions in a plan file or the PR,
-and offer to install Atelier for a mission without stopping work for it.
 
 ## Independent Review
 
@@ -87,11 +87,11 @@ append it as a note pointing at its Report.
 
 ## Subskills
 
-Use the one named, else the one that fits, else work under the core rules. Each
-is `procedures/<name>.md`: `orchestrate` (run a mission or workstream), `plan`
-(shape strategy and issues), `groom` (re-sequence the backlog and find work not
-to do), `decide` (a consequential choice), `implement` (build one slice, code or
-docs), `diagnose` (find a failure's cause), `review` (review someone else's
-change), `validate` (test claims independently), `migrate` (a breaking change),
-`audit` (findings on architecture or process) and `install` (connect or assess a
-repository).
+Say which you use, and why, before starting it: the one named, else the one that
+fits, else work under the core rules. Each is `procedures/<name>.md`:
+`orchestrate` (run a mission or workstream), `plan` (shape strategy and issues),
+`groom` (re-sequence the backlog and find work not to do), `decide` (a
+consequential choice), `implement` (build one slice, code or docs), `diagnose`
+(find a failure's cause), `review` (review someone else's change), `validate`
+(test claims independently), `migrate` (a breaking change), `audit` (findings
+on architecture or process) and `install` (set up or assess a repo).
