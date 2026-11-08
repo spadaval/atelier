@@ -8,6 +8,8 @@ atelier land --install
 atelier land --push
 atelier setup claude
 atelier setup claude --binary <path-to-atelier>
+atelier setup --link [<checkout>]
+atelier setup --unlink
 ```
 
 `status` is the one orientation view (ADR 0022). It reads the checkout's
@@ -307,6 +309,37 @@ follow the [official Claude Code hooks reference](https://code.claude.com/docs/e
 
 Hooks assist handoff; their warning escape does not prove completion. Actual
 session acceptance needs a dogfooded session as well as adapter tests.
+
+## Linking the Agent Factory skill
+
+`npx skills add spadaval/atelier --skill agent-factory -g` (Vercel's `skills`
+CLI) installs the skill as files in `~/.agents/skills/agent-factory`, with a
+relative symlink to them from `~/.claude/skills/agent-factory`, and records it
+in its lock file. To edit the live skill from a checkout instead, `atelier
+setup --link [<checkout>]` points both paths at `<checkout>/skills/agent-factory`;
+`<checkout>` defaults to the current repository's root. It follows the paths
+`skills` uses: `$CLAUDE_CONFIG_DIR/skills` when that is set, and the lock file
+`$XDG_STATE_HOME/skills/.skill-lock.json` when that is set, else
+`~/.agents/.skill-lock.json`.
+
+- It replaces a symlink, or a directory the lock file lists (one `skills add`
+  installed), and prints what each path held before.
+- It refuses, changing nothing, when `<checkout>/skills/agent-factory/SKILL.md`
+  does not exist, or when a path is a directory the lock file does not list,
+  since that may hold someone's own edits; the message says what to move aside.
+- It removes `agent-factory` from the lock file, keeping every other entry.
+  `skills update` and `skills add` replace a symlink to a skill the lock file
+  lists with a fresh copy, and leave an unlisted one alone.
+
+The live skill follows whatever the checkout has checked out, so link one that
+stays on `master`, such as a worktree detached at `master` (`git worktree add
+--detach ~/projects/atelier-skill master`), and move it forward with `git -C
+<checkout> checkout --detach master`. A checkout that switches branches for
+work changes the skill under every session.
+
+`atelier setup --unlink` removes the two symlinks, leaves a real directory or a
+skill the lock file lists alone, and prints the `npx skills add` line that
+reinstalls the skill.
 
 ## Other branches
 

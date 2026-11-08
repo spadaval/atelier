@@ -865,6 +865,9 @@ mod review_request;
 mod review_views;
 #[path = "cli_integration/setup_guidance.rs"]
 mod setup_guidance;
+#[cfg(unix)]
+#[path = "cli_integration/skill_link.rs"]
+mod skill_link;
 #[path = "cli_integration/unicode.rs"]
 mod unicode;
 #[path = "cli_integration/verified_records.rs"]

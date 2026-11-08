@@ -240,14 +240,36 @@ enum Commands {
         slug: Option<String>,
     },
 
-    /// Install supported harness session hooks
+    /// Install supported harness session hooks, or link the Agent Factory skill to a checkout
+    #[command(after_help = "Linking the skill:
+  atelier setup --link [<checkout>]  point ~/.agents/skills/agent-factory and
+                                     ~/.claude/skills/agent-factory at <checkout>/skills/agent-factory
+  atelier setup --unlink             remove those links; reinstall with
+                                     npx skills add spadaval/atelier --skill agent-factory -g
+
+Link a checkout that stays on master, such as a worktree detached at master
+(git worktree add --detach ~/projects/atelier-skill master). The live skill
+follows whatever that checkout has checked out, so a checkout that switches
+branches for work changes the skill under every session. Move it forward with
+git -C <checkout> checkout --detach master. --link also removes agent-factory
+from the skills lock file, so npx skills update -g leaves the links alone.")]
     Setup {
         /// Harness whose hooks to install
-        #[arg(value_parser = ["claude"])]
-        harness: String,
+        #[arg(
+            value_parser = ["claude"],
+            required_unless_present_any = ["link", "unlink"],
+            conflicts_with_all = ["link", "unlink"]
+        )]
+        harness: Option<String>,
         /// Explicit executable for local dogfooding; otherwise use atelier on PATH
-        #[arg(long)]
+        #[arg(long, requires = "harness")]
         binary: Option<std::path::PathBuf>,
+        /// Point the installed Agent Factory skill at <checkout>/skills/agent-factory [default: this repository's root]
+        #[arg(long, value_name = "CHECKOUT", num_args = 0..=1, conflicts_with = "unlink")]
+        link: Option<Option<std::path::PathBuf>>,
+        /// Remove the links --link made
+        #[arg(long)]
+        unlink: bool,
     },
 
     /// Orient a session: checkout, owner, work, missions, and other branches
@@ -983,6 +1005,11 @@ fn run() -> Result<()> {
             install,
             push,
         } => commands::session::land(id.as_deref(), hook.is_some(), install, push, quiet),
+        Commands::Setup {
+            link: Some(checkout),
+            ..
+        } => commands::skill_link::link(checkout.as_deref(), quiet),
+        Commands::Setup { unlink: true, .. } => commands::skill_link::unlink(quiet),
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
         Commands::RefreshUpdateCheck => unreachable!("handled before the repository is read"),
