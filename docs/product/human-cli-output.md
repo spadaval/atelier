@@ -139,7 +139,7 @@ authors (atelier-md0v). Merged
 work is judged on the base as `land` judges history: `✓ accepted on <base>`
 or `⚠ not accepted on <base>`. The views read whichever records the checkout
 has. A
-finding recommended defer or no_action is open until it has a decision; its
+finding recommended defer, no_action or wont_fix is open until it has a decision; its
 line shows the current one, with who set it and the commit it was set at. A
 `fix_now` finding, or one decided `fix_now`, is open until an approval of a
 later commit that holds the finding's record, recorded after the finding,
@@ -390,7 +390,7 @@ merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blo
   findings await an approval after their fix`, or `came after the current
   approval` when one is current but never saw them); when a trivial
   exemption carries `review.current`, the line says it resolves no fix_now
-  finding. A defer or no_action finding without a decision reads `needs a
+  finding. A defer, no_action or wont_fix finding without a decision reads `needs a
   decision` and names the `review disposition` that records one.
 - A failure with the same cause as another is folded into that line as
   `(also <check>, ...)` and still counted in the verdict: a blocker check that
@@ -598,6 +598,7 @@ refusal of it leaves stdout empty:
 | `evidence list`, `review list` | IDs, one per line; for `review list <id>`, those of the rows it lists |
 | `review record`, `approve`, `finding`, `trivial` | the new event's ID |
 | `review disposition` | the ID of the finding it settles |
+| `review defer` | the IDs of the follow-ups it filed, one per line; with `--dry-run`, the findings it would defer |
 | `review request` | the range to review, `<from>..<head>` in full commits |
 | `review show` | `<id> <event>`, the event as the record stores it, such as `approval` |
 | `check`, `land`, `doctor`, `merge`, `merge --check`, `bundle preview` | `passed`, or nothing and a non-zero exit; `land` on a work branch prints `work in progress — <n> checks open (<checks>)` and exits 0 |

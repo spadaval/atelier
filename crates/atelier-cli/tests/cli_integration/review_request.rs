@@ -93,7 +93,7 @@ fn the_brief_names_the_requirements_range_and_record_commands() {
         &format!("- Head, to pin records to: `{head}`\n"),
         "forked from `main`",
         "## Findings so far\n\nNone.\n",
-        &format!("atelier review finding {id} --identity \"Independent reviewer\" --commit {head} --recommendation fix_now|defer|no_action --commit-records"),
+        &format!("atelier review finding {id} --identity \"Independent reviewer\" --commit {head} --recommendation fix_now|defer|no_action|wont_fix --commit-records"),
         &format!("atelier review approve {id} --identity \"Independent reviewer\" --commit {head} --commit-records"),
     ] {
         assert!(brief.contains(expected), "missing `{expected}`: {brief}");

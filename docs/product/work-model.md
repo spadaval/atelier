@@ -194,7 +194,7 @@ children done together (see [Completion](#completion)), so no rule orders a
 parent after its children. Superseding a parent retires the parent with any
 open children, which then show as context only. Superseding needs no open blockers resolved, its own or a
 parent's, and `land` does not hold a superseded item to them: the work will
-not happen (atelier-lq42). Branch names carry no issue type: on the base,
+not happen (atelier-lq42). Declining is the same (atelier-stnv). Branch names carry no issue type: on the base,
 `start` names a new branch with the owner's bare ID. Typed `workflow_branch`
 metadata records the owner's `work_branch`, and a `branch_base` that `start`
 sets to the policy's base branch and nothing reads: the base is always the
@@ -272,8 +272,21 @@ Work is done when its change is merged
 start, implement, tick every Done when line and write the implementer report,
 ask for review, fix and re-review, approve, merge. A `fix_now` finding needs
 no disposition: the approval of the fix resolves it. There is no close step for
-work: the `work` workflow has `supersede` for work that will not happen, and
-no `close`.
+work: the `work` workflow has `supersede` for work that is obsolete or
+replaced, `decline` for real work that will not be done, and no `close`.
+
+`declined` is a terminal status in the done category (atelier-stnv). Like
+`superseded`, it is reached by a transition that needs a Report saying why,
+on the base or a branch, with no review or merge: `land` does not count it
+as a done claim, and neither the item's open blockers nor its parent's hold
+it. Merge leaves a declined child as it is, and a declined child's blockers do
+not hold its parent's merge. Unlike `superseded`, reports treat it as
+finished: work views list it under done work, and the
+[debrief](mission-reviews.md#debrief) shows it as declined in the timeline,
+counts it as planned work done, and asks no review of it, since it merged
+nothing; superseded work is dropped there. A policy written before the status
+existed has no `decline` transition and works unchanged; a repository adds
+the status and transitions from a fresh `atelier init`.
 
 A Done when line with a box (`- [ ]`) is ticked (`- [x]`) once it holds.
 `atelier review request <id>` refuses with `review_request_unfinished`, and

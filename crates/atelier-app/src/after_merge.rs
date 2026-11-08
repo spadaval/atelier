@@ -120,7 +120,7 @@ pub fn open_lines<'r>(
     };
     let mut open = Vec::new();
     for item in index.issue_records() {
-        if item.issue.status == "superseded" {
+        if atelier_core::closes_undone(&item.issue.status) {
             continue;
         }
         let done_when = item

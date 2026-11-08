@@ -266,7 +266,7 @@ impl EvidenceReadContext<'_> {
         policy
             .issue_status_is_terminal(&item.issue_type, &item.status)
             .unwrap_or(false)
-            && item.status != "superseded"
+            && !atelier_core::closes_undone(&item.status)
             && !claims.owned.contains(&item.id)
             && self
                 .claim_retained_at(index, &claims.parents, &item.id)

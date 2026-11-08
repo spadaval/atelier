@@ -19,6 +19,7 @@ pub mod merge_sync;
 pub mod migrate;
 pub mod mission_review;
 pub mod review;
+pub mod review_defer;
 pub mod review_request;
 
 pub(crate) mod git;

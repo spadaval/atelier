@@ -857,6 +857,8 @@ mod record_refs;
 mod records_evidence;
 #[path = "cli_integration/reports.rs"]
 mod reports;
+#[path = "cli_integration/review_defer.rs"]
+mod review_defer;
 #[path = "cli_integration/review_request.rs"]
 mod review_request;
 #[path = "cli_integration/review_views.rs"]
