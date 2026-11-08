@@ -7970,7 +7970,17 @@ fn v1_disposition(
 fn pre_adr_0025_repository(no_action_identity: &str, merged: bool) -> (Fixture, [String; 3]) {
     let f = Fixture::new();
     let id = f.id.clone();
-    let follow_up = ok(f.path(), &["-q", "issue", "create", "Follow up later"]);
+    let follow_up = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Follow up later",
+            "--body",
+            "## Goal\n\nFollow up later.\n\n## Done when\n\n- [ ] The follow-up test passes.",
+        ],
+    );
     commit(f.path(), "plan the follow-up");
     let pin = git(f.path(), &["rev-parse", "HEAD"]);
     let findings = ["atelier-f001", "atelier-f002", "atelier-f003"].map(str::to_owned);

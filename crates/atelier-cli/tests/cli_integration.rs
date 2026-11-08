@@ -845,6 +845,8 @@ mod mission_worktree;
 mod output_terms;
 #[path = "cli_integration/piped_output.rs"]
 mod piped_output;
+#[path = "cli_integration/plan_checks.rs"]
+mod plan_checks;
 #[path = "cli_integration/quiet_tokens.rs"]
 mod quiet_tokens;
 #[path = "cli_integration/record_commit.rs"]
