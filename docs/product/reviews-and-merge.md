@@ -80,7 +80,10 @@ instead. Recommendations and decisions use one of four values:
   consequence.
 - `wont_fix`: the finding is real, but not worth fixing (atelier-stnv). It
   needs a reason and no follow-up issue, so a real no costs nothing to
-  record.
+  record. A finding that recommends or decides `wont_fix` is written at
+  review schema version 4, so an Atelier that predates `wont_fix` reports it
+  as needing a newer Atelier, with the reinstall command, rather than as an
+  invalid record (atelier-xlxn). Every other finding keeps its version.
 
 ```text
 atelier review disposition <finding-id> --identity "Reviewer" --decision defer --follow-up <issue-id> "Follow-up accepted"
