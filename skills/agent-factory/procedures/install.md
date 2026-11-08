@@ -1,8 +1,8 @@
 # Install
 
-Use this subskill to connect Agent Factory to a repository, or to assess how
-easily agents can work in one. Installing points agents at the repository's own
-sources; it does not copy a workflow manual into it.
+Use this subskill when the user asks to set a repository up with Atelier, or to
+assess how easily agents can work in one. Installing points agents at the
+repository's own sources; it does not copy a workflow manual into it.
 
 ## Readiness
 
@@ -28,7 +28,8 @@ by value with the subskill for each.
 ## Tracker
 
 Installing Atelier changes how the repository merges, so get the user's
-agreement first. Then run `atelier init`, read the policy it writes (its base
+agreement first. If `atelier` is not found, give the install lines in
+[SKILL.md](../SKILL.md) and wait for it. Then run `atelier init`, read the policy it writes (its base
 branch and merge checks; without CI, put the test suite in the merge checks),
 and follow the steps it prints. Run `atelier setup claude` if the team uses
 Claude Code, committing its hook settings with the install, then

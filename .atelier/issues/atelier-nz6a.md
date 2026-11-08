@@ -4,6 +4,9 @@ id: "atelier-nz6a"
 issue_type: "task"
 labels:
 - "agent-factory"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-nz6a
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make the skill step aside outside Atelier repositories, and give its install lines first"
-updated_at: "2026-11-08T05:52:15.097702619+00:00"
+updated_at: "2026-11-08T22:46:55.629916577+00:00"
 ---
 
 ## Goal
