@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Have atelier check catch plan records with no Done when lines or broken links"
-updated_at: "2026-11-08T06:12:17.587947150+00:00"
+updated_at: "2026-11-08T06:13:02.745688080+00:00"
 ---
 
 ## Goal
@@ -52,6 +52,7 @@ The 2026-11-08 review audit found that plan review mostly caught criteria that c
   Reason: The Done when line says open work item and an issue record; a closed item's finish line no longer matters, but its links are still followed by readers.
 - 2026-11-08 [decision] Warnings are computed only for atelier check, not for the write guard (record_invalid), and print on stderr with -q.
   Reason: The write guard compares findings; adding warnings there would refuse writes and change exit codes, which the plan forbids. Quiet stdout stays the one-token contract.
+- 2026-11-08 [handoff] Implemented on atelier-edaj at a4d64887; see ## Report. Draft PR https://github.com/spadaval/atelier/pull/46. Independent review outstanding.
 
 ## Report
 
