@@ -38,7 +38,7 @@ Change the agent-factory skill (spadaval/.agents, `skills/agent-factory`) so tha
 - [x] references/atelier.md covers won't-fix, declined and the one-step defer as the binary's help describes them (installed from the sibling item before evals run).
 - [x] The agent-facing skill stays within atelier-qj9d's limits, counted by its rule (a role's read path is SKILL.md, its procedure and every file the procedure links, counted whole, plus the Atelier reference for roles that run `atelier`): at most 1,000 lines, SKILL.md at most 100, each role's read path at most 300 and the orchestrator's 450. The Report gives the counts before and after; an overrun needs a reason there.
 - [x] New eval scenarios in `evals/agent-factory/scenarios/` built from the audit, each with setup, prompt and grader: a rare-edge chain modelled on astromech-of26 (a low-severity finding the reviewer called rare and deferred; pass when it is won't-fix or deferred, not fixed); a costly hardening diff modelled on atelier-hwxm (a large fix for a low-severity finding on a path planned for deletion; pass when review returns shrink or reject); and two controls, a real cross-repository regression modelled on atelier-2ygf and a plan defect modelled on lor-0rnt (pass when each is found and recommended fix now).
-- [x] All eight scenarios (the four new and the four existing) run at the current skill (main) and at the new one, 3 runs each with Opus on the skill arm, with the same installed atelier binary built with atelier-stnv. Every run is read by hand. Results are recorded in `evals/agent-factory/results/`. The new skill passes more runs than main on the costly hardening scenario, and no fewer on every other scenario. The rare-edge chain is recorded as inconclusive: its fixture carries unplanted defects that every run fixes or declines over, and atelier-pju0 rebuilds it.
+- [x] All eight scenarios (the four new and the four existing) run at the current skill (main) and at the new one, 3 runs each with Opus on the skill arm, with the same installed atelier binary built with atelier-stnv. Every run is read by hand. Results are recorded in `evals/agent-factory/results/`. The new skill passes more runs than main on the costly hardening scenario, and no fewer on every other scenario. The rare-edge chain is recorded as inconclusive, and atelier-pju0 rebuilds it: its fixture's fix carries unplanted defects that reviewers in both arms found, so most runs fixed or declined over those rather than over the deferred finding.
 
 ## Scope
 
@@ -118,7 +118,7 @@ Counted by atelier-qj9d's rule: a role's path is SKILL.md, its procedure, every 
 
 ### Deviations
 
-- **Read-path overruns.** The review and orchestrate paths are 19 and 12 lines over their limits; the orchestrator directed this on 2026-11-08.
+- **Read-path overruns.** At `12c8a15` the review, orchestrate and plan paths are 19, 10 and 3 lines over their limits (319/300, 460/450, 303/300); merged with main `c2ed148` they are 22, 13 and 6 over. The orchestrator directed keeping them on 2026-11-08.
   - Older rules already stated in another file were cut first: Atelier's Done-when-rewrite and emulator-test sentences, and the wordy model-choice, spike and workspace text. Review's without-Atelier record format (`R1 FIX NOW: <reason>`) was dropped outright: SKILL.md still says to keep decisions in a plan file or the PR, but no file gives the format now.
   - `0cb3063` adds severity (Risk's three levels) to the Findings line at no net growth in review's path, by cutting two rationale sentences (review's Verdict opening and orchestrate's override reason).
   - What remains is the verdict with its anchored sizes, WON'T FIX, and orchestrate's reviewer-default, override and stop-signal paragraphs, all of which the Done when lines require.
@@ -147,8 +147,8 @@ Six decision notes of 2026-11-08 on this item:
 
 ### Open items
 
-- **Stop-signal over-application.** In new rare-edge run 2, the user's "third round on clock skew" was read as the third-review-round signal on an item reviewed once. Watch for it before rewording orchestrate's Stop signals.
+- **Stop-signal over-application.** In 2 of 6 new-skill rare-edge runs (first matrix run 2; fixture-corrected rerun run 1, `l58v-fq99-new/*-opus-1-cf46`) the item was declined over the planted one-line `fix_now` itself, citing the user's "third round" as the third-review-round signal and the first finding on a fix as "a fix drawing findings on its own changes". No main run did this (0 of 6). orchestrate's stop-signal and defer-chain rules have no passing eval of their own; atelier-pju0's rerun should watch for this before the Stop signals are reworded.
 - **Sample size.** At N = 3, the rare-edge margin of one run is within noise.
 - **Unverified in use:** plan.md's backlog sweep (eb5fffd) has no eval. The matrix ran at b0d3726; plan-defect, the scenario closest to plan.md, was rerun at eb5fffd and passed 3/3 by hand (recorded in the results file at eb14a31), but no run opened plan.md. eb5fffd changes only plan.md and SKILL.md's subskill list and deletes files no scenario reads.
 - **Not pushed.** agents-skills `atelier-l58v` is not pushed (Sumeet's remote), and the live checkout `~/projects/agents-skills` is untouched.
-- **Review outstanding.** Independent review of the skill branch and these records has not been requested.
+- **Review.** Full review recorded atelier-fq99, atelier-0avz and atelier-tv8e (fixed) and atelier-41xn and atelier-zwkw (deferred; atelier-y3d6 declined as moot after `12c8a15`). Re-review found atelier-0rem (this paragraph's fix).
