@@ -19,13 +19,13 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
-title: "Let Agent Factory say no: merge verdicts, won't-fix, stop signals, a gardener and a verification standard"
-updated_at: "2026-11-08T08:33:02.991870482+00:00"
+title: "Let Agent Factory say no: merge verdicts, won't-fix, stop signals and backlog sweeps"
+updated_at: "2026-11-08T21:03:21.422304639+00:00"
 ---
 
 ## Goal
 
-Change the agent-factory skill (spadaval/.agents, `skills/agent-factory`) so that reviewers, orchestrators, workers and planners can say no and make it stick, add a gardener role that keeps a codebase healthy on a daily cadence, and set a standard for each repository's verify skill. Prove with evals built from the audit's real cases that the change helps where review hurt without losing what review caught.
+Change the agent-factory skill (spadaval/.agents, `skills/agent-factory`) so that reviewers, orchestrators, workers and planners can say no and make it stick, and planners sweep the backlog for work to decline. Prove with evals built from the audit's real cases that the change helps where review hurt without losing what review caught.
 
 ## Done when
 
@@ -33,9 +33,8 @@ Change the agent-factory skill (spadaval/.agents, `skills/agent-factory`) so tha
 - [x] Findings end as fixed, deferred, won't-fix (real, not worth fixing, with a reason) or no action (the finding is wrong). A won't-fix on a high-severity finding or on anything touching the strategy's criteria goes to the human: agents leave the finding undisposed and label the item `needs-human`, and the human records the disposition. The skill says who records each other decision.
 - [x] orchestrate.md: the reviewer's recommendation is the default; fixing a deferred finding now is a scope decision with a recorded reason. Stop signals (a fix past about twice its estimate, a fix drawing findings on its own changes, a third review round) mean choosing between merge as is, shrink, or discard, where discard means `decline` with what it taught recorded. The estimate is the size (lines or files changed) the orchestrator or worker writes in the assignment or a decision note when the work starts. One rule overrides the reviewer's recommendation: a new finding on the fix of a low-severity finding is deferred, unless it shows a regression that fix introduced. Items that depend on an open human decision are not planned in detail or reviewed until it is decided. Deferring uses the one-step command.
 - [x] implement.md: a worker past about twice its estimate stops and reports instead of pushing through, and anyone may propose not doing work.
-- [x] plan.md: shared code and APIs are planned docs first (the README or tutorial before the code), and a planner may propose declining an item.
-- [x] A new `procedures/garden.md` defines the gardener: construction review across recent merges; finding mistake classes that have happened twice and fixing each at the highest level that works (architecture, then a check, then a doc), and deleting rules whose mistake can no longer happen; sweeping deferred findings and backlog, proposing declines; keeping the repository's verify skill and feature map current. It reviews what merged since its last run (the last 7 days on a first run) and counts mistake classes over the last 30 days. A run covers one repository and opens at most one pull request plus filed issues, reviewed like any change; it never touches a branch in flight. SKILL.md lists it.
-- [x] A new reference sets the verify-skill standard: a control CLI an agent drives the app with, a feature map of what the app does and what proves each feature works, Launch, Doctor, Drive, Evidence and Cleanup sections, and one end-to-end run before anyone relies on it. implement.md has authors use the repository's verify skill, where one exists, before review.
+- [x] plan.md: shared code and APIs are planned docs first (the README or tutorial before the code), and a planner may propose declining an item. Before planning a mission, the planner reads the backlog in its area and gives whoever owns the plan one list of items to decline (superseded, moot or not worth their cost), each with its reason.
+- [x] implement.md has authors use the repository's verify skill, where one exists, before review.
 - [x] references/atelier.md covers won't-fix, declined and the one-step defer as the binary's help describes them (installed from the sibling item before evals run).
 - [x] The agent-facing skill stays within atelier-qj9d's limits, counted by its rule (a role's read path is SKILL.md, its procedure and every file the procedure links, counted whole, plus the Atelier reference for roles that run `atelier`): at most 1,000 lines, SKILL.md at most 100, each role's read path at most 300 and the orchestrator's 450. The Report gives the counts before and after; an overrun needs a reason there.
 - [x] New eval scenarios in `evals/agent-factory/scenarios/` built from the audit, each with setup, prompt and grader: a rare-edge chain modelled on astromech-of26 (a low-severity finding the reviewer called rare and deferred; pass when it is won't-fix or deferred, not fixed); a costly hardening diff modelled on atelier-hwxm (a large fix for a low-severity finding on a path planned for deletion; pass when review returns shrink or reject); and two controls, a real cross-repository regression modelled on atelier-2ygf and a plan defect modelled on lor-0rnt (pass when each is found and recommended fix now).
@@ -62,14 +61,17 @@ Agreed with Sumeet in conversation on 2026-11-08 after an audit of review record
 - 2026-11-08 [decision] Stop tightening rare-edge-chain at v3 (modelled on astromech-t34c), which main passes 1/3.
   Reason: Main passed v1 and v2 3/3, so each showed nothing; v3 copies the real chain's pressure (a deferred finding beside a fix_now one in one function), and the orchestrator directed stopping at v3 whatever main did.
 - 2026-11-08 [handoff] Handoff: Outcome, Changes, Proof, Review and Open items are in this item's Report. Skill branch atelier-l58v in agents-skills at 9f775bb, not pushed; review outstanding.
+- 2026-11-08 [decision] Move the gardener (procedures/garden.md) and the verify-skill standard to atelier-3sk9, and give plan.md a backlog sweep instead.
+  Reason: Sumeet's direction on 2026-11-08: the gardener tends the conditions agents work in rather than owning the product, and gardening takes his taste, so it needs a triage flow this item does not cover. Neither file had an eval here; the backlog sweep is the product side the draft gardener carried, and it belongs with the planner.
+  Rejected: Keep the gardener here with its backlog sweep: it would merge untested and mix product ownership into maintenance.
 
 ## Report
 
-Every Done when line holds, with one reported overrun. The skill change is on agents-skills branch `atelier-l58v`, committed and not pushed: scenarios 703b9ca, e574874 and 5edb32b, the skill b0d3726, results and the grader fix 9f775bb, all on main 23a6bed. It runs on the installed `atelier 0.3.1+4910be45`.
+Every Done when line holds, with one reported overrun. The skill change is on agents-skills branch `atelier-l58v`, committed and not pushed: scenarios 703b9ca, e574874 and 5edb32b, the skill b0d3726, results and the grader fix 9f775bb, and eb5fffd, which adds plan.md's backlog sweep and moves the gardener and the verify-skill standard to atelier-3sk9, all on main 23a6bed. It runs on the installed `atelier 0.3.1+4910be45`.
 - **Target scenarios:** the new skill passes more runs than main on both. rare-edge-chain is 2/3 against 1/3, and costly-hardening 3/3 against 0/3.
 - **Other scenarios:** it passes no fewer on the six others: the two controls and the four existing scenarios.
 - **Counts:** all are hand counts from 48 Opus runs, each read by hand, recorded in `evals/agent-factory/results/2026-11-08-saying-no.md`.
-- **Line counts:** the agent-facing total and SKILL.md are within their limits. Review's read path (319/300) and orchestrate's (462/450) overrun, for the reason under Deviations. Plan's is at exactly 300.
+- **Line counts:** the agent-facing total and SKILL.md are within their limits. Review's read path (319/300), orchestrate's (462/450) and, at eb5fffd, plan's (303/300) overrun, for the reasons under Deviations.
 - **Skill text:** each Done when line was checked against the committed text. Every link anchor resolves. The `atelier.md` wording was checked against `review disposition --help`, `review defer --help` and the `decline` transition's description in a fresh `atelier init` workflow.
 
 ### Line counts
@@ -78,17 +80,16 @@ Counted by atelier-qj9d's rule: a role's path is SKILL.md, its procedure, every 
 
 | | 23a6bed raw / 80-col | b0d3726 raw / 80-col | b0d3726 path |
 | --- | --- | --- | --- |
-| Agent-facing total | 817 / 821 (12 .md + openai.yaml) | 954 / 958 (14 .md + openai.yaml) | |
+| Agent-facing total | 817 / 821 (12 .md + openai.yaml) | 954 / 958 (14 .md + openai.yaml); 871 / 876 at eb5fffd (12 .md) | |
 | SKILL.md | 96 / 100 | 96 / 100 | |
 | audit | 226 / 230 | 224 / 228 | SKILL, audit, atelier |
 | decide | 233 / 237 | 231 / 235 | SKILL, decide, atelier |
 | diagnose | 235 / 239 | 233 / 237 | SKILL, diagnose, atelier |
-| garden (new) | | 284 / 288 | SKILL, garden, atelier, verify-skill |
 | implement | 263 / 267 | 270 / 274 | SKILL, implement, atelier |
 | install | 258 / 262 | 256 / 260 | SKILL, install, atelier |
 | migrate | 245 / 249 | 243 / 247 | SKILL, migrate, atelier |
 | orchestrate | 419 / 423 | 458 / **462** | SKILL, orchestrate, review, atelier |
-| plan | 295 / 299 | 296 / 300 | SKILL, plan, atelier |
+| plan | 295 / 299 | 296 / 300; 299 / **303** at eb5fffd | SKILL, plan, atelier |
 | review | 291 / 295 | 315 / **319** | SKILL, review, atelier |
 | validate | 239 / 243 | 237 / 241 | SKILL, validate, atelier |
 
@@ -118,16 +119,19 @@ Counted by atelier-qj9d's rule: a role's path is SKILL.md, its procedure, every 
 - **rare-edge-chain was tightened twice.** Main passed v1 and v2 3/3, so each showed nothing; the decision note of 2026-11-08 gives what each tried. v3 copies astromech-t34c, and main passes it 1/3.
 - **Main runs reused.** main's runs of the two target scenarios come from the tightening runs at the committed scenario versions, not from the final matrix invocation; ref, binary, setup and prompt are the same.
 - **Graders changed after runs.** costly-hardening's grader was tightened after its main runs, because the first one counted a docs option offered to the user as a verdict. rare-edge-chain's grader now reads `archive/` tags, because declined items keep their records only there. Kept runs in both arms were regraded, and the hand counts did not change.
+- **Plan's read-path overrun.** eb5fffd adds a four-line backlog sweep to Shaping a Mission and folds Ready Work's decline sentence into it, leaving plan's path 3 lines over. Sumeet asked for the sweep on 2026-11-08, and Shaping a Mission is where a planner starts.
+- **Scope moved out.** The gardener and the verify-skill standard moved to atelier-3sk9 on Sumeet's direction (2026-11-08); their Done when lines were removed here.
 - **Pressure table.** Two rows were added to `maintainers/skill-evaluation.md`, and the four scenarios to the evals README, as Scope allows.
 
 ### Decisions
 
-Five decision notes of 2026-11-08 on this item:
+Six decision notes of 2026-11-08 on this item:
 - where the human's won't-fix rule lives;
 - why implement.md does not link the verify-skill standard;
 - how shrink, reject and their overrides are recorded and by whom;
 - keeping the read-path overruns;
-- stopping the rare-edge tightening at v3.
+- stopping the rare-edge tightening at v3;
+- moving the gardener and verify-skill standard to atelier-3sk9.
 
 ### Surprises
 
@@ -138,6 +142,6 @@ Five decision notes of 2026-11-08 on this item:
 
 - **Stop-signal over-application.** In new rare-edge run 2, the user's "third round on clock skew" was read as the third-review-round signal on an item reviewed once. Watch for it before rewording orchestrate's Stop signals.
 - **Sample size.** At N = 3, the rare-edge margin of one run is within noise.
-- **Unverified in use:** garden.md and the verify-skill standard have no eval. atelier-jy8k schedules the gardener, and its first real run is their test.
+- **Unverified in use:** plan.md's backlog sweep (eb5fffd) has no eval, and the matrix ran at b0d3726, before it. eb5fffd changes only plan.md and SKILL.md's subskill list and deletes files no scenario reads.
 - **Not pushed.** agents-skills `atelier-l58v` is not pushed (Sumeet's remote), and the live checkout `~/projects/agents-skills` is untouched.
 - **Review outstanding.** Independent review of the skill branch and these records has not been requested.
