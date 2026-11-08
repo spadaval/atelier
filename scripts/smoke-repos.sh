@@ -11,7 +11,8 @@
 # local branch that an unfinished item owns (checked out in the clone).
 #
 # The repositories themselves are only read: each binary gets its own clone,
-# made with `git clone --mirror` so every local branch comes along, and the
+# made with `git clone --mirror --no-hardlinks` so every local branch comes
+# along and no object file is shared with the source, and the
 # clone's push URL is disabled. Uncommitted changes in a repository are not
 # cloned.
 #
@@ -101,7 +102,7 @@ echo
 
 # clone SRC DEST: a working copy of every ref in SRC that cannot push back.
 clone() {
-  git clone -q --mirror "$1" "$2/.git"
+  git clone -q --mirror --no-hardlinks "$1" "$2/.git"
   git -C "$2" config core.bare false
   git -C "$2" config remote.origin.pushurl /dev/null/atelier-smoke-no-push
   git -C "$2" checkout -q -f
