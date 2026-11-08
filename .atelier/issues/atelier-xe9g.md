@@ -26,9 +26,9 @@ Land stops warning about unpushed base commits, so an agent pushes landed work w
 
 ## Done when
 
-- [ ] `foreign_base_commits_note` and its call in `crates/atelier-cli/src/commands/session.rs` are gone, as is its test in `crates/atelier-cli/tests/session.rs`.
-- [ ] `docs/product/sessions-and-hooks.md` no longer describes the warning.
-- [ ] Formatting passes and the `land` tests pass.
+- [ ] `foreign_base_commits_note` and its call in `land_gates` (`crates/atelier-cli/src/commands/session.rs`) are gone, as is the test `land_names_unpushed_base_commits_the_owner_did_not_make_before_pushing` in `crates/atelier-cli/tests/session.rs`.
+- [ ] `docs/product/sessions-and-hooks.md` drops the paragraph "When the local base branch is ahead of its upstream ..." (atelier-mvzi); the next paragraph, on land judging unpushed base commits on the base itself, stays.
+- [ ] `cargo fmt -- --check` and `cargo clippy -p atelier-cli --all-targets` pass with no warnings, and `cargo nextest run -p atelier-cli -E 'test(land)'` passes.
 
 ## Context
 
