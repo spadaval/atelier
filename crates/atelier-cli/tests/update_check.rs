@@ -201,7 +201,9 @@ impl Sandbox {
         fs::create_dir_all(link.parent().unwrap()).unwrap();
         #[cfg(unix)]
         std::os::unix::fs::symlink(checkout.join("skills/agent-factory"), &link).unwrap();
-        checkout
+        // Doctor names the checkout Git reports, which resolves symlinks in
+        // the temporary directory (/var is /private/var on macOS).
+        fs::canonicalize(checkout).unwrap()
     }
 }
 
