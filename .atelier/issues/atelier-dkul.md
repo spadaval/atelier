@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Move the skill and its evals here with their history, so a command and its guidance change in one commit"
-updated_at: "2026-11-08T22:28:40.135053564+00:00"
+updated_at: "2026-11-08T22:35:06.731424958+00:00"
 ---
 
 ## Goal
@@ -57,6 +57,7 @@ Waits on `atelier-l58v`, which edits the skill in spadaval/.agents; the skill mu
 ## Notes
 
 - 2026-11-08 [note] Import from the spadaval/.agents commit that merged atelier-l58v (or a later one), but before this item's own frozen notice there, so the moved maintainers/skill-evaluation.md does not carry the notice.
+- 2026-11-08 [note] Handoff: implemented on branch atelier-dkul (d64af935) and spadaval/.agents branch atelier-dkul (84102d9); see ## Report. Review outstanding; CI line open until the PR run.
 
 ## Report
 
