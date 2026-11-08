@@ -10,11 +10,11 @@ process ownership, review providers, transition actions, and the cache.
 - [Architecture guide](architecture/index.md): durable storage, crate
   boundaries, invariant checks, and engineering standards.
 - [Bundle input contract](spec/bundle/schema.md): one-shot authored graph input.
-- [Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md): planning,
-  implementation, review, validation, and handoff process. Its one copy lives
-  in `spadaval/.agents` until it moves into this repository
-  ([ADR 0029](adr/0029-agent-factory-lives-in-atelier.md)); agents load the
-  installed skill.
+- [Agent Factory](../skills/agent-factory/SKILL.md): planning,
+  implementation, review, validation, and handoff process. Its one copy is
+  `skills/agent-factory` in this repository, with its evals in
+  `evals/agent-factory` ([ADR 0029](adr/0029-agent-factory-lives-in-atelier.md));
+  agents load the installed skill.
 - [Rebuild strategy](strategies/atelier-rebuild.md): intent, criteria, scope,
   and authority of the rebuild, completed with mission
   [atelier-kgcr](../.atelier/issues/atelier-kgcr.md) on 2026-10-15. Open

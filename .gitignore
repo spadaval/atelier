@@ -13,3 +13,7 @@
 /.atelier/hook-config.local.json
 /.atelier/runtime/
 /.atelier-bundle-stage-*/
+
+# Python bytecode from the Agent Factory eval harness (evals/agent-factory)
+__pycache__/
+*.py[cod]

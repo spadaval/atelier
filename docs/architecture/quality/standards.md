@@ -40,7 +40,7 @@ Update Product Intent for direction, Context for terminology, and the owning
 product or architecture page for behavior. Add ADRs for consequential choices.
 Keep dated historical material distinct from current guidance.
 
-Use [Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md) for planning,
+Use [Agent Factory](../../../skills/agent-factory/SKILL.md) for planning,
 review, validation, and handoff. Non-trivial executable changes require
 independent review before local merge, and a branch that changes more than
 tracker records also needs a passing CI run on its pull request first.

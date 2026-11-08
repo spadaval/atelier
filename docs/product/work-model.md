@@ -3,7 +3,7 @@
 Atelier parses tracked Markdown records on every command. Records are the source
 of truth for current work; Git is the source of truth for branch ancestry,
 integration, and history. See [storage](../architecture/markdown-first-record-store.md)
-for the on-disk contract and [Agent Factory record templates](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/references/tracker-records.md)
+for the on-disk contract and [Agent Factory record guidance](../../skills/agent-factory/references/atelier.md#records)
 for authoring guidance.
 
 ## Records and relationships
@@ -14,7 +14,7 @@ together, and it may link a strategy file. Success criteria are optional, and
 any criterion must be something the mission's own work can make true and an
 agent can verify when the mission closes
 ([ADR 0024](../adr/0024-missions-are-themed-containers.md); Agent Factory's
-[Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission)). Work
+[Shaping a Mission](../../skills/agent-factory/procedures/plan.md#shaping-a-mission)). Work
 items (task, feature, bug, spike, validation, loose end, or any type the
 policy declares) state Goal and Done when, with optional Scope, Context,
 Unknowns, and Design. A loose end and a validation are done on the base by
