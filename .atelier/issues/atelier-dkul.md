@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Move the skill and its evals here with their history, so a command and its guidance change in one commit"
-updated_at: "2026-11-08T05:52:14.763375354+00:00"
+updated_at: "2026-11-08T06:01:08.705740965+00:00"
 ---
 
 ## Goal
@@ -50,3 +50,7 @@ Waits on `atelier-l58v`, which edits the skill in spadaval/.agents; the skill mu
 ## Unknowns
 
 - Whether `atelier land` and `doctor` accept unrelated imported history (they check commits on the base). Tried on a scratch clone before the real merge.
+
+## Notes
+
+- 2026-11-08 [note] Import from the spadaval/.agents commit that merged atelier-l58v (or a later one), but before this item's own frozen notice there, so the moved maintainers/skill-evaluation.md does not carry the notice.
