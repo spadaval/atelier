@@ -4,6 +4,9 @@ id: "atelier-sb0l"
 issue_type: "task"
 labels:
 - "agent-factory"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-sb0l
 priority: "P2"
 relationships:
   blocks: []
@@ -12,9 +15,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add a groomer: re-sequence the backlog across missions, and bring the human what we should not do"
-updated_at: "2026-11-08T22:43:12.358093041+00:00"
+updated_at: "2026-11-08T22:43:16.709467282+00:00"
 ---
 
 ## Goal
