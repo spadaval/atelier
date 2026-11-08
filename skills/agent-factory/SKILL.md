@@ -1,6 +1,6 @@
 ---
 name: agent-factory
-description: "Use for software work that spans multiple steps, sessions, or agents: planning or running a mission or a multi-issue increment, delegating work to subagents, making a consequential product or architecture decision, diagnosing an unexplained failure, or independently reviewing or validating agent-written code. Also use to connect a repository's tracker and docs for agent work."
+description: "Use for software work that spans multiple steps, sessions, or agents: planning or running a mission or a multi-issue increment, grooming a backlog, delegating work to subagents, making a consequential product or architecture decision, diagnosing an unexplained failure, or independently reviewing or validating agent-written code. Also use to connect a repository's tracker and docs for agent work."
 ---
 
 # Agent Factory
@@ -89,8 +89,9 @@ append it as a note pointing at its Report.
 
 Use the one named, else the one that fits, else work under the core rules. Each
 is `procedures/<name>.md`: `orchestrate` (run a mission or workstream), `plan`
-(shape strategy and issues), `decide` (a consequential choice), `implement`
-(build one slice, code or docs), `diagnose` (find a failure's cause), `review`
-(review someone else's change), `validate` (test claims independently),
-`migrate` (a breaking change), `audit` (findings on architecture or process) and
-`install` (connect or assess a repository).
+(shape strategy and issues), `groom` (re-sequence the backlog and find work not
+to do), `decide` (a consequential choice), `implement` (build one slice, code or
+docs), `diagnose` (find a failure's cause), `review` (review someone else's
+change), `validate` (test claims independently), `migrate` (a breaking change),
+`audit` (findings on architecture or process) and `install` (connect or assess a
+repository).
