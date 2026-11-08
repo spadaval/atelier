@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Ship Agent Factory from this repository, so a command and its guidance land in one change"
-updated_at: "2026-11-08T05:53:09.141238042+00:00"
+updated_at: "2026-11-08T06:02:32.302597256+00:00"
 ---
 
 ## Outcome
