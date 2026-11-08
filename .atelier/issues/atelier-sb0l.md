@@ -65,4 +65,3 @@ Trial: a fresh Opus agent given only the skill ran groom on the whole backlog at
 - Record fixes it would apply: four related links, the `agent-factory` label on four items, and boxing the bulleted Done when lines of 34 items.
 
 The trial's three problems with the procedure are fixed in groom.md: it now says what to check first on a large backlog and that cheaper agents may do the bulk reading, with each claim checked before it becomes an entry; an entry may cover several items and gives a new body as an outline; and it covers parked items whose condition holds, partly done items, deadline entries listed first, and format fixes `atelier check` asks for as record fixes.
-
