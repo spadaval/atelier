@@ -8,6 +8,9 @@ skill has exactly one git-tracked copy; atelier-svi6).
 Supersedes [ADR 0020](0020-agent-factory-targets-atelier-only.md) Decision 2.
 ADR 0020's other decisions stand.
 
+Superseded by [ADR 0029](0029-agent-factory-lives-in-atelier.md) (2026-11-08):
+the one copy moves into this repository. The one-copy rule stands.
+
 ## Context
 
 ADR 0020 made `spadaval/.agents` the skill's one source and had this
