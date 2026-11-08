@@ -24,6 +24,10 @@ Day to day, run formatting and the tests that cover your change
 `test-hooks`, on Linux and macOS, run in CI on the pull request, and that run
 gates the merge (see [AGENTS.md](../../AGENTS.md)).
 
+Tests run with `ATELIER_NO_UPDATE_CHECK=1`, which `.cargo/config.toml` sets,
+so `doctor` and `status` stay off the network (see the
+[update check](sessions-and-hooks.md#update-check)).
+
 The default test run excludes injected failure hooks. Run
 `cargo nextest run --features test-hooks` when checking rollback, cleanup
 failure, and concurrency paths. Normal release builds contain no fault-injection

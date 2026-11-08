@@ -1559,8 +1559,24 @@ fn touched_claims(
 
 /// The full verification land skips: every retained claim and the whole
 /// review history, for history that reached the base without the gates
-/// (atelier-37uq).
+/// (atelier-37uq). It also checks, in parallel and never failing, whether
+/// atelier and the Agent Factory skill are out of date (atelier-45gr).
 pub fn doctor(quiet: bool) -> Result<()> {
+    let updates = std::thread::spawn(crate::commands::freshness::doctor_lines);
+    let print_updates = |updates: std::thread::JoinHandle<Vec<String>>| {
+        let lines = updates.join().unwrap_or_default();
+        if quiet {
+            // Quiet stdout stays `passed`; only warnings reach stderr.
+            for line in lines.iter().filter(|line| line.starts_with('⚠')) {
+                eprintln!("{line}");
+            }
+        } else {
+            println!(
+                "\n{}",
+                crate::human_output::render_lines_section("Updates", lines).join("\n")
+            );
+        }
+    };
     if let Some(branch) = unborn() {
         println!(
             "{}",
@@ -1573,13 +1589,22 @@ pub fn doctor(quiet: bool) -> Result<()> {
                 )
             }
         );
+        print_updates(updates);
         return Ok(());
     }
-    let output = land_text(None, false, true)?;
+    let output = match land_text(None, false, true) {
+        Ok(output) => output,
+        Err(error) => {
+            print_updates(updates);
+            return Err(error);
+        }
+    };
     if quiet {
         println!("passed");
+        print_updates(updates);
     } else {
         println!("{output}");
+        print_updates(updates);
         println!("Doctor: every done claim and the whole review history were checked.");
     }
     Ok(())

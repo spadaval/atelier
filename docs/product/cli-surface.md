@@ -18,7 +18,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `review` | Print the reviewer's brief; record approvals, findings and explicit trivial exemptions; set findings' dispositions. |
 | `merge` | Evaluate the merge gates and integrate reviewed work with a merge commit that marks it done; `--check` evaluates them without merging. |
 | `land` | Run at every handoff: judge committed records, what changed since the base and the commits about to be pushed; report work in progress on a branch, refuse on the base. |
-| `doctor` | Judge every done claim and the whole review history. |
+| `doctor` | Judge every done claim and the whole review history, and warn when atelier or the Agent Factory skill is out of date; see [update check](sessions-and-hooks.md#update-check). |
 | `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `debrief` | Review a mission's outcome as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `setup` | Install supported harness hooks. |

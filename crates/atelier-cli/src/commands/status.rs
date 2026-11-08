@@ -78,10 +78,12 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
         (None, Vec::new())
     };
     let view = atelier_app::work_classification::status_view(&index, policy.as_ref())?;
+    // Read from a cache, never the network (atelier-45gr).
+    let updates = commands::freshness::status_warnings();
     if quiet {
         // Quiet stdout stays the summary; the fallback is still reported.
-        for diagnostic in &diagnostics {
-            eprintln!("{diagnostic}");
+        for line in diagnostics.iter().chain(&updates) {
+            eprintln!("{line}");
         }
         return Ok(format!(
             "work={} current_missions={} ready={} human={}",
@@ -127,7 +129,7 @@ fn text(quiet: bool, context: RenderContext) -> Result<String> {
     Ok(render_status_page(
         &view,
         &overview,
-        &diagnostics,
+        (&diagnostics, &updates),
         &checkout,
         (&owner, light.as_deref()),
         &in_flight,
@@ -423,7 +425,7 @@ fn evidence(
 fn render_status_page(
     view: &StatusView,
     overview: &MissionOverview,
-    diagnostics: &[String],
+    (diagnostics, updates): (&[String], &[String]),
     checkout: &Checkout,
     (owner, light): (&Result<Option<Owner>>, Option<&str>),
     in_flight: &BTreeMap<String, String>,
@@ -589,6 +591,11 @@ fn render_status_page(
             Vec::new()
         } else {
             render_lines_section("Policy Diagnostics", diagnostics.to_vec())
+        },
+        if updates.is_empty() {
+            Vec::new()
+        } else {
+            render_lines_section("Updates", updates.to_vec())
         },
         if summary_lines.is_empty() {
             Vec::new()
