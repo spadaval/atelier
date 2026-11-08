@@ -1,3 +1,8 @@
 # Verbatim copies of receipts recorded before atelier-dg3h, kept byte for byte
 # for the compatibility test, including their trailing blank line.
 crates/atelier-records/tests/fixtures/evidence/** -whitespace
+
+# Imported unchanged from spadaval/.agents c75a9b1 (atelier-dkul), each with a
+# trailing blank line.
+evals/agent-factory/results/2026-11-04-mission-shaping/input.md -whitespace
+evals/agent-factory/scenarios/costly-hardening/files/base/flags.py -whitespace
