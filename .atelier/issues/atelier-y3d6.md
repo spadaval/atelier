@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-08T22:23:18.757499464+00:00"
+status: "declined"
 title: "skills/agent-factory/procedures/orchestrate.md:77 (eb14a31). 'record fix_now with why it cannot wait' means review disp…"
-updated_at: "2026-11-08T21:50:02.001056830+00:00"
+updated_at: "2026-11-08T22:23:18.757499464+00:00"
 ---
 
 ## Goal
@@ -28,3 +29,7 @@ low: skills/agent-factory/procedures/orchestrate.md:77 (eb14a31). 'record fix_no
 ## Done when
 
 Done when was not specified.
+
+## Report
+
+Moot: agents-skills 12c8a15 removed the 'record fix_now' sentence on Sumeet's direction; the skill no longer records a scope choice as a fix_now disposition.
