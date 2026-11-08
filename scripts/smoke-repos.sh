@@ -28,6 +28,8 @@
 # Exit status: 0 when no regression, 1 when the new binary fails where the
 # installed one passes, 2 on a usage or setup error.
 set -euo pipefail
+# Reading a repository must not refresh its index either.
+export GIT_OPTIONAL_LOCKS=0
 
 usage() { sed -n '/^# Usage:/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//'; }
 
