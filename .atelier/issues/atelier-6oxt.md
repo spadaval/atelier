@@ -37,7 +37,7 @@ Remove from spadaval/.agents everything that has moved or is unused, once the sk
 
 - [x] On a branch in spadaval/.agents (made with `git -C ~/projects/agents-skills worktree add`; the live checkout never changes branch), `skills/agent-factory`, `evals/agent-factory`, `skills/artifact-hub`, `skills/generate-html-plan`, `skills/pr-review-explorer` and `skills/codex-reflect` are deleted, and the README (added by `atelier-dkul`) says Agent Factory lives in spadaval/atelier, with its install line.
 - [x] Nothing on this host links into a deleted path: `find ~/.claude/skills ~/.agents/skills -maxdepth 1 -type l -exec readlink -f {} \;` lists no path under `~/projects/agents-skills/skills/` that the branch deletes.
-- [ ] The branch is independently reviewed and merged into spadaval/.agents `main`; pushing waits for Sumeet.
+- [x] The branch is independently reviewed and merged into spadaval/.agents `main`; pushing waits for Sumeet.
 
 ## Scope
 
@@ -53,5 +53,6 @@ spadaval/.agents branch `atelier-6oxt` (worktree `~/projects/agents-skills-wt/at
 
 - **Links:** `find ~/.claude/skills ~/.agents/skills -maxdepth 1 -type l -exec readlink -f {} \;` lists nothing under `~/projects/agents-skills/skills/`. Agent Factory resolves to `~/projects/atelier-skill/skills/agent-factory` (atelier-bxs7).
 - **Whitespace:** `git diff --check HEAD^ HEAD` is clean.
+- **Merged:** reviewed (atelier-b8ha) and merged into spadaval/.agents `main` locally as dfa5f3e; not pushed.
 - **Left alone:** `.skill-lock.json` is stale (it names skills this repository never held), outside this item's Scope. Pushing waits for Sumeet; the live checkout `~/projects/agents-skills` stays on `main`.
 
