@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Orchestrators plan and implementers own the code: escalation instead of relay"
-updated_at: "2026-11-08T21:55:26.405647837+00:00"
+updated_at: "2026-11-08T22:01:42.235512691+00:00"
 ---
 
 ## Goal
@@ -83,3 +83,7 @@ The rule for findings after this change: correctness is settled between implemen
 - Whether three rounds and twice the expected size are the right limits. Today issues average 2.4 to 2.8 reviewed commits.
 - Whether implementers escalate when they should, or grind on. The evaluation's escalation case tests this once.
 - Whether a nested chain (orchestrator, implementer, reviewer, all T3 threads) stays manageable in T3; the skill evaluation will show it.
+
+## Notes
+
+- 2026-11-08 [note] Re-review (atelier-h8uv) left one wording point for the implementer: Done when 2 passes the printed review brief unchanged, while Done when 4 adds a marked author rebuttal when disputing a finding. Write the rebuttal as the one allowed addition to that brief.
