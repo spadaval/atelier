@@ -21,7 +21,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `doctor` | Judge every done claim and the whole review history. |
 | `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
 | `debrief` | Review a mission's outcome as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
-| `setup` | Install supported harness hooks. |
+| `setup` | Install supported harness hooks, or link the installed Agent Factory skill to a checkout (`--link`, `--unlink`). |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |
 | `migrate` | Apply one-shot record migrations: `migrate epics`, `migrate dispositions`, `migrate after-merge`. |
@@ -108,8 +108,10 @@ the claims that changed since the base, and on a work branch reports what is
 open and exits 0 (`land: work in progress — N checks open (…)`, quiet `work in
 progress — …`; the verdict counts open gates as checks); `doctor` judges
 every claim. `prime` is a deprecated alias for `status`, kept for installed hooks.
-`setup claude [--binary <path>]` installs the supported hooks. See
-[sessions](sessions-and-hooks.md) for active-work handoff and hook behavior.
+`setup claude [--binary <path>]` installs the supported hooks, and `setup
+--link [<checkout>]` and `setup --unlink` link and unlink the installed Agent
+Factory skill. See [sessions](sessions-and-hooks.md) for active-work handoff,
+hook behavior and the skill link.
 
 ## Committing records
 
