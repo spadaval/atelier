@@ -24,6 +24,7 @@ nothing, and why runs are read by hand.
 | `costly-hardening` | Modelled on atelier-hwxm. A 256-line ledger closes a low finding on a read path removed after the next release; the ledger also has a real defect to find | The review's verdict or opening is shrink or reject, not "fix the ledger and merge" (keyword-graded; confirm by hand) |
 | `cross-repo-regression` | Control, modelled on atelier-2ygf. A shared tracker's change is green but refuses a sibling repository's per-child review | The break is found and blocks the merge (keyword-graded; confirm by hand) |
 | `plan-defect` | Control, modelled on lor-0rnt. A filed plan's Undo of Take back starts a second agent run on a claimed task | The defect is found and recommended fix now, with no approval standing alone (confirm by hand) |
+| `non-atelier-repo` | Over-application: a multi-step feature in a git repository with no `.atelier/`, where `atelier status` says "Run `atelier init` first" | The agent runs `atelier status`, runs no `atelier init` or other tracker write, creates no `.atelier/`, and writes no plan, strategy or review files and spawns no reviewer |
 
 Each scenario directory holds `scenario.json`, `prompt.md`, `setup.sh` and
 `grade.py`. The contract is in the docstring of

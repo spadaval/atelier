@@ -18,6 +18,16 @@ profile; open a new shell to use it. Rerun it to upgrade. Releases, with archive
 are on [GitHub](https://github.com/spadaval/atelier/releases). To build from a
 source checkout instead, run `cargo install --path crates/atelier-cli --locked`.
 
+Agents learn Atelier's workflow from the Agent Factory skill, which lives in
+[skills/agent-factory](skills/agent-factory). Install it globally with Vercel's
+`skills` CLI:
+
+```bash
+npx skills add spadaval/atelier --skill agent-factory -g
+```
+
+The skill only acts in repositories tracked with Atelier.
+
 Fresh setup, required tools, validation commands, local environment policy, and
 the current devcontainer decision live in
 [docs/product/development-setup.md](docs/product/development-setup.md).
