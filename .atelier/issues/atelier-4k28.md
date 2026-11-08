@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Smoke-test a new atelier binary against every local Atelier repository before installing it"
-updated_at: "2026-11-08T06:03:55.223078722+00:00"
+updated_at: "2026-11-08T06:14:24.729664536+00:00"
 ---
 
 ## Goal
@@ -38,6 +38,10 @@ A script and the doc line. No change to atelier's commands.
 ## Context
 
 From the 2026-11-08 review audit.
+
+## Notes
+
+- 2026-11-08 [note] Handoff: implemented on atelier-4k28 (draft PR #47). All Done when lines ticked; proof and the base run are in the Report. Independent review outstanding.
 
 ## Report
 
