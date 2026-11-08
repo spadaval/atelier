@@ -1,8 +1,8 @@
 # Mission Authoring
 
-[Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md) owns planning.
-Its [tracker-record templates](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/references/tracker-records.md)
-are the authoring reference. Atelier validates the resulting records and graph.
+[Agent Factory](../../skills/agent-factory/SKILL.md) owns planning.
+Its [record guidance](../../skills/agent-factory/references/atelier.md#records)
+is the authoring reference. Atelier validates the resulting records and graph.
 
 A mission is a themed container: a set of changes that share a theme, and an
 Outcome saying why they belong together. It is a front door to its strategy,
@@ -11,8 +11,8 @@ and link the strategy by path if there is one. Success criteria are optional
 ([ADR 0024](../adr/0024-missions-are-themed-containers.md)): add one only for
 a claim about the whole that no single item proves, and only if the mission's
 own work can make it true and an agent can verify it when the mission closes.
-Agent Factory's [Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission) and
-[Ready Missions](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#ready-missions) sections own that process.
+Agent Factory's [Shaping a Mission](../../skills/agent-factory/procedures/plan.md#shaping-a-mission) and
+[Ready Work](../../skills/agent-factory/procedures/plan.md#ready-work) sections own that process.
 
 A criterion is a `- <slug>: <text>` bullet under the strategy's Success
 Criteria heading (any level), or under the mission's own Success criteria

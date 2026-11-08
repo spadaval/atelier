@@ -47,9 +47,9 @@ has to answer the same question again for each mission.
 The process for shaping a mission, deciding whether it needs criteria, and
 judging when it is ready belongs to Agent Factory
 ([ADR 0023](0023-agent-factory-is-not-vendored.md)), in its
-[Shaping a Mission](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#shaping-a-mission)
+[Shaping a Mission](../../skills/agent-factory/procedures/plan.md#shaping-a-mission)
 and
-[Ready Missions](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/procedures/plan.md#ready-missions)
+[Ready Work](../../skills/agent-factory/procedures/plan.md#ready-work)
 sections. Atelier does not restate it.
 
 ## Consequences

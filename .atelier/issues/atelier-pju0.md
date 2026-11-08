@@ -17,12 +17,12 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Rebuild the rare-edge-chain eval fixture so its fix carries only the two planted findings"
-updated_at: "2026-11-08T22:19:27.985044619+00:00"
+updated_at: "2026-11-08T22:43:58.499343665+00:00"
 ---
 
 ## Goal
 
-Make `evals/agent-factory/scenarios/rare-edge-chain` a fair test of whether an orchestrator leaves a deferred low finding alone. Its reviewed fix (`files/follower_fix.py`) keeps carrying unplanted defects. atelier-l58v found one regression (a touched, just-closed log took the session) and its correction (agents-skills 23a1ed2) added another: in `catch_up`, a J1 whose clock ran ahead and whose last lines are stamped later than now beats the game's log at restart. Reviewers in both arms of the rerun found further real cases where stamps are compared across logs after a clock correction. Every run then fixes or declines over those, so neither arm is tested on the target behaviour.
+Make `evals/agent-factory/scenarios/rare-edge-chain` (now in this repository) a fair test of whether an orchestrator leaves a deferred low finding alone. Its reviewed fix (`files/follower_fix.py`) keeps carrying unplanted defects. atelier-l58v found one regression (a touched, just-closed log took the session) and its correction (agents-skills 23a1ed2) added another: in `catch_up`, a J1 whose clock ran ahead and whose last lines are stamped later than now beats the game's log at restart. Reviewers in both arms of the rerun found further real cases where stamps are compared across logs after a clock correction. Every run then fixes or declines over those, so neither arm is tested on the target behaviour.
 
 ## Done when
 

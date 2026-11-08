@@ -179,7 +179,7 @@ impl Sandbox {
     /// A Git checkout holding the skill, its `HEAD` detached `behind`
     /// commits short of `master`, linked from `link` in the home.
     fn linked_checkout(&self, link: &str, behind: usize) -> PathBuf {
-        let checkout = self.root.join("agents-skills");
+        let checkout = self.root.join("skill-checkout");
         fs::create_dir_all(checkout.join("skills/agent-factory")).unwrap();
         git(&checkout, &["init", "-q", "-b", "master"]);
         fs::write(checkout.join("skills/agent-factory/SKILL.md"), "v1\n").unwrap();
