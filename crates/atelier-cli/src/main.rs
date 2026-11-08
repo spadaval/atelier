@@ -373,10 +373,17 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
         id: Option<String>,
     },
 
-    /// Judge every done item and the whole review history
+    /// Judge every done item and the whole review history, and check
+    /// whether atelier and the Agent Factory skill are out of date
     ///
-    /// `land` judges only what changed since the base.
+    /// `land` judges only what changed since the base. The update check
+    /// never fails the command; `ATELIER_NO_UPDATE_CHECK=1` turns it off.
     Doctor,
+
+    /// Refresh the cached update check that status reads (status runs it,
+    /// detached)
+    #[command(name = "refresh-update-check", hide = true)]
+    RefreshUpdateCheck,
 
     /// Review a mission's plan before work starts: outcome, criteria, scope
     /// with sizes, blockers, unknowns, human decisions, risks and approvals
@@ -936,6 +943,11 @@ fn load_dotenv() -> Result<()> {
 
 fn run() -> Result<()> {
     let cli = parse_cli_or_exit();
+    // Status's detached refresh reads no repository.
+    if let Commands::RefreshUpdateCheck = cli.command {
+        commands::freshness::refresh();
+        return Ok(());
+    }
     // Every record write passes the rules `atelier check` applies before it
     // lands, and is refused before anything is written (atelier-ilba).
     atelier_app::record_guard::install();
@@ -1000,6 +1012,7 @@ fn run() -> Result<()> {
         Commands::Setup { unlink: true, .. } => commands::skill_link::unlink(quiet),
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
+        Commands::RefreshUpdateCheck => unreachable!("handled before the repository is read"),
         Commands::Brief { id, html } => {
             let (_, index) = load_repository()?;
             commands::mission_review::brief(&index, &id, html, quiet)
@@ -1419,6 +1432,7 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         | Commands::Prime { .. }
         | Commands::Land { .. }
         | Commands::Doctor
+        | Commands::RefreshUpdateCheck
         | Commands::Setup { .. } => CanonicalTransactionMode::None,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical

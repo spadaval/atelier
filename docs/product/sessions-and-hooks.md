@@ -199,6 +199,49 @@ exemptions, and to review records the base already held.
 for history that reached the base without the gates, such as a direct push
 (atelier-37uq).
 
+## Update check
+
+`atelier doctor` also says whether the atelier binary and the Agent Factory
+skill are out of date, and prints the command that fixes each. It warns and
+never fails: doctor's exit status comes from its checks alone (atelier-45gr).
+It prints an `Updates` section with one line for each:
+
+- The binary: its version, without `+<sha>` build metadata, against the
+  highest `vX.Y.Z` tag that `git ls-remote --tags` reads from
+  `https://github.com/spadaval/atelier`. An older binary gets a ⚠ warning
+  naming both versions and the release installer line from the
+  [README](../../README.md#install). When Git cannot reach GitHub, or takes
+  more than 5 seconds, the line says the check could not run.
+- The skill, at `~/.agents/skills/agent-factory` or
+  `~/.claude/skills/agent-factory`. A symlink into a Git checkout reads
+  "linked to a checkout at <path>" and warns only when the checkout's `HEAD`
+  is behind its local base branch (the branch `origin/HEAD` names, else
+  `master`, else `main`), with the commit count and `git -C <path> checkout
+  --detach <base>`; it reads local refs only. Otherwise Vercel's `skills` CLI,
+  pinned at `npx -y skills@1.7.6` and run with `DISABLE_TELEMETRY=1`, decides:
+  a skill `skills ls -g --json` reports as tracked is checked with `skills
+  check agent-factory -g`, and a stale one warns with `npx skills update
+  agent-factory -g`. Because `check` also exits 0 when it could not reach the
+  source, its "Failed to check" line reads as could not check. An untracked
+  skill warns that updates cannot be checked, and a missing one, or a host
+  without `npx`, gets `npx skills add spadaval/atelier --skill agent-factory
+  -g`. Each `npx` call stops after 10 seconds.
+
+Doctor caches the result in `$XDG_CACHE_HOME/atelier/update-check` (else
+`~/.cache/atelier`, or `~/Library/Caches/atelier` on macOS). `status`, and
+its SessionStart hook, read only that cache, so they never wait on the
+network or `npx`: an `Updates` section appears only when the cached result
+says the binary or the skill is behind. When the cache is missing or more
+than a day old, `status` shows nothing about updates and starts a detached
+`atelier refresh-update-check`, a hidden command that runs doctor's check and
+rewrites the cache; it starts at most one every 10 minutes.
+
+`ATELIER_NO_UPDATE_CHECK=1` turns the check off: doctor prints that it is
+off, and nothing reaches the network, runs `npx`, or reads or writes the
+cache. The repository's `.cargo/config.toml` sets it for every test, and CI
+sets it for the whole workflow; the tests of the check itself remove it and
+fake the network and `npx`.
+
 Judged integrated claims retain the acceptance that was valid when completion
 was claimed. Historical acceptance requires immutable review history: an
 approval counts only as first committed, and its identity is recorded, not

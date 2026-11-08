@@ -15,8 +15,11 @@ concurrency:
 
 # setup-rust-toolchain sets RUST_BACKTRACE, which appends backtraces to the
 # error output that tests compare exactly.
+# ATELIER_NO_UPDATE_CHECK keeps doctor and status off the network; the
+# tests that cover the update check fake it instead.
 env:
   RUST_BACKTRACE: 0
+  ATELIER_NO_UPDATE_CHECK: 1
 
 jobs:
   test:
