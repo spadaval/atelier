@@ -90,13 +90,15 @@ pub struct ReviewSummary {
     pub fixed: usize,
     pub deferred: usize,
     pub no_action: usize,
+    /// Real findings decided won't fix (atelier-stnv).
+    pub wont_fix: usize,
     /// Findings with no disposition yet.
     pub undisposed: usize,
 }
 
 impl ReviewSummary {
     pub fn findings(&self) -> usize {
-        self.fixed + self.deferred + self.no_action + self.undisposed
+        self.fixed + self.deferred + self.no_action + self.wont_fix + self.undisposed
     }
 
     fn absorb(&mut self, other: &ReviewSummary) {
@@ -111,6 +113,7 @@ impl ReviewSummary {
         self.fixed += other.fixed;
         self.deferred += other.deferred;
         self.no_action += other.no_action;
+        self.wont_fix += other.wont_fix;
         self.undisposed += other.undisposed;
     }
 }
@@ -471,6 +474,7 @@ pub fn debrief(
             Some(FindingDecision::FixNow) => summary.fixed += 1,
             Some(FindingDecision::Defer) => summary.deferred += 1,
             Some(FindingDecision::NoAction) => summary.no_action += 1,
+            Some(FindingDecision::WontFix) => summary.wont_fix += 1,
             None => summary.undisposed += 1,
         }
     }
@@ -942,16 +946,17 @@ fn validation(
         validation.findings.fixed += review.fixed;
         validation.findings.deferred += review.deferred;
         validation.findings.no_action += review.no_action;
+        validation.findings.wont_fix += review.wont_fix;
         validation.findings.undisposed += review.undisposed;
         if review.approved {
             validation.approved += 1;
         } else if review.trivial {
             validation.trivial += 1;
-        } else if index
-            .issue_record(&entry.id)
-            .is_none_or(|record| record.issue.issue_type == "decision")
-        {
-            // A decision record is decided, not code-reviewed.
+        } else if index.issue_record(&entry.id).is_none_or(|record| {
+            record.issue.issue_type == "decision" || record.issue.status == "declined"
+        }) {
+            // A decision record is decided, not code-reviewed, and declined
+            // work merged nothing to review (atelier-stnv).
         } else if review.recorded {
             validation.not_approved.push(entry.id.clone());
         } else {

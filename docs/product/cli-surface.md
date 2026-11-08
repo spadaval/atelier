@@ -69,7 +69,8 @@ atelier issue link <parent-id> <mission-id> --role advances
 atelier issue link <blocked-id> <blocker-id> --role blocked_by
 atelier issue note <id> "Handoff detail" --kind handoff
 atelier issue note <id> "Chosen approach" --kind decision --reason "Why" [--rejected "Alternative"]
-atelier issue transition <id> supersede --reason "Why it will not happen"
+atelier issue transition <id> supersede --reason "Why it is obsolete"
+atelier issue transition <id> decline --reason "Why it will not be done"
 ```
 
 Transitions write records after read-only validators pass. `atelier start` prepares Git context; the `start` transition only changes the record.
@@ -92,9 +93,11 @@ merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
 `--identity`, and summary (`record`, `approve` and `finding` take `--branch
 <name>` in place of the owner on the light path); a commit they take (`--commit`, `--base`) may be a
 unique short ID, stored in full. `review disposition` sets a finding's
-disposition, replacing any earlier one: a deferred or dismissed finding needs
-one, and a `fix_now` finding is resolved by the approval after its fix
-([dispositions](reviews-and-merge.md#dispositions)).
+disposition, replacing any earlier one: a finding recommended defer,
+no_action or wont_fix needs one, and a `fix_now` finding is resolved by the
+approval after its fix ([dispositions](reviews-and-merge.md#dispositions)).
+`review defer <id>` defers every undecided finding recommended defer on an
+item, filing a backlog follow-up for each under one parent.
 `review request <id>` prints the reviewer brief for an owner, and with no ID
 for the checked-out branch's owner or, on a branch no issue owns, the branch
 itself (see [requesting a review](reviews-and-merge.md#requesting-a-review)).
@@ -113,7 +116,7 @@ hook behavior and the skill link.
 ## Committing records
 
 A step usually writes several records (a finding, its disposition, evidence, a
-transition). `review record|approve|finding|trivial|disposition`, `evidence record`
+transition). `review record|approve|finding|trivial|disposition|defer`, `evidence record`
 and `issue transition <id> <name>` accept two flags that replace one hand-made
 commit per record:
 

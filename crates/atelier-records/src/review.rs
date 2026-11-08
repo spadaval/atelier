@@ -28,8 +28,40 @@ const SEPARATE_DISPOSITIONS_VERSION: i64 = 1;
 /// that predates the light path keeps reading every ordinary review.
 pub const BRANCH_TARGET_VERSION: i64 = 3;
 
+/// The schema version a finding that recommends or decides `wont_fix` is
+/// written at, about an issue or a branch, the first that can hold it
+/// (atelier-stnv, atelier-xlxn). An older Atelier reads it as a record a
+/// newer Atelier wrote, not as an invalid one; every other record keeps the
+/// version it had, so an older binary keeps reading it.
+pub const WONT_FIX_VERSION: i64 = 4;
+
 /// The newest schema version this Atelier reads.
-const SUPPORTED_VERSION: i64 = BRANCH_TARGET_VERSION;
+const SUPPORTED_VERSION: i64 = WONT_FIX_VERSION;
+
+/// Whether an event recommends or decides `wont_fix`.
+fn holds_wont_fix(event: &ReviewEvent) -> bool {
+    let ReviewEvent::Finding {
+        recommendation,
+        disposition,
+    } = event
+    else {
+        return false;
+    };
+    *recommendation == FindingDecision::WontFix
+        || disposition
+            .as_ref()
+            .is_some_and(|disposition| disposition.decision == FindingDecision::WontFix)
+}
+
+/// The version an event is written at: `subject_version`, or
+/// [`WONT_FIX_VERSION`] when it holds `wont_fix`.
+fn written_version(event: &ReviewEvent, subject_version: i64) -> i64 {
+    if holds_wont_fix(event) {
+        WONT_FIX_VERSION
+    } else {
+        subject_version
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -385,6 +417,12 @@ fn parse_review_file_supporting(text: &str, relative: &Path, supported: i64) -> 
             invalid()
         );
     }
+    if holds_wont_fix(&event) && front.schema_version < WONT_FIX_VERSION {
+        bail!(
+            "{}: a finding holds wont_fix only from schema version {WONT_FIX_VERSION}",
+            invalid()
+        );
+    }
     let header = |relationships, updated_at| RecordHeader {
         kind: "review".into(),
         id: front.id.clone(),
@@ -640,7 +678,7 @@ pub fn render_review_record(record: &ReviewRecord) -> Result<String> {
     validate_review(record)?;
     let front = Front {
         schema: REVIEW_KIND.schema.into(),
-        schema_version: REVIEW_KIND.schema_version,
+        schema_version: written_version(&record.event, REVIEW_KIND.schema_version),
         id: record.header.id.clone(),
         title: record.header.title.clone(),
         target: Some(record.target.clone()),
@@ -659,12 +697,13 @@ pub fn render_review_record(record: &ReviewRecord) -> Result<String> {
 }
 
 /// Renders an event about a branch, whose `target` is the branch name, at
-/// [`BRANCH_TARGET_VERSION`].
+/// [`BRANCH_TARGET_VERSION`], or [`WONT_FIX_VERSION`] when it holds
+/// `wont_fix`.
 pub fn render_branch_review_record(record: &ReviewRecord) -> Result<String> {
     validate_branch_review(record)?;
     let front = Front {
         schema: REVIEW_KIND.schema.into(),
-        schema_version: BRANCH_TARGET_VERSION,
+        schema_version: written_version(&record.event, BRANCH_TARGET_VERSION),
         id: record.header.id.clone(),
         title: record.header.title.clone(),
         target: None,
@@ -865,13 +904,13 @@ mod tests {
             )
         };
         let path = Path::new("reviews/atelier-r001.md");
-        let newer = parse_review_file(&text(4), path).unwrap_err();
+        let newer = parse_review_file(&text(5), path).unwrap_err();
         assert_eq!(
             newer.downcast_ref::<atelier_core::NewerSchema>(),
             Some(&atelier_core::NewerSchema {
                 path: ".atelier/reviews/atelier-r001.md".into(),
-                found: 4,
-                supported: 3,
+                found: 5,
+                supported: 4,
             })
         );
         let older = parse_review_file(&text(0), path).unwrap_err();
@@ -994,6 +1033,90 @@ mod tests {
             ("atelier-f001", "follow_up")
         );
         render_branch_review_record(&finding).unwrap();
+    }
+
+    fn wont_fix_disposition() -> Disposition {
+        Disposition {
+            decision: FindingDecision::WontFix,
+            identity: "Lead".into(),
+            commit: "b".repeat(40),
+            recorded_at: "2026-11-08T00:00:00Z".parse().unwrap(),
+            resolution_commit: None,
+            follow_up: None,
+            reason: "not worth it".into(),
+            migrated_from: None,
+        }
+    }
+
+    /// A finding that recommends or decides wont_fix is written at schema
+    /// version 4, about an issue or a branch, so an older Atelier reports it
+    /// as needing a newer one rather than as invalid; a finding without it
+    /// keeps version 2 (or 3 about a branch), and both round-trip
+    /// (atelier-xlxn).
+    #[test]
+    fn a_wont_fix_finding_is_written_at_the_newer_version_and_round_trips() {
+        let path = Path::new("reviews/atelier-r001.md");
+        let finding = |subject: &str, recommendation: &str| {
+            event_file(
+                2,
+                subject,
+                &format!("  event: finding\n  recommendation: {recommendation}\n"),
+            )
+        };
+        let ReviewFile::Event(plain) =
+            parse_review_file(&finding("target: atelier-i001\n", "fix_now"), path).unwrap()
+        else {
+            panic!("a finding about an issue parses as one");
+        };
+        let text = render_review_record(&plain).unwrap();
+        assert!(text.contains("schema_version: 2\n"), "{text}");
+        assert_eq!(
+            parse_review_file(&text, path).unwrap(),
+            ReviewFile::Event(plain.clone())
+        );
+
+        let mut recommended = plain.clone();
+        recommended.event = ReviewEvent::Finding {
+            recommendation: FindingDecision::WontFix,
+            disposition: None,
+        };
+        let mut decided = plain.clone();
+        set_finding_disposition(&mut decided, wont_fix_disposition()).unwrap();
+        for record in [recommended, decided] {
+            let text = render_review_record(&record).unwrap();
+            assert!(text.contains("schema_version: 4\n"), "{text}");
+            assert_eq!(
+                parse_review_file(&text, path).unwrap(),
+                ReviewFile::Event(record.clone())
+            );
+            let older = parse_review_file_supporting(&text, path, 3).unwrap_err();
+            assert!(older.is::<atelier_core::NewerSchema>(), "{older:#}");
+        }
+
+        let ReviewFile::BranchEvent(mut branch) = parse_review_file(
+            &event_file(
+                3,
+                "branch: release\n",
+                "  event: finding\n  recommendation: fix_now\n",
+            ),
+            path,
+        )
+        .unwrap() else {
+            panic!("a finding about a branch parses as one");
+        };
+        assert!(render_branch_review_record(&branch)
+            .unwrap()
+            .contains("schema_version: 3\n"));
+        set_finding_disposition(&mut branch, wont_fix_disposition()).unwrap();
+        let text = render_branch_review_record(&branch).unwrap();
+        assert!(text.contains("schema_version: 4\n"), "{text}");
+        assert_eq!(
+            parse_review_file(&text, path).unwrap(),
+            ReviewFile::BranchEvent(branch)
+        );
+
+        // A wont_fix at an older version is refused, as no Atelier wrote it.
+        assert!(parse_review_file(&finding("target: atelier-i001\n", "wont_fix"), path).is_err());
     }
 
     /// A reader that predates the light path, whose newest version is 2,

@@ -940,7 +940,7 @@ fn test_issue_show_is_brief_by_default() {
              Mission: {mission} draft medium Brief mission\n\
              Parent: {parent} todo medium Brief parent\n\
              Blocked by: {blocker} todo medium Blocker\n\
-             Transitions: defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
+             Transitions: decline --reason, defer, supersede --reason | blocked: start - task {child} has direct blocker path {child} -> {blocker}\n\
              Goal: Child goal.\n\
              Done when: Child done.\n\
              More with --full: Context\n"
@@ -954,7 +954,7 @@ fn test_issue_show_is_brief_by_default() {
              Children:\n  \
              {sibling} ready medium Second child\n  \
              {child} ⚠ blocked medium First child\n\
-             Transitions: defer, start, supersede --reason\n\
+             Transitions: decline --reason, defer, start, supersede --reason\n\
              Goal: Parent goal.\n\
              Done when: Parent done.\n"
         )
@@ -996,7 +996,7 @@ fn test_issue_show_is_brief_by_default() {
         "{child_view}"
     );
     assert!(
-        child_view.contains("\nTransitions: defer, start, supersede --reason\n"),
+        child_view.contains("\nTransitions: decline --reason, defer, start, supersede --reason\n"),
         "{child_view}"
     );
 
@@ -1014,7 +1014,7 @@ fn test_issue_show_is_brief_by_default() {
     let parent_view = show_ok(dir.path(), &["issue", "show", &parent]);
     assert!(
         parent_view.contains(
-            "\nTransitions: supersede --reason | blocked: close - validator work.terminal failed: open work: "
+            "\nTransitions: decline --reason, supersede --reason | blocked: close - validator work.terminal failed: open work: "
         ),
         "{parent_view}"
     );
@@ -1062,13 +1062,15 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
     // Work has no close: merge marks it done (atelier-jnrh).
     let brief = show_ok(dir.path(), &["issue", "show", id]);
     assert!(
-        brief.contains("\nTransitions: supersede --reason\n"),
+        brief.contains("\nTransitions: decline --reason, supersede --reason\n"),
         "{brief}"
     );
 
     let full = show_ok(dir.path(), &["issue", "show", id, "--full"]);
     let readiness = format!(
         "Transition Readiness\n--------------------\n  \
+         decline: allowed - to declined, needs --reason\n    \
+         Command: atelier issue transition {id} decline --reason \"...\"\n  \
          supersede: allowed - to superseded, needs --reason\n    \
          Command: atelier issue transition {id} supersede --reason \"...\"\n"
     );
@@ -1086,7 +1088,7 @@ fn test_argument_only_transition_is_allowed_in_every_issue_view() {
     assert!(!options.contains(": blocked"), "{options}");
     assert_eq!(
         show_ok(dir.path(), &["-q", "issue", "transition", id]),
-        "supersede\n"
+        "decline\nsupersede\n"
     );
 }
 

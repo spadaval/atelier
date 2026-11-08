@@ -243,6 +243,15 @@ pub struct Issue {
 
 pub const ISSUE_STRATEGY_FIELD: &str = "strategy";
 
+/// Whether `status` closes work without doing it: `superseded` (obsolete or
+/// replaced) or `declined` (real, but it will not be done, atelier-stnv).
+/// The gates skip such work as work that will not happen: its blockers hold
+/// nothing, and taking it there on the base is no done claim. Reports do not
+/// share this; they show a declined item as finished under its own status.
+pub fn closes_undone(status: &str) -> bool {
+    matches!(status, "superseded" | "declined")
+}
+
 /// A repository-relative strategy link. Strategy revisions live in Git.
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -412,16 +421,21 @@ pub struct BaseExemption {
 pub enum FindingDecision {
     FixNow,
     Defer,
+    /// The finding is wrong: mistaken, a duplicate, or without consequence.
     NoAction,
+    /// The finding is real but not worth fixing (atelier-stnv): a recorded
+    /// no that needs no follow-up issue.
+    WontFix,
 }
 impl FindingDecision {
-    pub const ALL: [Self; 3] = [Self::FixNow, Self::Defer, Self::NoAction];
+    pub const ALL: [Self; 4] = [Self::FixNow, Self::Defer, Self::NoAction, Self::WontFix];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FixNow => "fix_now",
             Self::Defer => "defer",
             Self::NoAction => "no_action",
+            Self::WontFix => "wont_fix",
         }
     }
 }
@@ -1673,10 +1687,14 @@ mod tests {
             FindingDecision::FixNow,
             FindingDecision::Defer,
             FindingDecision::NoAction,
+            FindingDecision::WontFix,
         ] {
             // Exhaustive, so a new variant fails to compile until listed above.
             match decision {
-                FindingDecision::FixNow | FindingDecision::Defer | FindingDecision::NoAction => {}
+                FindingDecision::FixNow
+                | FindingDecision::Defer
+                | FindingDecision::NoAction
+                | FindingDecision::WontFix => {}
             }
             assert!(
                 FindingDecision::ALL.contains(&decision),

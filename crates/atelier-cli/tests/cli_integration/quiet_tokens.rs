@@ -257,7 +257,7 @@ fn every_command_prints_its_documented_quiet_token() {
     assert!(listed.lines().any(|id| id == owner), "{listed}");
     // Allowed names only, counting one that needs only `--reason`.
     let transitions = q.ok("issue transition", &[&owner]);
-    assert_eq!(transitions, "defer\nstart\nsupersede\n");
+    assert_eq!(transitions, "decline\ndefer\nstart\nsupersede\n");
     let blocked = q.ok("issue transition", &[&other]);
     assert!(!blocked.lines().any(|name| name == "start"), "{blocked}");
 
@@ -427,6 +427,23 @@ fn every_command_prints_its_documented_quiet_token() {
             "Fine as is",
         ],
     );
+    // Deferring in one step prints the follow-ups it filed (atelier-stnv),
+    // and with --dry-run the findings it would defer.
+    let deferred = review(
+        &mut q,
+        "review finding",
+        &[&owner, who[0], who[1], "--recommendation", "defer", "Later"],
+    );
+    assert_eq!(
+        q.ok("review defer", &[&owner, who[0], who[1], "--dry-run"]),
+        format!("{deferred}\n")
+    );
+    let follow_up = review(&mut q, "review defer", &[&owner, who[0], who[1]]);
+    assert!(
+        read_canonical_record(dir, "issues", &follow_up).contains(&deferred),
+        "{follow_up}"
+    );
+    unknown(q.refused("review defer", &["zzzz", who[0], who[1]]));
     review(
         &mut q,
         "review trivial",
@@ -440,7 +457,7 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_eq!(disposed, finding);
     let events = q.ok("review list", &[]);
     assert_ids(&events);
-    assert_eq!(events.lines().count(), 4, "{events}");
+    assert_eq!(events.lines().count(), 5, "{events}");
     assert_eq!(q.ok("review list", &[&owner]), events);
     assert_eq!(
         q.ok("review show", &[&account]),

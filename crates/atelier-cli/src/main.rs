@@ -116,11 +116,18 @@ enum ReviewCommands {
     Record(ReviewArgs),
     /// Record an independent approval of the work at the pinned commit
     Approve(ReviewArgs),
-    /// Record a finding; an approval after its fix resolves a fix_now finding, and defer or no_action needs a disposition before merge
+    /// Record a finding; an approval after its fix resolves a fix_now finding, and defer, no_action or wont_fix needs a disposition before merge
+    ///
+    /// Recommend fix_now to fix it on this branch, defer to fix it later in a
+    /// follow-up issue, no_action when the finding is wrong (mistaken, a
+    /// duplicate, or without consequence), and wont_fix when it is real but
+    /// not worth fixing.
     Finding {
         #[command(flatten)]
         args: ReviewArgs,
-        /// Recommended decision
+        /// Recommended decision: fix_now, defer (later, in a follow-up),
+        /// no_action (the finding is wrong) or wont_fix (real, not worth
+        /// fixing)
         #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
         recommendation: FindingDecision,
     },
@@ -135,17 +142,22 @@ enum ReviewCommands {
     Trivial(TrivialArgs),
     /// Set the decision on a finding, replacing any earlier one
     ///
-    /// A finding deferred or dismissed needs one before merge; a fix_now
-    /// finding needs none, since the approval after its fix resolves it. The
-    /// disposition is a field of the finding, with who set it and the commit
-    /// it was set at; Git keeps earlier ones in the finding file's history.
+    /// A finding recommended defer, no_action or wont_fix needs one before
+    /// merge; a fix_now finding needs none, since the approval after its fix
+    /// resolves it. defer names the follow-up issue that fixes it later;
+    /// no_action means the finding is wrong (mistaken, a duplicate, or
+    /// without consequence); wont_fix means it is real but not worth fixing,
+    /// and needs no follow-up. The disposition is a field of the finding,
+    /// with who set it and the commit it was set at; Git keeps earlier ones
+    /// in the finding file's history.
     Disposition {
         /// The finding's review event ID
         finding: String,
         /// Who decides, recorded with the decision
         #[arg(long)]
         identity: String,
-        /// The decision on the finding
+        /// The decision on the finding: defer (with --follow-up), no_action
+        /// (the finding is wrong) or wont_fix (real, not worth fixing)
         #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
         decision: FindingDecision,
         /// Only for an older Atelier's fix_now disposition, which named the commit (a full or unique short ID) that resolved the finding; a fix_now finding now needs no disposition
@@ -156,6 +168,25 @@ enum ReviewCommands {
         follow_up: Option<String>,
         /// Why the decision was taken
         summary: String,
+        #[command(flatten)]
+        record_commit: RecordCommitArgs,
+    },
+    /// Defer every finding on an item recommended defer with no decision yet
+    ///
+    /// Each one gets a backlog follow-up discovered from it and a defer
+    /// disposition naming it. The follow-ups go under one parent per item,
+    /// labelled deferred-findings and discovered from the item; the first
+    /// run creates it and later runs reuse it while it is open. A finding
+    /// already decided is left alone, so a second run files nothing twice.
+    Defer {
+        /// The item whose findings to defer, with its children's
+        id: String,
+        /// Who decides, recorded with each disposition
+        #[arg(long)]
+        identity: String,
+        /// List what would be deferred and filed, and write nothing
+        #[arg(long, conflicts_with_all = ["commit_records", "stage_records"])]
+        dry_run: bool,
         #[command(flatten)]
         record_commit: RecordCommitArgs,
     },
@@ -1109,6 +1140,16 @@ fn run() -> Result<()> {
                     )?;
                     group.finish("disposition", quiet)
                 }
+                ReviewCommands::Defer {
+                    id,
+                    identity,
+                    dry_run,
+                    record_commit,
+                } => {
+                    let group = RecordCommit::begin(record_commit)?;
+                    commands::review_defer::run(&id, &identity, dry_run, quiet)?;
+                    group.finish("defer", quiet)
+                }
                 ReviewCommands::Request { id, identity, from } => commands::review_request::run(
                     id.as_deref(),
                     identity.as_deref(),
@@ -1367,7 +1408,8 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
                 | ReviewCommands::Approve(_)
                 | ReviewCommands::Finding { .. }
                 | ReviewCommands::Trivial(_)
-                | ReviewCommands::Disposition { .. },
+                | ReviewCommands::Disposition { .. }
+                | ReviewCommands::Defer { dry_run: false, .. },
         } => CanonicalTransactionMode::Exclusive,
         // Shell checks may run Atelier read commands; revalidate snapshots
         // rather than hold a lock across arbitrary child execution. Status
@@ -1614,7 +1656,7 @@ mod help_tests {
                     "i",
                     "--recommendation",
                 ],
-                "fix_now, defer, no_action",
+                "fix_now, defer, no_action, wont_fix",
             ),
             (
                 &[
@@ -1626,7 +1668,7 @@ mod help_tests {
                     "i",
                     "--decision",
                 ],
-                "fix_now, defer, no_action",
+                "fix_now, defer, no_action, wont_fix",
             ),
             (
                 &["evidence", "record", "--kind", "test", "s", "--result"],
