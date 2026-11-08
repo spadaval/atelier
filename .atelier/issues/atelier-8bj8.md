@@ -21,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add setup --link so the live skill can be edited from a checkout of this repository"
-updated_at: "2026-11-08T06:09:55.757347156+00:00"
+updated_at: "2026-11-08T06:10:23.663593717+00:00"
 ---
 
 ## Goal
@@ -56,6 +56,7 @@ Strategy: docs/strategies/agent-factory-in-atelier.md. Facts from testing `skill
   Rejected: enable serde_json preserve_order for the workspace
 - 2026-11-08 [decision] A lock file that is not valid JSON counts as listing nothing and is not rewritten.
   Reason: skills 1.7.6 reads an unparseable lock the same way (createEmptyLockFile), so update will not touch the links, and a real directory in a path is refused as untracked rather than deleted.
+- 2026-11-08 [handoff] Implemented at 226f273c; see ## Report. Independent review outstanding.
 
 ## Report
 
