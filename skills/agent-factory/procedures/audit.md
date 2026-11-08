@@ -28,11 +28,14 @@ test](../references/atelier.md#records).
 ## Session Retrospectives
 
 When the scope is an earlier agent run, start from its raw transcripts; memory
-and summaries are hypotheses to check. Follow subagent and thread links back to
-the root session and judge the run against the root task; a child session alone
-answers only a question about that child. Before stating a failure, recovery or
-handoff claim, read the transcript around it: a child's report is a claim, and
-a gap between logged events does not prove idleness. Report what went well and
-should be kept, what went wrong, and what to change in code, tooling, guidance
-or skills, each citing a session and the event behind it; changes worth doing
-become findings as above.
+and summaries are hypotheses to check. Follow subagent spawns back to the root
+session and judge the run against the root task; a child session alone answers
+only a question about that child. A created or forked thread is a related peer,
+not a parent, so choose the primary thread from the task. Before stating a
+failure, recovery or handoff claim, read the transcript around it: a child's
+report or a detected signal is a claim, and a gap between logged events does
+not prove idleness. Take Git history only from what the transcript recorded,
+never from the repository's current state. Report what went well and should be
+kept, what went wrong, and what to change in code, tooling, guidance or skills,
+each citing a session and the event behind it; changes worth doing become
+findings as above.
