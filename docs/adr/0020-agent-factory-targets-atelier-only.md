@@ -8,7 +8,11 @@ Builds on [ADR 0019](0019-verified-repo-native-tracker.md). Decision 3 amended
 by [ADR 0022](0022-status-orients-and-output-is-dense.md): session context
 comes from `status`. Decision 2 superseded by
 [ADR 0023](0023-agent-factory-is-not-vendored.md): this repository no longer
-vendors the skill.
+vendors the skill. Decision 1's plan-file fallback and Decision 3's
+cross-repository sync rule superseded by
+[ADR 0029](0029-agent-factory-lives-in-atelier.md): the skill lives in this
+repository and steps aside outside Atelier. Decision 3's boundary (the skill
+maps concepts, Atelier owns syntax) stands.
 
 ## Context
 
