@@ -75,6 +75,12 @@ rebuilt model.
 - Installed CLI: `atelier` (`cargo install --path crates/atelier-cli --locked`
   in this checkout; elsewhere the release installer in `README.md`)
 - Local debug binary: `target/debug/atelier`
+- Cross-repository smoke test: `scripts/smoke-repos.sh` builds this tree and
+  runs read-only commands with it and with the installed `atelier` in scratch
+  clones of every local Atelier repository, failing when the new binary
+  refuses where the installed one does not. Run it before requesting review
+  of a change to atelier's commands or records, and before installing a new
+  binary.
 - Formatting: `cargo fmt -- --check`
 - Rust tests: `cargo nextest run`
 - Failure-path tests: `cargo nextest run --features test-hooks`
