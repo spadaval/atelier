@@ -40,7 +40,7 @@ Move the skill and its evals into this repository unchanged, keeping their git h
 - [x] The harness runs from here: `python3 evals/agent-factory/harness/run.py` finds the repository root and stages `skills/agent-factory` with `git archive`, `harness/test_run.py` passes, and the canary plus one scenario (`trivial-typo`, skill arm, one run) produce valid, graded results, recorded under `evals/agent-factory/results/`.
 - [x] Every link to the old location points at the new one: `AGENTS.md` (Process Sources), `docs/index.md`, `docs/product/*.md`, `docs/architecture/**/*.md`, live strategies, the skill's own `references/atelier.md` and `maintainers/`, and the eval README. `grep -rn 'spadaval/.agents\|agents-skills' --exclude-dir=.atelier --exclude-dir=target .` finds only closed records, superseded or completed strategies, ADRs 0020 and 0023, and history notes that describe the old location.
 - [x] spadaval/.agents gains a README (it has none) and a first line in `skills/agent-factory/maintainers/skill-evaluation.md`, both saying, in a commit on a branch there merged with this item (its live checkout never changes branch), that Agent Factory moved to spadaval/atelier and the copy there is frozen until `atelier-6oxt` deletes it. Pushing waits for Sumeet.
-- [ ] CI passes on the pull request, and nothing under `crates/` reads files under `skills/` or `evals/`.
+- [x] CI passes on the pull request, and nothing under `crates/` reads files under `skills/` or `evals/`.
 
 ## Scope
 
@@ -61,7 +61,7 @@ Waits on `atelier-l58v`, which edits the skill in spadaval/.agents; the skill mu
 
 ## Report
 
-The skill and its evals are in this repository with their history, imported from spadaval/.agents `c75a9b1` (the merge of atelier-l58v). `diff -r` of `skills/agent-factory` against a `git archive` of `c75a9b1` is empty, and `evals/agent-factory` differs only by the new `results/2026-11-08-moved-to-atelier.md`. `git log --follow -- skills/agent-factory/SKILL.md` lists 34 spadaval/.agents commits. `harness/test_run.py` passes (4 tests), and the Haiku canary plus one `trivial-typo` skill-arm Opus run pass, read by hand. The item's grep finds only ADRs 0020, 0023 and 0029, the completed `lighter-workflow` and `simpler-lifecycle` strategies, this mission's strategy (which plans the cleanup of spadaval/.agents), the closeout's history note and the new results entry. spadaval/.agents has a README and a first-line notice on branch `atelier-dkul` (`84102d9`), unmerged and unpushed. `cargo fmt -- --check`, `git diff --check master...HEAD`, `atelier land` and `atelier doctor` pass. The CI line waits for the pull request.
+The skill and its evals are in this repository with their history, imported from spadaval/.agents `c75a9b1` (the merge of atelier-l58v). `diff -r` of `skills/agent-factory` against a `git archive` of `c75a9b1` is empty, and `evals/agent-factory` differs only by the new `results/2026-11-08-moved-to-atelier.md`. `git log --follow -- skills/agent-factory/SKILL.md` lists 34 spadaval/.agents commits. `harness/test_run.py` passes (4 tests), and the Haiku canary plus one `trivial-typo` skill-arm Opus run pass, read by hand. The item's grep finds only ADRs 0020, 0023 and 0029, the completed `lighter-workflow` and `simpler-lifecycle` strategies, this mission's strategy (which plans the cleanup of spadaval/.agents), the closeout's history note and the new results entry. spadaval/.agents has a README and a first-line notice on branch `atelier-dkul` (`84102d9`), unmerged and unpushed. `cargo fmt -- --check`, `git diff --check master...HEAD`, `atelier land` and `atelier doctor` pass. CI passed on PR #54 at `0fb7f857` (all 7 checks).
 
 ### Decisions
 
@@ -77,6 +77,6 @@ The skill and its evals are in this repository with their history, imported from
 
 ### Open items
 
-- The CI line stays open until the pull request's run passes.
+- CI passed on PR #54 at `0fb7f857`.
 - spadaval/.agents `atelier-dkul` (`84102d9`) merges with this item; pushing waits for Sumeet.
 - This host's installed skill still links `~/projects/agents-skills` (`atelier doctor` says so); atelier-bxs7 relinks it.
