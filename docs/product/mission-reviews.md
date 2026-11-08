@@ -47,8 +47,11 @@ it stands. Both forms follow the same order:
   as `fast` counts as named only when written as code.
 - **Validation:** how the mission was checked. Item review: how many
   delivered items were approved, how many were waived as trivial, the
-  findings on delivered items by their disposition, and the items
-  reviewed without approval or not reviewed at all. Each validation run: the
+  findings on delivered items by their disposition (fixed, deferred, left as
+  is, won't fix, awaiting a decision), and the items
+  reviewed without approval or not reviewed at all. A declined item merged
+  nothing, so it is not asked for review; the timeline shows it as declined,
+  with its Report, and the plan counts it done (atelier-stnv). Each validation run: the
   receipts one producer recorded against one commit, with each receipt's
   criteria, results and summary, and, while one of its receipts still decides
   a criterion, the code commits since and the work delivered after it. Then

@@ -345,7 +345,7 @@ pub(crate) fn check_base_commits(
             reviews.unreviewed_claim(repo, &mut read, policy, commit, tip, &upstream, &changed)?;
         if let Some(id) = unreviewed_claim {
             bail!(
-                "land_base_done_claim: commit {} on {base} marks {id} done outside review; work is done when `atelier merge` integrates it. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and merge it from its work branch. To retire work that will not be done, supersede it.",
+                "land_base_done_claim: commit {} on {base} marks {id} done outside review; work is done when `atelier merge` integrates it. Undo it on {base} with `git revert {}`, or edit {id} back to its earlier status and commit, then run `atelier start {id}` and merge it from its work branch. To close work that will not be done, supersede it if it is obsolete or decline it.",
                 &commit[..8.min(commit.len())],
                 &commit[..8.min(commit.len())],
             );
@@ -637,7 +637,7 @@ fn base_done_claims(
         };
         if issue_type == "mission"
             || policy.done_on_base(&issue_type)
-            || status == "superseded"
+            || atelier_core::closes_undone(&status)
             || policy.status_category(&status) != Some("done")
         {
             continue;
@@ -1253,7 +1253,7 @@ fn branch_merge(repo: &Path, tip: &str, base_head: &str) -> Result<BranchMerge> 
 /// committed records: approval as `merge`'s `review.current` judges it, and,
 /// as a note that gates nothing (atelier-md0v), the failing receipt, if any,
 /// on an item in the owner's scope that is done or that merge marks done.
-/// Superseded work is skipped, as `merge` skips it.
+/// Superseded and declined work is skipped, as `merge` skips it.
 fn readiness(
     repo: &Path,
     index: &RecordIndex,
@@ -1267,7 +1267,7 @@ fn readiness(
     let mut failing = None;
     for id in review_gate::scope(index, owner)? {
         let issue = index.require_issue(&id)?;
-        if issue.status != "superseded"
+        if !atelier_core::closes_undone(&issue.status)
             && (policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
                 || policy.merge_done_status(&issue.issue_type).is_some())
         {

@@ -453,7 +453,7 @@ fn every_invalid_value_takes_the_shared_form_and_exits_2() {
         ),
         (
             vec!["issue", "transition", &target, "nope"],
-            "Invalid transition 'nope'. Valid values: defer, start, supersede. These are \
+            "Invalid transition 'nope'. Valid values: decline, defer, start, supersede. These are \
              the transitions out of status todo."
                 .into(),
         ),

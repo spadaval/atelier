@@ -24,9 +24,11 @@ project configuration version 1; these are distinct contracts. Review events
 use `atelier.review` version 2 when they are about an issue (version 1 records,
 with separate disposition events, are still read), and version 3 when they
 name a branch no issue owns ([ADR 0028](../adr/0028-simpler-lifecycle.md),
-decision 6). One version 3 record makes an older binary refuse the
-repository's records as needing a newer Atelier, so a repository whose CI pins
-an older binary does not use the light path until the pin moves. Only issue, evidence and review are record or
+decision 6). A finding that recommends or decides `wont_fix` is written at
+version 4, about an issue or a branch (atelier-xlxn). One record at a version
+an older binary does not read makes it refuse the repository's records as
+needing a newer Atelier, so a repository whose CI pins an older binary does
+not use the light path or `wont_fix` until the pin moves. Only issue, evidence and review are record or
 relationship target kinds. `workflow_validator` names mechanical workflow gate
 nodes; it is not a persistent record or link target kind.
 

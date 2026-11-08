@@ -2190,3 +2190,83 @@ fn a_child_done_when_edit_shown_under_its_parent_names_the_child() {
         "{page}"
     );
 }
+
+/// Declined work is finished without merging, under its own status
+/// (atelier-stnv): the timeline says it was declined, with its Report; it is
+/// not dropped as superseded work is, it counts as done in the plan, and
+/// Validation asks no review of it, since it merged nothing.
+#[test]
+fn declined_work_is_finished_under_its_own_status_not_dropped() {
+    let dir = tempdir().unwrap();
+    let dir = dir.path();
+    init_atelier(dir);
+    init_git_repo(dir);
+    let mission = ok(
+        dir,
+        &[
+            "issue",
+            "create",
+            "-q",
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nO",
+            "Mission",
+        ],
+    )
+    .trim()
+    .to_string();
+    let declined = item(dir, "Declined");
+    let retired = item(dir, "Retired");
+    for id in [&declined, &retired] {
+        ok(dir, &["issue", "link", "-q", id, &mission]);
+    }
+    commit_all(dir, "plan");
+    ok(dir, &["issue", "transition", &mission, "ready"]);
+    ok(dir, &["issue", "transition", &mission, "start"]);
+    commit_all(dir, "start");
+    ok(
+        dir,
+        &[
+            "issue",
+            "transition",
+            &declined,
+            "decline",
+            "--reason",
+            "Real, but it costs more than it buys.",
+        ],
+    );
+    ok(
+        dir,
+        &[
+            "issue",
+            "transition",
+            &retired,
+            "supersede",
+            "--reason",
+            "Obsolete.",
+        ],
+    );
+    commit_all(dir, "decline and supersede");
+    let page = ok(dir, &["debrief", &mission]);
+    let did = section(&page, "What We Did");
+    assert!(
+        did.contains(&format!("declined {declined} task ✓ declined Declined"))
+            && did.contains("  Outcome: Real, but it costs more than it buys.")
+            && !did.contains(&format!("delivered {declined}"))
+            && !did.contains("No review recorded")
+            && did.contains(&format!("dropped {retired}")),
+        "{page}"
+    );
+    let plan = section(&page, "Plan vs Actual");
+    assert!(
+        plan.contains("Planned: 1 of 1 item done")
+            && plan.contains(&format!("Dropped: {retired}"))
+            && !plan.contains(&declined),
+        "{page}"
+    );
+    assert!(
+        !page.contains(&format!("No review recorded: {declined}")),
+        "{page}"
+    );
+}

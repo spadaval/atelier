@@ -1314,11 +1314,12 @@ fn evaluate_scope(
         // records with those marks and refuse only an open blocker
         // (atelier-jnrh).
         let mut open = BTreeSet::new();
-        // A superseded child's blockers do not hold its parent (atelier-lq42).
+        // A superseded or declined child's blockers do not hold its parent
+        // (atelier-lq42, atelier-stnv).
         for id in ids.iter().filter(|id| {
             index
                 .get_issue(id)
-                .is_none_or(|issue| issue.status != "superseded")
+                .is_none_or(|issue| !atelier_core::closes_undone(&issue.status))
         }) {
             open.extend(
                 crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids(),
@@ -1408,7 +1409,7 @@ fn evaluate_scope(
             Settlement::Decided => true,
             Settlement::Undecided => {
                 unresolved.push(format!(
-                    "{finding_id} needs a decision: a finding recommended defer or no_action records one"
+                    "{finding_id} needs a decision: a finding recommended defer, no_action or wont_fix records one"
                 ));
                 gaps.push(Gap::Undisposed(finding_id));
                 continue;
@@ -1541,11 +1542,12 @@ fn completion_claims(
     let mut nodes = Vec::new();
     for id in ids {
         let issue = index.require_issue(id)?;
-        // Superseded work will not happen, so open blockers, including those
-        // inherited from a parent, do not hold its retirement; the supersede
-        // transition checks none either (atelier-lq42).
+        // Superseded or declined work will not happen, so open blockers,
+        // including those inherited from a parent, do not hold its retirement;
+        // the supersede and decline transitions check none either
+        // (atelier-lq42, atelier-stnv).
         if policy.issue_status_is_terminal(&issue.issue_type, &issue.status)?
-            && issue.status != "superseded"
+            && !atelier_core::closes_undone(&issue.status)
         {
             let blockers =
                 crate::objective_graph::dependency_closure(index, policy, id)?.blocking_ids();

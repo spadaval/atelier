@@ -340,16 +340,17 @@ fn change_text(change: &Change) -> String {
 }
 
 /// How review went; `None` for a decision record, which is decided rather
-/// than code-reviewed.
+/// than code-reviewed, and for declined work nobody reviewed, which merged
+/// nothing (atelier-stnv).
 fn review_line(view: &Debrief, entry: &WorkEntry) -> Option<String> {
-    if view
-        .refs
-        .get(&entry.id)
-        .is_some_and(|issue| issue.issue_type == "decision")
-    {
+    let issue = view.refs.get(&entry.id);
+    if issue.is_some_and(|issue| issue.issue_type == "decision") {
         return None;
     }
     if !entry.review.recorded {
+        if issue.is_some_and(|issue| issue.status == "declined") {
+            return None;
+        }
         return Some("No review recorded.".into());
     }
     Some(review_summary(&entry.review))
@@ -383,6 +384,7 @@ fn finding_counts(review: &ReviewSummary) -> Option<String> {
         (review.fixed, "fixed"),
         (review.deferred, "deferred"),
         (review.no_action, "left as is"),
+        (review.wont_fix, "won't fix"),
         (review.undisposed, "awaiting a decision"),
     ]
     .iter()
@@ -933,7 +935,13 @@ fn delivered_lines(
             .unwrap_or_else(|| id.to_string())
     };
     let mut lines = Vec::new();
-    let mut head = format!("{when} delivered {}", item(&entry.id));
+    // Declined work is finished without merging, so it is not delivered
+    // (atelier-stnv).
+    let verb = match view.refs.get(&entry.id) {
+        Some(issue) if issue.status == "declined" => "declined",
+        _ => "delivered",
+    };
+    let mut head = format!("{when} {verb} {}", item(&entry.id));
     if !entry.criteria.is_empty() {
         head.push_str(&format!(" | {}", entry.criteria.join(", ")));
     }
@@ -2463,4 +2471,23 @@ fn render_brief_html(
             next.to_lowercase(),
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A won't-fix finding is counted apart from no_action (atelier-stnv).
+    #[test]
+    fn finding_counts_name_wont_fix_apart_from_no_action() {
+        let review = ReviewSummary {
+            no_action: 1,
+            wont_fix: 2,
+            ..ReviewSummary::default()
+        };
+        assert_eq!(
+            finding_counts(&review).as_deref(),
+            Some("3 findings: 1 left as is, 2 won't fix")
+        );
+    }
 }

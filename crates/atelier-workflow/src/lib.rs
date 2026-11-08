@@ -50,6 +50,8 @@ statuses:
     category: done
   superseded:
     category: done
+  declined:
+    category: done
 workflows:
   objective:
     applies_to:
@@ -93,6 +95,7 @@ workflows:
     done_statuses:
     - done
     - superseded
+    - declined
     transitions:
       plan:
         from: [backlog]
@@ -113,6 +116,11 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire work that is no longer needed. Work is done when atelier merge integrates it.
+      decline:
+        from: [backlog, todo, in_progress]
+        to: declined
+        required_fields: [close_reason]
+        description: Decline real work that will not be done; the Report says why. It needs no branch, review or merge.
   decision:
     applies_to:
     - decision
@@ -143,6 +151,7 @@ workflows:
     done_statuses:
     - done
     - superseded
+    - declined
     transitions:
       plan:
         from: [backlog]
@@ -164,6 +173,11 @@ workflows:
         to: superseded
         required_fields: [close_reason]
         description: Retire it once it is no longer needed.
+      decline:
+        from: [backlog, todo]
+        to: declined
+        required_fields: [close_reason]
+        description: Decline an item that will not be done; the Report says why.
 "#;
 
 pub const WORKFLOW_POLICY_PATH: &str = ".atelier/workflow.yaml";
@@ -1916,6 +1930,21 @@ mod tests {
             work["supersede"].required_fields,
             vec!["close_reason".to_string()]
         );
+        // Declined is terminal work that will not be done (atelier-stnv):
+        // a done-category status reached from any open work status, with a
+        // Report, and never what merge marks.
+        assert_eq!(policy.status_category("declined"), Some("done"));
+        assert_eq!(
+            (work["decline"].from.clone(), work["decline"].to.as_str()),
+            (
+                vec!["backlog".into(), "todo".into(), "in_progress".into()],
+                "declined"
+            )
+        );
+        assert_eq!(
+            work["decline"].required_fields,
+            vec!["close_reason".to_string()]
+        );
         assert_eq!(policy.merge_done_status("task"), Some("done"));
         assert_eq!(policy.merge_done_status("mission"), None);
         assert_eq!(policy.merge_done_status("decision"), None);
@@ -1926,11 +1955,12 @@ mod tests {
         let on_base = &policy.workflows["on_base"].transitions;
         let mut names = on_base.keys().map(String::as_str).collect::<Vec<_>>();
         names.sort();
-        assert_eq!(names, vec!["defer", "done", "plan", "supersede"]);
+        assert_eq!(names, vec!["decline", "defer", "done", "plan", "supersede"]);
         for (name, from, to) in [
             ("plan", vec!["backlog"], "todo"),
             ("defer", vec!["todo"], "backlog"),
             ("supersede", vec!["backlog", "todo"], "superseded"),
+            ("decline", vec!["backlog", "todo"], "declined"),
         ] {
             assert_eq!(
                 (on_base[name].from.clone(), on_base[name].to.as_str()),
@@ -1986,6 +2016,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 "backlog",
+                "declined",
                 "done",
                 "draft",
                 "in_progress",

@@ -893,6 +893,73 @@ fn defer_and_no_action_findings_need_a_decision_by_any_identity() {
     ok(fixture.path(), &["merge", &fixture.id, "--check"]);
 }
 
+/// A won't-fix decision records that a real finding will not be fixed
+/// (atelier-stnv): it needs a reason and no follow-up, any identity may
+/// record it, it settles the finding for merge as defer and no_action do,
+/// and the review views show it as wont_fix, apart from no_action.
+#[test]
+fn merge_passes_with_a_wont_fix_disposition() {
+    let fixture = Fixture::new();
+    let finding = ok(
+        fixture.path(),
+        &[
+            "-q",
+            "review",
+            "finding",
+            &fixture.id,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "defer",
+            "low: the error message could name the file",
+        ],
+    );
+    commit(fixture.path(), "finding record");
+    fixture.approval("Reviewer");
+    fixture.refusal("findings.disposed");
+    let (passed, output) = cli(
+        fixture.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Author",
+            "--decision",
+            "wont_fix",
+            " ",
+        ],
+    );
+    assert!(
+        !passed && output.contains("requires an explicit identity and reason"),
+        "{output}"
+    );
+    ok(
+        fixture.path(),
+        &[
+            "review",
+            "disposition",
+            &finding,
+            "--identity",
+            "Author",
+            "--decision",
+            "wont_fix",
+            "Real, but nobody reads that message",
+        ],
+    );
+    commit(fixture.path(), "won't fix");
+    let list = ok(fixture.path(), &["review", "list", &fixture.id]);
+    assert!(
+        list.contains(&format!("✓ {finding} defer → wont_fix by Author @")),
+        "{list}"
+    );
+    let show = ok(fixture.path(), &["review", "show", &finding]);
+    assert!(show.contains("Disposition: wont_fix by Author"), "{show}");
+    ok(fixture.path(), &["merge", &fixture.id, "--check"]);
+    ok(fixture.path(), &["merge", &fixture.id]);
+    ok(fixture.path(), &["doctor"]);
+}
+
 /// The merge base is the `base_branch` of the branch's committed policy,
 /// checked against that base's own policy; no recorded base is read
 /// (atelier-md0v).
@@ -4198,7 +4265,7 @@ fn merge_check_names_each_finding_with_the_command_that_settles_it() {
     assert_eq!(
         out,
         format!(
-            "⚠ {id} findings.disposed: {named} no_action finding \"Name could be better\" needs a decision: defer it to a follow-up, or no_action, or fix it and record fix_now. Next: atelier review disposition {named} --decision no_action --identity <identity> \"…\"\n\
+            "⚠ {id} findings.disposed: {named} no_action finding \"Name could be better\" needs a decision: defer it to a follow-up, wont_fix if it is real but not worth fixing, no_action if it is wrong, or fix it and record fix_now. Next: atelier review disposition {named} --decision no_action --identity <identity> \"…\"\n\
              ⚠ {id} findings.disposed: 1 fix_now finding came after the current approval; it needs an approval after its fix. Next: atelier review request {id}\n\
              ✓ 4 checks pass (blockers.none_open, blockers.transitive_none_open, review.current via {approval}, claims.reviewed)\n\
              ✓ 1 done claim holds\n\
