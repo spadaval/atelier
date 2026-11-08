@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Let Agent Factory say no: merge verdicts, won't-fix, stop signals and backlog sweeps"
-updated_at: "2026-11-08T22:18:18.400348365+00:00"
+updated_at: "2026-11-08T22:19:38.965312791+00:00"
 ---
 
 ## Goal
@@ -38,7 +38,7 @@ Change the agent-factory skill (spadaval/.agents, `skills/agent-factory`) so tha
 - [x] references/atelier.md covers won't-fix, declined and the one-step defer as the binary's help describes them (installed from the sibling item before evals run).
 - [x] The agent-facing skill stays within atelier-qj9d's limits, counted by its rule (a role's read path is SKILL.md, its procedure and every file the procedure links, counted whole, plus the Atelier reference for roles that run `atelier`): at most 1,000 lines, SKILL.md at most 100, each role's read path at most 300 and the orchestrator's 450. The Report gives the counts before and after; an overrun needs a reason there.
 - [x] New eval scenarios in `evals/agent-factory/scenarios/` built from the audit, each with setup, prompt and grader: a rare-edge chain modelled on astromech-of26 (a low-severity finding the reviewer called rare and deferred; pass when it is won't-fix or deferred, not fixed); a costly hardening diff modelled on atelier-hwxm (a large fix for a low-severity finding on a path planned for deletion; pass when review returns shrink or reject); and two controls, a real cross-repository regression modelled on atelier-2ygf and a plan defect modelled on lor-0rnt (pass when each is found and recommended fix now).
-- [ ] All eight scenarios (the four new and the four existing) run at the current skill (main) and at the new one, 3 runs each with Opus on the skill arm, with the same installed atelier binary built with atelier-stnv. Every run is read by hand. Results are recorded in `evals/agent-factory/results/`. The new skill passes more runs than main on the rare-edge chain and the costly hardening scenarios, and no fewer on every other scenario. If main already passes one of those two, it shows nothing: tighten that scenario's pressure until main fails, and rerun both refs.
+- [ ] All eight scenarios (the four new and the four existing) run at the current skill (main) and at the new one, 3 runs each with Opus on the skill arm, with the same installed atelier binary built with atelier-stnv. Every run is read by hand. Results are recorded in `evals/agent-factory/results/`. The new skill passes more runs than main on the costly hardening scenario, and no fewer on every other scenario. The rare-edge chain is recorded as inconclusive: its fixture carries unplanted defects that every run fixes or declines over, and atelier-pju0 rebuilds it.
 
 ## Scope
 
@@ -65,6 +65,10 @@ Agreed with Sumeet in conversation on 2026-11-08 after an audit of review record
   Reason: Sumeet's direction on 2026-11-08: the gardener tends the conditions agents work in rather than owning the product, and gardening takes his taste, so it needs a triage flow this item does not cover. Neither file had an eval here; the backlog sweep is the product side the draft gardener carried, and it belongs with the planner.
   Rejected: Keep the gardener here with its backlog sweep: it would merge untested and mix product ownership into maintenance.
 - 2026-11-08 [handoff] Review fixes for atelier-fq99, atelier-0avz and atelier-tv8e: skill branch atelier-l58v at bd98a83, not pushed. The rare-edge-chain rerun with the fixture corrected gave main 2/3 and new 2/3, so it stopped and Done when's last line is unticked for the plan owner's decision; the corrected fixture's catch_up has a defect of its own (results file). Fix re-review outstanding. Details in the Report.
+- 2026-11-08 [decision] Narrow the last Done when line: the rare-edge chain is recorded as inconclusive, and atelier-pju0 rebuilds its fixture; the bar stays more passes than main on costly-hardening and no fewer elsewhere.
+  Reason: Review finding atelier-fq99 showed the fixture's fix carried an unplanted regression that every run found, so the first matrix compared reactions to it, not to the deferred finding. The corrected fixture (23a1ed2) tied 2/3 against 2/3 and drew a new unplanted defect plus further cross-log stamp cases in both arms. That is this item's own stop signal (a fix drawing findings on its own changes), and costly-hardening (main 0/3, new 3/3) still shows the verdict working. The orchestrator decided this on 2026-11-08; Sumeet may overrule it.
+  Rejected: Commit the candidate second fixture correction and rerun both arms: a fourth version of a fixture that keeps drawing findings, at six more Opus runs, with no reason to expect it to be the last.
+  Rejected: Ask Sumeet before merging: the bar is this item's, not the mission strategy's, and the orchestrator owns the plan within the strategy.
 
 ## Report
 
