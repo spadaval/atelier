@@ -19,4 +19,4 @@ keeping competing contracts alive.
 
 The governing sources are [Product Intent](../../PRODUCT_INTENT.md),
 [ADR 0019](../adr/0019-verified-repo-native-tracker.md), and
-[Agent Factory](https://github.com/spadaval/.agents/blob/main/skills/agent-factory/SKILL.md).
+[Agent Factory](../../skills/agent-factory/SKILL.md).
