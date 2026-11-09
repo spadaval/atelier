@@ -22,5 +22,9 @@ Crate-local unit tests cover their own types and rules. Fuzz targets remain in
 [quality standards](quality/standards.md) for the supported check commands.
 
 There are no provider, review-room, SQLite cache, transition-action, import,
-export, or telemetry subsystems. Historical root `src/` paths in dated audits
-refer to the earlier monolithic layout.
+export, or telemetry subsystems.
+[ADR 0030](../adr/0030-a-read-only-site-a-session-database-and-t3-code.md)
+allows two additions not yet in the workspace: `atelier serve`, a read-only site, and
+a host-wide session database recording which session ran each command.
+Historical root `src/` paths in dated audits refer to the earlier monolithic
+layout.

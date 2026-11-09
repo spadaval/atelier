@@ -3,6 +3,8 @@
 Atelier is a Rust workspace that parses repository records directly and applies
 invariant checks before mutation. [ADR 0019](../adr/0019-verified-repo-native-tracker.md)
 is the governing architecture decision.
+[ADR 0030](../adr/0030-a-read-only-site-a-session-database-and-t3-code.md)
+allows a read-only site and a session database beside the records.
 
 - [Markdown record store](markdown-first-record-store.md): durable state,
   direct reads, mutation boundaries, and Git authority.

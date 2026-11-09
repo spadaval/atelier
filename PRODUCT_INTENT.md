@@ -24,7 +24,11 @@ mechanical guards at the point of action. The governing decision is
   that only patches another rule's edge case is a reason to remove the first
   rule.
 - Keep one durable source of truth: tracked records under `.atelier/`.
-- Parse those records directly on each command. No database or query cache.
+- Parse those records directly on each command. No database or query cache
+  of records: the one database, the host-wide session database, holds only
+  attribution Git never held, such as which thread, harness, model and role
+  ran each command
+  ([ADR 0030](docs/adr/0030-a-read-only-site-a-session-database-and-t3-code.md)).
 - Guard valid records, dependency closure, traceable active work, a current
   independent approval of the code, visible trivial exemptions, and a decision
   for each deferred or dismissed finding; the approval after a `fix_now`
@@ -66,10 +70,15 @@ mechanical guards at the point of action. The governing decision is
   merge and leave no decision on it; that cannot let unreviewed code merge,
   since approvals cannot be edited and one still has to cover the code
   ([ADR 0028](docs/adr/0028-simpler-lifecycle.md) decision 4).
-- Prefer concise command output and inspectable Markdown to a second UI or an
-  external review service. A static HTML review page, such as `debrief
-  --html` writes, is a document a human reads, not a second UI: it holds no
-  controls, and decisions are recorded with ordinary commands.
+- Agents read concise command output and inspectable Markdown; there is no
+  external review service. Humans read each mission's brief and debrief, and
+  each repository's board, on the site `atelier serve` publishes for every
+  Atelier repository on the host, built from the same views the CLI prints
+  ([ADR 0030](docs/adr/0030-a-read-only-site-a-session-database-and-t3-code.md)).
+  The site is read-only: it holds no controls, the human gives direction in
+  conversation, and agents record it with ordinary commands. Until mission
+  atelier-yfqu ships the site, `brief --html` and `debrief --html` write
+  those pages as files.
 
 ## Work and proof
 
@@ -99,8 +108,15 @@ each branch's records distinct.
 
 ## Boundaries
 
-Atelier is a local CLI, not an agent runner, daemon, scheduler, review provider,
-or process framework. Reviews, findings and approvals are records in the
+Atelier is a local CLI, not an agent runner, scheduler, review provider, or
+process framework. Its one long-running process is `atelier serve`, the
+read-only site, which reads records from commits and writes nothing. Its one
+database is the host-wide session database, which the CLI writes, only
+`atelier serve` reads, and which holds no copy of records. Atelier may depend
+on T3 Code, which runs the agents on this host. Guard decisions consult none
+of these
+([ADR 0030](docs/adr/0030-a-read-only-site-a-session-database-and-t3-code.md)).
+Reviews, findings and approvals are records in the
 repository, never state on a forge. When a repository's policy names a forge,
 Atelier may push branches and the base, open pull requests and read CI
 results for a commit through it. A policy that names none gets none of these
@@ -108,8 +124,8 @@ forge operations, while its own `shell.check`s and explicit commands such as
 `land --push` keep their behaviour
 ([ADR 0031](docs/adr/0031-a-forge-carries-branches-and-ci.md)).
 Strategies and design documents remain ordinary files.
-There are no transition actions, activity sidecars, review rooms, SQLite cache,
-backup import/export path, or Mission Control TUI.
+There are no transition actions, activity sidecars, review rooms, SQLite cache of
+records, backup import/export path, or Mission Control TUI.
 
 Terminal records can leave the active tree through explicit pruning; Git
 history preserves their audit trail. Repository policy and Agent Factory decide
