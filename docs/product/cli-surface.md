@@ -16,7 +16,7 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `bundle` | Preview and apply one-shot graph input. |
 | `evidence` | Record, show, list, and attach optional commit-bound receipts; no gate reads them. |
 | `review` | Print the reviewer's brief; record approvals, findings and explicit trivial exemptions; set findings' dispositions. |
-| `merge` | Evaluate the merge gates and integrate reviewed work with a merge commit that marks it done; `--check` evaluates them without merging. |
+| `merge` | Evaluate the merge gates and integrate reviewed work with a merge commit that marks it done; `--check` evaluates them without merging; with a forge in the policy, `--push` pushes the branch, ensures a pull request, merges and publishes the base, and `--wait` waits for CI. |
 | `land` | Run at every handoff: judge committed records, what changed since the base and the commits about to be pushed; report work in progress on a branch, refuse on the base. |
 | `doctor` | Judge every done claim and the whole review history, and warn when atelier or the Agent Factory skill is out of date; see [update check](sessions-and-hooks.md#update-check). |
 | `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
@@ -85,7 +85,7 @@ review request`, fix and re-review, approve with `--branch <name>`, and
 path](reviews-and-merge.md#a-change-with-no-issue-the-light-path)). Run focused proof and get independent
 review before `merge`; see [evidence](validation.md) and [reviews and
 merge](reviews-and-merge.md). Run `atelier land` before a session handoff and
-`atelier merge <id> --check` to inspect integration gates. Atelier never pushes or squashes. It commits only the merge commit that `merge` creates, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
+`atelier merge <id> --check` to inspect integration gates. Atelier never squashes, and pushes only when asked: `land --push` pushes the current branch, and `merge --push` pushes the branch and the base to the [forge](workflow-configuration.md#forge) the policy names ([CI on a forge](reviews-and-merge.md#ci-on-a-forge)). It commits only the merge commit that `merge` creates, and the records a command wrote when asked with `--commit-records` (see [Committing records](#committing-records)).
 
 ## Review and session commands
 

@@ -20,6 +20,11 @@ writes no tracker state", and approval freshness judged by which records
 changed. In decision 6: append-only for records not yet on the base, and a
 disposition for a `fix_now` finding. Decisions 1, 5 and 7 stand.
 
+Scoped by [ADR 0031](0031-a-forge-carries-branches-and-ci.md) (2026-11-08):
+removing the Forgejo provider removed a review provider, not every use of a
+forge. A repository's policy may name a forge that carries branches and
+reports CI; decision 6 stands, and there is still no external review provider.
+
 Supersedes [ADR 0006](0006-agent-guidance-ownership-boundary.md),
 [ADR 0007](0007-mission-workspaces-and-epic-review-branches.md),
 [ADR 0010](0010-session-aware-pr-coordination-boundaries.md),

@@ -2,7 +2,7 @@
 
 `.atelier/workflow.yaml` is reviewed repository policy. It declares issue types,
 statuses and their categories, permitted transitions and their validators, the
-base branch, and the merge checks. Agent Factory owns process; this file must not become an agent
+base branch, the merge checks and, optionally, the [forge](#forge). Agent Factory owns process; this file must not become an agent
 choreography or a way to evade review.
 
 `.atelier/config.toml` contains project identity, the canonical state root,
@@ -17,7 +17,8 @@ directory name. The name is lowercased, with other characters replaced by
 single hyphens. `init` prints the slug it chose and where it came from; pass
 `atelier init --slug <slug>` to choose another. Changing the slug later affects
 only new IDs: existing records keep their IDs and stay valid. There is no review-provider
-mode or global provider credential configuration.
+mode or global provider credential configuration; a [forge](#forge) uses `gh`'s
+own sign-in.
 
 ## Installing Atelier
 
@@ -173,8 +174,9 @@ dismissed finding and an approval since each `fix_now` finding, and the
 absence of open blockers. No gate reads evidence receipts
 ([ADR 0028](../adr/0028-simpler-lifecycle.md) decision 5): an older policy
 naming the `evidence.attached` validator, with any parameters, still parses,
-and the name is ignored. Policy can add merge checks, read-only shell commands
-run at merge, using this top-level YAML shape:
+and the name is ignored. Policy can add merge checks: read-only shell commands
+run at merge, and, in a repository with a [forge](#forge), `ci.passed`. They use
+this top-level YAML shape:
 
 ```yaml
 branch_policy:
@@ -192,6 +194,55 @@ result. Merge checks must preserve the pinned checkout and records. Git hooks
 are disabled during integration and cleanup, so put mandatory merge checks in
 this reviewed policy surface.
 
+## Forge
+
+A policy may name a forge: the host Atelier pushes branches to, opens pull
+requests on and reads CI results from
+([ADR 0031](../adr/0031-a-forge-carries-branches-and-ci.md)). Reviews,
+findings and approvals stay records in the repository; no forge state but a
+CI result for a commit feeds a gate. A policy without a `forge` block gets
+none of Atelier's built-in forge operations: `merge` reads no CI through a
+forge, pushes nothing, and behaves as it always has. What a policy or an agent
+asks for explicitly keeps its behaviour: a `shell.check` that calls `gh` or the
+network, such as this repository's `scripts/merge-ci-passed.sh`, still does,
+`land --push` still pushes, and the [update
+check](sessions-and-hooks.md#update-check) has its own switch.
+
+```yaml
+forge:
+  provider: github
+  remote: origin
+  ci_workflow: ci.yml
+merge_checks:
+  - shell.check:
+      command: "cargo fmt -- --check"
+  - ci.passed
+```
+
+- `forge.provider` is required. `github` is the only value; Atelier reaches it
+  through the `gh` CLI, so authentication is whatever `gh auth login` set up.
+- `forge.remote` is the Git remote name, or a remote URL, that `merge --push`
+  pushes the branch and the base to, and from whose URL Atelier finds the
+  GitHub repository. It defaults to `origin`. Pushes go through `git` with
+  git's own credentials, so an SSH URL works where `origin` is HTTPS without
+  credentials.
+- `forge.ci_workflow` is required: the file name, under `.github/workflows`,
+  of the workflow whose pull request runs `ci.passed` trusts, such as
+  `ci.yml`. Runs of other workflows are ignored.
+- `ci.passed` is a merge check that takes no parameters, written as a plain
+  string like `blockers.none_open`. It needs a `forge` block. See [reviews
+  and merge](reviews-and-merge.md#ci-on-a-forge) for what it proves.
+
+Like every gate, the forge comes from the base branch's committed policy
+([base authority](#base-authority)), so a branch cannot point `ci.passed` at
+another workflow or push the base to another remote. `atelier check` refuses
+a policy whose `forge` block is malformed, naming the key: a missing or
+unknown `forge.provider`, a missing or empty `forge.ci_workflow`, an empty
+`forge.remote`, or an unknown key under `forge`
+(`workflow_config_invalid_forge`). It refuses `ci.passed` in a policy without
+a `forge` block, naming `merge_checks` (`workflow_config_invalid_validator`),
+and `ci.passed` in a transition's validators, as it does `shell.check`.
+
 ## Base authority
 
 Merge integrates into the `branch_policy.base_branch` of the work branch's
@@ -208,13 +259,15 @@ malformed. Fix policy through reviewed work.
 
 `atelier merge` always integrates with a merge commit, the only commit
 Atelier creates: a branch that merges cleanly into the current base merges as
-one, after `merge_checks` pass on the merged tree in a temporary checkout that
-reuses no build cache, and that commit marks the work done; see [reviews and
+one, after `merge_checks` pass, the `shell.check`s on the merged tree in a
+temporary checkout that reuses no build cache, and that commit marks the work done; see [reviews and
 merge](reviews-and-merge.md). A base that moved on needs no catch-up merge
 first. `branch_policy.merge_strategy` is optional: `merge_commit`, and an
 older policy's `fast_forward_only` or `squash`, are all read as a merge commit,
 and any other value is refused. A policy needs no `shell.check` to merge, but
-without one, or CI on the merged tree, it merges a tree nobody ran.
+a `shell.check` proves only what its command runs on the merged tree, and
+`ci.passed` accepts a run of the head merged with an earlier base, so a policy
+with neither merges a tree nobody ran.
 Always merging gives up a linear history and the `merge_diverged` refusal
 that `fast_forward_only` repositories had; in exchange no branch catches up
 before it merges, which `fast_forward_only` forced on every open branch after
