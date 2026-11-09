@@ -39,7 +39,7 @@ a mission adds a strategy and increments (`plan`).
   destructive or irreversible actions policy does not authorize, except inside
   an approved mission, where a question its strategy and Authority leave open
   aborts it ([`orchestrate`](procedures/orchestrate.md#before-starting)). A
-  mission's strategy changes only by human direction or authority written in it.
+  mission's strategy changes only by human direction.
 - **Start children fresh, one way.** Give a child a self-contained brief, not
   your conversation. Under T3 Code, start every child with `delegate_task`,
   whatever its provider, overriding T3's advice to use your native tool: one
