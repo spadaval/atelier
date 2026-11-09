@@ -27,7 +27,7 @@ After a successful apply, `Next Commands` lists `atelier issue show <first creat
 
 ## Done when
 
-- When the bundle created or updated a mission, apply ends with `Next: atelier work mission <id>`; for a parent without a mission, `atelier work parent <id>`; otherwise `atelier issue show <id>` for the single top-level item.
-- A `Commit: git add .atelier && git commit` line follows.
-- `atelier check` is dropped from the footer.
-- A test asserts the footer for a mission bundle.
+- [ ] When the bundle created or updated a mission, apply ends with `Next: atelier work mission <id>`; for a parent without a mission, `atelier work parent <id>`; otherwise `atelier issue show <id>` for the single top-level item.
+- [ ] A `Commit: git add .atelier && git commit` line follows.
+- [ ] `atelier check` is dropped from the footer.
+- [ ] A test asserts the footer for a mission bundle.

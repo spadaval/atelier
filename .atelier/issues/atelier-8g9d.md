@@ -34,10 +34,10 @@ Current missions: 2
 
 ## Done when
 
-- Each current mission appears as one line, for example `atelier-1w8c draft high  Orient a session from one view… 2 ready, 3 blocked`. The alternative is to remove the count; pick one.
-- The summary labels align.
-- `--quiet` prints `work=0` when nothing is active.
-- Tests are updated.
+- [ ] Each current mission appears as one line, for example `atelier-1w8c draft high  Orient a session from one view… 2 ready, 3 blocked`. The alternative is to remove the count; pick one.
+- [ ] The summary labels align.
+- [ ] `--quiet` prints `work=0` when nothing is active.
+- [ ] Tests are updated.
 
 ## Context
 

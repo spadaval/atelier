@@ -3,6 +3,7 @@ created_at: "2026-11-08T21:50:02.001056830+00:00"
 id: "atelier-rqzu"
 issue_type: "task"
 labels:
+- "agent-factory"
 - "deferred-findings"
 priority: "P2"
 relationships:
@@ -21,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Deferred review findings on atelier-l58v"
-updated_at: "2026-11-08T21:50:02.001056830+00:00"
+updated_at: "2026-11-09T00:00:55.275064859+00:00"
 ---
 
 ## Goal

@@ -27,8 +27,8 @@ docs/spec/bundle/fixtures/dry-run-preview.txt lacks the `updated:` count line an
 
 ## Done when
 
-- A test runs preview on valid-bundle.json in a fresh `atelier init` repository and compares the output to dry-run-preview.txt, so output changes must update the fixture.
-- The fixture matches current output.
+- [ ] A test runs preview on valid-bundle.json in a fresh `atelier init` repository and compares the output to dry-run-preview.txt, so output changes must update the fixture.
+- [ ] The fixture matches current output.
 
 ## Context
 

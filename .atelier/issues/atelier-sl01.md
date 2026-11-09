@@ -28,6 +28,6 @@ Mission atelier-o3lm validation (evidence atelier-ba8q) found two wording gaps:
 
 ## Done when
 
-- A transition run without its required argument refuses with wording that matches "allowed, needs --reason" (for example "needs --reason") and one recovery step.
-- The doc sentence says exactly when the report is printed.
-- Tests cover both.
+- [ ] A transition run without its required argument refuses with wording that matches "allowed, needs --reason" (for example "needs --reason") and one recovery step.
+- [ ] The doc sentence says exactly when the report is printed.
+- [ ] Tests cover both.

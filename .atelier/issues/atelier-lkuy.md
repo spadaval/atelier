@@ -14,6 +14,9 @@ relationships:
   - kind: "issue"
     id: "atelier-4pzj"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-om6l"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

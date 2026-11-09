@@ -31,7 +31,7 @@ The invalid-role error (`validate_issue_link_role`, `crates/atelier-cli/src/comm
 
 ## Done when
 
-- `link` without `--role` either requires it or, when the default fails, says `no --role given; the default is advances (work → mission). For sequencing use --role blocked_by; for context --role related.`
-- `unlink` without `--role` removes the only link between the two records, or lists the roles that exist and exits non-zero. Unlinking a link that doesn't exist exits non-zero.
-- The role error groups roles: `readiness: blocked_by, blocks · mission: advances · context: related, … · custom: …`, with no proof roles.
-- CLI tests cover each case.
+- [ ] `link` without `--role` either requires it or, when the default fails, says `no --role given; the default is advances (work → mission). For sequencing use --role blocked_by; for context --role related.`
+- [ ] `unlink` without `--role` removes the only link between the two records, or lists the roles that exist and exits non-zero. Unlinking a link that doesn't exist exits non-zero.
+- [ ] The role error groups roles: `readiness: blocked_by, blocks · mission: advances · context: related, … · custom: …`, with no proof roles.
+- [ ] CLI tests cover each case.

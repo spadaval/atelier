@@ -2,7 +2,8 @@
 created_at: "2026-11-05T06:03:09.874332233+00:00"
 id: "atelier-c6g2"
 issue_type: "task"
-labels: []
+labels:
+- "agent-factory"
 priority: "P3"
 relationships:
   blocks: []
@@ -19,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Teach Agent Factory to use the mission digest and check's skipped-graph notice"
-updated_at: "2026-11-05T06:03:09.874332233+00:00"
+updated_at: "2026-11-09T00:00:55.509294263+00:00"
 ---
 
 ## Goal
@@ -28,6 +29,6 @@ Two Atelier items had Done when clauses that needed a change in the Agent Factor
 
 ## Done when
 
-- Once atelier-avx0 lands, the skill tells orchestrators to read `work mission <id> --since <commit>` on wake-up and to ask subagents for short reports.
-- Once atelier-fb1i lands, the Administration section of `skills/agent-factory/references/atelier.md` states how `check` reports graph errors when a record fails to parse.
-- Both edits are committed in spadaval/.agents.
+- [ ] Once atelier-avx0 lands, the skill tells orchestrators to read `work mission <id> --since <commit>` on wake-up and to ask subagents for short reports.
+- [ ] Once atelier-fb1i lands, the Administration section of `skills/agent-factory/references/atelier.md` states how `check` reports graph errors when a record fails to parse.
+- [ ] Both edits are committed in spadaval/.agents.

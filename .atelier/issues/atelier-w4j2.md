@@ -31,9 +31,9 @@ updated_at: "2026-10-17T01:10:57.972018696+00:00"
 
 ## Done when
 
-- Unknown IDs, short or full, give one `atelier-zzzz not found` error and never claim the tracker is invalid.
-- Review and evidence IDs, short or full, are checked like issues (or rejected with a correct message naming their kind).
-- Tests cover a review ID, an evidence ID, and an unknown ID in both forms.
+- [ ] Unknown IDs, short or full, give one `atelier-zzzz not found` error and never claim the tracker is invalid.
+- [ ] Review and evidence IDs, short or full, are checked like issues (or rejected with a correct message naming their kind).
+- [ ] Tests cover a review ID, an evidence ID, and an unknown ID in both forms.
 
 ## Context
 

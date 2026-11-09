@@ -27,9 +27,9 @@ updated_at: "2026-10-17T01:10:57.987773924+00:00"
 
 ## Done when
 
-- Section headings carry their count: `Ready (1)`, `Blocked (6)`, `Needs a human (1)`, `Done (12)`.
-- The `Work:` summary line is gone from `work mission` and `work parent`.
-- `work ready` heading counts agree with `status` ("Ready work: 6") on the same records; a test asserts it.
+- [ ] Section headings carry their count: `Ready (1)`, `Blocked (6)`, `Needs a human (1)`, `Done (12)`.
+- [ ] The `Work:` summary line is gone from `work mission` and `work parent`.
+- [ ] `work ready` heading counts agree with `status` ("Ready work: 6") on the same records; a test asserts it.
 
 ## Context
 

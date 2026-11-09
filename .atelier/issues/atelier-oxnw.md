@@ -27,10 +27,10 @@ A refused `atelier start sdb0` prints 17 lines (`ensure_transition_allowed` and 
 
 ## Done when
 
-- A blocked transition or start prints one line per blocker with ID, status, title, and branch when it is in flight on a local branch, e.g. `start refused: blocked by atelier-bw0b [todo, in flight on task/atelier-bw0b] "Record ADR 0022…"`.
-- The `Error:` line doesn't repeat it.
-- `--verbose` keeps the validator detail.
-- CLI tests cover a direct blocker and a blocker inherited via the parent.
+- [ ] A blocked transition or start prints one line per blocker with ID, status, title, and branch when it is in flight on a local branch, e.g. `start refused: blocked by atelier-bw0b [todo, in flight on task/atelier-bw0b] "Record ADR 0022…"`.
+- [ ] The `Error:` line doesn't repeat it.
+- [ ] `--verbose` keeps the validator detail.
+- [ ] CLI tests cover a direct blocker and a blocker inherited via the parent.
 
 ## Context
 

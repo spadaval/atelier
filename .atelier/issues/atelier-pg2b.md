@@ -2,7 +2,8 @@
 created_at: "2026-10-28T02:06:44.271780469+00:00"
 id: "atelier-pg2b"
 issue_type: "task"
-labels: []
+labels:
+- "agent-factory"
 priority: "P3"
 relationships:
   blocks: []
@@ -16,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Tell Agent Factory's install procedure how to get the atelier CLI"
-updated_at: "2026-10-28T02:06:44.271780469+00:00"
+updated_at: "2026-11-09T00:00:55.748186130+00:00"
 ---
 
 ## Goal

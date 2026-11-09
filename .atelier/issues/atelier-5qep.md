@@ -27,8 +27,8 @@ updated_at: "2026-10-17T01:10:57.964262389+00:00"
 
 ## Done when
 
-- `--status`, `--category`, `--label` and `--issue-type` accept repeats (or comma lists). Values within one flag are ORed; different flags are ANDed.
-- `--open` (or `--category open`) selects every non-done category.
-- Invalid status or category errors list the policy's valid values. `--help` names them, or says where they come from.
-- The empty result repeats the active filters, e.g. `No issues with status=done and category=todo.`
-- CLI tests cover repeats, `--open`, an invalid value and the empty message.
+- [ ] `--status`, `--category`, `--label` and `--issue-type` accept repeats (or comma lists). Values within one flag are ORed; different flags are ANDed.
+- [ ] `--open` (or `--category open`) selects every non-done category.
+- [ ] Invalid status or category errors list the policy's valid values. `--help` names them, or says where they come from.
+- [ ] The empty result repeats the active filters, e.g. `No issues with status=done and category=todo.`
+- [ ] CLI tests cover repeats, `--open`, an invalid value and the empty message.

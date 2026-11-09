@@ -29,5 +29,5 @@ updated_at: "2026-10-17T09:26:58.654226601+00:00"
 
 ## Done when
 
-- Redirected output has no width limit whatever `COLUMNS` says; a terminal still uses it.
-- A test runs a view with `COLUMNS` set and stdout redirected and finds no wrapped rows.
+- [ ] Redirected output has no width limit whatever `COLUMNS` says; a terminal still uses it.
+- [ ] A test runs a view with `COLUMNS` set and stdout redirected and finds no wrapped rows.

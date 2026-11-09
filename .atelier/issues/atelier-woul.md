@@ -27,7 +27,7 @@ An `update` entry replaces `labels`, `title`, `body` and `priority` wholesale (d
 
 ## Done when
 
-- For each updated record, preview and apply list the changes, e.g.
+- [ ] For each updated record, preview and apply list the changes, e.g.
   `title: "Validate bundle fixtures" → "Validate bundle fixtures (revised)"`, `labels: bundle, fixtures → bundle (removes fixtures)`, `+1 note`, `+blocks p.b`.
-- Body replacement shows which sections change (`body: Goal, Done when replaced`).
-- A test covers a label removal shown in preview.
+- [ ] Body replacement shows which sections change (`body: Goal, Done when replaced`).
+- [ ] A test covers a label removal shown in preview.

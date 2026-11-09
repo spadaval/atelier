@@ -2,7 +2,8 @@
 created_at: "2026-11-08T21:50:02.001056830+00:00"
 id: "atelier-2yef"
 issue_type: "task"
-labels: []
+labels:
+- "agent-factory"
 priority: "P2"
 relationships:
   blocks: []
@@ -16,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "skills/agent-factory/references/atelier.md:15-16 vs :66-67, and procedures/orchestrate.md:89 (eb14a31). Declining a sta…"
-updated_at: "2026-11-08T21:50:02.001056830+00:00"
+updated_at: "2026-11-09T00:00:54.936103655+00:00"
 ---
 
 ## Goal

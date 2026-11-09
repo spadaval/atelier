@@ -27,8 +27,8 @@ The `issue list` Status column prints the raw workflow status (`crates/atelier-c
 
 ## Done when
 
-- Each row keeps its status word and adds one cue where it applies, using the work classification: `todo ⚠ blocked by atelier-bw0b` (or `blocked by 2` when there are several), and `todo · needs a human`. Ready and done rows add nothing.
-- A CLI test covers a blocked todo row, a needs-human row and a plain ready row. Redirected output stays plain text.
+- [ ] Each row keeps its status word and adds one cue where it applies, using the work classification: `todo ⚠ blocked by atelier-bw0b` (or `blocked by 2` when there are several), and `todo · needs a human`. Ready and done rows add nothing.
+- [ ] A CLI test covers a blocked todo row, a needs-human row and a plain ready row. Redirected output stays plain text.
 
 ## Scope
 

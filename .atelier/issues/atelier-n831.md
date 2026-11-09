@@ -31,9 +31,9 @@ Records and code are not separated, although they need different actions. On a w
 
 ## Done when
 
-- The branch line reads like `Branch: task/atelier-7b6e, 1 behind master (git merge master)` or `Branch: master, 1 ahead of origin/master`. A detached HEAD reads `detached at <sha8>`.
-- The checkout line splits `records: 2 uncommitted (.atelier/issues/atelier-43m1.md, …)` from `code: 6 uncommitted`, with no porcelain codes.
-- A test covers ahead, behind, detached, records-only and code-only states.
+- [ ] The branch line reads like `Branch: task/atelier-7b6e, 1 behind master (git merge master)` or `Branch: master, 1 ahead of origin/master`. A detached HEAD reads `detached at <sha8>`.
+- [ ] The checkout line splits `records: 2 uncommitted (.atelier/issues/atelier-43m1.md, …)` from `code: 6 uncommitted`, with no porcelain codes.
+- [ ] A test covers ahead, behind, detached, records-only and code-only states.
 
 ## Context
 

@@ -30,11 +30,11 @@ Work-view rows show the whole transitive blocker closure plus blockers inherited
 
 ## Done when
 
-- Rows in `work mission`, `work parent`, `work blocked` and `work all` list direct blockers, and mark inherited ones: `⚠ blocked by atelier-fhep; via parent atelier-qhnh: atelier-spvd`.
-- A row whose chain is longer than 1 names its far end: `(chain of 3, ends at atelier-ubti)`.
-- The `| N blocker(s)` suffix is gone (human_output.rs:363-367).
-- A gate failure is carried as a separate reason, not as a blocker ID; no row ever prints "readiness gate" as a blocker.
-- A test pins `work blocked` and `issue show` "Blocked by" to the same direct blocker IDs for the same issue.
+- [ ] Rows in `work mission`, `work parent`, `work blocked` and `work all` list direct blockers, and mark inherited ones: `⚠ blocked by atelier-fhep; via parent atelier-qhnh: atelier-spvd`.
+- [ ] A row whose chain is longer than 1 names its far end: `(chain of 3, ends at atelier-ubti)`.
+- [ ] The `| N blocker(s)` suffix is gone (human_output.rs:363-367).
+- [ ] A gate failure is carried as a separate reason, not as a blocker ID; no row ever prints "readiness gate" as a blocker.
+- [ ] A test pins `work blocked` and `issue show` "Blocked by" to the same direct blocker IDs for the same issue.
 
 ## Context
 

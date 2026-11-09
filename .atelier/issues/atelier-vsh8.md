@@ -29,5 +29,5 @@ updated_at: "2026-10-17T08:28:57.961331205+00:00"
 
 ## Done when
 
-- `bundle apply -q` lists every record it writes, or the Quiet Tokens row says exactly which it lists.
-- A test applies a bundle that adds a child under an existing parent and checks the quiet output.
+- [ ] `bundle apply -q` lists every record it writes, or the Quiet Tokens row says exactly which it lists.
+- [ ] A test applies a bundle that adds a child under an existing parent and checks the quiet output.

@@ -30,10 +30,10 @@ Several `issue create`/`update` errors name internal locations or blame the wron
 
 ## Done when
 
-- Body errors read like `--body is missing "## Done when"` or `--body has unknown section "## Bogus"; task sections: Goal, Done when, Scope, Context, Unknowns, Design, Background`.
-- An unknown type reads `unknown issue type 'epic'; types: bug, decision, feature, mission, spike, task, validation`.
-- `create` and `update` treat a plain-text body the same way, with the behaviour stated in both `--help` texts.
-- CLI tests cover each message.
+- [ ] Body errors read like `--body is missing "## Done when"` or `--body has unknown section "## Bogus"; task sections: Goal, Done when, Scope, Context, Unknowns, Design, Background`.
+- [ ] An unknown type reads `unknown issue type 'epic'; types: bug, decision, feature, mission, spike, task, validation`.
+- [ ] `create` and `update` treat a plain-text body the same way, with the behaviour stated in both `--help` texts.
+- [ ] CLI tests cover each message.
 
 ## Context
 

@@ -29,8 +29,8 @@ Open items are dropped whenever review filed follow-ups for the entry, but the t
 
 ## Done when
 
-- A debrief entry shows its Open items alongside Filed follow-ups, or the rule for hiding them is decided again and written in docs/product/mission-reviews.md.
-- A CLI fixture covers it in both forms, including atelier-cagr's case: a follow-up filed on one child leaves a sibling's Open items visible.
+- [ ] A debrief entry shows its Open items alongside Filed follow-ups, or the rule for hiding them is decided again and written in docs/product/mission-reviews.md.
+- [ ] A CLI fixture covers it in both forms, including atelier-cagr's case: a follow-up filed on one child leaves a sibling's Open items visible.
 
 ## Context
 

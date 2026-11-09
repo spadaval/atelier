@@ -29,5 +29,5 @@ When a work item's owner branch already exists, `start` checks that branch's rec
 
 ## Done when
 
-- Views either judge such rows on the owner branch's records or mark and skip them, as rows started on another branch already are.
-- A session test reproduces the case above.
+- [ ] Views either judge such rows on the owner branch's records or mark and skip them, as rows started on another branch already are.
+- [ ] A session test reproduces the case above.

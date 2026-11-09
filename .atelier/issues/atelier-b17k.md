@@ -29,4 +29,4 @@ updated_at: "2026-10-17T08:54:22.045186811+00:00"
 
 ## Done when
 
-- The gate is removed, or a comment and test record the case it catches that classification does not.
+- [ ] The gate is removed, or a comment and test record the case it catches that classification does not.

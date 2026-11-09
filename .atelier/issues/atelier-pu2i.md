@@ -27,10 +27,10 @@ updated_at: "2026-10-17T01:10:57.964569101+00:00"
 
 ## Done when
 
-- With no filters, non-done records are listed before done ones (or done ones are left out), and the footer counts what is hidden, e.g. `19 open shown · 67 done hidden: atelier issue list --category done`.
-- When rows are cut, the truncation line gives the exact next command, e.g. `36 more: atelier issue list --limit 86`.
-- The `Issue Inventory` title, the "metadata filters" sentence and the `Drill Down` block are gone.
-- A CLI test with 55 records, 50 of them done, shows every open one by default. Rendering tests are updated. `issue-inventory-and-mission-overview.md` states the new order.
+- [ ] With no filters, non-done records are listed before done ones (or done ones are left out), and the footer counts what is hidden, e.g. `19 open shown · 67 done hidden: atelier issue list --category done`.
+- [ ] When rows are cut, the truncation line gives the exact next command, e.g. `36 more: atelier issue list --limit 86`.
+- [ ] The `Issue Inventory` title, the "metadata filters" sentence and the `Drill Down` block are gone.
+- [ ] A CLI test with 55 records, 50 of them done, shows every open one by default. Rendering tests are updated. `issue-inventory-and-mission-overview.md` states the new order.
 
 ## Scope
 

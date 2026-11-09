@@ -27,7 +27,7 @@ The `issue create` confirmation (`crates/atelier-cli/src/commands/issue.rs:667-6
 
 ## Done when
 
-- The confirmation is one dense block: `Created atelier-xxxx task todo medium "Title"`, then labels/size when set, `Parent: <id> "<title>"` when set, and the file path.
-- Next steps come from state. Ready work suggests `atelier start <id>`. Non-mission work with no mission suggests `atelier issue link <id> <mission-id> --role advances` (with the real mission ID when exactly one mission is open). The generic four-item menu is gone.
-- Validation errors raised before the write don't name the unpersisted ID.
-- CLI tests cover plain, `--parent` and `--status backlog` output.
+- [ ] The confirmation is one dense block: `Created atelier-xxxx task todo medium "Title"`, then labels/size when set, `Parent: <id> "<title>"` when set, and the file path.
+- [ ] Next steps come from state. Ready work suggests `atelier start <id>`. Non-mission work with no mission suggests `atelier issue link <id> <mission-id> --role advances` (with the real mission ID when exactly one mission is open). The generic four-item menu is gone.
+- [ ] Validation errors raised before the write don't name the unpersisted ID.
+- [ ] CLI tests cover plain, `--parent` and `--status backlog` output.

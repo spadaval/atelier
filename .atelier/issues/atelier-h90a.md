@@ -26,10 +26,10 @@ updated_at: "2026-10-17T01:10:57.981495535+00:00"
 
 ## Done when
 
-- An unchanged run prints `Hooks already installed in .claude/settings.json; nothing changed`.
-- A first run lists what it added and warns about other SessionStart, Stop and PreCompact command handlers it keeps (`kept: bd prime (SessionStart, PreCompact)`).
-- The output ends with `Commit: git add .claude/settings.json && git commit`, then `Restart Claude Code`.
-- Tests cover the unchanged case and the foreign-handler warning.
+- [ ] An unchanged run prints `Hooks already installed in .claude/settings.json; nothing changed`.
+- [ ] A first run lists what it added and warns about other SessionStart, Stop and PreCompact command handlers it keeps (`kept: bd prime (SessionStart, PreCompact)`).
+- [ ] The output ends with `Commit: git add .claude/settings.json && git commit`, then `Restart Claude Code`.
+- [ ] Tests cover the unchanged case and the foreign-handler warning.
 
 ## Context
 

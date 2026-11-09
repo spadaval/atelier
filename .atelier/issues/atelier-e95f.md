@@ -27,10 +27,10 @@ Let a repository define its own work views as committed, declarative definitions
 ## Done when
 
 A design is accepted (an ADR, since it qualifies ADR 0022 Decision 4) and then built, so that:
-- View definitions live in `.atelier/`, are validated by `atelier check`, and are reviewed like other records.
-- A definition may only filter, choose fields from a fixed vocabulary, sort (using the shared order), and group. It cannot redefine derived states (ready, blocked, evidence freshness, merge readiness); those always come from core, so a view never contradicts a gate.
-- Definitions render through the same item-line contract and renderer as built-in views, so output stays dense Markdown. No scripts and no machine format.
-- Built-in views such as `work ready` and `work mission` are expressed in the same format.
+- [ ] View definitions live in `.atelier/`, are validated by `atelier check`, and are reviewed like other records.
+- [ ] A definition may only filter, choose fields from a fixed vocabulary, sort (using the shared order), and group. It cannot redefine derived states (ready, blocked, evidence freshness, merge readiness); those always come from core, so a view never contradicts a gate.
+- [ ] Definitions render through the same item-line contract and renderer as built-in views, so output stays dense Markdown. No scripts and no machine format.
+- [ ] Built-in views such as `work ready` and `work mission` are expressed in the same format.
 
 ## Scope
 

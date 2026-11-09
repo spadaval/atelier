@@ -30,7 +30,7 @@ Mutating issue commands confirm what was run but not what the record now says, s
 
 ## Done when
 
-- `update` prints only the changed fields, with old and new values: `priority: medium → critical`, `title: "A" → "B"`, `labels: +size-s −foo`. Removing a label that isn't set says `label foo was not set` and is not counted as a change.
-- `note` prints the stored bullet, e.g. `- 2026-10-16 [plan] Plan note`. `-q` prints nothing.
-- `link`/`unlink` describe the stored link in canonical direction with titles, e.g. `atelier-f0rr "No body at all" now advances mission atelier-1w8c "Orient a session…"`. For blocked_by they add the readiness effect: `atelier-xmtr is now blocked (1 open blocker)`. "Already exists" uses the same canonical wording. The generic footer is gone.
-- CLI tests cover each confirmation, including a mission-first advances link.
+- [ ] `update` prints only the changed fields, with old and new values: `priority: medium → critical`, `title: "A" → "B"`, `labels: +size-s −foo`. Removing a label that isn't set says `label foo was not set` and is not counted as a change.
+- [ ] `note` prints the stored bullet, e.g. `- 2026-10-16 [plan] Plan note`. `-q` prints nothing.
+- [ ] `link`/`unlink` describe the stored link in canonical direction with titles, e.g. `atelier-f0rr "No body at all" now advances mission atelier-1w8c "Orient a session…"`. For blocked_by they add the readiness effect: `atelier-xmtr is now blocked (1 open blocker)`. "Already exists" uses the same canonical wording. The generic footer is gone.
+- [ ] CLI tests cover each confirmation, including a mission-first advances link.

@@ -33,11 +33,11 @@ updated_at: "2026-11-05T06:07:19.198719+00:00"
 
 ## Done when
 
-- Every work view passes its chosen rows through `ordered_work_indices`.
-- `work blocked` and `work all` print blocked rows in the same order.
-- A test with chain ubti → il31 → fhep → 5hp9 asserts that order in `work blocked` and `work mission`.
-- A test pins the order of a mixed `--all` list in `work mission` and `work parent` (from atelier-31l2).
-- A test with more than 20 ready items shows every row in `work ready` (from atelier-8zxh).
+- [ ] Every work view passes its chosen rows through `ordered_work_indices`.
+- [ ] `work blocked` and `work all` print blocked rows in the same order.
+- [ ] A test with chain ubti → il31 → fhep → 5hp9 asserts that order in `work blocked` and `work mission`.
+- [ ] A test pins the order of a mixed `--all` list in `work mission` and `work parent` (from atelier-31l2).
+- [ ] A test with more than 20 ready items shows every row in `work ready` (from atelier-8zxh).
 
 ## Scope
 

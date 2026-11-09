@@ -38,7 +38,7 @@ Found in review of atelier-lr8o:
 
 ## Done when
 
-- A cross-kind short-ID clash is reported as ambiguous.
-- Preview refuses a wrong-kind reference in every slot with the shared wrong-kind message.
-- Update entry IDs use the shared not-found and wrong-kind messages.
-- Bundle tests cover each case.
+- [ ] A cross-kind short-ID clash is reported as ambiguous.
+- [ ] Preview refuses a wrong-kind reference in every slot with the shared wrong-kind message.
+- [ ] Update entry IDs use the shared not-found and wrong-kind messages.
+- [ ] Bundle tests cover each case.

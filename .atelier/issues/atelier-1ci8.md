@@ -37,9 +37,9 @@ The panel row prints the category twice (`active … [active]`) and hides the co
 
 ## Done when
 
-- Each active item is one line with its exact status, for example `atelier-43m1  in_progress  low  Define Close Reason…`. The owner is marked inline (for example `owner`) and not repeated in Local State.
-- With no active work, there is no empty panel and no separate `Current work: none` line.
-- Tests cover owner and no-owner output.
+- [ ] Each active item is one line with its exact status, for example `atelier-43m1  in_progress  low  Define Close Reason…`. The owner is marked inline (for example `owner`) and not repeated in Local State.
+- [ ] With no active work, there is no empty panel and no separate `Current work: none` line.
+- [ ] Tests cover owner and no-owner output.
 
 ## Context
 

@@ -32,7 +32,7 @@ Following them moves the item to in_progress without a branch or `workflow_branc
 
 ## Done when
 
-- Every place the `start` transition is offered as an action shows `atelier start <id>`.
-- `issue transition <id> start` run outside the item's owner branch prints a warning that no branch was recorded, and names `atelier start <id>`.
-- `atelier start <mission>` lists the mission's ready items (ID and title, up to 5), or says none is ready.
-- CLI tests cover the show hint, the warning and the mission error.
+- [ ] Every place the `start` transition is offered as an action shows `atelier start <id>`.
+- [ ] `issue transition <id> start` run outside the item's owner branch prints a warning that no branch was recorded, and names `atelier start <id>`.
+- [ ] `atelier start <mission>` lists the mission's ready items (ID and title, up to 5), or says none is ready.
+- [ ] CLI tests cover the show hint, the warning and the mission error.

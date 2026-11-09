@@ -32,11 +32,11 @@ Bundle validation errors reuse record-parser messages that do not fit bundles:
 
 ## Done when
 
-- The missing-section error reads `a: body is missing ## Done when`.
-- Unknown-field errors name the client_ref, or the array index when there is none.
-- The expected-resources list omits `missions`.
-- An empty bundle fails with `Bundle has no records`.
-- Tests cover each message.
+- [ ] The missing-section error reads `a: body is missing ## Done when`.
+- [ ] Unknown-field errors name the client_ref, or the array index when there is none.
+- [ ] The expected-resources list omits `missions`.
+- [ ] An empty bundle fails with `Bundle has no records`.
+- [ ] Tests cover each message.
 
 ## Context
 

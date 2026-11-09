@@ -27,6 +27,6 @@ A `todo` mission is classified Context and listed under "Parents and Missions (c
 
 ## Done when
 
-- Open missions of every status appear in one place with their status word, or `work all` leaves missions to `work missions`.
-- Empty context panels are omitted in `work ready` and `work all`.
-- Tests cover a draft and a todo mission.
+- [ ] Open missions of every status appear in one place with their status word, or `work all` leaves missions to `work missions`.
+- [ ] Empty context panels are omitted in `work ready` and `work all`.
+- [ ] Tests cover a draft and a todo mission.
