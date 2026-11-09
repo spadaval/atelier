@@ -344,7 +344,7 @@ fn base_records(
 
 /// Refuses a checkout with uncommitted changes to tracked files. Untracked
 /// files are no commit's, so merging leaves them in place (atelier-l457).
-pub(super) fn clean(repo: &Path) -> Result<()> {
+fn clean(repo: &Path) -> Result<()> {
     let dirty = text(repo, &["status", "--porcelain", "--untracked-files=no"])?;
     if !dirty.is_empty() {
         bail!("merge_checkout_dirty: {} has uncommitted changes:\n{dirty}\nCommit or stash them before retrying.", repo.display());
@@ -577,8 +577,6 @@ pub(super) fn rerun(issue_ref: Option<&str>, push: bool) -> String {
 /// that now has the base checked out.
 pub(super) struct Integrated {
     pub commit: String,
-    /// The work branch head the merge commit integrated.
-    pub head: String,
     pub base_checkout: PathBuf,
 }
 
@@ -1408,7 +1406,6 @@ fn merge_gates(
     let detached = base_tree.is_some().then(|| format!("The work checkout is detached; when finished, leave it and run `git worktree remove {}` from the base checkout.", repo.display()));
     let integrated = Integrated {
         commit: commit.clone(),
-        head: head.clone(),
         base_checkout: target.to_path_buf(),
     };
     if quiet {

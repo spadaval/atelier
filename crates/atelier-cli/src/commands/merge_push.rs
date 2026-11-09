@@ -9,10 +9,10 @@
 //! built yet (atelier-vqoy): the branch must already be pushed with an open
 //! pull request.
 use super::git::{resolve, text};
-use super::merge::{attempts, base_checkout, clean, rerun};
+use super::merge::{attempts, base_checkout, rerun};
 use anyhow::{anyhow, bail, Context, Result};
 use atelier_app::{
-    base_policy,
+    base_policy, committed_snapshot,
     forge::{ForgeError, Github},
     git_freshness as git,
     storage_layout::StorageLayout,
@@ -47,9 +47,11 @@ pub(super) fn run(issue_ref: Option<&str>, quiet: bool) -> Result<String> {
         bail!("merge_push_base_branch: merge --push runs from the work branch. Next: check out the work branch, then `{}`", rerun(issue_ref, true));
     };
     let rerun = rerun(issue_ref, true);
-    let policy = base_policy::from_ref(repo, &format!("refs/heads/{base}"))?.policy;
-    let Some(forge) = policy.forge else {
-        bail!("merge_push_no_forge: the {base} policy names no forge, so merge --push has nowhere to publish; nothing was pushed. Next: `{}`, then `atelier land --push` from the {base} checkout", super::merge::rerun(issue_ref, false));
+    let no_forge = || {
+        anyhow!("merge_push_no_forge: the {base} policy names no forge, so merge --push has nowhere to publish; nothing was pushed. Next: `{}`, then `atelier land --push` from the {base} checkout", super::merge::rerun(issue_ref, false))
+    };
+    let Some(forge) = base_forge(repo, &format!("refs/heads/{base}"))? else {
+        return Err(no_forge());
     };
     let remote = forge.remote.as_str();
 
@@ -83,17 +85,46 @@ pub(super) fn run(issue_ref: Option<&str>, quiet: bool) -> Result<String> {
             );
         }
     }
+    // The base's committed policy names the forge, so the base just fetched
+    // decides where it is published (ADR 0031, decision 3).
+    let changed = |now: Option<&atelier_app::workflow_policy::ForgeConfig>,
+                   at: &str,
+                   after: &str| {
+        match now {
+            None => no_forge(),
+            Some(now) => anyhow!(
+                "merge_push_forge_changed: {base} at {} names forge remote {} with workflow {}, not remote {remote} with workflow {} as {base} did before {after}; nothing was pushed. Next: rerun `{rerun}`, which publishes through the forge {base} names now",
+                short(at),
+                now.remote,
+                now.ci_workflow,
+                forge.ci_workflow
+            ),
+        }
+    };
+    let fetched = resolve(repo, &format!("refs/heads/{base}"))?;
+    let now = base_forge(repo, &fetched)?;
+    if now.as_ref() != Some(&forge) {
+        return Err(changed(now.as_ref(), &fetched, "the fetch"));
+    }
 
     // 5 and 6. The gates and the merge, as `merge` runs them.
     let integrated = attempts(issue_ref, false, false, quiet, true)?
         .context("merge integrated nothing to push")?;
     let target = integrated.base_checkout.as_path();
     let merged = short(&integrated.commit);
-    // The pull request is read while it is still open.
-    let pull = github
-        .open_pull_request(&integrated.head, &base)
-        .ok()
-        .flatten();
+    // The merge may have run on a base that moved again, by records only,
+    // while its gates ran; the base it merged onto still names this forge.
+    let onto = text(target, &["rev-parse", &format!("{}^1", integrated.commit)])?;
+    let now = base_forge(target, &onto)?;
+    if now.as_ref() != Some(&forge) {
+        return Err(anyhow!(
+            "{} Merge commit {merged} stays on local {base}.",
+            changed(now.as_ref(), &onto, "the merge")
+        ));
+    }
+    // The pull request is read while it is still open, by its branch: the
+    // branch head can be a record-only commit GitHub has never seen.
+    let pull = github.open_pull_request(&branch, &base);
 
     // 7. Judge the unpushed base commits as `land` does on the base, from
     // the base the forge has, then push.
@@ -129,8 +160,21 @@ pub(super) fn run(issue_ref: Option<&str>, quiet: bool) -> Result<String> {
     let published = format!("pushed {base} to {remote}");
 
     // 8. GitHub marks the pull request merged once its head is on the base.
-    let Some(number) = pull else {
-        return Ok(published);
+    let number = match pull {
+        Ok(Some(number)) => number,
+        Ok(None) => {
+            say(&format!(
+                "Note: {published} at {merged}; GitHub has no open pull request from {branch} into {base}, so none was confirmed merged."
+            ));
+            return Ok(published);
+        }
+        Err(error) => {
+            say(&format!(
+                "Note: {published} at {merged}; Atelier could not read the pull request from {branch} into {base}, so it did not confirm one merged: {}. Next: gh pr list --head {branch} --state all",
+                error.reason()
+            ));
+            return Ok(published);
+        }
     };
     if merged_within(&github, number, pull_request_wait()) {
         return Ok(format!("{published}, pull request #{number} merged"));
@@ -168,7 +212,25 @@ fn fetch_base(repo: &Path, remote: &str, base: &str) -> Result<String> {
 fn fast_forward(repo: &Path, base: &str, from: &str, to: &str) -> Result<()> {
     match base_checkout(repo, base)? {
         Some(path) => {
-            clean(&path)?;
+            // As `merge` guards a checked-out base: its records and code
+            // match its commit, and no untracked path is in the way.
+            committed_snapshot::CommittedSnapshot::new(from)?
+                .require_clean(&path)
+                .map_err(|error| {
+                    anyhow!("{error:#} The {base} checkout at {} must be clean before merge --push fast-forwards it; nothing was merged or pushed.", path.display())
+                })?;
+            let overwritten = super::git::untracked_overwritten(&path, &[to])?;
+            if !overwritten.is_empty() {
+                bail!(
+                    "merge_untracked_overwritten: {} has {} where {base} on the forge has files, so fast-forwarding would overwrite them: {}; nothing was merged or pushed. Next: move them out of the way, or commit them, then retry",
+                    path.display(),
+                    crate::human_output::count_noun(overwritten.len(), "untracked path"),
+                    crate::human_output::first_five(
+                        overwritten.iter().map(|path| path.display().to_string()),
+                        ", "
+                    )
+                );
+            }
             git::git_output(
                 &path,
                 &[
@@ -191,6 +253,14 @@ fn fast_forward(repo: &Path, base: &str, from: &str, to: &str) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The forge the base policy at `reference` names.
+fn base_forge(
+    repo: &Path,
+    reference: &str,
+) -> Result<Option<atelier_app::workflow_policy::ForgeConfig>> {
+    Ok(base_policy::from_ref(repo, reference)?.policy.forge)
 }
 
 fn is_ancestor(repo: &Path, ancestor: &str, of: &str) -> bool {

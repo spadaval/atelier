@@ -167,17 +167,22 @@ impl Github {
         .map(|_| ())
     }
 
-    /// The number of the open pull request into `base` that has `commit`.
-    /// GitHub refuses the lookup for a commit it has never seen, which is in
-    /// none.
-    pub fn open_pull_request(&self, commit: &str, base: &str) -> Result<Option<u64>, ForgeError> {
-        let pulls = self.api(&format!("repos/{}/commits/{commit}/pulls", self.slug), &[])?;
-        Ok(pulls.as_array().and_then(|pulls| {
-            pulls
-                .iter()
-                .find(|pull| pull["state"] == "open" && pull["base"]["ref"].as_str() == Some(base))
-                .and_then(|pull| pull["number"].as_u64())
-        }))
+    /// The number of the open pull request from this repository's `branch`
+    /// into `base`.
+    pub fn open_pull_request(&self, branch: &str, base: &str) -> Result<Option<u64>, ForgeError> {
+        let owner = self.slug.split('/').next().unwrap_or_default();
+        let pulls = self.api(
+            &format!("repos/{}/pulls", self.slug),
+            &[
+                ("head", &format!("{owner}:{branch}")),
+                ("base", base),
+                ("state", "open"),
+            ],
+        )?;
+        Ok(pulls
+            .as_array()
+            .and_then(|pulls| pulls.first())
+            .and_then(|pull| pull["number"].as_u64()))
     }
 
     /// Whether GitHub has marked pull request `number` merged.

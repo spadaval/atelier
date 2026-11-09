@@ -696,8 +696,8 @@ Until atelier-vqoy lands, `merge --push` runs steps 1 and 4 to 8 below, and
 not steps 2 and 3 or `--wait`: push the branch and open its pull request by
 hand first (`git push -u <remote> <branch>`, `gh pr create --base <base>`),
 and wait for CI yourself. The pull request step 8 confirms is the open one
-into the base that has the branch head; without one, `merge --push` pushes
-the base and ends `merge: passed — pushed master to origin`.
+from the branch into the base, found by the branch's name, since the branch
+head can be an approval GitHub has never seen.
 
 It does this, in order:
 
@@ -728,6 +728,13 @@ It does this, in order:
    refuses with `merge_push_fetch_failed` and git's message. If the local
    base is behind, it fast-forwards it, in its checkout when one has it
    checked out, and prints `Fast-forwarded master to <commit> from origin.`
+   That checkout must be as clean as `merge` requires, its records included,
+   and no untracked file may stand where the fetched base has one, or it
+   refuses, naming the check, before anything moves. The fetched base's
+   policy then decides the forge: if it names none, `merge --push` refuses
+   with `merge_push_no_forge`, and if it names another remote or workflow,
+   with `merge_push_forge_changed`, whose Next reruns it. Both refuse before
+   merging, and the merge's own base is checked again before the push.
    A local base ahead of the forge's is kept, and step 7 judges its extra
    commits. If the two have diverged, it refuses with
    `merge_push_base_diverged`, naming both heads. Next: in the base checkout,
@@ -758,7 +765,12 @@ It does this, in order:
 8. **Confirms the pull request merged.** GitHub marks a pull request merged
    when its head commits become reachable from the base, which the pushed
    merge commit does. Atelier reads its state every 5 seconds for up to a
-   minute. The success
+   minute. With no open pull request from the branch, or when GitHub cannot
+   be read, it still exits zero and says which in a note: `GitHub has no
+   open pull request from <branch> into master, so none was confirmed
+   merged.`, or `Atelier could not read the pull request from <branch> into
+   master, so it did not confirm one merged: <reason>. Next: gh pr list
+   --head <branch> --state all`. The success
    line reads `merge: passed — pushed master to origin, pull request #42
    merged`. If GitHub has not marked it merged, `merge` still exits zero,
    since the base is published, and says so:

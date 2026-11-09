@@ -3,7 +3,9 @@
 //! files: `runs/<sha>` for a commit's pull request runs, `base` for the
 //! base's newest push run, `pulls` for the pull requests that have a commit,
 //! `pull` for one pull request's state, and `signed-out` to answer as a
-//! signed-out `gh` does. `on-runs`, when present, is a script run once at
+//! signed-out `gh` does. With `pushed`, a list of commits, it refuses a
+//! commit's pull requests for any other commit, as GitHub does for one it
+//! has never seen; with `list-fails`, listing pull requests fails. `on-runs`, when present, is a script run once at
 //! the first runs lookup. Every call is logged to `calls`.
 //!
 //! `merge --push` reaches `git@github.com:owner/repo.git` through a fake ssh
@@ -32,7 +34,20 @@ for arg in "$@"; do
   case "$arg" in
     head_sha=*) answer="runs/${arg#head_sha=}" ;;
     branch=*) answer="base" ;;
-    */pulls) answer="pulls" ;;
+    */commits/*/pulls)
+      answer="pulls"
+      sha="${arg%/pulls}"
+      sha="${sha##*/}"
+      if [ -f "$FAKE_GH/pushed" ] && ! grep -qx "$sha" "$FAKE_GH/pushed"; then
+        echo "gh: No commit found for SHA: $sha (HTTP 422)" >&2
+        exit 1
+      fi ;;
+    */pulls)
+      answer="pulls"
+      if [ -f "$FAKE_GH/list-fails" ]; then
+        echo "gh: Server Error (HTTP 502)" >&2
+        exit 1
+      fi ;;
     */pulls/*) answer="pull" ;;
   esac
 done
@@ -206,6 +221,10 @@ impl Forge {
     /// Commits `file` on the forge's base from a scratch clone, as another
     /// agent's push would, and returns the commit.
     fn push_to_remote_main(&self, file: &str) -> String {
+        self.push_to_remote_main_with(file, "from another checkout\n")
+    }
+    /// Commits `file` with `content` on the forge's base.
+    fn push_to_remote_main_with(&self, file: &str, content: &str) -> String {
         let clone = tempdir().unwrap();
         let work = clone.path().join("work");
         git(
@@ -217,7 +236,7 @@ impl Forge {
                 &work.to_string_lossy(),
             ],
         );
-        fs::write(work.join(file), "from another checkout\n").unwrap();
+        fs::write(work.join(file), content).unwrap();
         git(&work, &["add", "."]);
         git(
             &work,
@@ -878,7 +897,10 @@ fn merge_push_publishes_the_merge_and_confirms_the_pull_request_merged() {
         forge.calls()
     );
     assert!(
-        forge.calls().contains("repos/owner/repo/pulls/7"),
+        forge.calls().contains(&format!(
+            "repos/owner/repo/pulls -f head=owner:{} -f base=main -f state=open",
+            forge.branch
+        )) && forge.calls().contains("repos/owner/repo/pulls/7"),
         "{}",
         forge.calls()
     );
@@ -1131,4 +1153,142 @@ fn plain_merge_in_a_forge_policy_names_merge_push_for_next_time() {
         git(forge.path(), &["rev-parse", "main^1"]),
         "nothing pushed"
     );
+}
+
+/// A base fast-forward never overwrites what `merge` would refuse to: an
+/// ignored, uncommitted tracker record in a separate base checkout, where
+/// the forge's base commits a record at the same path (finding atelier-kl16).
+#[test]
+fn merge_push_refuses_to_fast_forward_a_base_checkout_with_an_uncommitted_record() {
+    let forge = Forge::new("  - ci.passed\n");
+    let head = forge.head();
+    forge.run(&head, 101, "completed", Some("success"));
+    forge.pull_request(true);
+    let repo = forge.path();
+    let checkouts = tempdir().unwrap();
+    let base = checkouts.path().join("base");
+    git(
+        repo,
+        &["worktree", "add", "-q", &base.to_string_lossy(), "main"],
+    );
+    let record = ".atelier/issues/atelier-zz00.md";
+    let common = git(
+        repo,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    );
+    fs::create_dir_all(Path::new(&common).join("info")).unwrap();
+    fs::write(
+        Path::new(&common).join("info/exclude"),
+        format!("/{record}\n"),
+    )
+    .unwrap();
+    fs::write(base.join(record), "an unsaved local plan\n").unwrap();
+    forge.push_to_remote_main_with(record, "the forge's record\n");
+    let local = git(repo, &["rev-parse", "main"]);
+
+    forge.push_refuses(
+        &["merge", &forge.id, "--push"],
+        &[
+            "canonical_snapshot_uncommitted",
+            "must be clean before merge --push fast-forwards it; nothing was merged or pushed.",
+        ],
+        true,
+    );
+    assert_eq!(
+        fs::read_to_string(base.join(record)).unwrap(),
+        "an unsaved local plan\n"
+    );
+    assert_eq!(
+        git(repo, &["rev-parse", "main"]),
+        local,
+        "main did not move"
+    );
+    assert_eq!(git(repo, &["rev-parse", "HEAD"]), head, "nothing merged");
+}
+
+/// The base the merge fetches decides the forge: one that dropped the
+/// forge, or names another, refuses before merging (finding atelier-gfwz).
+#[test]
+fn merge_push_reads_the_forge_from_the_fetched_base() {
+    for (forge_block, expected) in [
+        ("", "merge_push_no_forge: the main policy names no forge"),
+        (
+            "forge:\n  provider: github\n  ci_workflow: other.yml\n",
+            "merge_push_forge_changed: main at ",
+        ),
+    ] {
+        let forge = Forge::new("  - ci.passed\n");
+        let head = forge.head();
+        forge.run(&head, 111, "completed", Some("success"));
+        forge.pull_request(true);
+        let policy = git(forge.path(), &["show", "main:.atelier/workflow.yaml"]);
+        let policy = policy.replace(
+            &format!("{FORGE}merge_checks:\n  - ci.passed"),
+            &format!("{forge_block}merge_checks:\n  - blockers.none_open"),
+        );
+        assert!(!policy.contains("ci.passed"), "{policy}");
+        forge.push_to_remote_main_with(".atelier/workflow.yaml", &format!("{policy}\n"));
+
+        let output = forge.push_refuses(&["merge", &forge.id, "--push"], &[expected], true);
+        assert!(output.contains("nothing was pushed"), "{output}");
+        assert_eq!(
+            git(forge.path(), &["rev-parse", "HEAD"]),
+            head,
+            "nothing merged"
+        );
+        assert!(!output.contains("✓ Merged"), "{output}");
+    }
+}
+
+/// The approval is recorded after the last push, so GitHub has never seen
+/// the branch head: the pull request is found by its branch, and CI on the
+/// pushed code commit stands for the head (finding atelier-sihf).
+#[test]
+fn merge_push_confirms_the_pull_request_when_the_approval_was_never_pushed() {
+    let forge = Forge::new("  - ci.passed\n");
+    let implementation = git(forge.path(), &["rev-parse", "HEAD~2"]);
+    forge.run(&implementation, 121, "completed", Some("success"));
+    fs::write(
+        forge.gh.path().join("pushed"),
+        format!("{implementation}\n"),
+    )
+    .unwrap();
+    forge.pull_request(true);
+
+    let output = forge.passes(&["merge", &forge.id, "--push"]);
+    assert_eq!(
+        verdict(&output),
+        "merge: passed — pushed main to origin, pull request #7 merged",
+        "{output}"
+    );
+}
+
+/// No open pull request and a lookup that fails read differently, and
+/// neither undoes the published base.
+#[test]
+fn merge_push_says_whether_it_found_no_pull_request_or_could_not_look() {
+    for (fails, expected) in [
+        (false, "GitHub has no open pull request from {branch} into main, so none was confirmed merged."),
+        (true, "Atelier could not read the pull request from {branch} into main, so it did not confirm one merged: gh could not read CI: gh: Server Error (HTTP 502). Next: gh pr list --head {branch} --state all"),
+    ] {
+        let forge = Forge::new("  - ci.passed\n");
+        let head = forge.head();
+        forge.run(&head, 131, "completed", Some("success"));
+        if fails {
+            forge.pull_request(true);
+            fs::write(forge.gh.path().join("list-fails"), "").unwrap();
+        }
+        let output = forge.passes(&["merge", &forge.id, "--push"]);
+        let main = git(forge.path(), &["rev-parse", "main"]);
+        assert!(
+            output.contains(&format!(
+                "Note: pushed main to origin at {}; {}\n",
+                short(&main),
+                expected.replace("{branch}", &forge.branch)
+            )),
+            "{output}"
+        );
+        assert_eq!(verdict(&output), "merge: passed — pushed main to origin", "{output}");
+        assert_eq!(forge.remote_main(), main);
+    }
 }
