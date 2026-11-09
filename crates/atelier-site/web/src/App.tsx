@@ -4,6 +4,7 @@ import { BoardPage } from "./pages/Board";
 import { BriefPage } from "./pages/Brief";
 import { DebriefPage } from "./pages/Debrief";
 import { Home } from "./pages/Home";
+import { InboxPage } from "./pages/Inbox";
 import { ItemPage } from "./pages/Item";
 import { MissionPage } from "./pages/Mission";
 import { StrategyPage } from "./pages/Strategy";
@@ -13,6 +14,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/inbox" element={<InboxPage />} />
       <Route path="/:repo" element={<BoardPage />} />
       <Route path="/:repo/item/:id" element={<ItemPage />} />
       <Route path="/:repo/mission/:id" element={<MissionPage />} />

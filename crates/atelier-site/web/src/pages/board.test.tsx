@@ -65,7 +65,11 @@ describe("the board", () => {
     renderAt("/alpha");
     await heading("Board: alpha");
     expect(within(section("Ready Work")).getByRole("link")).toHaveAttribute("href", "/alpha/item/alpha-a1");
-    expect(within(section("Needs a Human")).getByRole("link")).toHaveAttribute("href", "/alpha/item/alpha-a2");
+    expect(
+      within(section("Needs a Human"))
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("href")),
+    ).toEqual(["/alpha/item/alpha-a2", "/alpha/item/alpha-l2"]);
   });
 
   it("groups open work by mission, then by label, each with where it stands", async () => {
@@ -74,7 +78,11 @@ describe("the board", () => {
     await heading("Board: alpha");
     const open = section("Open Work");
     const groups = within(open).getAllByRole("heading", { level: 3 });
-    expect(groups.map((group) => group.textContent)).toEqual(["Read plans on the base branch", "Label ops"]);
+    expect(groups.map((group) => group.textContent)).toEqual([
+      "Read plans on the base branch",
+      "Label needs-human",
+      "Label ops",
+    ]);
     expect(within(groups[0]).getByRole("link")).toHaveAttribute("href", "/alpha/mission/alpha-m1");
     expect(within(row(open, "alpha-a1")).getByText("ready")).toBeInTheDocument();
     expect(within(row(open, "alpha-a2")).getByText("needs human")).toBeInTheDocument();
@@ -99,7 +107,12 @@ describe("the board", () => {
     renderAt("/beta");
     await heading("Board: beta");
     expect(within(section("In Progress")).getByText("No work in progress.")).toBeInTheDocument();
-    expect(within(section("Done in the Last 14 Days")).getByText("Nothing done.")).toBeInTheDocument();
+    // beta's one closed record is superseded mission beta-m3.
+    expect(
+      within(section("Done in the Last 14 Days"))
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("href")),
+    ).toEqual(["/beta/item/beta-m3"]);
   });
 
   it("is linked from the repository list, and links back from brief, debrief and item pages", async () => {

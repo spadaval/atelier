@@ -148,6 +148,15 @@ td {
 .rows a .title {
   color: var(--link);
 }
+.rows .links {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+.rows .links a {
+  color: var(--link);
+}
 .item > * + * {
   margin-left: 0.4rem;
 }

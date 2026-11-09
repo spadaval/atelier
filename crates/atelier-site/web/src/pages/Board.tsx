@@ -8,6 +8,7 @@ import type { InProgress } from "../api/InProgress";
 import type { ReviewState } from "../api/ReviewState";
 import { Facts, ItemLine, Loading, Page, Section } from "../components/Page";
 import { countNoun, localDate, shortCommit } from "../text";
+import { InboxLink } from "./Inbox";
 
 /** The crumbs of a repository's pages: the board, then `page`. */
 export function repoCrumbs(repo: string, page?: string) {
@@ -86,6 +87,7 @@ function BoardView({ body }: { body: BoardResponse }) {
   const { repo, board } = body;
   return (
     <Page crumbs={repoCrumbs(repo)} title={`Board: ${repo}`}>
+      <InboxLink />
       <Facts
         facts={[
           ["Base", <code>{`${body.base_branch} at ${shortCommit(body.base_commit)}`}</code>],
