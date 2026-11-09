@@ -35,7 +35,7 @@ Independently show the site mission's criterion site-matches-cli holds on this h
 
 ## Done when
 
-- [ ] An agent that did not build the site fetches, over the Tailscale hostname, the brief and debrief page of every mission in every Atelier repository on this host, and each returns 200 and shows the title, criteria count and item count that `atelier brief -q` and `atelier debrief -q` print on that repository's base branch.
+- [ ] An agent that did not build the site fetches, over the Tailscale hostname, the brief and debrief page of every mission in every Atelier repository on this host, and each returns 200 and shows the mission's title as `atelier issue show <mission>` gives it, and the criteria and item counts that `atelier brief -q` and `atelier debrief -q` print, all run in a detached worktree of that repository's base branch.
 - [ ] For each repository, the board lists the same in-progress, ready and needs-human items as `atelier status` run in a detached worktree of its base branch (created under `$HOME/.cache/` and removed afterwards).
 - [ ] Every inbox entry's links return 200.
 - [ ] A receipt for site-matches-cli records the commit, the hostname fetched, the counts and any failures.

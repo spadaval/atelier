@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: replanned from Sumeet's 2026-11-08 direction: brief and debrief pages first, a board per repository, the inbox as a notification queue, --html removed"
+last_changed: "2026-11-09: planning review fixes: one captured base commit through every view read, the branch-overlay read contract, a Markdown URL policy, an executable title check"
 ---
 
 # Why
@@ -30,9 +30,10 @@ agents.
 
 - site-matches-cli: with the site installed and published on this host, fetched
   over the Tailscale hostname, every mission of every Atelier repository here
-  has a brief and a debrief page that return 200 and show the title, criteria
-  count and item count that `atelier brief -q` and `atelier debrief -q` give on
-  that repository's base branch; each repository's board lists the same
+  has a brief and a debrief page that return 200 and show the mission's title
+  as `atelier issue show` gives it, and the criteria and item counts that
+  `atelier brief -q` and `atelier debrief -q` print, all run on that
+  repository's base branch; each repository's board lists the same
   in-progress, ready and needs-human items as `atelier status` on its base
   branch; and every inbox link returns 200. Shown by validation item
   atelier-mtb3.
@@ -65,8 +66,12 @@ asked every session and gives both review points one place.
   with (see Design).
 - Pages, in Sumeet's order: brief and debrief first, then the board, then the
   inbox, which is a notification queue and not the home page.
-- Everything is read from each repository's base branch commit, never from a
-  checkout, so a stale or detached worktree cannot mislead it.
+- What a page says about missions and work comes from one captured commit of
+  each repository's base branch, never from a checkout, so a stale or detached
+  worktree cannot mislead it. The one exception is the overlay of work in
+  flight (the board's branches, approvals and findings), which comes from each
+  owned work branch's own records, read at a pinned commit of that branch.
+  Nothing is read from a working tree, and nothing is written.
 - When qualities conflict: correct and current beats complete, read-only beats
   convenient, the T3 host's responsiveness beats page speed, and plain pages
   beat polish.
@@ -83,9 +88,16 @@ depends on the CLI.
 **Reading a repository at a commit.** `atelier-app` gains a record loader that
 builds a `RecordIndex` from a commit's tree (`git ls-tree` and
 `git cat-file --batch`, as `git_freshness` already does) in memory, with no
-temporary directory. The brief, debrief and status views take every file they
-read, such as the strategy (`mission_review.rs` reads it from the working tree
-today, lines 887 and 1443), from that commit. Git runs against the
+temporary directory. The brief, debrief and status views take that one captured
+commit and read everything from it. Today they read the checkout in these
+places, each of which must change: `RecordIndex::load` reads a directory and
+validates against the working tree's `workflow.yaml`
+(`record_index.rs:1232`); `mission_review.rs` reads the strategy from the
+working tree (lines 887 and 1443) and pins history to `HEAD` (lines 360 and
+1470); and `criteria.rs` reads the strategy's criteria from the working tree
+(line 48) and runs `git rev-parse HEAD` for receipt history (line 249). Run
+against a common Git directory, `HEAD` is whatever the main checkout has out,
+not the base. Git runs against the
 repository's common Git directory with optional locks off, so nothing the site
 does writes to a repository. The loader lives in `atelier-app` because it is
 a records concern; `Snapshot::at`'s tarball extraction (atelier-3i7x) can move
@@ -110,7 +122,10 @@ status and the debrief afterwards, with links to both at
 `render_brief_html` in `commands/mission_review.rs`) move into `atelier-site`
 as pure functions returning a `String`. New pages use the same helpers, so
 there is one HTML style and one `escape`. Whole Markdown documents (strategies,
-item bodies) render with `pulldown-cmark`, with raw HTML escaped. No front-end
+item bodies) render with `pulldown-cmark`, with raw HTML escaped and one
+shared URL policy for links and images: relative paths, fragments, `http`,
+`https` and `mailto` are kept, and any other scheme (`javascript:`, `data:`,
+`vbscript:` and the rest) is rendered as plain text. No front-end
 framework, no JavaScript beyond what the existing pages carry.
 
 **Server.** `axum` on a `tokio` runtime, bound to loopback; `tailscale serve`
@@ -142,10 +157,12 @@ different rendering path, and every later page changes.
 Planner's spike (2026-11-09, this repository, installed binary from a
 checkout): `atelier debrief atelier-k8h8 -q` (48 items) took 7.7 s wall
 (5.6 s user, 2.1 s sys) and 64 MB peak RSS; `atelier brief atelier-yfqu -q`
-0.13 s; `atelier status` 1.6 s. The views read the working tree in two known
-places: `RecordIndex::load` from a directory and the strategy file. So the
-work is a loader and two read sites, and the cost is real but bounded; a large
-debrief must be cached by base commit and capped at two renders.
+0.13 s; `atelier status` 1.6 s. Reading the code found the checkout reads the Design
+lists: records and policy from the working tree, the strategy in two views and
+the criteria parser, and `HEAD` pins in the views and receipt history. So the
+work is a loader and one captured commit threaded through those sites, and the
+cost is real but bounded; a large debrief must be cached by base commit and
+capped at two renders.
 
 atelier-zpmb tests it first: it serves brief and debrief pages from the base
 commit with a read-only proof and the load bound measured on this host, before

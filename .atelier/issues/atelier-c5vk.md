@@ -15,7 +15,7 @@ schema_version: 2
 closed_at: "2026-11-09T06:41:17.067334663+00:00"
 status: "done"
 title: "Build the site as crate atelier-site in the atelier binary, on axum, with the existing HTML helpers"
-updated_at: "2026-11-09T06:41:17.067334663+00:00"
+updated_at: "2026-11-09T06:52:38.191978430+00:00"
 ---
 
 ## Context
@@ -36,6 +36,11 @@ Where does the site's code live, how does it ship, and which HTTP, HTML and Mark
 ## Decision
 
 A new library crate `crates/atelier-site`, called by `atelier serve` in `atelier-cli`, so the site ships in the one `atelier` binary and always reads records the way the CLI does. HTTP on `axum`, `tokio` and `tower`: the cap and timeout come from maintained layers rather than our code, and later work (live thread status from atelier-bnek, write actions under a later decision) fits it; the compile-time cost is accepted. HTML from the existing helpers moved into the site crate, not `maud`, so there is one style and no rewrite of the brief and debrief; a test renders `<script>` in record text on every route and finds it escaped. Whole Markdown documents render with `pulldown-cmark`, raw HTML escaped. A record loader that reads a commit's tree in memory lives in `atelier-app`. Decided by the planner of atelier-yfqu on 2026-11-09 under the plan procedure; Sumeet's approval of the mission's brief confirms it, and the strategy's Authority reserves changing it to him.
+
+## Notes
+
+- 2026-11-09 [decision] The site applies one shared URL policy to rendered Markdown: relative paths, fragments, http, https and mailto are kept, and any other scheme (javascript:, data:, vbscript: and the rest) is rendered as plain text. The library choice stands; the strategy's Design and atelier-zpmb carry the rule and its fixture.
+  Reason: planning review finding atelier-wjok: escaping raw HTML leaves link and image destinations with any scheme
 
 ## Report
 
