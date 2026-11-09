@@ -406,3 +406,56 @@ fn a_view_is_built_once_per_base_commit() {
     assert_ne!(after["base_commit"], first["base_commit"]);
     assert!(client.site().builds_run() > built);
 }
+
+/// Makes every loose-object directory of `objects` unreadable, or readable
+/// again, so Git still opens the repository and reads its refs but cannot
+/// read a commit.
+fn readable(objects: &Path, yes: bool) {
+    let mode = if yes { "u+rwx" } else { "000" };
+    for entry in fs::read_dir(objects).unwrap().flatten() {
+        let name = entry.file_name();
+        if name.len() == 2 {
+            let status = Command::new("chmod")
+                .arg(mode)
+                .arg(entry.path())
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+    }
+}
+
+#[test]
+fn a_failure_reading_git_is_not_kept_once_git_reads_again() {
+    let root = scratch();
+    let (alpha, _) = fleet(root.path());
+    let objects = alpha.dir.join(".git/objects");
+    let client = client(root.path());
+    // The records are loaded; then a view is built while Git cannot read
+    // objects.
+    get_json(&client, "/api/alpha/mission/alpha-m1", 200);
+    readable(&objects, false);
+    let (status, body) = client.get("/api/alpha/mission/alpha-m2/debrief");
+    readable(&objects, true);
+    assert_eq!(status, 500, "{body}");
+    get_json(&client, "/api/alpha/mission/alpha-m2/debrief", 200);
+
+    // A server that first meets the failure reading the base's policy.
+    let fresh = super::client(root.path());
+    readable(&objects, false);
+    let repos = get_json(&fresh, "/api/repos", 200);
+    let (status, body) = fresh.get("/api/alpha/mission/alpha-m1/brief");
+    readable(&objects, true);
+    let alpha_entry = repos["repos"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|repo| repo["base_branch"].is_null() || repo["repo"] == "alpha")
+        .unwrap()
+        .clone();
+    assert!(alpha_entry["error"].is_string(), "{alpha_entry}");
+    assert_ne!(status, 200, "{body}");
+    get_json(&fresh, "/api/alpha/mission/alpha-m1/brief", 200);
+    let repos = get_json(&fresh, "/api/repos", 200);
+    assert!(repos["repos"][0]["error"].is_null(), "{repos}");
+}

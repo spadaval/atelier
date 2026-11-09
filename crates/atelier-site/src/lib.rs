@@ -183,19 +183,22 @@ impl Site {
         .map_err(|error| Reply::error(StatusCode::INTERNAL_SERVER_ERROR, error))
     }
 
-    /// The records of a repository's base commit, loaded once per commit.
+    /// The records of a repository's base commit, loaded once per commit
+    /// once a load succeeds.
     async fn loaded(&self, snapshot: &Arc<Snapshot>) -> Result<Arc<Loaded>, Reply> {
         let shared = snapshot.clone();
         let loaded = self
             .build(
-                || snapshot.loaded.get().cloned(),
-                move || shared.loaded.get_or_init(|| shared.load()).clone(),
+                || snapshot.loaded.get().cloned().map(Ok),
+                move || shared.load_once(),
             )
             .await?;
         loaded.map_err(|error| Reply::json(StatusCode::INTERNAL_SERVER_ERROR, &ApiError { error }))
     }
 
-    /// A view of one mission, built once per base commit.
+    /// A view of one mission, built once per base commit. Only a view built
+    /// without error is kept: an error may come from Git failing for a
+    /// moment, so the next request builds again.
     async fn view(
         &self,
         snapshot: &Arc<Snapshot>,
@@ -208,20 +211,19 @@ impl Site {
         let id = mission.to_owned();
         let reply = self
             .build(cached, move || {
-                let reply = match shared.loaded.get_or_init(|| shared.load()) {
-                    Ok(loaded) => shared.build_view(loaded, &id, kind),
-                    Err(error) => Reply::json(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        &ApiError {
-                            error: error.clone(),
-                        },
-                    ),
+                let reply = match shared.load_once() {
+                    Ok(loaded) => shared.build_view(&loaded, &id, kind),
+                    Err(error) => {
+                        Reply::json(StatusCode::INTERNAL_SERVER_ERROR, &ApiError { error })
+                    }
                 };
-                shared
-                    .views
-                    .lock()
-                    .expect("view lock")
-                    .insert((id, kind), reply.clone());
+                if reply.status == StatusCode::OK {
+                    shared
+                        .views
+                        .lock()
+                        .expect("view lock")
+                        .insert((id, kind), reply.clone());
+                }
                 reply
             })
             .await?;
@@ -261,7 +263,11 @@ impl Fleet {
                             .remove(&key)
                             .or_else(|| kept.get(&key).cloned())
                             .unwrap_or_else(|| discovery::commit_facts(&common_dir, commit));
-                        kept.insert(key, facts.clone());
+                        // A policy that cannot be read may be Git failing
+                        // for a moment, so it is read again next scan.
+                        if facts.base_branch.is_ok() {
+                            kept.insert(key, facts.clone());
+                        }
                         facts
                     };
                     discovery::base(&common_dir, &mut facts_of)
@@ -341,7 +347,8 @@ fn unique_names<'a>(names: impl Iterator<Item = &'a str>) -> Vec<String> {
 struct Snapshot {
     common_dir: PathBuf,
     commit: String,
-    loaded: OnceLock<std::result::Result<Arc<Loaded>, String>>,
+    /// The records, once a load has succeeded.
+    loaded: OnceLock<Arc<Loaded>>,
     views: Mutex<HashMap<(String, ViewKind), Reply>>,
 }
 
@@ -360,6 +367,16 @@ enum ViewKind {
 impl Snapshot {
     fn read(&self) -> ReadContext<'_> {
         ReadContext::at_commit(&self.common_dir, self.commit.clone())
+    }
+
+    /// The loaded records, loading them unless a load has succeeded; a
+    /// failed load is not kept.
+    fn load_once(&self) -> std::result::Result<Arc<Loaded>, String> {
+        if let Some(loaded) = self.loaded.get() {
+            return Ok(loaded.clone());
+        }
+        let loaded = self.load()?;
+        Ok(self.loaded.get_or_init(|| loaded).clone())
     }
 
     fn load(&self) -> std::result::Result<Arc<Loaded>, String> {

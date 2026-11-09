@@ -82,7 +82,10 @@ All eight Done when lines hold. `atelier serve` (new crate `crates/atelier-site`
 
 See the four decision notes above: serializing the existing view models with `{kind, value}` enums; a semaphore around builds rather than a tower concurrency layer; refs read afresh on every request with in-flight scans shared; and the local base branch, URL names, scan limits and default port.
 
+### Review fixes
+
+Round 1 (gpt-6.1-sol-r1) found three `fix_now` issues, each fixed in its own commit with a test seen failing first: repeated names could collide (atelier-aodt; `repeated_names_get_suffixes_no_repository_has`, `repositories_with_the_same_name_each_answer_under_their_own`); a failed load, view build or policy read was kept until the base moved (atelier-cuq9; `a_failure_reading_git_is_not_kept_once_git_reads_again`, which makes the loose objects unreadable for a moment); and a dropped request freed its build slot while its build ran on, letting four builds overlap (atelier-oowv; `a_dropped_request_keeps_its_build_slot_until_the_build_ends`). The generated TypeScript also lost the trailing spaces `ts-rs` writes, so the whole branch passes `git diff --check`.
+
 ### Open items
 
-- A failed load or view build is cached for its base commit like a successful one, so a transient Git failure (a process that could not start) stays until the base moves or the server restarts.
 - The Rust doc comments on the view types appear in the generated TypeScript, so editing one needs `ATELIER_UPDATE_FIXTURES=1` to refresh `web/src/api/`.

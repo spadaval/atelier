@@ -117,7 +117,9 @@ loaded from it and each view built from them, as serialized JSON, keyed by
 repository and base commit. A newer base commit replaces a repository's
 entry, and a scan drops the entries of repositories that are gone, so only
 the latest commit of each repository is kept. What the policy and config of
-a default or base commit say is kept the same way.
+a default or base commit say is kept the same way. Only successes are kept:
+a load, view or policy read that fails is tried again by the next request,
+since the failure may be Git failing for a moment rather than the commit.
 
 Refs are never cached. Every request scans the roots and reads each
 repository's refs again, so it reads the base as of its arrival; requests
@@ -125,7 +127,8 @@ that arrive while a scan is running wait for the next one, which serves them
 all.
 
 A record load or view build runs on a blocking thread once it holds one of
-two build slots, and checks the cache again once it has one, so twenty
+two build slots, which it keeps until the work ends even if its request has
+gone, and checks the cache again once it has one, so twenty
 requests for the same cold view build it at most twice. A request that waits
 more than five seconds for a slot gets a 503 with `Retry-After: 1`
 (`builds_are_capped_and_a_long_wait_is_a_503`). The cap is a semaphore around
