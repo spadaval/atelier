@@ -40,7 +40,7 @@ jobs:
         run: scripts/ci-jobs.sh "$BASE" HEAD >> "$GITHUB_OUTPUT"
       - name: git diff --check
         run: |
-          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
+          if [ -z "$BASE" ] || ! git rev-parse -q --verify "$BASE^{commit}" >/dev/null; then
             echo "No base commit to compare against."
           else
             git diff --check "$BASE" HEAD

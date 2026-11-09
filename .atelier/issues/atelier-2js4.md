@@ -65,4 +65,3 @@ There are two decision notes above. The first covers why this is a shell script 
 - Records-only skipping and the master `push` path have been seen only in the script test, not in a live run. The first record push to `master` after merge will show both.
 - If a code push makes `master` red and a records-only or Markdown push follows it, that run is green. Then `merge`'s base note, which reads only the newest `master` run, stops warning about the failure. Code still reaches `master` only after its PR passes, so this needs a bad merge combination first.
 - The probe branch `atelier-2js4-probe` is still on the remote. Only the human deletes remote branches.
-
