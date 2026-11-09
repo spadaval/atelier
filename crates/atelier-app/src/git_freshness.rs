@@ -218,6 +218,9 @@ struct ObjectCache {
     edges: HashMap<(String, String), Rc<Vec<CommitEdge>>>,
     first_parents: HashMap<String, Option<String>>,
     retired_findings: HashMap<String, Rc<std::collections::BTreeSet<String>>>,
+    issue_graphs: HashMap<String, Rc<crate::record_index::RecordIndex>>,
+    /// Issue records parsed by blob ID, shared by every commit holding one.
+    parsed_issues: HashMap<String, Option<atelier_records::CanonicalIssueRecord>>,
     trees: HashMap<String, Rc<Vec<TreeEntry>>>,
     commit_trees: HashMap<String, String>,
     histories: HashMap<Vec<String>, String>,
@@ -722,6 +725,55 @@ impl<'a> ReadContext<'a> {
         let findings = Rc::new(findings);
         self.cache.retired_findings.insert(commit, findings.clone());
         Ok(findings)
+    }
+    /// The issue records `commit` holds, as a graph of their links: what
+    /// was planned then, whatever later commits changed or pruned. A record
+    /// that does not parse is left out.
+    pub(crate) fn issue_graph_at(
+        &mut self,
+        commit: &str,
+    ) -> Result<Rc<crate::record_index::RecordIndex>> {
+        let commit = self.commit_id(commit)?;
+        if let Some(found) = self.cache.issue_graphs.get(&commit) {
+            return Ok(found.clone());
+        }
+        let listed = git_output(
+            self.repo,
+            &[
+                "ls-tree",
+                "-r",
+                "-z",
+                "--name-only",
+                &commit,
+                "--",
+                ".atelier/issues/",
+            ],
+        )?;
+        let mut issues = Vec::new();
+        for name in listed
+            .split(|byte| *byte == 0)
+            .filter(|name| !name.is_empty())
+        {
+            let path = PathBuf::from(String::from_utf8_lossy(name).into_owned());
+            let Ok(relative) = path.strip_prefix(".atelier") else {
+                continue;
+            };
+            if path.extension().is_none_or(|extension| extension != "md") {
+                continue;
+            }
+            let Some((_, oid)) = self.entry(&commit, &path)? else {
+                continue;
+            };
+            if !self.cache.parsed_issues.contains_key(&oid) {
+                let text = self.blob(&commit, &path)?;
+                let parsed = atelier_records::parse_issue_record(&text, relative).ok();
+                self.cache.parsed_issues.insert(oid.clone(), parsed);
+            }
+            issues.extend(self.cache.parsed_issues[&oid].clone());
+        }
+        let graph = Rc::new(crate::record_index::RecordIndex::issue_graph(issues));
+        self.cache.issue_graphs.insert(commit, graph.clone());
+        Ok(graph)
     }
     pub(crate) fn blob(&mut self, commit: &str, path: &Path) -> Result<String> {
         let commit = self.commit_id(commit)?;

@@ -727,6 +727,7 @@ impl Gates<'_> {
     fn finding_lines(&self, node: &GateNode, nodes: &[GateNode]) -> Vec<Line> {
         let mut lines = Vec::new();
         let mut awaiting = Vec::new();
+        let mut stale = Vec::<((String, String, String), Vec<String>)>::new();
         for gap in &node.gaps {
             match gap {
                 Gap::Undisposed(id) => {
@@ -744,8 +745,61 @@ impl Gates<'_> {
                     ));
                 }
                 Gap::AwaitingApproval(id) => awaiting.push(id.clone()),
+                // review.current already names what made the owner's
+                // approval stale.
+                Gap::StaleApproval { finding, .. }
+                    if self.owner_failed(nodes, "review.current") =>
+                {
+                    awaiting.push(finding.clone())
+                }
+                Gap::StaleApproval {
+                    finding,
+                    approval,
+                    commit,
+                    subject,
+                } => {
+                    let key = (approval.clone(), commit.clone(), subject.clone());
+                    match stale.iter_mut().find(|(group, _)| *group == key) {
+                        Some((_, findings)) => findings.push(finding.clone()),
+                        None => stale.push((key, vec![finding.clone()])),
+                    }
+                }
                 _ => {}
             }
+        }
+        // A stale approval names the commit that changed code after it
+        // (atelier-ygul).
+        for ((approval, commit, subject), findings) in stale {
+            let mut targets = findings
+                .iter()
+                .map(|id| self.finding(id).0)
+                .collect::<Vec<_>>();
+            targets.sort();
+            targets.dedup();
+            let record = if node.target == "session" {
+                targets.join(", ")
+            } else {
+                node.target.clone()
+            };
+            let owner = match self.owner {
+                Some(owner) if self.light_path => owner.to_owned(),
+                _ => self.reviewed_owner(targets.first().map_or(&record, |target| target)),
+            };
+            let count = count_noun(findings.len(), "fix_now finding");
+            let they = if findings.len() == 1 {
+                "it needs"
+            } else {
+                "they need"
+            };
+            lines.push(Line::new(
+                &record,
+                node,
+                format!(
+                    "approval {approval} saw the fix of {count}, but commit {} \"{subject}\" changed code after it; {they} an approval of the current code",
+                    &commit[..commit.len().min(8)]
+                ),
+                Some(self.request_command(&owner)),
+            ));
         }
         if !awaiting.is_empty() {
             let mut targets = awaiting

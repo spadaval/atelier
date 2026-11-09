@@ -73,7 +73,9 @@ details.
 A code change since the approved commit, as `atelier --help` says. Code is
 anything outside `.atelier/issues`, `.atelier/reviews` and `.atelier/evidence`:
 policy, config and strategy files count (a strategy edit on the base is still
-planning), and a clean merge of the base does not.
+planning), and a clean merge of the base does not. For an item or mission marked
+done on the base, another mission's strategy edit already there does not count
+either: that mission's planning review covers it. Its own mission's does.
 
 A base that moved on needs no catch-up: merge it in (`merge --sync`) only when
 the branch is next to merge and conflicts, a merge check fails on the merged
