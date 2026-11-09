@@ -255,6 +255,7 @@ impl Forge {
     }
     /// Answers the runs lookups of `commit` with `states` in turn, the last
     /// one for good.
+    #[cfg(feature = "test-hooks")]
     fn run_sequence(&self, commit: &str, id: u64, states: &[(&str, Option<&str>)]) {
         let dir = self.gh.path().join("sequence").join(commit);
         fs::create_dir_all(&dir).unwrap();

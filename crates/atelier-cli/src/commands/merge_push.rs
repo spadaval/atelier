@@ -83,7 +83,7 @@ pub(super) fn run(
             return Err(error);
         }
     };
-    push_branch(repo, remote, &branch, &base, &rerun)?;
+    push_branch(repo, remote, &branch, &rerun)?;
     *unpushed = format!(", {base} not pushed");
     let (pull, opened) = ensure_pull_request(&github, repo, &owned, &branch, &base)?;
     say(&format!(
@@ -197,7 +197,7 @@ pub(super) fn run(
 /// Pushes the committed branch head to `remote` under the branch's name,
 /// never forcing, and sets the branch's upstream when it has none and the
 /// remote is a name rather than a URL.
-fn push_branch(repo: &Path, remote: &str, branch: &str, base: &str, rerun: &str) -> Result<()> {
+fn push_branch(repo: &Path, remote: &str, branch: &str, rerun: &str) -> Result<()> {
     let has_upstream = git::git_output(
         repo,
         &[
