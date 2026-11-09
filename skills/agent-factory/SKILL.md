@@ -89,10 +89,11 @@ append it as a note pointing at its Report.
 
 Say which you use, and why, before starting it: the one named, else the one that
 fits, else work under the core rules. Each is `procedures/<name>.md`:
-`orchestrate` (run a mission or workstream), `plan` (shape strategy and issues),
-`groom` (re-sequence the backlog and find work not to do), `decide` (a
-consequential choice), `implement` (build one slice, code or docs), `diagnose`
-(find a failure's cause), `review` (review someone else's change), `validate`
-(test claims independently), `migrate` (a breaking change), `audit` (findings on
-architecture or process), `garden` (fix where agents trip, and bring the human
-the rest) and `install` (set up or assess a repo).
+`plan` (the planner's role: take a mission to the human's approval),
+`orchestrate` (run a mission or workstream), `groom` (re-sequence the backlog
+and find work not to do), `decide` (a consequential choice), `implement` (build
+one slice, code or docs), `diagnose` (find a failure's cause), `review` (review
+someone else's change), `validate` (test claims independently), `migrate` (a
+breaking change), `audit` (findings on architecture or process), `garden` (fix
+where agents trip, and bring the human the rest) and `install` (set up or assess
+a repo).

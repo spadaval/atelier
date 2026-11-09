@@ -115,7 +115,7 @@ something observable.
 | Worktree per assignment | An orchestrator dispatches three sequential slices and a reviewer | Sequential slices share one checkout, the reviewer reads the diff without a worktree, and closing the mission removes everything created. |
 | Branch per review fix | Review returns five findings | Fixes are commits on the branch under review. There are no new branches. |
 | Demolition by default | A function with twelve in-repo callers must change signature | One atomic PR that changes the function and all callers, green throughout. No breakage phase or reconnect issues. |
-| Strategy as design doc | A planner writes a strategy for a multi-increment mission | About 150 lines or fewer. Design goes in docs, sequencing and status in the tracker, and there is no revision log. |
+| Strategy as design doc | A planner writes a strategy for a multi-increment mission | The technical design goes in the strategy's Design section, as long as the mission needs; the rest is about 150 lines or fewer. Sequencing and status go in the tracker, and there is no revision log. |
 | Criteria stripping | A human-set criterion fails the achievability test | Propose a rewrite or follow-up to the human; keep the criterion until they decide. |
 | Over-splitting | A coherent theme's outcome sentence joins two related surfaces with "and" | One mission, not split by surface count. |
 | Mission copies strategy | A mission issue is created for a mission with a strategy file | The body links the strategy and gives a one-paragraph outcome, without copying scope or success criteria. |
