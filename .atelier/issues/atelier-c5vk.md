@@ -15,7 +15,7 @@ schema_version: 2
 closed_at: "2026-11-09T06:41:17.067334663+00:00"
 status: "done"
 title: "Build the site as crate atelier-site in the atelier binary, on axum, with the existing HTML helpers"
-updated_at: "2026-11-09T06:52:38.191978430+00:00"
+updated_at: "2026-11-09T14:30:56.074299133+00:00"
 ---
 
 ## Context
@@ -41,6 +41,8 @@ A new library crate `crates/atelier-site`, called by `atelier serve` in `atelier
 
 - 2026-11-09 [decision] The site applies one shared URL policy to rendered Markdown: relative paths, fragments, http, https and mailto are kept, and any other scheme (javascript:, data:, vbscript: and the rest) is rendered as plain text. The library choice stands; the strategy's Design and atelier-zpmb carry the rule and its fixture.
   Reason: planning review finding atelier-wjok: escaping raw HTML leaves link and image destinations with any scheme
+- 2026-11-09 [decision] The HTML choice is superseded by decision atelier-8p7u: a Vite, TypeScript and React app over a read-only JSON API. The crate and axum choices stand.
+  Reason: Sumeet reopened the HTML choice on 2026-11-09: server-rendered pages are slow to iterate on and hard to test as a UI
 
 ## Report
 

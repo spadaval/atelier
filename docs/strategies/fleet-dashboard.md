@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: planning review fixes: one captured base commit through every view read, the branch-overlay read contract, a Markdown URL policy, an executable title check"
+last_changed: "2026-11-09: Sumeet's direction: a Vite, TypeScript and React app over a read-only JSON API (decision atelier-8p7u), and a debrief one history walk long (atelier-t7pb) before the site"
 ---
 
 # Why
@@ -28,32 +28,34 @@ agents.
 
 # Success Criteria
 
-- site-matches-cli: with the site installed and published on this host, fetched
-  over the Tailscale hostname, every mission of every Atelier repository here
-  has a brief and a debrief page that return 200 and show the mission's title
-  as `atelier issue show` gives it, and the criteria and item counts that
-  `atelier brief -q` and `atelier debrief -q` print, all run on that
-  repository's base branch; each repository's board lists the same
-  in-progress, ready and needs-human items as `atelier status` on its base
-  branch; and every inbox link returns 200. Shown by validation item
-  atelier-mtb3.
+- site-matches-cli: with the site installed and published on this host, loaded
+  in a headless browser over the Tailscale hostname, every mission of every
+  Atelier repository here has a brief and a debrief page that render without
+  an error and show the mission's title as `atelier issue show` gives it, and
+  the criteria and item counts that `atelier brief -q` and `atelier debrief -q`
+  print, all run on that repository's base branch; each repository's board
+  lists the same in-progress, ready and needs-human items as `atelier status`
+  on its base branch; and every inbox link opens a page that renders without
+  an error. Shown by validation item atelier-mtb3.
 
 # Sizing
 
-- Complexity: high. A new crate, a long-running server, a loader that reads
-  records from a commit instead of a directory, and URLs that agents and
-  Sumeet will rely on.
+- Complexity: high. A new crate and a web app in a second language, a
+  long-running server, a loader that reads records from a commit instead of a
+  directory, a JSON contract between them, and URLs that agents and Sumeet will
+  rely on.
 - Value: high. The brief and debrief are the human's two review points under
   the mission model (atelier-fl12), and "where are we?" is asked in nearly
   every session.
 - Risk: medium. The site is read-only and reaches only this host; a wrong or
-  missing page shows and the service can be stopped. The silent hazard, a
-  board that disagrees with the records, is checked against `atelier status`
-  by fixture tests and by the validation.
+  missing page shows and the service can be stopped. The silent hazards are a
+  board that disagrees with the records, checked against `atelier status` by
+  fixture tests and the validation, and a release or install that ships
+  without the app, which the build refuses.
 
 Worth it: the cheaper paths are keeping `--html` files and asking agents
 (Sumeet's direction rejects both) or static pages regenerated after `land`
-(rejected in decision atelier-7bs1); a few days of work removes a question
+(rejected in decision atelier-7bs1); a week or two of work removes a question
 asked every session and gives both review points one place.
 
 # Shape
@@ -62,8 +64,10 @@ asked every session and gives both review points one place.
   (atelier-tu8c) records it and narrows `PRODUCT_INTENT.md`'s Boundaries.
   Records in Git stay the only source of truth, and guard decisions read only
   Git.
-- Decision atelier-c5vk settles where the site lives and what it is built
-  with (see Design).
+- Decision atelier-c5vk settles the crate and server; decision atelier-8p7u,
+  which supersedes its HTML choice, settles the app (see Design).
+- The debrief is made fast first (atelier-t7pb): it runs one history walk per
+  item today, and the site would inherit that cost.
 - Pages, in Sumeet's order: brief and debrief first, then the board, then the
   inbox, which is a notification queue and not the home page.
 - What a page says about missions and work comes from one captured commit of
@@ -72,18 +76,22 @@ asked every session and gives both review points one place.
   flight (the board's branches, approvals and findings), which comes from each
   owned work branch's own records, read at a pinned commit of that branch.
   Nothing is read from a working tree, and nothing is written.
+- The site shows what the CLI computes. The API serializes `atelier-app`'s
+  views; the app lays them out and decides nothing about work.
 - When qualities conflict: correct and current beats complete, read-only beats
   convenient, the T3 host's responsiveness beats page speed, and plain pages
   beat polish.
 
 # Design
 
-**Components.** A new library crate, `crates/atelier-site`, owns the site:
-repository discovery, the HTTP routes, the page renderers, the cache and the
-load limits. `atelier-cli` gains `atelier serve`, which parses its flags and
-calls into the crate, so the site ships in the one `atelier` binary. Dependency
-direction: `atelier-cli` → `atelier-site` → `atelier-app`; the site never
-depends on the CLI.
+**Components.** A library crate, `crates/atelier-site`, owns the server:
+repository discovery, the JSON API, serving the embedded app, the cache and
+the load limits. Its `web/` directory holds the app: Vite, TypeScript and
+React, with pnpm, React Router and `react-markdown` (decision atelier-8p7u).
+`atelier-cli` gains `atelier serve`, which parses its flags and calls into the
+crate, so the site ships in the one `atelier` binary. Dependency direction:
+`atelier-cli` → `atelier-site` → `atelier-app`; the site never depends on the
+CLI.
 
 **Reading a repository at a commit.** `atelier-app` gains a record loader that
 builds a `RecordIndex` from a commit's tree (`git ls-tree` and
@@ -97,11 +105,10 @@ working tree (lines 887 and 1443) and pins history to `HEAD` (lines 360 and
 1470); and `criteria.rs` reads the strategy's criteria from the working tree
 (line 48) and runs `git rev-parse HEAD` for receipt history (line 249). Run
 against a common Git directory, `HEAD` is whatever the main checkout has out,
-not the base. Git runs against the
-repository's common Git directory with optional locks off, so nothing the site
-does writes to a repository. The loader lives in `atelier-app` because it is
-a records concern; `Snapshot::at`'s tarball extraction (atelier-3i7x) can move
-to it later.
+not the base. Git runs against the repository's common Git directory with
+optional locks off, so nothing the site does writes to a repository. The
+loader lives in `atelier-app` because it is a records concern;
+`Snapshot::at`'s tarball extraction (atelier-3i7x) can move to it later.
 
 **Discovery.** `atelier serve --root <dir>...` (default `~/projects`) scans
 for checkouts holding `.atelier/`, groups them by Git common directory so each
@@ -110,77 +117,100 @@ policy at the base commit. The URL slug is the project's `project_slug`; a
 repository whose records cannot be read shows its error on its own page while
 the others render.
 
-**Routes.** `/` lists repositories with their counts.
-`/<repo>/mission/<id>` shows the brief while the mission is in its draft
-status and the debrief afterwards, with links to both at
-`/<repo>/mission/<id>/brief` and `/debrief`, and to the strategy rendered at
-`/<repo>/mission/<id>/strategy`. Later increments add `/<repo>` (the board),
-`/<repo>/item/<id>` and `/inbox`.
+**API.** Read-only `GET` routes returning JSON: `/api/repos` (repositories and
+their counts), `/api/<repo>/mission/<id>/brief`, `/debrief` and `/strategy`
+(the strategy's Markdown as text). Later increments add `/api/<repo>/board`,
+`/api/<repo>/item/<id>` and `/api/inbox`. Each response is an `atelier-app`
+view model serialized with `serde`, plus the base commit it was read from;
+the API adds no fields the CLI's views do not compute, apart from links and
+that commit. TypeScript types come from the Rust types through `ts-rs` and are
+checked in; a Rust test fails when they are stale. An unknown repository,
+mission or item is a 404 with a JSON error, and a repository whose records
+fail to load is a 500 naming the error.
 
-**Rendering.** The brief and debrief HTML renderers and their helpers
-(`crates/atelier-cli/src/review_page.rs`, `render_html` and
-`render_brief_html` in `commands/mission_review.rs`) move into `atelier-site`
-as pure functions returning a `String`. New pages use the same helpers, so
-there is one HTML style and one `escape`. Whole Markdown documents (strategies,
-item bodies) render with `pulldown-cmark`, with raw HTML escaped and one
-shared URL policy for links and images: relative paths, fragments, `http`,
-`https` and `mailto` are kept, and any other scheme (`javascript:`, `data:`,
-`vbscript:` and the rest) is rendered as plain text. No front-end
-framework, no JavaScript beyond what the existing pages carry.
+**App.** Client routes mirror the pages: `/` lists repositories,
+`/<repo>/mission/<id>` shows the brief while the mission is in its workflow's
+initial status and the debrief afterwards, linking `/brief`, `/debrief` and
+`/strategy`; later `/<repo>`, `/<repo>/item/<id>` and `/inbox`. The server
+answers any non-API path with the app's `index.html`. Markdown renders with
+`react-markdown`, raw HTML skipped, and one URL policy for links and images:
+relative paths, fragments, `http`, `https` and `mailto` are kept, and any other
+scheme (`javascript:`, `data:`, `vbscript:` and the rest) renders as plain
+text. React escapes every other string. Pages read at a 390 px viewport.
+
+**Build and ship.** The built app is embedded in the binary with `rust-embed`.
+A `cargo install` or release build either builds the app or fails naming the
+missing step, so no binary ships without it; Rust tests and debug builds need
+no Node. The release workflow builds the app before `dist` builds the
+binaries. While developing, `pnpm dev` serves the app with reloads and proxies
+`/api` to a running `atelier serve`.
+
+**Tests.** Rust tests check each API route against fixture repositories, and
+write each response as checked-in fixture JSON that a Rust test keeps current.
+Vitest and Testing Library test components against that JSON, so the
+frontend's fixtures are real API output. One Playwright suite starts
+`atelier serve` on a fixture repository and loads every route at a 390 px
+viewport. CI gains a `web` job, chosen by `scripts/ci-jobs.sh` when `web/` or
+the API changes, that runs the typecheck, Vitest, the build and Playwright.
 
 **Server.** `axum` on a `tokio` runtime, bound to loopback; `tailscale serve`
-publishes it beside T3 Code's port. Renders run in `spawn_blocking`, at most
-two at a time (a `tower` concurrency limit); a request that waits more than 5
-seconds for a slot gets a 503 page. Only work that depends on nothing but the
-base commit, such as a parsed record index or a rendered debrief, is cached,
-keyed by repository and base commit, and only the latest base commit per
-repository is kept. Anything read from other refs (work branches, review
-state) is recomputed per request or keyed by every ref it read, and anything
+publishes it beside T3 Code's port. View builds run in `spawn_blocking`, at
+most two at a time (a `tower` concurrency limit); a request that waits more
+than 5 seconds for a slot gets a 503. Only work that depends on nothing but the
+base commit, such as a parsed record index or a debrief view, is cached, keyed
+by repository and base commit, and only the latest base commit per repository
+is kept. Anything read from other refs (work branches, review state) is
+recomputed per request or keyed by every ref it read, and anything
 date-dependent by the date. A systemd user unit runs it with
 `Restart=on-failure`, `MemoryMax=` and `CPUQuota=`.
 
 **Dependencies chosen.** `axum`, `tokio` and `tower` (decision atelier-c5vk):
 maintained, and its layers give the concurrency cap and timeout without
-hand-written code; they cost about sixty crates of compile time. `pulldown-cmark`
-for Markdown: small, and the standard Rust parser. No template engine: the
-existing pages are hand-written HTML, and one style beats rewriting them.
+hand-written code. Vite, TypeScript, React, React Router, `react-markdown`,
+Vitest, Testing Library and Playwright (decision atelier-8p7u): fast reloads,
+component and browser tests, and the stack agents write most reliably. `serde`
+and `ts-rs` for the contract, `rust-embed` for shipping. Node and pnpm are
+already on this host for T3 Code.
 
-`docs/architecture/` gains a page for the site, written by atelier-zpmb.
+`docs/architecture/` gains a page for the site, written by atelier-zpmb and
+extended by atelier-yn69.
 
 # Derisking
 
 Riskiest assumption: the brief, debrief and status views can be built from a
 base commit alone, without a checkout, cheaply enough to serve from the host
 T3 Code runs on. If it fails, the site needs checkouts of its own or a
-different rendering path, and every later page changes.
+different read path, and every later page changes.
 
-Planner's spike (2026-11-09, this repository, installed binary from a
-checkout): `atelier debrief atelier-k8h8 -q` (48 items) took 7.7 s wall
-(5.6 s user, 2.1 s sys) and 64 MB peak RSS; `atelier brief atelier-yfqu -q`
-0.13 s; `atelier status` 1.6 s. Reading the code found the checkout reads the Design
-lists: records and policy from the working tree, the strategy in two views and
-the criteria parser, and `HEAD` pins in the views and receipt history. So the
-work is a loader and one captured commit threaded through those sites, and the
-cost is real but bounded; a large debrief must be cached by base commit and
-capped at two renders.
+What is known (2026-11-09, this repository): `atelier debrief atelier-k8h8 -q`
+(45 items) takes 7.4 s and 63 MB, and tracing it shows 88 git processes, 45 of
+them a full-history `git log` per item in `done_when_edits` at about 0.18 s
+each; one walk over `.atelier/issues/` takes 0.28 s. atelier-t7pb removes that
+cost first. `atelier brief atelier-yfqu -q` takes 0.13 s and `atelier status`
+1.6 s. Reading the code found the checkout reads the Design lists. So the work
+is a loader and one captured commit threaded through those sites.
 
-atelier-zpmb tests it first: it serves brief and debrief pages from the base
+atelier-zpmb tests it first: it serves the brief and debrief API from the base
 commit with a read-only proof and the load bound measured on this host, before
-any board or inbox work starts.
+any app or board work starts. The second risk, shipping a Node build inside a
+Rust binary through `cargo install` and `dist`, is atelier-yn69's first Done
+when, before its pages.
 
 # Scope
 
-In: ADR 0030 and the documents it changes; `atelier-site` and `atelier serve`;
-brief, debrief, strategy, board, item and inbox pages; the unit file and setup
-docs; removing `--html` and `.atelier/runtime/reviews/`, and pointing Agent
+In: the debrief speed fix; ADR 0030 and the documents it changes;
+`atelier-site`, its app and `atelier serve`; brief, debrief, strategy, board,
+item and inbox pages; the CI job; the unit file and setup docs; removing
+`--html`, its renderers and `.atelier/runtime/reviews/`, and pointing Agent
 Factory and the docs at the site; the validation.
 
 Out: attribution, model metrics and live T3 thread status (mission
 atelier-bnek); actions from the site, which need a later decision under ADR
-0030; a dashboard inside T3 Code; CLI orientation views (mission atelier-4pzj),
-though shared view fixes reach the site; the debrief's content bugs (atelier-jdpf
-and its ten items, groom digest atelier-8i86 G8), except that atelier-59fz
-rewrites their Done when lines that name the HTML debrief.
+0030; a dashboard inside T3 Code; agents reading the JSON API; CLI orientation
+views (mission atelier-4pzj), though shared view fixes reach the site; the
+debrief's content bugs (atelier-jdpf and its ten items, groom digest
+atelier-8i86 G8), except that atelier-59fz rewrites their Done when lines that
+name the HTML debrief.
 
 Environment: this host only, every Atelier repository under `~/projects`.
 Installing and publishing the service (loose end atelier-6rts) and Sumeet's
@@ -188,16 +218,19 @@ phone read (loose end atelier-pywh) sit outside the mission.
 
 # Authority
 
-The orchestrator may change items, their order, routes, page layout and design
-detail within ADR 0030, decision atelier-c5vk and this Shape. Changing the
-Outcome or the criterion, the crate or library choice, keeping `--html`, or
+The orchestrator may change items, their order, routes, API shapes, page
+layout and design detail, and libraries below the framework, within ADR 0030,
+decisions atelier-c5vk and atelier-8p7u, and this Shape. Changing the Outcome
+or the criterion, the crate, server or app framework, keeping `--html`, or
 adding write actions to the site needs Sumeet.
 
 # Risks and Unknowns
 
-- A cold debrief of a large mission takes about 8 s. If that is too slow to
-  read, warming the cache after the base moves is a later item; zpmb's Report
-  records the numbers.
+- If atelier-t7pb leaves a large debrief over about 2 s, the cache by base
+  commit carries it; warming the cache after the base moves is a later item.
+- The build may not embed cleanly in `dist`'s cross builds (musl, aarch64);
+  atelier-yn69 proves the release path first and may build the app once and
+  share it across targets.
 - `tailscale serve` may conflict with T3 Code's own setup; atelier-6rts must
   leave T3's published port unchanged.
 - The installed binary serves every repository; one whose records are newer
