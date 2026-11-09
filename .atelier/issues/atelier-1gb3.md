@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-09T17:59:21.622465141+00:00"
+status: "done"
 title: "Take approved work to the published base in one command, through a forge"
-updated_at: "2026-11-09T04:11:33.885408199+00:00"
+updated_at: "2026-11-09T17:59:21.622465141+00:00"
 ---
 
 ## Outcome
@@ -34,3 +35,7 @@ Planned 2026-11-08 at Sumeet's direction after atelier-3sk9 needed three CI reru
 ## Notes
 
 - 2026-11-08 [note] 2026-11-08: atelier-ah82 (ADR 0031, forge docs) merged at 8d54da43 and atelier-7tul (GitHub forge, ci.passed, this repo's policy switched) merged at 5f54b1e1; binary reinstalled. Planned atelier-fad5 and atelier-vqoy in detail against the reviewed docs: fad5 builds merge --push's publishing steps (1, 4-8) and refuses without a forge as the docs say; vqoy builds branch push, the pull request (steps 2-3) and --wait.
+
+## Report
+
+All six items merged. one-command-merge is proven by validation receipt atelier-nxxk: atelier-7o4r merged and published with atelier merge --push alone (PR #74, merge 5eaf5101). ci.passed reused CI run 42583151383 after another thread's strategy commits reached master.
