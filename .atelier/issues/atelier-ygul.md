@@ -54,4 +54,3 @@ Rewrote the first Done when line after diagnosis. The guessed cause (the mission
 ### Open items
 
 - The fallback message for a fix_now finding that no approval saw ("came after the current approval") is unchanged.
-
