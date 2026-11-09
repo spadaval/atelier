@@ -4,6 +4,9 @@ id: "atelier-fad5"
 issue_type: "feature"
 labels:
 - "forge"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-fad5
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Let merge push the base it integrated, and stop recommending piped gates"
-updated_at: "2026-11-09T04:11:33.511430640+00:00"
+updated_at: "2026-11-09T04:14:53.215272773+00:00"
 ---
 
 ## Goal
