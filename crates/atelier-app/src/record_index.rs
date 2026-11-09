@@ -1218,10 +1218,14 @@ impl RecordIndex {
         } else {
             BTreeSet::new()
         };
+        self.validate_link_types_with(&custom, errors);
+    }
+
+    fn validate_link_types_with(&self, custom: &BTreeSet<String>, errors: &mut Vec<anyhow::Error>) {
         for record in self.issues.values() {
             for relation in &record.relationships.relates {
                 if let Err(error) =
-                    validate_issue_link_type(&record.issue.id, &relation.relation_type, &custom)
+                    validate_issue_link_type(&record.issue.id, &relation.relation_type, custom)
                 {
                     errors.push(error);
                 }
@@ -1246,18 +1250,51 @@ impl RecordIndex {
                 return;
             }
         };
+        self.validate_issues_against(&policy, policy_exists, errors);
+    }
+
+    fn validate_issues_against(
+        &self,
+        policy: &WorkflowPolicy,
+        dependencies: bool,
+        errors: &mut Vec<anyhow::Error>,
+    ) {
         for record in self.issues.values() {
             if let Err(error) = crate::workflow_policy::validate_issue_against_policy(
-                &policy,
+                policy,
                 &record.issue,
                 &record_file("issue", &record.issue.id),
             ) {
                 errors.push(error);
             }
         }
-        if policy_exists {
-            errors.extend(self.mission_dependency_errors(&policy));
+        if dependencies {
+            errors.extend(self.mission_dependency_errors(policy));
         }
+    }
+
+    /// Builds and validates an index from record files read from a commit's
+    /// tree (atelier-zpmb), as [`Self::load`] does from a directory, with
+    /// the link types and workflow policy that commit holds. It names no
+    /// repository, so no error or lookup consults a checkout or another ref.
+    pub(crate) fn from_commit_files(
+        files: RecordFiles,
+        custom_link_types: &BTreeSet<String>,
+        policy: &WorkflowPolicy,
+    ) -> Result<Self> {
+        if let Some(first) = files.errors.into_iter().next() {
+            return Err(first.error);
+        }
+        let (index, mut errors) = Self::structural(files.issues, files.evidence, files.reviews);
+        index.validate_link_types_with(custom_link_types, &mut errors);
+        index.validate_issues_against(policy, true, &mut errors);
+        if let Some(error) = errors.into_iter().next() {
+            return Err(error);
+        }
+        index
+            .with_base_exemptions(files.base_exemptions)?
+            .with_retired_dispositions(files.retired_dispositions)?
+            .with_branch_reviews(files.branch_reviews)
     }
 
     fn validate_mission_dependencies(&self, policy: &WorkflowPolicy) -> Result<()> {

@@ -6,6 +6,7 @@
 pub mod after_merge;
 pub mod base_policy;
 pub mod ci_passed;
+pub mod commit_records;
 pub mod committed_snapshot;
 pub mod criteria;
 pub mod decisions;

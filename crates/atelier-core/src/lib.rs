@@ -220,7 +220,7 @@ impl fmt::Display for ParseIssuePriorityError {
 
 impl std::error::Error for ParseIssuePriorityError {}
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, ts_rs::TS)]
 pub struct Issue {
     pub id: IssueId,
     pub title: String,
@@ -253,7 +253,7 @@ pub fn closes_undone(status: &str) -> bool {
 }
 
 /// A repository-relative strategy link. Strategy revisions live in Git.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct IssueStrategy {
     pub path: String,
@@ -268,7 +268,7 @@ impl IssueStrategy {
 }
 
 /// A repository-relative link from a decision record to the ADR it produced.
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct IssueAdr {
     pub path: String,
@@ -298,7 +298,7 @@ fn repository_relative(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct WorkflowBranch {
     pub work_branch: String,
@@ -566,7 +566,7 @@ pub enum IssueSectionName {
 
 /// One success criterion of a mission (atelier-et6q): a `- <slug>: <text>`
 /// bullet under the success criteria heading.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct Criterion {
     pub slug: String,
     pub text: String,
@@ -574,7 +574,7 @@ pub struct Criterion {
 
 /// The criteria read from a success criteria section, in document order,
 /// and what could not be read as a criterion.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct CriteriaParse {
     pub criteria: Vec<Criterion>,
     pub problems: Vec<String>,
@@ -685,7 +685,8 @@ pub fn parse_criteria(section: &str) -> CriteriaParse {
 /// a `### <title>` subsection of the Report; the text before the first is
 /// the Outcome. Agent Factory asks for them; Atelier requires only a
 /// non-empty Report (atelier-jnrh).
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
 pub enum ReportPart {
     Deviations,
     Decisions,
@@ -726,7 +727,7 @@ impl ReportPart {
 /// The Report section read as the implementer report: the Outcome, then any
 /// report parts. A `###` heading that names no part stays in the text around
 /// it.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct CloseReport {
     pub outcome: String,
     /// The parts in record order; a repeated heading adds to its part.
@@ -845,7 +846,7 @@ fn note_bullet(line: &str) -> Option<IssueNote> {
 
 /// A decision note: the choice and the reason are required, rejected
 /// alternatives are optional.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct DecisionNote {
     pub date: String,
     pub choice: String,
@@ -1288,7 +1289,7 @@ impl IssueSectionName {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(rename_all = "kebab-case")]
 pub enum EvidenceResult {
     Pass,
@@ -1402,7 +1403,7 @@ pub struct EvidenceRecordData {
     pub criteria_mission: Option<String>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceCriterion {
     pub slug: String,

@@ -31,6 +31,9 @@ pub struct ReadContext<'a> {
     /// One `git cat-file --batch` process serves every object read, instead
     /// of a Git process per query (atelier-0349).
     reader: Option<ObjectReader>,
+    /// Whether files are read from the pinned HEAD's tree rather than the
+    /// working tree, as `atelier serve` reads a base commit (atelier-zpmb).
+    at_commit: bool,
 }
 
 struct ObjectReader {
@@ -232,6 +235,30 @@ impl<'a> ReadContext<'a> {
             clean: None,
             cache: ObjectCache::default(),
             reader: None,
+            at_commit: false,
+        }
+    }
+    /// A read phase over one captured commit and nothing else: HEAD is
+    /// `commit`, files such as a strategy are read from its tree, and no
+    /// working tree or other ref is consulted. `repo` may be a common Git
+    /// directory with no checkout (atelier-zpmb).
+    pub fn at_commit(repo: &'a Path, commit: String) -> Self {
+        Self {
+            at_commit: true,
+            ..Self::from_head(repo, commit)
+        }
+    }
+    /// Whether this read phase reads one captured commit only.
+    pub(crate) fn reads_commit_only(&self) -> bool {
+        self.at_commit
+    }
+    /// The text of a repository-relative file: from the pinned HEAD's tree
+    /// in a read phase [`Self::at_commit`], else from the working tree.
+    pub(crate) fn file_text(&mut self, path: &str) -> Result<String> {
+        if self.at_commit {
+            self.blob("HEAD", Path::new(path))
+        } else {
+            Ok(std::fs::read_to_string(self.repo.join(path))?)
         }
     }
     pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[PathBuf]) -> Self {
@@ -244,6 +271,7 @@ impl<'a> ReadContext<'a> {
             clean: None,
             cache: ObjectCache::default(),
             reader: None,
+            at_commit: false,
         }
     }
     /// Attach successful fresh working-path proof for this same read phase.
@@ -270,6 +298,10 @@ impl<'a> ReadContext<'a> {
         Ok(expression)
     }
     pub(crate) fn code_clean(&mut self) -> Result<bool> {
+        if self.at_commit {
+            // A commit read alone holds no uncommitted code.
+            return Ok(true);
+        }
         match self.clean {
             Some(clean) => Ok(clean),
             None => Ok(working_code_paths(self.repo)?.is_empty()),
@@ -365,6 +397,51 @@ impl<'a> ReadContext<'a> {
         let entries = Rc::new(entries);
         self.cache.trees.insert(tree.to_owned(), entries.clone());
         Ok(entries)
+    }
+    /// Every entry below `dir` in `commit`'s tree that is not a directory,
+    /// as `(path, mode, object ID)` in path order, read through the batch
+    /// reader with no other Git process. Empty when `dir` is not in the tree.
+    pub(crate) fn files_under(
+        &mut self,
+        commit: &str,
+        dir: &Path,
+    ) -> Result<Vec<(PathBuf, String, String)>> {
+        let mut tree = self.commit_tree(commit)?;
+        let name = dir.to_str().context("tree path is not UTF-8")?;
+        for component in name.split('/').filter(|part| !part.is_empty()) {
+            let entries = self.tree_entries(&tree)?;
+            let Some(found) = entries
+                .iter()
+                .find(|entry| entry.name == component.as_bytes() && entry.mode == "40000")
+            else {
+                return Ok(Vec::new());
+            };
+            tree = found.oid.clone();
+        }
+        let mut files = Vec::new();
+        let mut pending = vec![(dir.to_path_buf(), tree)];
+        while let Some((prefix, tree)) = pending.pop() {
+            for entry in self.tree_entries(&tree)?.iter() {
+                let path = prefix.join(std::str::from_utf8(&entry.name)?);
+                if entry.mode == "40000" {
+                    pending.push((path, entry.oid.clone()));
+                } else {
+                    files.push((path, entry.mode.clone(), entry.oid.clone()));
+                }
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+    /// The bytes of the blob `oid`, read through the batch reader.
+    pub(crate) fn blob_bytes(&mut self, oid: &str) -> Result<Vec<u8>> {
+        let object = self
+            .object(oid)?
+            .with_context(|| format!("Git object missing: {oid}"))?;
+        if object.kind != "blob" {
+            bail!("expected Git blob {oid}");
+        }
+        Ok(object.data)
     }
     /// Paths that differ between two commits, as `git diff --name-status`
     /// lists them without rename detection: both sides of a rename appear.
@@ -754,10 +831,24 @@ fn ancestry_path<'a>(commits: &'a str, pin: &str) -> Result<HashSet<&'a str>> {
     Ok(marked)
 }
 
+/// Whether Git runs without optional locks, set once by `atelier serve`.
+static READ_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Runs every later Git command with optional locks off
+/// (`GIT_OPTIONAL_LOCKS=0`), so reading a repository never writes to it,
+/// as `atelier serve` requires (ADR 0030). Commands that change a
+/// repository keep Git's default.
+pub fn read_only() {
+    READ_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Pinned evidence and review history always describe original Git objects.
 pub fn command(repo: &Path) -> Command {
     let mut command = Command::new("git");
     command.current_dir(repo).arg("--no-replace-objects");
+    if READ_ONLY.load(std::sync::atomic::Ordering::Relaxed) {
+        command.env("GIT_OPTIONAL_LOCKS", "0");
+    }
     command
 }
 pub fn git_output(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {

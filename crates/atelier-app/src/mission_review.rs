@@ -25,7 +25,7 @@ use crate::record_index::RecordIndex;
 use crate::workflow_policy::WorkflowPolicy;
 
 /// What a reference to an issue shows: its chip and the card behind it.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct IssueRef {
     pub id: String,
     pub title: String,
@@ -40,7 +40,7 @@ pub struct IssueRef {
 }
 
 /// A review event or evidence receipt that record text mentions by ID.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct RecordRef {
     /// `finding`, `approval`, `disposition`, `review`, `trivial` or `receipt`.
     pub kind: String,
@@ -48,7 +48,8 @@ pub struct RecordRef {
 }
 
 /// Something only the human can settle.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Ask {
     /// An open decision record in scope.
     Decision(String),
@@ -62,7 +63,8 @@ pub enum Ask {
 
 /// A fact about one item that departs from the plan, beside its report's
 /// own Deviations.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Change {
     /// A done claim later withdrawn.
     Reopened(DateTime<Utc>),
@@ -79,7 +81,7 @@ pub enum Change {
 }
 
 /// How review of one item went.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct ReviewSummary {
     /// Any review event targets the item.
     pub recorded: bool,
@@ -119,7 +121,7 @@ impl ReviewSummary {
 }
 
 /// One piece of delivered work, with its children.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
 pub struct WorkEntry {
     pub id: String,
     /// The parent, when the parent itself is not done.
@@ -142,7 +144,7 @@ pub struct WorkEntry {
 }
 
 /// A child of a done item, shown under it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
 pub struct WorkChild {
     pub id: String,
     /// The child's own implementer report, when the child is done.
@@ -150,7 +152,7 @@ pub struct WorkChild {
 }
 
 /// Work in scope that is not done, or that was dropped.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct OpenEntry {
     pub id: String,
     pub parent: Option<String>,
@@ -170,7 +172,7 @@ pub struct OpenEntry {
 }
 
 /// A review event on the mission itself, such as a plan approval.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct MissionEvent {
     pub id: String,
     pub event: &'static str,
@@ -181,7 +183,7 @@ pub struct MissionEvent {
 }
 
 /// A receipt that judged mission criteria.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct ValidationReceipt {
     pub id: String,
     /// The mission, or the item it was recorded on.
@@ -193,7 +195,7 @@ pub struct ValidationReceipt {
 
 /// The receipts one producer recorded against one commit: one validation
 /// of the mission.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct ValidationRun {
     pub identity: String,
     pub at: DateTime<Utc>,
@@ -208,7 +210,7 @@ pub struct ValidationRun {
 
 /// How the mission was checked: review of each item, the runs that judged
 /// its criteria, and the criteria still waiting for proof.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct Validation {
     /// Delivered items with an approval, items waived as trivial, items
     /// reviewed without an approval, and items with no review at all.
@@ -224,7 +226,8 @@ pub struct Validation {
 }
 
 /// One moment in what the mission did.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Event {
     /// The mission left `draft`.
     Started,
@@ -248,13 +251,13 @@ pub enum Event {
     Closed,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct TimedEvent {
     pub at: Option<DateTime<Utc>>,
     pub event: Event,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
 pub struct Debrief {
     pub mission: Issue,
     pub status_category: Option<String>,
@@ -884,7 +887,7 @@ pub fn debrief(
     let why = mission
         .strategy
         .as_ref()
-        .and_then(|strategy| std::fs::read_to_string(read.repo.join(&strategy.path)).ok())
+        .and_then(|strategy| read.file_text(&strategy.path).ok())
         .and_then(|text| atelier_core::markdown_section(&text, "why"))
         .or_else(|| {
             record
@@ -1324,7 +1327,7 @@ fn base_exemptions(index: &RecordIndex, timeline: &MissionTimeline) -> Vec<Missi
 }
 
 /// One scoped item as the brief shows it (atelier-acrt).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
 pub struct BriefItem {
     pub issue: Issue,
     pub status_category: Option<String>,
@@ -1339,7 +1342,7 @@ pub struct BriefItem {
 }
 
 /// A mission's plan, for review before work starts.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, ts_rs::TS)]
 pub struct Brief {
     pub mission: Issue,
     pub status_category: Option<String>,
@@ -1440,7 +1443,7 @@ pub fn brief(
     let strategy_text = mission
         .strategy
         .as_ref()
-        .and_then(|strategy| std::fs::read_to_string(read.repo.join(&strategy.path)).ok());
+        .and_then(|strategy| read.file_text(&strategy.path).ok());
     let strategy_section = |name: &str| {
         strategy_text
             .as_deref()
@@ -1468,7 +1471,7 @@ pub fn brief(
             .as_ref()
             .map(|strategy| strategy.path.clone()),
         generated_from: read.pinned("HEAD").ok(),
-        criteria: crate::criteria::mission_criteria(index, read.repo, mission_id)?,
+        criteria: crate::criteria::mission_criteria_read(index, read, mission_id)?,
         items,
         human_decisions,
         risks,

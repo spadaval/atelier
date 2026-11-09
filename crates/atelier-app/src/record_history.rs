@@ -167,6 +167,10 @@ fn walk(
 /// The newest base commit HEAD holds, when HEAD is not on the base's line:
 /// `None` on the base, behind it, or without a base branch.
 fn fork(read: &ReadContext<'_>, head: &str, base: Option<&str>) -> Option<String> {
+    // A read of one captured commit reads the base itself, and no other ref.
+    if read.reads_commit_only() {
+        return None;
+    }
     let commit = |args: &[&str]| {
         git_output(read.repo, args)
             .ok()
@@ -202,7 +206,7 @@ fn retired_epic_at(
 }
 
 /// A dated moment in a record's history.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct Moment {
     pub position: usize,
     pub commit: String,
@@ -223,7 +227,7 @@ impl From<&RecordVersion> for Moment {
 }
 
 /// What a mission's history says about its scope.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct MissionTimeline {
     /// The first version that left `draft`, or the mission's first version.
     pub started: Option<Moment>,
@@ -449,7 +453,7 @@ fn advances(record: &CanonicalIssueRecord, other: &str) -> bool {
 /// changed once work began is seen by whoever judges the work, including
 /// after an approval, which record edits do not make stale. It refuses
 /// nothing.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct DoneWhenEdit {
     pub issue: String,
     /// The commit that changed the Done when.
@@ -460,7 +464,8 @@ pub struct DoneWhenEdit {
 }
 
 /// A record that judged the item before its Done when changed.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum Precedent {
     Finding(String),
     FailingReceipt(String),

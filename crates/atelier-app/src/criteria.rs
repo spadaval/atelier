@@ -10,12 +10,13 @@ use atelier_core::{
     IssueSectionName,
 };
 
-use crate::git_freshness::{git_output, ReadContext};
+use crate::git_freshness::ReadContext;
 use crate::objective_graph::{mission_issue_ids, mission_objective_kind};
 use crate::record_index::RecordIndex;
 
 /// Where a mission's criteria are written.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum CriteriaSource {
     /// The Success Criteria heading of the linked strategy file.
     Strategy(String),
@@ -23,7 +24,7 @@ pub enum CriteriaSource {
     Mission,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct MissionCriteria {
     pub mission_id: String,
     pub source: CriteriaSource,
@@ -39,13 +40,33 @@ pub fn mission_criteria(
     repo_root: &Path,
     mission_id: &str,
 ) -> Result<MissionCriteria> {
+    criteria_read_with(index, mission_id, |path| {
+        Ok(std::fs::read_to_string(repo_root.join(path))?)
+    })
+}
+
+/// [`mission_criteria`] with the strategy read as `read` reads files: from
+/// its pinned commit when it reads one commit only (atelier-zpmb).
+pub fn mission_criteria_read(
+    index: &RecordIndex,
+    read: &mut ReadContext<'_>,
+    mission_id: &str,
+) -> Result<MissionCriteria> {
+    criteria_read_with(index, mission_id, |path| read.file_text(path))
+}
+
+fn criteria_read_with(
+    index: &RecordIndex,
+    mission_id: &str,
+    read_strategy: impl FnOnce(&str) -> Result<String>,
+) -> Result<MissionCriteria> {
     mission_objective_kind(index, mission_id)?;
     let record = index
         .issue_record(mission_id)
         .ok_or_else(|| index.not_found(crate::record_ref::RecordKind::Issue, mission_id))?;
     if let Some(strategy) = &record.issue.strategy {
         let path = strategy.path.clone();
-        let parse = match std::fs::read_to_string(repo_root.join(&path)) {
+        let parse = match read_strategy(&path) {
             Ok(text) => match strategy_criteria_section(&text) {
                 Some(section) => parse_criteria(&section),
                 None => CriteriaParse::default(),
@@ -153,7 +174,7 @@ pub fn undefined_criteria(
 }
 
 /// One receipt's judgement of one criterion.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct CriterionReceipt {
     pub evidence_id: String,
     pub target_id: String,
@@ -168,7 +189,8 @@ pub struct CriterionReceipt {
     pub code_commits_since: Option<usize>,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
 pub enum CriterionMark {
     /// The newest receipt in HEAD's history passes.
     Proven,
@@ -189,7 +211,7 @@ impl CriterionMark {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct CriterionProof {
     pub criterion: Criterion,
     pub mark: CriterionMark,
@@ -204,7 +226,7 @@ impl CriterionProof {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct MissionProof {
     pub criteria: MissionCriteria,
     pub proofs: Vec<CriterionProof>,
@@ -233,8 +255,7 @@ pub fn mission_proof_until(
     mission_id: &str,
     until: Option<&str>,
 ) -> Result<MissionProof> {
-    let repo_root = read.repo;
-    let criteria = mission_criteria(index, repo_root, mission_id)?;
+    let criteria = mission_criteria_read(index, read, mission_id)?;
     // A receipt belongs to the mission it was recorded against, wherever its
     // target has moved since.
     let mut receipts = index
@@ -246,10 +267,7 @@ pub fn mission_proof_until(
         (b.data.captured_at, &b.header.id).cmp(&(a.data.captured_at, &a.header.id))
     });
     // Without a commit there is no history, and so no receipt to count.
-    let head = git_output(repo_root, &["rev-parse", "HEAD"])
-        .ok()
-        .and_then(|head| String::from_utf8(head).ok())
-        .map(|head| head.trim().to_string());
+    let head = read.pinned("HEAD").ok();
     let mut proofs = Vec::new();
     for criterion in &criteria.parse.criteria {
         let mut naming = Vec::new();

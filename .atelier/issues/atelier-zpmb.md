@@ -4,6 +4,9 @@ id: "atelier-zpmb"
 issue_type: "feature"
 labels:
 - "fleet-dashboard"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-zpmb
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Serve every mission's brief and debrief as JSON from its base commit: atelier serve, read-only, for every repository here"
-updated_at: "2026-11-09T14:43:23.392860739+00:00"
+updated_at: "2026-11-09T16:09:35.665540244+00:00"
 ---
 
 ## Goal

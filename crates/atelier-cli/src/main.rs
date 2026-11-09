@@ -422,6 +422,26 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
         html: bool,
     },
 
+    /// Serve every mission's brief and debrief as JSON, read-only, for every
+    /// Atelier repository under the roots, from each one's base branch
+    #[command(after_help = "Routes:
+  GET /api/repos                            repositories, their counts and missions
+  GET /api/<repo>/mission/<id>              one mission and the review it opens on
+  GET /api/<repo>/mission/<id>/brief        the view `atelier brief` prints
+  GET /api/<repo>/mission/<id>/debrief      the view `atelier debrief` prints
+  GET /api/<repo>/mission/<id>/strategy     the strategy's Markdown
+
+Each repository is read from one commit of its base branch, never from a
+checkout, and nothing is written to it.")]
+    Serve {
+        /// Address to listen on
+        #[arg(long, default_value = "127.0.0.1:7341")]
+        bind: std::net::SocketAddr,
+        /// Directory to search for Atelier repositories; repeat for more [default: ~/projects]
+        #[arg(long = "root", value_name = "DIR")]
+        roots: Vec<std::path::PathBuf>,
+    },
+
     /// Prune accumulated artifacts safely
     Prune {
         /// Apply eligible cleanup; without this flag the command only reports candidates
@@ -963,6 +983,16 @@ fn run() -> Result<()> {
         commands::freshness::refresh();
         return Ok(());
     }
+    // The server reads repositories under its roots, not the current one.
+    if let Commands::Serve { bind, roots } = cli.command {
+        let roots = if roots.is_empty() {
+            vec![atelier_site::default_root()
+                .context("HOME is not set; name a directory with --root")?]
+        } else {
+            roots
+        };
+        return atelier_site::serve(bind, roots);
+    }
     // Every record write passes the rules `atelier check` applies before it
     // lands, and is refused before anything is written (atelier-ilba).
     atelier_app::record_guard::install();
@@ -1027,7 +1057,9 @@ fn run() -> Result<()> {
         Commands::Setup { unlink: true, .. } => commands::skill_link::unlink(quiet),
         Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
         Commands::Doctor => commands::session::doctor(quiet),
-        Commands::RefreshUpdateCheck => unreachable!("handled before the repository is read"),
+        Commands::RefreshUpdateCheck | Commands::Serve { .. } => {
+            unreachable!("handled before the repository is read")
+        }
         Commands::Brief { id, html } => {
             let (_, index) = load_repository()?;
             commands::mission_review::brief(&index, &id, html, quiet)
@@ -1461,6 +1493,7 @@ fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
         | Commands::Land { .. }
         | Commands::Doctor
         | Commands::RefreshUpdateCheck
+        | Commands::Serve { .. }
         | Commands::Setup { .. } => CanonicalTransactionMode::None,
         // Command-backed evidence deliberately executes its arbitrary child
         // before acquiring an association transaction for the canonical

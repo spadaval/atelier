@@ -8,7 +8,7 @@ use crate::work_classification::{work_buckets_for, WorkBuckets, WorkRow};
 use crate::workflow_policy::WorkflowPolicy;
 use atelier_core::{Issue, IssuePriority, RecordLink};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
 pub struct ObjectiveBucketTotals {
     pub active: usize,
     pub ready: usize,
