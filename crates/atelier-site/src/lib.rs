@@ -68,7 +68,7 @@ pub struct Site {
     /// base commits say.
     facts: Arc<Mutex<HashMap<(PathBuf, String), CommitFacts>>>,
     snapshots: Mutex<HashMap<PathBuf, Arc<Snapshot>>>,
-    builds: Semaphore,
+    builds: Arc<Semaphore>,
     built: AtomicUsize,
 }
 
@@ -77,7 +77,7 @@ impl Site {
         // Reading a repository never takes Git's optional locks.
         atelier_app::git_freshness::read_only();
         Self {
-            builds: Semaphore::new(options.max_builds),
+            builds: Arc::new(Semaphore::new(options.max_builds)),
             options,
             fleet: tokio::sync::Mutex::new(None),
             facts: Arc::new(Mutex::new(HashMap::new())),
@@ -145,7 +145,8 @@ impl Site {
 
     /// Runs `work` on a blocking thread once one of the build slots is free,
     /// unless `cached` answers first, before or after the wait. A wait longer
-    /// than `wait` is a 503.
+    /// than `wait` is a 503. The slot moves into the blocking job and is
+    /// freed when the work ends, even if the request has gone.
     async fn build<T: Send + 'static>(
         &self,
         cached: impl Fn() -> Option<T>,
@@ -154,7 +155,7 @@ impl Site {
         if let Some(value) = cached() {
             return Ok(value);
         }
-        let _permit = tokio::time::timeout(self.options.wait, self.builds.acquire())
+        let permit = tokio::time::timeout(self.options.wait, self.builds.clone().acquire_owned())
             .await
             .map_err(|_| {
                 Reply::json(
@@ -173,9 +174,13 @@ impl Site {
             return Ok(value);
         }
         self.built.fetch_add(1, Ordering::Relaxed);
-        tokio::task::spawn_blocking(work)
-            .await
-            .map_err(|error| Reply::error(StatusCode::INTERNAL_SERVER_ERROR, error))
+        tokio::task::spawn_blocking(move || {
+            let value = work();
+            drop(permit);
+            value
+        })
+        .await
+        .map_err(|error| Reply::error(StatusCode::INTERNAL_SERVER_ERROR, error))
     }
 
     /// The records of a repository's base commit, loaded once per commit.
@@ -834,5 +839,51 @@ mod tests {
             .1
             .contains("waited 0 s for one of its 2 view builds"));
         assert_eq!(site.builds_run(), 2);
+    }
+
+    /// A build keeps its slot until it finishes, even when the request that
+    /// started it goes away, so builds from later requests never overlap it
+    /// beyond the cap.
+    #[test]
+    fn a_dropped_request_keeps_its_build_slot_until_the_build_ends() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let site = Arc::new(Site::new(SiteOptions::new(Vec::new())));
+        let running = Arc::new(AtomicUsize::new(0));
+        let most = Arc::new(AtomicUsize::new(0));
+        let start = |site: Arc<Site>, running: Arc<AtomicUsize>, most: Arc<AtomicUsize>| {
+            tokio::spawn(async move {
+                let _ = site
+                    .build(
+                        || None,
+                        move || {
+                            let now = running.fetch_add(1, Ordering::SeqCst) + 1;
+                            most.fetch_max(now, Ordering::SeqCst);
+                            std::thread::sleep(Duration::from_millis(600));
+                            running.fetch_sub(1, Ordering::SeqCst);
+                        },
+                    )
+                    .await;
+            })
+        };
+        runtime.block_on(async {
+            let first = start(site.clone(), running.clone(), most.clone());
+            let second = start(site.clone(), running.clone(), most.clone());
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            // Both requests disconnect while their builds run.
+            first.abort();
+            second.abort();
+            let later = [
+                start(site.clone(), running.clone(), most.clone()),
+                start(site.clone(), running.clone(), most.clone()),
+            ];
+            for task in later {
+                task.await.unwrap();
+            }
+        });
+        assert_eq!(most.load(Ordering::SeqCst), 2);
     }
 }
