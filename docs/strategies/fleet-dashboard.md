@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: planning review fixes: base-ref bootstrap without a checkout, the server picks brief or debrief, asset routing before the app fallback, web CI on every Rust change"
+last_changed: "2026-11-09: planning review fixes: base-ref bootstrap, server-chosen review, asset routing, web CI on every Rust change, build.rs and dist wiring, full routes"
 ---
 
 # Why
@@ -120,8 +120,8 @@ the others render.
 counts and their missions, each with its id, title, status and which review
 the server says to show: the brief while the mission is in its workflow's
 initial status, the debrief afterwards), `/api/<repo>/mission/<id>` (that
-summary for one mission), `/api/<repo>/mission/<id>/brief`, `/debrief` and `/strategy`
-(the strategy's Markdown as text). Later increments add `/api/<repo>/board`,
+summary for one mission), `/api/<repo>/mission/<id>/brief`, `/api/<repo>/mission/<id>/debrief` and
+`/api/<repo>/mission/<id>/strategy` (the strategy's Markdown as text). Later increments add `/api/<repo>/board`,
 `/api/<repo>/item/<id>` and `/api/inbox`. Each response is an `atelier-app`
 view model serialized with `serde`, plus the base commit it was read from;
 the API adds no fields the CLI's views do not compute, apart from links and
@@ -132,8 +132,8 @@ fail to load is a 500 naming the error.
 
 **App.** Client routes mirror the pages: `/` lists repositories,
 `/<repo>/mission/<id>` shows the review the API names for it (the app never
-interprets statuses), linking `/brief`, `/debrief` and
-`/strategy`; later `/<repo>`, `/<repo>/item/<id>` and `/inbox`. The server
+interprets statuses), linking `/<repo>/mission/<id>/brief`,
+`/<repo>/mission/<id>/debrief` and `/<repo>/mission/<id>/strategy`; later `/<repo>`, `/<repo>/item/<id>` and `/inbox`. The server
 answers a path that names an embedded asset with that asset and its content
 type; a missing path under the asset directory is a 404, never `index.html`;
 and any other non-API path gets the app's `index.html`. Markdown renders with
@@ -144,9 +144,7 @@ text. React escapes every other string. Pages read at a 390 px viewport.
 
 **Build and ship.** The built app is embedded in the binary with `rust-embed`.
 A `cargo install` or release build either builds the app or fails naming the
-missing step, so no binary ships without it; Rust tests and debug builds need
-no Node. The release workflow builds the app before `dist` builds the
-binaries. While developing, `pnpm dev` serves the app with reloads and proxies
+missing step, so no binary ships without it: `crates/atelier-site/build.rs` builds the app (`pnpm install --frozen-lockfile` and `pnpm build` in `web/`) when the release profile is built and `web/dist` is missing or older than the app's sources, and fails naming the missing step when pnpm is absent; debug builds embed `web/dist` if it exists and otherwise serve a page saying how to build it, so Rust tests need no Node. `dist` runs that `build.rs` like any release build; its runners get Node and pnpm through `dist-workspace.toml`'s `github-build-setup`, and `.github/workflows/release.yml` is regenerated with `dist generate`, never edited by hand. While developing, `pnpm dev` serves the app with reloads and proxies
 `/api` to a running `atelier serve`.
 
 **Tests.** Rust tests check each API route against fixture repositories, and
@@ -233,9 +231,10 @@ adding write actions to the site needs Sumeet.
 
 - If atelier-t7pb leaves a large debrief over about 2 s, the cache by base
   commit carries it; warming the cache after the base moves is a later item.
-- The build may not embed cleanly in `dist`'s cross builds (musl, aarch64);
-  atelier-yn69 proves the release path first and may build the app once and
-  share it across targets.
+- The build may not run cleanly in `dist`'s cross builds (musl, aarch64);
+  atelier-yn69 proves the release path first, and building the app once and
+  sharing it across targets would need Sumeet's approval as a change to this
+  wiring.
 - `tailscale serve` may conflict with T3 Code's own setup; atelier-6rts must
   leave T3's published port unchanged.
 - The installed binary serves every repository; one whose records are newer
