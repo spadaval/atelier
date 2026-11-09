@@ -4,7 +4,9 @@
 //! mission opens on, read from the workflow policy. TypeScript types for
 //! these are generated with `ts-rs` into `web/src/api/`.
 
+use atelier_app::board::{Board, InProgress};
 use atelier_app::issue_read::ObjectiveBucketTotals;
+use atelier_app::item_view::ItemView;
 use atelier_app::mission_review::{Brief, Debrief};
 use atelier_app::workflow_policy::WorkflowPolicy;
 use atelier_core::Issue;
@@ -116,6 +118,37 @@ pub struct StrategyResponse {
     pub markdown: String,
 }
 
+/// `GET /api/<repo>/board`: what the base commit says about the
+/// repository's work, with the work in flight read from each owned work
+/// branch's records at its tip.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct BoardResponse {
+    pub repo: String,
+    pub base_branch: String,
+    pub base_commit: String,
+    pub board: Board,
+    /// Owners of work branches, then active work on the base no branch
+    /// read owns.
+    pub in_progress: Vec<InProgress>,
+    /// Work branches whose records could not be read.
+    pub unreadable_branches: Vec<UnreadableBranch>,
+}
+
+/// A work branch whose records could not be read, and why.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct UnreadableBranch {
+    pub branch: String,
+    pub error: String,
+}
+
+/// `GET /api/<repo>/item/<id>`: one item as its page shows it.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ItemResponse {
+    pub repo: String,
+    pub base_commit: String,
+    pub item: ItemView,
+}
+
 /// The body of every response that is not a 200.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ApiError {
@@ -131,6 +164,8 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     BriefResponse::export_all(&config)?;
     DebriefResponse::export_all(&config)?;
     StrategyResponse::export_all(&config)?;
+    BoardResponse::export_all(&config)?;
+    ItemResponse::export_all(&config)?;
     ApiError::export_all(&config)?;
     // ts-rs ends some lines with a space; strip them so the checked-in files
     // pass `git diff --check`.

@@ -4,6 +4,9 @@ id: "atelier-ahpf"
 issue_type: "feature"
 labels:
 - "fleet-dashboard"
+workflow_branch:
+  branch_base: master
+  work_branch: t3/fleet-board-item-pages
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Answer where are we, what's done and what's next: a board per repository and a page per item"
-updated_at: "2026-11-09T20:01:06.139321058+00:00"
+updated_at: "2026-11-09T20:03:36.231713120+00:00"
 ---
 
 ## Goal

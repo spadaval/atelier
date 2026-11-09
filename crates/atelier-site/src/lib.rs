@@ -6,9 +6,11 @@
 //!
 //! Only work that depends on nothing but a base commit is cached: the
 //! records read from it and the views built from them, keyed by repository
-//! and commit, and only the latest commit of each repository is kept. At
-//! most two loads or view builds run at once; a request that waits longer
-//! than five seconds for one gets a 503.
+//! and commit, and only the latest commit of each repository is kept. The
+//! board's work in flight is kept per work branch, keyed by the branch's tip
+//! and the base commit it was read against (atelier-ahpf). At most two loads
+//! or view builds run at once; a request that waits longer than five seconds
+//! for one gets a 503.
 
 pub mod api;
 pub mod app;
@@ -22,6 +24,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use atelier_app::board::{Board, BranchWork};
 use atelier_app::commit_records::CommitRecords;
 use atelier_app::git_freshness::ReadContext;
 use axum::body::Body;
@@ -30,12 +33,14 @@ use axum::http::{header, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use tokio::sync::Semaphore;
 
 use api::{
-    ApiError, BriefResponse, DebriefResponse, MissionLinks, MissionResponse, MissionSummary,
-    RepoCounts, RepoSummary, ReposResponse, Review, StrategyResponse,
+    ApiError, BoardResponse, BriefResponse, DebriefResponse, ItemResponse, MissionLinks,
+    MissionResponse, MissionSummary, RepoCounts, RepoSummary, ReposResponse, Review,
+    StrategyResponse, UnreadableBranch,
 };
 use discovery::{Base, CommitFacts};
 
@@ -48,6 +53,8 @@ pub struct SiteOptions {
     pub max_builds: usize,
     /// How long a request waits for one of them before a 503.
     pub wait: Duration,
+    /// What time it is, for the board's recently done work.
+    pub clock: Clock,
 }
 
 impl SiteOptions {
@@ -56,7 +63,33 @@ impl SiteOptions {
             roots,
             max_builds: 2,
             wait: Duration::from_secs(5),
+            clock: Clock::system(),
         }
+    }
+}
+
+/// What time the site takes it to be: the system's, or one a test sets.
+#[derive(Clone)]
+pub struct Clock(Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>);
+
+impl Clock {
+    pub fn system() -> Self {
+        Self(Arc::new(Utc::now))
+    }
+
+    /// A clock that reads `now` each time it is asked.
+    pub fn new(now: impl Fn() -> DateTime<Utc> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(now))
+    }
+
+    pub fn now(&self) -> DateTime<Utc> {
+        (self.0)()
+    }
+}
+
+impl std::fmt::Debug for Clock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Clock({})", self.now())
     }
 }
 
@@ -70,6 +103,8 @@ pub struct Site {
     /// base commits say.
     facts: Arc<Mutex<HashMap<(PathBuf, String), CommitFacts>>>,
     snapshots: Mutex<HashMap<PathBuf, Arc<Snapshot>>>,
+    /// Each work branch's work in flight, by common directory and branch.
+    branch_work: Arc<Mutex<HashMap<(PathBuf, String), BranchEntry>>>,
     builds: Arc<Semaphore>,
     built: AtomicUsize,
 }
@@ -84,6 +119,7 @@ impl Site {
             fleet: tokio::sync::Mutex::new(None),
             facts: Arc::new(Mutex::new(HashMap::new())),
             snapshots: Mutex::new(HashMap::new()),
+            branch_work: Arc::new(Mutex::new(HashMap::new())),
             built: AtomicUsize::new(0),
         }
     }
@@ -124,6 +160,26 @@ impl Site {
             .lock()
             .expect("snapshot lock")
             .retain(|dir, snapshot| current.get(dir) == Some(&snapshot.commit));
+        // A branch whose tip or base moved, or that is gone, is read again.
+        let tips = fleet
+            .repos
+            .iter()
+            .filter_map(|entry| entry.located.as_ref().ok())
+            .flat_map(|located| {
+                located.base.branches.iter().map(|(branch, tip)| {
+                    (
+                        (located.common_dir.clone(), branch.clone()),
+                        (tip.clone(), located.base.commit.clone()),
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        self.branch_work
+            .lock()
+            .expect("branch lock")
+            .retain(|key, entry| {
+                tips.get(key) == Some(&(entry.tip.clone(), entry.base_commit.clone()))
+            });
         *latest = Some((started, fleet.clone()));
         Ok(fleet)
     }
@@ -138,6 +194,7 @@ impl Site {
                     commit: located.base.commit.clone(),
                     loaded: OnceLock::new(),
                     views: Mutex::new(HashMap::new()),
+                    boards: Mutex::new(HashMap::new()),
                 });
                 snapshots.insert(located.common_dir.clone(), snapshot.clone());
                 snapshot
@@ -231,6 +288,127 @@ impl Site {
             .await?;
         Ok(reply)
     }
+
+    /// The board of a base commit on `today`, built once per commit and day.
+    async fn board(&self, snapshot: &Arc<Snapshot>, today: NaiveDate) -> Result<Arc<Board>, Reply> {
+        let cached = || {
+            snapshot
+                .boards
+                .lock()
+                .expect("board lock")
+                .get(&today)
+                .cloned()
+                .map(Ok)
+        };
+        let shared = snapshot.clone();
+        let built = self
+            .build(cached, move || {
+                let loaded = shared.load_once()?;
+                let records = &loaded.records;
+                let mut read = shared.read();
+                let board =
+                    atelier_app::board::board(&records.index, &records.policy, &mut read, today)
+                        .map_err(|error| format!("{error:#}"));
+                if let Some(failed) = read.failed_read() {
+                    return Err(failed.to_owned());
+                }
+                let board = Arc::new(board?);
+                let mut boards = shared.boards.lock().expect("board lock");
+                // Only today's board is kept.
+                boards.retain(|day, _| *day == today);
+                boards.insert(today, board.clone());
+                Ok(board)
+            })
+            .await?;
+        built.map_err(|error| Reply::json(StatusCode::INTERNAL_SERVER_ERROR, &ApiError { error }))
+    }
+
+    /// The work in flight on every local branch but the base, in branch
+    /// order, each read from the branch's records at its tip once per tip
+    /// and base commit.
+    async fn branches(&self, at: &RepoAt) -> Result<Vec<(String, BranchRead)>, Reply> {
+        let wanted = at
+            .base
+            .branches
+            .iter()
+            .filter(|(branch, _)| **branch != at.base.branch)
+            .map(|(branch, tip)| (branch.clone(), tip.clone()))
+            .collect::<Vec<_>>();
+        let common_dir = at.snapshot.common_dir.clone();
+        let base_commit = at.base.commit.clone();
+        let known = self.branch_work.clone();
+        let lookup = {
+            let (wanted, common_dir, base_commit) =
+                (wanted.clone(), common_dir.clone(), base_commit.clone());
+            move |known: &HashMap<(PathBuf, String), BranchEntry>| {
+                wanted
+                    .iter()
+                    .map(|(branch, tip)| {
+                        known
+                            .get(&(common_dir.clone(), branch.clone()))
+                            .filter(|entry| entry.tip == *tip && entry.base_commit == base_commit)
+                            .map(|entry| (branch.clone(), Ok(entry.work.clone())))
+                    })
+                    .collect::<Option<Vec<_>>>()
+            }
+        };
+        let cached = {
+            let (known, lookup) = (known.clone(), lookup.clone());
+            move || lookup(&known.lock().expect("branch lock"))
+        };
+        let loaded = at.loaded.clone();
+        self.build(cached, move || {
+            wanted
+                .into_iter()
+                .map(|(branch, tip)| {
+                    let key = (common_dir.clone(), branch.clone());
+                    let kept = known
+                        .lock()
+                        .expect("branch lock")
+                        .get(&key)
+                        .filter(|entry| entry.tip == tip && entry.base_commit == base_commit)
+                        .map(|entry| entry.work.clone());
+                    let work = match kept {
+                        Some(work) => Ok(work),
+                        None => atelier_app::board::branch_work(
+                            &common_dir,
+                            &loaded.records.index,
+                            &loaded.records.policy,
+                            &base_commit,
+                            &branch,
+                            &tip,
+                        )
+                        .map(|work| {
+                            let work = Arc::new(work.unwrap_or_default());
+                            known.lock().expect("branch lock").insert(
+                                key,
+                                BranchEntry {
+                                    tip: tip.clone(),
+                                    base_commit: base_commit.clone(),
+                                    work: work.clone(),
+                                },
+                            );
+                            work
+                        })
+                        .map_err(|error| format!("{error:#}")),
+                    };
+                    (branch, work)
+                })
+                .collect()
+        })
+        .await
+    }
+}
+
+/// What one work branch's records say is in flight on it, or why they
+/// could not be read.
+type BranchRead = std::result::Result<Arc<Vec<BranchWork>>, String>;
+
+/// A work branch's work in flight, read at `tip` against `base_commit`.
+struct BranchEntry {
+    tip: String,
+    base_commit: String,
+    work: Arc<Vec<BranchWork>>,
 }
 
 /// One scan of the roots: every repository found, by the name in its URLs.
@@ -352,6 +530,8 @@ struct Snapshot {
     /// The records, once a load has succeeded.
     loaded: OnceLock<Arc<Loaded>>,
     views: Mutex<HashMap<(String, ViewKind), Reply>>,
+    /// The board, by the day it counts recently done work back from.
+    boards: Mutex<HashMap<NaiveDate, Arc<Board>>>,
 }
 
 struct Loaded {
@@ -575,13 +755,15 @@ pub fn router_with(site: Arc<Site>, assets: app::Assets) -> Router {
         .route("/api/{repo}/mission/{id}/brief", get(brief))
         .route("/api/{repo}/mission/{id}/debrief", get(debrief))
         .route("/api/{repo}/mission/{id}/strategy", get(strategy))
+        .route("/api/{repo}/board", get(board))
+        .route("/api/{repo}/item/{id}", get(item))
         .fallback(move |uri: Uri| async move {
             let path = uri.path();
             if path == "/api" || path.starts_with("/api/") {
                 return Reply::json(
                     StatusCode::NOT_FOUND,
                     &ApiError {
-                        error: "no such route; the API is GET /api/repos and /api/<repo>/mission/<id>[/brief|/debrief|/strategy]".into(),
+                        error: "no such route; the API is GET /api/repos, /api/<repo>/board, /api/<repo>/item/<id> and /api/<repo>/mission/<id>[/brief|/debrief|/strategy]".into(),
                     },
                 )
                 .into_response();
@@ -648,14 +830,17 @@ fn error_text(reply: &Reply) -> String {
         .unwrap_or_default()
 }
 
-/// The repository's snapshot, its records and the mission's full ID: a 404
-/// for an unknown repository, mission or a record that is not a mission,
-/// and a 500 for a repository whose base or records cannot be read.
-async fn locate(
-    site: &Site,
-    repo: &str,
-    mission: &str,
-) -> Result<(Arc<Snapshot>, Arc<Loaded>, String), Reply> {
+/// A repository as one request reads it: its base and refs, and the
+/// records of its base commit.
+struct RepoAt {
+    base: Base,
+    snapshot: Arc<Snapshot>,
+    loaded: Arc<Loaded>,
+}
+
+/// The repository named `repo`: a 404 when there is none, and a 500 when its
+/// base or records cannot be read.
+async fn locate_repo(site: &Site, repo: &str) -> Result<RepoAt, Reply> {
     let fleet = site.fleet().await?;
     let entry = fleet.get(repo)?;
     let located = entry.located.as_ref().map_err(|error| {
@@ -668,6 +853,24 @@ async fn locate(
     })?;
     let snapshot = site.snapshot(located);
     let loaded = site.loaded(&snapshot).await?;
+    Ok(RepoAt {
+        base: located.base.clone(),
+        snapshot,
+        loaded,
+    })
+}
+
+/// The repository's snapshot, its records and the mission's full ID: a 404
+/// for an unknown repository, mission or a record that is not a mission,
+/// and a 500 for a repository whose base or records cannot be read.
+async fn locate(
+    site: &Site,
+    repo: &str,
+    mission: &str,
+) -> Result<(Arc<Snapshot>, Arc<Loaded>, String), Reply> {
+    let RepoAt {
+        snapshot, loaded, ..
+    } = locate_repo(site, repo).await?;
     let index = &loaded.records.index;
     let not_found = |error: String| Reply::json(StatusCode::NOT_FOUND, &ApiError { error });
     let id = index
@@ -735,6 +938,76 @@ async fn strategy(
     UrlPath((repo, mission)): UrlPath<(String, String)>,
 ) -> Reply {
     view_route(&site, &repo, &mission, ViewKind::Strategy).await
+}
+
+async fn board(State(site): State<Arc<Site>>, UrlPath(repo): UrlPath<String>) -> Reply {
+    let at = match locate_repo(&site, &repo).await {
+        Ok(at) => at,
+        Err(reply) => return reply,
+    };
+    let today = site.options.clock.now().date_naive();
+    let board = match site.board(&at.snapshot, today).await {
+        Ok(board) => board,
+        Err(reply) => return reply,
+    };
+    let branches = match site.branches(&at).await {
+        Ok(branches) => branches,
+        Err(reply) => return reply,
+    };
+    let mut in_flight = Vec::new();
+    let mut unreadable_branches = Vec::new();
+    for (branch, read) in branches {
+        match read {
+            Ok(work) => in_flight.extend(work.iter().cloned()),
+            Err(error) => unreadable_branches.push(UnreadableBranch { branch, error }),
+        }
+    }
+    Reply::json(
+        StatusCode::OK,
+        &BoardResponse {
+            in_progress: atelier_app::board::in_progress(&board, &in_flight),
+            repo,
+            base_branch: at.base.branch.clone(),
+            base_commit: at.base.commit.clone(),
+            board: (*board).clone(),
+            unreadable_branches,
+        },
+    )
+}
+
+async fn item(
+    State(site): State<Arc<Site>>,
+    UrlPath((repo, item)): UrlPath<(String, String)>,
+) -> Reply {
+    let at = match locate_repo(&site, &repo).await {
+        Ok(at) => at,
+        Err(reply) => return reply,
+    };
+    let records = &at.loaded.records;
+    let Some(id) = records.index.resolve_issue_ref(&item).ok().flatten() else {
+        return Reply::json(
+            StatusCode::NOT_FOUND,
+            &ApiError {
+                error: format!("no item {item} in {repo}"),
+            },
+        );
+    };
+    match atelier_app::item_view::item_view(&records.index, &records.policy, &id) {
+        Ok(view) => Reply::json(
+            StatusCode::OK,
+            &ItemResponse {
+                repo,
+                base_commit: at.snapshot.commit.clone(),
+                item: view,
+            },
+        ),
+        Err(error) => Reply::json(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &ApiError {
+                error: format!("{error:#}"),
+            },
+        ),
+    }
 }
 
 /// Requests answered in process, through the router with no socket, for

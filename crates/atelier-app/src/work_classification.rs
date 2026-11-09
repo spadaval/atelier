@@ -199,6 +199,47 @@ pub fn work_buckets_for<'a>(
     Ok(buckets)
 }
 
+/// Moves ready and needs-human work whose dependencies are not ready to
+/// blocked, marked `readiness gate`, as `atelier work ready` lists it.
+pub fn apply_ready_gates(
+    index: &RecordIndex,
+    policy: &WorkflowPolicy,
+    buckets: &mut WorkBuckets,
+) -> Result<()> {
+    let candidate_ids = buckets
+        .ready
+        .iter()
+        .chain(&buckets.human)
+        .map(|row| row.id.clone())
+        .collect::<BTreeSet<_>>();
+    let dependency = crate::objective_graph::dependency_readiness_batch(
+        index,
+        policy,
+        candidate_ids.iter().cloned(),
+    )?;
+    for bucket in [&mut buckets.ready, &mut buckets.human] {
+        let mut kept = Vec::new();
+        for mut row in std::mem::take(bucket) {
+            let dependency_ready = dependency
+                .ready_by_issue
+                .get(&row.id)
+                .copied()
+                .unwrap_or(false);
+            if dependency_ready {
+                kept.push(row);
+            } else {
+                row.open_blockers.push("readiness gate".to_string());
+                buckets.blocked.push(row);
+            }
+        }
+        *bucket = kept;
+    }
+    buckets
+        .blocked
+        .sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(())
+}
+
 fn work_row(
     index: &RecordIndex,
     workflow_policy: Option<&WorkflowPolicy>,
