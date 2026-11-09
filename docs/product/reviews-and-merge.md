@@ -651,14 +651,7 @@ from.
 | `forge_unreachable` | `gh` failed for another reason, such as the network; the line quotes its message. | Retry; `gh auth status` shows the sign-in. |
 | `ci_no_run` | The branch has no pull request into the base, or no `pull_request` run of the trusted workflow exists for a commit with the head's code. The line says which. | `atelier merge <id> --push --wait` |
 | `ci_pending` | The newest such run is queued or in progress, and none passed, or `--wait` timed out. The line names its state and link, and how long it waited. | `atelier merge <id> [--push] --wait` |
-| `ci_failed` | The newest such run failed, and none passed. The line names its conclusion and link. | `gh run view <run-id> --log-failed`; fix it on the branch, commit, then `atelier merge <id> --push --wait`. A cancelled or timed-out run instead says `gh run rerun <run-id>`. |
-
-Until `merge --push` pushes the branch and `--wait` exists (atelier-vqoy),
-these Next lines name the steps by hand instead, each ending with `atelier
-merge <id>` once CI passes, without `--push` even when the refused run had
-it: `ci_no_run` says to open the pull request with `gh pr create --base
-<base>`, or to push the branch when it has one; `ci_pending` says `gh run
-watch <run-id>`; and `ci_failed` says to fix, commit and push.
+| `ci_failed` | The newest such run failed, and none passed. The line names its conclusion and link. | `gh run view <run-id> --log-failed`; fix it on the branch, commit, then `atelier merge <id> --push --wait`. A cancelled or timed-out run instead says `gh run rerun <run-id>`, then `atelier merge <id> [--push] --wait`. |
 
 For example, after `atelier merge atelier-2xx5 --push`:
 
@@ -690,14 +683,9 @@ atelier merge <id> --push --wait --timeout 45
 it from the work branch, as `merge`. In a policy without a `forge` block it
 refuses with `merge_push_no_forge` and pushes nothing; its Next is `atelier
 merge <id>`, then `atelier land --push` from the base checkout. Any refusal
-ends `merge: refused — N checks (…), nothing pushed` and exits non-zero.
-
-Until atelier-vqoy lands, `merge --push` runs steps 1 and 4 to 8 below, and
-not steps 2 and 3 or `--wait`: push the branch and open its pull request by
-hand first (`git push -u <remote> <branch>`, `gh pr create --base <base>`),
-and wait for CI yourself. The pull request step 8 confirms is the open one
-from the branch into the base, found by the branch's name, since the branch
-head can be an approval GitHub has never seen.
+exits non-zero, and its verdict says what stayed unpushed: `merge: refused
+— N checks (…), nothing pushed` until step 2 has pushed the branch, and
+`merge: refused — N checks (…), master not pushed` after.
 
 It does this, in order:
 
@@ -706,19 +694,27 @@ It does this, in order:
    before pushing anything. A refusal that comes before any gate, such as the
    wrong branch, also pushes nothing.
 2. **Pushes the branch.** It pushes the committed branch head to
-   `forge.remote` under the branch's name, never forcing, and sets the
-   branch's upstream when it has none and the remote is a name. A rejected
+   `forge.remote` under the branch's name, never forcing (`git push
+   [--set-upstream] <remote> refs/heads/<branch>:refs/heads/<branch>`), and
+   sets the branch's upstream when it has none and the remote is a name. A rejected
    push refuses with `merge_push_branch_rejected` and git's message: the
    remote branch has commits this one lacks. Next: `git fetch <remote>
    <branch> && git merge --no-edit FETCH_HEAD`, then `atelier merge <id>
    --push`, with `<remote>` the value of `forge.remote` as written, a name or
    a URL. Fetching into `FETCH_HEAD` needs no remote-tracking branch, so it
-   works for a URL remote too.
+   works for a URL remote too. A push that fails for another reason, such
+   as a remote that asks for credentials, refuses with
+   `merge_push_branch_failed` and git's message, and pushes nothing. Next:
+   check that `git push <remote> <branch>` works, then `atelier merge <id>
+   --push`.
 3. **Ensures a pull request.** It reuses an open pull request from the branch
-   into the base, or opens one titled `<id>: <title>` (on the light path, the
-   branch's newest commit subject), whose body names the item and says review
-   is recorded in `.atelier/reviews`, not on the pull request. It prints
-   `Pull request #42: <url>`, saying whether it opened it.
+   into the base, found by the branch's name, or opens one titled `<id>:
+   <title>` (on the light path, the subject of the branch's newest commit
+   that changes code, since its head is often a record-only approval),
+   whose body names the item and says review is recorded in
+   `.atelier/reviews`, not on the pull request. It prints `Pull request #42:
+   <url> (opened now)`, or `(already open)`. If `gh` cannot look up or open
+   it, `merge --push` refuses with `forge_unreachable`, quoting `gh`.
 
    Steps 2 and 3 happen even when a later gate refuses. Pushing a work branch
    is always allowed, and it starts CI early, so `merge --push` can run before
@@ -743,8 +739,9 @@ It does this, in order:
    `atelier merge <id> --push`.
 5. **Judges the gates,** as `merge` does, `ci.passed` included, and refuses as
    `merge` does when one fails; the branch and pull request stay. Right after
-   step 2 pushed a new head, a run that has not started yet reads as pending,
-   since GitHub starts runs a few seconds after a push.
+   step 2 pushed a new head, GitHub may not have started its run yet, which
+   refuses with `ci_no_run`; its Next, `--push --wait`, counts such a run as
+   pending for a grace period.
 6. **Merges,** as `merge` does: the merge commit, the `shell.check`s on the
    merged tree, the done marks, and the local branch deleted. It never deletes
    the remote branch.
@@ -752,7 +749,7 @@ It does this, in order:
    does on the base, from the base it fetched in step 4 rather than the
    base's upstream, and prints the same summary line, such as `No unpushed
    base commits need review.` A judgment that refuses, such as
-   `land_base_unreviewed`, pushes nothing and leaves the merge commit on the
+   `land_base_unreviewed`, does not push the base and leaves the merge commit on the
    local base. Then it pushes the merge commit to the base on
    `forge.remote`, never forcing. A
    rejected push, when the remote base moved during the merge, refuses with
@@ -764,13 +761,8 @@ It does this, in order:
    `forge.remote`.
 8. **Confirms the pull request merged.** GitHub marks a pull request merged
    when its head commits become reachable from the base, which the pushed
-   merge commit does. Atelier reads its state every 5 seconds for up to a
-   minute. With no open pull request from the branch, or when GitHub cannot
-   be read, it still exits zero and says which in a note: `GitHub has no
-   open pull request from <branch> into master, so none was confirmed
-   merged.`, or `Atelier could not read the pull request from <branch> into
-   master, so it did not confirm one merged: <reason>. Next: gh pr list
-   --head <branch> --state all`. The success
+   merge commit does. Atelier reads the state of the pull request step 3
+   found or opened every 5 seconds for up to a minute. The success
    line reads `merge: passed — pushed master to origin, pull request #42
    merged`. If GitHub has not marked it merged, `merge` still exits zero,
    since the base is published, and says so:
@@ -786,11 +778,21 @@ pending, naming its state and the run's link, so an agent decides how to
 wait. With `--wait`, they judge the other gates first and refuse without
 waiting when one of those fails. Otherwise they poll CI every 30 seconds,
 printing a line when its state changes, until the run finishes or
-`--timeout` minutes pass (default 30). A run that passes continues the merge;
-a failed run refuses with `ci_failed`; a timeout refuses with `ci_pending`,
-naming how long it waited, and its Next keeps `--push` when it was given. A
-run that has not started counts as pending for its first 5 minutes after the
-push, then refuses with `ci_no_run`.
+`--timeout` minutes pass (default 30):
+
+```text
+Waiting up to 30 minutes for CI: ci.yml is in progress on pull request #42 for 1a2b3c4d: https://github.com/<owner>/<repo>/actions/runs/<run-id>
+CI: ci.yml passed on pull request #42 for 1a2b3c4d, which has the branch head's code, and master has gained no code since the branch left it: https://github.com/<owner>/<repo>/actions/runs/<run-id>
+```
+
+A run that passes continues the merge; a failed run refuses with
+`ci_failed`, and a `gh` that cannot answer with its `forge_*` code; a
+timeout refuses with `ci_pending`, naming how long it waited (`…; merge
+waited 30 minutes for it`), and its Next keeps `--push` when it was given.
+A run that has not started counts as pending for its first 5 minutes of
+waiting, as does a missing pull request under `--push`, which step 3 just
+opened; then it refuses with `ci_no_run`, saying none started. Without
+`--push`, a branch with no pull request refuses at once.
 
 `--wait` without `--push` waits for a run on a branch already pushed, then
 merges without pushing. `--push` and `--wait` do not combine with `--check`,

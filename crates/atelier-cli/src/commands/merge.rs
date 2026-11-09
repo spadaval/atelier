@@ -12,6 +12,7 @@ use atelier_app::{
 };
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// A detached checkout of the merge commit, outside every working tree, so
 /// `merge_checks` run on exactly the tree merging would put on the base.
@@ -452,19 +453,24 @@ fn test_move_base_before_locks(repo: &Path, base: &str) {
 /// on a branch no issue owns, the branch itself on an approval of its head
 /// (the light path, atelier-4nsl).
 /// With `push`, the merge publishes the base through the policy's forge
-/// (`merge --push`), and the verdict says what it pushed, or that nothing
-/// was pushed.
+/// (`merge --push`), and the verdict says what it pushed, or that the base
+/// was not pushed. With `wait`, a pending CI run is polled for up to that
+/// long once every other gate passes (`merge --wait`).
 pub fn run(
     issue_ref: Option<&str>,
     check_only: bool,
     json: bool,
     quiet: bool,
     push: bool,
+    wait: Option<Duration>,
 ) -> Result<()> {
+    // What a refusal left unpushed, which `merge --push` changes once it
+    // pushed the branch.
+    let mut unpushed = ", nothing pushed".to_owned();
     let result = if push {
-        super::merge_push::run(issue_ref, quiet).map(Some)
+        super::merge_push::run(issue_ref, quiet, wait, &mut unpushed).map(Some)
     } else {
-        attempts(issue_ref, check_only, json, quiet, false).map(|_| None)
+        attempts(issue_ref, check_only, json, quiet, false, wait).map(|_| None)
     };
     // `--json` is a script's format and keeps its errors (ADR 0022).
     if json {
@@ -477,7 +483,7 @@ pub fn run(
             println!("{line}");
         }
     };
-    let nothing_pushed = if push { ", nothing pushed" } else { "" };
+    let nothing_pushed = if push { unpushed.as_str() } else { "" };
     match result {
         Ok(published) => {
             println!(
@@ -544,9 +550,10 @@ pub(super) fn attempts(
     json: bool,
     quiet: bool,
     push: bool,
+    wait: Option<Duration>,
 ) -> Result<Option<Integrated>> {
     for attempt in 1..=MAX_ATTEMPTS {
-        match merge_once(issue_ref, check_only, json, quiet, push) {
+        match merge_once(issue_ref, check_only, json, quiet, push, wait) {
             Err(error) => match error.downcast_ref::<RetryOnMovedBase>() {
                 Some(moved) if attempt < MAX_ATTEMPTS => {
                     eprintln!("merge_base_moved: {moved}; running the gates again on the new base")
@@ -615,6 +622,16 @@ impl std::error::Error for AlreadyMerged {}
 /// The owner's work branch, refusing any checkout but its own clean one.
 pub(super) fn owned_branch(issue_ref: Option<&str>) -> Result<Owned> {
     owned(issue_ref, None)
+}
+
+/// The owner's work branch as the gates find it, with records or code that
+/// differ from HEAD read from HEAD's commit, as `merge` reads them before
+/// it reports them as failed preconditions.
+pub(super) fn committed_branch(issue_ref: Option<&str>) -> Result<Owned> {
+    owned(
+        issue_ref,
+        Some(&mut crate::gate_report::Preconditions::default()),
+    )
 }
 
 /// The owner's work branch. With `preconditions`, records or code that
@@ -881,9 +898,17 @@ fn merge_once(
     json: bool,
     quiet: bool,
     push: bool,
+    wait: Option<Duration>,
 ) -> Result<Option<Integrated>> {
     let mut preconditions = crate::gate_report::Preconditions::default();
-    let result = merge_gates(issue_ref, check_only, json, quiet, push, &mut preconditions);
+    let result = merge_gates(
+        issue_ref,
+        check_only,
+        json,
+        quiet,
+        (push, wait),
+        &mut preconditions,
+    );
     let error = match result {
         Ok(integrated) => return Ok(integrated),
         Err(error) => error,
@@ -919,7 +944,7 @@ fn merge_gates(
     check_only: bool,
     json: bool,
     quiet: bool,
-    push: bool,
+    (push, wait): (bool, Option<Duration>),
     preconditions: &mut crate::gate_report::Preconditions,
 ) -> Result<Option<Integrated>> {
     let Owned {
@@ -1063,6 +1088,7 @@ fn merge_gates(
     let heads = atelier_app::workflow_validation::MergeHeads {
         base: &base_head,
         head: &head,
+        push,
     };
     // The gates read the records merging would put on the base.
     let mut nodes = if light {
@@ -1165,6 +1191,20 @@ fn merge_gates(
     nodes.push(claims_reviewed);
     nodes.splice(0..0, std::mem::take(&mut preconditions.failed));
     preconditions.gates_ran = true;
+    // `--wait` polls CI only when it is the one gate left (`merge --wait`).
+    if let Some(timeout) = wait {
+        super::merge_wait::wait_for_ci(
+            &mut nodes,
+            super::merge_wait::Ci {
+                checkout: &checkout.path,
+                policy: &source.policy,
+                issue_id: if light { "" } else { owner },
+                heads,
+            },
+            timeout,
+            quiet,
+        )?;
+    }
     let gates = crate::gate_report::Gates {
         index: &merged,
         policy: &source.policy,

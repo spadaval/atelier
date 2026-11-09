@@ -17,6 +17,7 @@ pub mod workflow;
 pub mod merge;
 pub(crate) mod merge_push;
 pub mod merge_sync;
+mod merge_wait;
 pub mod migrate;
 pub mod mission_review;
 pub mod review;
