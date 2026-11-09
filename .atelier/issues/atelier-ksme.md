@@ -14,9 +14,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "in_progress"
 title: "R4 low: skills/agent-factory/SKILL.md:35 Core Rules still say workers report findings and the agent accountable for the…"
-updated_at: "2026-11-09T06:20:38.445765716+00:00"
+updated_at: "2026-11-09T06:30:37.481555868+00:00"
 ---
 
 ## Goal
