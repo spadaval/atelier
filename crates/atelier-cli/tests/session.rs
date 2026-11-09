@@ -1914,7 +1914,7 @@ fn base_done_claims_keep_planning_approvals_through_other_missions_strategy_edit
         );
         commit(f.path(), "planning approval");
         strategy("other", "# Other plan\n");
-        mission("Other mission", "other");
+        let other = mission("Other mission", "other");
         commit(f.path(), "plan another mission");
         let edited = if edits_own { "own" } else { "other" };
         strategy(edited, "# Replanned\n");
@@ -1929,6 +1929,17 @@ fn base_done_claims_keep_planning_approvals_through_other_missions_strategy_edit
                     && !output.contains("came after the current approval"),
                 "{output}"
             );
+            // The strategy was the item's mission's when it changed; a later
+            // unlink does not make that edit another mission's.
+            if !closes_mission {
+                ok(
+                    f.path(),
+                    &["issue", "unlink", &item, &own, "--role", "advances"],
+                );
+                commit(f.path(), "unlink the item from its mission");
+                let (pass, output) = cli(f.path(), &["land"]);
+                assert!(!pass && output.contains("findings.disposed"), "{output}");
+            }
         } else {
             assert!(pass, "closes mission {closes_mission}: {output}");
             // Later, the base holds the claim, which land judges from history.
@@ -1936,6 +1947,24 @@ fn base_done_claims_keep_planning_approvals_through_other_missions_strategy_edit
             commit(f.path(), "note on the done claim");
             let (pass, output) = cli(f.path(), &["land"]);
             assert!(pass, "closes mission {closes_mission}, later: {output}");
+            // Pruning the other mission later leaves its replan its own.
+            if !closes_mission {
+                let store = f.store();
+                let mut record = store.load_issue_by_id(&other).unwrap();
+                record.issue.status = "done".into();
+                record.issue.closed_at = Some("2020-01-01T00:00:00Z".parse().unwrap());
+                record.sections.report = Some("Done long ago".into());
+                store.write_issue_atomic(&record).unwrap();
+                commit(f.path(), "other mission completed long ago");
+                ok(f.path(), &["prune", "--apply", "--retention-days", "0"]);
+                commit(f.path(), "prune the other mission");
+                assert!(!f
+                    .path()
+                    .join(format!(".atelier/issues/{other}.md"))
+                    .exists());
+                let (pass, output) = cli(f.path(), &["land"]);
+                assert!(pass, "after prune: {output}");
+            }
         }
     }
 }

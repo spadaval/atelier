@@ -668,6 +668,12 @@ impl RecordIndex {
         }
     }
 
+    /// The links among `issues` alone, for reading a past commit's plan;
+    /// structural problems, such as links to records left out, are ignored.
+    pub(crate) fn issue_graph(issues: Vec<CanonicalIssueRecord>) -> Self {
+        Self::structural(issues, Vec::new(), Vec::new()).0
+    }
+
     fn structural(
         issues: Vec<CanonicalIssueRecord>,
         evidence: Vec<EvidenceRecord>,

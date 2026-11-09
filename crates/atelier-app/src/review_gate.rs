@@ -1389,7 +1389,7 @@ fn evaluate_scope(
             intact
                 && ((historical && retained(read, base_commit, record))
                     || if global {
-                        base_stale_edge(read, index, record, "HEAD", base_commit)
+                        base_stale_edge(read, record, "HEAD", base_commit)
                             .is_ok_and(|edge| edge.is_none())
                     } else {
                         current_on_branch(read, record, base_commit)
@@ -1504,7 +1504,7 @@ fn evaluate_scope(
                     Some("HEAD".to_owned())
                 };
                 end.and_then(|end| {
-                    base_stale_edge(read, index, approval, &end, base_commit)
+                    base_stale_edge(read, approval, &end, base_commit)
                         .ok()
                         .flatten()
                 })
@@ -1802,7 +1802,7 @@ fn original_approval_valid(
     base: &str,
 ) -> Result<bool> {
     let end = read.claim_endpoint(index, target, &approval.commit)?;
-    Ok(base_stale_edge(read, index, approval, &end, base)?.is_none())
+    Ok(base_stale_edge(read, approval, &end, base)?.is_none())
 }
 
 /// The first commit after `approval`'s pin that makes it stale at `end` for
@@ -1816,35 +1816,45 @@ fn original_approval_valid(
 /// related mission's strategy, and any other code, still does.
 fn base_stale_edge(
     read: &mut git::ReadContext<'_>,
-    index: &RecordIndex,
     approval: &ReviewRecord,
     end: &str,
     base: &str,
 ) -> Result<Option<git::CommitEdge>> {
-    let mut unrelated = None;
     // Edges come newest first.
     for (edge, clean_base_merge) in work_edges(read, &approval.commit, end, base)?
         .into_iter()
         .rev()
     {
-        if edge_allowed(&edge, clean_base_merge) {
+        if edge_allowed(&edge, clean_base_merge)
+            || (ancestor(read, &edge.commit, base)
+                && only_unrelated_strategies(read, &edge, &approval.target)?)
+        {
             continue;
-        }
-        if ancestor(read, &edge.commit, base) {
-            let unrelated = match &unrelated {
-                Some(paths) => paths,
-                None => unrelated.insert(unrelated_strategies(index, &approval.target)?),
-            };
-            if code_paths(&edge.paths)
-                .iter()
-                .all(|path| unrelated.contains(&normalized(path)))
-            {
-                continue;
-            }
         }
         return Ok(Some(edge));
     }
     Ok(None)
+}
+
+/// Whether all the code `edge` changes is strategy files that only missions
+/// unrelated to `target` link, judged by the records `edge`'s commit holds:
+/// what the plan was when the strategy changed, so a later unlink cannot
+/// excuse an edit of the item's own mission's strategy, and a later prune
+/// cannot turn another mission's into one.
+fn only_unrelated_strategies(
+    read: &mut git::ReadContext<'_>,
+    edge: &git::CommitEdge,
+    target: &str,
+) -> Result<bool> {
+    let code = code_paths(&edge.paths);
+    if code.is_empty() {
+        return Ok(true);
+    }
+    let graph = read.issue_graph_at(&edge.commit)?;
+    let unrelated = unrelated_strategies(&graph, target)?;
+    Ok(code
+        .iter()
+        .all(|path| unrelated.contains(&normalized(path))))
 }
 
 /// The strategy files only missions unrelated to `target` link: none of
