@@ -1,6 +1,4 @@
-# Transcripts
-
-How to read earlier agent runs, for `audit` retrospectives and `garden`.
+# Reading Agent Transcripts
 
 - **Start from raw transcripts**; memory, summaries and handoffs are hypotheses.
   Claude Code keeps them in `~/.claude/projects/<cwd, / and . as ->/`, one

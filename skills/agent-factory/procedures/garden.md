@@ -5,17 +5,17 @@ and fix the ground. Change how agents work here (code structure without
 behaviour change, checks, docs, error and help text, skills, tooling), not what
 the product does. A fix that would change the product (as when a repository
 builds the tools agents trip on) or the host's setup is a recommendation; send a
-product question to the plan's owner as an issue. The human gardens too: you do
-the bulk reading and the routine upkeep, and bring them the rest.
+product question to the plan's owner as an issue. You do the bulk reading and
+routine upkeep, and bring the human, who gardens too, the rest.
 
-A run covers one repository and never touches a branch in flight. Its window is
-what is new since the last run (the latest digest, label `garden`), or the last
-7 days on a first run. Read agent [transcripts](../references/transcripts.md),
-other repositories' too where they trip on the same tool, review findings,
-reverts, refused checks and failed CI runs, and the code and docs agents read:
-dead code, residue of finished migrations, docs the code contradicts, broken
-links, and the [verify skill](../references/verify-skill.md) where agents
-tripped on it.
+A run covers one repository and never touches a branch in flight. Its window
+starts where the last run's ended, as the latest digest (label `garden`) records
+it, or 7 days back if none does. Read agent
+[transcripts](../references/transcripts.md), other repositories' too where they
+trip on the same tool, review findings, reverts, refused checks and failed CI
+runs, and the code and docs agents read: dead code, residue of finished
+migrations, docs the code contradicts, broken links, and the [verify
+skill](../references/verify-skill.md) where agents tripped on it.
 
 A trip is where an agent went wrong or wasted effort: a misread refusal, a rule
 broken or worked around, a retry loop, a kind of mistake review keeps catching
@@ -43,12 +43,13 @@ rule, reworded guidance or messages, a changed default, a restructure.
 
 File one digest per run and repository (`atelier issue create "Garden <repo>:
 <n> recommendations" --issue-type decision -l needs-human -l garden`), or add to
-the open one while any entry is unanswered; a run with none files none. Its
-Question asks which entries go ahead, and its Options give each as `### R1
-<title>`: the trip and how often it happened, its evidence (sessions and events,
-or paths and lines), the fix and its level (architecture, check, sign or
-removal), its size (lines changed, and complexity, value and risk) and the
-alternatives, leaving it included.
+the open one while any entry is unanswered, and record the run's window in it; a
+run with no entries records its window as a note on the latest digest, or files
+nothing if there is none. Its Question asks which entries go ahead, and its
+Options give each as `### R1 <title>`: the trip and how often it happened, its
+evidence (sessions and events, or paths and lines), the fix and its level
+(architecture, check, sign or removal), its size (lines changed, and complexity,
+value and risk) and the alternatives, leaving it included.
 
 The human answers each entry in a note: do it, do it differently, or no. Start
 each run with those answers: file each accepted entry as an issue, or point it
