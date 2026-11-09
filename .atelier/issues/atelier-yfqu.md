@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "See where every Atelier repository on this host stands, from one site"
-updated_at: "2026-11-09T01:10:59.714537104+00:00"
+updated_at: "2026-11-09T03:58:08.021551790+00:00"
 ---
 
 ## Outcome
@@ -35,3 +35,4 @@ Split on 2026-11-08 at Sumeet's direction, after planning review finding atelier
 
 - 2026-11-08 [plan] Revised after planning review (findings atelier-b9wq, i8h1, 79wo, gnh5, bihd, 5yz1, roov, ntq9, 8j0j, 726p). On Sumeet's authority (2026-11-08) split attribution and metrics into mission atelier-bnek, and moved acceptance to independent validation items (atelier-mtb3 here, atelier-wo22 there) with his phone read as loose end atelier-pywh. Other fixes: ADR item reconciles architecture docs; serve item gains direct debrief links, a pure renderer, an unwritable-repository proof, a load bound and the unit file; the service loose end keeps only install and publish; attribution records item reads, explicit roles, and a write-only store; the hook keeps the light path; metrics validates the attribution rule on real threads first.
 - 2026-11-08 [plan] Fixed re-review findings atelier-bihd and atelier-mhb4: a new reads link role names an inbox item's reading target (membership and related links never do), and validation adds reads links to existing debrief reads such as atelier-3km4; only base-derived work is cached by base commit, branch and review state is recomputed or keyed by its refs, date sections by the date, with a warm-cache fixture on atelier-ahpf.
+- 2026-11-08 [note] 2026-11-08, Sumeet's direction for the replan (not yet applied to the strategy or items): the site is agent Jira, not agent Gmail. Primary: every mission's brief and debrief as pages, current from the base branch, replacing ad-hoc artifacts; the CLI's --html output and .atelier/runtime/reviews/ go away, while Markdown brief and debrief stay for agents. Second: a backlog board per repository (missions with progress, all open work by mission, label and status, recently done) answering where are we, what's done, what's next. The inbox is a notification queue linking into those pages, not the home page. Proposed by Claude and not yet decided: the site lives in this workspace as a new crate (crates/atelier-site) shipped in the atelier binary as atelier serve, Rust with axum and maud. Replan this mission under the planner procedure from mission 'missions are a human review boundary' once it lands.
