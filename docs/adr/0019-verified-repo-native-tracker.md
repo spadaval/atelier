@@ -25,6 +25,12 @@ removing the Forgejo provider removed a review provider, not every use of a
 forge. A repository's policy may name a forge that carries branches and
 reports CI; decision 6 stands, and there is still no external review provider.
 
+Scoped by [ADR 0030](0030-a-read-only-site-a-session-database-and-t3-code.md)
+(2026-11-08): decision 7 and the removed SQLite crate are about records, which
+still have no database or cache. A host-wide session database may hold
+attribution Git never held, and a read-only server may read records from
+commits; no guard reads either.
+
 Supersedes [ADR 0006](0006-agent-guidance-ownership-boundary.md),
 [ADR 0007](0007-mission-workspaces-and-epic-review-branches.md),
 [ADR 0010](0010-session-aware-pr-coordination-boundaries.md),

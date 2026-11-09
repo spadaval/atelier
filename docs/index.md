@@ -22,6 +22,10 @@ process ownership, review providers, transition actions, and the cache.
 - [ADRs](adr/0019-verified-repo-native-tracker.md): decision history; consult each
   decision's status and the supersession lists of ADR 0019 and
   [ADR 0028](adr/0028-simpler-lifecycle.md#supersession) before applying older rules.
+  [ADR 0030](adr/0030-a-read-only-site-a-session-database-and-t3-code.md)
+  allows a read-only site for humans, a host-wide session database for
+  attribution, and a dependency on T3 Code, with records in Git still the only
+  source of truth for work.
   [ADR 0031](adr/0031-a-forge-carries-branches-and-ci.md) lets a forge carry
   branches and report CI, with review staying in the repository.
 - [Development setup](product/development-setup.md): local tools and verification.

@@ -1,8 +1,14 @@
 # Markdown Record Store
 
 Tracked Markdown under `.atelier/` is Atelier's durable source of truth.
-Commands parse record files into an in-memory `RecordIndex` on every invocation.
-There is no SQLite database, domain cache, daemon, or persistent query index.
+Commands parse record files into an in-memory `RecordIndex` on every
+invocation. Records have no database, cache, daemon, or persistent query
+index.
+[ADR 0030](../adr/0030-a-read-only-site-a-session-database-and-t3-code.md)
+allows two things beside them, neither a source of truth for work and neither read by
+any guard: a host-wide session database, which holds only attribution Git
+never held, and `atelier serve`, a read-only server that reads records from
+commits and writes nothing.
 
 ## Layout
 

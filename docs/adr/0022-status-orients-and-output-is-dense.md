@@ -8,6 +8,11 @@ discussion with Sumeet; atelier-bw0b).
 Amends [ADR 0020](0020-agent-factory-targets-atelier-only.md) Decision 3:
 Agent Factory takes session context from `status`, not `prime`.
 
+Scoped by [ADR 0030](0030-a-read-only-site-a-session-database-and-t3-code.md)
+(2026-11-08): the views also serialize to JSON for the read-only site's API,
+which serves its web app. Decision 3 stands for agents: no view gains a JSON
+mode for them, and nothing tells them to call the API.
+
 ## Context
 
 `prime` and `status` both describe the current checkout, and neither is

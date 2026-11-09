@@ -47,7 +47,8 @@ identity is self-declared; commands with attribution accept an explicit identity
 where documented by help. Do not commit credentials or local runtime files.
 
 The ignored `.atelier/runtime/` contains the mutation lock. Commands read
-tracked records directly. There is no database or cache to initialize or repair.
+tracked records directly. There is no record database or cache to initialize
+or repair.
 `cargo udeps` is an optional nightly cross-check, not a required setup input.
 
 See [standards](../architecture/quality/standards.md) for change-specific proof
