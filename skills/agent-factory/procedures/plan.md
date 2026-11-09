@@ -18,7 +18,8 @@ preliminary goal, a provisional Done when and their unknowns, and no tasks.
 Settle the choices the first work depends on, with `decide` where several paths
 are credible, recording each per the [record
 test](../references/atelier.md#records) rather than as a future issue, and plan
-the work that gathers any missing evidence. Prefer a first increment that proves
+the work that gathers any missing evidence, after settling what [could break the
+mission](#shaping-a-mission). Prefer a first increment that proves
 a user outcome end to end over infrastructure alone. Plan shared code and APIs
 docs first, the README or tutorial before the code: a bad interface is cheapest
 to fix on paper.
@@ -42,6 +43,16 @@ A mission is one thing a person can hold in their head, plan against and finish:
   ready.
 - **Sized to finish:** one reviewer can judge it in one debrief, usually days to
   weeks of work. Split a larger one along the outcome's seams, not item count.
+- **Confident enough to run unattended.** No plan survives first contact, so do
+  not try to settle every unknown; but a mission runs mostly unattended, so
+  settle the ones likely to break it. Ask: if this mission stalls or needs the
+  human to change its strategy, what is the likely cause? Each likely cause that
+  could change the outcome, shape or scope is settled before the mission is
+  ready; one that would only change the route waits for its evidence boundary.
+  A question a quick spike can answer is usually best answered that way: run a
+  small one yourself on a throwaway branch, or for a larger one file a spike
+  outside the mission and ask the human to approve running it. Record what it
+  shows where the choice lives, and keep its evidence, not its code.
 - **Success criteria are optional.** Add one only for a claim about the whole
   that no single item proves, such as an end-to-end scenario across items. Each
   must be something the work can make true and an agent can verify at close: a
@@ -59,7 +70,8 @@ otherwise, under about 150 lines, with front matter giving `status` and
 (`- <slug>: <claim>`, each saying how it will be shown), **Shape** (key
 decisions, linking ADRs and docs, and what wins when qualities conflict),
 **Scope** (in, out, the target environment), **Authority** (what the
-orchestrator may change without asking) and **Risks and Unknowns**. What changes
+orchestrator may change without asking) and **Risks and Unknowns** (what is
+left open, each with what happens if it bites). What changes
 whenever the plan does, such as tasks, order, status, design detail or history,
 belongs in the tracker, docs or Git, not in the strategy or a separate plan.
 
@@ -67,7 +79,8 @@ belongs in the tracker, docs or Git, not in the strategy or a separate plan.
 
 A mission is ready (draft to todo) when an orchestrator could start it without
 asking the human what it means: it passes the shaping tests and every item fits
-its outcome; its first items are ready issues; each question only the human can
+its outcome; you would expect it to reach its outcome without the human's call
+on its strategy; its first items are ready issues; each question only the human can
 answer is an open decision record or a `needs-human` item, not an issue's
 Unknown; and the planning has been reviewed and the human has approved it after
 a walk through `atelier brief <mission> --html` (recorded under their name with
