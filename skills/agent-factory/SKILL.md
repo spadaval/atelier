@@ -93,5 +93,6 @@ fits, else work under the core rules. Each is `procedures/<name>.md`:
 `groom` (re-sequence the backlog and find work not to do), `decide` (a
 consequential choice), `implement` (build one slice, code or docs), `diagnose`
 (find a failure's cause), `review` (review someone else's change), `validate`
-(test claims independently), `migrate` (a breaking change), `audit` (findings
-on architecture or process) and `install` (set up or assess a repo).
+(test claims independently), `migrate` (a breaking change), `audit` (findings on
+architecture or process), `garden` (fix where agents trip, and bring the human
+the rest) and `install` (set up or assess a repo).

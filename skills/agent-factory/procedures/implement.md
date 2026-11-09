@@ -49,7 +49,8 @@ only follow a merge or release.
 ## Review
 
 Before review, prove the change in the running app with the repository's verify
-skill where one exists, and include its evidence with your proof. Get review as
+skill where one exists, include its evidence with your proof, and update its
+feature map for the features you add or change. Get review as
 [Independent Review](../SKILL.md#independent-review) says; under an
 orchestrator, report it as outstanding. Fix each `FIX NOW` finding that
 stands under that section's Findings rule, one at a time, and rerun its proof.
