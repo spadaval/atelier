@@ -10,7 +10,7 @@ import { BriefView } from "./Brief";
 import { DebriefView } from "./Debrief";
 
 export function missionCrumbs(repo: string, id: string, page?: string): Crumb[] {
-  const crumbs: Crumb[] = [{ label: repo }, { label: id, to: page ? `/${repo}/mission/${id}` : undefined }];
+  const crumbs: Crumb[] = [{ label: repo, to: `/${repo}` }, { label: id, to: page ? `/${repo}/mission/${id}` : undefined }];
   if (page) crumbs.push({ label: page });
   return crumbs;
 }
