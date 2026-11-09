@@ -84,7 +84,7 @@ atelier-l58v's draft verify-skill standard, copied from spadaval/.agents `git sh
 
 ## Report
 
-Agent Factory now has a gardener. `procedures/garden.md` finds where agents trip, from transcripts, review records, failed checks and the code. It makes routine upkeep itself and brings everything else to the human as one `needs-human` digest per run. `references/verify-skill.md` sets the verify-skill standard from l58v's draft, and `references/transcripts.md` holds the transcript method, moved out of audit.md so both procedures link one copy. A trial run on this repository at d82576b9, by a fresh Opus agent given only the skill, found 7 trips, proposed 1 routine fix and 6 recommendations, and filed and merged nothing. I checked every trip it cited against its transcript (below).
+Agent Factory now has a gardener. `procedures/garden.md` finds where agents trip, from transcripts, review records, failed checks and the code. It makes routine upkeep itself and brings everything else to the human as one `needs-human` digest per run. `references/verify-skill.md` sets the verify-skill standard from l58v's draft, and `references/transcripts.md` holds the transcript method, moved out of audit.md so both procedures link one copy. Two trial runs on this repository, each by a fresh Opus agent given only the skill, filed and merged nothing. The first, at d82576b9, shaped the text, and the second ran the final text at 7f26fee2 (Trial 2, below). I checked the trips each cited against its transcripts.
 
 Read paths, counted by atelier-qj9d's rule (SKILL.md, the procedure, every file it links, plus references/atelier.md), master 6772ac6f, then this branch:
 
@@ -101,7 +101,7 @@ Read paths, counted by atelier-qj9d's rule (SKILL.md, the procedure, every file 
 
 SKILL.md's one added line, for listing `garden`, raises every role by 1. plan, review and orchestrate were already over their limits on master. The agent-facing skill is 1,069 lines, up from 977, past qj9d's 1,000. This item's Done when sets no total, so the overrun is reported here and not fixed.
 
-### Trial
+### Trial 1 (d82576b9)
 
 The trial window was 2026-11-01 to 2026-11-08, with repeats counted over 30 days. It read 19 root Claude Code sessions with their subagents, 3 Codex sessions (Codex keeps only today's), 161 review findings and 5 failed CI runs. I checked the trips with `grep` in the cited files:
 
@@ -121,7 +121,25 @@ The digest it would file is "Garden atelier: 5 recommendations" (decision, `need
 - **R4, sign.** The refusal names `atelier merge <owner> --sync`.
 - **R5, removal.** Plan atelier-hfme now (drop `start --base` and the `branch_base` write), and possibly the `prime` alias.
 
-Asked whether it looked for rules or checks to remove, the trial added **R6, removal**. It drops `cargo fmt -- --check` and `git diff --check` from `merge_checks` in `.atelier/workflow.yaml`, because `scripts/merge-ci-passed.sh` already requires a CI pass on the same code, and CI runs both checks. I confirmed that by reading the policy, the script and `ci.yml`. It keeps `cargo metadata --locked`, since CI builds without `--locked`.
+Asked whether it looked for rules or checks to remove, the trial added **R6, removal**. It drops `cargo fmt -- --check` and `git diff --check` from `merge_checks` in `.atelier/workflow.yaml`, because `scripts/merge-ci-passed.sh` already requires a CI pass on the same code, and CI runs both checks. I confirmed that by reading the policy, the script and `ci.yml`. It keeps `cargo metadata --loc### Trial 2 (7f26fee2, the final text but for three small fixes)
+
+Run at review finding atelier-m2zn's request, from a fresh checkout of master. It covered the same window, 20 root sessions and their 173 subagents, 161 findings and 2 failed CI runs. It made one routine fix (60a3e1d4 on local branch `garden-trial2`), the same `check --fix` doc fix as trial 1. It wrote "Garden atelier: 8 recommendations", and filed it in a throwaway Atelier repository, where `issue show --full` listed all 8 `### R` entries under Options and `atelier check` passed. I checked these by `grep` in the cited transcripts:
+
+- **R1, `issue create --parent <mission>` refused.** a0cc9335: "'task/' is not a valid branch name".
+- **R4, removal.** `SKILL.md:48` "its PR is not marked ready" outlived the no-draft-PRs direction. 9fa7eab8 has 2 `gh pr create --draft` calls after it.
+- **R5, free text starting with `--` parsed as a flag.** 7377a49f: "first summary started with `--binary`, so it was parsed as a flag".
+- **R8, removal.** A stale memory note on this host, since corrected by hand (memory, not the repository).
+
+The other entries are the detached main checkout (R2), the follow-up refusal (R3), docs and help left stale by changes (R6, 12 of 99 `fix_now` findings) and snapshots unpacked into a full $TMPDIR (R7). Every entry is a recommendation, which is what garden.md now says for a repository that builds the tools agents trip on. It proposes two removals (R4, R8).
+
+Three of its notes were fixed after it, within the same 300 lines: the window goes in the digest's Context, a refusal followed is a gate working, and gardener runs are left out of the transcripts read. These are left open:
+
+- where a host or memory fix goes, other than as a digest entry;
+- whether the twice-in-30-days rule applies to evidence from review records;
+- forked T3 threads copying their parent's events, so counts double;
+- how far to read other repositories.
+
+ked`, since CI builds without `--locked`.
 
 ### Deviations
 
@@ -134,12 +152,13 @@ Asked whether it looked for rules or checks to remove, the trial added **R6, rem
   - where entries go in a decision record (`### R1` under Options; it was refused until it used them);
   - transcript stores that keep only recent sessions.
 
-  The trial was not rerun on the fixed text.
+  Trial 2 ran the fixed text.
 - The trial's first report proposed no rule or check removal and did not say why. It added R6 when asked.
 
 ### Open items
 
-- The trial's routine fix and digest are not applied, because the trial files and merges nothing. Once this merges, a real run (or Sumeet) can apply the fix and file the digest.
+- The trials' routine fix and digests are not applied, because a trial files and merges nothing. Once this merges, a real run can apply the fix and file the digest.
+- Trial 2's four unclear points, listed above.
 - The skill's 1,069 lines are past qj9d's 1,000 total.
 
 ## Notes
