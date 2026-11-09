@@ -27,13 +27,21 @@ Reviewers ask "which requirement needs this?" of every moving part a change adds
 
 ## Done when
 
-- [ ] `skills/agent-factory/constitution.md` Simplicity section says code should be as complex as its requirements call for and no more; every moving part (type, layer, flag, option, cache, branch) traces to a current requirement; and simplicity is judged on the system after the change, not the diff, so a larger change that removes parts is simpler.
-- [ ] `skills/agent-factory/procedures/review.md` replaces the "Complexity is a defect only when you can name ... a simpler construction" rule: for each moving part the change adds, the reviewer asks which requirement needs it; a part that traces to none is `FIX NOW` (`DEFER` if it predates the change); the author answers by naming the requirement or removing the part. The smallest-proof tie-break for disputes stays.
-- [ ] The brief printed by `atelier review request` (`crates/atelier-cli/src/commands/review_request.rs`) has a working rule to size the change's complexity, value and risk and ask which requirement needs each moving part it adds, and its Report line asks for the Verdict (merge, shrink or reject) and Sizes as well as Contract and Fitness. Brief tests cover the new lines.
-- [ ] `skills/agent-factory/maintainers/skill-evaluation.md` no longer points to a "Good Code" section that does not exist (row "Spike-shaped production"); it points to the Simplicity section.
+- [x] `skills/agent-factory/constitution.md` Simplicity section says code should be as complex as its requirements call for and no more; every moving part (type, layer, flag, option, cache, branch) traces to a current requirement; and simplicity is judged on the system after the change, not the diff, so a larger change that removes parts is simpler.
+- [x] `skills/agent-factory/procedures/review.md` replaces the "Complexity is a defect only when you can name ... a simpler construction" rule: for each moving part the change adds, the reviewer asks which requirement needs it; a part that traces to none is `FIX NOW` (`DEFER` if it predates the change); the author answers by naming the requirement or removing the part. The smallest-proof tie-break for disputes stays.
+- [x] The brief printed by `atelier review request` (`crates/atelier-cli/src/commands/review_request.rs`) has a working rule to size the change's complexity, value and risk and ask which requirement needs each moving part it adds, and its Report line asks for the Verdict (merge, shrink or reject) and Sizes as well as Contract and Fitness. Brief tests cover the new lines.
+- [x] `skills/agent-factory/maintainers/skill-evaluation.md` no longer points to a "Good Code" section that does not exist (row "Spike-shaped production"); it points to the Simplicity section.
 
 ## Context
 
 The trade-off between simplicity and scope is decided at planning, where items are sized on complexity, value and risk. At review the Done when lines fix the scope, so the rule is single, not two opposing demands: no more complexity than those requirements need. The weighing of value against complexity at review stays in the merge, shrink or reject verdict on the whole change. Code that skips something the domain requires already fails Contract.
 
 Watch for over-correction (atelier-jxce): the rule asks for a traceable requirement, not the smallest diff. A patch that adds a special case or a second copy of logic is less simple than a larger change that unifies it.
+
+## Report
+
+All four Done when lines hold. The constitution's Simplicity section and `review.md` carry the single rule (every moving part traces to a current requirement; judge the system after the change, not the diff), with `FIX NOW`/`DEFER` and the smallest-proof tie-break kept. The item brief gains a working rule to size the change and ask which requirement needs each moving part, and its Report line asks for Verdict and Sizes. `the_brief_renders_as_dense_markdown` failed with the new expected text before the render change and passes after it; `cargo nextest run -p atelier-cli` passes (883 tests), and `scripts/smoke-repos.sh` reports no regression across 5 repositories. `skill-evaluation.md`'s spike row now links the Simplicity section.
+
+### Open items
+
+- The light-path brief (`light_path.rs`, `atelier review request` with no id) still asks only for Correctness and Fitness; it was outside this item's named file. Filed as atelier-5lv9 (backlog, low).
