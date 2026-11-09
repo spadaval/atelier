@@ -543,6 +543,15 @@ impl<'a> ReadContext<'a> {
         self.cache.histories.insert(key, output.clone());
         Ok(output)
     }
+    /// How many `git log` runs [`Self::history`] has made in this read phase.
+    #[cfg(test)]
+    pub(crate) fn logs_run(&self) -> usize {
+        self.cache
+            .histories
+            .keys()
+            .filter(|args| args.first().is_some_and(|arg| arg == "log"))
+            .count()
+    }
     /// The commits a path-limited `git log` over records lists. Every such
     /// query in this read phase is answered from one load of HEAD's history,
     /// so the Git work does not grow with the number of queries.
