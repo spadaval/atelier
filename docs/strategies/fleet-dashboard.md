@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: Sumeet's direction: a Vite, TypeScript and React app over a read-only JSON API (decision atelier-8p7u), and a debrief one history walk long (atelier-t7pb) before the site"
+last_changed: "2026-11-09: planning review fixes: base-ref bootstrap without a checkout, the server picks brief or debrief, asset routing before the app fallback, web CI on every Rust change"
 ---
 
 # Why
@@ -112,13 +112,15 @@ loader lives in `atelier-app` because it is a records concern;
 
 **Discovery.** `atelier serve --root <dir>...` (default `~/projects`) scans
 for checkouts holding `.atelier/`, groups them by Git common directory so each
-repository appears once, and reads each one's base branch from its workflow
-policy at the base commit. The URL slug is the project's `project_slug`; a
+repository appears once, and reads each one's base branch without a checkout: it takes the repository's default branch (`refs/remotes/origin/HEAD`, else whichever one of local `main` and `master` exists), reads the workflow policy committed there, and uses the `base_branch` that policy names, which must name itself in its own committed policy. A repository with no default branch, both `main` and `master` and no `origin/HEAD`, or a policy whose base does not name itself shows that error on its own page; nothing falls back to `HEAD` or a working tree. The URL slug is the project's `project_slug`; a
 repository whose records cannot be read shows its error on its own page while
 the others render.
 
-**API.** Read-only `GET` routes returning JSON: `/api/repos` (repositories and
-their counts), `/api/<repo>/mission/<id>/brief`, `/debrief` and `/strategy`
+**API.** Read-only `GET` routes returning JSON: `/api/repos` (repositories, their
+counts and their missions, each with its id, title, status and which review
+the server says to show: the brief while the mission is in its workflow's
+initial status, the debrief afterwards), `/api/<repo>/mission/<id>` (that
+summary for one mission), `/api/<repo>/mission/<id>/brief`, `/debrief` and `/strategy`
 (the strategy's Markdown as text). Later increments add `/api/<repo>/board`,
 `/api/<repo>/item/<id>` and `/api/inbox`. Each response is an `atelier-app`
 view model serialized with `serde`, plus the base commit it was read from;
@@ -129,10 +131,12 @@ mission or item is a 404 with a JSON error, and a repository whose records
 fail to load is a 500 naming the error.
 
 **App.** Client routes mirror the pages: `/` lists repositories,
-`/<repo>/mission/<id>` shows the brief while the mission is in its workflow's
-initial status and the debrief afterwards, linking `/brief`, `/debrief` and
+`/<repo>/mission/<id>` shows the review the API names for it (the app never
+interprets statuses), linking `/brief`, `/debrief` and
 `/strategy`; later `/<repo>`, `/<repo>/item/<id>` and `/inbox`. The server
-answers any non-API path with the app's `index.html`. Markdown renders with
+answers a path that names an embedded asset with that asset and its content
+type; a missing path under the asset directory is a 404, never `index.html`;
+and any other non-API path gets the app's `index.html`. Markdown renders with
 `react-markdown`, raw HTML skipped, and one URL policy for links and images:
 relative paths, fragments, `http`, `https` and `mailto` are kept, and any other
 scheme (`javascript:`, `data:`, `vbscript:` and the rest) renders as plain
@@ -150,8 +154,9 @@ write each response as checked-in fixture JSON that a Rust test keeps current.
 Vitest and Testing Library test components against that JSON, so the
 frontend's fixtures are real API output. One Playwright suite starts
 `atelier serve` on a fixture repository and loads every route at a 390 px
-viewport. CI gains a `web` job, chosen by `scripts/ci-jobs.sh` when `web/` or
-the API changes, that runs the typecheck, Vitest, the build and Playwright.
+viewport. CI gains a `web` job, chosen by `scripts/ci-jobs.sh` whenever the
+Rust jobs run (the API is the shared view models, so any Rust change can
+change it) or `web/` changes, and also when the base is missing, that runs the typecheck, Vitest, the build and Playwright.
 
 **Server.** `axum` on a `tokio` runtime, bound to loopback; `tailscale serve`
 publishes it beside T3 Code's port. View builds run in `spawn_blocking`, at
