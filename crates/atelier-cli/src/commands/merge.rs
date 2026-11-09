@@ -352,7 +352,7 @@ fn clean(repo: &Path) -> Result<()> {
     Ok(())
 }
 
-fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
+pub(super) fn base_checkout(repo: &Path, base: &str) -> Result<Option<PathBuf>> {
     let worktrees =
         String::from_utf8(git::git_output(repo, &["worktree", "list", "--porcelain"])?)?;
     for block in worktrees.split("\n\n") {
@@ -451,11 +451,24 @@ fn test_move_base_before_locks(repo: &Path, base: &str) {
 /// With no ID, the checked-out branch says what merges: its owner's work, or
 /// on a branch no issue owns, the branch itself on an approval of its head
 /// (the light path, atelier-4nsl).
-pub fn run(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -> Result<()> {
-    let result = attempts(issue_ref, check_only, json, quiet);
+/// With `push`, the merge publishes the base through the policy's forge
+/// (`merge --push`), and the verdict says what it pushed, or that nothing
+/// was pushed.
+pub fn run(
+    issue_ref: Option<&str>,
+    check_only: bool,
+    json: bool,
+    quiet: bool,
+    push: bool,
+) -> Result<()> {
+    let result = if push {
+        super::merge_push::run(issue_ref, quiet).map(Some)
+    } else {
+        attempts(issue_ref, check_only, json, quiet, false).map(|_| None)
+    };
     // `--json` is a script's format and keeps its errors (ADR 0022).
     if json {
-        return result;
+        return result.map(|_| ());
     }
     let say = |line: &str| {
         if quiet {
@@ -464,9 +477,17 @@ pub fn run(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -
             println!("{line}");
         }
     };
+    let nothing_pushed = if push { ", nothing pushed" } else { "" };
     match result {
-        Ok(()) => {
-            println!("{}", if quiet { "passed" } else { "merge: passed" });
+        Ok(published) => {
+            println!(
+                "{}",
+                match (quiet, published) {
+                    (true, _) => "passed".to_owned(),
+                    (false, Some(published)) => format!("merge: passed — {published}"),
+                    (false, None) => "merge: passed".to_owned(),
+                }
+            );
             Ok(())
         }
         // Nothing is left to merge, so nothing refuses (atelier-yrlj).
@@ -474,7 +495,14 @@ pub fn run(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -
             if !quiet {
                 println!("{error}");
             }
-            println!("{}", if quiet { "passed" } else { "merge: passed" });
+            println!(
+                "{}",
+                if quiet {
+                    "passed".to_owned()
+                } else {
+                    format!("merge: passed{nothing_pushed}")
+                }
+            );
             Ok(())
         }
         Err(error) => {
@@ -486,11 +514,14 @@ pub fn run(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -
                     refusal_code(&error).into_iter().collect()
                 }
             };
-            say(&if failed.is_empty() {
-                "merge: refused".to_owned()
-            } else {
-                crate::gate_report::verdict("merge", &failed)
-            });
+            say(&format!(
+                "{}{nothing_pushed}",
+                if failed.is_empty() {
+                    "merge: refused".to_owned()
+                } else {
+                    crate::gate_report::verdict("merge", &failed)
+                }
+            ));
             Err(super::session::Reported.into())
         }
     }
@@ -505,14 +536,22 @@ fn refusal_code(error: &anyhow::Error) -> Option<String> {
         .then(|| code.to_owned())
 }
 
-fn attempts(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+/// Runs the merge, retrying on a base that moved by records-only commits.
+/// It returns what integrating did, or `None` for `--check`.
+pub(super) fn attempts(
+    issue_ref: Option<&str>,
+    check_only: bool,
+    json: bool,
+    quiet: bool,
+    push: bool,
+) -> Result<Option<Integrated>> {
     for attempt in 1..=MAX_ATTEMPTS {
-        match merge_once(issue_ref, check_only, json, quiet) {
+        match merge_once(issue_ref, check_only, json, quiet, push) {
             Err(error) => match error.downcast_ref::<RetryOnMovedBase>() {
                 Some(moved) if attempt < MAX_ATTEMPTS => {
                     eprintln!("merge_base_moved: {moved}; running the gates again on the new base")
                 }
-                Some(moved) => bail!("merge_snapshot_changed: {moved}, and it kept moving across {MAX_ATTEMPTS} attempts. Next: rerun `{}` once the base is quiet", rerun(issue_ref)),
+                Some(moved) => bail!("merge_snapshot_changed: {moved}, and it kept moving across {MAX_ATTEMPTS} attempts. Next: rerun `{}` once the base is quiet", rerun(issue_ref, push)),
                 None => return Err(error),
             },
             done => return done,
@@ -521,12 +560,24 @@ fn attempts(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) 
     unreachable!("the last attempt returns")
 }
 
-/// The command that runs this merge again.
-fn rerun(issue_ref: Option<&str>) -> String {
-    match issue_ref {
+/// The command that runs this merge again, keeping `--push`.
+pub(super) fn rerun(issue_ref: Option<&str>, push: bool) -> String {
+    let command = match issue_ref {
         Some(id) => format!("atelier merge {id}"),
         None => "atelier merge".to_owned(),
+    };
+    if push {
+        format!("{command} --push")
+    } else {
+        command
     }
+}
+
+/// What a merge integrated: the merge commit on the base, and the checkout
+/// that now has the base checked out.
+pub(super) struct Integrated {
+    pub commit: String,
+    pub base_checkout: PathBuf,
 }
 
 /// The checked-out work branch of the item's owner, read from its committed
@@ -810,6 +861,9 @@ fn owned(
 /// Whether `code` is one of merge's own checks or the record fences it runs.
 fn is_merge_code(code: &str) -> bool {
     code.starts_with("merge_")
+        // `merge --push` checks `gh` and judges the base as `land` does.
+        || code.starts_with("forge_")
+        || code.starts_with("land_base_")
         || [
             "canonical_snapshot_uncommitted",
             "tracked_snapshot_uncommitted",
@@ -821,11 +875,18 @@ fn is_merge_code(code: &str) -> bool {
 /// One merge attempt. A failed precondition is one more failed check, and
 /// the gates still run against what can be read; one that keeps them from
 /// running prints with the preconditions before it.
-fn merge_once(issue_ref: Option<&str>, check_only: bool, json: bool, quiet: bool) -> Result<()> {
+fn merge_once(
+    issue_ref: Option<&str>,
+    check_only: bool,
+    json: bool,
+    quiet: bool,
+    push: bool,
+) -> Result<Option<Integrated>> {
     let mut preconditions = crate::gate_report::Preconditions::default();
-    let result = merge_gates(issue_ref, check_only, json, quiet, &mut preconditions);
-    let Err(error) = result else {
-        return result;
+    let result = merge_gates(issue_ref, check_only, json, quiet, push, &mut preconditions);
+    let error = match result {
+        Ok(integrated) => return Ok(integrated),
+        Err(error) => error,
     };
     // `--json` keeps its errors, and the gates' own refusal has printed.
     if json
@@ -858,8 +919,9 @@ fn merge_gates(
     check_only: bool,
     json: bool,
     quiet: bool,
+    push: bool,
     preconditions: &mut crate::gate_report::Preconditions,
-) -> Result<()> {
+) -> Result<Option<Integrated>> {
     let Owned {
         layout,
         head,
@@ -874,7 +936,11 @@ fn merge_gates(
         light,
     } = owned(issue_ref, Some(preconditions))?;
     let repo = layout.repo_root();
-    let rerun = if light { rerun(None) } else { rerun(Some(&id)) };
+    let rerun = if light {
+        rerun(None, push)
+    } else {
+        rerun(Some(&id), push)
+    };
     // Where the records the gates read are: the checkout, or HEAD's when
     // the checkout's differ.
     let records_root = committed.as_ref().map_or(repo, |dir| dir.path());
@@ -1250,7 +1316,7 @@ fn merge_gates(
         .into());
     }
     if check_only {
-        return Ok(());
+        return Ok(None);
     }
     drop(checkout);
     // ci.passed's pass says what its run tested, so it is printed with the
@@ -1338,17 +1404,33 @@ fn merge_gates(
     clean(target)?;
     clean(repo)?;
     let detached = base_tree.is_some().then(|| format!("The work checkout is detached; when finished, leave it and run `git worktree remove {}` from the base checkout.", repo.display()));
+    let integrated = Integrated {
+        commit: commit.clone(),
+        base_checkout: target.to_path_buf(),
+    };
     if quiet {
         if let Some(note) = detached {
             eprintln!("{note}");
         }
-        return Ok(());
+        return Ok(Some(integrated));
     }
     for line in &ci {
         println!("{line}");
     }
+    // `--push` publishes the base next; otherwise land judges it and pushes
+    // it to its upstream, and a forge policy can do both in one step.
+    let next = if push {
+        String::new()
+    } else if source.policy.forge.is_some() {
+        format!(
+            " Next: atelier land --push from the {base} checkout; next time, `{}` publishes it in one step.",
+            self::rerun((!light).then_some(id.as_str()), true)
+        )
+    } else {
+        format!(" Next: atelier land --push from the {base} checkout.")
+    };
     println!(
-        "✓ Merged {branch} into {base} with merge commit {}{}; branch deleted. Next: atelier land, then git push.",
+        "✓ Merged {branch} into {base} with merge commit {}{}; branch deleted.{next}",
         crate::human_output::short_commit(&commit),
         if marked.is_empty() {
             String::new()
@@ -1359,7 +1441,7 @@ fn merge_gates(
     if let Some(note) = detached {
         println!("{note}");
     }
-    Ok(())
+    Ok(Some(integrated))
 }
 
 /// Whether the repository runs Git hooks of its own: a `core.hooksPath`, or

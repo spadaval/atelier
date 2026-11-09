@@ -318,10 +318,16 @@ findings.disposed)` (exit status zero), since it refuses nothing there
 (ADR 0028 decision 5). `land --push` appends what happened to
 the push: `land: passed, pushed to origin/<branch>`, `land: work in progress —
 1 check open (review.current), pushed to origin/<branch>` or `land: refused —
-1 check (land_push_failed), nothing pushed`. It is the last line of the combined
-output, so `| tail -1` reads it, and a refusal still exits non-zero: a piped
-command's exit status is the pipe's last command's, so check `$?` before
-acting on it. Each command adopts the line in its own item: `land` prints it since
+1 check (land_push_failed), nothing pushed`. `merge --push` does too:
+`merge: passed — pushed master to origin, pull request #42 merged`, or, on
+any refusal, `merge: refused — 1 check (ci.passed), nothing pushed` (see
+[`merge --push`](reviews-and-merge.md#merge---push-step-by-step)). The exit
+status carries the same verdict: zero for passed, non-zero for refused. Run a
+gate unpiped and act on its exit status. Piping it through `tail`, `head` or
+`grep` hides a refusal, because a pipe's exit status is its last command's,
+and a command chained after the pipe runs anyway; to publish, use `merge
+--push` or `land --push` rather than chaining `git push` after a gate. Each
+command adopts the line in its own item: `land` prints it since
 atelier-ecah, counting every failed gate check since atelier-9jr8, `merge --sync` since
 atelier-s2ei (`merge: passed`, `merge: synced — approval needs fresh review`, or `merge:
 refused — 1 check (sync_conflict)`),
@@ -441,10 +447,13 @@ was started` line for each such edit, before `Next:` (see [reviews and
 merge](reviews-and-merge.md#a-done-when-edited-after-the-start)). A successful
 `merge` prints no gate lines, only those notes, what it did and the next step:
 `✓ Merged atelier-nqgr into master at c24af21a; branch deleted. Next:
-atelier land, then git push.` It notes that Git hooks did not run only when
-the repository has hooks of its own. `merge --push` ends with what it pushed
-instead, `merge: passed — pushed master to origin, pull request #42 merged`
-(see [`merge --push`](reviews-and-merge.md#merge---push-step-by-step)).
+atelier land --push from the master checkout.` In a policy with a forge, the
+Next goes on to name `atelier merge atelier-nqgr --push`, which publishes in
+one step, for next time. It notes that Git hooks did not run only when the repository has
+hooks of its own. `merge --push` prints no Next after the merge line; it
+prints the base judgment as `land` does, then ends with what it pushed,
+`merge: passed — pushed master to origin, pull request #42 merged` (see
+[`merge --push`](reviews-and-merge.md#merge---push-step-by-step)).
 
 ### Mutation Confirmation
 

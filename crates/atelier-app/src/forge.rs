@@ -157,16 +157,69 @@ impl Github {
         }))
     }
 
+    /// Whether `gh` is installed and signed in to this host, checked before
+    /// `merge --push` pushes anything.
+    pub fn signed_in(&self) -> Result<(), ForgeError> {
+        self.gh(
+            &["auth", "status", "--hostname", &self.host],
+            "gh auth status",
+        )
+        .map(|_| ())
+    }
+
+    /// The number of the open pull request from this repository's `branch`
+    /// into `base`.
+    pub fn open_pull_request(&self, branch: &str, base: &str) -> Result<Option<u64>, ForgeError> {
+        let owner = self.slug.split('/').next().unwrap_or_default();
+        let pulls = self.api(
+            &format!("repos/{}/pulls", self.slug),
+            &[
+                ("head", &format!("{owner}:{branch}")),
+                ("base", base),
+                ("state", "open"),
+            ],
+        )?;
+        Ok(pulls
+            .as_array()
+            .and_then(|pulls| pulls.first())
+            .and_then(|pull| pull["number"].as_u64()))
+    }
+
+    /// Whether GitHub has marked pull request `number` merged.
+    pub fn pull_request_merged(&self, number: u64) -> Result<bool, ForgeError> {
+        let pull = self.api(&format!("repos/{}/pulls/{number}", self.slug), &[])?;
+        Ok(pull["merged"].as_bool().unwrap_or(false))
+    }
+
     fn api(&self, path: &str, fields: &[(&str, &str)]) -> Result<Value, ForgeError> {
-        let mut command = Command::new("gh");
-        command
-            .args(["api", "--hostname", &self.host, "-X", "GET", path])
-            .env("GH_PROMPT_DISABLED", "1")
-            .env("NO_COLOR", "1");
+        let mut args = vec![
+            "api".to_owned(),
+            "--hostname".to_owned(),
+            self.host.clone(),
+            "-X".to_owned(),
+            "GET".to_owned(),
+            path.to_owned(),
+        ];
         for (key, value) in fields {
-            command.arg("-f").arg(format!("{key}={value}"));
+            args.push("-f".to_owned());
+            args.push(format!("{key}={value}"));
         }
-        let output = match command.output() {
+        let args = args.iter().map(String::as_str).collect::<Vec<_>>();
+        let stdout = self.gh(&args, &format!("gh api {path}"))?;
+        serde_json::from_slice(&stdout).map_err(|error| {
+            ForgeError::Unreachable(format!("gh api {path} returned unreadable JSON: {error}"))
+        })
+    }
+
+    /// Runs `gh` and returns its standard output, telling a missing or
+    /// signed-out `gh` from other failures.
+    fn gh(&self, args: &[&str], what: &str) -> Result<Vec<u8>, ForgeError> {
+        let output = match Command::new("gh")
+            .args(args)
+            .env("GH_PROMPT_DISABLED", "1")
+            .env("NO_COLOR", "1")
+            .output()
+        {
             Ok(output) => output,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Err(ForgeError::GhMissing)
@@ -175,7 +228,8 @@ impl Github {
         };
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            // gh exits 4 when it needs a sign-in.
+            // gh exits 4 when it needs a sign-in; `gh auth status` exits 1
+            // and names `gh auth login`.
             if output.status.code() == Some(4) || stderr.contains("gh auth login") {
                 return Err(ForgeError::SignedOut {
                     host: self.host.clone(),
@@ -188,14 +242,12 @@ impl Github {
                 .collect::<Vec<_>>()
                 .join(" ");
             return Err(ForgeError::Unreachable(if message.is_empty() {
-                format!("gh api {path} exited with {:?}", output.status.code())
+                format!("{what} exited with {:?}", output.status.code())
             } else {
                 message
             }));
         }
-        serde_json::from_slice(&output.stdout).map_err(|error| {
-            ForgeError::Unreachable(format!("gh api {path} returned unreadable JSON: {error}"))
-        })
+        Ok(output.stdout)
     }
 }
 

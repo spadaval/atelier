@@ -359,6 +359,12 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
         /// nothing
         #[arg(long)]
         sync: bool,
+        /// Publish the merge through the policy's forge: fetch the base from
+        /// `forge.remote`, merge, judge the base as `land` does, push it, and
+        /// confirm the pull request merged. The branch must already be
+        /// pushed with an open pull request
+        #[arg(long, conflicts_with_all = ["check", "json", "sync"])]
+        push: bool,
     },
 
     /// One-shot graph bundle files
@@ -1081,8 +1087,12 @@ fn run() -> Result<()> {
 
         Commands::Merge { id, sync: true, .. } => commands::merge_sync::run(id.as_deref(), quiet),
         Commands::Merge {
-            id, check, json, ..
-        } => commands::merge::run(id.as_deref(), check, json, quiet),
+            id,
+            check,
+            json,
+            push,
+            ..
+        } => commands::merge::run(id.as_deref(), check, json, quiet, push),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event: ReviewEvent| {

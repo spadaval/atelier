@@ -246,7 +246,7 @@ fn approval_records_committed_by_author_remain_independent_and_merge_marks_the_i
     assert_eq!(
         output,
         format!(
-            "✓ Merged {} into main with merge commit {}, which marks {} done; branch deleted. Next: atelier land, then git push.\nmerge: passed",
+            "✓ Merged {} into main with merge commit {}, which marks {} done; branch deleted. Next: atelier land --push from the main checkout.\nmerge: passed",
             fixture.branch,
             &merge[..8],
             fixture.id
