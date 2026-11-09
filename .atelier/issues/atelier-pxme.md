@@ -15,9 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make SKILL.md's ask-a-human rules agree with complete-or-abort inside a mission"
-updated_at: "2026-11-09T05:55:07.731261036+00:00"
+updated_at: "2026-11-09T05:55:18.069843733+00:00"
 ---
 
 ## Goal

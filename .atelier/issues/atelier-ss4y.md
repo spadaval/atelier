@@ -5,6 +5,9 @@ issue_type: "feature"
 labels:
 - "agent-factory"
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-ss4y
 priority: "P2"
 relationships:
   blocks: []
@@ -26,9 +29,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Orchestrators plan and implementers own the code: escalation instead of relay"
-updated_at: "2026-11-09T05:55:07.731874322+00:00"
+updated_at: "2026-11-09T05:55:13.402142031+00:00"
 ---
 
 ## Goal

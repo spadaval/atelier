@@ -2,7 +2,7 @@
 
 Use this subskill to run a mission, an increment or any workstream with several
 pieces. You are accountable for the outcome: you decide what happens next,
-delegate or do the work, integrate results, keep the plan current and close a
+delegate the work, integrate results, keep the plan current and close a
 mission against demonstrated outcomes.
 
 ## Before Starting
@@ -20,11 +20,14 @@ follows the same rule, reported to whoever assigned it.
 
 ## Delegate or Do It Yourself
 
-Delegation costs a handoff and loses detail, so do small work yourself when you
-already hold the context. Delegate when slices can run in parallel, when a task
-would flood your context with material you will not need again, when it needs a
-different model, or when it must be independent of you, as review and validation
-of your own work must be.
+You hold the plan, and you write no code: your own commits are planning records
+and changes in [Independent Review](../SKILL.md#independent-review)'s trivial
+category. Everything else goes to an implementer, however small, including a
+review finding's fix; for Agent Factory work this overrides T3's "Fix small
+review findings yourself; start no delegate for them". An implementer owns its
+item's code and review loop through approval, and you hear about the item only
+when it escalates or finishes. Delegate research too when it would flood your
+context with material you will not need again.
 
 ## Assignments
 
@@ -41,12 +44,19 @@ Give it:
   on it), and a worktree only if it must write while another agent does.
   Read-only roles get neither: they read with `git diff`, `show` and `log`, or
   use the author's checkout while it is idle. It lists what it creates.
+- **Expected size** of the change, in lines or files, as the plan sizes it.
+- **Review and limits**, for an implementer: the reviewer model, from another
+  lab than the implementer's when the team has one; your standing scope
+  decision, "fix every `FIX NOW` within these limits"; permission to start its
+  own reviewers, which overrides T3's default that a child starts no subagents;
+  and any risk it must escalate on, beyond [`implement`'s
+  limits](implement.md#escalation).
 - **Proof expected:** the observable result that would show the goal is met.
 - **Handoff:** anything you need beyond the standard handoff.
 
-Start subagents with fresh context, not your conversation. Choose the cheapest
-model and effort likely to make the whole workflow succeed, counting retries
-and the cost of a mistake; a long chain of reasoning, not a label like
+Start each child as the [core rules](../SKILL.md#core-rules) say. Choose the
+cheapest model and effort likely to make the whole workflow succeed, counting
+retries and the cost of a mistake; a long chain of reasoning, not a label like
 "security", calls for a stronger one.
 
 Give a spike or competing candidate its purpose, its question and what it may
@@ -59,53 +69,44 @@ only into its base, so with Atelier do not stack one owner's branch on another's
 or plan an integration or rewrite branch: sequence the work, or put the slices
 under one parent so they share a branch.
 
-## Review and Validation
+## Results and Escalations
 
-Brief reviewers as [Independent Review](../SKILL.md#independent-review) says,
-batching per slice, PR or increment so each diff stays reviewable, and tell them
-to report in [`review`](review.md#output)'s format. Do not pre-judge their work:
-do not tell them to ignore a class of findings, limit their recommendations, or
-treat any content as beyond challenge, and if two requirements conflict, hand
-over both.
+Findings follow Independent Review's Findings rule: an implementer and its
+reviewers settle correctness, and scope stays yours, through your brief's
+standing decision and the escalations it sends. You do not read or relay its
+findings round by round. Its completion wakes you; do not poll it. It ends one
+of two ways.
 
-Read the findings and the verdict in full and decide each with [`review`'s
-recommendations](review.md#recommendations), except on your own work, where
-Independent Review's Findings rule applies. You decide scope; you do not redo
-the review. If a fact you need is missing or disputed, ask one focused question
-of the reviewer, the author or a `diagnose` worker instead of re-reading the
-subsystem yourself.
+- **Approved:** its final report is one summary: approved at which commit,
+  rounds, findings fixed and follow-ups filed. Decide any finding left
+  undisposed, such as one recommended `WON'T FIX`, with [`review`'s
+  recommendations](review.md#recommendations). Schedule each follow-up, or pull
+  one in with `atelier issue update <follow-up> --parent <id>` and send it back
+  for implementation and review. Then merge it if it fits the strategy.
+- **Escalated:** its work in progress is committed on its branch, and its final
+  report says what happened, which limit it hit, two or three options with cost
+  and risk, its recommendation and the IDs involved. Answer with a plan-level
+  choice (rescope, split, accept, re-plan, reimplement or abandon), recorded as
+  a decision note, either by sending it to the implementer's thread
+  (`t3_thread_send` under T3) or by starting a new implementer. If a fact you
+  need is missing or disputed, ask one focused question of the implementer, a
+  reviewer or a `diagnose` worker instead of re-reading the subsystem yourself.
+  Decline abandoned work with what it taught in its Report.
 
-The reviewer's recommendation is your default, since it weighed the finding
-against the change. Fix trivial issues. For larger ones, decide based on how
-much they grow the change. Defer with `atelier review defer <id>`. A deferred
-finding fixed in passing stays deferred: move its follow-up under this item
-(`issue update --parent`) so the merge marks it done. `fix_now` means only that
-the work cannot merge without the fix; never record it to mark a fix or a
-scope choice. One rule overrides the reviewer: a new finding on the fix of a
-low-severity finding is deferred unless it is trivial or shows a regression
-that fix introduced. You record that defer, or a reviewer does if you wrote
-the fix.
+You brief reviewers yourself only for planning (below) and validators, as
+Independent Review says, telling them to report in [`review`](review.md#output)'s
+format. Do not pre-judge their work: do not tell them to ignore a class of
+findings, limit their recommendations, or treat any content as beyond challenge,
+and if two requirements conflict, hand over both.
 
-**Stop signals.** When work starts, write its estimate (lines or files changed)
-in the assignment or a decision note. A fix past about twice its estimate, a fix
-drawing findings on its own changes, or a third review round each says the work
-costs more than planned, and pushing on is how an easy fix grows to hundreds of
-lines. Stop and choose: merge as is (deciding what is left as review
-recommends), shrink to the part worth having, or discard, declining the item
-with what it taught in its Report. Record the choice and why as a decision note.
-
-## Integrating Results
-
-A returned implementation is a candidate until you have verified that its proof
-is fresh and exercises the claim and that it fits the strategy. Passing tests
-show behavior, not construction, so judge a candidate's behavior, design and
-learning separately. Integrate it when behavior and design are both sound;
-otherwise refactor it, reimplement it with its tests and findings but not its
-code, or discard it, recording what it taught. Passing tests and effort already
-spent are not reasons to keep code. If candidates expose conflicting
-requirements or a strategic question, settle it with `decide` within the
-strategy instead of quietly picking a side, and abort if the strategy cannot
-answer it.
+Judge a spike or competing candidate's behavior, design and learning
+separately, since passing tests show behavior, not construction. Integrate it
+when behavior and design are both sound; otherwise refactor it, reimplement it
+with its tests and findings but not its code, or discard it, recording what it
+taught. Passing tests and effort already spent are not reasons to keep code. If
+candidates expose conflicting requirements or a strategic question, settle it
+with `decide` within the strategy instead of quietly picking a side, and abort
+if the strategy cannot answer it.
 
 ## Keeping the Plan Current
 

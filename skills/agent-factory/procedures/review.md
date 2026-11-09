@@ -7,8 +7,9 @@ re-running acceptance scenarios is `validate`.
 
 ## Stance
 
-- Read the change, the requirements and constraints it answers to, and enough
-  surrounding code, docs and decision records to judge it.
+- Read the change, the requirements and constraints it answers to (in Atelier,
+  the item's Scope is in `atelier issue show <id>`), and enough surrounding
+  code, docs and decision records to judge it.
 - Stay read-only unless asked to fix things; your review records, and the
   follow-up issue for a deferral you decide, are part of the review.
 - Report every finding you can support, whatever your verdict, ordered by
@@ -29,7 +30,7 @@ finding opening `Shrink:` or `Reject:`, its severity the change's risk; merge
 then waits for the smaller change and a fresh approval or, for a reject that
 stands, the item's decline. The accountable agent, never the author, may
 override either: `no_action` if the verdict is wrong, `wont_fix` if its point
-stands but merging is worth it (high severity makes that the human's call).
+stands but merging is worth it (for high risk, as `WON'T FIX` below says).
 
 ## What to Look For
 
@@ -54,8 +55,11 @@ acceptable changes interact.
 
 ## Recommendations
 
-Recommend one per finding; whoever decides it, as Independent Review's Findings
-rule says, uses the same rules.
+Recommend one per finding. Independent Review's Findings rule says who decides
+each, with these same rules: the author fixes a `FIX NOW` and files a `DEFER`,
+and you decide a finding whose rebuttal the author put in your brief, marked as
+its claim, recording `no_action` (`atelier review disposition`) if the rebuttal
+shows it wrong, or keeping it.
 
 - **FIX NOW** blocks the current work. It names the blocking condition and shows
   it exists on a current path in the target environment: a contract failure (a
@@ -75,9 +79,13 @@ rule says, uses the same rules.
   rare failure that fails safe or one on a path planned for removal; give the
   reason. For a high-severity finding, or one the strategy's criteria touch,
   that is the human's call: leave it undisposed and label the item
-  `needs-human`.
+  `needs-human`. Inside an approved mission, the orchestrator fixes or defers
+  it instead.
 - **NO ACTION**: wrong, a duplicate, purely stylistic or without consequence,
   with a one-line reason.
+
+A new finding on the fix of a low-severity finding is `DEFER` unless it is
+trivial or shows a regression that fix introduced.
 
 Complexity is a defect only when you can name the unneeded moving part and a
 simpler construction meeting the same current requirements without moving it

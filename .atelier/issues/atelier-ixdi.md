@@ -12,9 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Under T3, start every child agent with delegate_task, whatever its provider"
-updated_at: "2026-11-08T21:55:32.592760222+00:00"
+updated_at: "2026-11-09T05:55:15.757285333+00:00"
 ---
 
 ## Goal
