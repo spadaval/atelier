@@ -18,16 +18,16 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Read the fleet site on your phone for taste"
-updated_at: "2026-11-09T01:04:23.262093406+00:00"
+updated_at: "2026-11-09T06:42:41.829369458+00:00"
 ---
 
 ## Goal
 
-Sumeet reads the site on his phone and says whether it answers where things stand and what waits on him, for taste.
+Sumeet reads the site on his phone and says whether it answers where things stand, what's next and what waits on him, for taste.
 
 ## Done when
 
-- [ ] Sumeet has opened the inbox and one repository page on his phone over Tailscale and recorded his judgment, with anything he wants changed filed as backlog items.
+- [ ] Sumeet has opened a mission's brief and debrief, one repository's board and the inbox on his phone over Tailscale and recorded his judgment, with anything he wants changed filed as backlog items.
 
 ## Context
 
