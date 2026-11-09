@@ -4,7 +4,7 @@ id: "atelier-ygul"
 issue_type: "task"
 labels:
 - "review"
-priority: "P2"
+priority: "P1"
 relationships:
   blocks: []
   children: []
@@ -15,9 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Stop land refusing a done validation item whose planning approval predates unrelated code"
-updated_at: "2026-11-09T17:48:26.037463257+00:00"
+updated_at: "2026-11-09T17:52:27.791577367+00:00"
 ---
 
 ## Goal

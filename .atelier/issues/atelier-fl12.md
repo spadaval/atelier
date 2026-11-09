@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Make each mission a human review boundary: a planner gets it approved, an orchestrator completes it or aborts"
-updated_at: "2026-11-09T17:48:26.336798630+00:00"
+updated_at: "2026-11-09T17:52:28.050953326+00:00"
 ---
 
 ## Outcome
@@ -40,3 +40,5 @@ Planned 2026-11-08 at Sumeet's direction, in the discussion that reframed the si
 - 2026-11-09 [decision] 2026-11-09: atelier-v3nm's validator found planner-end-to-end passes (receipt atelier-ze4f), but marking it done on master made atelier land refuse for every thread (findings.disposed: planning approval atelier-4102 predates code merged since). I moved the done commit 26186c06 off master onto local branch atelier-v3nm so master lands again, pushed master (the yfqu replan's reviewed planning records), and asked Sol to review the validation at 26186c06; with an approval it goes back. Filed the land defect as atelier-ygul (backlog, outside this mission). The validator also found the two planning reviewers were blind to each other only by timing; plan.md says they must be blind but not how, so I added atelier-v5zk to this mission. Its code review also judges its two Done when lines; no separate planning review for a two-sentence item.
   Reason: Keep master landable for other threads, and keep the mission's two-pass rule true in practice, within the strategy's Authority to split items.
 - 2026-11-09 [note] 2026-11-09: All 10 items merged; atelier-xc5y merged last (4438f93d, PR #72): 12/12 eval runs passed on old and new skill. planner-end-to-end is proven (atelier-ze4f); since that receipt only atelier-v5zk's 5 lines in plan.md changed the skill, and a fresh atelier brief atelier-yfqu still shows Sizing and Derisking. Closing refused: land's findings.disposed judged the items' settled review findings against Sumeet's planning approval atelier-op8x (same defect as atelier-ygul, noted there). I undid the close commit rather than have an agent approve the mission, since the mission's result review is Sumeet's. The mission stays in_progress with nothing left to do; recording Sumeet's result review as an approval of atelier-fl12 at the debrief would let it close, or atelier-ygul's fix would.
+- 2026-11-09 [decision] 2026-11-09: Sumeet asked to remove plan.md's rule that a strategy's Authority may delegate his approval of the brief; added as atelier-zzpp to this mission. He also asked about land: atelier-ygul (land refuses a done validation item or closed mission when unrelated code merged after its approvals) is raised to high and started now, outside this mission's scope, since this mission's close waits on it.
+  Reason: Sumeet's direction, 2026-11-09.
