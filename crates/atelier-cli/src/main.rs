@@ -405,10 +405,6 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
     Brief {
         /// Mission ID
         id: String,
-        /// Write a self-contained HTML page under .atelier/runtime/reviews/
-        /// instead of printing Markdown
-        #[arg(long)]
-        html: bool,
     },
 
     /// Review a finished mission: criteria and proof, each item's report,
@@ -416,10 +412,6 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
     Debrief {
         /// Mission ID
         id: String,
-        /// Write a self-contained HTML page under .atelier/runtime/reviews/
-        /// instead of printing Markdown
-        #[arg(long)]
-        html: bool,
     },
 
     /// Serve every mission's brief, debrief and strategy as pages and JSON,
@@ -1065,13 +1057,13 @@ fn run() -> Result<()> {
         Commands::RefreshUpdateCheck | Commands::Serve { .. } => {
             unreachable!("handled before the repository is read")
         }
-        Commands::Brief { id, html } => {
+        Commands::Brief { id } => {
             let (_, index) = load_repository()?;
-            commands::mission_review::brief(&index, &id, html, quiet)
+            commands::mission_review::brief(&index, &id, quiet)
         }
-        Commands::Debrief { id, html } => {
+        Commands::Debrief { id } => {
             let (_, index) = load_repository()?;
-            commands::mission_review::debrief(&index, &id, html, quiet)
+            commands::mission_review::debrief(&index, &id, quiet)
         }
 
         Commands::Work { action: None } => {

@@ -4644,16 +4644,6 @@ fn a_done_when_edited_after_the_start_is_shown_without_changing_the_verdict() {
         1,
         "{debrief}"
     );
-    let wrote = ok(fixture.path(), &["debrief", &mission_id, "--html"]);
-    let page = wrote
-        .split_whitespace()
-        .find(|word| word.ends_with(".html"))
-        .unwrap();
-    let html = fs::read_to_string(page).unwrap();
-    assert!(
-        html.contains(&format!("Done when edited at {}", &edit[..8])),
-        "{html}"
-    );
     // The merge itself says it too, and integrates.
     let merged = ok(fixture.path(), &["merge", &fixture.id]);
     assert_eq!(edit_lines(&merged), [line.as_str()], "{merged}");

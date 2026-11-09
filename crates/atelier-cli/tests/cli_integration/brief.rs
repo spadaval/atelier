@@ -1,5 +1,5 @@
 //! `atelier brief` (atelier-acrt): a mission's plan before work starts, in
-//! Markdown and HTML from one view model.
+//! Markdown for agents; a human reads it on the site (atelier-59fz).
 
 use super::*;
 
@@ -221,82 +221,60 @@ fn brief_markdown_shows_the_plan_and_its_approval() {
     assert!(debrief.contains("| Plan approved as written"), "{debrief}");
 }
 
+/// The site is the one place a human reads a brief or debrief
+/// (atelier-59fz): neither command takes `--html` or writes a page, and each
+/// names the mission's site page when this user has set the site's address.
 #[test]
-fn brief_html_holds_the_same_facts_as_the_markdown() {
+fn brief_and_debrief_name_the_site_page_instead_of_writing_html() {
     let dir = tempdir().unwrap();
     let p = plan(dir.path());
-    ok(
-        dir.path(),
-        &[
-            "review",
-            "approve",
-            &p.mission,
-            "--identity",
-            "Human",
-            "Plan approved as written",
-        ],
-    );
-    let markdown = ok(dir.path(), &["brief", &p.mission]);
-    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
-    assert_eq!(
-        path,
-        dir.path()
-            .canonicalize()
-            .unwrap()
-            .join(format!(".atelier/runtime/reviews/{}-brief.html", p.mission))
-    );
-    let html = fs::read_to_string(path).unwrap();
-    for forbidden in ["<script", "<form", "<button", "http://", "https://", "src="] {
-        assert!(!html.contains(forbidden), "page holds {forbidden}");
+    for command in ["brief", "debrief"] {
+        let (success, _, stderr) = run_atelier(dir.path(), &[command, &p.mission, "--html"]);
+        assert!(!success, "{command} --html succeeded");
+        assert!(stderr.contains("--html"), "{stderr}");
     }
-    assert!(html.contains("Plans are &lt;reviewable&gt;.") && !html.contains("<reviewable>"));
-    for fact in [
-        p.mission.as_str(),
-        p.sized.as_str(),
-        p.blocked.as_str(),
-        p.decision.as_str(),
-        p.human.as_str(),
-        "plan-shown",
-        "The brief shows the plan.",
-        "Whether the cache is needed.",
-        "The parser may be slow on huge strategies.",
-        "Plan approved as written",
-        "Choose the store",
-    ] {
-        assert!(markdown.contains(fact) && html.contains(fact), "{fact}");
+    assert!(!dir.path().join(".atelier/runtime/reviews").exists());
+
+    let config = tempdir().unwrap();
+    let unset = config.path().display().to_string();
+    for command in ["brief", "debrief"] {
+        let (success, page, stderr) = run_atelier_with_env(
+            dir.path(),
+            &[command, &p.mission],
+            &[("XDG_CONFIG_HOME", unset.as_str())],
+        );
+        assert!(success, "{stderr}");
+        assert!(
+            !page.contains("Send the human the page") && !page.contains("--html"),
+            "{page}"
+        );
     }
-    assert!(html.contains("<td>M</td>"), "size shown: {html}");
-    // The blocked-by cell and the approval's event ID are on the page.
-    let blocked_row = html
-        .split(&format!("<td class=\"id\">{}</td>", p.blocked))
-        .nth(1)
-        .unwrap();
-    let row = blocked_row.split("</tr>").next().unwrap();
-    assert!(
-        row.ends_with(&format!("<td class=\"id\">{}</td>", p.decision)),
-        "{row}"
-    );
-    let approval = markdown
-        .lines()
-        .find(|line| line.starts_with("approval atelier-"))
-        .unwrap()
-        .split_whitespace()
-        .nth(1)
-        .unwrap();
-    assert!(html.contains(approval), "{approval}");
-    assert!(!html.contains("No plan approval recorded."));
-    assert!(
-        !html.contains("atelier review approve")
-            && html.contains(&format!(
-                "Next: move the approved plan on: atelier issue transition {}.",
+
+    fs::create_dir_all(config.path().join("atelier")).unwrap();
+    fs::write(
+        config.path().join("atelier/site-url"),
+        "http://site.test:7341/\n",
+    )
+    .unwrap();
+    for command in ["brief", "debrief"] {
+        let (success, page, stderr) = run_atelier_with_env(
+            dir.path(),
+            &[command, &p.mission],
+            &[("XDG_CONFIG_HOME", unset.as_str())],
+        );
+        assert!(success, "{stderr}");
+        assert!(
+            page.contains(&format!(
+                "Send the human the page: http://site.test:7341/atelier/mission/{}/{command}\n",
                 p.mission
             )),
-        "{html}"
-    );
+            "{page}"
+        );
+    }
 }
 
 #[test]
-fn brief_says_no_plan_approval_in_both_forms_when_only_other_events_exist() {
+fn brief_says_no_plan_approval_when_only_other_events_exist() {
     let dir = tempdir().unwrap();
     let p = plan(dir.path());
     ok(
@@ -311,16 +289,12 @@ fn brief_says_no_plan_approval_in_both_forms_when_only_other_events_exist() {
         ],
     );
     let markdown = ok(dir.path(), &["brief", &p.mission]);
-    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
-    let html = fs::read_to_string(path).unwrap();
-    for form in [&markdown, &html] {
-        assert!(
-            form.contains("Looked at the plan")
-                && form.contains("No plan approval recorded.")
-                && form.contains(&format!("atelier review approve {}", p.mission)),
-            "{form}"
-        );
-    }
+    assert!(
+        markdown.contains("Looked at the plan")
+            && markdown.contains("No plan approval recorded.")
+            && markdown.contains(&format!("atelier review approve {}", p.mission)),
+        "{markdown}"
+    );
 }
 
 #[test]
@@ -333,21 +307,11 @@ fn brief_shows_the_strategy_outcome_and_falls_back_to_the_mission_outcome() {
         "# Outcome\n\nThe strategy says plans are <approved>.\n\n# Success Criteria\n\n- plan-shown: The brief shows the plan.\n",
     )
     .unwrap();
-    let both = |dir: &Path| {
-        let markdown = ok(dir, &["brief", &p.mission]);
-        let path = PathBuf::from(ok(dir, &["brief", &p.mission, "--html", "-q"]).trim());
-        (markdown, fs::read_to_string(path).unwrap())
-    };
-    let (markdown, html) = both(dir.path());
+    let markdown = ok(dir.path(), &["brief", &p.mission]);
     assert!(
         markdown.contains("Outcome       : The strategy says plans are <approved>.\n")
             && !markdown.contains("Plans are <reviewable>."),
         "{markdown}"
-    );
-    assert!(
-        html.contains("The strategy says plans are &lt;approved&gt;.")
-            && !html.contains("Plans are &lt;reviewable&gt;."),
-        "{html}"
     );
 
     // A strategy without an Outcome section leaves the mission's.
@@ -356,12 +320,11 @@ fn brief_shows_the_strategy_outcome_and_falls_back_to_the_mission_outcome() {
         "# Success Criteria\n\n- plan-shown: The brief shows the plan.\n",
     )
     .unwrap();
-    let (markdown, html) = both(dir.path());
+    let markdown = ok(dir.path(), &["brief", &p.mission]);
     assert!(
         markdown.contains("Outcome       : Plans are <reviewable>.\n"),
         "{markdown}"
     );
-    assert!(html.contains("Plans are &lt;reviewable&gt;."), "{html}");
 
     // So does a mission with no strategy.
     let bare = create(
@@ -381,8 +344,8 @@ fn brief_shows_the_strategy_outcome_and_falls_back_to_the_mission_outcome() {
     );
 }
 
-/// The strategy's Sizing and Derisking sit directly under the Outcome in
-/// both forms (atelier-cfq9), so the human sees cost, value and risk first.
+/// The strategy's Sizing and Derisking sit directly under the Outcome
+/// (atelier-cfq9), so the human sees cost, value and risk first.
 #[test]
 fn brief_shows_sizing_and_derisking_under_the_outcome() {
     let dir = tempdir().unwrap();
@@ -406,22 +369,6 @@ fn brief_shows_sizing_and_derisking_under_the_outcome() {
         "{markdown}"
     );
     assert!(!markdown.contains("not written"), "{markdown}");
-
-    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
-    let html = fs::read_to_string(path).unwrap();
-    let at = |text: &str| html.find(text).expect(text);
-    assert!(
-        at("Plans are &lt;reviewable&gt;.") < at("<strong>Sizing</strong>")
-            && at("<strong>Sizing</strong>") < at("Complexity: small, one &lt;view&gt;.")
-            && at("Complexity: small, one &lt;view&gt;.") < at("<strong>Derisking</strong>")
-            && at("<strong>Derisking</strong>") < at("Riskiest assumption: the parser copes.")
-            && at("Riskiest assumption: the parser copes.") < at("class=\"tiles\""),
-        "{html}"
-    );
-    assert!(
-        !html.contains("<view>") && !html.contains("not written"),
-        "{html}"
-    );
 }
 
 /// A strategy missing either section, or a mission with no strategy, says so
@@ -443,14 +390,6 @@ fn brief_says_when_sizing_or_derisking_is_not_written() {
             && !markdown.contains("Sizing        : not written"),
         "{markdown}"
     );
-    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
-    let html = fs::read_to_string(path).unwrap();
-    assert!(
-        html.contains("<strong>Sizing</strong>")
-            && html.contains("Derisking: not written")
-            && !html.contains("Sizing: not written"),
-        "{html}"
-    );
 
     let bare = create(
         dir.path(),
@@ -468,12 +407,6 @@ fn brief_says_when_sizing_or_derisking_is_not_written() {
             "Outcome       : No strategy here.\nSizing        : not written\nDerisking     : not written\n"
         ),
         "{markdown}"
-    );
-    let path = PathBuf::from(ok(dir.path(), &["brief", &bare, "--html", "-q"]).trim());
-    let html = fs::read_to_string(path).unwrap();
-    assert!(
-        html.contains("Sizing: not written") && html.contains("Derisking: not written"),
-        "{html}"
     );
 }
 
@@ -522,16 +455,10 @@ fn mission_without_criteria_is_valid_and_its_views_omit_criteria() {
     let work = ok(dir.path(), &["work", "mission", &mission]);
     mark_done_with_evidence(dir.path(), &item, Some("Done A."));
     let debrief = ok(dir.path(), &["debrief", &mission]);
-    let brief_html =
-        fs::read_to_string(ok(dir.path(), &["brief", &mission, "--html", "-q"]).trim()).unwrap();
-    let debrief_html =
-        fs::read_to_string(ok(dir.path(), &["debrief", &mission, "--html", "-q"]).trim()).unwrap();
     for (view, text) in [
         ("brief", &brief),
         ("work mission", &work),
         ("debrief", &debrief),
-        ("brief --html", &brief_html),
-        ("debrief --html", &debrief_html),
     ] {
         // `work mission` lists the work, not the Outcome.
         assert!(
@@ -594,10 +521,6 @@ fn strategy_without_criteria_heading_means_no_criteria() {
             "{args:?}: {text}"
         );
     }
-    let html =
-        fs::read_to_string(ok(dir.path(), &["brief", &plain, "--html", "-q"]).trim()).unwrap();
-    assert!(!html.to_lowercase().contains("criteri"), "{html}");
-
     for args in [
         vec!["brief", malformed.as_str()],
         vec!["work", "mission", malformed.as_str()],

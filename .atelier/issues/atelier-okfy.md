@@ -26,7 +26,7 @@ The debrief does not show the mission's own Report, the report written when it c
 
 ## Done when
 
-- [ ] A CLI fixture in a scratch repository shows the mission's Report and the item notes Left open points at, in both the Markdown and HTML debrief, for a mission closed under the current lifecycle and for one whose records use `## Close Reason`.
+- [ ] A CLI fixture in a scratch repository shows the mission's Report and the item notes Left open points at, in both the Markdown debrief and the site's debrief page, for a mission closed under the current lifecycle and for one whose records use `## Close Reason`.
 
 ## Context
 

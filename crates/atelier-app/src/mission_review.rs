@@ -1,6 +1,6 @@
 //! Mission reviews (atelier-rx22, atelier-acrt): one view model per review,
-//! built from records and Git history and rendered by the CLI as dense
-//! Markdown and as a static HTML page, so the two forms cannot disagree.
+//! built from records and Git history, printed by the CLI as dense Markdown
+//! and served by the site as JSON, so the two forms cannot disagree.
 //!
 //! The debrief reads as an after-action report (atelier-8bil): the problem,
 //! what the mission set out to do, what happened in time order, then where

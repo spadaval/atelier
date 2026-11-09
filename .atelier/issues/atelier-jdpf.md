@@ -28,7 +28,7 @@ Decision atelier-mzpn superseded the debrief mission atelier-gg6b: its items wer
 
 ## Done when
 
-- [ ] An independent agent has reviewed `atelier debrief <mission>` (Markdown and HTML) for a mission closed under the new lifecycle (atelier-mmpv unless a better one exists) against its records and docs/product/mission-reviews.md, and its report is attached as a note.
+- [ ] An independent agent has reviewed `atelier debrief <mission>` (Markdown and the site's page) for a mission closed under the new lifecycle (atelier-mmpv unless a better one exists) against its records and docs/product/mission-reviews.md, and its report is attached as a note.
 - [ ] Each defect it finds is filed as a backlog item or added to one of the ten items above, and any of those the new model makes moot is superseded; the Report says which.
 
 ## Context

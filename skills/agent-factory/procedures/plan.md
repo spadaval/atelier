@@ -141,7 +141,8 @@ re-reviews a fix.
 ## Brief and Handoff
 
 This section serves the real need: the human decides whether the need is worth
-its cost. Walk them through `atelier brief <mission> --html` and record their
+its cost. Send them the mission's brief on the site, the page `atelier brief
+<mission>` names in its footer, walk them through it, and record their
 approval (`atelier review approve <mission> --identity <the human>`); no
 strategy can delegate it. Then hand the mission to an orchestrator,
 reporting the strategy location, decisions recorded, increments and ready issues

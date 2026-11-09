@@ -26,7 +26,7 @@ Two nits from the S7 agent re-review of atelier-vt8q's debrief at 7518f516: each
 
 ## Done when
 
-- [ ] A CLI fixture shows each timeline 'How' link pointing at its own validation run, and the Results header labelling every column, in the HTML debrief.
+- [ ] A CLI fixture shows each timeline 'How' link pointing at its own validation run, and the Results header labelling every column, on the site's debrief page.
 
 ## Context
 

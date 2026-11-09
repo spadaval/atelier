@@ -268,3 +268,22 @@ tailscale serve --bg --http=7341 http://127.0.0.1:7341
 
 The site is then at `http://<host>.<tailnet>.ts.net:7341/`, on the tailnet
 only. `tailscale serve --http=7341 off` removes it.
+
+## Naming a page from the CLI
+
+`atelier brief` and `atelier debrief` end with the mission's page on the
+site, `Send the human the page: <site>/<project_slug>/mission/<id>/brief`
+(or `/debrief`), when the user has set the site's address. The address is
+the first line of `site-url` in `$XDG_CONFIG_HOME/atelier/`, else
+`~/.config/atelier/`, one file that every repository and harness on the host
+reads without any environment to pass along:
+
+```bash
+mkdir -p ~/.config/atelier
+echo "http://<host>.<tailnet>.ts.net:7341" > ~/.config/atelier/site-url
+```
+
+With no file, an empty one, or no readable `project_slug`, the footer names
+no page. The CLI names the repository by its own `project_slug`, so a
+repository whose slug another one on the host also uses, which the site
+serves as `<slug>-<n>`, gets a URL for the other one.

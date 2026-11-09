@@ -76,9 +76,9 @@ mechanical guards at the point of action. The governing decision is
   Atelier repository on the host, built from the same views the CLI prints
   ([ADR 0030](docs/adr/0030-a-read-only-site-a-session-database-and-t3-code.md)).
   The site is read-only: it holds no controls, the human gives direction in
-  conversation, and agents record it with ordinary commands. Until mission
-  atelier-yfqu ships the site, `brief --html` and `debrief --html` write
-  those pages as files.
+  conversation, and agents record it with ordinary commands. `atelier brief`
+  and `atelier debrief` print Markdown for agents and name the mission's page
+  on the site for the human.
 
 ## Work and proof
 

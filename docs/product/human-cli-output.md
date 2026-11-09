@@ -600,8 +600,8 @@ refusal of it leaves stdout empty:
 | `work` | the view names, one per line |
 | `work ready`, `blocked`, `human`, `active`, `all`, `missions` | IDs, one per line |
 | `work decisions` | the IDs of the items holding current decisions, one per line |
-| `brief` | `criteria=<n> items=<n> blocked=<n> unknowns=<n> human_decisions=<n> approvals=<n>`; with `--html`, the page's path |
-| `debrief` | `criteria=<n> proven=<n> failing=<n> unproven=<n> items=<n> decisions=<n> deviations=<n> follow_ups=<n>`; with `--html`, the page's path |
+| `brief` | `criteria=<n> items=<n> blocked=<n> unknowns=<n> human_decisions=<n> approvals=<n>` |
+| `debrief` | `criteria=<n> proven=<n> failing=<n> unproven=<n> items=<n> decisions=<n> deviations=<n> follow_ups=<n>` |
 | `serve` | the URL it serves, such as `http://127.0.0.1:7341`, once it is listening |
 | `work mission`, `work parent` | their counts as `key=value` numbers, `active=<n> ready=<n> human=<n> context=<n> blocked=<n> done=<n> backlog=<n>`, with `failing_evidence=<n>` for a parent; with a filter such as `--ready`, its IDs |
 | `issue create`, `update`, `note`, `link`, `unlink` | the ID; for `link` and `unlink`, the first ID given |
