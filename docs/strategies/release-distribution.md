@@ -58,7 +58,9 @@ request, before the first tag is cut.
 - Upgrades go through the installer. Atelier itself gets no self-update
   command and no network code; it stays a local tool.
 - The release workflow builds what CI tests. Release targets are only those
-  CI also tests on (Linux and macOS).
+  CI also tests on (Linux and macOS). Since 2026-11-09 the one exception is
+  macOS: CI tests only Linux, and releases keep the macOS archives as
+  best-effort builds (README.md, Platform support).
 - Simplicity wins over coverage: no Windows, crates.io, Homebrew or
   `cargo binstall` until someone needs them.
 

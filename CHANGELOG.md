@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Changed
+- macOS support is now unofficial and best effort. CI tests only on Linux;
+  releases still include macOS binaries.
+
 ## [0.3.1] - 2026-11-04
 
 ### Fixed
