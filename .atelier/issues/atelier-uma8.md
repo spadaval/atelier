@@ -4,6 +4,9 @@ id: "atelier-uma8"
 issue_type: "feature"
 labels:
 - "fleet-dashboard"
+workflow_branch:
+  branch_base: master
+  work_branch: t3/ce3458cf
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "List what waits on Sumeet across every repository, linking into the site's pages"
-updated_at: "2026-11-09T20:57:04.100077672+00:00"
+updated_at: "2026-11-09T20:59:53.200436494+00:00"
 ---
 
 ## Goal
@@ -46,3 +49,18 @@ Planned at the evidence boundary after atelier-zpmb and atelier-ahpf: they show 
 
 - Which missions an entry links besides its item page. Any linked mission is too loose: needs-human atelier-3km4 asks for atelier-vt8q's debrief but relates only to superseded mission atelier-gg6b (finding atelier-ei8w). Settle a rule, or link only the item page, and say which in the Report.
 - Whether listing every draft mission is noisy; if it is, show only drafts with a recorded planning approval, and say so in the Report.
+
+## Notes
+
+- 2026-11-09 [decision] An inbox entry links its item page and every mission the item belongs to: each mission whose scope holds it (the advances scope atelier-app's mission_overview computes, the same scope a brief's Asks come from) and each mission its record links under any role (get_typed_relations, either direction), leaving out missions whose status is superseded or declined. Each mission link opens the mission page, which shows its brief or debrief by the API's review. With this rule atelier-3km4 links only its item page, since its one mission, atelier-gg6b, is superseded.
+  Reason: Scope plus direct links reaches every mission a needs-human item, a decision or a loose end (never in scope, so only by a direct link such as blocked_by) is about, and needs no new link role or record field. The ei8w problem was a retired mission, not the role, so dropping superseded and declined missions fixes it; a done mission stays, because asking for a mission's debrief after it closes is the common case. mission_review already treats superseded by name, so the status names follow precedent.
+  Rejected: Link only the item page: loses the one-tap path to the brief or debrief the entry asks for.
+  Rejected: Any linked mission under any role: opens superseded atelier-gg6b for atelier-3km4 (finding atelier-ei8w).
+  Rejected: Parse mission IDs from the title or body: guesswork the CLI does nowhere.
+- 2026-11-09 [decision] The inbox lists a draft mission (a mission in its workflow's initial status, so its page opens on the brief) only when at least one approval review event targets it, the record a planning review leaves.
+  Reason: On this host 13 draft missions exist across 6 repositories and 6 of them, all in cosplay-studio, have no review at all: old exploration drafts nobody is planning, which would sit in the queue forever. Each of the 7 with an approval has been through planning review and waits on Sumeet's brief approval. The approval is already a record, so this adds no field.
+  Rejected: Every draft mission: 6 of 13 entries are stale drafts not waiting on Sumeet.
+  Rejected: Only drafts with two planning approvals: plans differ in how many passes they record, and one approval already shows planning has reached review.
+- 2026-11-09 [decision] Expected size: about 900 hand-written lines across atelier-app (inbox view, ~150), atelier-site (route, types, ~200), fixtures and Rust tests (~250), the React page, nav count and Vitest test (~250), Playwright and docs (~100).
+  Reason: The brief's estimate is 600 to 1,200; this is its middle.
+- 2026-11-09 [plan] Design. (1) atelier-app gains inbox.rs: inbox(index, policy) -> Inbox { items: Vec<InboxItem { row: BoardRow, missions: Vec<String> }>, drafts: Vec<String> }. items is status_view(index, policy).work.human, the exact set and order atelier status counts as Needs a human (no ready gates, unlike the board's human list), with mission IDs by the linking decision; drafts are missions in their workflow's initial status with an approval event, in mission_overview order. (2) atelier-site computes it per base commit inside Loaded, beside the counts, so it is cached with the records and costs no extra build. GET /api/inbox returns InboxResponse { count, repos: Vec<InboxRepo { repo, base_branch, base_commit, error, items: Vec<InboxEntry { item: BoardRow, missions: Vec<MissionSummary> }>, drafts: Vec<MissionSummary> }> }, listing repositories that have an entry or an error, in fleet order; count is items plus drafts over all repositories. MissionSummary already carries review and links. (3) App: /inbox page grouped by repository, each entry linking /<repo>/item/<id> and /<repo>/mission/<id>; a shared Inbox (n) link in the Page header that / and the board show, from /api/inbox. (4) Tests: fixture records added to alpha and beta (a needs-human loose end blocked_by done mission alpha-m2, an approval on draft alpha-m1, a needs-human validation related only to superseded beta-m3, draft beta-m1 left unapproved), a Rust test comparing each repository's inbox items with atelier status -q's human count and atelier work human -q, fixture JSON for /api/inbox, a Vitest render, the e2e route list, and a host Playwright spec that loads every inbox link. (5) docs/architecture/site.md gains the route, page and rules.
