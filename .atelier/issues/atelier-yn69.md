@@ -4,6 +4,9 @@ id: "atelier-yn69"
 issue_type: "feature"
 labels:
 - "fleet-dashboard"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-yn69
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show briefs, debriefs and strategies as pages: a Vite and React app embedded in atelier serve"
-updated_at: "2026-11-09T14:43:23.791717404+00:00"
+updated_at: "2026-11-09T18:18:17.270706621+00:00"
 ---
 
 ## Goal

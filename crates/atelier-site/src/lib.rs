@@ -10,6 +10,7 @@
 //! than five seconds for one gets a 503.
 
 pub mod api;
+pub mod app;
 pub mod discovery;
 
 use std::collections::HashMap;
@@ -24,7 +25,7 @@ use atelier_app::commit_records::CommitRecords;
 use atelier_app::git_freshness::ReadContext;
 use axum::body::Body;
 use axum::extract::{Path as UrlPath, State};
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::http::{header, HeaderValue, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
@@ -559,21 +560,32 @@ fn mission_summary(repo: &str, records: &CommitRecords, id: &str) -> Option<Miss
     })
 }
 
-/// The router of every API route, over `site`.
+/// The router of every API route, over `site`, and of the embedded app.
 pub fn router(site: Arc<Site>) -> Router {
+    router_with(site, app::Assets::embedded())
+}
+
+/// The router of every API route, over `site`, serving `assets` on every
+/// path outside `/api/`.
+pub fn router_with(site: Arc<Site>, assets: app::Assets) -> Router {
     Router::new()
         .route("/api/repos", get(repos))
         .route("/api/{repo}/mission/{id}", get(mission))
         .route("/api/{repo}/mission/{id}/brief", get(brief))
         .route("/api/{repo}/mission/{id}/debrief", get(debrief))
         .route("/api/{repo}/mission/{id}/strategy", get(strategy))
-        .fallback(|| async {
-            Reply::json(
-                StatusCode::NOT_FOUND,
-                &ApiError {
-                    error: "no such route; the API is GET /api/repos and /api/<repo>/mission/<id>[/brief|/debrief|/strategy]".into(),
-                },
-            )
+        .fallback(move |uri: Uri| async move {
+            let path = uri.path();
+            if path == "/api" || path.starts_with("/api/") {
+                return Reply::json(
+                    StatusCode::NOT_FOUND,
+                    &ApiError {
+                        error: "no such route; the API is GET /api/repos and /api/<repo>/mission/<id>[/brief|/debrief|/strategy]".into(),
+                    },
+                )
+                .into_response();
+            }
+            assets.respond(path)
         })
         .with_state(site)
 }
