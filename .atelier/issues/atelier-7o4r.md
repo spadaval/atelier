@@ -21,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Run this repository on the one-command merge: retire the hand-run routine from AGENTS.md and the skill"
-updated_at: "2026-11-09T02:02:36.297141137+00:00"
+updated_at: "2026-11-09T07:54:49.392536923+00:00"
 ---
 
 ## Goal
