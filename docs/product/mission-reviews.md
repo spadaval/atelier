@@ -118,7 +118,14 @@ every item, criterion mark, and decision in one appears in the other.
 `atelier brief <mission>` reviews the plan, so the human can approve or
 change it while changes are cheap. It shows the mission line; the Outcome,
 from the linked strategy's Outcome section, or from the mission record when
-it has no strategy or the strategy has no such section; the strategy path;
+it has no strategy or the strategy has no such section; directly under the
+Outcome, the strategy's Sizing section (the plan's complexity, value, risk
+and whether it is worth it) and its Derisking section (the riskiest
+assumption and how it is tested first); a section the strategy lacks, or
+both when no strategy is linked, shows as "not written" there (in Markdown a
+header line such as `Sizing        : not written`), so an unsized plan shows
+without refusing anything; the
+strategy path;
 each success criterion, if it has any; the scope, one item line each with
 its size (`| size M`, from the `size-*` label), open blockers and
 needs-human cue, children under their parent; the blocked items; the

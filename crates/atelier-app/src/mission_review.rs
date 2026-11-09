@@ -1353,10 +1353,24 @@ pub struct Brief {
     pub human_decisions: Vec<Issue>,
     /// The strategy's Risks and Unknowns section.
     pub risks: Option<String>,
+    /// The strategy's Sizing section: the plan's cost, value and risk.
+    pub sizing: Option<String>,
+    /// The strategy's Derisking section: what is tested first, and how.
+    pub derisking: Option<String>,
     pub mission_events: Vec<MissionEvent>,
 }
 
 impl Brief {
+    /// The sections both forms of the brief show under the Outcome, in
+    /// order, each with its text or `None` when the strategy lacks it
+    /// (atelier-cfq9).
+    pub fn plan_sections(&self) -> [(&'static str, Option<&str>); 2] {
+        [
+            ("Sizing", self.sizing.as_deref()),
+            ("Derisking", self.derisking.as_deref()),
+        ]
+    }
+
     pub fn blocked(&self) -> impl Iterator<Item = &BriefItem> {
         self.items
             .iter()
@@ -1435,6 +1449,8 @@ pub fn brief(
             .filter(|section| !section.is_empty())
     };
     let risks = strategy_section("risks and unknowns");
+    let sizing = strategy_section("sizing");
+    let derisking = strategy_section("derisking");
     // The strategy's Outcome, as S5 names it, or the mission's own
     // (atelier-0a52).
     let outcome = strategy_section("outcome").unwrap_or_else(|| {
@@ -1456,6 +1472,8 @@ pub fn brief(
         items,
         human_decisions,
         risks,
+        sizing,
+        derisking,
         mission_events: mission_events(index, mission_id),
         mission,
     })
