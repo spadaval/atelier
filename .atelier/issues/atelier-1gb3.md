@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Take approved work to the published base in one command, through a forge"
-updated_at: "2026-11-09T02:41:45.818322753+00:00"
+updated_at: "2026-11-09T04:11:33.885408199+00:00"
 ---
 
 ## Outcome
@@ -30,3 +30,7 @@ In a repository whose policy names a forge, `atelier merge <id> --push` takes an
 ## Background
 
 Planned 2026-11-08 at Sumeet's direction after atelier-3sk9 needed three CI reruns for docs-only base changes. Decision atelier-vmq2 and ADR 0031 govern it.
+
+## Notes
+
+- 2026-11-08 [note] 2026-11-08: atelier-ah82 (ADR 0031, forge docs) merged at 8d54da43 and atelier-7tul (GitHub forge, ci.passed, this repo's policy switched) merged at 5f54b1e1; binary reinstalled. Planned atelier-fad5 and atelier-vqoy in detail against the reviewed docs: fad5 builds merge --push's publishing steps (1, 4-8) and refuses without a forge as the docs say; vqoy builds branch push, the pull request (steps 2-3) and --wait.
