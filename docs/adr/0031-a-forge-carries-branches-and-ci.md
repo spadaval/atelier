@@ -58,8 +58,10 @@ decide from Git and records.
 3. **Policy names the forge.** `.atelier/workflow.yaml` gains a `forge` block
    naming the provider, the remote and the CI workflow it trusts, reviewed like
    any policy change and read from the base branch's policy (ADR 0019
-   Decision 5). A policy without a `forge` block uses no network, and Atelier
-   behaves as it did before this ADR.
+   Decision 5). A policy without a `forge` block gets none of these forge
+   operations, and Atelier behaves as it did before this ADR: a `shell.check`
+   that reaches the network, such as `scripts/merge-ci-passed.sh`, and explicit
+   commands such as `land --push` keep their behaviour.
 
 4. **CI is accepted for the branch head merged with an earlier base.** A typed
    merge check, `ci.passed`, passes when the trusted workflow succeeded on a

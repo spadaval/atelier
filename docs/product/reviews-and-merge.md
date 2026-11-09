@@ -291,8 +291,10 @@ branches. Record conflicts may be resolved any way, since records are not what
 an approval covers; the gates then read the records as resolved, so a blocker
 the resolution keeps still holds the merge. A merge that resolved or edited
 code by hand, or one that brings in code from a branch not yet on the base,
-makes the approval stale. Proof is different: tests run again on the merged
-result, through CI or the merge checks, and nothing is recorded (see
+makes the approval stale. Proof is different: the policy's `shell.check`s run
+again on the merged result and prove what their commands run, a
+[`ci.passed`](#what-cipassed-proves) run tested the head merged with an
+earlier base, and nothing is recorded (see
 [`--sync`](#catching-up-with---sync)).
 
 Git's own merge here is `git merge-tree` with the repository's configuration
@@ -385,10 +387,10 @@ commit, so a base that moved on needs no catch-up merge on the branch first
 ([ADR 0028](../adr/0028-simpler-lifecycle.md), decision 2). An older policy's
 `merge_strategy: fast_forward_only` or `squash` is read as `merge_commit` (see
 [workflow configuration](workflow-configuration.md)). The merge records no
-new proof: the merge checks test the merged tree where the repository has
-them (see [what gets a receipt](validation.md#what-gets-a-receipt)), CI on a
-forge tests the head merged with an earlier base ([`ci.passed`](#what-cipassed-proves)),
-and a repository with neither merges a tree nobody ran.
+new proof: the policy's `shell.check`s run on the merged tree and prove what
+their commands run (see [what gets a receipt](validation.md#what-gets-a-receipt)),
+a [`ci.passed`](#what-cipassed-proves) run tested the head merged with an
+earlier base, and a repository with neither merges a tree nobody ran.
 
 The merge commit marks the owner's open work done: every item of the `work`
 workflow in the owner's scope that is not yet in a done status takes the
@@ -464,9 +466,11 @@ or `--json`.
   `git merge --abort`. Running `--sync` again after the resolution commit
   finds nothing to merge and reports the approval, judged from where the
   branch stood before the merge.
-- **No receipts.** The sync runs and records no evidence. CI or the policy's
-  `merge_checks` test the merged tree where the repository has them; a
-  repository with neither runs nothing on the merged tree until it adds a suite to
+- **No receipts.** The sync runs and records no evidence. At merge, the
+  policy's `shell.check`s run on the merged tree and prove what their commands
+  run, and [`ci.passed`](#what-cipassed-proves) judges a pull request run of
+  the head merged with an earlier base. A repository whose `shell.check`s run
+  no suite runs nothing on the merged tree until it adds one to
   `merge_checks` ([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).
   Before atelier-s66u the sync reran the command-backed receipts that were
   current before it and committed them.
@@ -508,10 +512,11 @@ them, the operating system drops the lock, and the next merge removes every
 `atelier-merge-*` checkout whose lock is free before it makes its own; one a
 concurrent merge still holds stays (atelier-rcnk).
 
-Merge checks do not reuse a build cache. Each run builds in the
-checkout's own target directory (the repository's `merge_checks` set
-`CARGO_TARGET_DIR=target`), which goes away with the checkout, so a merge check
-proves what the merged tree builds and never what an earlier tree left behind.
+Merge checks do not reuse a build cache. A `shell.check` that builds does so
+in the checkout's own target directory (for cargo, by setting
+`CARGO_TARGET_DIR=target` in its command), which goes away with the checkout,
+so it proves what the merged tree builds and never what an earlier tree left
+behind.
 A shared target directory is the one cache Atelier does not allow here: it has
 run another branch's binary in tests, and cargo's freshness rules cannot tell
 two checkouts apart. A policy that wants faster merge checks may put a
@@ -577,8 +582,11 @@ A repository whose policy names a [forge](workflow-configuration.md#forge)
 lets `merge` push branches, open pull requests and read CI through GitHub's
 `gh` CLI ([ADR 0031](../adr/0031-a-forge-carries-branches-and-ci.md)). Review
 stays here: the pull request carries the branch and runs CI, and nothing on it
-but a CI result for a commit feeds a gate. Without a `forge` block, `merge`
-uses no network and none of this applies.
+but a CI result for a commit feeds a gate. Without a `forge` block, Atelier
+makes none of these forge calls and none of this applies. What the policy and
+the agent ask for explicitly keeps its behaviour: a `shell.check` that reaches
+the network, such as this repository's `scripts/merge-ci-passed.sh`, still
+does, and so do `land --push` and the update check.
 
 ### What `ci.passed` proves
 
@@ -623,11 +631,18 @@ untested until CI runs on the base after the push:
 Other passes collapse into one line ([gate
 lines](human-cli-output.md#gate-lines)), but `ci.passed` prints its pass on a
 line of its own, because it says what the run tested, and the merge commit's
-message repeats it. The local `shell.check`s still run on the merged tree, so a conflict that
-breaks the build or the formatting check is still caught before the merge.
+message repeats it. The local `shell.check`s still run on the merged tree and
+catch what their commands check there, and nothing more: a policy whose
+checks build or test catches a combination that breaks those, while one that
+runs only whitespace and formatting checks, as this repository's does, leaves
+the build of the combination to CI on the base after the push.
 
 Each refusal is a gate line with its Next step. `<id>` is left out of a Next
-command on [the light path](#a-change-with-no-issue-the-light-path).
+command on [the light path](#a-change-with-no-issue-the-light-path). A Next
+command that reruns `merge` keeps `--push` whenever the refused run had it,
+shown below as `[--push]`, since `merge --wait` alone merges without
+publishing the base and deletes the local branch `--push` would have pushed
+from.
 
 | Code | When | Next |
 | --- | --- | --- |
@@ -635,13 +650,13 @@ command on [the light path](#a-change-with-no-issue-the-light-path).
 | `forge_gh_signed_out` | `gh` is not signed in to github.com. | `gh auth login` |
 | `forge_unreachable` | `gh` failed for another reason, such as the network; the line quotes its message. | Retry; `gh auth status` shows the sign-in. |
 | `ci_no_run` | The branch has no pull request into the base, or no `pull_request` run of the trusted workflow exists for a commit with the head's code. The line says which. | `atelier merge <id> --push --wait` |
-| `ci_pending` | The newest such run is queued or in progress, and none passed. The line names its state and link. | `atelier merge <id> --wait` |
+| `ci_pending` | The newest such run is queued or in progress, and none passed, or `--wait` timed out. The line names its state and link, and how long it waited. | `atelier merge <id> [--push] --wait` |
 | `ci_failed` | The newest such run failed, and none passed. The line names its conclusion and link. | `gh run view <run-id> --log-failed`; fix it on the branch, commit, then `atelier merge <id> --push --wait`. A cancelled or timed-out run instead says `gh run rerun <run-id>`. |
 
-For example:
+For example, after `atelier merge atelier-2xx5 --push`:
 
 ```text
-⚠ atelier-2xx5 ci.passed: ci.yml is in progress on pull request #42 for 1a2b3c4d: https://github.com/<owner>/<repo>/actions/runs/<run-id>. Next: atelier merge atelier-2xx5 --wait
+⚠ atelier-2xx5 ci.passed: ci.yml is in progress on pull request #42 for 1a2b3c4d: https://github.com/<owner>/<repo>/actions/runs/<run-id>. Next: atelier merge atelier-2xx5 --push --wait
 ```
 
 `merge`, `merge --check` and `merge --push` also show the trusted workflow's
@@ -676,8 +691,11 @@ refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
    `forge.remote` under the branch's name, never forcing, and sets the
    branch's upstream when it has none and the remote is a name. A rejected
    push refuses with `merge_push_branch_rejected` and git's message: the
-   remote branch has commits this one lacks. Next: merge
-   `<remote>/<branch>` into the branch, then retry.
+   remote branch has commits this one lacks. Next: `git fetch <remote>
+   <branch> && git merge --no-edit FETCH_HEAD`, then `atelier merge <id>
+   --push`, with `<remote>` the value of `forge.remote` as written, a name or
+   a URL. Fetching into `FETCH_HEAD` needs no remote-tracking branch, so it
+   works for a URL remote too.
 3. **Ensures a pull request.** It reuses an open pull request from the branch
    into the base, or opens one titled `<id>: <title>` (on the light path, the
    branch's newest commit subject), whose body names the item and says review
@@ -687,11 +705,13 @@ refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
    Steps 2 and 3 happen even when a later gate refuses. Pushing a work branch
    is always allowed, and it starts CI early, so `merge --push` can run before
    the approval is in.
-4. **Fetches the base.** It fetches the base from `forge.remote`. If the
-   local base is behind, it fast-forwards it. If the two have diverged, it
-   refuses with `merge_push_base_diverged`, naming both heads. Next: merge
-   `<remote>/<base>` into `<base>` in the base checkout and run `atelier land`
-   there.
+4. **Fetches the base.** It fetches the base from `forge.remote` into
+   `FETCH_HEAD`, with no remote-tracking branch needed. If the local base is
+   behind, it fast-forwards it. If the two have diverged, it refuses with
+   `merge_push_base_diverged`, naming both heads. Next: in the base checkout,
+   `git fetch <remote> <base> && git merge --no-edit FETCH_HEAD` and `atelier
+   land`, then `git push <remote> <base>`, then back on the work branch
+   `atelier merge <id> --push`.
 5. **Judges the gates,** as `merge` does, `ci.passed` included, and refuses as
    `merge` does when one fails; the branch and pull request stay. Right after
    step 2 pushed a new head, a run that has not started yet reads as pending,
@@ -703,8 +723,11 @@ refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
    does on the base, then pushes the base to `forge.remote`, never forcing. A
    rejected push, when the remote base moved during the merge, refuses with
    `merge_push_base_rejected` and git's message. The merge commit stays on the
-   local base and nothing is undone. Next: in the base checkout, `git pull
-   --no-rebase <remote> <base>`, then `atelier land --push`.
+   local base and nothing is undone. Next: in the base checkout, `git fetch
+   <remote> <base> && git merge --no-edit FETCH_HEAD`, then `atelier land`,
+   then `git push <remote> <base>`. `atelier land --push` is not the fix: it
+   pushes to the base's configured upstream, which need not be
+   `forge.remote`.
 8. **Confirms the pull request merged.** GitHub marks a pull request merged
    when its head commits become reachable from the base, which the pushed
    merge commit does. Atelier reads its state for up to a minute. The success
@@ -725,8 +748,9 @@ waiting when one of those fails. Otherwise they poll CI every 30 seconds,
 printing a line when its state changes, until the run finishes or
 `--timeout` minutes pass (default 30). A run that passes continues the merge;
 a failed run refuses with `ci_failed`; a timeout refuses with `ci_pending`,
-naming how long it waited. A run that has not started counts as pending for
-its first 5 minutes after the push, then refuses with `ci_no_run`.
+naming how long it waited, and its Next keeps `--push` when it was given. A
+run that has not started counts as pending for its first 5 minutes after the
+push, then refuses with `ci_no_run`.
 
 `--wait` without `--push` waits for a run on a branch already pushed, then
 merges without pushing. `--push` and `--wait` do not combine with `--check`,

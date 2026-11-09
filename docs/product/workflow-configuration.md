@@ -200,10 +200,13 @@ A policy may name a forge: the host Atelier pushes branches to, opens pull
 requests on and reads CI results from
 ([ADR 0031](../adr/0031-a-forge-carries-branches-and-ci.md)). Reviews,
 findings and approvals stay records in the repository; no forge state but a
-CI result for a commit feeds a gate. A policy without a `forge` block uses no
-network: `merge` reads no CI, pushes nothing, and behaves as it always has.
-(The [update check](sessions-and-hooks.md#update-check) is separate and has
-its own switch.)
+CI result for a commit feeds a gate. A policy without a `forge` block gets
+none of Atelier's built-in forge operations: `merge` reads no CI through a
+forge, pushes nothing, and behaves as it always has. What a policy or an agent
+asks for explicitly keeps its behaviour: a `shell.check` that calls `gh` or the
+network, such as this repository's `scripts/merge-ci-passed.sh`, still does,
+`land --push` still pushes, and the [update
+check](sessions-and-hooks.md#update-check) has its own switch.
 
 ```yaml
 forge:
@@ -256,13 +259,15 @@ malformed. Fix policy through reviewed work.
 
 `atelier merge` always integrates with a merge commit, the only commit
 Atelier creates: a branch that merges cleanly into the current base merges as
-one, after `merge_checks` pass on the merged tree in a temporary checkout that
-reuses no build cache, and that commit marks the work done; see [reviews and
+one, after `merge_checks` pass, the `shell.check`s on the merged tree in a
+temporary checkout that reuses no build cache, and that commit marks the work done; see [reviews and
 merge](reviews-and-merge.md). A base that moved on needs no catch-up merge
 first. `branch_policy.merge_strategy` is optional: `merge_commit`, and an
 older policy's `fast_forward_only` or `squash`, are all read as a merge commit,
 and any other value is refused. A policy needs no `shell.check` to merge, but
-without one, or CI on the merged tree, it merges a tree nobody ran.
+a `shell.check` proves only what its command runs on the merged tree, and
+`ci.passed` accepts a run of the head merged with an earlier base, so a policy
+with neither merges a tree nobody ran.
 Always merging gives up a linear history and the `merge_diverged` refusal
 that `fast_forward_only` repositories had; in exchange no branch catches up
 before it merges, which `fast_forward_only` forced on every open branch after
