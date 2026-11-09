@@ -26,13 +26,13 @@ alone takes the orchestrator's too.
 2. **Implement** (author), committing code and records together.
 3. **Finish the record** (author): tick each Done when line once it holds and
    write the `## Report` ([implement](../procedures/implement.md#handoff)).
-4. **Request review** (orchestrator): give the reviewer the brief
-   `atelier review request <id>` prints, adding the proof that ran (commands and
-   results) and any constraint it lacks, such as the item's Scope. The reviewer
-   records its findings with the commands the brief prints.
-5. **Fix and re-review** (author, then a reviewer): the author fixes each
-   `fix_now` finding that stands in a later commit, and a reviewer reviews the
-   fix. Each other finding gets a disposition from whoever [Independent
+4. **Request review** (author): `atelier review request <id> --identity
+   <reviewer>` prints the brief, which a fresh reviewer gets unchanged
+   ([implement](../procedures/implement.md#review)). The reviewer records its
+   findings with the commands the brief prints.
+5. **Fix and re-review** (author, then a new reviewer): the author fixes each
+   `fix_now` finding that stands in a later commit, and a new reviewer reviews
+   the fix. Each other finding gets a disposition from whoever [Independent
    Review](../SKILL.md#independent-review) says: `defer` (with a follow-up),
    `wont_fix` (real, not worth fixing, no follow-up) or `no_action` (wrong).
    `review defer <id>` defers all its undecided findings recommended defer.
@@ -84,7 +84,9 @@ item, changes a public or persisted contract, or needs the human. Other choices
 are decision notes on their item (`atelier issue note --kind decision`), written
 where a later reader would ask "why is it like this?". A changed decision gets a
 new record that supersedes the old one. Label work only a human can do
-`needs-human`; agents leave it, and open decisions, to the human.
+`needs-human`; agents leave it, and open decisions, to the human, except inside
+an approved mission, where one its strategy and Authority leave open aborts the
+mission ([orchestrate](../procedures/orchestrate.md#before-starting)).
 
 ## Loose Ends and Validation Items
 

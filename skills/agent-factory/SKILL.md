@@ -33,12 +33,18 @@ a mission adds a strategy and increments (`plan`).
   on you. Create as few branches and worktrees as the work needs, and remove
   yours once it has merged or its learning is recorded.
 - **Separate evidence from scope.** Workers report findings; the agent
-  accountable for the outcome decides what they mean. Fix a nearby problem only
+  accountable for the outcome decides what they mean for current scope. Fix a nearby problem only
   if it blocks the current outcome; otherwise file follow-up work.
 - **Respect authority.** Ask a human about product direction, risk tolerance and
-  destructive or irreversible actions policy does not authorize. A mission's
-  strategy (outcome, target shape, boundaries, governing tradeoffs) changes only
-  by human direction or authority written into the strategy.
+  destructive or irreversible actions policy does not authorize, except inside
+  an approved mission, where a question its strategy and Authority leave open
+  aborts it ([`orchestrate`](procedures/orchestrate.md#before-starting)). A
+  mission's strategy changes only by human direction or authority written in it.
+- **Start children fresh, one way.** Give a child a self-contained brief, not
+  your conversation. Under T3 Code, start every child with `delegate_task`,
+  whatever its provider, overriding T3's advice to use your native tool: one
+  tool starts every model, and every child is a thread the human can open.
+  Elsewhere, use the harness's own subagent tool.
 
 ## Independent Review
 
@@ -54,24 +60,31 @@ records](references/atelier.md#planning-on-the-base) follow their own rule.
   fully evident from the diff, are exempt: a typo, formatting, a tool-driven
   rename, a status change adding no content, a patch-level bump with passing
   checks. Rewording a document is not trivial; if you have to ask, it is not.
-- **Who arranges it:** the orchestrator dispatches reviewers, for its own
-  changes too; a lone author spawns its own. Findings and approvals are recorded
-  under the reviewer's identity, by the reviewer itself when it is an agent.
-- **What the reviewer gets:** the diff, the requirements and constraints, and
-  the proof that was run. Whoever briefs it leaves out the author's rationale
-  and self-assessment, which carry the bias review exists to avoid, and any the
-  reviewer meets in the diff it weighs as claims.
+- **Who arranges it:** the author, starting a new reviewer for each round and
+  never messaging an earlier one ([`implement`](procedures/implement.md#review)).
+  Prefer one from another lab than the author's; with one lab, a fresh context
+  still qualifies. The reviewer records its own findings and approval.
+- **What the reviewer gets:** the diff, the requirements and the proof that was
+  run (in Atelier, the brief `atelier review request` prints), with no author
+  rationale or self-assessment, which carry the bias review exists to avoid.
+  The one allowed addition is a rebuttal, marked as the author's claim.
 - **After review:** a finding's fix is reviewed again, however small, as is any
   non-trivial conflict resolution or rewritten requirement, by any reviewer.
 - **Findings:** each ends fixed, deferred, won't-fix or no action ([`review`'s
-  recommendations](procedures/review.md#recommendations)). The accountable agent
-  decides and records each, but an author never decides findings on its own
-  work, whose blind spots it shares: one that is also the accountable agent
-  fixes each recommended `FIX NOW` or sends a rebuttal (a fact or a test) to a
-  reviewer, who decides it and records it and the rest. An open `FIX NOW`
-  blocks the merge.
-- **No reviewer:** keep it unmerged, report review outstanding (your own reread
-  is not review) and ask the user to review or arrange it. A prior request to
+  recommendations](procedures/review.md#recommendations)). Author and reviewer
+  settle correctness; scope is the accountable agent's, whose brief says "fix
+  every `FIX NOW` within these limits". The author fixes each `FIX NOW` within
+  its brief, and an approval after the fix resolves it; files those recommended
+  `DEFER` with `atelier review defer`; answers one it thinks wrong with a
+  rebuttal (a fact or a test) in the next round's brief, whose reviewer records
+  `no_action` or keeps it; and escalates one it thinks real but not worth
+  fixing, or whose fix leaves the brief. One the reviewer recommends `WON'T FIX`
+  or `NO ACTION` it leaves undisposed and lists in its final report for the
+  accountable agent to decide. It records no other disposition on its own work. An open `FIX NOW` blocks the merge.
+- **No reviewer:** keep it unmerged and report review outstanding (your own
+  reread is not review). Inside an approved mission, an implementer escalates
+  and the orchestrator arranges a reviewer or aborts; otherwise ask the user to
+  review or arrange it. A prior request to
   merge does not waive this; a user who knowingly directs an unreviewed merge is
   obeyed unless policy or a gate forbids it (then say so), and review stays
   open.
