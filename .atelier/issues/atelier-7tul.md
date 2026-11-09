@@ -41,7 +41,7 @@ The provider, `ci.passed`, policy parsing and this repository's policy. Not push
 
 ## Context
 
-The script's logic (code paths, matching an earlier commit's code, the record-only shortcut) is in `scripts/merge-ci-passed.sh`; keep its record-only behaviour. Merge checks run from the base's committed policy, so this branch merges under the script's check. After it merges, install the new binary (`cargo install --path crates/atelier-cli --locked`, as `AGENTS.md` says) before `atelier land` or any later merge, since the old binary cannot read the new policy.
+The script's logic (code paths, matching an earlier commit's code, the record-only shortcut) is in `scripts/merge-ci-passed.sh`; keep its record-only behaviour. Merge checks run from the base's committed policy, so this branch merges under the script's check, which stays. The installed binary cannot read the branch's `ci.passed` policy and refuses the merge with `workflow_config_invalid_validator` (reproduced in planning review finding atelier-8wdb), so run this item's merge with the reviewed branch build: `cargo install --path crates/atelier-cli --locked` from the approved head, or `target/debug/atelier merge <id>` built from it, then `atelier land` with that binary. The base policy and the script are unchanged by doing so.
 
 ## Unknowns
 
