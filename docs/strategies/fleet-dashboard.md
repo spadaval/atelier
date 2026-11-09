@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-08: split attribution and metrics into agent-attribution.md after planning review"
+last_changed: "2026-11-08: reads links choose inbox targets; cache only base-derived work (planning re-review)"
 ---
 
 # Why
@@ -43,13 +43,17 @@ reads only Git.
   layer's views. The debrief gets a pure rendering function; the CLI keeps
   writing its file from it.
 - **Staying light.** This host runs the T3 Code server Sumeet's phone depends
-  on. Pages are cached by repository and base commit, renders are capped at two
-  at a time, and the unit sets `MemoryMax=` and `CPUQuota=`.
+  on. Only work that depends on nothing but the base commit, such as the
+  debrief, is cached by base commit; branch and review state is recomputed or
+  keyed by the refs it read, and date-dependent sections by the date. Renders
+  are capped at two at a time, and the unit sets `MemoryMax=` and `CPUQuota=`.
 - **Repositories** are found by scanning configured roots (default
   `~/projects`) for `.atelier/`, counting worktrees of one repository once by
   Git common directory.
-- **Inbox targets.** A needs-human item that links a mission opens that
-  mission's debrief directly; any other item opens its own page.
+- **Inbox targets.** An item names what the human should read with a new
+  `reads` link to a mission, whose debrief the inbox opens directly. Membership
+  and context links never choose a target; without a `reads` link the inbox
+  opens the item's own page.
 - When qualities conflict: correct and current beats complete, read-only beats
   convenient, the T3 host's responsiveness beats page speed, and plain pages
   beat polish.

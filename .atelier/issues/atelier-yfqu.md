@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "See where every Atelier repository on this host stands, from one site"
-updated_at: "2026-11-09T01:04:50.752793199+00:00"
+updated_at: "2026-11-09T01:10:59.714537104+00:00"
 ---
 
 ## Outcome
@@ -34,3 +34,4 @@ Split on 2026-11-08 at Sumeet's direction, after planning review finding atelier
 ## Notes
 
 - 2026-11-08 [plan] Revised after planning review (findings atelier-b9wq, i8h1, 79wo, gnh5, bihd, 5yz1, roov, ntq9, 8j0j, 726p). On Sumeet's authority (2026-11-08) split attribution and metrics into mission atelier-bnek, and moved acceptance to independent validation items (atelier-mtb3 here, atelier-wo22 there) with his phone read as loose end atelier-pywh. Other fixes: ADR item reconciles architecture docs; serve item gains direct debrief links, a pure renderer, an unwritable-repository proof, a load bound and the unit file; the service loose end keeps only install and publish; attribution records item reads, explicit roles, and a write-only store; the hook keeps the light path; metrics validates the attribution rule on real threads first.
+- 2026-11-08 [plan] Fixed re-review findings atelier-bihd and atelier-mhb4: a new reads link role names an inbox item's reading target (membership and related links never do), and validation adds reads links to existing debrief reads such as atelier-3km4; only base-derived work is cached by base commit, branch and review state is recomputed or keyed by its refs, date sections by the date, with a warm-cache fixture on atelier-ahpf.
