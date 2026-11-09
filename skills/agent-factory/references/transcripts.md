@@ -3,10 +3,9 @@
 How to read earlier agent runs, for `audit` retrospectives and `garden`.
 
 - **Start from raw transcripts**; memory, summaries and handoffs are hypotheses.
-  Claude Code keeps a JSONL file per session in `~/.claude/projects/<dir>/`,
-  `<dir>` being the working directory with `/` and `.` as `-` (one per
-  worktree); Codex in `~/.codex/sessions/<yyyy>/<mm>/<dd>/`. For another
-  harness, find its store first, and say so if you cannot.
+  Claude Code keeps them in `~/.claude/projects/<cwd, / and . as ->/`, one
+  directory per worktree, and Codex in `~/.codex/sessions/<yyyy>/<mm>/<dd>/`;
+  for another harness, find its store. Say what the window's stores lacked.
 - **Search first, then read around hits**: refusals, errors, user corrections.
 - **Follow lineage to the root.** Trace subagent spawns to the root session and
   judge the run against the root task; a child alone answers only a question
