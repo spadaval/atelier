@@ -28,14 +28,14 @@ updated_at: "2026-11-09T02:02:36.297141137+00:00"
 
 ## Goal
 
-Run this repository on the one-command merge. Now that `atelier merge <id> --push` pushes the branch, opens the pull request, waits for CI and publishes the base (atelier-fad5, atelier-vqoy), rewrite `AGENTS.md`'s Merge Policy and the skill's `skills/agent-factory/references/atelier.md` so agents run it instead of the hand-run routine, delete `scripts/merge-ci-passed.sh`, which no policy runs since atelier-7tul, and merge this item itself with `atelier merge atelier-7o4r --push` alone, so its transcript shows the mission's one-command-merge criterion.
+Run this repository on the one-command merge. Now that `atelier merge <id> --push` pushes the branch, opens the pull request, waits for CI and publishes the base (atelier-fad5, atelier-vqoy), rewrite `AGENTS.md`'s Merge Policy and the skill's `skills/agent-factory/references/atelier.md` so agents run it instead of the hand-run routine, delete `scripts/merge-ci-passed.sh`, which no policy runs since atelier-7tul, and prepare this item to be merged with `atelier merge atelier-7o4r --push` alone, so that merge can show the mission's one-command-merge criterion, which validation atelier-zz0t checks.
 
 ## Done when
 
 - [ ] `AGENTS.md`'s Merge Policy and `skills/agent-factory/references/atelier.md` name `atelier merge <id> --push` (with `--wait`, run in the background or with `--timeout` where a harness limits foreground commands) as the way work reaches the base, and neither tells agents to run `gh pr create`, wait on checks or push the base by hand. Repositories whose policy names no forge keep `atelier merge <id>` then `atelier land --push`, and the skill says so.
 - [ ] `scripts/merge-ci-passed.sh` is deleted, and no current policy, doc or test names it (`git grep -n merge-ci-passed -- . ':!.atelier' ':!docs/adr' ':!docs/strategies'` shows only historical text).
 - [ ] `merge --push` can publish from this host: this checkout's `origin` is HTTPS without credentials and agents push over SSH, so either the policy's `forge.remote` or the checkout's push URL makes the push work. The choice and why are a decision note on this item, and `AGENTS.md` says what a fresh checkout needs.
-- [ ] This item merges with `atelier merge atelier-7o4r --push` alone, run with the installed binary built from master after atelier-vqoy merged, while another commit reaches master after this branch's CI run; no `gh` or `git push` is run by hand for the branch, the pull request or the base. The validation item atelier-zz0t checks the transcript and the pull request's merged state.
+- [ ] The Report says how this item will be merged for the mission's criterion: with `atelier merge atelier-7o4r --push` alone, run with the installed binary built from master after atelier-vqoy merged, and that the orchestrator runs it and quotes the full delivery transcript in a note for atelier-zz0t. The merge itself and its acceptance are atelier-zz0t's to check, after the merge.
 
 ## Scope
 
