@@ -158,11 +158,10 @@ decision depends on one of these and no durable source settles it, ask.
 ### Strategy changes deliberately
 
 A mission's strategy (its outcome, target shape, boundaries, and governing
-tradeoffs) changes only when a human directs it or the strategy itself grants
-that authority. Silence, routine progress, and automatic continuation are not
-authorization. Any agent may research and propose a change. The tactical plan
-beneath the strategy is a hypothesis and should change freely as evidence
-arrives.
+tradeoffs) changes only when a human directs it. Silence, routine progress, and
+automatic continuation are not authorization. Any agent may research and propose
+a change. The tactical plan beneath the strategy is a hypothesis and should
+change freely as evidence arrives.
 
 ### Evidence and scope are separate
 

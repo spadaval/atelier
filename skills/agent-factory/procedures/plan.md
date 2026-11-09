@@ -89,7 +89,8 @@ the Design, keep it under about 150 lines. Its sections, each left out if empty:
 - **Design**: the technical design.
 - **Derisking**: the riskiest assumption and how it is tested early.
 - **Scope**: in, out and the target environment.
-- **Authority**: what the orchestrator may change without asking.
+- **Authority**: what the orchestrator may decide inside the mission without
+  asking; never approving its plan or result, which stay the human's.
 - **Risks and Unknowns**: what is left open, each with what happens if it bites.
 
 What changes as the work runs (tasks, order, status, history) belongs in the
@@ -141,8 +142,8 @@ re-reviews a fix.
 
 This section serves the real need: the human decides whether the need is worth
 its cost. Walk them through `atelier brief <mission> --html` and record their
-approval (`atelier review approve <mission> --identity <the human>`), unless the
-strategy's Authority delegates it. Then hand the mission to an orchestrator,
+approval (`atelier review approve <mission> --identity <the human>`); no
+strategy can delegate it. Then hand the mission to an orchestrator,
 reporting the strategy location, decisions recorded, increments and ready issues
 created, the review passes and their outcome, and the unknowns left for later
 evidence.
