@@ -58,20 +58,17 @@ drill-down commands:
 - manage blockers with
   `atelier issue link <blocked-id> <blocker-id> --role blocked_by` and
   `atelier issue unlink <blocked-id> <blocker-id> --role blocked_by`;
-- validate canonical records and workflow configuration with `atelier check`,
-  using `atelier check --fix` only when ignored local state requires repair;
+- validate canonical records and workflow configuration with `atelier check`;
 - capture claim-specific proof with `atelier evidence record` and use quiet
   acknowledgements only where a command naturally returns one result.
 
-Do not use command-result `--json` as workflow proof. Low-level export and
-rebuild diagnostics remain implementation or migration probes, not normal
-handoff, health, or recovery guidance.
+Do not use command-result `--json` as workflow proof.
 
 ## Historical Failure Classifications
 
 - Fixed in validation scope at the time: stale canonical projection after
   closing `atelier-z1p.6`; refreshed with the then-current export diagnostic and
-  rechecked. Current normal local repair is `atelier check --fix`.
+  rechecked.
 - Deferred with owner: `atelier` was not on PATH in the shell; validation used
   `/root/atelier/target/debug` on PATH. Owner: repository operator or install
   story follow-up.
