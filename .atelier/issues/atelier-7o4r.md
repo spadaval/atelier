@@ -33,7 +33,8 @@ Once `merge --push` drives the forge, rewrite `AGENTS.md`'s Merge Policy and the
 ## Done when
 
 - [ ] `AGENTS.md`'s Merge Policy and `skills/agent-factory/references/atelier.md` name `atelier merge <id> --push` as the way work reaches the base, and neither tells agents to run `gh pr create`, wait on checks or push the base by hand.
-- [ ] One real item in this repository merges with `atelier merge <id> --push` alone while another commit reaches master after its CI run; the Report links the transcript and the merged pull request.
+- [ ] `scripts/merge-ci-passed.sh` is deleted, with no policy, doc or test still naming it.
+- [ ] One real item in this repository merges with `atelier merge <id> --push` alone while another commit reaches master after its CI run; the Report links the transcript and the pull request, which GitHub shows as merged.
 
 ## Scope
 

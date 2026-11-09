@@ -16,6 +16,9 @@ relationships:
   - kind: "issue"
     id: "atelier-7tul"
     type: "blocked_by"
+  - kind: "issue"
+    id: "atelier-fad5"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
@@ -31,7 +34,7 @@ With a forge in policy, `atelier merge <id>` pushes the work branch and makes su
 
 - [ ] Integration tests with a bare origin and a fake `gh`: `merge <id>` on an approved branch with no pull request pushes the branch, opens one, and refuses with CI's state and the run link while it is pending; a rerun after CI passes merges.
 - [ ] `merge <id> --wait` with CI pending then passing merges in one run; with CI failing it refuses naming the run; past its timeout it refuses saying CI is still running.
-- [ ] After `merge <id> --push`, the pull request shows as merged (checked against GitHub once on a real pull request in this repository, with the link in the Report).
+- [ ] With a fake `gh`, after `merge <id> --push` publishes the base, `merge` checks the pull request reports merged and says so; when it does not, `merge` says the base was published and the pull request is still open, and closes nothing.
 
 ## Scope
 
@@ -39,5 +42,5 @@ Provisional until atelier-7tul settles the provider interface; plan it in detail
 
 ## Unknowns
 
-- Whether GitHub marks the pull request merged when Atelier's merge commit reaches the base by push, or `merge` must close it (strategy, Risks).
+- How long GitHub takes to show an indirect merge after the push, and so how long `merge` should look before saying the pull request is still open. The real observation is atelier-7o4r's.
 - The `--wait` default timeout, given Claude Code's 10-minute command limit and this repository's 12-minute macOS run.

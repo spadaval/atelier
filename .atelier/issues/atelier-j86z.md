@@ -14,7 +14,7 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
-title: "Garden atelier: 9 recommendations"
+title: "Garden atelier: 10 recommendations"
 updated_at: "2026-11-09T01:49:32.703024421+00:00"
 ---
 
@@ -37,7 +37,7 @@ This digest was filed by the orchestrator of atelier-3sk9 from the gardener tria
 
 ## Question
 
-Which of these nine recommendations should go ahead? For each, answer in a note: do it, do it differently (say how), or no.
+Which of these ten recommendations should go ahead? For each, answer in a note: do it, do it differently (say how), or no.
 
 ## Options
 
@@ -172,3 +172,15 @@ The help text says only "Parent issue ID" (`crates/atelier-cli/src/main.rs:559`)
 **Size.** About 4 lines of policy, which counts as code, so it needs a PR and CI. Low complexity, low value (two fewer local checks per merge), low risk.
 
 **Alternatives.** Keep them as a cheap local backstop.
+
+### R10 Stop strategy-only commits on master from voiding every branch's CI pass
+
+**Trip, 4 times on 2026-11-08 in one session.** `scripts/merge-ci-passed.sh` counts `docs/strategies/` as code, so when another thread commits a mission strategy to master, every open branch's CI pass stops counting. `atelier merge` refuses with "Run `atelier merge --sync`, push the branch, and wait for CI to pass". Each time the sync was clean and kept the approval, but it cost a fresh CI run of about 12 minutes on macOS, during which the next planning commit could land.
+
+**Evidence.** Session `~/.claude/projects/-home-supadava-projects-atelier/8b4e8565-ace5-4b02-a3b4-e1c8c8c9a37c.jsonl` on 2026-11-08: `atelier merge atelier-3sk9` was refused three times. The causes were `docs/strategies/agent-attribution.md` and `fleet-dashboard.md` (28ae3d61, afdcfda0), then `fleet-dashboard.md` again (c0a1ead2), then a `plan.md` skill change (5d3f6f88, a real code change). `atelier merge` on `docs/no-check-fix` was refused once, by `docs/strategies/forge-delivery.md` (8095332a).
+
+**Fix (architecture).** Have merge-ci-passed.sh treat base commits that touch only strategy files missions link the way it treats record-only commits. A strategy is still reviewed as planning and still makes an approval stale, but a branch's CI cannot fail on it, since no build or test reads it. About 5 lines in the script's `code` pathspec, plus a test case.
+
+**Size.** About 5 to 15 lines. Low complexity, medium value (fewer reruns while missions are being planned), low risk, though widening "not code" needs care.
+
+**Alternatives.** Leave it: the refusal says exactly what to do, at the cost of a CI run. Or batch planning commits so they land less often.

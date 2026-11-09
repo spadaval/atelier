@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-08: first draft, from decision atelier-vmq2"
+last_changed: "2026-11-08: correct what PR CI tests and the merged-state fallback, per planning review"
 ---
 
 # Why
@@ -19,8 +19,8 @@ routine itself and judge CI for what it proves.
 
 In a repository whose policy names a forge, `atelier merge <id> --push` takes an
 approved branch to the published base in one command: it pushes the branch,
-makes sure it has a pull request, checks that CI passed on the branch head's
-code, merges and pushes the base, and the pull request shows as merged. A base
+makes sure it has a pull request, checks that CI passed on the branch head,
+merges and pushes the base, and the pull request shows as merged. A base
 that moved by docs or records alone needs no new CI run. `merge` says exactly
 what it is waiting for when CI is pending or failed. This repository runs that
 way, with `scripts/merge-ci-passed.sh` and the hand-run routine gone from its
@@ -48,11 +48,14 @@ behaves as today.
 - **Policy names the forge.** `.atelier/workflow.yaml` gains the forge and the
   CI workflow it trusts, reviewed like any policy change. No forge, no network:
   a repository without one keeps today's behaviour.
-- **CI proves the branch head.** A typed merge check, `ci.passed`, passes when
-  CI succeeded on a commit whose code matches the branch head. Unlike a
-  `shell.check`, it does not claim the merged tree, so a moved base needs no
-  rerun. Local `shell.check`s still run on the merged tree, and CI on the base
-  after the push is the backstop. A failing base CI run is shown, never a gate:
+- **CI is accepted for the branch head, not the merged tree.** A typed merge
+  check, `ci.passed`, passes when the trusted workflow succeeded on a pull
+  request run for a commit whose code matches the branch head. That run tested
+  GitHub's merge of the head with the base as it was then
+  (`refs/pull/<n>/merge`), not the tree Atelier merges, and the check says so
+  instead of claiming the merged tree; a moved base needs no rerun. Local
+  `shell.check`s still run on the merged tree, and CI on the base after the push
+  is the backstop for the untested combination. A failing base CI run is shown, never a gate:
   gating on it would block the merge that fixes it.
 - **Docs first.** The ADR and the product docs (`reviews-and-merge.md`,
   `workflow-configuration.md`, the merge section of the CLI help) describe the
@@ -90,9 +93,11 @@ adding a second forge, or putting review on the forge needs Sumeet.
   that bites, read the REST API through `gh api` with fixed fields.
 - Tests need a fake `gh`. If one on `PATH` cannot cover the cases, the provider
   takes an injected command, as the test hooks already do for git failures.
-- GitHub marks a pull request merged when its head commit reaches the base by
-  push. If a merge commit pushed by Atelier does not trigger that, `merge`
-  closes the pull request itself; the first `merge` item checks this.
+- GitHub documents marking a pull request merged when its head commits become
+  reachable from the base (an indirect merge), which Atelier's pushed merge
+  commit does. `merge --push` checks the pull request reports merged after the
+  push and, if it does not, says the base was published and the pull request is
+  still open, never closing it: closed is not merged.
 - Pushing over HTTPS needs credentials this host's `origin` lacks (agents push
   over SSH). If `gh auth setup-git` does not fix it, `merge` pushes to a
   configured remote URL.
