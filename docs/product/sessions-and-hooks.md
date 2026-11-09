@@ -162,7 +162,11 @@ pushed (`land_state_changed`). A push git rejects exits non-zero with
 git's message and `land: refused — 1 check (land_push_failed), nothing
 pushed`. `--push` does not combine with
 `--hook`. Prefer it to `atelier land && git push`, and never push behind a
-pipe: a pipe's exit status is its last command's (atelier-ecah).
+pipe: a pipe's exit status is its last command's (atelier-ecah). To publish a
+merge, `atelier land --push` from the base checkout pushes the base to its
+upstream; in a policy with a forge, `atelier merge <id> --push` merges and
+publishes in one command instead (see [`merge
+--push`](reviews-and-merge.md#merge---push-step-by-step)).
 
 On the base branch itself, `land` judges unpushed base commits: only records
 and mission strategies may be committed there without review (see

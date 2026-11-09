@@ -261,6 +261,21 @@ pub(crate) fn check_base_commits(
             format!("Base commits unchecked: {base} has no upstream, so there is no pushed point to check from.")
         });
     };
+    check_base_commits_since(repo, index, policy, tip, &upstream)
+}
+
+/// [`check_base_commits`] from an explicit pushed point of the base, such as
+/// the base `merge --push` fetched from the forge's remote, which need not
+/// be the base's upstream.
+pub(crate) fn check_base_commits_since(
+    repo: &Path,
+    index: &RecordIndex,
+    policy: &atelier_workflow::WorkflowPolicy,
+    tip: &str,
+    upstream: &str,
+) -> Result<String> {
+    let base = &policy.branch_policy.base_branch;
+    let upstream = upstream.to_owned();
     // History reads need the tip as a full commit ID.
     let tip = &resolve(repo, tip)?;
     let mut read = git_freshness::ReadContext::from_head(repo, tip.clone());

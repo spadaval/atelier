@@ -653,9 +653,10 @@ from.
 | `ci_pending` | The newest such run is queued or in progress, and none passed, or `--wait` timed out. The line names its state and link, and how long it waited. | `atelier merge <id> [--push] --wait` |
 | `ci_failed` | The newest such run failed, and none passed. The line names its conclusion and link. | `gh run view <run-id> --log-failed`; fix it on the branch, commit, then `atelier merge <id> --push --wait`. A cancelled or timed-out run instead says `gh run rerun <run-id>`. |
 
-Until `merge --push` and `--wait` exist (atelier-vqoy), these Next lines
-name the steps by hand instead, each ending with `atelier merge <id>` once CI
-passes: `ci_no_run` says to open the pull request with `gh pr create --base
+Until `merge --push` pushes the branch and `--wait` exists (atelier-vqoy),
+these Next lines name the steps by hand instead, each ending with `atelier
+merge <id>` once CI passes, without `--push` even when the refused run had
+it: `ci_no_run` says to open the pull request with `gh pr create --base
 <base>`, or to push the branch when it has one; `ci_pending` says `gh run
 watch <run-id>`; and `ci_failed` says to fix, commit and push.
 
@@ -687,7 +688,18 @@ atelier merge <id> --push --wait --timeout 45
 
 `--push` takes an approved branch to the published base in one command. Run
 it from the work branch, as `merge`. In a policy without a `forge` block it
-refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
+refuses with `merge_push_no_forge` and pushes nothing; its Next is `atelier
+merge <id>`, then `atelier land --push` from the base checkout. Any refusal
+ends `merge: refused — N checks (…), nothing pushed` and exits non-zero.
+
+Until atelier-vqoy lands, `merge --push` runs steps 1 and 4 to 8 below, and
+not steps 2 and 3 or `--wait`: push the branch and open its pull request by
+hand first (`git push -u <remote> <branch>`, `gh pr create --base <base>`),
+and wait for CI yourself. The pull request step 8 confirms is the open one
+into the base that has the branch head; without one, `merge --push` pushes
+the base and ends `merge: passed — pushed master to origin`.
+
+It does this, in order:
 
 1. **Checks `gh`.** If `gh` is missing or signed out, it refuses with
    `forge_gh_missing` or `forge_gh_signed_out` and their Next lines above,
@@ -712,8 +724,12 @@ refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
    is always allowed, and it starts CI early, so `merge --push` can run before
    the approval is in.
 4. **Fetches the base.** It fetches the base from `forge.remote` into
-   `FETCH_HEAD`, with no remote-tracking branch needed. If the local base is
-   behind, it fast-forwards it. If the two have diverged, it refuses with
+   `FETCH_HEAD`, with no remote-tracking branch needed; a fetch that fails
+   refuses with `merge_push_fetch_failed` and git's message. If the local
+   base is behind, it fast-forwards it, in its checkout when one has it
+   checked out, and prints `Fast-forwarded master to <commit> from origin.`
+   A local base ahead of the forge's is kept, and step 7 judges its extra
+   commits. If the two have diverged, it refuses with
    `merge_push_base_diverged`, naming both heads. Next: in the base checkout,
    `git fetch <remote> <base> && git merge --no-edit FETCH_HEAD` and `atelier
    land`, then `git push <remote> <base>`, then back on the work branch
@@ -726,7 +742,12 @@ refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
    merged tree, the done marks, and the local branch deleted. It never deletes
    the remote branch.
 7. **Pushes the base.** It judges the unpushed base commits as `atelier land`
-   does on the base, then pushes the base to `forge.remote`, never forcing. A
+   does on the base, from the base it fetched in step 4 rather than the
+   base's upstream, and prints the same summary line, such as `No unpushed
+   base commits need review.` A judgment that refuses, such as
+   `land_base_unreviewed`, pushes nothing and leaves the merge commit on the
+   local base. Then it pushes the merge commit to the base on
+   `forge.remote`, never forcing. A
    rejected push, when the remote base moved during the merge, refuses with
    `merge_push_base_rejected` and git's message. The merge commit stays on the
    local base and nothing is undone. Next: in the base checkout, `git fetch
@@ -736,7 +757,8 @@ refuses with `merge_push_no_forge` and pushes nothing. It does this, in order:
    `forge.remote`.
 8. **Confirms the pull request merged.** GitHub marks a pull request merged
    when its head commits become reachable from the base, which the pushed
-   merge commit does. Atelier reads its state for up to a minute. The success
+   merge commit does. Atelier reads its state every 5 seconds for up to a
+   minute. The success
    line reads `merge: passed — pushed master to origin, pull request #42
    merged`. If GitHub has not marked it merged, `merge` still exits zero,
    since the base is published, and says so:
