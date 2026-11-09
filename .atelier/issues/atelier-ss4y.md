@@ -16,6 +16,12 @@ relationships:
   - kind: "issue"
     id: "atelier-dkul"
     type: "blocked_by"
+  - kind: "issue"
+    id: "atelier-fl12"
+    type: "advances"
+  - kind: "issue"
+    id: "atelier-n7c4"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
