@@ -31,3 +31,4 @@ process ownership, review providers, transition actions, and the cache.
 Dated [quality audits](architecture/quality/index.md), provenance notes, and
 `docs/references/` preserve observations about earlier designs. They do not
 replace the current guides.
+<!-- probe for atelier-2js4; not to merge -->
