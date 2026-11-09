@@ -77,10 +77,10 @@ shows it wrong, or keeping it.
   settle it; then run the test.
 - **WON'T FIX**: real, but the fix would cost more than the problem, as for a
   rare failure that fails safe or one on a path planned for removal; give the
-  reason. For a high-severity finding, or one the strategy's criteria touch,
-  that is the human's call: leave it undisposed and label the item
-  `needs-human`. Inside an approved mission, the orchestrator fixes or defers
-  it instead.
+  reason. A high-severity finding, or one the strategy's criteria touch, needs
+  more than the accountable agent: inside an approved mission the orchestrator
+  fixes or defers it, or aborts; outside one it is the human's call, so leave it
+  undisposed and label the item `needs-human`.
 - **NO ACTION**: wrong, a duplicate, purely stylistic or without consequence,
   with a one-line reason.
 

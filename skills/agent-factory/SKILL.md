@@ -33,7 +33,7 @@ a mission adds a strategy and increments (`plan`).
   on you. Create as few branches and worktrees as the work needs, and remove
   yours once it has merged or its learning is recorded.
 - **Separate evidence from scope.** Workers report findings; the agent
-  accountable for the outcome decides what they mean. Fix a nearby problem only
+  accountable for the outcome decides what they mean for current scope. Fix a nearby problem only
   if it blocks the current outcome; otherwise file follow-up work.
 - **Respect authority.** Ask a human about product direction, risk tolerance and
   destructive or irreversible actions policy does not authorize, except inside
@@ -78,10 +78,13 @@ records](references/atelier.md#planning-on-the-base) follow their own rule.
   `DEFER` with `atelier review defer`; answers one it thinks wrong with a
   rebuttal (a fact or a test) in the next round's brief, whose reviewer records
   `no_action` or keeps it; and escalates one it thinks real but not worth
-  fixing, or whose fix leaves the brief. It records no other disposition on its
-  own work. An open `FIX NOW` blocks the merge.
-- **No reviewer:** keep it unmerged, report review outstanding (your own reread
-  is not review) and ask the user to review or arrange it. A prior request to
+  fixing, or whose fix leaves the brief. One the reviewer recommends `WON'T FIX`
+  or `NO ACTION` it leaves undisposed and lists in its final report for the
+  accountable agent to decide. It records no other disposition on its own work. An open `FIX NOW` blocks the merge.
+- **No reviewer:** keep it unmerged and report review outstanding (your own
+  reread is not review). Inside an approved mission, an implementer escalates
+  and the orchestrator arranges a reviewer or aborts; otherwise ask the user to
+  review or arrange it. A prior request to
   merge does not waive this; a user who knowingly directs an unreviewed merge is
   obeyed unless policy or a gate forbids it (then say so), and review stays
   open.

@@ -63,8 +63,9 @@ until a reviewer approves; your brief authorizes the reviewers you start.
    each `FIX NOW` in its own commit and rerun its proof; run `atelier review
    defer <id> --identity <you>` for those recommended `DEFER`, leaving them
    unfixed; and for one you think wrong, add your rebuttal (a fact or a test) to
-   the next round's brief, marked as the author's claim. Anything else about a
-   finding is scope: escalate.
+   the next round's brief, marked as the author's claim. Leave one the reviewer
+   recommends `WON'T FIX` or `NO ACTION` undisposed for your final report.
+   Anything else about a finding is scope: escalate.
 4. Start a new reviewer for each round, never a message to an earlier one, and
    do not widen scope to address a finding.
 
