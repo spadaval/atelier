@@ -161,9 +161,11 @@ workflows:
         to: declined
         required_fields: [close_reason]
         description: Decline an item that will not be done; the Report says why.
-# ci.passed reads CI on the branch's pull request through gh (ADR 0031).
-# origin is HTTPS without credentials on this host, but reading CI goes
-# through gh's own sign-in, so the remote only names the repository.
+# ci.passed reads CI on the branch's pull request through gh (ADR 0031), and
+# merge --push pushes the branch and the base to origin. origin's URL is
+# HTTPS; a host without HTTPS credentials sets an SSH push URL in its own
+# checkout (AGENTS.md, Merge Policy), so this policy stays the same on every
+# host.
 forge:
   provider: github
   remote: origin

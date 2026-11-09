@@ -37,18 +37,35 @@ alone takes the orchestrator's too.
    `wont_fix` (real, not worth fixing, no follow-up) or `no_action` (wrong).
    `review defer <id>` defers all its undecided findings recommended defer.
 6. **Approve** (reviewer), with the command the brief prints.
-7. **Merge** (orchestrator): `atelier merge <id>` also marks every open child
-   done, started or not, so move out or supersede any that should not merge.
-   Never use plain `git merge`, which runs no gate and marks nothing done.
+7. **Merge** (orchestrator): `atelier merge <id>`, or `atelier merge <id>
+   --push --wait` where the policy names a forge (below), also marks every
+   open child done, started or not, so move out or supersede any that should
+   not merge. Never use plain `git merge`, which runs no gate and marks
+   nothing done.
 
 A change that needs no issue, such as small work, a release, docs or a mockup,
 takes the light path that `atelier --help` and `review approve --help`
 (`--branch`) describe instead, with the same gates and nothing marked done.
 
-Push only when `atelier land` exits zero (`land --push` does that), never behind
-a pipe that hides its status. Once it does, push without asking: whether work
+How merged work gets published depends on the base policy:
+
+- **A policy with a `forge` block** (`.atelier/workflow.yaml`): `atelier merge <id> --push --wait`, from
+  the work checkout, is the whole route to the published base. It pushes the
+  branch, reuses or opens its pull request, waits for CI, merges, judges and
+  pushes the base, and confirms the pull request merged. Do not push the
+  branch, open the pull request, wait on checks or push the base by hand.
+  `--wait` polls for up to `--timeout` minutes (30 by default), so where a
+  harness limits foreground commands, run it in the background, or set
+  `--timeout` under the limit and rerun when it refuses with `ci_pending`. A
+  refusal names what stayed unpushed and its Next line.
+- **A policy with no forge:** `atelier merge <id>`, then `atelier land --push`
+  from the base checkout.
+
+Either way, publish records and planning on the base with `atelier land
+--push`, and push only through a command that pushes when its gate passes,
+never behind a pipe that hides its status. Push without asking: whether work
 goes out was decided at review and merge, and land refuses unreviewed code on
-the base. Stop only if land refuses, or a commit holds secrets or personal
+the base. Stop only if a gate refuses, or a commit holds secrets or personal
 details.
 
 ## What Makes an Approval Stale

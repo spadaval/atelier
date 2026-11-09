@@ -47,21 +47,35 @@ rebuilt model.
   asking. Unreviewed non-trivial code never reaches `master`. Tracker records
   and mission strategies may be committed there directly; non-trivial
   planning is reviewed before the work it defines starts.
+- Reviewed work reaches `master` through one command, run from the work
+  checkout: `atelier merge <id> --push --wait`, or with no id for a change
+  on the light path. It pushes the work branch to `origin`, reuses or opens
+  its pull request, waits for the CI workflow, merges, judges and pushes
+  `master`, and confirms the pull request merged
+  ([merge --push](docs/product/reviews-and-merge.md#merge---push-step-by-step)).
+  Do not push branches, open pull requests, wait on checks or push `master`
+  by hand. `--wait` polls for up to 30 minutes and the macOS job takes about
+  12, so where a harness limits foreground commands, run it in the background,
+  or set `--timeout` under the limit and rerun when it refuses with
+  `ci_pending`.
 - A branch that changes anything besides tracker records (`.atelier/issues`,
   `reviews`, `evidence`; the workflow policy and config count as code) merges
-  only after CI has passed on its latest code: push the work branch, open a
-  pull request, wait for the CI workflow to pass, then run `atelier merge`
-  and `atelier land`, and push `master`.
-  Record-only commits after that run, such as approvals, need no new run; a
-  commit that changes code does, including an `atelier merge --sync` that
-  brings in code from `master` (a clean one still keeps the approval).
-  Record-only branches skip the pull request. The `ci.passed` merge check
+  only after CI has passed on its latest code. The `ci.passed` merge check
   enforces this through `gh` ([ADR 0031](docs/adr/0031-a-forge-carries-branches-and-ci.md)),
   so `atelier merge` runs no test suite on this host, and `master` moving
-  after the run needs no sync and no new run.
-- Agents may push work branches, and `master` once `atelier land` passes on
-  it, without asking. Never force-push `master` or delete remote branches without
-  the human.
+  after the run needs no sync and no new run. Record-only commits after that
+  run, such as approvals, need no new run; a commit that changes code does,
+  including an `atelier merge --sync` that brings in code from `master` (a
+  clean one still keeps the approval). A record-only branch needs no CI run.
+- `merge --push` pushes over `origin`, whose URL here is HTTPS. A host
+  without HTTPS credentials for GitHub needs one command in a fresh checkout:
+  `git config remote.origin.pushurl git@github.com:spadaval/atelier.git`
+  (pushes go over SSH, fetches stay HTTPS), or `gh auth setup-git`. `gh` must
+  be signed in either way.
+- Tracker records and planning go on `master` directly; publish them with
+  `atelier land --push` from the base checkout, which pushes only when land
+  passes. Agents may push work branches and `master` this way without asking.
+  Never force-push `master` or delete remote branches without the human.
 
 ## Product Sources
 

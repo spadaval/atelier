@@ -19,7 +19,8 @@ committed work with one merge commit, which marks the work done. Plain `merge`
 never pushes; in a repository whose policy names a forge, `merge --push`
 pushes the branch, opens its pull request and publishes the base
 ([CI on a forge](reviews-and-merge.md#ci-on-a-forge)). This repository's
-policy names no forge yet, so the routine in AGENTS.md still applies. GitHub collaboration surfaces may
+policy names GitHub as its forge, so reviewed work reaches `master` through
+`atelier merge <id> --push --wait` ([AGENTS.md](../../AGENTS.md)). GitHub collaboration surfaces may
 support discussion and dependency updates, but do not create a second tracker
 or substitute for in-repo approval and evidence.
 

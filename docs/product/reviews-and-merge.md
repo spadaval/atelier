@@ -585,8 +585,8 @@ stays here: the pull request carries the branch and runs CI, and nothing on it
 but a CI result for a commit feeds a gate. Without a `forge` block, Atelier
 makes none of these forge calls and none of this applies. What the policy and
 the agent ask for explicitly keeps its behaviour: a `shell.check` that reaches
-the network, such as this repository's `scripts/merge-ci-passed.sh`, still
-does, and so do `land --push` and the update check.
+the network, such as a script that calls `gh` itself, still does, and so do
+`land --push` and the update check.
 
 ### What `ci.passed` proves
 

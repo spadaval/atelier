@@ -204,8 +204,7 @@ CI result for a commit feeds a gate. A policy without a `forge` block gets
 none of Atelier's built-in forge operations: `merge` reads no CI through a
 forge, pushes nothing, and behaves as it always has. What a policy or an agent
 asks for explicitly keeps its behaviour: a `shell.check` that calls `gh` or the
-network, such as this repository's `scripts/merge-ci-passed.sh`, still does,
-`land --push` still pushes, and the [update
+network still does, `land --push` still pushes, and the [update
 check](sessions-and-hooks.md#update-check) has its own switch.
 
 ```yaml
