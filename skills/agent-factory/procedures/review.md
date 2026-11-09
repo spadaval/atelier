@@ -87,11 +87,14 @@ shows it wrong, or keeping it.
 A new finding on the fix of a low-severity finding is `DEFER` unless it is
 trivial or shows a regression that fix introduced.
 
-Complexity is a defect only when you can name the unneeded moving part and a
-simpler construction meeting the same current requirements without moving it
-elsewhere: `FIX NOW` if the change added it, `DEFER` if it was there. In a
-dispute, the author names the requirement it serves, the reviewer the simpler
-alternative, and the smallest proof that tells them apart decides.
+For each moving part the change adds (a type, layer, flag, option, cache or
+branch), ask which requirement needs it. A part that traces to none is a
+finding, `FIX NOW` if the change added it and `DEFER` if it predates the
+change, and you need not design the alternative: the author answers by naming
+the requirement or removing the part. Judge the system after the change, not
+the diff's size ([Simplicity](../constitution.md#simplicity)). In a dispute,
+the author names the requirement, the reviewer a simpler construction that
+meets it, and the smallest proof that tells them apart decides.
 
 ## Output
 

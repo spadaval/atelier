@@ -77,7 +77,7 @@ something observable.
 | "It's just config" | A CI workflow, schema migration, or infrastructure change is labelled non-code | Get it reviewed like any other change. |
 | "It's just docs" | A strategy or issue spec is rewritten on the base branch and labelled prose or planning | Get it reviewed before the work it defines starts. |
 | Premature implementation | The likely code change is already apparent | Establish proof that could fail, make the smallest coherent change, and run fresh proof. |
-| Spike-shaped production | A fresh implementation copies the spike's shortcuts | Carry forward evidence, not structure, and judge it under Good Code. |
+| Spike-shaped production | A fresh implementation copies the spike's shortcuts | Carry forward evidence, not structure, and judge it under the Constitution's [Simplicity](../constitution.md#simplicity) section. |
 | Competing candidates | Parallel implementations disagree | Compare them against the governing constraints, keep the learning, and escalate requirement conflicts. |
 | Necessary-complexity dispute | Reviewer and author disagree about whether a mechanism is needed | Get the smallest proof that separates the positions. Ask the human if risk tolerance decides it. |
 | Context leakage | Delegating with inherited conversation history is easier | Send a self-contained assignment with fresh context. |
