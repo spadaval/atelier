@@ -17,9 +17,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-09T21:47:41.040599928+00:00"
+status: "done"
 title: "Read every mission's brief and debrief, and each repository's board, on one site for every Atelier repository here"
-updated_at: "2026-11-09T16:09:24.169791510+00:00"
+updated_at: "2026-11-09T21:47:41.040599928+00:00"
 ---
 
 ## Outcome
@@ -44,3 +45,7 @@ Split on 2026-11-08 at Sumeet's direction, after planning review finding atelier
 - 2026-11-09 [plan] Replanned on Sumeet's authority (2026-11-09, in conversation): after Claude's recommendation he chose a Vite, TypeScript and React app over a read-only JSON API instead of server-rendered HTML, because the dev loop and UI testing outweigh the toolchain cost; and asked for the debrief's slowness to be fixed first. A trace found 7.4 s of atelier debrief atelier-k8h8 is 45 per-item full-history git log walks in done_when_edits; one walk takes 0.28 s. Changes: new decision atelier-8p7u supersedes atelier-c5vk's HTML choice (crate and axum stand); new task atelier-t7pb (debrief one history walk) blocks atelier-zpmb; atelier-zpmb rewritten as the JSON API from the base commit, with ts-rs types and fixture JSON; new feature atelier-yn69 holds the app, embedding, release build, CI web job, Playwright and the unit file, and now blocks atelier-ahpf and loose end atelier-6rts; criterion site-matches-cli now loads pages in a headless browser; atelier-ahpf, atelier-uma8, atelier-59fz (also deletes the Rust renderers), atelier-mtb3, atelier-6rts and atelier-tu8c revised to match. Strategy rewritten in place: Shape, Design (API, App, Build and ship, Tests), Derisking, Scope, Authority, Risks.
 - 2026-11-09 [result] atelier-tu8c merged (b6c131a7, PR #75): ADR 0030 records the read-only site, session database and T3 dependency; PRODUCT_INTENT.md, the record-store architecture page and ADRs 0019 and 0022 are scoped by it. Approved by GPT-6.1 Sol in one round. atelier-t7pb is in progress.
 - 2026-11-09 [result] atelier-t7pb merged (94990dd3, PR #76): debrief atelier-k8h8 -q went from 7.8 s to 1.04 s with all 56 compared outputs unchanged; one git log over .atelier/issues/ replaces one per item. Follow-up atelier-lr08 (backlog) covers issue_histories, now 0.38 s of the rest. atelier-zpmb started.
+
+## Report
+
+All 8 items done and site-matches-cli proven by independent validation atelier-mtb3 (receipt atelier-ril9): 84 brief and debrief pages for 42 missions, 5 boards and 93 inbox links over Tailscale match the CLI on each base branch. Delivered: atelier serve reads every repository's base commit (zpmb), a React app embedded in the binary (yn69), installed as a user service on tailnet port 7341 (6rts), boards and item pages (ahpf), the inbox (uma8), --html removed with brief and debrief printing the page link from ~/.config/atelier/site-url (59fz). Deferred by Sumeet: atelier-01wq, transient Git failures (wont_fix). Known gaps: light-path branches are not on the board; repositories sharing a project_slug get the wrong CLI link. Open loose end: atelier-pywh, Sumeet's phone read for taste.
