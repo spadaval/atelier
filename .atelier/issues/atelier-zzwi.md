@@ -12,6 +12,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-4gsb"
+    type: "related"
+  - kind: "issue"
     id: "atelier-icv4"
     type: "advances"
 schema: "atelier.issue"
@@ -32,7 +35,7 @@ Two causes:
 
 ## Done when
 
-- [ ] The brief's Working rules say the reviewer runs no `atelier status`, `check`, `land` or `merge` and pushes nothing, because its record commands commit what they write and the orchestrator merges and lands. A brief rendering test checks the line.
+- [ ] The brief's Working rules say the reviewer runs no `atelier status`, `check`, `land`, `merge` or `doctor` and pushes nothing, because its record commands commit what they write and the orchestrator merges and lands. A brief rendering test checks the line.
 - [ ] The brief's Record section lists every command a reviewer may need, flags filled in, says when to use `review record` (or that it is not needed), and says no other Atelier command is needed. A brief rendering test checks it.
 - [ ] SKILL.md's opening `atelier status` instruction, the AGENTS.md lines install.md prescribes, and this repository's AGENTS.md apply `status` at start and `land` at handoff to a session that owns work; an agent given a brief starts from the brief.
 - [ ] `land`'s help and the top-level help say `land` is for whoever hands off work it owns, not for a reviewer.
@@ -44,6 +47,6 @@ Two causes:
 
 ## Context
 
-Evidence: transcripts 2026-11-04 to 2026-11-09 (see the mission's Background for the method). Sol: `status` 53, `land` 34, `check` 28 in 50 reviews. Claude reviewers: `status` 15, `land` 19, `check` 69 in 173. Record-help lookups by Sol reviews whose prompt pasted the commands: 2.6 per planning review, 0.7 per work review. Some `check` runs review record changes and are proof; `merge` runs `check` anyway.
+Evidence: transcripts 2026-11-04 to 2026-11-09 (see the mission's Background for the method). Sol: `status` 53, `land` 34, `check` 28 in 50 reviews. Claude reviewers: `status` 15, `land` 19, `check` 69 in 173. Record-help lookups by Sol reviews whose prompt pasted the commands: 2.6 per planning review, 0.7 per work review. Some `check` runs review record changes and are proof; `merge` runs `check` anyway. Claude reviewers also ran `doctor` 30 times. The Record section's finding template keeps whatever form atelier-4gsb settles for the severity prefix.
 
 Claude reviewers run `status` far less (0.09 per review) because the SessionStart hook already printed it.

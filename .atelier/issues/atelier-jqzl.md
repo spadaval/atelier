@@ -33,12 +33,12 @@ Two outputs tell agents to run `scripts/merge-ci-passed.sh` by hand, and it fail
 
 ## Done when
 
-- [ ] Every command the review brief lists as a merge check runs in the work branch's checkout and gives a pass or fail verdict there, not "HEAD is not a merge commit". For this repository's CI check that means either the script judges the branch head against the base when HEAD is not a merge, or the brief lists only the checks a reviewer can run and says merge runs the rest. A test or scripted run shows it.
+- [ ] Every command the review brief lists as a merge check runs in the work branch's checkout and gives a pass or fail verdict there, not "HEAD is not a merge commit". For this repository's CI check, `scripts/merge-ci-passed.sh` judges the branch head against the base when HEAD is not a merge commit, giving the verdict merge would give. A scripted run on a branch with and without a passing CI run shows it.
 - [ ] A merge refused by a failed merge check ends with a Next that works from the work checkout: the check's own advice when it printed one, then `atelier merge <id>`, which reruns the check on the merged tree. A gate report test covers it.
 
 ## Scope
 
-`crates/atelier-cli/src/commands/review_request.rs` or `scripts/merge-ci-passed.sh`, and `crates/atelier-cli/src/gate_report.rs`.
+`scripts/merge-ci-passed.sh` and `crates/atelier-cli/src/gate_report.rs`.
 
 ## Context
 

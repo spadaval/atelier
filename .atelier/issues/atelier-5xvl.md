@@ -11,6 +11,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-4gsb"
+    type: "related"
+  - kind: "issue"
     id: "atelier-icv4"
     type: "advances"
 schema: "atelier.issue"
@@ -38,4 +41,4 @@ references/atelier.md says "brief the reviewer with the planning commits (`revie
 
 ## Context
 
-Evidence: transcripts 2026-11-04 to 2026-11-09; Sol planning reviews 16, record-help lookups 46; Claude planning reviews 31, lookups 29. How a range is named (a commit range, or the planning commits since an item's last approval) is the implementer's choice; both must pin records to the range's head. It shares `review_request.rs` with this mission's other brief items, so their merge order matters only for conflicts.
+Evidence: transcripts 2026-11-04 to 2026-11-09; Sol planning reviews 16, record-help lookups 46; Claude planning reviews 31, lookups 29. How a range is named (a commit range, or the planning commits since an item's last approval) is the implementer's choice; both must pin records to the range's head. It shares `review_request.rs` with this mission's other brief items, so their merge order matters only for conflicts. Its finding template takes the form atelier-4gsb settles for the severity prefix.
