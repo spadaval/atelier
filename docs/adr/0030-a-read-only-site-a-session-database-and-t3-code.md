@@ -15,13 +15,13 @@ for agents. Also scopes the Boundaries of
 
 The decisions take effect as those missions' items merge: the site with
 atelier-yfqu, the session database with atelier-bnek. Until then the docs
-describe them ahead of the code, and `brief --html` and `debrief --html` stay
-until atelier-59fz removes them.
+describe them ahead of the code, and the CLI's HTML brief and debrief pages
+stayed until atelier-59fz removed them.
 
 ## Context
 
 Sumeet reviews a mission twice, its brief before it starts and its debrief
-after it ends. Each is a file `--html` writes into whichever checkout ran it,
+after it ends. Each is an HTML file the CLI writes into whichever checkout ran it,
 so it is in a different place each time and his phone cannot reach most of
 them. Between those points he learns where a project stands only by asking an
 agent, which he does in nearly every session. Nothing records which thread,
@@ -95,8 +95,8 @@ database's is in the agent-attribution strategy.
 - A stale or detached worktree cannot mislead the site, because the site reads
   commits. A page shows the base as of its captured commit, and uncommitted
   work never appears.
-- The `--html` pages and `.atelier/runtime/reviews/` are removed
-  (atelier-59fz).
+- The CLI's HTML pages, and the directory under `.atelier/runtime/` that held
+  them, are removed (atelier-59fz).
 - The installed binary serves every repository on the host, so a repository
   whose records are newer than it shows an error page until reinstall.
 

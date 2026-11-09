@@ -5,5 +5,4 @@
 pub mod commands;
 pub(crate) mod gate_report;
 pub(crate) mod human_output;
-pub(crate) mod review_page;
 pub mod utils;

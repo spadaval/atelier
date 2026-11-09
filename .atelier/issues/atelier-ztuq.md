@@ -26,7 +26,7 @@ Nits from the S7 review of atelier-vt8q's debrief at c73d55e8: the mission chip 
 
 ## Done when
 
-- [ ] A CLI fixture in a scratch repository shows each nit fixed in both the Markdown and HTML debrief.
+- [ ] A CLI fixture in a scratch repository shows each nit fixed in both the Markdown debrief and the site's debrief page.
 
 ## Context
 

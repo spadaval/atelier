@@ -11,7 +11,7 @@ its plan before work starts.
 
 `atelier debrief <mission>` reviews what a mission did as an after-action
 report: the problem, what the mission set out to do, what it did, and where
-it stands. Both forms follow the same order:
+it stands. The Markdown and the site's page follow the same order:
 
 - **Status:** a one-line verdict: criteria proven (if any), how many calls
   need the human, how much is left and how much was found along the way.
@@ -78,20 +78,15 @@ entry, beside an open, dropped or asked item, and, for decisions on the
 mission itself, under what it set out to do. `atelier work decisions
 <mission>` lists the whole log.
 
-The Markdown form keeps record IDs, for agents. `--html` writes the same
-review to `.atelier/runtime/reviews/<mission>-debrief.html` and prints its
-path. The page has a persistent sidebar with progress, navigation, the
-delivered items, and a time rail beside the
-timeline. Every issue it names, including IDs mentioned in record text, is a
-chip with its ID, title and status; hovering or focusing it opens a card with
-its type, summary, outcome and parent. Review events and receipts are chips
-with their ID and kind, and a card with what they say. It is one
-self-contained file: inline CSS with light and dark palettes, no scripts,
-forms or external resources, and every record string escaped. It is a
-document, not a second UI: the human reads it in T3 Code's file panel or any
-browser and gives direction in conversation, and the agent records that
-direction as ordinary review events, decisions, notes, and issues. The page
-is never committed; regenerate it when the records change.
+The Markdown form keeps record IDs, for agents. The human reads the same
+review on the site `atelier serve` publishes, at
+`/<repo>/mission/<mission>/debrief`, built from the base branch's latest
+commit ([site](../architecture/site.md)). When the site's address is set,
+the Markdown's footer names that page (`Send the human the page: <url>`;
+[Naming a page from the CLI](../architecture/site.md#naming-a-page-from-the-cli)).
+The page is a document, not a second UI: the human gives direction in
+conversation, and the agent records that direction as ordinary review
+events, decisions, notes, and issues.
 
 Every fact is derived from records and Git: one history query walks HEAD's
 first-parent history over the mission's issue records, reading a merge as
@@ -110,8 +105,8 @@ the record that links it was written, even on a branch that merged later,
 but not before the mission's start. The start and close are the commits
 that made them. Nothing new is stored. Dates are local.
 
-The Markdown and HTML forms come from one view model, and a test verifies that
-every item, criterion mark, and decision in one appears in the other.
+The Markdown and the site's page come from one view model, which the site
+serves as JSON.
 
 ## Brief
 
@@ -131,16 +126,17 @@ its size (`| size M`, from the `size-*` label), open blockers and
 needs-human cue, children under their parent; the blocked items; the
 Unknowns of each open item; open human decisions (open decision records and
 needs-human work in scope); the strategy's Risks and Unknowns section; and review events on
-the mission. `--html` writes `.atelier/runtime/reviews/<mission>-brief.html`
-with the same facts, under the same rules as the debrief page.
+the mission. The site shows the same facts at
+`/<repo>/mission/<mission>/brief`, and the footer names that page as the
+debrief's does.
 
 A plan approval is an ordinary review event on the mission:
 `atelier review approve <mission> --identity "<human>" "<summary>"`. The
-brief and the debrief both show it; without one, both forms of the brief say
+brief and the debrief both show it; without one, the brief says
 no plan approval is recorded. Any approval event on the mission counts, so a
 later approval of the debrief also reads as approval in a brief generated
 after it. Atelier adds no approval gate (ADR 0018). The brief's next step,
-in the Markdown footer and the HTML page's footer, is recording that
+in the footer, is recording that
 approval until one exists; then it is `atelier issue transition <mission>`
 while the mission is still in its initial status, and `atelier work ready`
 after.

@@ -144,7 +144,8 @@ judged by demonstrated outcomes, not issue count:
    to this work, anything with uncommitted changes, and any branch with an open
    PR, and list them in the handoff; remote branches follow repository policy.
 4. Close it with `atelier issue transition <mission> close --reason "<report>"`,
-   then walk the human through `atelier debrief <mission> --html` and record
+   then send the human the mission's debrief on the site, the page `atelier
+   debrief <mission>` names in its footer, walk them through it, and record
    their direction as review records, decisions, notes and issues.
 
 In the handoff, also report delivered and deferred outcomes, open loose ends,

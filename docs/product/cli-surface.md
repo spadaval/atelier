@@ -19,8 +19,8 @@ binary runs the Claude Code hooks (see [development setup](development-setup.md)
 | `merge` | Evaluate the merge gates and integrate reviewed work with a merge commit that marks it done; `--check` evaluates them without merging; with a forge in the policy, `--push` pushes the branch, ensures a pull request, merges and publishes the base, and `--wait` waits for CI. |
 | `land` | Run at every handoff: judge committed records, what changed since the base and the commits about to be pushed; report work in progress on a branch, refuse on the base. |
 | `doctor` | Judge every done claim and the whole review history, and warn when atelier or the Agent Factory skill is out of date; see [update check](sessions-and-hooks.md#update-check). |
-| `brief` | Review a mission's plan as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
-| `debrief` | Review a mission's outcome as Markdown or a static HTML page; see [mission reviews](mission-reviews.md). |
+| `brief` | Review a mission's plan as Markdown, naming its page on the site; see [mission reviews](mission-reviews.md). |
+| `debrief` | Review a mission's outcome as Markdown, naming its page on the site; see [mission reviews](mission-reviews.md). |
 | `setup` | Install supported harness hooks, or link the installed Agent Factory skill to a checkout (`--link`, `--unlink`). |
 | `check` | Validate canonical tracker records and workflow policy. |
 | `prune` | Inspect or apply protected cleanup. |
