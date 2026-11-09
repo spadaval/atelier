@@ -4,6 +4,9 @@ id: "atelier-xc5y"
 issue_type: "task"
 labels:
 - "agent-factory"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-xc5y
 priority: "P1"
 relationships:
   blocks: []
@@ -21,9 +24,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Eval the orchestrator's complete-or-abort rule: it settles what it can and aborts only when it must"
-updated_at: "2026-11-09T04:14:39.732107427+00:00"
+updated_at: "2026-11-09T06:33:14.816272938+00:00"
 ---
 
 ## Goal
