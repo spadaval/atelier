@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Make check and check <id> apply one rule set"
-updated_at: "2026-11-07T21:03:24.484045299+00:00"
+updated_at: "2026-11-09T02:36:56.141314919+00:00"
 ---
 
 ## Goal
@@ -27,7 +27,7 @@ updated_at: "2026-11-07T21:03:24.484045299+00:00"
 ## Done when
 
 - [ ] `check` and `check <id>` report the same findings for the same record, and atelier-ilba's write guard judges writes by that one rule set; a test covers an issue missing its required sections under both forms.
-- [ ] docs/architecture/quality/agent-factory-atelier-validation.md names only commands that exist (ADRs and dated audit records stay as written).
+- [x] docs/architecture/quality/agent-factory-atelier-validation.md names only commands that exist (ADRs and dated audit records stay as written).
 
 ## Context
 
@@ -36,3 +36,7 @@ Found while implementing atelier-pr4k. Decision atelier-mzpn meant this for atel
 ## Unknowns
 
 Whether a `backlog` item may keep placeholder sections (capture now, refine later); atelier-k55o settles it for `issue create`, and `check` follows the same answer. One record in this repository and one in astromech hold placeholders today; a rule that turns their `check` red needs a migration or a note naming them.
+
+## Notes
+
+- 2026-11-08 [note] The validation-doc line holds: b13d74e4 merged docs/no-check-fix (the first gardener run's routine upkeep, digest atelier-j86z), which removed check --fix and the export and rebuild diagnostics.
