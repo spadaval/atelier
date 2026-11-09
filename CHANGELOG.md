@@ -17,6 +17,9 @@ exception: `[decision one-way]` notes must be rewritten (see Removed). The
   strategy as pages and JSON, for every Atelier repository under the given
   roots, read from each one's base branch. The release binary embeds the web
   app.
+- The site also shows a board for each repository (in-progress work with its
+  review state, ready work, what needs a human, and work done in the last 14
+  days) and a page for each item.
 - `merge --push --wait`: with a `forge` block in the workflow policy, one
   command pushes the work branch, reuses or opens its pull request, waits for
   CI, merges, pushes the base and confirms the pull request merged. A new
