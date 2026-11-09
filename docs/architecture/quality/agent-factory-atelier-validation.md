@@ -62,9 +62,7 @@ drill-down commands:
 - capture claim-specific proof with `atelier evidence record` and use quiet
   acknowledgements only where a command naturally returns one result.
 
-Do not use command-result `--json` as workflow proof. Low-level export and
-rebuild diagnostics remain implementation or migration probes, not normal
-handoff, health, or recovery guidance.
+Do not use command-result `--json` as workflow proof.
 
 ## Historical Failure Classifications
 
