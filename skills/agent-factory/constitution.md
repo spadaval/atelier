@@ -179,3 +179,19 @@ Agent Factory should evolve when practice shows a boundary, role, or proof
 requirement is wrong or missing. A change earns its place by improving agent
 behavior, ideally shown by comparing runs with and without it. Removing
 ceremony that does not change outcomes is an improvement.
+
+### Each role reads only what it needs
+
+An agent acts on what it reads, so instructions meant for another role are
+not harmless background. An orchestrator that reads how to perform a review
+will tend to review the work itself instead of arranging an independent
+review. A worker that reads how to merge will tend to merge. Each role's
+instructions therefore hold what that role needs to do its work, and nothing
+more. Guidance that several roles share lives in one standard, read only by
+the roles that use it.
+
+Within those instructions, clarity comes first. Two plain sentences are
+easier to follow than one that stacks conditions and exceptions. A rule added
+for an edge case no agent has met costs every reader attention, and it often
+makes the rule around it harder to read. Length limits serve clarity; they
+are not the goal. Prose squeezed to fit a limit defeats its purpose.
