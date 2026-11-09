@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Let merge push the base it integrated, and stop recommending piped gates"
-updated_at: "2026-11-09T04:14:53.215272773+00:00"
+updated_at: "2026-11-09T04:28:49.168729720+00:00"
 ---
 
 ## Goal
@@ -48,6 +48,10 @@ crates/atelier-cli/src/commands/merge.rs, the base judgment and push code it reu
 - Decision atelier-mzpn kept this standalone, outside atelier-mmpv, and dropped its receipt on the superseded mission atelier-ll3p.
 - atelier-p1vz recounts piping on ordinary sessions; it measures, this item changes the product.
 
+## Notes
+
+- 2026-11-08 [handoff] Implementation handoff: code at ebd76dd6, Report at 33220a6d. All Done when lines ticked with named tests in forge_ci.rs; full atelier-cli suite passes with and without test-hooks; smoke-repos no regression. Review outstanding. See ## Report for decisions, doc fixes and notes for atelier-vqoy.
+
 ## Report
 
 All six Done when lines hold, each shown by a test in crates/atelier-cli/tests/forge_ci.rs (bare repository behind a fake ssh as `forge.remote`, fake `gh` on PATH), passing with and without `--features test-hooks` except where noted: (1) `merge_push_publishes_the_merge_and_confirms_the_pull_request_merged` (fetch, fast-forward of a behind local base, merge, base judgment, remote base at the merge commit, `merge: passed — pushed main to origin, pull request #7 merged`) and `merge_push_publishes_an_approved_light_path_branch_to_a_url_remote` (no ID, light path, `forge.remote` written as a URL); (2) `merge_push_pushes_nothing_when_a_gate_refuses_or_gh_is_missing_or_signed_out`; (3) `merge_push_refuses_a_local_base_that_diverged_from_the_forge_before_merging` and `merge_push_keeps_the_merge_when_the_forge_rejects_the_base_push` (the fake `gh` moves the forge's base during the CI lookup); (4) `merge_push_passes_with_a_note_when_the_pull_request_is_still_open` (test-hooks only, see Decisions); (5) `merge_push_needs_a_forge_and_plain_merge_names_land_push` and `plain_merge_in_a_forge_policy_names_merge_push_for_next_time`, plus the updated Next in merge_gates.rs; (6) `git grep -n "tail -1" docs/product` prints nothing, and reviews-and-merge.md says `--push` runs steps 1 and 4 to 8 until atelier-vqoy. Also `merge_push_judges_the_unpushed_base_commits_as_land_does` (an unreviewed code commit on the local base refuses with `land_base_unreviewed` after the merge, nothing pushed). Full atelier-cli suite: 851 passed, 858 with test-hooks. `scripts/smoke-repos.sh --new <branch build>`: no regression across 5 repositories.
@@ -70,4 +74,3 @@ All six Done when lines hold, each shown by a test in crates/atelier-cli/tests/f
 - For atelier-vqoy: ci.passed's Next lines are built in atelier-app (workflow_validation.rs) as `atelier merge <id>` and do not keep `--push`; merge's own reruns do (`merge::rerun(issue_ref, push)`). The pull request lookup in step 8 should switch to the one step 3 ensures.
 - docs/product/cli-surface.md line 19 still describes the full `--push` (branch push and pull request); left as the target interface.
 - The `ForgeError` reasons still say "so Atelier cannot read CI", also for `merge --push`'s step 1.
-
