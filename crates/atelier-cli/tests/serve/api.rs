@@ -59,6 +59,16 @@ pub(super) fn routes() -> Vec<(String, String)> {
     routes
 }
 
+/// Writes the fixture fleet under `$ATELIER_FIXTURE_FLEET`, for the web
+/// app's Playwright suite (`crates/atelier-site/web/e2e/serve.sh`) to serve.
+#[test]
+#[ignore = "run by the Playwright suite to build its fixture repositories"]
+fn write_fixture_fleet() {
+    let root = std::env::var_os("ATELIER_FIXTURE_FLEET")
+        .expect("ATELIER_FIXTURE_FLEET names an empty directory to write the fleet into");
+    fleet(Path::new(&root));
+}
+
 #[test]
 fn fixture_responses_match_the_checked_in_json() {
     let root = scratch();
