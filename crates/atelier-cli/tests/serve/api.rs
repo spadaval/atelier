@@ -48,6 +48,20 @@ pub(super) fn routes() -> Vec<(String, String)> {
             }
         }
     }
+    for repo in ["alpha", "beta"] {
+        routes.push((format!("/api/{repo}/board"), format!("{repo}/board.json")));
+    }
+    // A task, a decision, a loose end and a done task with an approval.
+    for item in ["alpha-a1", "alpha-a2", "alpha-l1", "alpha-b1"] {
+        routes.push((
+            format!("/api/alpha/item/{item}"),
+            format!("alpha/item/{item}.json"),
+        ));
+    }
+    routes.push((
+        "/api/alpha/item/alpha-zzzz".to_owned(),
+        "errors/unknown-item.json".to_owned(),
+    ));
     routes.push((
         "/api/nowhere/mission/x".to_owned(),
         "errors/unknown-repo.json".to_owned(),

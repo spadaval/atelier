@@ -867,7 +867,7 @@ pub(crate) fn render_unassigned_groups(
             group.label.as_deref().unwrap_or("no label"),
             count_noun(group.work.len(), "open issue")
         ));
-        for index in crate::commands::work_order::ordered_work_indices(&group.work)
+        for index in atelier_app::work_order::ordered_work_indices(&group.work)
             .into_iter()
             .take(row_limit)
         {

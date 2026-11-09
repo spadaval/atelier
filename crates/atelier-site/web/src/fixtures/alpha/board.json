@@ -1,0 +1,187 @@
+{
+  "body": {
+    "base_branch": "main",
+    "base_commit": "07da884d20eedb4506de6ce29e7747397f59cf7b",
+    "board": {
+      "active": [],
+      "groups": [
+        {
+          "label": null,
+          "mission": "alpha-m1",
+          "title": "Read plans on the base branch",
+          "work": [
+            {
+              "closed_at": null,
+              "id": "alpha-a1",
+              "issue_type": "task",
+              "labels": [
+                "size-m"
+              ],
+              "open_blockers": [],
+              "priority": "high",
+              "state": "ready",
+              "status": "todo",
+              "status_category": "todo",
+              "title": "Load records from a commit",
+              "work_branch": null
+            },
+            {
+              "closed_at": null,
+              "id": "alpha-a2",
+              "issue_type": "decision",
+              "labels": [],
+              "open_blockers": [],
+              "priority": "high",
+              "state": "needs human",
+              "status": "todo",
+              "status_category": "todo",
+              "title": "Choose the server",
+              "work_branch": null
+            }
+          ]
+        },
+        {
+          "label": "ops",
+          "mission": null,
+          "title": "ops",
+          "work": [
+            {
+              "closed_at": null,
+              "id": "alpha-l1",
+              "issue_type": "loose_end",
+              "labels": [
+                "ops"
+              ],
+              "open_blockers": [
+                "alpha-a1"
+              ],
+              "priority": "high",
+              "state": "blocked",
+              "status": "todo",
+              "status_category": "todo",
+              "title": "Check the loader on the server",
+              "work_branch": null
+            }
+          ]
+        }
+      ],
+      "human": [
+        {
+          "closed_at": null,
+          "id": "alpha-a2",
+          "issue_type": "decision",
+          "labels": [],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "needs human",
+          "status": "todo",
+          "status_category": "todo",
+          "title": "Choose the server",
+          "work_branch": null
+        }
+      ],
+      "missions": [
+        {
+          "criteria": 2,
+          "criteria_error": null,
+          "done": 0,
+          "id": "alpha-m1",
+          "planned": 2,
+          "priority": "high",
+          "proven": 1,
+          "status": "draft",
+          "status_category": "todo",
+          "title": "Read plans on the base branch",
+          "totals": {
+            "active": 0,
+            "backlog": 0,
+            "blocked": 0,
+            "context": 0,
+            "done": 0,
+            "human": 1,
+            "ready": 1
+          }
+        }
+      ],
+      "ready": [
+        {
+          "closed_at": null,
+          "id": "alpha-a1",
+          "issue_type": "task",
+          "labels": [
+            "size-m"
+          ],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "ready",
+          "status": "todo",
+          "status_category": "todo",
+          "title": "Load records from a commit",
+          "work_branch": null
+        }
+      ],
+      "recent_days": 14,
+      "recently_done": [
+        {
+          "closed_at": "2026-01-01T01:00:00Z",
+          "id": "alpha-m2",
+          "issue_type": "mission",
+          "labels": [],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "done",
+          "status": "done",
+          "status_category": "done",
+          "title": "Ship the loader",
+          "work_branch": null
+        },
+        {
+          "closed_at": "2026-01-01T00:40:00Z",
+          "id": "alpha-b1",
+          "issue_type": "task",
+          "labels": [],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "done",
+          "status": "done",
+          "status_category": "done",
+          "title": "Write the loader",
+          "work_branch": null
+        }
+      ],
+      "today": "2026-01-10"
+    },
+    "in_progress": [
+      {
+        "branch": "alpha-a1",
+        "item": {
+          "closed_at": null,
+          "id": "alpha-a1",
+          "issue_type": "task",
+          "labels": [
+            "size-m"
+          ],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "active",
+          "status": "in_progress",
+          "status_category": "active",
+          "title": "Load records from a commit",
+          "work_branch": "alpha-a1"
+        },
+        "on_branch": {
+          "behind": 1,
+          "open_findings": [
+            "alpha-r2"
+          ],
+          "review": "not_approved",
+          "tip": "b615599c74d074c966ad9f2d6e52b28d45fd623b"
+        }
+      }
+    ],
+    "repo": "alpha",
+    "unreadable_branches": []
+  },
+  "route": "/api/alpha/board",
+  "status": 200
+}

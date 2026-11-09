@@ -1,11 +1,15 @@
+//! The order work lists show items in: blockers before what they block, then
+//! state, priority, newest update and id. Shared by the CLI's lists and the
+//! site's board.
+
 use chrono::{DateTime, Utc};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
-use atelier_app::work_classification::{ClassifiedWork, WorkClassification};
+use crate::work_classification::{ClassifiedWork, WorkClassification};
 use atelier_core::{Issue, IssuePriority};
 
-pub(crate) fn ordered_work_indices(rows: &[(Issue, ClassifiedWork)]) -> Vec<usize> {
+pub fn ordered_work_indices(rows: &[(Issue, ClassifiedWork)]) -> Vec<usize> {
     let by_id = rows
         .iter()
         .enumerate()
@@ -69,7 +73,7 @@ fn state_rank(state: WorkClassification) -> u8 {
     }
 }
 
-pub(crate) fn priority_rank(priority: &str) -> u8 {
+pub fn priority_rank(priority: &str) -> u8 {
     IssuePriority::from_label(priority)
         .map(|priority| priority.sort_rank())
         .unwrap_or(4)

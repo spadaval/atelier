@@ -58,7 +58,7 @@ pub fn list(index: &RecordIndex, bucket: &str, quiet: bool) -> Result<()> {
     let mut buckets = atelier_app::work_classification::work_buckets(index, policy.as_ref())?;
     if bucket_needs_execution_gates(bucket) {
         if let Some(policy) = policy.as_ref() {
-            apply_ready_execution_gates(index, policy, &mut buckets)?;
+            atelier_app::work_classification::apply_ready_gates(index, policy, &mut buckets)?;
         }
     }
     if quiet {
@@ -125,45 +125,6 @@ fn in_flight_marks(index: &RecordIndex) -> Result<InFlight> {
 
 fn bucket_needs_execution_gates(bucket: &str) -> bool {
     matches!(bucket, "ready" | "human" | "all")
-}
-
-fn apply_ready_execution_gates(
-    index: &RecordIndex,
-    policy: &atelier_app::workflow_policy::WorkflowPolicy,
-    buckets: &mut WorkBuckets,
-) -> Result<()> {
-    let candidate_ids = buckets
-        .ready
-        .iter()
-        .chain(&buckets.human)
-        .map(|row| row.id.clone())
-        .collect::<BTreeSet<_>>();
-    let dependency = atelier_app::objective_graph::dependency_readiness_batch(
-        index,
-        policy,
-        candidate_ids.iter().cloned(),
-    )?;
-    for bucket in [&mut buckets.ready, &mut buckets.human] {
-        let mut kept = Vec::new();
-        for mut row in std::mem::take(bucket) {
-            let dependency_ready = dependency
-                .ready_by_issue
-                .get(&row.id)
-                .copied()
-                .unwrap_or(false);
-            if dependency_ready {
-                kept.push(row);
-            } else {
-                row.open_blockers.push("readiness gate".to_string());
-                buckets.blocked.push(row);
-            }
-        }
-        *bucket = kept;
-    }
-    buckets
-        .blocked
-        .sort_by(|left, right| left.id.cmp(&right.id));
-    Ok(())
 }
 
 /// Missions `work missions` shows without `--all`.
@@ -553,7 +514,7 @@ impl ScopedWork {
         // list it; a parent's own row stays first.
         let own = usize::from(objective.issue_type != "mission");
         let scope = rows.split_off(own);
-        let order = crate::commands::work_order::ordered_work_indices(&scope);
+        let order = atelier_app::work_order::ordered_work_indices(&scope);
         let mut scope = scope.into_iter().map(Some).collect::<Vec<_>>();
         rows.extend(order.into_iter().filter_map(|index| scope[index].take()));
         Ok(Self {

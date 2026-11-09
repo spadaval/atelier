@@ -13,6 +13,16 @@ for (const [repo, missions] of [
   }
 }
 pages.push(["/alpha/mission/alpha-m1/strategy", "Strategy: docs/strategies/one.md"]);
+pages.push(["/alpha", "Board: alpha"], ["/beta", "Board: beta"]);
+// A task in progress on its branch, a decision, a loose end and a done task.
+for (const [id, title] of [
+  ["alpha-a1", "Load records from a commit"],
+  ["alpha-a2", "Choose the server"],
+  ["alpha-l1", "Check the loader on the server"],
+  ["alpha-b1", "Write the loader"],
+]) {
+  pages.push([`/alpha/item/${id}`, title]);
+}
 
 /** Pages whose API answer is a 404, shown as a not-found page. */
 const notFound = [
@@ -21,6 +31,8 @@ const notFound = [
   "/nowhere/mission/x/debrief",
   "/beta/mission/beta-m1/strategy",
   "/alpha/no/such/page",
+  "/nowhere",
+  "/alpha/item/alpha-zzzz",
 ];
 
 /**
@@ -94,4 +106,21 @@ test("a mission link on the list opens its review", async ({ page }) => {
   await page.getByRole("link", { name: /Ship the loader/ }).click();
   await expect(page).toHaveURL("/alpha/mission/alpha-m2");
   await expect(page.getByRole("heading", { level: 1, name: "Debrief: Ship the loader" })).toBeVisible();
+});
+
+test("the board links each item and mission, and an item links back to the board", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "alpha", exact: true }).click();
+  await expect(page).toHaveURL("/alpha");
+  await expect(page.getByRole("heading", { level: 1, name: "Board: alpha" })).toBeVisible();
+  const inProgress = page.locator("section", { has: page.getByRole("heading", { level: 2, name: "In Progress" }) });
+  await expect(inProgress.getByText("⚠ not approved")).toBeVisible();
+  await inProgress.getByRole("link", { name: /Load records from a commit/ }).click();
+  await expect(page).toHaveURL("/alpha/item/alpha-a1");
+  await expect(page.getByRole("heading", { level: 1, name: "Load records from a commit" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Breadcrumbs" }).getByRole("link", { name: "alpha" }).click();
+  await expect(page).toHaveURL("/alpha");
+  await page.getByRole("link", { name: /Read plans on the base branch/ }).first().click();
+  await expect(page).toHaveURL("/alpha/mission/alpha-m1");
+  await expect(page.getByRole("heading", { level: 1, name: "Brief: Read plans on the base branch" })).toBeVisible();
 });

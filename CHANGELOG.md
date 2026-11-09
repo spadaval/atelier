@@ -77,6 +77,8 @@ exception: `[decision one-way]` notes must be rewritten (see Removed). The
   Briefs show a mission's sizing and derisking first, and debriefs show each
   done child's report.
 - Mission success criteria are optional.
+- macOS support is now unofficial and best effort. CI tests only on Linux;
+  releases still include macOS binaries.
 
 ### Removed
 - `brief --html` and `debrief --html`. Use `atelier serve`; when

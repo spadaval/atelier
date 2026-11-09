@@ -54,8 +54,8 @@ rebuilt model.
   `master`, and confirms the pull request merged
   ([merge --push](docs/product/reviews-and-merge.md#merge---push-step-by-step)).
   Do not push branches, open pull requests, wait on checks or push `master`
-  by hand. `--wait` polls for up to 30 minutes and the macOS job takes about
-  12, so where a harness limits foreground commands, run it in the background,
+  by hand. `--wait` polls for up to 30 minutes and the CI run takes about 5,
+  so where a harness limits foreground commands, run it in the background,
   or set `--timeout` under the limit and rerun when it refuses with
   `ci_pending`.
 - A branch that changes anything besides tracker records (`.atelier/issues`,
@@ -106,7 +106,7 @@ rebuilt model.
 - Whitespace: `git diff --check`
 - Locally, run formatting and the tests that cover your change
   (`cargo nextest run -p <crate>` or a filter). The full suite, with and
-  without `test-hooks`, on Linux and macOS, runs in CI on the pull request
+  without `test-hooks`, runs on Linux in CI on the pull request
   (`.github/workflows/ci.yml`), and that run gates the merge. CI skips the
   Rust jobs when a change touches only tracker records and Markdown outside
   `crates/` and `docs/strategies/`, since no Rust test reads those; the run

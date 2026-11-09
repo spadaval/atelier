@@ -47,15 +47,11 @@ jobs:
             git diff --check "$BASE" HEAD
           fi
 
+  # Linux only: macOS support is best effort (see README.md).
   test:
-    name: test (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.rust == 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
