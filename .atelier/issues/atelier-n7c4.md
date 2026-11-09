@@ -30,9 +30,9 @@ updated_at: "2026-11-09T03:59:21.097704169+00:00"
 ## Done when
 
 - [ ] `procedures/orchestrate.md`'s Before Starting says: "Complete the mission. Abort only when its outcome can't be reached within the strategy, or carrying on would do harm." Aborting means stopping the mission's work, posting what was learned as a dated mission note, and reporting to the human, who replans with a planner. The four stop conditions are gone.
-- [ ] Keeping the Plan Current: a strategy problem aborts instead of pausing for the human; the orchestrator still plans a later backlog increment at its evidence boundary within the strategy's Authority, by `plan.md`'s standard; progress goes in dated mission notes, not messages to the human. No other sentence in orchestrate.md asks the human anything before the mission closes, apart from aborting (`git grep -n -i "ask" skills/agent-factory/procedures/orchestrate.md` shows only closing-time cleanup).
+- [ ] Keeping the Plan Current: a strategy problem aborts instead of pausing for the human. The orchestrator still plans a later backlog increment at its evidence boundary within the approved strategy and Authority, with one independent planning review and no brief (as atelier-xb18's plan.md says); progress goes in dated mission notes, not messages to the human. Apart from aborting, orchestrate.md has no instruction to ask, consult or wait for the human before the mission closes; the Report quotes every remaining sentence that mentions the human or the user, and each is about aborting or closing.
 - [ ] `CONTEXT.md`: Mission says it exists so the human reviews a batch of related work twice, its plan before it starts (plan review, `brief`) and its result after it merges (result review, `debrief`), with no human work inside it and human work after it as a loose end; Review names those two human reviews.
-- [ ] The orchestrator's read path, counted by atelier-qj9d's rule, is at most 450 lines (455 at the time of planning); the Report gives the count.
+- [ ] The Report gives the orchestrator's read path before and after, without a target (Sumeet dropped the limits for this mission).
 
 ## Scope
 
