@@ -3,7 +3,7 @@ created_at: "2026-11-09T00:45:59.633639914+00:00"
 id: "atelier-aab1"
 issue_type: "spike"
 labels:
-- "fleet-dashboard"
+- "agent-attribution"
 priority: "P1"
 relationships:
   blocks: []
@@ -11,13 +11,13 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
-    id: "atelier-yfqu"
+    id: "atelier-bnek"
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Find how atelier serve can read T3 thread status, models and token usage"
-updated_at: "2026-11-09T00:45:59.633639914+00:00"
+updated_at: "2026-11-09T01:04:28.239761849+00:00"
 ---
 
 ## Goal

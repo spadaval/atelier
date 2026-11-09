@@ -17,19 +17,19 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Run atelier serve as a user service and publish it on the tailnet"
-updated_at: "2026-11-09T00:45:58.669636931+00:00"
+updated_at: "2026-11-09T01:04:24.463133101+00:00"
 ---
 
 ## Goal
 
-Run `atelier serve` on this host as a systemd user service and publish it on the tailnet with `tailscale serve`, beside T3 Code's own published port, so the site is reachable from Sumeet's phone.
+Install `atelier serve` on this host from the reviewed unit file and publish it on the tailnet, so the site is reachable from Sumeet's phone.
 
 ## Done when
 
-- [ ] A systemd user unit runs the installed `atelier serve`, restarts it on failure, and survives a reboot (`systemctl --user is-enabled` and `is-active`).
-- [ ] `tailscale serve status` shows the site on a port or path that does not disturb T3 Code's, and fetching the inbox over the Tailscale hostname from another tailnet device returns 200.
-- [ ] The unit file and the commands are written down in `docs/` (or the README) so the setup can be repeated.
+- [ ] The installed `atelier` matches `master`, and the shipped user unit is installed, enabled and active (`systemctl --user is-enabled` and `is-active`).
+- [ ] After `systemctl --user kill -s KILL` on the service, it is active again within 30 seconds and `systemctl --user show -p NRestarts` has gone up by one. No host reboot.
+- [ ] `tailscale serve status` shows the site on a port or path that leaves T3 Code's published port unchanged, and the inbox fetched over the Tailscale hostname returns 200.
 
 ## Context
 
-Can only happen after the serve item merges and the new binary is installed.
+Can only happen after atelier-zpmb merges and the binary is installed. Steps are in the docs that item ships.

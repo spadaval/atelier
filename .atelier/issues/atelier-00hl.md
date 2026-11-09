@@ -3,7 +3,7 @@ created_at: "2026-11-09T00:45:59.153090199+00:00"
 id: "atelier-00hl"
 issue_type: "feature"
 labels:
-- "fleet-dashboard"
+- "agent-attribution"
 priority: "P2"
 relationships:
   blocks: []
@@ -11,16 +11,16 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-bnek"
+    type: "advances"
+  - kind: "issue"
     id: "atelier-tu8c"
     type: "blocked_by"
-  - kind: "issue"
-    id: "atelier-yfqu"
-    type: "advances"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Name the reviewer's provider and model in structured fields on review records"
-updated_at: "2026-11-09T00:45:59.153090199+00:00"
+updated_at: "2026-11-09T01:04:26.826682230+00:00"
 ---
 
 ## Goal
