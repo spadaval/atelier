@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Run this repository on the one-command merge: retire the hand-run routine from AGENTS.md and the skill"
-updated_at: "2026-11-09T07:55:46.097163745+00:00"
+updated_at: "2026-11-09T07:58:30.870214233+00:00"
 ---
 
 ## Goal
@@ -49,6 +49,12 @@ AGENTS.md, skills/agent-factory/references/atelier.md (and other skill files onl
 - The installed binary and the live skill checkout (`~/projects/atelier-skill`) must be moved forward after atelier-vqoy merges, before this item's merge.
 - Unknowns from atelier-vqoy that this run observes: how long GitHub takes to mark the pull request merged after the base push (step 8 waits 60 seconds), and whether the 30-minute `--wait` default suits this repository's ~12-minute macOS run. Record what the run shows in the Report; file follow-ups for anything that needs a change.
 
+## Notes
+
+- 2026-11-09 [decision] merge --push publishes from this host through the checkout's push URL, not the policy: `git config remote.origin.pushurl git@github.com:spadaval/atelier.git` (repository-local, shared by every worktree; fetches stay HTTPS). forge.remote stays `origin`. Verified with `git remote -v` in this worktree and the master worktree, and a read-only `git ls-remote --heads git@github.com:spadaval/atelier.git master`, which returned master's head. AGENTS.md names the one command a fresh checkout needs, or `gh auth setup-git` instead.
+  Reason: Credentials belong to the host, not the repository: putting an SSH URL in forge.remote would force SSH on every host and CI-less clone, while the push URL keeps the committed policy portable and fixes only this host.
+- 2026-11-09 [note] Handoff: implementation done at 3cb961ba, evidence at 48cb0018; see ## Report. Review not yet requested (the orchestrator arranges it). Nothing pushed; the branch, pull request and master push are for atelier merge atelier-7o4r --push.
+
 ## Report
 
 Agents in this repository now publish reviewed work with `atelier merge <id> --push --wait` alone. `AGENTS.md`'s Merge Policy names it as the one route to `master`, says not to push branches, open pull requests, wait on checks or push `master` by hand, and says to run it in the background or with `--timeout` under a harness limit. `skills/agent-factory/references/atelier.md` gives both paths: a policy with a `forge` block uses `merge <id> --push --wait`, and one without keeps `atelier merge <id>` then `atelier land --push`. `scripts/merge-ci-passed.sh` is deleted; `git grep -n merge-ci-passed -- . ':!.atelier' ':!docs/adr' ':!docs/strategies'` prints nothing, and `git grep -n -E "gh pr create|gh pr merge|git push" AGENTS.md skills/` prints nothing. This host pushes through `remote.origin.pushurl` set to SSH (decision note); `git remote -v` shows the SSH push URL in this worktree and the master worktree, and a read-only `git ls-remote --heads git@github.com:spadaval/atelier.git master` returned master's head. `AGENTS.md` names that command, or `gh auth setup-git`, for a fresh checkout. No push of any kind was made from this branch.
@@ -68,8 +74,3 @@ Merge plan for the mission's criterion: the orchestrator merges this item with `
 
 - Other skill files were checked (`grep` for `gh pr`, `git push`, `land --push`, `pull request`, `merge-ci-passed` under `skills/`); none described the hand-run routine, so none changed. `procedures/install.md` still only says to put tests in merge checks when there is no CI; it does not mention naming a forge. Not in scope.
 - The live skill checkout (`~/projects/atelier-skill`) must move to master after this merges to carry the new `references/atelier.md`.
-
-## Notes
-
-- 2026-11-09 [decision] merge --push publishes from this host through the checkout's push URL, not the policy: `git config remote.origin.pushurl git@github.com:spadaval/atelier.git` (repository-local, shared by every worktree; fetches stay HTTPS). forge.remote stays `origin`. Verified with `git remote -v` in this worktree and the master worktree, and a read-only `git ls-remote --heads git@github.com:spadaval/atelier.git master`, which returned master's head. AGENTS.md names the one command a fresh checkout needs, or `gh auth setup-git` instead.
-  Reason: Credentials belong to the host, not the repository: putting an SSH URL in forge.remote would force SSH on every host and CI-less clone, while the push URL keeps the committed policy portable and fixes only this host.
