@@ -127,8 +127,11 @@ bad change. Every mission plan gets two independent planning reviews before the
 human sees it, as [Planning on the
 Base](../references/atelier.md#planning-on-the-base) describes. Run the two
 passes in parallel, as fresh agents that see neither your reasoning nor each
-other's findings. Use model families other than yours, and different from each
-other, when available; with one family, still run both. Brief each with the
+other's findings. To keep them blind, tell each not to read the other's records
+or thread, and give each its own checkout of the planning commits to record in
+(`git worktree add --detach`); once both finish, cherry-pick their record
+commits onto the base. Use model families other than yours, and different from
+each other, when available; with one family, still run both. Brief each with the
 planning commits, the human's direction and this procedure, and ask it to judge
 the plan against the three clauses and Ready Work. Decide the findings as
 [Independent Review](../SKILL.md#independent-review) says; either reviewer
