@@ -1,6 +1,6 @@
 {
   "body": {
-    "base_commit": "74c84a186e3f7e1cb583299d367bfe0622836337",
+    "base_commit": "07da884d20eedb4506de6ce29e7747397f59cf7b",
     "debrief": {
       "added": [],
       "asks": [],
@@ -33,7 +33,7 @@
               {
                 "captured_at": "2026-01-01T00:35:00Z",
                 "code_commits_since": 1,
-                "commit": "c3f62793f973303afd20932b92b4594cbeb9d9cf",
+                "commit": "6c485654016f95d612d1560c640bbd8eeeb9b040",
                 "evidence_id": "alpha-e1",
                 "in_history": true,
                 "result": "pass",
@@ -83,7 +83,7 @@
         }
       ],
       "found": [],
-      "generated_from": "74c84a186e3f7e1cb583299d367bfe0622836337",
+      "generated_from": "07da884d20eedb4506de6ce29e7747397f59cf7b",
       "left": [],
       "mission": {
         "adr": null,
@@ -151,6 +151,16 @@
           "summary": "Write it.",
           "title": "Write the loader"
         },
+        "alpha-l1": {
+          "id": "alpha-l1",
+          "issue_type": "loose_end",
+          "outcome": null,
+          "parent": null,
+          "status": "todo",
+          "status_category": "todo",
+          "summary": "Check it there.",
+          "title": "Check the loader on the server"
+        },
         "alpha-m1": {
           "id": "alpha-m1",
           "issue_type": "mission",
@@ -177,14 +187,14 @@
       "timeline": {
         "added_after_start": [],
         "closed": {
-          "commit": "74c84a186e3f7e1cb583299d367bfe0622836337",
+          "commit": "4276870b9bdcdc6be3d0b5e94d9c359631bb8552",
           "position": 4,
           "since": null,
           "time": "2026-01-01T00:08:00Z"
         },
         "reopened": [],
         "started": {
-          "commit": "d4f9cc65e1ed6ee93c1475ebe607bf8664996266",
+          "commit": "f6df1fe9f4d87d65eb15e9e0ecf4fdfe4e8ee09d",
           "position": 1,
           "since": null,
           "time": "2026-01-01T00:03:00Z"
@@ -209,7 +219,7 @@
           {
             "at": "2026-01-01T00:35:00Z",
             "code_commits_since": 1,
-            "commit": "c3f62793f973303afd20932b92b4594cbeb9d9cf",
+            "commit": "6c485654016f95d612d1560c640bbd8eeeb9b040",
             "identity": "fixture-validator",
             "later_work": [
               "alpha-b1"

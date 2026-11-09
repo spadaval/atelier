@@ -260,7 +260,7 @@ fn brief_child_rows(
             Ok((child, classified))
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(crate::commands::work_order::ordered_work_indices(&children)
+    Ok(atelier_app::work_order::ordered_work_indices(&children)
         .into_iter()
         .map(|position| {
             let (child, classified) = &children[position];
@@ -771,7 +771,7 @@ fn render_subissue_section(index: &RecordIndex, canonical_id: &str) -> Result<()
             Ok((subissue, classified))
         })
         .collect::<Result<Vec<_>>>()?;
-    let order = crate::commands::work_order::ordered_work_indices(&classified_subissues);
+    let order = atelier_app::work_order::ordered_work_indices(&classified_subissues);
     let summary = subissue_summary(
         classified_subissues.len(),
         classified_subissues.iter().map(|(subissue, classified)| {

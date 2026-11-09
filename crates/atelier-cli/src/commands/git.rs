@@ -1,5 +1,6 @@
 //! Pinned, read-only branch snapshots shared by start and orientation.
 use anyhow::{bail, Context, Result};
+use atelier_app::branch_work::{branch_merge, branch_owner_ids, BranchMerge};
 use atelier_app::{git_freshness, record_index::RecordIndex, review_gate, workflow_policy};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -1227,43 +1228,6 @@ fn light_row(repo: &Path, branch: &str, tip: &str, base_head: &str) -> Result<Op
     Ok(Some(format!("{branch}  light path{facts}")))
 }
 
-/// How a branch at `tip` meets the base at `base_head`; the same for every
-/// owner of the branch.
-struct BranchMerge {
-    /// Where the branch left the base.
-    fork_point: String,
-    behind: usize,
-    conflicts: Vec<PathBuf>,
-    /// The paths the branch changes since `fork_point`, sorted.
-    changed: Vec<PathBuf>,
-}
-
-/// Reads the branch's merge into the base with `git merge-tree`, which
-/// writes only unreachable objects, so no ref, index or checkout changes.
-fn branch_merge(repo: &Path, tip: &str, base_head: &str) -> Result<BranchMerge> {
-    let fork_point = text(repo, &["merge-base", base_head, tip])?;
-    let behind = text(
-        repo,
-        &["rev-list", "--count", &format!("{tip}..{base_head}")],
-    )?
-    .parse()
-    .context("git rev-list --count printed no count")?;
-    let conflicts = if behind == 0 {
-        Vec::new()
-    } else {
-        git_freshness::merge_tree(repo, base_head, tip)?
-            .context("git merge-tree could not merge the branch into the base")?
-            .1
-    };
-    let changed = git_freshness::changed_paths(repo, &fork_point, tip)?;
-    Ok(BranchMerge {
-        fork_point,
-        behind,
-        conflicts,
-        changed,
-    })
-}
-
 /// The owner's readiness on a branch at `tip`, judged from the branch's
 /// committed records: approval as `merge`'s `review.current` judges it, and,
 /// as a note that gates nothing (atelier-md0v), the failing receipt, if any,
@@ -1298,73 +1262,6 @@ fn readiness(
         failing,
         conflicts: merge.conflicts.clone(),
     })
-}
-
-/// The issues a branch's committed records say own it, read from their small
-/// record blobs without materializing the tracker.
-fn branch_owner_ids(
-    repo: &Path,
-    live: &RecordIndex,
-    branch: &str,
-    commit: &str,
-) -> Result<Vec<String>> {
-    let mut paths = live
-        .issues()
-        .filter(|issue| {
-            issue
-                .workflow_branch
-                .as_ref()
-                .is_some_and(|owner| owner.work_branch == branch)
-        })
-        .map(|issue| format!(".atelier/issues/{}.md", issue.id))
-        .collect::<BTreeSet<_>>();
-    if let Some(id) = branch
-        .rsplit('/')
-        .next()
-        .filter(|id| atelier_records::validate_record_id(id).is_ok())
-    {
-        paths.insert(format!(".atelier/issues/{id}.md"));
-    }
-    let mut owners = Vec::new();
-    for attempt in 0..2 {
-        for path in &paths {
-            if let Ok(blob) = git_freshness::blob(repo, commit, Path::new(path)) {
-                let record = atelier_records::parse_issue_record(
-                    &blob,
-                    Path::new(path).strip_prefix(".atelier")?,
-                )?;
-                if record
-                    .issue
-                    .workflow_branch
-                    .as_ref()
-                    .is_some_and(|owner| owner.work_branch == branch)
-                {
-                    owners.push(record.issue.id);
-                }
-            }
-        }
-        if !owners.is_empty() || attempt == 1 {
-            break;
-        }
-        // A custom branch can introduce its owner only on that branch.
-        let found = text(
-            repo,
-            &[
-                "grep",
-                "-l",
-                "^workflow_branch:",
-                commit,
-                "--",
-                ".atelier/issues/",
-            ],
-        )
-        .unwrap_or_default();
-        paths = found
-            .lines()
-            .filter_map(|line| line.split_once(':').map(|(_, path)| path.into()))
-            .collect();
-    }
-    Ok(owners)
 }
 
 /// The first line of an error's outermost context, for a one-line mark.

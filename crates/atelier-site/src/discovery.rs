@@ -147,6 +147,9 @@ pub struct Base {
     pub commit: String,
     /// The `project_slug` committed there, when its config reads.
     pub slug: Option<String>,
+    /// Every local branch and its commit, read in the same `for-each-ref`,
+    /// for the board's work in flight.
+    pub branches: BTreeMap<String, String>,
 }
 
 /// What one commit's committed policy and config say, which nothing but the
@@ -208,6 +211,7 @@ pub fn base(common_dir: &Path, facts: &mut dyn FnMut(&str) -> CommitFacts) -> Re
             branch: named,
             commit: default_commit.to_owned(),
             slug: on_default.slug,
+            branches: refs.branches.clone(),
         });
     }
     let commit = refs.branch(&named).ok_or_else(|| {
@@ -228,6 +232,7 @@ pub fn base(common_dir: &Path, facts: &mut dyn FnMut(&str) -> CommitFacts) -> Re
         branch: named,
         commit: commit.to_owned(),
         slug: on_base.slug,
+        branches: refs.branches.clone(),
     })
 }
 

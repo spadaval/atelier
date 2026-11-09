@@ -4,7 +4,7 @@ import type { ReposResponse } from "../api/ReposResponse";
 import { Loading, Page, ItemLine } from "../components/Page";
 import { shortCommit } from "../text";
 
-/** `/`: every repository, with a link to each of its missions. */
+/** `/`: every repository, with a link to its board and each of its missions. */
 export function Home() {
   const loaded = useApi<ReposResponse>("/api/repos");
   return (
@@ -14,7 +14,9 @@ export function Home() {
           {repos.length === 0 ? <p className="muted">No Atelier repositories under the server's roots.</p> : null}
           {repos.map((repo) => (
             <section key={repo.repo}>
-              <h2>{repo.repo}</h2>
+              <h2>
+                <Link to={`/${repo.repo}`}>{repo.repo}</Link>
+              </h2>
               {repo.base_branch ? (
                 <p className="muted">
                   {repo.base_branch}

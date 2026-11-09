@@ -2,9 +2,11 @@
 
 `atelier serve` is a read-only server over every Atelier repository on this
 host ([ADR 0030](../adr/0030-a-read-only-site-a-session-database-and-t3-code.md)).
-It serves each mission's brief and debrief as JSON, read from one captured
-commit of the repository's base branch, never from a checkout, and writes
-nothing to any repository. The design is in
+It serves each mission's brief and debrief, each repository's board and each
+item as JSON, read from one captured commit of the repository's base branch,
+never from a checkout, and writes nothing to any repository. The board's work
+in flight is the one exception to reading only the base: it comes from each
+owned work branch's own records, read at the branch's tip. The design is in
 [the fleet-dashboard strategy](../strategies/fleet-dashboard.md) and decisions
 atelier-c5vk and atelier-8p7u; this page says how the code does it.
 
@@ -94,14 +96,44 @@ models serialized with `serde`, plus the base commit and links
 | `/api/<repo>/mission/<id>/brief` | The `Brief` view `atelier brief` prints. |
 | `/api/<repo>/mission/<id>/debrief` | The `Debrief` view `atelier debrief` prints. |
 | `/api/<repo>/mission/<id>/strategy` | The strategy's path and Markdown as committed. |
+| `/api/<repo>/board` | The `Board` view, the work in progress on each work branch, and the branches that cannot be read. |
+| `/api/<repo>/item/<id>` | The `ItemView` of one item: its record's Markdown, where it stands, its links and the review events on it. |
 
 `review` is the one judgment the server makes: `brief` while the mission is
 in its workflow's initial status, `debrief` afterwards, read from the
-committed policy. A mission accepts a full or unique short ID, as the CLI
+committed policy. A mission or item accepts a full or unique short ID, as the CLI
 does.
 
-An unknown repository, mission, route or a mission without a strategy is a
-404, and a repository whose base or records cannot be read is a 500 naming
+### The board
+
+`atelier_app::board::board` builds the board from a base commit's records,
+from the same views the CLI prints:
+
+- Open missions as `atelier work missions` orders them, each with its items
+  done of planned and its criteria proven, as its debrief marks them
+  (`criteria::mission_proof`).
+- Open work under each open mission, then work in no open mission by label,
+  as `atelier work missions` groups it, each list in `atelier work`'s order
+  (`atelier_app::work_order`).
+- Active, ready and needs-human work as `atelier status` and
+  `atelier work ready` list it, with the ready gates `work ready` applies
+  (`work_classification::apply_ready_gates`).
+- Work closed on the day the server's clock says or in the 14 days before
+  it, newest first.
+
+`board::branch_work` reads one work branch as `atelier status` reads its
+branch rows: a branch with no tracker, no owner, whose tip the base already
+holds, or whose owners are done on the base, has no work in flight. Owners
+are found by `branch_work::branch_owner_ids`, the function `status` uses;
+the branch's records are loaded at its tip; and each owner's review state is
+`review_gate::approval_state`, the judgment `status` and `merge` make, with
+`unreviewed` when no review event targets the owner's scope. Open findings
+are those `findings.disposed` would not count as settled. `board::in_progress`
+lists the owners in branch order, then active work on the base that no
+branch read owns.
+
+An unknown repository, mission, item, route or a mission without a strategy
+is a 404, and a repository whose base or records cannot be read is a 500 naming
 the error, from its own routes only; the others answer. Every error body is
 `{"error": "..."}`.
 
@@ -109,8 +141,11 @@ The TypeScript types in `web/src/api/` come from the Rust types through
 `ts-rs`, one file per type. `api::tests::typescript_types_are_current` fails
 when they are stale. The fixture JSON in `web/src/fixtures/` is written by
 `crates/atelier-cli/tests/serve/api.rs` from two fixture repositories built
-with fixed dates, and `fixture_responses_match_the_checked_in_json` fails when
-it is stale. Rewrite both with `ATELIER_UPDATE_FIXTURES=1` and the same tests.
+with fixed dates, served on a clock fixed at 2026-01-10 (`SiteOptions::clock`),
+and `fixture_responses_match_the_checked_in_json` fails when it is stale.
+Rewrite both with `ATELIER_UPDATE_FIXTURES=1` and the same tests: the types
+with `cargo nextest run -p atelier-site typescript_types`, the JSON with
+`cargo nextest run -p atelier-cli --test serve fixture_responses`.
 
 ## Cache and load limits
 
@@ -127,6 +162,15 @@ commit tells a file the commit does not hold from one Git could not read
 (`ReadContext::failed_read`); after the second, the view or the commit's
 facts are an error, never kept, rather than a page that misstates the
 commit.
+
+The board is kept per base commit and day, since recently done work depends
+on the date. Each work branch's work in flight is kept by repository and
+branch, with the branch's tip and the base commit it was read against; a
+scan drops an entry whose tip or base moved, or whose branch is gone. A
+board request builds what is missing, the base's board and every work branch
+not yet read, as one build each, so a warm board with nothing moved builds
+nothing. Composing the in-progress list and an item view read only the
+loaded records and take no build slot.
 
 Refs are never cached. Every request scans the roots and reads each
 repository's refs again, so it reads the base as of its arrival; requests
@@ -163,7 +207,11 @@ routes mirror the API's:
 | `/<repo>/mission/<id>/brief` | What `atelier brief` prints. |
 | `/<repo>/mission/<id>/debrief` | What `atelier debrief` prints. |
 | `/<repo>/mission/<id>/strategy` | The strategy's Markdown, rendered. |
+| `/<repo>` | The board: open missions with progress, work in progress with its branch, review state, open findings and how far behind, ready and needs-human work, open work by mission and label, and work done in the last 14 days. |
+| `/<repo>/item/<id>` | An item's record as Markdown (a decision's Question and Options among its sections), its links and its review events. |
 
+The repository list links each board, the board links each mission and item,
+and every page under a repository links back to its board.
 An API error shows on the page; a 404 is a not-found page. Each page puts the
 view's facts into the words the CLI uses (`web/src/debrief.ts` follows
 `crates/atelier-cli/src/commands/mission_review.rs`). React escapes every

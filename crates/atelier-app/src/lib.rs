@@ -5,6 +5,8 @@
 
 pub mod after_merge;
 pub mod base_policy;
+pub mod board;
+pub mod branch_work;
 pub mod ci_passed;
 pub mod commit_records;
 pub mod committed_snapshot;
@@ -18,6 +20,7 @@ pub mod git_freshness;
 pub mod init;
 pub mod issue_inventory;
 pub mod issue_read;
+pub mod item_view;
 pub mod light_path;
 pub mod lint;
 pub mod mission_overview;
@@ -35,6 +38,7 @@ pub mod review_gate;
 pub mod storage_layout;
 pub mod use_cases;
 pub mod work_classification;
+pub mod work_order;
 pub mod workflow_policy;
 pub mod workflow_validation;
 

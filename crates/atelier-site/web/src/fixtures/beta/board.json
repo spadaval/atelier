@@ -1,0 +1,105 @@
+{
+  "body": {
+    "base_branch": "main",
+    "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+    "board": {
+      "active": [],
+      "groups": [
+        {
+          "label": null,
+          "mission": "beta-m1",
+          "title": "Propose the board",
+          "work": []
+        },
+        {
+          "label": null,
+          "mission": "beta-m2",
+          "title": "Build the inbox",
+          "work": [
+            {
+              "closed_at": null,
+              "id": "beta-c1",
+              "issue_type": "task",
+              "labels": [],
+              "open_blockers": [],
+              "priority": "high",
+              "state": "ready",
+              "status": "todo",
+              "status_category": "todo",
+              "title": "List the asks",
+              "work_branch": null
+            }
+          ]
+        }
+      ],
+      "human": [],
+      "missions": [
+        {
+          "criteria": 1,
+          "criteria_error": null,
+          "done": 0,
+          "id": "beta-m1",
+          "planned": 0,
+          "priority": "high",
+          "proven": 0,
+          "status": "proposed",
+          "status_category": "todo",
+          "title": "Propose the board",
+          "totals": {
+            "active": 0,
+            "backlog": 0,
+            "blocked": 0,
+            "context": 0,
+            "done": 0,
+            "human": 0,
+            "ready": 0
+          }
+        },
+        {
+          "criteria": 2,
+          "criteria_error": null,
+          "done": 0,
+          "id": "beta-m2",
+          "planned": 1,
+          "priority": "high",
+          "proven": 0,
+          "status": "ready",
+          "status_category": "todo",
+          "title": "Build the inbox",
+          "totals": {
+            "active": 0,
+            "backlog": 0,
+            "blocked": 0,
+            "context": 0,
+            "done": 0,
+            "human": 0,
+            "ready": 1
+          }
+        }
+      ],
+      "ready": [
+        {
+          "closed_at": null,
+          "id": "beta-c1",
+          "issue_type": "task",
+          "labels": [],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "ready",
+          "status": "todo",
+          "status_category": "todo",
+          "title": "List the asks",
+          "work_branch": null
+        }
+      ],
+      "recent_days": 14,
+      "recently_done": [],
+      "today": "2026-01-10"
+    },
+    "in_progress": [],
+    "repo": "beta",
+    "unreadable_branches": []
+  },
+  "route": "/api/beta/board",
+  "status": 200
+}
