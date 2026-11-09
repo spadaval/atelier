@@ -55,9 +55,10 @@ rebuilt model.
   Record-only commits after that run, such as approvals, need no new run; a
   commit that changes code does, including an `atelier merge --sync` that
   brings in code from `master` (a clean one still keeps the approval).
-  Record-only branches skip the pull request. The
-  `scripts/merge-ci-passed.sh` merge check enforces this, so `atelier merge`
-  runs no test suite on this host.
+  Record-only branches skip the pull request. The `ci.passed` merge check
+  enforces this through `gh` ([ADR 0031](docs/adr/0031-a-forge-carries-branches-and-ci.md)),
+  so `atelier merge` runs no test suite on this host, and `master` moving
+  after the run needs no sync and no new run.
 - Agents may push work branches, and `master` once `atelier land` passes on
   it, without asking. Never force-push `master` or delete remote branches without
   the human.

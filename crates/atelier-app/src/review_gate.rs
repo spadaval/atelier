@@ -134,11 +134,17 @@ pub(crate) fn validator_gate(
             _ => Vec::new(),
         }
     };
-    let fix = check
-        .help
-        .as_deref()
-        .and_then(|help| help.split('`').nth(1))
-        .map(str::to_owned);
+    // ci.passed's help is its whole Next step, which can take more than
+    // one command; another check's help names its fix in backticks.
+    let fix = if check.validator == crate::workflow_policy::CI_PASSED {
+        check.help.clone()
+    } else {
+        check
+            .help
+            .as_deref()
+            .and_then(|help| help.split('`').nth(1))
+            .map(str::to_owned)
+    };
     let mut node = gate(
         target,
         &check.validator,
@@ -1164,8 +1170,16 @@ pub fn evaluate(
     owner: &str,
     base_commit: &str,
     checks_root: &Path,
+    heads: crate::workflow_validation::MergeHeads<'_>,
 ) -> Result<Vec<GateNode>> {
-    evaluate_inner(index, read, policy, owner, base_commit, Some(checks_root))
+    evaluate_inner(
+        index,
+        read,
+        policy,
+        owner,
+        base_commit,
+        Some((checks_root, Some(heads))),
+    )
 }
 
 /// Active handoffs check committed completion claims, not merge readiness.
@@ -1185,7 +1199,7 @@ pub fn evaluate_session(
         policy,
         owner,
         base_commit,
-        complete.then_some(repo),
+        complete.then_some((repo, None)),
     )
 }
 
@@ -1195,7 +1209,7 @@ fn evaluate_inner(
     policy: &WorkflowPolicy,
     owner: &str,
     base_commit: &str,
-    checks_root: Option<&Path>,
+    checks: Option<(&Path, Option<crate::workflow_validation::MergeHeads<'_>>)>,
 ) -> Result<Vec<GateNode>> {
     evaluate_scope(
         index,
@@ -1203,8 +1217,8 @@ fn evaluate_inner(
         policy,
         owner,
         base_commit,
-        match checks_root {
-            Some(root) => EvaluationKind::Merge(root),
+        match checks {
+            Some((root, heads)) => EvaluationKind::Merge(root, heads),
             None => EvaluationKind::Session,
         },
         scope(index, owner)?,
@@ -1237,7 +1251,9 @@ pub fn evaluate_claims(
     )
 }
 enum EvaluationKind<'p> {
-    Merge(&'p Path),
+    /// Merge checks run in the path; with the heads of a merge, or none
+    /// when a completed work branch is landed.
+    Merge(&'p Path, Option<crate::workflow_validation::MergeHeads<'p>>),
     Session,
     CurrentClaims,
     Historical,
@@ -1251,7 +1267,7 @@ fn evaluate_scope(
     kind: EvaluationKind<'_>,
     ids: BTreeSet<String>,
 ) -> Result<Vec<GateNode>> {
-    let complete = matches!(kind, EvaluationKind::Merge(_));
+    let complete = matches!(kind, EvaluationKind::Merge(..));
     let historical = matches!(kind, EvaluationKind::Historical);
     let global = matches!(
         kind,
@@ -1479,7 +1495,7 @@ fn evaluate_scope(
     nodes.extend(completion_claims(
         index, read, policy, &claimed, historical,
     )?);
-    let checks = if let EvaluationKind::Merge(checks_root) = kind {
+    let checks = if let EvaluationKind::Merge(checks_root, merge) = kind {
         crate::workflow_validation::evaluate_policy_transition(
             crate::workflow_validation::ValidatorRequest {
                 index,
@@ -1487,6 +1503,7 @@ fn evaluate_scope(
                 policy,
                 issue_id: owner,
                 validators: &policy.merge_checks,
+                merge,
             },
         )?
     } else {
@@ -1615,6 +1632,7 @@ fn completion_claims(
                     policy,
                     issue_id: id,
                     validators: &transition.validators,
+                    merge: None,
                 },
                 !historical,
                 read,

@@ -6,9 +6,9 @@ use crate::record_index::RecordIndex;
 
 pub use atelier_workflow::{
     configured_initial_status, starter_policy_yaml, validate_issue_against_policy,
-    BranchLifecycleConfig, StatusDefinition, TransitionDefinition, ValidatorDefinition,
-    ValidatorParams, WorkflowDefinition, WorkflowPolicy, WORKFLOW_BRANCH_FIELD,
-    WORKFLOW_POLICY_PATH,
+    BranchLifecycleConfig, ForgeConfig, StatusDefinition, TransitionDefinition,
+    ValidatorDefinition, ValidatorParams, WorkflowDefinition, WorkflowPolicy, CI_PASSED,
+    WORKFLOW_BRANCH_FIELD, WORKFLOW_POLICY_PATH,
 };
 
 /// Whether a status is in the done category. Without a workflow policy the
@@ -242,6 +242,7 @@ mod tests {
     fn policy() -> WorkflowPolicy {
         WorkflowPolicy {
             merge_checks: Vec::new(),
+            forge: None,
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),

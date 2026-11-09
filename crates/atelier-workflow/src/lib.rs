@@ -196,7 +196,12 @@ const BUILTIN_VALIDATORS: &[&str] = &[
     "work.terminal",
     "decision.recorded",
     "shell.check",
+    CI_PASSED,
 ];
+/// The merge check that reads CI through the policy's forge (ADR 0031).
+pub const CI_PASSED: &str = "ci.passed";
+/// The only forge provider Atelier knows, reached through the `gh` CLI.
+const FORGE_PROVIDERS: &[&str] = &["github"];
 /// The one required field: a non-empty Report section. The policy key keeps
 /// its old name (atelier-jnrh).
 const CLOSE_REASON_FIELD: &str = "close_reason";
@@ -225,16 +230,31 @@ const TOP_LEVEL_FIELDS: &[&str] = &[
     "statuses",
     "workflows",
     "merge_checks",
+    "forge",
 ];
 #[derive(Debug, Clone)]
 pub struct WorkflowPolicy {
     pub merge_checks: Vec<ValidatorDefinition>,
+    /// The forge that carries branches and reports CI, when the policy names
+    /// one; without it Atelier makes no forge call (ADR 0031).
+    pub forge: Option<ForgeConfig>,
     pub schema_version: i64,
     pub branch_policy: BranchLifecycleConfig,
     pub issue_types: BTreeMap<String, IssueTypeDefinition>,
     pub workflow_by_issue_type: BTreeMap<String, String>,
     pub statuses: BTreeMap<String, StatusDefinition>,
     pub workflows: BTreeMap<String, WorkflowDefinition>,
+}
+
+/// The policy's `forge` block (ADR 0031). `github` is the only provider.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForgeConfig {
+    /// A Git remote name or a remote URL; `origin` when the policy leaves
+    /// it out.
+    pub remote: String,
+    /// The file name, under `.github/workflows`, of the workflow whose pull
+    /// request runs `ci.passed` trusts.
+    pub ci_workflow: String,
 }
 
 /// `atelier merge` always integrates with a merge commit, which also marks
@@ -639,8 +659,21 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
         )?,
     };
     let branch_policy = parse_branch_policy(root.get("branch_policy"), display_path)?;
+    let forge = root
+        .get("forge")
+        .map(|value| parse_forge(value, display_path))
+        .transpose()?;
+    if forge.is_none() && merge_checks.iter().any(|check| check.builtin == CI_PASSED) {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_validator",
+            display_path,
+            "merge_checks",
+            "ci.passed reads CI through a forge, and this policy has no forge block; add one naming forge.provider and forge.ci_workflow",
+        ));
+    }
     let policy = WorkflowPolicy {
         merge_checks,
+        forge,
         schema_version,
         branch_policy,
         issue_types,
@@ -650,6 +683,92 @@ pub fn parse_policy_text(text: &str, display_path: &str) -> Result<WorkflowPolic
     };
     validate_workflows(&policy, display_path)?;
     Ok(policy)
+}
+
+/// The `forge` block, refused naming the key that is wrong.
+fn parse_forge(value: &Value, display_path: &str) -> Result<ForgeConfig> {
+    let invalid = |field: &str, message: String| {
+        policy_error_with_field(
+            "workflow_config_invalid_forge",
+            display_path,
+            field,
+            message,
+        )
+    };
+    let Some(mapping) = value.as_mapping() else {
+        return Err(invalid(
+            "forge",
+            "forge must be a mapping with provider, ci_workflow and an optional remote".into(),
+        ));
+    };
+    let text = |key: &str| -> Result<Option<String>> {
+        match mapping.get(key) {
+            None => Ok(None),
+            Some(Value::String(text)) => Ok(Some(text.trim().to_owned())),
+            Some(_) => Err(invalid(
+                &format!("forge.{key}"),
+                format!("forge.{key} must be a string"),
+            )),
+        }
+    };
+    for key in mapping.keys() {
+        match key.as_str() {
+            Some("provider" | "remote" | "ci_workflow") => {}
+            Some(other) => {
+                return Err(invalid(
+                    &format!("forge.{other}"),
+                    format!(
+                        "unknown forge field '{other}'; expected provider, remote or ci_workflow"
+                    ),
+                ))
+            }
+            None => return Err(invalid("forge", "forge keys must be strings".into())),
+        }
+    }
+    match text("provider")? {
+        None => {
+            return Err(invalid(
+                "forge.provider",
+                "forge.provider is required; write github".into(),
+            ))
+        }
+        Some(provider) if !FORGE_PROVIDERS.contains(&provider.as_str()) => {
+            return Err(invalid(
+                "forge.provider",
+                format!("unsupported forge provider '{provider}'; expected github"),
+            ))
+        }
+        Some(_) => {}
+    }
+    let remote = match text("remote")? {
+        None => "origin".to_owned(),
+        Some(remote) if remote.is_empty() => {
+            return Err(invalid(
+                "forge.remote",
+                "forge.remote cannot be empty; name a Git remote or a remote URL, or leave it out for origin".into(),
+            ))
+        }
+        Some(remote) => remote,
+    };
+    let ci_workflow = match text("ci_workflow")? {
+        Some(workflow) if !workflow.is_empty() => workflow,
+        _ => {
+            return Err(invalid(
+                "forge.ci_workflow",
+                "forge.ci_workflow is required: the file name under .github/workflows of the workflow ci.passed trusts, such as ci.yml".into(),
+            ))
+        }
+    };
+    if ci_workflow.contains('/') {
+        return Err(invalid(
+            "forge.ci_workflow",
+            format!("forge.ci_workflow '{ci_workflow}' must be a file name under .github/workflows, such as ci.yml, not a path"),
+        ));
+    }
+    Ok(ForgeConfig {
+        remote,
+        ci_workflow,
+    })
 }
 
 fn parse_branch_policy(value: Option<&Value>, display_path: &str) -> Result<BranchLifecycleConfig> {
@@ -1308,6 +1427,14 @@ fn validate_builtin_validator_name(
     if name == "shell.check" && !matches!(context, ValidatorContext::MergeChecks) {
         return Err(anyhow!("shell.check is available only in merge_checks"));
     }
+    if name == CI_PASSED && !matches!(context, ValidatorContext::MergeChecks) {
+        return Err(policy_error_with_field(
+            "workflow_config_invalid_validator",
+            display_path,
+            format!("workflows.{workflow_name}.transitions.{transition_name}.validators"),
+            "ci.passed is available only in merge_checks",
+        ));
+    }
     if BUILTIN_VALIDATORS.contains(&name) {
         Ok(())
     } else {
@@ -1839,6 +1966,65 @@ mod tests {
         assert!(
             older.starts_with("error: workflow_config_schema_unsupported\n"),
             "{older}"
+        );
+    }
+
+    /// A forge block defaults its remote to origin, and a policy without
+    /// one has no forge (ADR 0031).
+    #[test]
+    fn a_forge_block_parses_and_ci_passed_needs_it_in_merge_checks() {
+        let plain = parse_policy_text(&valid_policy(), WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(plain.forge, None);
+        let forge = format!(
+            "{}\nforge:\n  provider: github\n  ci_workflow: ci.yml\nmerge_checks:\n  - ci.passed\n",
+            valid_policy()
+        );
+        let policy = parse_policy_text(&forge, WORKFLOW_POLICY_PATH).unwrap();
+        assert_eq!(
+            policy.forge,
+            Some(ForgeConfig {
+                remote: "origin".into(),
+                ci_workflow: "ci.yml".into()
+            })
+        );
+        assert_eq!(policy.merge_checks[0].builtin, CI_PASSED);
+        let remote = forge.replace(
+            "  ci_workflow: ci.yml\n",
+            "  ci_workflow: ci.yml\n  remote: git@github.com:o/r.git\n",
+        );
+        assert_eq!(
+            parse_policy_text(&remote, WORKFLOW_POLICY_PATH)
+                .unwrap()
+                .forge
+                .unwrap()
+                .remote,
+            "git@github.com:o/r.git"
+        );
+        let path = forge.replace(
+            "ci_workflow: ci.yml",
+            "ci_workflow: .github/workflows/ci.yml",
+        );
+        let error = parse_policy_text(&path, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("workflow_config_invalid_forge")
+                && error.contains("field: forge.ci_workflow"),
+            "{error}"
+        );
+        // Like shell.check, ci.passed is a merge check only.
+        let transition = forge.replace(
+            "        - blockers.transitive_none_open\n",
+            "        - blockers.transitive_none_open\n        - ci.passed\n",
+        );
+        assert_ne!(transition, forge);
+        let error = parse_policy_text(&transition, WORKFLOW_POLICY_PATH)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("workflow_config_invalid_validator")
+                && error.contains("ci.passed is available only in merge_checks"),
+            "{error}"
         );
     }
 

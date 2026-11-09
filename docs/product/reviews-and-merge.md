@@ -653,6 +653,12 @@ from.
 | `ci_pending` | The newest such run is queued or in progress, and none passed, or `--wait` timed out. The line names its state and link, and how long it waited. | `atelier merge <id> [--push] --wait` |
 | `ci_failed` | The newest such run failed, and none passed. The line names its conclusion and link. | `gh run view <run-id> --log-failed`; fix it on the branch, commit, then `atelier merge <id> --push --wait`. A cancelled or timed-out run instead says `gh run rerun <run-id>`. |
 
+Until `merge --push` and `--wait` exist (atelier-vqoy), these Next lines
+name the steps by hand instead, each ending with `atelier merge <id>` once CI
+passes: `ci_no_run` says to open the pull request with `gh pr create --base
+<base>`, or to push the branch when it has one; `ci_pending` says `gh run
+watch <run-id>`; and `ci_failed` says to fix, commit and push.
+
 For example, after `atelier merge atelier-2xx5 --push`:
 
 ```text
@@ -660,7 +666,7 @@ For example, after `atelier merge atelier-2xx5 --push`:
 ```
 
 `merge`, `merge --check` and `merge --push` also show the trusted workflow's
-newest completed run for the remote base's head when it failed, as a note
+newest `push` run on the base when it finished and failed, as a note
 after the gate lines. It refuses nothing, since the merge may be the fix:
 
 ```text

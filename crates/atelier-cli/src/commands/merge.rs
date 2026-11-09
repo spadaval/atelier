@@ -237,6 +237,7 @@ fn merge_commit(
     (base, base_head): (&str, &str),
     (branch, head): (&str, &str),
     marked: &[String],
+    ci: &[String],
 ) -> Result<String> {
     let checks = tree_checks(policy)
         .map(|command| format!("- shell.check: {command}"))
@@ -251,6 +252,11 @@ fn merge_commit(
     } else {
         format!("The base policy's merge_checks passed on this tree before atelier merge\nput it on {base}:\n{checks}\n")
     });
+    // ci.passed judged CI on the branch, not this tree, and says what its
+    // run tested.
+    for line in ci {
+        message.push_str(&format!("\n{line}\n"));
+    }
     text(
         repo,
         &[
@@ -946,6 +952,7 @@ fn merge_gates(
         (base, &base_head),
         (&branch, &head),
         &marked,
+        &[],
     )?;
     // Integrating moves the base checkout to the merge commit, or the work
     // checkout to the base and then to it.
@@ -987,6 +994,10 @@ fn merge_gates(
         )?;
         review_gate::scope(&merged, owner)?
     };
+    let heads = atelier_app::workflow_validation::MergeHeads {
+        base: &base_head,
+        head: &head,
+    };
     // The gates read the records merging would put on the base.
     let mut nodes = if light {
         atelier_app::light_path::evaluate(
@@ -995,7 +1006,7 @@ fn merge_gates(
             &source.policy,
             owner,
             &fork_point,
-            Some(&checkout.path),
+            Some((&checkout.path, heads)),
         )?
     } else {
         review_gate::evaluate(
@@ -1005,6 +1016,7 @@ fn merge_gates(
             owner,
             &fork_point,
             &checkout.path,
+            heads,
         )?
     };
     // The records merging puts on the base, the done marks it writes
@@ -1106,6 +1118,9 @@ fn merge_gates(
     .iter()
     .map(|edit| format!("Note: {}", crate::human_output::done_when_edit(edit)))
     .collect::<Vec<_>>();
+    // The trusted workflow's newest run on the base, when it failed, is
+    // shown and refuses nothing (ADR 0031, decision 5).
+    edited.extend(atelier_app::ci_passed::base_note(repo, &source.policy));
     // Work merge marks done with an unticked Done when line or an empty
     // Report is shown too, and refuses nothing: review asked for them, and
     // a record edit after approval, or a child review did not cover, can
@@ -1238,6 +1253,27 @@ fn merge_gates(
         return Ok(());
     }
     drop(checkout);
+    // ci.passed's pass says what its run tested, so it is printed with the
+    // merge and repeated in the merge commit's message, whose tree the
+    // checks already judged.
+    let ci = nodes
+        .iter()
+        .filter(|node| node.passed && node.check == atelier_app::workflow_policy::CI_PASSED)
+        .map(crate::gate_report::ci_pass_line)
+        .collect::<Vec<_>>();
+    let commit = if ci.is_empty() {
+        commit
+    } else {
+        merge_commit(
+            repo,
+            &source.policy,
+            &tree_with_records(repo, &tree, &marks)?,
+            (base, &base_head),
+            (&branch, &head),
+            &marked,
+            &ci,
+        )?
+    };
     // A separately checked-out base can be updated without touching it from
     // this worktree. Detach the source so its now-integrated branch can go.
     let target = base_tree.as_deref().unwrap_or(repo);
@@ -1307,6 +1343,9 @@ fn merge_gates(
             eprintln!("{note}");
         }
         return Ok(());
+    }
+    for line in &ci {
+        println!("{line}");
     }
     println!(
         "✓ Merged {branch} into {base} with merge commit {}{}; branch deleted. Next: atelier land, then git push.",

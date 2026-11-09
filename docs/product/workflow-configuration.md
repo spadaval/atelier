@@ -226,9 +226,9 @@ merge_checks:
   GitHub repository. It defaults to `origin`. Pushes go through `git` with
   git's own credentials, so an SSH URL works where `origin` is HTTPS without
   credentials.
-- `forge.ci_workflow` is required: the file name, under `.github/workflows`,
-  of the workflow whose pull request runs `ci.passed` trusts, such as
-  `ci.yml`. Runs of other workflows are ignored.
+- `forge.ci_workflow` is required: the file name, not a path, under
+  `.github/workflows`, of the workflow whose pull request runs `ci.passed`
+  trusts, such as `ci.yml`. Runs of other workflows are ignored.
 - `ci.passed` is a merge check that takes no parameters, written as a plain
   string like `blockers.none_open`. It needs a `forge` block. See [reviews
   and merge](reviews-and-merge.md#ci-on-a-forge) for what it proves.
@@ -237,7 +237,8 @@ Like every gate, the forge comes from the base branch's committed policy
 ([base authority](#base-authority)), so a branch cannot point `ci.passed` at
 another workflow or push the base to another remote. `atelier check` refuses
 a policy whose `forge` block is malformed, naming the key: a missing or
-unknown `forge.provider`, a missing or empty `forge.ci_workflow`, an empty
+unknown `forge.provider`, a missing or empty `forge.ci_workflow` or one
+that is a path, an empty
 `forge.remote`, or an unknown key under `forge`
 (`workflow_config_invalid_forge`). It refuses `ci.passed` in a policy without
 a `forge` block, naming `merge_checks` (`workflow_config_invalid_validator`),
