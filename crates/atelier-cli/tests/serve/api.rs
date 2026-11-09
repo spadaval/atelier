@@ -59,6 +59,16 @@ pub(super) fn routes() -> Vec<(String, String)> {
     routes
 }
 
+/// Writes the fixture fleet under `$ATELIER_FIXTURE_FLEET`, for the web
+/// app's Playwright suite (`crates/atelier-site/web/e2e/serve.sh`) to serve.
+#[test]
+#[ignore = "run by the Playwright suite to build its fixture repositories"]
+fn write_fixture_fleet() {
+    let root = std::env::var_os("ATELIER_FIXTURE_FLEET")
+        .expect("ATELIER_FIXTURE_FLEET names an empty directory to write the fleet into");
+    fleet(Path::new(&root));
+}
+
 #[test]
 fn fixture_responses_match_the_checked_in_json() {
     let root = scratch();
@@ -338,7 +348,7 @@ fn unknown_repositories_missions_and_routes_are_json_404s() {
             "alpha-m2 links no strategy",
         ),
         ("/api/alpha", "no such route"),
-        ("/", "no such route"),
+        ("/api/no/such/route", "no such route"),
     ] {
         let error = get_json(&client, path, 404);
         let text = error["error"].as_str().unwrap();
@@ -347,6 +357,33 @@ fn unknown_repositories_missions_and_routes_are_json_404s() {
     // A short id resolves as the CLI resolves it.
     let short = get_json(&client, "/api/alpha/mission/m1", 200);
     assert_eq!(short["mission"]["id"], "alpha-m1");
+}
+
+/// Every path outside `/api/` belongs to the app (atelier-yn69): a page
+/// path gets its `index.html`, built or not, and a missing asset is a 404.
+#[test]
+fn paths_outside_the_api_get_the_app_and_a_missing_asset_is_a_404() {
+    let root = scratch();
+    fleet(root.path());
+    let client = client(root.path());
+    for path in [
+        "/",
+        "/alpha/mission/alpha-m1",
+        "/alpha/mission/alpha-m1/debrief",
+    ] {
+        let (status, body) = client.get(path);
+        assert_eq!(status, 200, "GET {path}");
+        assert!(
+            body.to_ascii_lowercase().starts_with("<!doctype html>"),
+            "GET {path}: {body}"
+        );
+    }
+    let (status, body) = client.get("/assets/index-missing.js");
+    assert_eq!(status, 404, "{body}");
+    assert!(
+        !body.to_ascii_lowercase().contains("<!doctype html>"),
+        "{body}"
+    );
 }
 
 #[test]

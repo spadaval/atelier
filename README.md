@@ -16,7 +16,13 @@ The installer puts `atelier` in `$CARGO_HOME/bin` (`~/.cargo/bin` by default)
 and, if that directory is not already on your `PATH`, adds it in your shell
 profile; open a new shell to use it. Rerun it to upgrade. Releases, with archives and checksums for each platform,
 are on [GitHub](https://github.com/spadaval/atelier/releases). To build from a
-source checkout instead, run `cargo install --path crates/atelier-cli --locked`.
+source checkout instead, install Node.js and pnpm, which build the web app
+`atelier serve` embeds, and run `cargo install --path crates/atelier-cli --locked`.
+
+`atelier serve` shows every mission's brief, debrief and strategy as pages,
+for every Atelier repository under `~/projects`, at `http://127.0.0.1:7341`.
+[docs/architecture/site.md](docs/architecture/site.md) says how to develop,
+test and run it as a service.
 
 Agents learn Atelier's workflow from the Agent Factory skill, which lives in
 [skills/agent-factory](skills/agent-factory). Install it globally with Vercel's

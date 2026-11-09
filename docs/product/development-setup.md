@@ -2,6 +2,9 @@
 
 Normal development needs Git and the toolchain pinned in
 [rust-toolchain.toml](../../rust-toolchain.toml), including rustfmt and clippy.
+A release build or `cargo install` also needs Node.js and pnpm, which build the
+web app `atelier serve` embeds; debug builds and the Rust tests do not
+([site](../architecture/site.md#building-and-shipping-it)).
 Install the default test runner and dependency checker when needed:
 
 ```bash
