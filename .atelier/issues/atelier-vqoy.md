@@ -21,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Let merge push the work branch, open its pull request and wait for CI"
-updated_at: "2026-11-09T02:02:35.262010794+00:00"
+updated_at: "2026-11-09T05:08:01.964496971+00:00"
 ---
 
 ## Goal
