@@ -15,6 +15,8 @@ relationships:
   - kind: "issue"
     id: "atelier-ixdi"
   - kind: "issue"
+    id: "atelier-ksme"
+  - kind: "issue"
     id: "atelier-pxme"
   attachments: []
   relates:
@@ -31,7 +33,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Orchestrators plan and implementers own the code: escalation instead of relay"
-updated_at: "2026-11-09T06:11:58.025056404+00:00"
+updated_at: "2026-11-09T06:20:38.446182273+00:00"
 ---
 
 ## Goal
