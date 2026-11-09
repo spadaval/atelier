@@ -1,7 +1,7 @@
 //! The GitHub forge a policy names, reached through the `gh` CLI as Atelier
 //! reaches Git through `git` (ADR 0031): authentication is whatever
-//! `gh auth login` set up. It reads CI for a commit; nothing else it could
-//! read feeds a gate.
+//! `gh auth login` set up. It reads CI for a commit, and finds or opens a
+//! branch's pull request for `merge --push`; nothing but CI feeds a gate.
 //!
 //! It calls the REST API through `gh api` with fixed fields rather than
 //! parsing `gh run list`, whose output is `gh`'s own and changes between
@@ -73,6 +73,21 @@ pub struct CiRun {
 impl CiRun {
     pub fn passed(&self) -> bool {
         self.status == "completed" && self.conclusion.as_deref() == Some("success")
+    }
+}
+
+/// A pull request, by number and web link.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PullRequest {
+    pub number: u64,
+    pub url: String,
+}
+impl PullRequest {
+    fn from_json(pull: &Value) -> Option<Self> {
+        Some(Self {
+            number: pull["number"].as_u64()?,
+            url: pull["html_url"].as_str().unwrap_or_default().to_owned(),
+        })
     }
 }
 
@@ -167,9 +182,12 @@ impl Github {
         .map(|_| ())
     }
 
-    /// The number of the open pull request from this repository's `branch`
-    /// into `base`.
-    pub fn open_pull_request(&self, branch: &str, base: &str) -> Result<Option<u64>, ForgeError> {
+    /// The open pull request from this repository's `branch` into `base`.
+    pub fn open_pull_request(
+        &self,
+        branch: &str,
+        base: &str,
+    ) -> Result<Option<PullRequest>, ForgeError> {
         let owner = self.slug.split('/').next().unwrap_or_default();
         let pulls = self.api(
             &format!("repos/{}/pulls", self.slug),
@@ -182,7 +200,31 @@ impl Github {
         Ok(pulls
             .as_array()
             .and_then(|pulls| pulls.first())
-            .and_then(|pull| pull["number"].as_u64()))
+            .and_then(PullRequest::from_json))
+    }
+
+    /// Opens a pull request from this repository's `branch` into `base`.
+    pub fn create_pull_request(
+        &self,
+        branch: &str,
+        base: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<PullRequest, ForgeError> {
+        let path = format!("repos/{}/pulls", self.slug);
+        let pull = self.call(
+            "POST",
+            &path,
+            &[
+                ("title", title),
+                ("head", branch),
+                ("base", base),
+                ("body", body),
+            ],
+        )?;
+        PullRequest::from_json(&pull).ok_or_else(|| {
+            ForgeError::Unreachable(format!("gh api {path} returned no pull request number"))
+        })
     }
 
     /// Whether GitHub has marked pull request `number` merged.
@@ -192,12 +234,18 @@ impl Github {
     }
 
     fn api(&self, path: &str, fields: &[(&str, &str)]) -> Result<Value, ForgeError> {
+        self.call("GET", path, fields)
+    }
+
+    /// Calls the REST API: a GET sends `fields` as query parameters, a POST
+    /// as its JSON body.
+    fn call(&self, method: &str, path: &str, fields: &[(&str, &str)]) -> Result<Value, ForgeError> {
         let mut args = vec![
             "api".to_owned(),
             "--hostname".to_owned(),
             self.host.clone(),
             "-X".to_owned(),
-            "GET".to_owned(),
+            method.to_owned(),
             path.to_owned(),
         ];
         for (key, value) in fields {

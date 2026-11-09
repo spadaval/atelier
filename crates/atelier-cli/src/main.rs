@@ -359,12 +359,21 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
         /// nothing
         #[arg(long)]
         sync: bool,
-        /// Publish the merge through the policy's forge: fetch the base from
-        /// `forge.remote`, merge, judge the base as `land` does, push it, and
-        /// confirm the pull request merged. The branch must already be
-        /// pushed with an open pull request
+        /// Publish the merge through the policy's forge: push the branch to
+        /// `forge.remote` and open its pull request if it has none, fetch the
+        /// base, merge, judge the base as `land` does, push it, and confirm
+        /// the pull request merged. The branch and pull request are pushed
+        /// even when a gate refuses
         #[arg(long, conflicts_with_all = ["check", "json", "sync"])]
         push: bool,
+        /// When every other gate passes and CI is pending, poll it every 30
+        /// seconds until it finishes or `--timeout` passes, then merge if it
+        /// passed. Without `--push`, merges without publishing
+        #[arg(long, conflicts_with_all = ["check", "json", "sync"])]
+        wait: bool,
+        /// Minutes `--wait` waits for CI before refusing
+        #[arg(long, value_name = "MINUTES", default_value_t = 30, requires = "wait")]
+        timeout: u64,
     },
 
     /// One-shot graph bundle files
@@ -1091,8 +1100,17 @@ fn run() -> Result<()> {
             check,
             json,
             push,
+            wait,
+            timeout,
             ..
-        } => commands::merge::run(id.as_deref(), check, json, quiet, push),
+        } => commands::merge::run(
+            id.as_deref(),
+            check,
+            json,
+            quiet,
+            push,
+            wait.then(|| std::time::Duration::from_secs(timeout * 60)),
+        ),
         Commands::Review { action } => {
             use atelier_core::ReviewEvent;
             let append = |args: ReviewArgs, event: ReviewEvent| {

@@ -5,8 +5,12 @@
 //! `pull` for one pull request's state, and `signed-out` to answer as a
 //! signed-out `gh` does. With `pushed`, a list of commits, it refuses a
 //! commit's pull requests for any other commit, as GitHub does for one it
-//! has never seen; with `list-fails`, listing pull requests fails. `on-runs`, when present, is a script run once at
-//! the first runs lookup. Every call is logged to `calls`.
+//! has never seen; with `list-fails`, listing pull requests fails. A POST
+//! to the pull requests opens #7, writing `pulls` and `pull`, unless
+//! `create-fails` exists. `on-runs`, when present, is a script run once at
+//! the first runs lookup. `sequence/<sha>/<n>` files are a commit's runs
+//! answers in turn: each lookup of the commit moves the lowest-numbered one
+//! to `runs/<sha>`. Every call is logged to `calls`.
 //!
 //! `merge --push` reaches `git@github.com:owner/repo.git` through a fake ssh
 //! that serves a bare repository instead, so nothing leaves the machine.
@@ -30,7 +34,11 @@ if [ "$1" = auth ]; then
   exit 0
 fi
 answer=""
+method=GET
+previous=""
 for arg in "$@"; do
+  if [ "$previous" = -X ]; then method="$arg"; fi
+  previous="$arg"
   case "$arg" in
     head_sha=*) answer="runs/${arg#head_sha=}" ;;
     branch=*) answer="base" ;;
@@ -56,6 +64,22 @@ case "$answer" in
     if [ -f "$FAKE_GH/on-runs" ]; then
       sh "$FAKE_GH/on-runs"
       rm -f "$FAKE_GH/on-runs"
+    fi
+    sequence="$FAKE_GH/sequence/${answer#runs/}"
+    if [ -d "$sequence" ]; then
+      next=$(ls "$sequence" | sort -n | head -n 1)
+      if [ -n "$next" ]; then mv "$sequence/$next" "$FAKE_GH/$answer"; fi
+    fi ;;
+  pulls)
+    if [ "$method" = POST ]; then
+      if [ -f "$FAKE_GH/create-fails" ]; then
+        echo "gh: Validation Failed (HTTP 422)" >&2
+        exit 1
+      fi
+      echo '[{"number":7,"state":"open","base":{"ref":"main"},"html_url":"https://github.com/owner/repo/pull/7"}]' > "$FAKE_GH/pulls"
+      echo '{"number":7,"merged":true}' > "$FAKE_GH/pull"
+      echo '{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}'
+      exit 0
     fi ;;
 esac
 if [ -f "$FAKE_GH/$answer" ]; then
@@ -178,6 +202,10 @@ impl Forge {
     }
     /// atelier with the fake gh, or with no gh on `PATH` at all.
     fn atelier(&self, args: &[&str], gh: bool) -> (bool, String) {
+        self.atelier_env(args, gh, &[])
+    }
+    /// atelier with the fake gh and `env` besides.
+    fn atelier_env(&self, args: &[&str], gh: bool, env: &[(&str, &str)]) -> (bool, String) {
         let path = if gh {
             self.with_gh()
         } else {
@@ -190,6 +218,8 @@ impl Forge {
             .env("FAKE_REMOTE", self.remote())
             .env("GIT_SSH_COMMAND", self.gh.path().join("ssh"))
             .env("ATELIER_TEST_MERGE_PR_WAIT_SECS", "0")
+            .env("ATELIER_TEST_MERGE_CI_POLL_MS", "10")
+            .envs(env.iter().copied())
             .args(args)
             .output()
             .unwrap();
@@ -201,6 +231,41 @@ impl Forge {
                 String::from_utf8_lossy(&output.stderr)
             ),
         )
+    }
+    /// The forge's copy of the work branch, if it has one.
+    fn remote_branch(&self) -> Option<String> {
+        let output = Command::new("git")
+            .args(["--git-dir", &self.remote().to_string_lossy()])
+            .args(["rev-parse", "--verify", "--quiet"])
+            .arg(format!("refs/heads/{}", self.branch))
+            .output()
+            .unwrap();
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    }
+    /// The pull requests `merge --push` opened, as the fake gh logged them.
+    fn opened(&self) -> Vec<String> {
+        self.calls()
+            .lines()
+            .filter(|call| call.contains("-X POST"))
+            .map(str::to_owned)
+            .collect()
+    }
+    /// Answers the runs lookups of `commit` with `states` in turn, the last
+    /// one for good.
+    #[cfg(feature = "test-hooks")]
+    fn run_sequence(&self, commit: &str, id: u64, states: &[(&str, Option<&str>)]) {
+        let dir = self.gh.path().join("sequence").join(commit);
+        fs::create_dir_all(&dir).unwrap();
+        for (n, (status, conclusion)) in states.iter().enumerate() {
+            fs::write(
+                dir.join(n.to_string()),
+                runs(&[(id, commit, status, *conclusion, Some(7))]),
+            )
+            .unwrap();
+        }
     }
     /// The bare repository the forge holds.
     fn remote(&self) -> PathBuf {
@@ -258,7 +323,7 @@ impl Forge {
     fn pull_request(&self, merged: bool) {
         fs::write(
             self.gh.path().join("pulls"),
-            r#"[{"number":7,"state":"open","base":{"ref":"main"}}]"#,
+            r#"[{"number":7,"state":"open","base":{"ref":"main"},"html_url":"https://github.com/owner/repo/pull/7"}]"#,
         )
         .unwrap();
         fs::write(
@@ -268,7 +333,7 @@ impl Forge {
         .unwrap();
     }
     /// `merge --push` refuses with `expected`, ending with a verdict that
-    /// says nothing was pushed, and the forge's base is unchanged.
+    /// says the base was not pushed, and the forge's base is unchanged.
     fn push_refuses(&self, args: &[&str], expected: &[&str], gh: bool) -> String {
         let before = self.remote_main();
         let (passed, output) = self.atelier(args, gh);
@@ -278,7 +343,8 @@ impl Forge {
         }
         assert!(
             verdict(&output).starts_with("merge: refused")
-                && verdict(&output).ends_with(", nothing pushed"),
+                && (verdict(&output).ends_with(", nothing pushed")
+                    || verdict(&output).ends_with(", main not pushed")),
             "{output}"
         );
         assert_eq!(self.remote_main(), before, "the forge's base moved");
@@ -462,21 +528,21 @@ fn ci_passed_refuses_with_the_runs_state_and_link_or_when_no_run_exists() {
 
     forge.run(&head, 21, "in_progress", None);
     forge.refuses(
-        &[&format!("⚠ {id} ci.passed: ci.yml is in progress on pull request #7 for {}: {url}. Next: `gh run watch 21`, then `atelier merge {id}`", short(&head))],
+        &[&format!("⚠ {id} ci.passed: ci.yml is in progress on pull request #7 for {}: {url}. Next: atelier merge {id} --wait", short(&head))],
         true,
     );
     forge.run(&head, 21, "queued", None);
     forge.refuses(&["ci.yml is queued on pull request #7"], true);
     forge.run(&head, 21, "completed", Some("failure"));
     forge.refuses(
-        &[&format!("⚠ {id} ci.passed: ci.yml failed on pull request #7 for {}: {url}. Next: `gh run view 21 --log-failed`; fix it on the branch, commit and push, then `atelier merge {id}` once CI passes", short(&head))],
+        &[&format!("⚠ {id} ci.passed: ci.yml failed on pull request #7 for {}: {url}. Next: `gh run view 21 --log-failed`; fix it on the branch, commit, then `atelier merge {id} --push --wait`", short(&head))],
         true,
     );
     forge.run(&head, 21, "completed", Some("cancelled"));
     forge.refuses(
         &[
             "ci.yml was cancelled on pull request #7",
-            "Next: `gh run rerun 21`",
+            &format!("Next: `gh run rerun 21`, then `atelier merge {id} --wait`"),
         ],
         true,
     );
@@ -493,7 +559,7 @@ fn ci_passed_refuses_with_the_runs_state_and_link_or_when_no_run_exists() {
 
     fs::remove_file(forge.gh.path().join("runs").join(&head)).unwrap();
     forge.refuses(
-        &[&format!("⚠ {id} ci.passed: no open pull request into main has {}, the branch head, so CI has not run on it. Next: push the branch and open a pull request into main (`gh pr create --base main`), then `atelier merge {id}` once CI passes", short(&head))],
+        &[&format!("⚠ {id} ci.passed: no open pull request into main has {}, the branch head, so CI has not run on it. Next: atelier merge {id} --push --wait", short(&head))],
         true,
     );
     fs::write(
@@ -503,7 +569,7 @@ fn ci_passed_refuses_with_the_runs_state_and_link_or_when_no_run_exists() {
     .unwrap();
     forge.refuses(
         &[&format!(
-            "⚠ {id} ci.passed: no pull_request run of ci.yml exists for {}, the branch head, or an earlier branch commit with its code",
+            "⚠ {id} ci.passed: no pull_request run of ci.yml exists for {}, the branch head, or an earlier branch commit with its code. Next: atelier merge {id} --push --wait",
             short(&head)
         )],
         true,
@@ -946,23 +1012,14 @@ fn merge_push_publishes_an_approved_light_path_branch_to_a_url_remote() {
     assert_eq!(git(repo, &["rev-parse", "main^2"]), head);
 }
 
+/// A missing or signed-out gh pushes nothing at all; a gate that refuses
+/// leaves the branch and its pull request pushed, and the base unpushed.
 #[test]
-fn merge_push_pushes_nothing_when_a_gate_refuses_or_gh_is_missing_or_signed_out() {
+fn merge_push_pushes_nothing_without_gh_and_no_base_when_a_gate_refuses() {
     let forge = Forge::new("  - ci.passed\n");
     let id = forge.id.as_str();
     let head = forge.head();
     forge.pull_request(true);
-    forge.run(&head, 51, "in_progress", None);
-    forge.push_refuses(
-        &["merge", id, "--push"],
-        &[
-            "ci.yml is in progress",
-            "merge: refused — 1 check (ci.passed), nothing pushed",
-        ],
-        true,
-    );
-    forge.run(&head, 51, "completed", Some("success"));
-    let calls = forge.calls().lines().count();
     forge.push_refuses(
         &["merge", id, "--push"],
         &[
@@ -982,15 +1039,384 @@ fn merge_push_pushes_nothing_when_a_gate_refuses_or_gh_is_missing_or_signed_out(
         true,
     );
     // The signed-out gh was asked only whether it is signed in.
-    assert_eq!(
-        forge.calls().lines().skip(calls).collect::<Vec<_>>(),
-        ["auth status --hostname github.com"]
+    assert_eq!(forge.calls(), "auth status --hostname github.com\n");
+    assert_eq!(forge.remote_branch(), None, "the branch was pushed");
+
+    fs::remove_file(forge.gh.path().join("signed-out")).unwrap();
+    forge.run(&head, 51, "in_progress", None);
+    forge.push_refuses(
+        &["merge", id, "--push"],
+        &[
+            "Pull request #7: https://github.com/owner/repo/pull/7 (already open)",
+            "ci.yml is in progress",
+            "merge: refused — 1 check (ci.passed), main not pushed",
+        ],
+        true,
     );
+    assert_eq!(forge.remote_branch(), Some(head.clone()));
     assert_eq!(
         git(forge.path(), &["rev-parse", "HEAD"]),
         head,
         "nothing merged"
     );
+}
+
+/// `merge --push` on an approved branch the forge has never seen pushes it
+/// and opens its pull request, refuses while CI is pending, and on a rerun
+/// reuses the pull request and publishes once CI passes.
+#[test]
+fn merge_push_pushes_the_branch_and_opens_its_pull_request_then_publishes_once_ci_passes() {
+    let forge = Forge::new("  - ci.passed\n");
+    let id = forge.id.as_str();
+    let head = forge.head();
+    assert_eq!(forge.remote_branch(), None);
+    forge.run(&head, 141, "in_progress", None);
+
+    let output = forge.push_refuses(
+        &["merge", id, "--push"],
+        &[
+            "Pull request #7: https://github.com/owner/repo/pull/7 (opened now)\n",
+            &format!("⚠ {id} ci.passed: ci.yml is in progress on pull request #7 for {}: https://github.com/owner/repo/actions/runs/141. Next: atelier merge {id} --push --wait", short(&head)),
+            "merge: refused — 1 check (ci.passed), main not pushed",
+        ],
+        true,
+    );
+    assert_eq!(forge.remote_branch(), Some(head.clone()), "{output}");
+    // Never forced, and the branch tracks the forge's copy.
+    assert!(!forge.calls().contains("force"), "{}", forge.calls());
+    assert_eq!(
+        git(forge.path(), &["rev-parse", "--abbrev-ref", "@{upstream}"]),
+        format!("origin/{}", forge.branch)
+    );
+    let opened = forge.opened();
+    assert_eq!(opened.len(), 1, "{opened:?}");
+    assert!(
+        opened[0].contains("repos/owner/repo/pulls")
+            && opened[0].contains(&format!(
+                "-f title={id}: Owner -f head={} -f base=main -f body=Atelier item {id}.",
+                forge.branch
+            ))
+            && forge.calls().contains(
+                "Review is recorded in `.atelier/reviews` on the branch, not on this pull request."
+            ),
+        "{opened:?}"
+    );
+
+    forge.run(&head, 141, "completed", Some("success"));
+    let output = forge.passes(&["merge", id, "--push"]);
+    assert!(
+        output.contains("Pull request #7: https://github.com/owner/repo/pull/7 (already open)\n"),
+        "{output}"
+    );
+    assert_eq!(forge.opened().len(), 1, "a second pull request was opened");
+    assert_eq!(
+        verdict(&output),
+        "merge: passed — pushed main to origin, pull request #7 merged",
+        "{output}"
+    );
+    assert_eq!(
+        forge.remote_main(),
+        git(forge.path(), &["rev-parse", "main"])
+    );
+    assert_eq!(git(forge.path(), &["rev-parse", "main^2"]), head);
+}
+
+/// A light-path branch's pull request takes the subject of its newest
+/// commit that changes code, not the approval after it.
+#[test]
+fn merge_push_titles_a_light_path_pull_request_by_its_newest_code_commit() {
+    let forge = Forge::new("  - ci.passed\n");
+    let repo = forge.path();
+    git(repo, &["switch", "-qc", "docs", "main"]);
+    fs::write(repo.join("guide.md"), "a guide\n").unwrap();
+    commit(repo, "Write a guide");
+    forge.run(&forge.head(), 151, "completed", Some("success"));
+    ok(
+        repo,
+        &[
+            "-q",
+            "review",
+            "approve",
+            "--branch",
+            "docs",
+            "--identity",
+            "Reviewer",
+            "--commit-records",
+            "Read the branch",
+        ],
+    );
+    let output = forge.passes(&["merge", "--push"]);
+    let opened = forge.opened();
+    assert!(
+        opened.len() == 1
+            && opened[0].contains("-f title=Write a guide -f head=docs -f base=main -f body=Branch docs, which no Atelier item owns."),
+        "{opened:?}\n{output}"
+    );
+}
+
+/// Steps 2 and 3 run before the gates, so a branch whose approval is stale
+/// is still pushed with a pull request, and the base is not.
+#[test]
+fn merge_push_pushes_the_branch_and_opens_its_pull_request_when_a_gate_refuses() {
+    let forge = Forge::new("  - ci.passed\n");
+    fs::write(forge.path().join("src.rs"), "changed after the approval\n").unwrap();
+    commit(forge.path(), "code change after the approval");
+    let head = forge.head();
+    forge.run(&head, 161, "completed", Some("success"));
+
+    let output = forge.push_refuses(
+        &["merge", &forge.id, "--push"],
+        &[
+            "Pull request #7: https://github.com/owner/repo/pull/7 (opened now)",
+            "review.current",
+            "main not pushed",
+        ],
+        true,
+    );
+    assert_eq!(forge.remote_branch(), Some(head), "{output}");
+    assert_eq!(forge.opened().len(), 1, "{output}");
+}
+
+/// A forge copy of the branch with commits this one lacks rejects the
+/// push: merge refuses before the pull request and the base, never forcing.
+#[test]
+fn merge_push_refuses_a_rejected_branch_push_and_pushes_no_base() {
+    let forge = Forge::new("  - ci.passed\n");
+    let head = forge.head();
+    forge.run(&head, 171, "completed", Some("success"));
+    // Another commit on the forge's copy of the branch.
+    let bare = forge.remote().to_string_lossy().into_owned();
+    git(
+        forge.path(),
+        &["push", "-q", &bare, "HEAD~1:refs/heads/elsewhere"],
+    );
+    let clone = tempdir().unwrap();
+    let work = clone.path().join("work");
+    git(
+        forge.path(),
+        &[
+            "clone",
+            "-q",
+            "-b",
+            "elsewhere",
+            &bare,
+            &work.to_string_lossy(),
+        ],
+    );
+    fs::write(work.join("other.rs"), "another agent's change\n").unwrap();
+    git(&work, &["add", "."]);
+    git(
+        &work,
+        &[
+            "-c",
+            "user.name=Other",
+            "-c",
+            "user.email=other@example.test",
+            "commit",
+            "-qm",
+            "theirs",
+        ],
+    );
+    git(
+        &work,
+        &[
+            "push",
+            "-q",
+            "origin",
+            &format!("HEAD:refs/heads/{}", forge.branch),
+        ],
+    );
+    let theirs = forge.remote_branch().unwrap();
+
+    let id = forge.id.as_str();
+    let branch = forge.branch.as_str();
+    forge.push_refuses(
+        &["merge", id, "--push"],
+        &[
+            &format!("merge_push_branch_rejected: git push to origin refused {branch}: "),
+            &format!("Next: `git fetch origin {branch} && git merge --no-edit FETCH_HEAD`, then `atelier merge {id} --push`"),
+            "The remote branch has commits this one lacks; nothing was pushed.",
+            "merge: refused — 1 check (merge_push_branch_rejected), nothing pushed",
+        ],
+        true,
+    );
+    assert_eq!(forge.remote_branch(), Some(theirs), "the push was forced");
+    assert!(forge.opened().is_empty(), "{:?}", forge.opened());
+    assert_eq!(
+        git(forge.path(), &["rev-parse", "HEAD"]),
+        head,
+        "nothing merged"
+    );
+}
+
+/// A branch push that fails for another reason, such as a remote that
+/// wants credentials, is not called a rejection and names no merge.
+#[test]
+fn merge_push_names_a_failed_branch_push_apart_from_a_rejected_one() {
+    let forge = Forge::new("  - ci.passed\n");
+    let id = forge.id.as_str();
+    let branch = forge.branch.as_str();
+    let before = forge.remote_main();
+    let (passed, output) = forge.atelier_env(
+        &["merge", id, "--push"],
+        true,
+        &[("GIT_SSH_COMMAND", "false")],
+    );
+    assert!(!passed, "{output}");
+    assert!(
+        output.contains(&format!("merge_push_branch_failed: git push to origin could not push {branch}: "))
+            && output.contains(&format!("; nothing was pushed. Next: check that `git push origin {branch}` works, then `atelier merge {id} --push`")),
+        "{output}"
+    );
+    assert!(!output.contains("FETCH_HEAD"), "{output}");
+    assert_eq!(
+        verdict(&output),
+        "merge: refused — 1 check (merge_push_branch_failed), nothing pushed",
+        "{output}"
+    );
+    assert_eq!(forge.remote_main(), before);
+    assert!(forge.opened().is_empty(), "{:?}", forge.opened());
+}
+
+/// `--push --wait` polls a pending run, printing each state it sees, and
+/// merges and publishes when it passes.
+#[cfg(feature = "test-hooks")]
+#[test]
+fn merge_push_wait_merges_and_publishes_once_pending_ci_passes() {
+    let forge = Forge::new("  - ci.passed\n");
+    let head = forge.head();
+    forge.run_sequence(
+        &head,
+        181,
+        &[
+            ("queued", None),
+            ("in_progress", None),
+            ("completed", Some("success")),
+        ],
+    );
+    let output = forge.passes(&["merge", &forge.id, "--push", "--wait"]);
+    let url = "https://github.com/owner/repo/actions/runs/181";
+    for line in [
+        format!("Waiting up to 30 minutes for CI: ci.yml is in progress on pull request #7 for {}: {url}\n", short(&head)),
+        format!("CI: ci.yml passed on pull request #7 for {}", short(&head)),
+    ] {
+        assert!(output.contains(&line), "missing {line:?} in:\n{output}");
+    }
+    assert_eq!(
+        verdict(&output),
+        "merge: passed — pushed main to origin, pull request #7 merged",
+        "{output}"
+    );
+    assert_eq!(
+        forge.remote_main(),
+        git(forge.path(), &["rev-parse", "main"])
+    );
+}
+
+/// `--wait` ends on a failed run, or at its timeout naming how long it
+/// waited and keeping `--push`, and never waits on a run that finished.
+#[test]
+fn merge_wait_refuses_on_a_failed_run_or_at_its_timeout() {
+    let forge = Forge::new("  - ci.passed\n");
+    let id = forge.id.as_str();
+    let head = forge.head();
+    let url = "https://github.com/owner/repo/actions/runs/191";
+    forge.run(&head, 191, "completed", Some("failure"));
+    let output = forge.push_refuses(
+        &["merge", id, "--push", "--wait"],
+        &[&format!("⚠ {id} ci.passed: ci.yml failed on pull request #7 for {}: {url}. Next: `gh run view 191 --log-failed`; fix it on the branch, commit, then `atelier merge {id} --push --wait`", short(&head))],
+        true,
+    );
+    assert!(!output.contains("Waiting"), "{output}");
+
+    forge.run(&head, 191, "in_progress", None);
+    forge.push_refuses(
+        &["merge", id, "--push", "--wait", "--timeout", "0"],
+        &[
+            "Waiting up to 0 seconds for CI: ci.yml is in progress",
+            &format!("⚠ {id} ci.passed: ci.yml is in progress on pull request #7 for {}: {url}; merge waited 0 seconds for it. Next: atelier merge {id} --push --wait", short(&head)),
+            "merge: refused — 1 check (ci.passed), main not pushed",
+        ],
+        true,
+    );
+}
+
+/// A run that never starts is pending only for the grace period, then
+/// refuses as no run.
+#[cfg(feature = "test-hooks")]
+#[test]
+fn merge_push_wait_refuses_a_run_that_never_starts_after_its_grace_period() {
+    let forge = Forge::new("  - ci.passed\n");
+    let id = forge.id.as_str();
+    let before = forge.remote_main();
+    let (passed, output) = forge.atelier_env(
+        &["merge", id, "--push", "--wait"],
+        true,
+        &[("ATELIER_TEST_MERGE_CI_GRACE_MS", "50")],
+    );
+    assert!(!passed, "{output}");
+    assert!(
+        output.contains(&format!("⚠ {id} ci.passed: no pull_request run of ci.yml exists for {}, the branch head, or an earlier branch commit with its code, and none started within 0 seconds of waiting. Next: atelier merge {id} --push --wait", short(&forge.head()))),
+        "{output}"
+    );
+    assert_eq!(forge.remote_main(), before);
+}
+
+/// `--wait` without `--push` waits for CI on a branch already pushed, then
+/// merges without pushing anything.
+#[cfg(feature = "test-hooks")]
+#[test]
+fn merge_wait_without_push_waits_then_merges_without_pushing() {
+    let forge = Forge::new("  - ci.passed\n");
+    let head = forge.head();
+    forge.run_sequence(
+        &head,
+        201,
+        &[
+            ("in_progress", None),
+            ("in_progress", None),
+            ("completed", Some("success")),
+        ],
+    );
+    let before = forge.remote_main();
+    let output = forge.passes(&["merge", &forge.id, "--wait"]);
+    assert!(
+        output.contains("Waiting up to 30 minutes for CI: ci.yml is in progress"),
+        "{output}"
+    );
+    assert_eq!(verdict(&output), "merge: passed", "{output}");
+    assert_eq!(git(forge.path(), &["rev-parse", "main^2"]), head);
+    assert_eq!(forge.remote_main(), before, "the base was pushed");
+    assert_eq!(forge.remote_branch(), None, "the branch was pushed");
+    assert!(forge.opened().is_empty(), "{:?}", forge.opened());
+}
+
+/// `--push`, `--wait` and `--timeout` do not combine with `--check`,
+/// `--json` or `--sync`, and `--timeout` needs `--wait`.
+#[test]
+fn push_wait_and_timeout_refuse_check_json_sync_and_a_timeout_without_wait() {
+    let forge = Forge::new("  - ci.passed\n");
+    let id = forge.id.as_str();
+    for flag in ["--push", "--wait", "--timeout"] {
+        for other in ["--check", "--json", "--sync"] {
+            let mut args = vec!["merge", id, flag];
+            if flag == "--timeout" {
+                args.extend(["5", "--wait"]);
+            }
+            args.push(other);
+            let (passed, output) = forge.atelier(&args, true);
+            assert!(
+                !passed && output.contains("cannot be used with"),
+                "{args:?}: {output}"
+            );
+        }
+    }
+    let (passed, output) = forge.atelier(&["merge", id, "--timeout", "5"], true);
+    assert!(
+        !passed && output.contains("the following required arguments were not provided:\n  --wait"),
+        "{output}"
+    );
+    assert_eq!(forge.calls(), "", "a refused flag reached gh");
 }
 
 #[test]
@@ -1016,7 +1442,7 @@ fn merge_push_refuses_a_local_base_that_diverged_from_the_forge_before_merging()
                 short(&remote)
             ),
             "Next: in the main checkout, `git fetch origin main && git merge --no-edit FETCH_HEAD` and `atelier land`, then `git push origin main`",
-            "merge: refused — 1 check (merge_push_base_diverged), nothing pushed",
+            "merge: refused — 1 check (merge_push_base_diverged), main not pushed",
         ],
         true,
     );
@@ -1059,7 +1485,7 @@ fn merge_push_keeps_the_merge_when_the_forge_rejects_the_base_push() {
     assert!(!output.contains("land --push"), "{output}");
     assert_eq!(
         verdict(&output),
-        "merge: refused — 1 check (merge_push_base_rejected), nothing pushed",
+        "merge: refused — 1 check (merge_push_base_rejected), main not pushed",
         "{output}"
     );
     assert_eq!(forge.remote_main(), moved);
@@ -1088,8 +1514,8 @@ fn merge_push_judges_the_unpushed_base_commits_as_land_does() {
         &["merge", &forge.id, "--push"],
         &[
             "land_base_unreviewed: commit",
-            "Nothing was pushed; merge commit",
-            "merge: refused — 1 check (land_base_unreviewed), nothing pushed",
+            "main was not pushed; merge commit",
+            "merge: refused — 1 check (land_base_unreviewed), main not pushed",
         ],
         true,
     );
@@ -1190,7 +1616,7 @@ fn merge_push_refuses_to_fast_forward_a_base_checkout_with_an_uncommitted_record
         &["merge", &forge.id, "--push"],
         &[
             "canonical_snapshot_uncommitted",
-            "must be clean before merge --push fast-forwards it; nothing was merged or pushed.",
+            "must be clean before merge --push fast-forwards it; nothing was merged, and main was not pushed.",
         ],
         true,
     );
@@ -1230,7 +1656,12 @@ fn merge_push_reads_the_forge_from_the_fetched_base() {
         forge.push_to_remote_main_with(".atelier/workflow.yaml", &format!("{policy}\n"));
 
         let output = forge.push_refuses(&["merge", &forge.id, "--push"], &[expected], true);
-        assert!(output.contains("nothing was pushed"), "{output}");
+        let unpushed = if forge_block.is_empty() {
+            format!("{} was pushed, and main was not.", forge.branch)
+        } else {
+            "main was not pushed.".to_owned()
+        };
+        assert!(output.contains(&unpushed), "{output}");
         assert_eq!(
             git(forge.path(), &["rev-parse", "HEAD"]),
             head,
@@ -1263,32 +1694,28 @@ fn merge_push_confirms_the_pull_request_when_the_approval_was_never_pushed() {
     );
 }
 
-/// No open pull request and a lookup that fails read differently, and
-/// neither undoes the published base.
+/// A pull request that cannot be looked up or opened refuses after the
+/// branch push, before the gates, and leaves the base unpushed.
 #[test]
-fn merge_push_says_whether_it_found_no_pull_request_or_could_not_look() {
-    for (fails, expected) in [
-        (false, "GitHub has no open pull request from {branch} into main, so none was confirmed merged."),
-        (true, "Atelier could not read the pull request from {branch} into main, so it did not confirm one merged: gh could not read CI: gh: Server Error (HTTP 502). Next: gh pr list --head {branch} --state all"),
-    ] {
+fn merge_push_refuses_when_the_pull_request_cannot_be_looked_up_or_opened() {
+    for (file, doing) in [("list-fails", "look up"), ("create-fails", "open")] {
         let forge = Forge::new("  - ci.passed\n");
         let head = forge.head();
         forge.run(&head, 131, "completed", Some("success"));
-        if fails {
-            forge.pull_request(true);
-            fs::write(forge.gh.path().join("list-fails"), "").unwrap();
-        }
-        let output = forge.passes(&["merge", &forge.id, "--push"]);
-        let main = git(forge.path(), &["rev-parse", "main"]);
-        assert!(
-            output.contains(&format!(
-                "Note: pushed main to origin at {}; {}\n",
-                short(&main),
-                expected.replace("{branch}", &forge.branch)
-            )),
-            "{output}"
+        fs::write(forge.gh.path().join(file), "").unwrap();
+        let branch = &forge.branch;
+        forge.push_refuses(
+            &["merge", &forge.id, "--push"],
+            &[&format!("forge_unreachable: gh could not {doing} the pull request from {branch} into main: gh: "),
+              &format!("; {branch} was pushed, and main was not. Next: retry; `gh auth status` shows the sign-in"),
+              "merge: refused — 1 check (forge_unreachable), main not pushed"],
+            true,
         );
-        assert_eq!(verdict(&output), "merge: passed — pushed main to origin", "{output}");
-        assert_eq!(forge.remote_main(), main);
+        assert_eq!(forge.remote_branch(), Some(head));
+        assert_eq!(
+            git(forge.path(), &["rev-parse", "HEAD"]),
+            forge.head(),
+            "nothing merged"
+        );
     }
 }

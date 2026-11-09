@@ -320,7 +320,8 @@ the push: `land: passed, pushed to origin/<branch>`, `land: work in progress —
 1 check open (review.current), pushed to origin/<branch>` or `land: refused —
 1 check (land_push_failed), nothing pushed`. `merge --push` does too:
 `merge: passed — pushed master to origin, pull request #42 merged`, or, on
-any refusal, `merge: refused — 1 check (ci.passed), nothing pushed` (see
+a refusal, `merge: refused — 1 check (ci.passed), master not pushed` once it
+pushed the work branch, and `…, nothing pushed` before (see
 [`merge --push`](reviews-and-merge.md#merge---push-step-by-step)). The exit
 status carries the same verdict: zero for passed, non-zero for refused. Run a
 gate unpiped and act on its exit status. Piping it through `tail`, `head` or

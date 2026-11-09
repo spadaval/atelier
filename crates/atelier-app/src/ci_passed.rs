@@ -15,7 +15,7 @@ use crate::workflow_validation::MergeHeads;
 
 /// Code is everything outside these record directories; the workflow policy
 /// and config count as code.
-const CODE: [&str; 5] = [
+pub const CODE: [&str; 5] = [
     ".",
     ":(exclude).atelier/issues",
     ":(exclude).atelier/reviews",
@@ -23,24 +23,45 @@ const CODE: [&str; 5] = [
     ":(exclude).atelier/runtime",
 ];
 
+/// What CI says about the code that merges, for `merge --wait` to act on:
+/// the refusal table's codes, and a pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CiState {
+    Passed,
+    /// `ci_no_run`: no open pull request into the base has the head.
+    NoPullRequest,
+    /// `ci_no_run`: a pull request has the head, but no run started for its
+    /// code.
+    NoRun,
+    /// `ci_pending`: the newest run is queued or in progress.
+    Pending,
+    /// `ci_failed`: the newest run finished without passing.
+    Failed,
+    /// `forge_*`: `gh` could not answer.
+    Unreachable,
+}
+
 /// The check's verdict; `next` is the whole Next step of a refusal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Verdict {
-    pub passed: bool,
+    pub state: CiState,
     pub reason: String,
     pub next: Option<String>,
 }
 impl Verdict {
+    pub fn passed(&self) -> bool {
+        self.state == CiState::Passed
+    }
     fn pass(reason: String) -> Self {
         Self {
-            passed: true,
+            state: CiState::Passed,
             reason,
             next: None,
         }
     }
-    fn refuse(reason: String, next: String) -> Self {
+    fn refuse(state: CiState, reason: String, next: String) -> Self {
         Self {
-            passed: false,
+            state,
             reason,
             next: Some(next),
         }
@@ -51,11 +72,12 @@ impl Verdict {
 /// integrates; elsewhere, such as `land` on a completed work branch, HEAD is
 /// the branch head and the base is the policy's base branch. The heads are
 /// never read from HEAD's parents: a work branch's own HEAD can be a merge
-/// of the base. `rerun` is the command that merges again.
+/// of the base. `issue_id` names the item a Next reruns `merge` for, empty
+/// on the light path.
 pub fn evaluate(
     checkout: &Path,
     policy: &WorkflowPolicy,
-    rerun: &str,
+    issue_id: &str,
     merge: Option<MergeHeads<'_>>,
 ) -> Result<Verdict> {
     let forge = policy
@@ -89,7 +111,22 @@ pub fn evaluate(
         ));
     }
     let workflow = forge.ci_workflow.as_str();
-    let refused = |error: ForgeError| Verdict::refuse(error.reason(), error.next());
+    // A Next that reruns `merge` waits for CI. Code that must reach the
+    // forge first pushes; a rerun that only waits keeps `--push` when this
+    // run had it, since `merge --wait` alone publishes nothing.
+    let merge_command = if issue_id.is_empty() {
+        "atelier merge".to_owned()
+    } else {
+        format!("atelier merge {issue_id}")
+    };
+    let push_and_wait = format!("{merge_command} --push --wait");
+    let wait_again = if merge.is_some_and(|heads| heads.push) {
+        push_and_wait.clone()
+    } else {
+        format!("{merge_command} --wait")
+    };
+    let refused =
+        |error: ForgeError| Verdict::refuse(CiState::Unreachable, error.reason(), error.next());
     let github = match Github::open(checkout, forge) {
         Ok(github) => github,
         Err(error) => return Ok(refused(error)),
@@ -133,19 +170,21 @@ pub fn evaluate(
         let has_pull_request = github.has_pull_request(&head, base).unwrap_or(false);
         return Ok(if has_pull_request {
             Verdict::refuse(
+                CiState::NoRun,
                 format!(
                     "no pull_request run of {workflow} exists for {}, the branch head, or an earlier branch commit with its code",
                     short(&head)
                 ),
-                format!("push the branch so CI runs on its pull request, then `{rerun}` once CI passes"),
+                push_and_wait,
             )
         } else {
             Verdict::refuse(
+                CiState::NoPullRequest,
                 format!(
                     "no open pull request into {base} has {}, the branch head, so CI has not run on it",
                     short(&head)
                 ),
-                format!("push the branch and open a pull request into {base} (`gh pr create --base {base}`), then `{rerun}` once CI passes"),
+                push_and_wait,
             )
         });
     };
@@ -157,13 +196,15 @@ pub fn evaluate(
     );
     if newest.status != "completed" {
         return Ok(Verdict::refuse(
+            CiState::Pending,
             format!("{workflow} is {} {on}", newest.status.replace('_', " ")),
-            format!("`gh run watch {}`, then `{rerun}`", newest.id),
+            wait_again,
         ));
     }
     let conclusion = newest.conclusion.as_deref().unwrap_or("unknown");
     Ok(match conclusion {
         "cancelled" | "timed_out" => Verdict::refuse(
+            CiState::Failed,
             format!(
                 "{workflow} {} {on}",
                 if conclusion == "cancelled" {
@@ -172,9 +213,10 @@ pub fn evaluate(
                     "timed out"
                 }
             ),
-            format!("`gh run rerun {}`, then `{rerun}` once CI passes", newest.id),
+            format!("`gh run rerun {}`, then `{wait_again}`", newest.id),
         ),
         _ => Verdict::refuse(
+            CiState::Failed,
             format!(
                 "{workflow} {} {on}",
                 if conclusion == "failure" {
@@ -184,7 +226,7 @@ pub fn evaluate(
                 }
             ),
             format!(
-                "`gh run view {} --log-failed`; fix it on the branch, commit and push, then `{rerun}` once CI passes",
+                "`gh run view {} --log-failed`; fix it on the branch, commit, then `{push_and_wait}`",
                 newest.id
             ),
         ),
