@@ -14,7 +14,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Under T3, start every child agent with delegate_task, whatever its provider"
-updated_at: "2026-11-09T05:55:15.757285333+00:00"
+updated_at: "2026-11-09T06:11:58.279303879+00:00"
 ---
 
 ## Goal
@@ -29,9 +29,26 @@ Cost per session is about the same either way (implementation $6.34 native again
 
 ## Done when
 
-- [ ] Agent Factory tells every agent that starts a child (orchestrators, and implementers starting reviewers) to use `delegate_task` when it runs under T3, overriding T3's same-provider default, without a patch to T3's prompt. Outside T3 it uses the harness's own subagent tool, and nothing in the skill requires T3 or a second provider.
-- [ ] Every new review round starts a new reviewer, never a message to an earlier one: under T3 a new `delegate_task`, never a `t3_thread_send`, matching T3's rule; elsewhere a new subagent from the harness's own tool.
+- [x] Agent Factory tells every agent that starts a child (orchestrators, and implementers starting reviewers) to use `delegate_task` when it runs under T3, overriding T3's same-provider default, without a patch to T3's prompt. Outside T3 it uses the harness's own subagent tool, and nothing in the skill requires T3 or a second provider.
+- [x] Every new review round starts a new reviewer, never a message to an earlier one: under T3 a new `delegate_task`, never a `t3_thread_send`, matching T3's rule; elsewhere a new subagent from the harness's own tool.
 
 ## Context
 
 - Part of atelier-ss4y, which defines the review loop these children run.
+
+## Notes
+
+- 2026-11-09 [note] Implementer handoff: see ## Report. Independent review outstanding.
+
+## Report
+
+Outcome: both Done when lines hold at `80ec4fc4`. SKILL.md's core rule "Start children fresh, one way" tells every agent that starts a child, orchestrators and implementers alike, to use `delegate_task` under T3 Code whatever the provider, overriding T3's advice to use the native tool, with no change to T3's prompt; elsewhere the harness's own subagent tool, and no step needs T3 or a second provider. SKILL.md's Who arranges it and implement.md's Review step 4 start a new reviewer each round, never a message to an earlier one. In the evaluation (`evals/agent-factory/results/2026-11-09-implementer-owns-review.md`) the orchestrator started its implementer and the implementer started its Sol reviewer with `delegate_task`, and no one used `t3_thread_send` or a native `Agent`.
+
+### Changes and Proof
+
+- Changes: SKILL.md's core rules and Who arranges it, implement.md's Review, at `80ec4fc4` on branch `atelier-ss4y`.
+- Proof: the evaluation above; links checked with atelier-ss4y.
+
+### Review
+
+Independent review outstanding, with atelier-ss4y.
