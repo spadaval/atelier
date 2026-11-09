@@ -47,7 +47,7 @@ jobs:
             git diff --check "$BASE" HEAD
           fi
 
-  # Linux only: macOS support is best effort (see README.md).
+  # Linux only: macOS is not supported (see README.md).
   test:
     needs: changes
     if: needs.changes.outputs.rust == 'true'

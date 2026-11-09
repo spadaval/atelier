@@ -5,9 +5,7 @@ workflows.
 
 ## Install
 
-On Linux (x86_64 or aarch64), or macOS on a
-[best-effort basis](#platform-support), install or upgrade to the latest
-release with:
+On Linux (x86_64 or aarch64), install or upgrade to the latest release with:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/spadaval/atelier/releases/latest/download/atelier-cli-installer.sh | sh
@@ -22,10 +20,9 @@ source checkout instead, install Node.js and pnpm, which build the web app
 
 ## Platform support
 
-Linux is the supported platform: every change is tested on it in CI. macOS
-support is unofficial and best effort. Releases still include macOS
-binaries, and fixes for macOS bugs are welcome, but CI does not test on
-macOS, so a change can break it unnoticed. Windows is not supported.
+Linux is the supported platform: every change is tested on it in CI, and
+releases include Linux binaries only. macOS and Windows are not supported.
+Building from source on macOS may work, but nothing tests it.
 
 ## Use
 

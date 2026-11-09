@@ -26,7 +26,7 @@ Day to day, run formatting and the tests that cover your change
 (`cargo nextest run -p <crate>` or a filter). The full suites, with and without
 `test-hooks`, run on Linux in CI on the pull request, and that run gates the
 merge (see [AGENTS.md](../../AGENTS.md)). CI does not run on macOS, which is
-supported on a best-effort basis (see [README.md](../../README.md#platform-support)).
+not supported (see [README.md](../../README.md#platform-support)).
 
 Tests run with `ATELIER_NO_UPDATE_CHECK=1`, which `.cargo/config.toml` sets,
 so `doctor` and `status` stay off the network (see the
