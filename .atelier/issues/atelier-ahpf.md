@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Answer where-are-we on the site: a page per repository and per mission"
-updated_at: "2026-11-09T00:45:58.429754395+00:00"
+updated_at: "2026-11-09T01:10:59.197116519+00:00"
 ---
 
 ## Goal
@@ -31,6 +31,7 @@ Answer "where are we on this project?" without an agent: a page per repository a
 
 - [ ] `/<repo>` shows, from the base branch ref: items waiting on the human; work in progress with its branch, review state (unreviewed, approval current or stale, findings open) and how far the branch is behind; ready work in the order `atelier work ready` gives; items done in the last 14 days; and each open mission with its item counts. A fixture test covers each section.
 - [ ] `/<repo>/mission/<id>` renders the mission's Outcome, criteria, linked strategy file (Markdown rendered as HTML), its items by status with links, and its debrief link. A fixture test covers a mission with a strategy and one without.
+- [ ] With a warm cache and `master` unchanged, moving only an owned work branch from unreviewed to approved, then to approval stale by a new code commit, changes `/<repo>`'s review state on the next request to match `atelier status` each time; and with an injected clock, an item leaves the recently-done section once it is more than 14 days old. Fixture tests cover both.
 - [ ] The inbox and every page link to `/<repo>`, and `/<repo>` links each mission and item.
 - [ ] Rendered against this repository's `master`, `/atelier` lists the same in-progress branches and ready items as `atelier status` run on `master`; the Report records the comparison.
 

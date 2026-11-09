@@ -15,15 +15,23 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "draft"
-title: "See every Atelier repository and which agent did what from one site on this host"
-updated_at: "2026-11-09T00:45:57.707570089+00:00"
+title: "See where every Atelier repository on this host stands, from one site"
+updated_at: "2026-11-09T01:10:59.714537104+00:00"
 ---
 
 ## Outcome
 
-A site on this host, reached over Tailscale, shows Sumeet every Atelier repository here: an inbox of everything waiting on him with one-click links to what he must read, each repository's state, and each mission's strategy, items and debrief. Every `atelier` command run in a T3 thread records which thread, harness, provider, model, effort and role did it, so the site can show who is working on what and report work, review outcomes and token cost by model and role. See `docs/strategies/fleet-dashboard.md`.
+A site on this host, reached over Tailscale, shows Sumeet every Atelier repository here: an inbox of everything waiting on him, each with one link that opens what he must read, each repository's state (waiting on him, in progress, up next, recently done), and each mission's strategy, items and debrief. It reads only Git, so he no longer has to ask an agent where a project stands. See `docs/strategies/fleet-dashboard.md`. Attribution and model metrics are mission atelier-bnek.
 
 ## Success criteria
 
-- one-click-inbox: from a device on the tailnet, the inbox lists every open item across this host's Atelier repositories that waits on the human, and each entry opens the page he needs in one click. Shown by an agent fetching the inbox and every linked page over the Tailscale hostname, plus Sumeet's read on his phone.
-- who-did-what: for one real item implemented by a Claude model and reviewed by a Codex model after attribution lands, the item's page names each thread's provider, model, effort and role, links each thread into T3, and gives each role's token cost. Shown by an agent comparing the page with T3's thread records and the provider transcripts.
+- one-click-inbox: with the site installed and published on this host, the inbox fetched over the Tailscale hostname lists exactly the open items across this host's Atelier repositories that `atelier status` on each base branch reports as needing a human, and each entry's primary link returns the page that entry asks him to read (for a debrief read, that mission's rendered debrief) with no intermediate page. Shown by validation item atelier-mtb3.
+
+## Background
+
+Split on 2026-11-08 at Sumeet's direction, after planning review finding atelier-i8h1, from the first draft that also held attribution and metrics. Sumeet's own read of the site on his phone is loose end atelier-pywh, which does not hold this mission open (finding atelier-gnh5).
+
+## Notes
+
+- 2026-11-08 [plan] Revised after planning review (findings atelier-b9wq, i8h1, 79wo, gnh5, bihd, 5yz1, roov, ntq9, 8j0j, 726p). On Sumeet's authority (2026-11-08) split attribution and metrics into mission atelier-bnek, and moved acceptance to independent validation items (atelier-mtb3 here, atelier-wo22 there) with his phone read as loose end atelier-pywh. Other fixes: ADR item reconciles architecture docs; serve item gains direct debrief links, a pure renderer, an unwritable-repository proof, a load bound and the unit file; the service loose end keeps only install and publish; attribution records item reads, explicit roles, and a write-only store; the hook keeps the light path; metrics validates the attribution rule on real threads first.
+- 2026-11-08 [plan] Fixed re-review findings atelier-bihd and atelier-mhb4: a new reads link role names an inbox item's reading target (membership and related links never do), and validation adds reads links to existing debrief reads such as atelier-3km4; only base-derived work is cached by base commit, branch and review state is recomputed or keyed by its refs, date sections by the date, with a warm-cache fixture on atelier-ahpf.

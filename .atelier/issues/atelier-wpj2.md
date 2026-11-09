@@ -3,7 +3,7 @@ created_at: "2026-11-09T00:45:59.871807783+00:00"
 id: "atelier-wpj2"
 issue_type: "feature"
 labels:
-- "fleet-dashboard"
+- "agent-attribution"
 priority: "P2"
 relationships:
   blocks: []
@@ -17,7 +17,7 @@ relationships:
     id: "atelier-aab1"
     type: "blocked_by"
   - kind: "issue"
-    id: "atelier-yfqu"
+    id: "atelier-bnek"
     type: "advances"
   - kind: "issue"
     id: "atelier-zpmb"
@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Show each item's T3 threads, roles, models and live status on the site"
-updated_at: "2026-11-09T00:45:59.871807783+00:00"
+updated_at: "2026-11-09T01:04:28.942057171+00:00"
 ---
 
 ## Goal
