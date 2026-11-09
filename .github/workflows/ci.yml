@@ -22,8 +22,34 @@ env:
   ATELIER_NO_UPDATE_CHECK: 1
 
 jobs:
+  # Decides which jobs the change needs (scripts/ci-jobs.sh), and checks
+  # whitespace on every change. A run whose other jobs are skipped still
+  # concludes success, which is what ci.passed reads.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.jobs.outputs.rust }}
+    env:
+      BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: scripts/ci-jobs.test.sh
+      - id: jobs
+        run: scripts/ci-jobs.sh "$BASE" HEAD >> "$GITHUB_OUTPUT"
+      - name: git diff --check
+        run: |
+          if [ -z "$BASE" ] || ! git rev-parse -q --verify "$BASE^{commit}" >/dev/null; then
+            echo "No base commit to compare against."
+          else
+            git diff --check "$BASE" HEAD
+          fi
+
   test:
     name: test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -49,12 +75,3 @@ jobs:
       - run: target/debug/atelier check
       - run: cargo nextest run
       - run: cargo nextest run --features test-hooks
-      - name: git diff --check
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ]; then
-            echo "No base commit to compare against."
-          else
-            git diff --check "$BASE" HEAD
-          fi

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Tests scripts/ci-jobs.sh against scratch repositories. CI's `changes` job
+# runs it before trusting the script's answer.
+set -euo pipefail
+
+script=$(cd "$(dirname "$0")" && pwd)/ci-jobs.sh
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+failed=0
+
+g() { git -c user.name=ci -c user.email=ci@ci.invalid "$@"; }
+
+# expect <want> <case> <path>...: a commit touching the paths needs rust or not.
+expect() {
+  local want=$1 name=$2
+  shift 2
+  local repo="$scratch/$name"
+  g init -q "$repo"
+  mkdir -p "$repo/crates/a/tests/fixtures" "$repo/docs/strategies"
+  echo base > "$repo/crates/a/tests/fixtures/old.md"
+  echo base > "$repo/README.md"
+  g -C "$repo" add -A
+  g -C "$repo" commit -qm base
+  for path in "$@"; do
+    mkdir -p "$repo/$(dirname "$path")"
+    echo change >> "$repo/$path"
+  done
+  g -C "$repo" add -A
+  g -C "$repo" commit -qm change
+  check "$want" "$name" "$repo" HEAD^
+}
+
+# check <want> <case> <repo> <base>: the script answers rust=<want>.
+check() {
+  local got
+  got=$(cd "$3" && "$script" "$4" HEAD 2>/dev/null)
+  if [ "$got" = "rust=$1" ]; then
+    echo "ok   $2"
+  else
+    echo "FAIL $2: want rust=$1, got ${got:-nothing}"
+    failed=1
+  fi
+}
+
+expect false markdown-at-root README.md
+expect false markdown-in-docs docs/adr/0001-x.md docs/product/y.md
+expect false records-only .atelier/issues/a.md .atelier/reviews/a.toml .atelier/evidence/a.md
+expect false markdown-and-records CONTEXT.md .atelier/issues/a.md
+expect true strategy docs/strategies/s.md
+expect true strategy-and-records docs/strategies/s.md .atelier/issues/a.md
+expect true markdown-under-crates crates/a/tests/fixtures/new.md
+expect true rust-source crates/a/src/lib.rs
+expect true workflow-policy .atelier/workflow.yaml
+expect true github-workflow .github/workflows/ci.yml
+expect true script scripts/x.sh
+expect true markdown-and-code README.md Cargo.toml
+
+# Moving a fixture out of crates/ changes crates/.
+repo="$scratch/rename"
+g init -q "$repo"
+mkdir -p "$repo/crates/a" "$repo/docs"
+echo fixture > "$repo/crates/a/f.md"
+g -C "$repo" add -A
+g -C "$repo" commit -qm base
+g -C "$repo" mv crates/a/f.md docs/f.md
+g -C "$repo" commit -qm move
+check true rename-out-of-crates "$repo" HEAD^
+
+check true empty-base "$repo" ""
+check true zero-base "$repo" 0000000000000000000000000000000000000000
+check true missing-base "$repo" 1234567890abcdef1234567890abcdef12345678
+
+exit "$failed"

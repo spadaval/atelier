@@ -90,4 +90,9 @@ rebuilt model.
 - Locally, run formatting and the tests that cover your change
   (`cargo nextest run -p <crate>` or a filter). The full suite, with and
   without `test-hooks`, on Linux and macOS, runs in CI on the pull request
-  (`.github/workflows/ci.yml`), and that run gates the merge.
+  (`.github/workflows/ci.yml`), and that run gates the merge. CI skips the
+  Rust jobs when a change touches only tracker records and Markdown outside
+  `crates/` and `docs/strategies/`, since no Rust test reads those; the run
+  still passes, so such a branch still needs its pull request
+  (`scripts/ci-jobs.sh` holds the rule, and its test is
+  `scripts/ci-jobs.test.sh`).
