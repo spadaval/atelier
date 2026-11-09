@@ -72,7 +72,7 @@ impl BoardRow {
         }
     }
 
-    fn from_work_row(index: &RecordIndex, row: &WorkRow) -> Self {
+    pub(crate) fn from_work_row(index: &RecordIndex, row: &WorkRow) -> Self {
         let record = index.issue_record(&row.id);
         Self {
             id: row.id.clone(),

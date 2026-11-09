@@ -1,6 +1,6 @@
 {
   "body": {
-    "base_commit": "07da884d20eedb4506de6ce29e7747397f59cf7b",
+    "base_commit": "8e792cce2ce6ea82885c80fc33ded941f45c2537",
     "item": {
       "body": "## Goal\n\nCheck it there.\n\n## Done when\n\n- [ ] It loads on the server.\n\n## Notes\n\n- 2026-01-01 The server is not set up yet.",
       "issue": {

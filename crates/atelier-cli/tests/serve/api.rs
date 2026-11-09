@@ -32,7 +32,10 @@ pub(super) fn fleet(root: &Path) -> (Repo, Repo) {
 
 /// Every route of the fixture fleet with the file its response is kept in.
 pub(super) fn routes() -> Vec<(String, String)> {
-    let mut routes = vec![("/api/repos".to_owned(), "repos.json".to_owned())];
+    let mut routes = vec![
+        ("/api/repos".to_owned(), "repos.json".to_owned()),
+        ("/api/inbox".to_owned(), "inbox.json".to_owned()),
+    ];
     for (repo, missions) in [
         ("alpha", &["alpha-m1", "alpha-m2"]),
         ("beta", &["beta-m1", "beta-m2"]),
@@ -51,8 +54,9 @@ pub(super) fn routes() -> Vec<(String, String)> {
     for repo in ["alpha", "beta"] {
         routes.push((format!("/api/{repo}/board"), format!("{repo}/board.json")));
     }
-    // A task, a decision, a loose end and a done task with an approval.
-    for item in ["alpha-a1", "alpha-a2", "alpha-l1", "alpha-b1"] {
+    // A task, a decision, a loose end, a needs-human loose end and a done
+    // task with an approval.
+    for item in ["alpha-a1", "alpha-a2", "alpha-l1", "alpha-l2", "alpha-b1"] {
         routes.push((
             format!("/api/alpha/item/{item}"),
             format!("alpha/item/{item}.json"),
@@ -328,6 +332,10 @@ fn a_mission_opens_on_the_brief_only_in_its_workflows_initial_status() {
             // status, so its debrief is shown.
             ("beta-m1".to_owned(), expect("proposed", "todo", "brief")),
             ("beta-m2".to_owned(), expect("ready", "todo", "debrief")),
+            (
+                "beta-m3".to_owned(),
+                expect("superseded", "done", "debrief")
+            ),
         ])
     );
     let one = get_json(&client, "/api/beta/mission/beta-m2", 200);

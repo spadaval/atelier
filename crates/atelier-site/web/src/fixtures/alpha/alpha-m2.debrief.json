@@ -1,6 +1,6 @@
 {
   "body": {
-    "base_commit": "07da884d20eedb4506de6ce29e7747397f59cf7b",
+    "base_commit": "8e792cce2ce6ea82885c80fc33ded941f45c2537",
     "debrief": {
       "added": [],
       "asks": [],
@@ -83,7 +83,7 @@
         }
       ],
       "found": [],
-      "generated_from": "07da884d20eedb4506de6ce29e7747397f59cf7b",
+      "generated_from": "8e792cce2ce6ea82885c80fc33ded941f45c2537",
       "left": [],
       "mission": {
         "adr": null,
@@ -160,6 +160,16 @@
           "status_category": "todo",
           "summary": "Check it there.",
           "title": "Check the loader on the server"
+        },
+        "alpha-l2": {
+          "id": "alpha-l2",
+          "issue_type": "loose_end",
+          "outcome": null,
+          "parent": null,
+          "status": "todo",
+          "status_category": "todo",
+          "summary": "Read how the loader shipped.",
+          "title": "Read the loader's debrief"
         },
         "alpha-m1": {
           "id": "alpha-m1",

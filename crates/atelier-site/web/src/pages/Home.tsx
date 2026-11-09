@@ -3,6 +3,7 @@ import { useApi } from "../api";
 import type { ReposResponse } from "../api/ReposResponse";
 import { Loading, Page, ItemLine } from "../components/Page";
 import { shortCommit } from "../text";
+import { InboxLink } from "./Inbox";
 
 /** `/`: every repository, with a link to its board and each of its missions. */
 export function Home() {
@@ -11,6 +12,7 @@ export function Home() {
     <Loading loaded={loaded} crumbs={[]}>
       {({ repos }) => (
         <Page crumbs={[]} title="Repositories">
+          <InboxLink />
           {repos.length === 0 ? <p className="muted">No Atelier repositories under the server's roots.</p> : null}
           {repos.map((repo) => (
             <section key={repo.repo}>

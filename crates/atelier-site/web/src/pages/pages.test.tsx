@@ -87,7 +87,10 @@ describe("a draft mission with a strategy", () => {
       expect(within(row).getByText("high")).toHaveClass("priority");
     }
     expect(screen.getByText("Whether it is fast.")).toBeInTheDocument();
-    expect(screen.getByText("No plan approval recorded.")).toBeInTheDocument();
+    // Planning review approved alpha-m1 (alpha-r3).
+    const reviews = screen.getByRole("heading", { level: 2, name: "Mission Reviews" }).closest("section")!;
+    expect(reviews).toHaveTextContent("approval");
+    expect(screen.queryByText("No plan approval recorded.")).toBeNull();
     expect(screen.getByText("docs/strategies/one.md")).toBeInTheDocument();
   });
 

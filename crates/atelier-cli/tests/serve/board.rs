@@ -64,6 +64,7 @@ fn the_board_shows_each_section_from_the_base_and_its_work_branch() {
         headings,
         [
             (Some("alpha-m1"), None, vec!["alpha-a1", "alpha-a2"]),
+            (None, Some("needs-human"), vec!["alpha-l2"]),
             (None, Some("ops"), vec!["alpha-l1"]),
         ]
     );
@@ -76,7 +77,7 @@ fn the_board_shows_each_section_from_the_base_and_its_work_branch() {
     };
     assert_eq!(status(0, 0), ("todo", "ready"));
     assert_eq!(status(0, 1), ("todo", "needs human"));
-    assert_eq!(status(1, 0), ("todo", "blocked"));
+    assert_eq!(status(2, 0), ("todo", "blocked"));
 
     // The base marks nothing active; alpha-a1 is in progress on its branch,
     // reviewed with a finding nothing has decided, one base commit behind.
@@ -101,16 +102,16 @@ fn the_board_shows_each_section_from_the_base_and_its_work_branch() {
 
     // Ready and needs-human work as `atelier work ready` lists it.
     assert_eq!(ids(&board["ready"]), ["alpha-a1"]);
-    assert_eq!(ids(&board["human"]), ["alpha-a2"]);
+    assert_eq!(ids(&board["human"]), ["alpha-a2", "alpha-l2"]);
     let ready = atelier(&alpha.dir, &["work", "ready", "-q"]);
     assert_eq!(ready.lines().collect::<Vec<_>>(), ["alpha-a1"]);
     let human = atelier(&alpha.dir, &["work", "human", "-q"]);
-    assert_eq!(human.lines().collect::<Vec<_>>(), ["alpha-a2"]);
+    assert_eq!(human.lines().collect::<Vec<_>>(), ["alpha-a2", "alpha-l2"]);
 
     // Done within 14 days of the fixture clock, newest first.
     assert_eq!(ids(&board["recently_done"]), ["alpha-m2", "alpha-b1"]);
 
-    // beta has no branch and nothing done.
+    // beta has no branch, and its one closed record is superseded beta-m3.
     let beta = get_json(&client, "/api/beta/board", 200);
     let missions = beta["board"]["missions"].as_array().unwrap();
     assert_eq!(
@@ -121,7 +122,7 @@ fn the_board_shows_each_section_from_the_base_and_its_work_branch() {
         ["beta-m1", "beta-m2"]
     );
     assert_eq!(beta["in_progress"], serde_json::json!([]));
-    assert_eq!(ids(&beta["board"]["recently_done"]), Vec::<&str>::new());
+    assert_eq!(ids(&beta["board"]["recently_done"]), ["beta-m3"]);
 }
 
 fn atelier(dir: &std::path::Path, args: &[&str]) -> String {

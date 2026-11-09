@@ -4,7 +4,7 @@
 //! mission opens on, read from the workflow policy. TypeScript types for
 //! these are generated with `ts-rs` into `web/src/api/`.
 
-use atelier_app::board::{Board, InProgress};
+use atelier_app::board::{Board, BoardRow, InProgress};
 use atelier_app::issue_read::ObjectiveBucketTotals;
 use atelier_app::item_view::ItemView;
 use atelier_app::mission_review::{Brief, Debrief};
@@ -149,6 +149,40 @@ pub struct ItemResponse {
     pub item: ItemView,
 }
 
+/// `GET /api/inbox`: what waits on the human in every repository
+/// (atelier-uma8).
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct InboxResponse {
+    /// How many entries, items and draft missions, all repositories hold.
+    pub count: usize,
+    /// Each repository with an entry or an error, in `/api/repos` order.
+    pub repos: Vec<InboxRepo>,
+}
+
+/// What waits on the human in one repository, read from its base commit, or
+/// why it cannot be read.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct InboxRepo {
+    pub repo: String,
+    pub base_branch: Option<String>,
+    pub base_commit: Option<String>,
+    pub error: Option<String>,
+    /// The work `atelier status` counts under Needs a human, in its order.
+    pub items: Vec<InboxEntry>,
+    /// Missions in their workflow's initial status that an approval targets:
+    /// planning review has reached them, and their brief waits on the human.
+    pub drafts: Vec<MissionSummary>,
+}
+
+/// One needs-human item and the missions it belongs to: those whose scope
+/// holds it or that it links under any role, never a superseded or
+/// declined one.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct InboxEntry {
+    pub item: BoardRow,
+    pub missions: Vec<MissionSummary>,
+}
+
 /// The body of every response that is not a 200.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ApiError {
@@ -166,6 +200,7 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     StrategyResponse::export_all(&config)?;
     BoardResponse::export_all(&config)?;
     ItemResponse::export_all(&config)?;
+    InboxResponse::export_all(&config)?;
     ApiError::export_all(&config)?;
     // ts-rs ends some lines with a space; strip them so the checked-in files
     // pass `git diff --check`.
