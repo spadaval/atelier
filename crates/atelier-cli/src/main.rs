@@ -422,9 +422,14 @@ from the skills lock file, so npx skills update -g leaves the links alone.")]
         html: bool,
     },
 
-    /// Serve every mission's brief and debrief as JSON, read-only, for every
-    /// Atelier repository under the roots, from each one's base branch
-    #[command(after_help = "Routes:
+    /// Serve every mission's brief, debrief and strategy as pages and JSON,
+    /// read-only, for every Atelier repository under the roots, from each
+    /// one's base branch
+    #[command(after_help = "Pages:
+  /                                         every repository and its missions
+  /<repo>/mission/<id>[/brief|/debrief|/strategy]
+
+Routes:
   GET /api/repos                            repositories, their counts and missions
   GET /api/<repo>/mission/<id>              one mission and the review it opens on
   GET /api/<repo>/mission/<id>/brief        the view `atelier brief` prints

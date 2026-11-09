@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.jobs.outputs.rust }}
+      web: ${{ steps.jobs.outputs.web }}
     env:
       BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
@@ -75,3 +76,37 @@ jobs:
       - run: target/debug/atelier check
       - run: cargo nextest run
       - run: cargo nextest run --features test-hooks
+
+  # The site's app (crates/atelier-site/web): typecheck, Vitest, the build,
+  # then Playwright against a debug `atelier serve` that embeds that build.
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/atelier-site/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: crates/atelier-site/web/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: crates/atelier-site/web/pnpm-lock.yaml
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: warn
+      # The Playwright suite's fixture repositories make commits.
+      - run: |
+          git config --global user.name "Atelier CI"
+          git config --global user.email "ci@atelier.invalid"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: cargo build -p atelier-cli
+      - run: pnpm exec playwright install --with-deps chromium-headless-shell
+      - run: pnpm e2e

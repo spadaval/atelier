@@ -84,9 +84,10 @@ describe("a draft mission with a strategy", () => {
     serveFixtures();
     renderAt("/alpha/mission/alpha-m1/strategy");
     await heading("Strategy: docs/strategies/one.md");
-    expect(screen.getByRole("heading", { level: 1, name: "Why" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Risks and Unknowns" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Why" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Risks and Unknowns" })).toBeInTheDocument();
     expect(screen.getByText("The base may move.").tagName).toBe("LI");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 });
 

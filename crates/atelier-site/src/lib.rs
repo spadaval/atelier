@@ -1,5 +1,6 @@
 //! `atelier serve` (atelier-zpmb, ADR 0030): a read-only JSON API over every
-//! Atelier repository under the given roots. Each repository is read from
+//! Atelier repository under the given roots, and the web app that shows it
+//! (atelier-yn69, `app`). Each repository is read from
 //! one captured commit of its base branch, never from a checkout, and
 //! nothing is written to any repository.
 //!
@@ -829,7 +830,7 @@ pub fn serve(bind: SocketAddr, roots: Vec<PathBuf>, quiet: bool) -> Result<()> {
             println!("http://{address}");
         } else {
             println!(
-                "Serving every Atelier repository under {} at http://{address}/api/repos",
+                "Serving every Atelier repository under {} at http://{address}/",
                 roots
                     .iter()
                     .map(|root| root.display().to_string())

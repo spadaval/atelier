@@ -12,6 +12,10 @@
 # rust (build and tests) reads everything except tracker records and Markdown
 # outside crates/ and docs/strategies/: crates/ holds test fixtures, and a test
 # parses every strategy.
+#
+# web (the site's app: typecheck, Vitest, build and Playwright) runs whenever
+# rust does, since the API it shows is the shared view models any Rust change
+# can change, and whenever crates/atelier-site/web/ changes.
 set -euo pipefail
 
 base=${1:-}
@@ -29,18 +33,28 @@ needs_rust() {
 if [[ -z $base || $base =~ ^0+$ ]] || ! git rev-parse -q --verify "$base^{commit}" >/dev/null; then
   echo "ci-jobs: no base commit to compare against, so every job runs." >&2
   echo "rust=true"
+  echo "web=true"
   exit 0
 fi
 
 # --no-renames lists a renamed file under both names, so moving a fixture
 # out of crates/ still counts as a change to crates/.
 rust=false
+web=false
 while IFS= read -r path; do
-  if needs_rust "$path"; then
+  if [ "$rust" = false ] && needs_rust "$path"; then
     echo "ci-jobs: rust runs for $path." >&2
     rust=true
-    break
+  fi
+  if [ "$web" = false ] && [[ $path == crates/atelier-site/web/* ]]; then
+    echo "ci-jobs: web runs for $path." >&2
+    web=true
   fi
 done < <(git diff --no-renames --name-only "$base" "$head")
 [ "$rust" = true ] || echo "ci-jobs: rust skipped; the change touches nothing it tests." >&2
+if [ "$rust" = true ]; then
+  web=true
+fi
+[ "$web" = true ] || echo "ci-jobs: web skipped; the change touches neither Rust nor the app." >&2
 echo "rust=$rust"
+echo "web=$web"

@@ -89,7 +89,10 @@ rebuilt model.
 ## Command References
 
 - Installed CLI: `atelier` (`cargo install --path crates/atelier-cli --locked`
-  in this checkout; elsewhere the release installer in `README.md`)
+  in this checkout, which needs pnpm to build the site's app; elsewhere the
+  release installer in `README.md`)
+- Site app: `crates/atelier-site/web/` (`pnpm test`, `pnpm e2e`, `pnpm dev`;
+  see `docs/architecture/site.md`)
 - Local debug binary: `target/debug/atelier`
 - Cross-repository smoke test: `scripts/smoke-repos.sh` builds this tree and
   runs read-only commands with it and with the installed `atelier` in scratch

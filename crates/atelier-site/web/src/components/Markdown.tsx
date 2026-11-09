@@ -13,7 +13,14 @@ export function allowedUrl(url: string): boolean {
   return ["http", "https", "mailto"].includes(scheme[1].toLowerCase());
 }
 
+// Record headings sit one level below the page's own: a strategy's `#`
+// sections are the page's `h2`s.
 const components: Components = {
+  h1: ({ children }) => <h2>{children}</h2>,
+  h2: ({ children }) => <h3>{children}</h3>,
+  h3: ({ children }) => <h4>{children}</h4>,
+  h4: ({ children }) => <h5>{children}</h5>,
+  h5: ({ children }) => <h6>{children}</h6>,
   a({ href, children }) {
     if (href === undefined || !allowedUrl(href)) return <span className="unlinked">{children}</span>;
     return <a href={href}>{children}</a>;
