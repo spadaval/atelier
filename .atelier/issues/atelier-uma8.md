@@ -32,10 +32,10 @@ Give Sumeet one queue of what waits on him across every repository on this host,
 
 ## Done when
 
-- [ ] `GET /api/inbox` and the `/inbox` page list, grouped by repository, exactly the open items `atelier status` on each base branch lists under Needs a human, and each draft mission with a link to its brief. A Rust fixture test shows the set matches `status` with two repositories, and a Vitest test renders it from the fixture JSON.
-- [ ] each entry links to its item page, and, under the rule the Unknowns settle, to the page of the mission it asks the human to read, which opens the brief or debrief by the mission's status. A fixture test covers a decision, a loose end that names a mission, a needs-human item related only to a superseded mission, and a draft mission.
-- [ ] `/` and every board link to `/inbox` and show its count.
-- [ ] Served from this host's repositories, every inbox link opens a page that renders in Playwright without an error; the Report records the command and counts.
+- [x] `GET /api/inbox` and the `/inbox` page list, grouped by repository, exactly the open items `atelier status` on each base branch lists under Needs a human, and each draft mission with a link to its brief. A Rust fixture test shows the set matches `status` with two repositories, and a Vitest test renders it from the fixture JSON.
+- [x] each entry links to its item page, and, under the rule the Unknowns settle, to the page of the mission it asks the human to read, which opens the brief or debrief by the mission's status. A fixture test covers a decision, a loose end that names a mission, a needs-human item related only to a superseded mission, and a draft mission.
+- [x] `/` and every board link to `/inbox` and show its count.
+- [x] Served from this host's repositories, every inbox link opens a page that renders in Playwright without an error; the Report records the command and counts.
 
 ## Scope
 
@@ -49,6 +49,25 @@ Planned at the evidence boundary after atelier-zpmb and atelier-ahpf: they show 
 
 - Which missions an entry links besides its item page. Any linked mission is too loose: needs-human atelier-3km4 asks for atelier-vt8q's debrief but relates only to superseded mission atelier-gg6b (finding atelier-ei8w). Settle a rule, or link only the item page, and say which in the Report.
 - Whether listing every draft mission is noisy; if it is, show only drafts with a recorded planning approval, and say so in the Report.
+
+## Report
+
+All four Done when lines hold. `GET /api/inbox` and `/inbox` list, by repository, the work `atelier status` counts under Needs a human (the same `status_view`) and the draft missions planning review approved: `serve::inbox::the_inbox_lists_what_status_counts_as_needing_a_human_and_approved_drafts` checks each fixture repository's items against `atelier status -q`'s `human=` and `atelier work human -q`, and passes. The same test asserts each entry's mission links by hand: decision alpha-a2 links draft alpha-m1 on its brief, loose end alpha-l2 (blocked_by done alpha-m2) links alpha-m2 on its debrief, validation beta-v1 related only to superseded beta-m3 links nothing, and approved draft alpha-m1 is listed while unapproved draft beta-m1 is not. `inbox::tests::an_item_links_its_scope_and_direct_missions_but_no_retired_one` fails when the blocker-graph links are removed and passes with them. Vitest (`src/pages/inbox.test.tsx`) renders the page from the fixture JSON and checks `Inbox (4)` on `/`, `/alpha` and `/beta`; Playwright on the fixture fleet loads `/inbox` and clicks from a board through the inbox to a debrief (36 passed). On this host, a release build of this branch served `~/projects` on port 7351 and `ATELIER_SERVE=http://127.0.0.1:7351 pnpm exec playwright test -c playwright.host.config.ts` loaded every inbox link: 5 repositories, 50 items, 5 draft missions, 61 pages, 0 failed (and 84 brief and debrief pages, 0 failed). `atelier status -q` matched the inbox in the checkouts on their base: astromech 35, cosplay-studio 2, worldcrafter 2.
+
+### Decisions
+
+- Which missions an entry links (notes of 2026-11-09, the second revising the first after finding atelier-jx4p): every mission whose scope holds the item, plus every mission it links under any role, typed relations and blockers alike, leaving out superseded and declined missions. atelier-3km4 therefore links only its item page, since its one mission, atelier-gg6b, is superseded.
+- Drafts: listing every draft is noisy (6 of the host's 13 drafts, all in cosplay-studio, have no review at all), so only drafts an approval targets are listed.
+
+### Surprises
+
+- The needs-human set `atelier status` counts is not the board's: the board and `atelier work human` apply ready gates, status does not. The inbox follows status, as Done when says; in the fixtures and on this host the two agree.
+- `blocked_by` links are kept only in the record index's blocker graph, not among typed relations (atelier-jx4p).
+
+### Open items
+
+- `scripts/smoke-repos.sh` was not run: it runs read-only CLI commands, and this change adds only a route and a page to `atelier serve`.
+- The live `atelier-serve` service still runs the installed binary; it shows the inbox after the merge, a `cargo install` and a restart, which atelier-mtb3 validates.
 
 ## Notes
 
