@@ -27,7 +27,7 @@ Cost per session is about the same either way (implementation $6.34 native again
 
 ## Done when
 
-- [ ] Agent Factory tells every agent that starts a child (orchestrators, and implementers starting reviewers) to use `delegate_task`, overriding T3's same-provider default, without a patch to T3's prompt.
+- [ ] Agent Factory tells every agent that starts a child (orchestrators, and implementers starting reviewers) to use `delegate_task` when it runs under T3, overriding T3's same-provider default, without a patch to T3's prompt. Outside T3 it uses the harness's own subagent tool, and nothing in the skill requires T3 or a second provider.
 - [ ] Every new review round is a new `delegate_task`, never a `t3_thread_send` to an earlier reviewer, matching T3's rule.
 
 ## Context
