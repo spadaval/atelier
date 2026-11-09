@@ -994,6 +994,10 @@ fn merge_gates(
         )?;
         review_gate::scope(&merged, owner)?
     };
+    let heads = atelier_app::workflow_validation::MergeHeads {
+        base: &base_head,
+        head: &head,
+    };
     // The gates read the records merging would put on the base.
     let mut nodes = if light {
         atelier_app::light_path::evaluate(
@@ -1002,7 +1006,7 @@ fn merge_gates(
             &source.policy,
             owner,
             &fork_point,
-            Some(&checkout.path),
+            Some((&checkout.path, heads)),
         )?
     } else {
         review_gate::evaluate(
@@ -1012,6 +1016,7 @@ fn merge_gates(
             owner,
             &fork_point,
             &checkout.path,
+            heads,
         )?
     };
     // The records merging puts on the base, the done marks it writes

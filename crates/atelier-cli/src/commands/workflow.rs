@@ -733,6 +733,7 @@ fn evaluate_policy_transition(
             policy,
             issue_id,
             validators: &transition.validators,
+            merge: None,
         },
     )
 }

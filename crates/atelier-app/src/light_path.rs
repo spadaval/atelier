@@ -138,7 +138,7 @@ pub fn fix_approval<'r>(
 /// The gates for a branch on the light path, at `read`'s HEAD, which left
 /// the base at `fork_point`: `review.current` (a current independent
 /// approval of its run), `findings.disposed` (its run's findings, judged as
-/// for an issue) and, with `checks_root`, the policy's `merge_checks` run
+/// for an issue) and, with `checks`, the policy's `merge_checks` run
 /// there. A check that reads an issue passes, since there is none. Each node
 /// is about `branch`.
 pub fn evaluate(
@@ -147,7 +147,7 @@ pub fn evaluate(
     policy: &WorkflowPolicy,
     branch: &str,
     fork_point: &str,
-    checks_root: Option<&Path>,
+    checks: Option<(&Path, crate::workflow_validation::MergeHeads<'_>)>,
 ) -> Result<Vec<GateNode>> {
     let run = run(index.branch_reviews(), read, branch, fork_point);
     let current = run
@@ -217,12 +217,13 @@ pub fn evaluate(
         )
         .with_gaps(gaps),
     );
-    if let Some(root) = checks_root {
+    if let Some((root, heads)) = checks {
         let checks = crate::workflow_validation::evaluate_without_issue(
             index,
             root,
             policy,
             &policy.merge_checks,
+            Some(heads),
         )?;
         for (check, definition) in checks.into_iter().zip(&policy.merge_checks) {
             nodes.push(review_gate::validator_gate(

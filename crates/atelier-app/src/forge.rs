@@ -86,23 +86,23 @@ pub struct Github {
 }
 
 impl Github {
-    /// The repository `forge.remote` points at: a remote's URL, or the
-    /// URL the policy gives.
+    /// The repository `forge.remote` points at: a configured remote's URL,
+    /// or else the URL the policy gives. A remote name may hold a slash, so
+    /// the name is tried first.
     pub fn open(repo: &Path, forge: &ForgeConfig) -> Result<Self, ForgeError> {
-        let url = if forge.remote.contains(':') || forge.remote.contains('/') {
+        let output = crate::git_freshness::command(repo)
+            .args(["remote", "get-url", "--", &forge.remote])
+            .output()
+            .map_err(|error| ForgeError::Unreachable(error.to_string()))?;
+        let url = if output.status.success() {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        } else if forge.remote.contains(':') || forge.remote.contains('/') {
             forge.remote.clone()
         } else {
-            let output = crate::git_freshness::command(repo)
-                .args(["remote", "get-url", &forge.remote])
-                .output()
-                .map_err(|error| ForgeError::Unreachable(error.to_string()))?;
-            if !output.status.success() {
-                return Err(ForgeError::Unreachable(format!(
-                    "forge.remote names {}, which is not a Git remote here",
-                    forge.remote
-                )));
-            }
-            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+            return Err(ForgeError::Unreachable(format!(
+                "forge.remote names {}, which is not a Git remote here",
+                forge.remote
+            )));
         };
         let (host, slug) = github_repository(&url).ok_or_else(|| {
             ForgeError::Unreachable(format!(

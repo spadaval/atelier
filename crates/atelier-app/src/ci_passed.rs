@@ -11,6 +11,7 @@ use std::path::Path;
 
 use crate::forge::{CiRun, ForgeError, Github};
 use crate::workflow_policy::WorkflowPolicy;
+use crate::workflow_validation::MergeHeads;
 
 /// Code is everything outside these record directories; the workflow policy
 /// and config count as code.
@@ -46,11 +47,17 @@ impl Verdict {
     }
 }
 
-/// Judges `ci.passed` in `checkout`. In `merge`'s checkout of the merge
-/// commit, the first parent is the base head and the second the branch head;
-/// elsewhere HEAD is the branch head and the base is the policy's base
-/// branch. `rerun` is the command that merges again.
-pub fn evaluate(checkout: &Path, policy: &WorkflowPolicy, rerun: &str) -> Result<Verdict> {
+/// Judges `ci.passed` in `checkout`. A merge passes the heads it
+/// integrates; elsewhere, such as `land` on a completed work branch, HEAD is
+/// the branch head and the base is the policy's base branch. The heads are
+/// never read from HEAD's parents: a work branch's own HEAD can be a merge
+/// of the base. `rerun` is the command that merges again.
+pub fn evaluate(
+    checkout: &Path,
+    policy: &WorkflowPolicy,
+    rerun: &str,
+    merge: Option<MergeHeads<'_>>,
+) -> Result<Verdict> {
     let forge = policy
         .forge
         .as_ref()
@@ -63,9 +70,9 @@ pub fn evaluate(checkout: &Path, policy: &WorkflowPolicy, rerun: &str) -> Result
                 .to_owned(),
         )
     };
-    let (base_head, head) = match git(&["rev-parse", "-q", "--verify", "HEAD^2"]) {
-        Ok(head) => (git(&["rev-parse", "HEAD^1"])?, head),
-        Err(_) => (
+    let (base_head, head) = match merge {
+        Some(heads) => (heads.base.to_owned(), heads.head.to_owned()),
+        None => (
             git(&["rev-parse", &format!("refs/heads/{base}")])?,
             git(&["rev-parse", "HEAD"])?,
         ),

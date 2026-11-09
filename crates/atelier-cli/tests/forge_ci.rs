@@ -51,6 +51,9 @@ struct Forge {
 
 impl Forge {
     fn new(checks: &str) -> Self {
+        Self::with_forge(FORGE, checks)
+    }
+    fn with_forge(forge: &str, checks: &str) -> Self {
         let dir = tempdir().unwrap();
         let repo = dir.path();
         git(repo, &["init", "-qb", "main"]);
@@ -61,7 +64,7 @@ impl Forge {
             &["remote", "add", "origin", "git@github.com:owner/repo.git"],
         );
         ok(repo, &["init", "--slug", "atelier"]);
-        append_policy(repo, &format!("{FORGE}merge_checks:\n{checks}"));
+        append_policy(repo, &format!("{forge}merge_checks:\n{checks}"));
         commit(repo, "base policy with a forge");
         let id = owner(repo, "Owner");
         ok(repo, &["start", &id]);
@@ -631,4 +634,67 @@ fn switching_the_policy_to_ci_passed_takes_effect_on_the_next_merge() {
         "{}",
         forge.calls()
     );
+}
+
+#[test]
+fn a_remote_name_with_a_slash_is_read_as_the_remote_not_a_url() {
+    let forge = Forge::with_forge(
+        "forge:\n  provider: github\n  remote: upstream/github\n  ci_workflow: ci.yml\n",
+        "  - ci.passed\n",
+    );
+    git(
+        forge.path(),
+        &[
+            "remote",
+            "add",
+            "upstream/github",
+            "git@github.com:other/repo.git",
+        ],
+    );
+    let head = forge.head();
+    forge.run(&head, 61, "completed", Some("success"));
+    let output = forge.passes(&["merge", &forge.id, "--check"]);
+    assert!(output.contains("ci.passed: ci.yml passed"), "{output}");
+    assert!(
+        forge
+            .calls()
+            .contains("repos/other/repo/actions/workflows/ci.yml/runs"),
+        "{}",
+        forge.calls()
+    );
+}
+
+/// A work branch an older Atelier marked done is landed with the merge
+/// checks run in its own checkout. Its HEAD can be a merge of the base, and
+/// ci.passed still judges the branch's code, not the merged-in base's
+/// (finding atelier-oqrm).
+#[test]
+fn land_on_a_done_branch_whose_head_merges_the_base_still_judges_the_branch_code() {
+    let forge = Forge::new("  - ci.passed\n");
+    let store = atelier_records::RecordStore::new(forge.path().join(".atelier"));
+    let mut record = store.load_issue_by_id(&forge.id).unwrap();
+    record.issue.status = "done".into();
+    record.issue.closed_at = Some(chrono::Utc::now());
+    store.write_issue_atomic(&record).unwrap();
+    commit(
+        forge.path(),
+        "an older Atelier closes the work on its branch",
+    );
+    approve(forge.path(), &forge.id);
+    let refused = |output: &str| {
+        output.contains(&format!("⚠ {} ci.passed: no open pull request", forge.id))
+            && !output.contains("changes only records")
+            && output.contains("land: work in progress")
+    };
+    // land reports work in progress, exiting zero, while a check is open.
+    let (_, output) = forge.atelier(&["land"], true);
+    assert!(refused(&output), "{output}");
+
+    // A record-only commit on the base, merged into the branch.
+    git(forge.path(), &["switch", "-q", "main"]);
+    owner(forge.path(), "Unrelated plan");
+    git(forge.path(), &["switch", "-q", &forge.branch]);
+    git(forge.path(), &["merge", "-q", "--no-edit", "main"]);
+    let (_, output) = forge.atelier(&["land"], true);
+    assert!(refused(&output), "{output}");
 }

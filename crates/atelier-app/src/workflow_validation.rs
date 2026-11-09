@@ -13,6 +13,17 @@ pub struct ValidatorRequest<'a> {
     pub policy: &'a WorkflowPolicy,
     pub issue_id: &'a str,
     pub validators: &'a [ValidatorDefinition],
+    /// The base and branch heads `merge` integrates, when the checks run
+    /// for a merge; `None` elsewhere, such as `land` on a work branch.
+    pub merge: Option<MergeHeads<'a>>,
+}
+
+/// The base head and branch head of a merge, captured by `merge` rather
+/// than read from the shape of the checkout's HEAD.
+#[derive(Debug, Clone, Copy)]
+pub struct MergeHeads<'a> {
+    pub base: &'a str,
+    pub head: &'a str,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,6 +81,7 @@ pub fn evaluate_without_issue(
     repo_root: &Path,
     policy: &WorkflowPolicy,
     validators: &[ValidatorDefinition],
+    merge: Option<MergeHeads<'_>>,
 ) -> Result<Vec<ValidatorResult>> {
     let request = ValidatorRequest {
         index,
@@ -77,6 +89,7 @@ pub fn evaluate_without_issue(
         policy,
         issue_id: "",
         validators,
+        merge,
     };
     let mut read = crate::git_freshness::ReadContext::new(repo_root);
     let mut results = Vec::new();
@@ -115,6 +128,7 @@ fn evaluate_builtin(
         repo_root,
         policy,
         issue_id,
+        merge,
         ..
     } = *request;
     match definition.builtin.as_str() {
@@ -157,7 +171,7 @@ fn evaluate_builtin(
             } else {
                 format!("atelier merge {issue_id}")
             };
-            let verdict = crate::ci_passed::evaluate(repo_root, policy, &rerun)?;
+            let verdict = crate::ci_passed::evaluate(repo_root, policy, &rerun, merge)?;
             Ok((verdict.passed, verdict.reason, verdict.next))
         }
         "work.terminal" => work_terminal(index, policy, issue_id).map(without_validator_help),
