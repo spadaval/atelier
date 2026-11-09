@@ -27,7 +27,7 @@ schema_version: 2
 closed_at: "2026-11-09T17:49:02.795439917+00:00"
 status: "done"
 title: "Run this repository on the one-command merge: retire the hand-run routine from AGENTS.md and the skill"
-updated_at: "2026-11-09T17:49:02.795439917+00:00"
+updated_at: "2026-11-09T17:49:41.884289011+00:00"
 ---
 
 ## Goal
@@ -55,6 +55,7 @@ AGENTS.md, skills/agent-factory/references/atelier.md (and other skill files onl
 - 2026-11-09 [decision] merge --push publishes from this host through the checkout's push URL, not the policy: `git config remote.origin.pushurl git@github.com:spadaval/atelier.git` (repository-local, shared by every worktree; fetches stay HTTPS). forge.remote stays `origin`. Verified with `git remote -v` in this worktree and the master worktree, and a read-only `git ls-remote --heads git@github.com:spadaval/atelier.git master`, which returned master's head. AGENTS.md names the one command a fresh checkout needs, or `gh auth setup-git` instead.
   Reason: Credentials belong to the host, not the repository: putting an SSH URL in forge.remote would force SSH on every host and CI-less clone, while the push URL keeps the committed policy portable and fixes only this host.
 - 2026-11-09 [note] Handoff: implementation done at 3cb961ba, evidence at 48cb0018; see ## Report. Review not yet requested (the orchestrator arranges it). Nothing pushed; the branch, pull request and master push are for atelier merge atelier-7o4r --push.
+- 2026-11-09 [result] Acceptance merge ran as one command: atelier merge atelier-7o4r --push, run twice from the 7o4r worktree, with no hand gh pr create, gh pr merge or git push. Run 1 (2026-11-09T03:02-05:00, exit 1) pushed the branch, opened PR #74, and refused on ci.passed because no ci.yml run existed yet: 'merge: refused — 1 check (ci.passed), master not pushed'. CI run 42583151383 passed at 03:21 after one rerun of the macOS job, which had failed on a curl network error in tool install. Another thread then committed atelier-yfqu strategy changes to master (a9cd1265, b143c1fd, 5f5079de, 09:33 to 09:43). Run 2 (12:49:00 to 12:49:22, exit 0) accepted that same run with no rerun: 'ci.passed: ci.yml passed on pull request #74 for 5b54c439 ... merge: passed — pushed master to origin, pull request #74 merged'. Merge commit 5eaf5101; gh pr view 74 shows MERGED at 17:49:17Z. atelier land passed afterwards. Full output is in ~/.cache/atelier-7o4r-run/run1.txt and run2.txt.
 
 ## Report
 
