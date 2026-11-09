@@ -8,8 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 Reviewed work now reaches a published base in one command, a site shows each
 mission's brief and debrief, and the work lifecycle has fewer records and
-steps. Repositories written by 0.3.x keep working unmigrated; the `migrate`
-commands below are optional cleanup.
+steps. Repositories written by 0.3.x keep working unmigrated, with one
+exception: `[decision one-way]` notes must be rewritten (see Removed). The
+`migrate` commands below are optional cleanup.
 
 ### Added
 - `atelier serve`: a read-only site with every mission's brief, debrief and
@@ -19,13 +20,15 @@ commands below are optional cleanup.
 - `merge --push --wait`: with a `forge` block in the workflow policy, one
   command pushes the work branch, reuses or opens its pull request, waits for
   CI, merges, pushes the base and confirms the pull request merged. A new
-  `ci.passed` merge check refuses code that has no passing CI run on its
-  latest commit, using `gh` (ADR 0031).
+  `ci.passed` merge check, using `gh`, refuses a branch until CI has passed
+  on its latest code; record-only commits after that run, and branches that
+  change only tracker records, need no new run (ADR 0031).
 - A change with no issue can be reviewed and merged: `review request` and
   `merge` with no ID, and `review approve --branch`.
 - Loose ends (`--issue-type loose_end`) track work that can only happen after
-  a merge or release, outside any mission. `atelier migrate after-merge` turns
-  open After merge lines into loose ends.
+  a merge or release, outside any mission. Once the workflow policy declares
+  `loose_end`, `atelier migrate after-merge --apply` turns open After merge
+  lines into loose ends; without `--apply` it only reports them.
 - Review can say no: a won't-fix decision, a `declined` status, and deferring
   an item's findings in one command.
 - `setup --link` links the Agent Factory skill to a checkout of this
@@ -42,6 +45,10 @@ commands below are optional cleanup.
   when line and write the `## Report`, `review request` (which refuses until
   both hold), approve, then `merge`, whose merge commit marks the work done.
   `## Close Reason` is read as `## Report`.
+- `start` on the base creates a branch named with the bare issue ID (no type
+  prefix such as `task/`), and on any other unowned branch it takes that
+  branch. `merge` targets the policy's `base_branch`; the recorded
+  `branch_base` is still written but no longer read.
 - A record write that `atelier check` would refuse is refused before any
   file changes (`record_invalid`). Review records can be corrected until they
   reach the base.
@@ -72,6 +79,13 @@ commands below are optional cleanup.
 - `brief --html` and `debrief --html`. Use `atelier serve`; when
   `~/.config/atelier/site-url` names the site, brief and debrief footers link
   to the mission's page.
+- `issue note --one-way` and the `[decision one-way]` note tag. Existing
+  `[decision one-way]` notes now fail `atelier check`; rewrite each as a plain
+  `[decision]` note, and record a costly choice as a decision record instead.
+- `start --base` no longer chooses where the branch is created from. It is
+  still accepted, prints a deprecation note and is ignored, so starting from
+  a detached HEAD with `--base` now refuses unless the item has a recorded
+  branch.
 - `land`'s warning about unpushed base commits.
 
 ### Fixed
