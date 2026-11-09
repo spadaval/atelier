@@ -381,6 +381,102 @@ fn brief_shows_the_strategy_outcome_and_falls_back_to_the_mission_outcome() {
     );
 }
 
+/// The strategy's Sizing and Derisking sit directly under the Outcome in
+/// both forms (atelier-cfq9), so the human sees cost, value and risk first.
+#[test]
+fn brief_shows_sizing_and_derisking_under_the_outcome() {
+    let dir = tempdir().unwrap();
+    let p = plan(dir.path());
+    fs::write(
+        dir.path().join("docs/strategies/plan.md"),
+        "# Outcome\n\nPlans are <reviewable>.\n\n# Success Criteria\n\n- plan-shown: The brief shows the plan.\n\n# Sizing\n\n- Complexity: small, one <view>.\n- Worth it: yes.\n\n# Derisking\n\n- Riskiest assumption: the parser copes. Tested first.\n",
+    )
+    .unwrap();
+    let markdown = ok(dir.path(), &["brief", &p.mission]);
+    let after_header = markdown
+        .split("Generated from: ")
+        .nth(1)
+        .and_then(|rest| rest.split_once("\n\n"))
+        .map(|(_, rest)| rest)
+        .expect(&markdown);
+    assert!(
+        after_header.starts_with(
+            "Sizing\n------\n- Complexity: small, one <view>.\n- Worth it: yes.\n\nDerisking\n---------\n- Riskiest assumption: the parser copes. Tested first.\n\nSuccess Criteria\n"
+        ),
+        "{markdown}"
+    );
+    assert!(!markdown.contains("not written"), "{markdown}");
+
+    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    let at = |text: &str| html.find(text).expect(text);
+    assert!(
+        at("Plans are &lt;reviewable&gt;.") < at("<strong>Sizing</strong>")
+            && at("<strong>Sizing</strong>") < at("Complexity: small, one &lt;view&gt;.")
+            && at("Complexity: small, one &lt;view&gt;.") < at("<strong>Derisking</strong>")
+            && at("<strong>Derisking</strong>") < at("Riskiest assumption: the parser copes.")
+            && at("Riskiest assumption: the parser copes.") < at("class=\"tiles\""),
+        "{html}"
+    );
+    assert!(
+        !html.contains("<view>") && !html.contains("not written"),
+        "{html}"
+    );
+}
+
+/// A strategy missing either section, or a mission with no strategy, says so
+/// under the Outcome instead of leaving the gap unseen; nothing refuses.
+#[test]
+fn brief_says_when_sizing_or_derisking_is_not_written() {
+    let dir = tempdir().unwrap();
+    let p = plan(dir.path());
+    fs::write(
+        dir.path().join("docs/strategies/plan.md"),
+        "# Outcome\n\nPlans are <reviewable>.\n\n# Sizing\n\n- Complexity: small.\n",
+    )
+    .unwrap();
+    let markdown = ok(dir.path(), &["brief", &p.mission]);
+    assert!(
+        markdown.contains(
+            "Outcome       : Plans are <reviewable>.\nDerisking     : not written\nStrategy      : "
+        ) && markdown.contains("Sizing\n------\n- Complexity: small.\n")
+            && !markdown.contains("Sizing        : not written"),
+        "{markdown}"
+    );
+    let path = PathBuf::from(ok(dir.path(), &["brief", &p.mission, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(
+        html.contains("<strong>Sizing</strong>")
+            && html.contains("Derisking: not written")
+            && !html.contains("Sizing: not written"),
+        "{html}"
+    );
+
+    let bare = create(
+        dir.path(),
+        &[
+            "--issue-type",
+            "mission",
+            "--body",
+            "## Outcome\n\nNo strategy here.",
+            "Bare mission",
+        ],
+    );
+    let markdown = ok(dir.path(), &["brief", &bare]);
+    assert!(
+        markdown.contains(
+            "Outcome       : No strategy here.\nSizing        : not written\nDerisking     : not written\n"
+        ),
+        "{markdown}"
+    );
+    let path = PathBuf::from(ok(dir.path(), &["brief", &bare, "--html", "-q"]).trim());
+    let html = fs::read_to_string(path).unwrap();
+    assert!(
+        html.contains("Sizing: not written") && html.contains("Derisking: not written"),
+        "{html}"
+    );
+}
+
 /// A mission is a themed container whose success criteria are optional
 /// (ADR 0024): one with only an Outcome and no strategy passes `check`,
 /// becomes ready, and every mission view leaves criteria out rather than

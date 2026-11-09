@@ -19,7 +19,7 @@ use atelier_core::{CloseReport, EvidenceResult, ReportPart};
 
 use crate::human_output::{
     local_date, print_page, render_footer_section, render_lines_section, render_metadata,
-    render_row_wrapped, short_commit, FooterAction, ItemLine, RenderContext,
+    render_row_wrapped, render_text_section, short_commit, FooterAction, ItemLine, RenderContext,
 };
 use crate::review_page::{self, badge, escape, inline, prose, section, tile, Tone};
 
@@ -2137,6 +2137,20 @@ pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) ->
     .state(view.status_category.as_deref(), None)
     .text();
     let mut metadata = vec![("Outcome", view.outcome.replace('\n', " "))];
+    // A missing Sizing or Derisking section is named under the Outcome, so
+    // an unsized plan shows; a written one follows as its own section.
+    let mut plan: Vec<String> = Vec::new();
+    for (title, text) in view.plan_sections() {
+        match text {
+            Some(text) => {
+                if !plan.is_empty() {
+                    plan.push(String::new());
+                }
+                plan.extend(render_text_section(title, Some(text)));
+            }
+            None => metadata.push((title, NOT_WRITTEN.to_string())),
+        }
+    }
     if let Some(strategy) = &view.strategy {
         metadata.push(("Strategy", strategy.clone()));
     }
@@ -2236,6 +2250,7 @@ pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) ->
         &format!("Brief: {title}"),
         [
             render_metadata(None, &metadata),
+            plan,
             optional("Success Criteria", criteria),
             render_lines_section("Scope", scope),
             optional("Blockers", blocked),
@@ -2261,6 +2276,9 @@ pub fn brief(index: &RecordIndex, mission_ref: &str, html: bool, quiet: bool) ->
     );
     Ok(())
 }
+
+/// What the brief shows for a strategy section that is not written.
+const NOT_WRITTEN: &str = "not written";
 
 fn render_brief_html(
     view: &atelier_app::mission_review::Brief,
@@ -2298,9 +2316,23 @@ fn render_brief_html(
     }
     body.push_str(&format!("<p class=\"meta\">{}</p>", facts.join(" · ")));
     body.push_str(&format!(
-        "<div class=\"outcome\">{}</div><div class=\"tiles\">",
+        "<div class=\"outcome\">{}</div><div class=\"outcome\">",
         prose(&view.outcome)
     ));
+    for (title, text) in view.plan_sections() {
+        match text {
+            Some(text) => body.push_str(&format!(
+                "<p><strong>{}</strong></p>{}",
+                escape(title),
+                prose(text)
+            )),
+            None => body.push_str(&format!(
+                "<p class=\"muted\">{}: {NOT_WRITTEN}</p>",
+                escape(title)
+            )),
+        }
+    }
+    body.push_str("</div><div class=\"tiles\">");
     // Success criteria are optional (ADR 0024): a mission without any shows
     // no criteria tile, link or section rather than an empty one.
     let has_criteria =
