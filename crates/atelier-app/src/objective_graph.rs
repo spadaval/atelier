@@ -405,6 +405,7 @@ mod tests {
         ]);
         WorkflowPolicy {
             merge_checks: Vec::new(),
+            forge: None,
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),

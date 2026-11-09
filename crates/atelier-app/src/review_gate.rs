@@ -134,11 +134,17 @@ pub(crate) fn validator_gate(
             _ => Vec::new(),
         }
     };
-    let fix = check
-        .help
-        .as_deref()
-        .and_then(|help| help.split('`').nth(1))
-        .map(str::to_owned);
+    // ci.passed's help is its whole Next step, which can take more than
+    // one command; another check's help names its fix in backticks.
+    let fix = if check.validator == crate::workflow_policy::CI_PASSED {
+        check.help.clone()
+    } else {
+        check
+            .help
+            .as_deref()
+            .and_then(|help| help.split('`').nth(1))
+            .map(str::to_owned)
+    };
     let mut node = gate(
         target,
         &check.validator,

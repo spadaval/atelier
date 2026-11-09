@@ -91,6 +91,12 @@ impl Uncommitted {
     }
 }
 
+/// A passing `ci.passed`'s own line, which `merge` prints and its merge
+/// commit repeats.
+pub(crate) fn ci_pass_line(node: &GateNode) -> String {
+    format!("✓ {} {}: {}", node.target, node.check, node.reason)
+}
+
 /// A rendered gate run.
 #[derive(Debug, Default)]
 pub(crate) struct GateReport {
@@ -1036,9 +1042,14 @@ impl Gates<'_> {
                 || atelier_app::review_gate::scope(self.index, owner)
                     .is_ok_and(|scope| scope.iter().any(|id| self.differs(id)))
         });
-        let owner_passes = nodes
+        // ci.passed says what its CI run tested, so its pass keeps a line
+        // of its own (docs/product/reviews-and-merge.md, CI on a forge).
+        let (ci_passes, owner_passes): (Vec<_>, Vec<_>) = nodes
             .iter()
             .filter(|node| node.passed && self.is_owner(node) && !scope_differs)
+            .partition(|node| node.check == atelier_app::workflow_policy::CI_PASSED);
+        let owner_passes = owner_passes
+            .into_iter()
             .map(|node| self.pass_label(node))
             .collect::<Vec<_>>();
         if !owner_passes.is_empty() {
@@ -1053,6 +1064,9 @@ impl Gates<'_> {
                 owner_passes.join(", ")
             ));
         }
+        report
+            .passes
+            .extend(ci_passes.into_iter().map(ci_pass_line));
         let mut claims = nodes
             .iter()
             .filter(|node| !self.is_owner(node) && self.index.get_issue(&node.target).is_some())

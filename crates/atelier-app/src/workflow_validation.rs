@@ -151,6 +151,15 @@ fn evaluate_builtin(
             );
             Ok((output.status.success(), reason, None))
         }
+        "ci.passed" => {
+            let rerun = if issue_id.is_empty() {
+                "atelier merge".to_owned()
+            } else {
+                format!("atelier merge {issue_id}")
+            };
+            let verdict = crate::ci_passed::evaluate(repo_root, policy, &rerun)?;
+            Ok((verdict.passed, verdict.reason, verdict.next))
+        }
         "work.terminal" => work_terminal(index, policy, issue_id).map(without_validator_help),
         "decision.recorded" => decision_recorded(index, issue_id),
         other => bail!("unsupported builtin validator: {other}"),
@@ -371,6 +380,7 @@ mod tests {
         .collect();
         WorkflowPolicy {
             merge_checks: Vec::new(),
+            forge: None,
             schema_version: 3,
             branch_policy: BranchLifecycleConfig::default(),
             issue_types: BTreeMap::new(),
