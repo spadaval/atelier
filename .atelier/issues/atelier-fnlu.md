@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Have reviewers flag code no requirement needs: 1 shrink verdict and no overbuilt-code findings in 1,252 reviews"
-updated_at: "2026-11-09T22:05:32.910164251+00:00"
+updated_at: "2026-11-09T22:17:16.589773419+00:00"
 ---
 
 ## Goal
@@ -37,6 +37,10 @@ Reviewers ask "which requirement needs this?" of every moving part a change adds
 The trade-off between simplicity and scope is decided at planning, where items are sized on complexity, value and risk. At review the Done when lines fix the scope, so the rule is single, not two opposing demands: no more complexity than those requirements need. The weighing of value against complexity at review stays in the merge, shrink or reject verdict on the whole change. Code that skips something the domain requires already fails Contract.
 
 Watch for over-correction (atelier-jxce): the rule asks for a traceable requirement, not the smallest diff. A patch that adds a special case or a second copy of logic is less simple than a larger change that unifies it.
+
+## Notes
+
+- 2026-11-09 [note] Handoff: approved by GPT-6.1 Sol r1 (atelier-fstb @ e338da39) in one round with no findings. Not merged; merge --check passes all but ci.passed, which needs merge --push --wait. See ## Report; follow-up atelier-5lv9.
 
 ## Report
 
