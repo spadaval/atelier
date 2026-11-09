@@ -28,14 +28,20 @@ updated_at: "2026-11-09T02:02:36.297141137+00:00"
 
 ## Goal
 
-Once `merge --push` drives the forge, rewrite `AGENTS.md`'s Merge Policy and the skill's `references/atelier.md` so agents run `atelier merge <id> --push` instead of pushing the branch, opening a pull request, waiting for CI and pushing the base by hand, and show the mission's one-command-merge criterion on a real item.
+Run this repository on the one-command merge. Now that `atelier merge <id> --push` pushes the branch, opens the pull request, waits for CI and publishes the base (atelier-fad5, atelier-vqoy), rewrite `AGENTS.md`'s Merge Policy and the skill's `skills/agent-factory/references/atelier.md` so agents run it instead of the hand-run routine, delete `scripts/merge-ci-passed.sh`, which no policy runs since atelier-7tul, and merge this item itself with `atelier merge atelier-7o4r --push` alone, so its transcript shows the mission's one-command-merge criterion.
 
 ## Done when
 
-- [ ] `AGENTS.md`'s Merge Policy and `skills/agent-factory/references/atelier.md` name `atelier merge <id> --push` as the way work reaches the base, and neither tells agents to run `gh pr create`, wait on checks or push the base by hand.
-- [ ] `scripts/merge-ci-passed.sh` is deleted, with no policy, doc or test still naming it.
-- [ ] One real item in this repository merges with `atelier merge <id> --push` alone while another commit reaches master after its CI run; the Report links the transcript and the pull request, which GitHub shows as merged.
+- [ ] `AGENTS.md`'s Merge Policy and `skills/agent-factory/references/atelier.md` name `atelier merge <id> --push` (with `--wait`, run in the background or with `--timeout` where a harness limits foreground commands) as the way work reaches the base, and neither tells agents to run `gh pr create`, wait on checks or push the base by hand. Repositories whose policy names no forge keep `atelier merge <id>` then `atelier land --push`, and the skill says so.
+- [ ] `scripts/merge-ci-passed.sh` is deleted, and no current policy, doc or test names it (`git grep -n merge-ci-passed -- . ':!.atelier' ':!docs/adr' ':!docs/strategies'` shows only historical text).
+- [ ] `merge --push` can publish from this host: this checkout's `origin` is HTTPS without credentials and agents push over SSH, so either the policy's `forge.remote` or the checkout's push URL makes the push work. The choice and why are a decision note on this item, and `AGENTS.md` says what a fresh checkout needs.
+- [ ] This item merges with `atelier merge atelier-7o4r --push` alone, run with the installed binary built from master after atelier-vqoy merged, while another commit reaches master after this branch's CI run; no `gh` or `git push` is run by hand for the branch, the pull request or the base. The validation item atelier-zz0t checks the transcript and the pull request's merged state.
 
 ## Scope
 
-Provisional until atelier-fad5 and the pull-request item land. Moving astromech's policy is separate backlog.
+AGENTS.md, skills/agent-factory/references/atelier.md (and other skill files only where they describe the hand-run routine), scripts/merge-ci-passed.sh, docs that still name it, and this checkout's git config if that is the choice. Moving astromech's policy is separate backlog.
+
+## Context
+
+- The installed binary and the live skill checkout (`~/projects/atelier-skill`) must be moved forward after atelier-vqoy merges, before this item's merge.
+- Unknowns from atelier-vqoy that this run observes: how long GitHub takes to mark the pull request merged after the base push (step 8 waits 60 seconds), and whether the 30-minute `--wait` default suits this repository's ~12-minute macOS run. Record what the run shows in the Report; file follow-ups for anything that needs a change.
