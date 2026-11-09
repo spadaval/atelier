@@ -991,7 +991,7 @@ fn run() -> Result<()> {
         } else {
             roots
         };
-        return atelier_site::serve(bind, roots);
+        return atelier_site::serve(bind, roots, cli.quiet);
     }
     // Every record write passes the rules `atelier check` applies before it
     // lands, and is refused before anything is written (atelier-ilba).

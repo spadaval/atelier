@@ -9,6 +9,8 @@ allows a read-only site and a session database beside the records.
 - [Markdown record store](markdown-first-record-store.md): durable state,
   direct reads, mutation boundaries, and Git authority.
 - [Source layout](source-layout.md): crate responsibilities and dependency direction.
+- [Site](site.md): `atelier serve`, reading each repository's base commit
+  without a checkout, discovery, the JSON API and its load limits.
 - [Quality standards](quality/standards.md): engineering requirements.
 - [Validation](quality/validation.md): proof and review boundaries.
 - [Quality vocabulary](quality/architecture-quality.md) and

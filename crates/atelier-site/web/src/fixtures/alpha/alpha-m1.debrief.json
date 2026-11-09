@@ -1,0 +1,274 @@
+{
+  "body": {
+    "base_commit": "74c84a186e3f7e1cb583299d367bfe0622836337",
+    "debrief": {
+      "added": [],
+      "asks": [
+        {
+          "kind": "decision",
+          "value": "alpha-a2"
+        },
+        {
+          "kind": "unproven",
+          "value": [
+            "current"
+          ]
+        }
+      ],
+      "base_exemptions": [],
+      "criteria": {
+        "criteria": {
+          "mission_id": "alpha-m1",
+          "parse": {
+            "criteria": [
+              {
+                "slug": "shown",
+                "text": "The brief shows the plan."
+              },
+              {
+                "slug": "current",
+                "text": "The page reads the base branch."
+              }
+            ],
+            "problems": []
+          },
+          "source": {
+            "kind": "strategy",
+            "value": "docs/strategies/one.md"
+          }
+        },
+        "orphaned": [],
+        "proofs": [
+          {
+            "criterion": {
+              "slug": "shown",
+              "text": "The brief shows the plan."
+            },
+            "mark": "proven",
+            "receipts": [
+              {
+                "captured_at": "2026-01-01T00:36:00Z",
+                "code_commits_since": 1,
+                "commit": "c3f62793f973303afd20932b92b4594cbeb9d9cf",
+                "evidence_id": "alpha-e2",
+                "in_history": true,
+                "result": "pass",
+                "target_id": "alpha-m1"
+              }
+            ]
+          },
+          {
+            "criterion": {
+              "slug": "current",
+              "text": "The page reads the base branch."
+            },
+            "mark": "unproven",
+            "receipts": []
+          }
+        ]
+      },
+      "decisions": {
+        "malformed": [],
+        "notes": [],
+        "records": [
+          {
+            "decided": false,
+            "issue": {
+              "adr": null,
+              "closed_at": null,
+              "created_at": "2026-01-01T00:00:00Z",
+              "description": null,
+              "id": "alpha-a2",
+              "issue_type": "decision",
+              "parent_id": null,
+              "priority": "high",
+              "status": "todo",
+              "strategy": null,
+              "title": "Choose the server",
+              "updated_at": "2026-01-01T00:00:00Z",
+              "workflow_branch": null
+            },
+            "superseded_by": [],
+            "supersedes": []
+          }
+        ]
+      },
+      "delivered_by": {
+        "current": [],
+        "shown": []
+      },
+      "dropped": [],
+      "events": [
+        {
+          "at": "2026-01-01T00:36:00Z",
+          "event": {
+            "kind": "validated",
+            "value": 0
+          }
+        }
+      ],
+      "found": [],
+      "generated_from": "74c84a186e3f7e1cb583299d367bfe0622836337",
+      "left": [
+        {
+          "added_after_start": false,
+          "changes": [],
+          "discovered": false,
+          "filed_at": null,
+          "from": null,
+          "id": "alpha-a1",
+          "parent": null,
+          "reason": null
+        }
+      ],
+      "mission": {
+        "adr": null,
+        "closed_at": null,
+        "created_at": "2026-01-01T00:00:00Z",
+        "description": null,
+        "id": "alpha-m1",
+        "issue_type": "mission",
+        "parent_id": null,
+        "priority": "high",
+        "status": "draft",
+        "strategy": {
+          "path": "docs/strategies/one.md"
+        },
+        "title": "Read plans on the base branch",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "workflow_branch": null
+      },
+      "mission_events": [],
+      "outcome": "Every plan is read on the base.",
+      "planned": [
+        [
+          "alpha-a1",
+          null
+        ],
+        [
+          "alpha-a2",
+          null
+        ]
+      ],
+      "planned_done": 0,
+      "planned_total": 2,
+      "record_refs": {
+        "alpha-e2": {
+          "kind": "receipt",
+          "summary": "pass: Fixture tests pass"
+        }
+      },
+      "refs": {
+        "alpha-a1": {
+          "id": "alpha-a1",
+          "issue_type": "task",
+          "outcome": null,
+          "parent": null,
+          "status": "todo",
+          "status_category": "todo",
+          "summary": "Load them.",
+          "title": "Load records from a commit"
+        },
+        "alpha-a2": {
+          "id": "alpha-a2",
+          "issue_type": "decision",
+          "outcome": null,
+          "parent": null,
+          "status": "todo",
+          "status_category": "todo",
+          "summary": "Which server?",
+          "title": "Choose the server"
+        },
+        "alpha-b1": {
+          "id": "alpha-b1",
+          "issue_type": "task",
+          "outcome": "The loader reads every record.",
+          "parent": null,
+          "status": "done",
+          "status_category": "done",
+          "summary": "Write it.",
+          "title": "Write the loader"
+        },
+        "alpha-m1": {
+          "id": "alpha-m1",
+          "issue_type": "mission",
+          "outcome": null,
+          "parent": null,
+          "status": "draft",
+          "status_category": "todo",
+          "summary": "Every plan is read on the base.",
+          "title": "Read plans on the base branch"
+        },
+        "alpha-m2": {
+          "id": "alpha-m2",
+          "issue_type": "mission",
+          "outcome": "The loader shipped and reads every record.",
+          "parent": null,
+          "status": "done",
+          "status_category": "done",
+          "summary": "The loader ships.",
+          "title": "Ship the loader"
+        }
+      },
+      "status_category": "todo",
+      "strategy": "docs/strategies/one.md",
+      "timeline": {
+        "added_after_start": [],
+        "closed": null,
+        "reopened": [],
+        "started": null
+      },
+      "validation": {
+        "approved": 0,
+        "awaiting": [
+          [
+            "current",
+            "unproven",
+            null
+          ]
+        ],
+        "findings": {
+          "approved": false,
+          "approvers": [],
+          "deferred": 0,
+          "fixed": 0,
+          "no_action": 0,
+          "recorded": false,
+          "trivial": false,
+          "undisposed": 0,
+          "wont_fix": 0
+        },
+        "not_approved": [],
+        "runs": [
+          {
+            "at": "2026-01-01T00:36:00Z",
+            "code_commits_since": 1,
+            "commit": "c3f62793f973303afd20932b92b4594cbeb9d9cf",
+            "identity": "fixture-validator",
+            "later_work": [],
+            "receipts": [
+              {
+                "criteria": [
+                  {
+                    "result": "pass",
+                    "slug": "shown"
+                  }
+                ],
+                "id": "alpha-e2",
+                "result": "pass",
+                "summary": "Fixture tests pass",
+                "target": "alpha-m1"
+              }
+            ]
+          }
+        ],
+        "trivial": 0,
+        "unreviewed": []
+      },
+      "why": "Plans go unread.",
+      "work": []
+    }
+  },
+  "route": "/api/alpha/mission/alpha-m1/debrief",
+  "status": 200
+}

@@ -1283,7 +1283,8 @@ fn test_root_help_lists_every_command_and_lifecycle_common_commands() {
         commands,
         [
             "init", "setup", "status", "work", "issue", "start", "evidence", "review", "land",
-            "merge", "bundle", "check", "doctor", "brief", "debrief", "prune", "migrate", "help",
+            "merge", "bundle", "check", "doctor", "brief", "debrief", "serve", "prune", "migrate",
+            "help",
         ],
         "{stdout}"
     );

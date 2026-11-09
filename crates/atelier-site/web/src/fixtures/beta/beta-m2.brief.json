@@ -1,0 +1,77 @@
+{
+  "body": {
+    "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+    "brief": {
+      "criteria": {
+        "mission_id": "beta-m2",
+        "parse": {
+          "criteria": [
+            {
+              "slug": "queued",
+              "text": "The inbox queues asks."
+            },
+            {
+              "slug": "linked",
+              "text": "Each ask links its page."
+            }
+          ],
+          "problems": []
+        },
+        "source": {
+          "kind": "mission"
+        }
+      },
+      "derisking": null,
+      "generated_from": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+      "human_decisions": [],
+      "items": [
+        {
+          "issue": {
+            "adr": null,
+            "closed_at": null,
+            "created_at": "2026-01-01T00:00:00Z",
+            "description": null,
+            "id": "beta-c1",
+            "issue_type": "task",
+            "parent_id": null,
+            "priority": "high",
+            "status": "todo",
+            "strategy": null,
+            "title": "List the asks",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "workflow_branch": null
+          },
+          "needs_human": false,
+          "open_blockers": [],
+          "parent": null,
+          "size": null,
+          "status_category": "todo",
+          "unknowns": null
+        }
+      ],
+      "mission": {
+        "adr": null,
+        "closed_at": null,
+        "created_at": "2026-01-01T00:00:00Z",
+        "description": null,
+        "id": "beta-m2",
+        "issue_type": "mission",
+        "parent_id": null,
+        "priority": "high",
+        "status": "ready",
+        "strategy": null,
+        "title": "Build the inbox",
+        "updated_at": "2026-01-01T00:05:00Z",
+        "workflow_branch": null
+      },
+      "mission_events": [],
+      "outcome": "An inbox.",
+      "risks": null,
+      "sizing": null,
+      "status_category": "todo",
+      "strategy": null
+    }
+  },
+  "route": "/api/beta/mission/beta-m2/brief",
+  "status": 200
+}

@@ -134,3 +134,60 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     ApiError::export_all(&config)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn files(dir: &Path) -> BTreeMap<PathBuf, String> {
+        let mut found = BTreeMap::new();
+        let mut pending = vec![dir.to_path_buf()];
+        while let Some(next) = pending.pop() {
+            let Ok(entries) = fs::read_dir(&next) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    let text = fs::read_to_string(&path).unwrap();
+                    found.insert(path.strip_prefix(dir).unwrap().to_path_buf(), text);
+                }
+            }
+        }
+        found
+    }
+
+    /// The checked-in TypeScript types are what `ts-rs` generates from the
+    /// Rust types now.
+    #[test]
+    fn typescript_types_are_current() {
+        let checked_in = Path::new(env!("CARGO_MANIFEST_DIR")).join("web/src/api");
+        let fresh = tempfile::tempdir().unwrap();
+        super::export_types(fresh.path()).unwrap();
+        let generated = files(fresh.path());
+        if std::env::var_os("ATELIER_UPDATE_FIXTURES").is_some_and(|value| value == "1") {
+            let _ = fs::remove_dir_all(&checked_in);
+            for (path, text) in &generated {
+                let path = checked_in.join(path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, text).unwrap();
+            }
+        }
+        let current = files(&checked_in);
+        let stale = generated
+            .keys()
+            .chain(current.keys())
+            .filter(|path| generated.get(*path) != current.get(*path))
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(
+            stale.is_empty(),
+            "the TypeScript types in {} are stale: {stale:?}. Rewrite them with ATELIER_UPDATE_FIXTURES=1 cargo nextest run -p atelier-site typescript_types",
+            checked_in.display()
+        );
+        assert!(generated.contains_key(Path::new("DebriefResponse.ts")));
+    }
+}

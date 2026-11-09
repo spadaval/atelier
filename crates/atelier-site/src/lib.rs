@@ -35,15 +35,13 @@ use api::{
     ApiError, BriefResponse, DebriefResponse, MissionLinks, MissionResponse, MissionSummary,
     RepoCounts, RepoSummary, ReposResponse, Review, StrategyResponse,
 };
-use discovery::Base;
+use discovery::{Base, CommitFacts};
 
 /// Where and how the site reads repositories.
 #[derive(Debug, Clone)]
 pub struct SiteOptions {
     /// Directories searched for checkouts holding `.atelier/`.
     pub roots: Vec<PathBuf>,
-    /// How long a scan of the roots and their base branches is reused.
-    pub refresh: Duration,
     /// How many loads and view builds may run at once.
     pub max_builds: usize,
     /// How long a request waits for one of them before a 503.
@@ -54,7 +52,6 @@ impl SiteOptions {
     pub fn new(roots: Vec<PathBuf>) -> Self {
         Self {
             roots,
-            refresh: Duration::from_secs(2),
             max_builds: 2,
             wait: Duration::from_secs(5),
         }
@@ -65,7 +62,11 @@ impl SiteOptions {
 /// commit with what has been read and built from it.
 pub struct Site {
     options: SiteOptions,
+    /// The latest scan, with when it started.
     fleet: tokio::sync::Mutex<Option<(Instant, Arc<Fleet>)>>,
+    /// What the policy and config of each repository's latest default and
+    /// base commits say.
+    facts: Arc<Mutex<HashMap<(PathBuf, String), CommitFacts>>>,
     snapshots: Mutex<HashMap<PathBuf, Arc<Snapshot>>>,
     builds: Semaphore,
     built: AtomicUsize,
@@ -79,6 +80,7 @@ impl Site {
             builds: Semaphore::new(options.max_builds),
             options,
             fleet: tokio::sync::Mutex::new(None),
+            facts: Arc::new(Mutex::new(HashMap::new())),
             snapshots: Mutex::new(HashMap::new()),
             built: AtomicUsize::new(0),
         }
@@ -90,19 +92,23 @@ impl Site {
         self.built.load(Ordering::Relaxed)
     }
 
-    /// The repositories under the roots, scanned again once the last scan is
-    /// older than `refresh`. A scan drops what was kept for repositories
-    /// that are gone or whose base moved.
+    /// The repositories under the roots and their base commits, as a scan
+    /// that started after this request arrived found them: one scan serves
+    /// every request that was waiting when it started. A scan drops what was
+    /// kept for repositories that are gone or whose base moved.
     async fn fleet(&self) -> Result<Arc<Fleet>, Reply> {
+        let asked = Instant::now();
         let mut latest = self.fleet.lock().await;
-        if let Some((at, fleet)) = latest.as_ref() {
-            if at.elapsed() < self.options.refresh {
+        if let Some((started, fleet)) = latest.as_ref() {
+            if *started >= asked {
                 return Ok(fleet.clone());
             }
         }
+        let started = Instant::now();
         let roots = self.options.roots.clone();
+        let facts = self.facts.clone();
         let fleet = Arc::new(
-            tokio::task::spawn_blocking(move || Fleet::read(&roots))
+            tokio::task::spawn_blocking(move || Fleet::read(&roots, &facts))
                 .await
                 .map_err(|error| Reply::error(StatusCode::INTERNAL_SERVER_ERROR, error))?,
         );
@@ -116,7 +122,7 @@ impl Site {
             .lock()
             .expect("snapshot lock")
             .retain(|dir, snapshot| current.get(dir) == Some(&snapshot.commit));
-        *latest = Some((Instant::now(), fleet.clone()));
+        *latest = Some((started, fleet.clone()));
         Ok(fleet)
     }
 
@@ -234,14 +240,31 @@ struct Located {
 }
 
 impl Fleet {
-    fn read(roots: &[PathBuf]) -> Self {
+    /// Scans `roots`, reading each repository's refs afresh and the facts of
+    /// its commits from `facts` where they are known. Afterwards `facts`
+    /// keeps only the commits this scan read.
+    fn read(roots: &[PathBuf], facts: &Mutex<HashMap<(PathBuf, String), CommitFacts>>) -> Self {
         let mut taken = HashMap::<String, usize>::new();
+        let mut known = std::mem::take(&mut *facts.lock().expect("facts lock"));
+        let mut kept = HashMap::new();
         let repos = discovery::discover(roots)
             .into_iter()
             .map(|found| {
                 let located = found.common_dir.clone().and_then(|common_dir| {
-                    discovery::base(&common_dir)
-                        .map(|base| Located { common_dir, base })
+                    let mut facts_of = |commit: &str| {
+                        let key = (common_dir.clone(), commit.to_owned());
+                        let facts = known
+                            .remove(&key)
+                            .or_else(|| kept.get(&key).cloned())
+                            .unwrap_or_else(|| discovery::commit_facts(&common_dir, commit));
+                        kept.insert(key, facts.clone());
+                        facts
+                    };
+                    discovery::base(&common_dir, &mut facts_of)
+                        .map(|base| Located {
+                            common_dir: common_dir.clone(),
+                            base,
+                        })
                         .map_err(|error| format!("{error:#}"))
                 });
                 let name = located
@@ -258,6 +281,7 @@ impl Fleet {
                 FleetEntry { repo, located }
             })
             .collect();
+        *facts.lock().expect("facts lock") = kept;
         Self { repos }
     }
 
@@ -711,8 +735,15 @@ pub fn default_root() -> Option<PathBuf> {
 
 /// Serves the API on `bind` until interrupted, on a small runtime: two
 /// worker threads and four blocking threads, so the host's other services
-/// keep their cores.
-pub fn serve(bind: SocketAddr, roots: Vec<PathBuf>) -> Result<()> {
+/// keep their cores. Once listening it prints what it serves, or with
+/// `quiet` only its URL. A root that is not a directory is refused first.
+pub fn serve(bind: SocketAddr, roots: Vec<PathBuf>, quiet: bool) -> Result<()> {
+    if let Some(root) = roots.iter().find(|root| !root.is_dir()) {
+        anyhow::bail!(
+            "{} is not a directory; name a directory holding Atelier repositories with --root",
+            root.display()
+        );
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .max_blocking_threads(4)
@@ -725,14 +756,18 @@ pub fn serve(bind: SocketAddr, roots: Vec<PathBuf>) -> Result<()> {
             .await
             .with_context(|| format!("cannot listen on {bind}"))?;
         let address = listener.local_addr()?;
-        println!(
-            "Serving every Atelier repository under {} at http://{address}/api/repos",
-            roots
-                .iter()
-                .map(|root| root.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
+        if quiet {
+            println!("http://{address}");
+        } else {
+            println!(
+                "Serving every Atelier repository under {} at http://{address}/api/repos",
+                roots
+                    .iter()
+                    .map(|root| root.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
         let site = Arc::new(Site::new(SiteOptions::new(roots)));
         axum::serve(listener, router(site))
             .with_graceful_shutdown(async {
@@ -741,4 +776,63 @@ pub fn serve(bind: SocketAddr, roots: Vec<PathBuf>) -> Result<()> {
             .await
             .context("the server stopped")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    /// At most `max_builds` builds run at once, and a request that cannot
+    /// get a slot within `wait` is a 503 that names the wait.
+    #[test]
+    fn builds_are_capped_and_a_long_wait_is_a_503() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let site = Arc::new(Site::new(SiteOptions {
+            wait: Duration::from_millis(300),
+            ..SiteOptions::new(Vec::new())
+        }));
+        let running = Arc::new(AtomicUsize::new(0));
+        let most = Arc::new(AtomicUsize::new(0));
+        let answers = runtime.block_on(async {
+            let tasks = (0..3)
+                .map(|_| {
+                    let (site, running, most) = (site.clone(), running.clone(), most.clone());
+                    tokio::spawn(async move {
+                        site.build(
+                            || None,
+                            move || {
+                                let now = running.fetch_add(1, Ordering::SeqCst) + 1;
+                                most.fetch_max(now, Ordering::SeqCst);
+                                std::thread::sleep(Duration::from_millis(1000));
+                                running.fetch_sub(1, Ordering::SeqCst);
+                            },
+                        )
+                        .await
+                        .map_err(|reply| (reply.status, error_text(&reply)))
+                    })
+                })
+                .collect::<Vec<_>>();
+            let mut answers = Vec::new();
+            for task in tasks {
+                answers.push(task.await.unwrap());
+            }
+            answers
+        });
+        assert_eq!(most.load(Ordering::SeqCst), 2);
+        let refused = answers
+            .iter()
+            .filter_map(|answer| answer.as_ref().err())
+            .collect::<Vec<_>>();
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert_eq!(refused[0].0, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(refused[0]
+            .1
+            .contains("waited 0 s for one of its 2 view builds"));
+        assert_eq!(site.builds_run(), 2);
+    }
 }

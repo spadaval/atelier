@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Serve every mission's brief and debrief as JSON from its base commit: atelier serve, read-only, for every repository here"
-updated_at: "2026-11-09T16:09:35.665540244+00:00"
+updated_at: "2026-11-09T16:33:53.361851600+00:00"
 ---
 
 ## Goal
@@ -53,3 +53,18 @@ Decisions atelier-c5vk and atelier-8p7u and the Design in `docs/strategies/fleet
 
 - Whether the views read any checkout state beyond the sites listed in Context; the divergent-`HEAD` test and the read-only proof find out.
 - Whether the view models serialize as they are or need a serializable shape beside them; prefer deriving `Serialize` on the existing types, and record a decision note if a separate shape is needed.
+
+## Notes
+
+- 2026-11-09 [decision] The API serializes the existing view models: serde and ts-rs derives on the brief and debrief types in atelier-app and the record types in atelier-core, with each enum that carries data tagged as {kind, value}.
+  Reason: The views serialize as they are, so the site cannot drift from what the CLI computes, and tagged enums give TypeScript discriminated unions.
+  Rejected: A separate serializable shape beside each view: a second model to keep in step
+- 2026-11-09 [decision] At most two loads or view builds run at once through a tokio semaphore around the builds, not a tower concurrency layer; tower serves in-process requests (atelier_site::Client) through ServiceExt::oneshot.
+  Reason: A layer limits every request, so warm requests answered from the cache would queue behind cold builds; the Done when caps builds.
+  Rejected: tower ConcurrencyLimitLayer and TimeoutLayer on the API routes
+- 2026-11-09 [decision] Refs are read afresh for every request: each request scans the roots and runs one git for-each-ref per repository, and requests that arrive while a scan runs share the next one. Only the policy and config facts of a commit, the records loaded from it and the views built from it are cached.
+  Reason: The strategy's Design says anything read from refs is recomputed per request or keyed by every ref it read; a warm debrief with the scan still answers in about 12 ms on a debug build.
+  Rejected: Reusing a scan for two seconds: a time-keyed cache of ref state
+- 2026-11-09 [decision] The base branch is read from its local branch (refs/heads/<base>); a base with no local branch is an error, never its remote-tracking ref. A repository's URL name is its committed project_slug, else its directory name, with -2 and on for a repeated name in common-directory order. Discovery searches at most four directories deep, never inside a checkout, hidden directories, node_modules or target. atelier serve binds 127.0.0.1:7341 by default.
+  Reason: The CLI's commands and land read the local base, and agents push it after land; the other choices keep a scan of ~/projects cheap and URLs stable.
+  Rejected: Falling back to refs/remotes/origin/<base>: it can lag or lead what land checked
