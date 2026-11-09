@@ -61,5 +61,15 @@ class CanaryTest(unittest.TestCase):
         self.assertIn(str(Path.home() / ".claude" / "CLAUDE.md"), message)
 
 
+class AgentEnvTest(unittest.TestCase):
+    def test_atelier_update_check_is_off(self):
+        # Its notice names the host's own skill checkout, not the staged one.
+        tmp = Path(tempfile.mkdtemp(prefix="af-env-test-"))
+        try:
+            self.assertEqual(run.agent_env(tmp).get("ATELIER_NO_UPDATE_CHECK"), "1")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
