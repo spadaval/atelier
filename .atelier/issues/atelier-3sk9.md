@@ -90,7 +90,7 @@ Read paths, counted by atelier-qj9d's rule (SKILL.md, the procedure, every file 
 
 | Role | Before | After |
 |---|---|---|
-| garden | none | 300 (SKILL 98, garden 60, atelier 105, transcripts 18, verify-skill 21) |
+| garden | none | 300 (SKILL 98, garden 61, atelier 105, transcripts 14, verify-skill 22) |
 | audit | 243 | 253 |
 | implement | 274 | 276 |
 | groom | 297 | 298 |
@@ -121,12 +121,14 @@ The digest it would file is "Garden atelier: 5 recommendations" (decision, `need
 - **R4, sign.** The refusal names `atelier merge <owner> --sync`.
 - **R5, removal.** Plan atelier-hfme now (drop `start --base` and the `branch_base` write), and possibly the `prime` alias.
 
-Asked whether it looked for rules or checks to remove, the trial added **R6, removal**. It drops `cargo fmt -- --check` and `git diff --check` from `merge_checks` in `.atelier/workflow.yaml`, because `scripts/merge-ci-passed.sh` already requires a CI pass on the same code, and CI runs both checks. I confirmed that by reading the policy, the script and `ci.yml`. It keeps `cargo metadata --loc### Trial 2 (7f26fee2, the final text but for three small fixes)
+Asked whether it looked for rules or checks to remove, the trial added **R6, removal**. It drops `cargo fmt -- --check` and `git diff --check` from `merge_checks` in `.atelier/workflow.yaml`, because `scripts/merge-ci-passed.sh` already requires a CI pass on the same code, and CI runs both checks. I confirmed that by reading the policy, the script and `ci.yml`. It keeps `cargo metadata --locked`, since CI builds without `--locked`.
+
+### Trial 2 (7f26fee2, the final text but for three small fixes)
 
 Run at review finding atelier-m2zn's request, from a fresh checkout of master. It covered the same window, 20 root sessions and their 173 subagents, 161 findings and 2 failed CI runs. It made one routine fix (60a3e1d4 on local branch `garden-trial2`), the same `check --fix` doc fix as trial 1. It wrote "Garden atelier: 8 recommendations", and filed it in a throwaway Atelier repository, where `issue show --full` listed all 8 `### R` entries under Options and `atelier check` passed. I checked these by `grep` in the cited transcripts:
 
 - **R1, `issue create --parent <mission>` refused.** a0cc9335: "'task/' is not a valid branch name".
-- **R4, removal.** `SKILL.md:48` "its PR is not marked ready" outlived the no-draft-PRs direction. 9fa7eab8 has 2 `gh pr create --draft` calls after it.
+- **R4, removal.** `SKILL.md:48` "its PR is not marked ready" outlived the no-draft-PRs direction. 9fa7eab8 has a `gh pr create --draft` call after it.
 - **R5, free text starting with `--` parsed as a flag.** 7377a49f: "first summary started with `--binary`, so it was parsed as a flag".
 - **R8, removal.** A stale memory note on this host, since corrected by hand (memory, not the repository).
 
@@ -138,8 +140,6 @@ Three of its notes were fixed after it, within the same 300 lines: the window go
 - whether the twice-in-30-days rule applies to evidence from review records;
 - forked T3 threads copying their parent's events, so counts double;
 - how far to read other repositories.
-
-ked`, since CI builds without `--locked`.
 
 ### Deviations
 

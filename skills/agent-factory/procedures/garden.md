@@ -44,18 +44,18 @@ rule, reworded guidance or messages, a changed default, a restructure.
 File one digest per run and repository (`atelier issue create "Garden <repo>:
 <n> recommendations" --issue-type decision -l needs-human -l garden`), or add to
 the open one while any entry is unanswered, and record the run's window in its
-Context; a run with no entries records its window as a note on the latest
-digest, or files nothing if there is none. Its Question asks which entries go
-ahead, and its Options give each as `### R1 <title>`: the trip and how often it
-happened, its evidence (sessions and events, or paths and lines), the fix and
-its level (architecture, check, sign or removal), its size (lines changed, and
-complexity, value and risk) and the alternatives, leaving it included.
+Context; a run with no entries notes its window on the latest digest, or files
+one whose Decision says "no entries" and decides it. Its Question asks which
+entries go ahead, and its Options give each as `### R1 <title>`: the trip and
+how often it happened, its evidence (sessions and events, or paths and lines),
+the fix and its level (architecture, check, sign or removal), its size (lines,
+and complexity, value and risk) and the alternatives, including leaving it.
 
 The human answers each entry in a note: do it, do it differently, or no. Start
 each run with those answers: file each accepted entry as an issue, or point it
 at the item that already holds it, planned and reviewed as `plan` and [Planning
 on the Base](../references/atelier.md#planning-on-the-base) say; propose a
 declined one again only with new evidence, and name that. Once every entry is
-answered and filed, `decide` the digest. Report the window, the trips found, the
-routine fixes merged, the recommendations made, and the rules and checks added
-and removed.
+answered and filed, `decide` the digest. Report the window, the trips, the
+routine fixes merged, the recommendations, and the rules and checks added and
+removed.
