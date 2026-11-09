@@ -4,6 +4,9 @@ id: "atelier-3sk9"
 issue_type: "task"
 labels:
 - "agent-factory"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-3sk9
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add a gardener: agents fix routine mess, and bring the human the judgment calls"
-updated_at: "2026-11-08T21:06:32.850458660+00:00"
+updated_at: "2026-11-09T00:07:09.297053584+00:00"
 ---
 
 ## Goal
@@ -78,3 +81,8 @@ atelier-l58v's draft verify-skill standard, copied from spadaval/.agents `git sh
 >
 > Nobody relies on it until an agent has run it end to end from a clean checkout:
 > Doctor, Launch, Drive of one feature, Evidence and Cleanup.
+
+## Notes
+
+- 2026-11-08 [decision] Estimate: about 200 changed lines across garden.md, verify-skill.md, a transcripts reference, SKILL.md, audit.md and implement.md, records excluded.
+  Reason: implement.md asks for a size estimate when the assignment gives none.
