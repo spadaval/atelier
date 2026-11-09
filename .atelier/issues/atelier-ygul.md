@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Stop land refusing a done validation item whose planning approval predates unrelated code"
-updated_at: "2026-11-09T07:05:20.547021291+00:00"
+updated_at: "2026-11-09T17:48:26.037463257+00:00"
 ---
 
 ## Goal
@@ -28,3 +28,7 @@ Marking validation item atelier-v3nm done made `atelier land` refuse on master f
 
 - [ ] A done item whose own commits change no code is not refused by land because code elsewhere changed after its planning approval; a regression test reproduces the atelier-v3nm case (planning fix_now, approval after it, unrelated code merged, item marked done on the base).
 - [ ] The refusal message, where it still applies, names the code change that made the approval stale rather than saying the findings came after the approval.
+
+## Notes
+
+- 2026-11-09 [note] 2026-11-09: Closing mission atelier-fl12 hit the same refusal: findings.disposed said 4 fix_now findings came after the current approval. The approval it meant was Sumeet's planning approval of the mission, atelier-op8x at 2a7a5f14; the findings were the items' own code-review findings (atelier-vjuy, atelier-lfkn, atelier-huh0 and others), each already resolved by the item's later approval. So land also judges a mission's rolled-up item findings against the mission's planning approval. The fix should cover both the done validation item and the closed mission.
