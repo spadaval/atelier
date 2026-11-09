@@ -16,9 +16,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-09T00:06:47.193042444+00:00"
+status: "done"
 title: "Push spadaval/.agents main, so GitHub's copy drops Agent Factory and the four Codex skills"
-updated_at: "2026-11-08T23:41:02.959451965+00:00"
+updated_at: "2026-11-09T00:06:47.193042444+00:00"
 ---
 
 ## Goal
@@ -27,15 +28,19 @@ Mission atelier-g6rp's outcome says spadaval/.agents no longer holds Agent Facto
 
 ## Done when
 
-- [ ] Sumeet has reviewed and pushed `~/projects/agents-skills` `main` (`dfa5f3e`, 19 commits ahead of `origin/main`). It holds:
+- [x] Sumeet has reviewed and pushed `~/projects/agents-skills` `main` (`dfa5f3e`, 19 commits ahead of `origin/main`). It holds:
   - atelier-l58v's skill change (`c75a9b1`);
   - atelier-dkul's README and frozen notice (`aef856d`);
   - atelier-6oxt's deletion of `skills/agent-factory`, `evals/agent-factory` and the four Codex skills (`dfa5f3e`).
 
   For example: `git -C ~/projects/agents-skills push origin main`.
-- [ ] `git ls-remote git@github.com:spadaval/.agents.git main` names `dfa5f3e` or a descendant, and its tree has no `skills/` directory.
+- [x] `git ls-remote git@github.com:spadaval/.agents.git main` names `dfa5f3e` or a descendant, and its tree has no `skills/` directory.
 
 ## Context
 
 - Each change was reviewed independently and merged locally.
 - atelier-rfxf keeps the repository for future personal skills.
+
+## Report
+
+Pushed spadaval/.agents main to dfa5f3e (c2ed148..dfa5f3e); git ls-remote names dfa5f3e and its tree holds only .gitignore, .skill-lock.json and README.md
