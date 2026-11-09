@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Record ADR 0030: Atelier may have a site, a session database and a T3 dependency"
-updated_at: "2026-11-09T15:11:32.101351178+00:00"
+updated_at: "2026-11-09T15:19:35.129596554+00:00"
 ---
 
 ## Goal
@@ -41,6 +41,10 @@ Docs only. Do not design the server, schema or pages beyond what the ADR must sa
 ## Context
 
 Decision atelier-7bs1, `docs/strategies/fleet-dashboard.md` and `docs/strategies/agent-attribution.md` hold the reasoning; ADR 0019 and `docs/strategies/atelier-rebuild.md` explain why the Boundaries were written. Planning review finding atelier-roov named the architecture contradiction. Sumeet's 2026-11-08 direction on atelier-yfqu replaced the HTML files with the site.
+
+## Notes
+
+- 2026-11-09 [note] Handoff: approved by gpt-6.1-sol-review-1 (atelier-4ozu) at ab1ad675 in one round, no new findings; planning finding atelier-s0mf settled by that approval. See the Report.
 
 ## Report
 
