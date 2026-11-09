@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Make each mission a human review boundary: a planner gets it approved, an orchestrator completes it or aborts"
-updated_at: "2026-11-09T03:58:51.764237065+00:00"
+updated_at: "2026-11-09T05:33:40.470486210+00:00"
 ---
 
 ## Outcome
