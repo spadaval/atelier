@@ -17,9 +17,9 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Read every mission's brief and debrief, and each repository's board, on one site for every Atelier repository here"
-updated_at: "2026-11-09T14:33:01.323185373+00:00"
+updated_at: "2026-11-09T15:10:21.182294564+00:00"
 ---
 
 ## Outcome
