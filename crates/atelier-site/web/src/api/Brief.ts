@@ -7,23 +7,23 @@ import type { MissionEvent } from "./MissionEvent";
 /**
  * A mission's plan, for review before work starts.
  */
-export type Brief = { mission: Issue, status_category: string | null, 
+export type Brief = { mission: Issue, status_category: string | null,
 /**
  * The strategy's Outcome section, or the mission's Outcome.
  */
-outcome: string, strategy: string | null, generated_from: string | null, criteria: MissionCriteria, items: Array<BriefItem>, 
+outcome: string, strategy: string | null, generated_from: string | null, criteria: MissionCriteria, items: Array<BriefItem>,
 /**
  * Open decision records and needs-human items in scope.
  */
-human_decisions: Array<Issue>, 
+human_decisions: Array<Issue>,
 /**
  * The strategy's Risks and Unknowns section.
  */
-risks: string | null, 
+risks: string | null,
 /**
  * The strategy's Sizing section: the plan's cost, value and risk.
  */
-sizing: string | null, 
+sizing: string | null,
 /**
  * The strategy's Derisking section: what is tested first, and how.
  */

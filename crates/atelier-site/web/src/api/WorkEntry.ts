@@ -9,27 +9,27 @@ import type { WorkChild } from "./WorkChild";
 /**
  * One piece of delivered work, with its children.
  */
-export type WorkEntry = { id: string, 
+export type WorkEntry = { id: string,
 /**
  * The parent, when the parent itself is not done.
  */
-parent: string | null, closed_at: string | null, 
+parent: string | null, closed_at: string | null,
 /**
  * The Close Reason read as the implementer report.
  */
-report: CloseReport | null, 
+report: CloseReport | null,
 /**
  * The criteria it delivers.
  */
-criteria: Array<string>, children: Array<WorkChild>, added_after_start: boolean, changes: Array<Change>, 
+criteria: Array<string>, children: Array<WorkChild>, added_after_start: boolean, changes: Array<Change>,
 /**
  * Decision notes on the item and its children, in record order.
  */
-decisions: Array<NoteDecision>, 
+decisions: Array<NoteDecision>,
 /**
  * Decision notes on the item and its children that `check` refuses.
  */
-malformed: Array<MalformedDecision>, review: ReviewSummary, 
+malformed: Array<MalformedDecision>, review: ReviewSummary,
 /**
  * Follow-ups its review deferred findings to.
  */

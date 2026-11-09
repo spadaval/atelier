@@ -3,7 +3,7 @@ import type { Criterion } from "./Criterion";
 import type { CriterionMark } from "./CriterionMark";
 import type { CriterionReceipt } from "./CriterionReceipt";
 
-export type CriterionProof = { criterion: Criterion, mark: CriterionMark, 
+export type CriterionProof = { criterion: Criterion, mark: CriterionMark,
 /**
  * The receipts naming the criterion, newest first.
  */

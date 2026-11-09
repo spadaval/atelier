@@ -3,7 +3,7 @@
 /**
  * A review event or evidence receipt that record text mentions by ID.
  */
-export type RecordRef = { 
+export type RecordRef = {
 /**
  * `finding`, `approval`, `disposition`, `review`, `trivial` or `receipt`.
  */

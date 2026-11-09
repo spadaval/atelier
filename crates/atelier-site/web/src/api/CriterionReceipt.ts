@@ -4,12 +4,12 @@ import type { EvidenceResult } from "./EvidenceResult";
 /**
  * One receipt's judgement of one criterion.
  */
-export type CriterionReceipt = { evidence_id: string, target_id: string, result: EvidenceResult, commit: string, captured_at: string, 
+export type CriterionReceipt = { evidence_id: string, target_id: string, result: EvidenceResult, commit: string, captured_at: string,
 /**
  * Whether the pinned commit is in HEAD's history; only such receipts
  * decide a mark.
  */
-in_history: boolean, 
+in_history: boolean,
 /**
  * Commits since the pin that change files outside the tracker, counted
  * for the deciding receipt only.

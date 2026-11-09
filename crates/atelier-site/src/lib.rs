@@ -249,10 +249,9 @@ impl Fleet {
     /// its commits from `facts` where they are known. Afterwards `facts`
     /// keeps only the commits this scan read.
     fn read(roots: &[PathBuf], facts: &Mutex<HashMap<(PathBuf, String), CommitFacts>>) -> Self {
-        let mut taken = HashMap::<String, usize>::new();
         let mut known = std::mem::take(&mut *facts.lock().expect("facts lock"));
         let mut kept = HashMap::new();
-        let repos = discovery::discover(roots)
+        let found = discovery::discover(roots)
             .into_iter()
             .map(|found| {
                 let located = found.common_dir.clone().and_then(|common_dir| {
@@ -277,14 +276,14 @@ impl Fleet {
                     .ok()
                     .and_then(|located| located.base.slug.clone())
                     .unwrap_or_else(|| found.directory_name());
-                let seen = taken.entry(name.clone()).or_default();
-                *seen += 1;
-                let repo = match *seen {
-                    1 => name,
-                    count => format!("{name}-{count}"),
-                };
-                FleetEntry { repo, located }
+                (name, located)
             })
+            .collect::<Vec<_>>();
+        let names = unique_names(found.iter().map(|(name, _)| name.as_str()));
+        let repos = names
+            .into_iter()
+            .zip(found)
+            .map(|(repo, (_, located))| FleetEntry { repo, located })
             .collect();
         *facts.lock().expect("facts lock") = kept;
         Self { repos }
@@ -310,6 +309,32 @@ impl Fleet {
                 )
             })
     }
+}
+
+/// One URL name per repository from `names`, in order: each keeps its own
+/// name the first time it appears, and a repeat takes the first `<name>-<n>`,
+/// from 2, that no repository has.
+fn unique_names<'a>(names: impl Iterator<Item = &'a str>) -> Vec<String> {
+    let names = names.collect::<Vec<_>>();
+    let mut taken = names
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect::<std::collections::HashSet<_>>();
+    let mut first = std::collections::HashSet::new();
+    names
+        .into_iter()
+        .map(|name| {
+            if first.insert(name) {
+                return name.to_owned();
+            }
+            let unique = (2..)
+                .map(|count| format!("{name}-{count}"))
+                .find(|candidate| !taken.contains(candidate))
+                .expect("some suffix is free");
+            taken.insert(unique.clone());
+            unique
+        })
+        .collect()
 }
 
 /// What has been read and built from one base commit of one repository.
@@ -839,6 +864,26 @@ mod tests {
             .1
             .contains("waited 0 s for one of its 2 view builds"));
         assert_eq!(site.builds_run(), 2);
+    }
+
+    /// Every repository gets a URL name no other has, even when a repeated
+    /// name's suffix is another repository's own name.
+    #[test]
+    fn repeated_names_get_suffixes_no_repository_has() {
+        let names = |given: &[&str]| unique_names(given.iter().copied());
+        assert_eq!(
+            names(&["demo", "demo", "demo-2"]),
+            ["demo", "demo-3", "demo-2"]
+        );
+        assert_eq!(
+            names(&["demo-2", "demo", "demo"]),
+            ["demo-2", "demo", "demo-3"]
+        );
+        assert_eq!(
+            names(&["a", "a", "a", "a-2", "a-3"]),
+            ["a", "a-4", "a-5", "a-2", "a-3"]
+        );
+        assert_eq!(names(&["x", "y"]), ["x", "y"]);
     }
 
     /// A build keeps its slot until it finishes, even when the request that

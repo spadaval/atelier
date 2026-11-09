@@ -22,7 +22,7 @@ pub struct ReposResponse {
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct RepoSummary {
     /// The name in its URLs: its `project_slug`, else its directory name; a
-    /// second repository with the same name gets `-2`, and so on.
+    /// repeated name takes the first `<name>-<n>`, from 2, no repository has.
     pub repo: String,
     pub base_branch: Option<String>,
     pub base_commit: Option<String>,
@@ -132,6 +132,18 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     DebriefResponse::export_all(&config)?;
     StrategyResponse::export_all(&config)?;
     ApiError::export_all(&config)?;
+    // ts-rs ends some lines with a space; strip them so the checked-in files
+    // pass `git diff --check`.
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        let text = std::fs::read_to_string(&path)?;
+        let trimmed = text
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, format!("{trimmed}\n"))?;
+    }
     Ok(())
 }
 

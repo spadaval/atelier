@@ -3,19 +3,19 @@
 /**
  * How review of one item went.
  */
-export type ReviewSummary = { 
+export type ReviewSummary = {
 /**
  * Any review event targets the item.
  */
-recorded: boolean, approved: boolean, 
+recorded: boolean, approved: boolean,
 /**
  * Who approved it, oldest approval first.
  */
-approvers: Array<string>, trivial: boolean, fixed: number, deferred: number, no_action: number, 
+approvers: Array<string>, trivial: boolean, fixed: number, deferred: number, no_action: number,
 /**
  * Real findings decided won't fix (atelier-stnv).
  */
-wont_fix: number, 
+wont_fix: number,
 /**
  * Findings with no disposition yet.
  */

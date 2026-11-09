@@ -3,11 +3,11 @@
 /**
  * What a reference to an issue shows: its chip and the card behind it.
  */
-export type IssueRef = { id: string, title: string, issue_type: string, status: string, status_category: string | null, 
+export type IssueRef = { id: string, title: string, issue_type: string, status: string, status_category: string | null,
 /**
  * The first sentence of its Goal, Question or Outcome.
  */
-summary: string, 
+summary: string,
 /**
  * The first sentence of its Close Reason, once closed.
  */

@@ -3,7 +3,7 @@
 /**
  * The API routes for one mission.
  */
-export type MissionLinks = { summary: string, brief: string, debrief: string, 
+export type MissionLinks = { summary: string, brief: string, debrief: string,
 /**
  * `None` when the mission links no strategy.
  */

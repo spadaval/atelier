@@ -3,7 +3,7 @@ import type { IssueAdr } from "./IssueAdr";
 import type { IssueStrategy } from "./IssueStrategy";
 import type { WorkflowBranch } from "./WorkflowBranch";
 
-export type Issue = { id: string, title: string, description: string | null, status: string, issue_type: string, priority: string, strategy: IssueStrategy | null, 
+export type Issue = { id: string, title: string, description: string | null, status: string, issue_type: string, priority: string, strategy: IssueStrategy | null,
 /**
  * The ADR a decision record produced (atelier-fip8).
  */

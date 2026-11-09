@@ -200,3 +200,44 @@ fn a_base_branch_with_no_local_branch_is_an_error() {
         "{error}"
     );
 }
+
+#[test]
+fn repositories_with_the_same_name_each_answer_under_their_own() {
+    let root = scratch();
+    for (dir, slug, id) in [
+        ("a", "demo", "demo-a1"),
+        ("b", "demo", "demo-b1"),
+        ("c", "demo-2", "demo-c1"),
+    ] {
+        let repo = Repo::init(
+            &root.path().join(dir),
+            slug,
+            "main",
+            &fixture::policy("main"),
+        );
+        mission(id).write(&repo);
+        repo.commit("Plan");
+    }
+    let listed = repos(root.path());
+    let names = listed
+        .iter()
+        .map(|repo| (repo["repo"].as_str().unwrap().to_owned(), mission_ids(repo)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        names,
+        [
+            ("demo".to_owned(), vec!["demo-a1".to_owned()]),
+            ("demo-3".to_owned(), vec!["demo-b1".to_owned()]),
+            ("demo-2".to_owned(), vec!["demo-c1".to_owned()]),
+        ]
+    );
+    let client = client(root.path());
+    for (repo, mission) in [
+        ("demo", "demo-a1"),
+        ("demo-3", "demo-b1"),
+        ("demo-2", "demo-c1"),
+    ] {
+        let one = get_json(&client, &format!("/api/{repo}/mission/{mission}"), 200);
+        assert_eq!(one["mission"]["id"], mission);
+    }
+}

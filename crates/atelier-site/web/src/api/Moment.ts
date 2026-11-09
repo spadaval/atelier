@@ -3,7 +3,7 @@
 /**
  * A dated moment in a record's history.
  */
-export type Moment = { position: number, commit: string, 
+export type Moment = { position: number, commit: string,
 /**
  * As on [`RecordVersion`].
  */

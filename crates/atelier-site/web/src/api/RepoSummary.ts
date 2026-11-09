@@ -6,12 +6,12 @@ import type { RepoCounts } from "./RepoCounts";
  * One repository: its base and what its records hold, or why they cannot
  * be read.
  */
-export type RepoSummary = { 
+export type RepoSummary = {
 /**
  * The name in its URLs: its `project_slug`, else its directory name; a
- * second repository with the same name gets `-2`, and so on.
+ * repeated name takes the first `<name>-<n>`, from 2, no repository has.
  */
-repo: string, base_branch: string | null, base_commit: string | null, 
+repo: string, base_branch: string | null, base_commit: string | null,
 /**
  * Why the base or the records could not be read; the repository has no
  * counts or missions then.

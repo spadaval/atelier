@@ -8,11 +8,11 @@ import type { Precedent } from "./Precedent";
  * after an approval, which record edits do not make stale. It refuses
  * nothing.
  */
-export type DoneWhenEdit = { issue: string, 
+export type DoneWhenEdit = { issue: string,
 /**
  * The commit that changed the Done when.
  */
-commit: string, 
+commit: string,
 /**
  * The newest finding or failing receipt on the item pinned to an
  * ancestor of `commit`, which the edit may answer.

@@ -4,7 +4,7 @@ import type { CloseReport } from "./CloseReport";
 /**
  * A child of a done item, shown under it.
  */
-export type WorkChild = { id: string, 
+export type WorkChild = { id: string,
 /**
  * The child's own implementer report, when the child is done.
  */

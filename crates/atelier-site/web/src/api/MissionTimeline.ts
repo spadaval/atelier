@@ -4,21 +4,21 @@ import type { Moment } from "./Moment";
 /**
  * What a mission's history says about its scope.
  */
-export type MissionTimeline = { 
+export type MissionTimeline = {
 /**
  * The first version that left `draft`, or the mission's first version.
  */
-started: Moment | null, 
+started: Moment | null,
 /**
  * The version that made the mission's current done claim.
  */
-closed: Moment | null, 
+closed: Moment | null,
 /**
  * Items first linked to the mission after it started, with where the
  * link reached the walk and, by the record's own clock, when it was
  * written (atelier-b3qt).
  */
-added_after_start: Array<[string, Moment]>, 
+added_after_start: Array<[string, Moment]>,
 /**
  * Items whose done claim was later withdrawn, with when.
  */

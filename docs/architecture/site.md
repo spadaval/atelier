@@ -74,8 +74,10 @@ another branch, shows that error in `/api/repos` and from its routes. Nothing
 falls back to `HEAD` or a working tree.
 
 A repository's name in URLs is the `project_slug` committed on its base,
-else its directory name. A second repository with the same name gets `-2`,
-and so on, in common-directory order.
+else its directory name. In common-directory order, the first repository
+with a name keeps it, and each repeat takes the first `<name>-<n>`, from 2,
+that no repository has, so `demo`, `demo` and `demo-2` are served as `demo`,
+`demo-3` and `demo-2`.
 
 ## API
 

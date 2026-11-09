@@ -5,7 +5,7 @@ import type { EvidenceResult } from "./EvidenceResult";
 /**
  * A receipt that judged mission criteria.
  */
-export type ValidationReceipt = { id: string, 
+export type ValidationReceipt = { id: string,
 /**
  * The mission, or the item it was recorded on.
  */

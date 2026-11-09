@@ -5,12 +5,12 @@ import type { ValidationReceipt } from "./ValidationReceipt";
  * The receipts one producer recorded against one commit: one validation
  * of the mission.
  */
-export type ValidationRun = { identity: string, at: string, commit: string, 
+export type ValidationRun = { identity: string, at: string, commit: string,
 /**
  * Code commits since the run's commit, where one of its receipts still
  * decides a mark.
  */
-code_commits_since: number | null, receipts: Array<ValidationReceipt>, 
+code_commits_since: number | null, receipts: Array<ValidationReceipt>,
 /**
  * Work delivered after the run, when code has changed since.
  */

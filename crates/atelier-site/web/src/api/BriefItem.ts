@@ -4,15 +4,15 @@ import type { Issue } from "./Issue";
 /**
  * One scoped item as the brief shows it (atelier-acrt).
  */
-export type BriefItem = { issue: Issue, status_category: string | null, parent: string | null, 
+export type BriefItem = { issue: Issue, status_category: string | null, parent: string | null,
 /**
  * The `size-*` label's size, upper-cased, such as `M`.
  */
-size: string | null, 
+size: string | null,
 /**
  * Blockers that are not done.
  */
-open_blockers: Array<string>, unknowns: string | null, 
+open_blockers: Array<string>, unknowns: string | null,
 /**
  * Labelled `needs-human`.
  */

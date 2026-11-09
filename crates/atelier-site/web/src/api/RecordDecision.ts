@@ -5,7 +5,7 @@ import type { Issue } from "./Issue";
  * A decision record. It is superseded once a decided record that
  * `supersedes` it exists.
  */
-export type RecordDecision = { issue: Issue, 
+export type RecordDecision = { issue: Issue,
 /**
  * Closed with its Decision, and not retired by its own status.
  */

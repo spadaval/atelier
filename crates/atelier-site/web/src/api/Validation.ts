@@ -7,16 +7,16 @@ import type { ValidationRun } from "./ValidationRun";
  * How the mission was checked: review of each item, the runs that judged
  * its criteria, and the criteria still waiting for proof.
  */
-export type Validation = { 
+export type Validation = {
 /**
  * Delivered items with an approval, items waived as trivial, items
  * reviewed without an approval, and items with no review at all.
  */
-approved: number, trivial: number, not_approved: Array<string>, unreviewed: Array<string>, 
+approved: number, trivial: number, not_approved: Array<string>, unreviewed: Array<string>,
 /**
  * Findings on the delivered items, by their disposition.
  */
-findings: ReviewSummary, runs: Array<ValidationRun>, 
+findings: ReviewSummary, runs: Array<ValidationRun>,
 /**
  * Criteria not proven, each with the open item that will prove it.
  */

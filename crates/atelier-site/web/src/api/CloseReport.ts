@@ -6,7 +6,7 @@ import type { ReportPart } from "./ReportPart";
  * report parts. A `###` heading that names no part stays in the text around
  * it.
  */
-export type CloseReport = { outcome: string, 
+export type CloseReport = { outcome: string,
 /**
  * The parts in record order; a repeated heading adds to its part.
  */

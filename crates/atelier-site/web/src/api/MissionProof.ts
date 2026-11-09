@@ -2,7 +2,7 @@
 import type { CriterionProof } from "./CriterionProof";
 import type { MissionCriteria } from "./MissionCriteria";
 
-export type MissionProof = { criteria: MissionCriteria, proofs: Array<CriterionProof>, 
+export type MissionProof = { criteria: MissionCriteria, proofs: Array<CriterionProof>,
 /**
  * Receipts whose stored `criteria_mission` is this mission that name a
  * criterion it does not define, as `(evidence id, slug)`.
