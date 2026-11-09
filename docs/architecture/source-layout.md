@@ -9,6 +9,7 @@ The repository root is a virtual Cargo workspace. The product binary is
 | `atelier-records` | Typed Markdown records, parsing/rendering, validation, IDs, persistence, and mutation locking. |
 | `atelier-workflow` | Workflow schema parsing and structural policy validation. |
 | `atelier-app` | Repository loading, direct record index, graph queries, classification, lint, policy resolution, and application use cases. |
+| `atelier-site` | `atelier serve`: repository discovery, the read-only JSON API, its cache and load limits ([Site](site.md)). |
 | `atelier-cli` | Clap arguments, command dispatch, Git and shell adapters, identity, transcripts, and human output. |
 
 CLI commands depend on application use cases and typed domain/record values.
@@ -24,7 +25,8 @@ Crate-local unit tests cover their own types and rules. Fuzz targets remain in
 There are no provider, review-room, SQLite cache, transition-action, import,
 export, or telemetry subsystems.
 [ADR 0030](../adr/0030-a-read-only-site-a-session-database-and-t3-code.md)
-allows two additions not yet in the workspace: `atelier serve`, a read-only site, and
-a host-wide session database recording which session ran each command.
+allows two additions: `atelier serve`, the read-only [site](site.md) in
+`atelier-site`, and a host-wide session database recording which session ran
+each command, not yet in the workspace.
 Historical root `src/` paths in dated audits refer to the earlier monolithic
 layout.

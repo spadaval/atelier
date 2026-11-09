@@ -524,6 +524,30 @@ fn every_command_prints_its_documented_quiet_token() {
     assert_ids(&applied);
     assert_eq!(applied.lines().count(), 5, "{applied}");
 
+    // `serve` runs until stopped: its token is the first line it prints.
+    q.covered.insert("serve".to_string());
+    let mut server = std::process::Command::new(env!("CARGO_BIN_EXE_atelier"))
+        .args(["-q", "serve", "--bind", "127.0.0.1:0", "--root"])
+        .arg(dir)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    std::io::BufRead::read_line(
+        &mut std::io::BufReader::new(server.stdout.take().unwrap()),
+        &mut line,
+    )
+    .unwrap();
+    server.kill().unwrap();
+    server.wait().unwrap();
+    let port = line
+        .trim_end()
+        .strip_prefix("http://127.0.0.1:")
+        .unwrap_or_else(|| panic!("{line:?}"));
+    assert!(port.parse::<u16>().is_ok_and(|port| port > 0), "{line:?}");
+    let missing = q.refused("serve", &["--root", "no-such-directory"]);
+    assert!(missing.contains("is not a directory"), "{missing}");
+
     let leaves = leaf_commands(dir, &[]);
     let missing: Vec<&String> = leaves
         .iter()

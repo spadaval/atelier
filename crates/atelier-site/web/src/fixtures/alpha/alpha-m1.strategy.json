@@ -1,0 +1,10 @@
+{
+  "body": {
+    "base_commit": "74c84a186e3f7e1cb583299d367bfe0622836337",
+    "markdown": "# Why\n\nPlans go unread.\n\n# Outcome\n\nEvery plan is read on the base.\n\n# Success Criteria\n\n- shown: The brief shows the plan.\n- current: The page reads the base branch.\n\n# Sizing\n\n- Complexity: low.\n\n# Derisking\n\nRead one commit first.\n\n# Risks and Unknowns\n\n- The base may move.\n",
+    "mission": "alpha-m1",
+    "path": "docs/strategies/one.md"
+  },
+  "route": "/api/alpha/mission/alpha-m1/strategy",
+  "status": 200
+}

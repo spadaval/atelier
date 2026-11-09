@@ -1,0 +1,21 @@
+{
+  "body": {
+    "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+    "mission": {
+      "id": "beta-m1",
+      "links": {
+        "brief": "/api/beta/mission/beta-m1/brief",
+        "debrief": "/api/beta/mission/beta-m1/debrief",
+        "strategy": null,
+        "summary": "/api/beta/mission/beta-m1"
+      },
+      "review": "brief",
+      "status": "proposed",
+      "status_category": "todo",
+      "title": "Propose the board"
+    },
+    "repo": "beta"
+  },
+  "route": "/api/beta/mission/beta-m1",
+  "status": 200
+}

@@ -13,7 +13,7 @@ use crate::workflow_policy::{status_is_done, WorkflowPolicy};
 pub const SUPERSEDES: &str = "supersedes";
 
 /// One decision note, with the item it was made in.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct NoteDecision {
     pub issue_id: String,
     pub decision: DecisionNote,
@@ -21,7 +21,7 @@ pub struct NoteDecision {
 
 /// A decision note `check` refuses, with its defect. `number` counts the
 /// item's decision notes from 1, as `check` names them.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct MalformedDecision {
     pub issue_id: String,
     pub number: usize,
@@ -31,7 +31,7 @@ pub struct MalformedDecision {
 
 /// A decision record. It is superseded once a decided record that
 /// `supersedes` it exists.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct RecordDecision {
     pub issue: Issue,
     /// Closed with its Decision, and not retired by its own status.
@@ -53,7 +53,7 @@ impl RecordDecision {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, ts_rs::TS)]
 pub struct Decisions {
     pub notes: Vec<NoteDecision>,
     pub records: Vec<RecordDecision>,

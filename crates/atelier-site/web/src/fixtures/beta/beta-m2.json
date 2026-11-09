@@ -1,0 +1,21 @@
+{
+  "body": {
+    "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+    "mission": {
+      "id": "beta-m2",
+      "links": {
+        "brief": "/api/beta/mission/beta-m2/brief",
+        "debrief": "/api/beta/mission/beta-m2/debrief",
+        "strategy": null,
+        "summary": "/api/beta/mission/beta-m2"
+      },
+      "review": "debrief",
+      "status": "ready",
+      "status_category": "todo",
+      "title": "Build the inbox"
+    },
+    "repo": "beta"
+  },
+  "route": "/api/beta/mission/beta-m2",
+  "status": 200
+}
