@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Make each mission a human review boundary: a planner gets it approved, an orchestrator completes it or aborts"
-updated_at: "2026-11-09T05:34:33.430472253+00:00"
+updated_at: "2026-11-09T05:42:27.704319301+00:00"
 ---
 
 ## Outcome
@@ -34,3 +34,4 @@ Planned 2026-11-08 at Sumeet's direction, in the discussion that reframed the si
 ## Notes
 
 - 2026-11-09 [note] 2026-11-09: Orchestration started (Opus 5.5). Started atelier-xb18 and atelier-cfq9 in parallel on their own branches. Estimates: xb18 about 150-250 changed lines across plan.md, SKILL.md, references/atelier.md, skill-evaluation.md; cfq9 about 150-250 lines in mission_review.rs, its tests and docs/product/mission-reviews.md.
+- 2026-11-09 [note] 2026-11-09: atelier-xb18 merged (d04c9b96, PR #68). Sol (xhigh) approved with no findings; CI passed. Decision: plan.md keeps the existing rule that a strategy's Authority may waive the human's approval of the brief. The human writes Authority, so a waiver is still the human's choice, and removing it is outside xb18's Done when. Flagged for the debrief. The Release workflow's dist install failed on the PR; it does not gate merges, and atelier-vqoy hit the same failure. Starting atelier-n7c4.
