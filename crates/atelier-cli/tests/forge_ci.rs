@@ -774,8 +774,8 @@ fn atelier_check_refuses_a_malformed_forge_naming_the_key() {
 
 #[test]
 fn switching_the_policy_to_ci_passed_takes_effect_on_the_next_merge() {
-    // The base runs a CI script, as this repository did with
-    // scripts/merge-ci-passed.sh.
+    // The base runs its own CI script, as a repository may before it names a
+    // forge.
     let dir = tempdir().unwrap();
     let repo = dir.path();
     git(repo, &["init", "-qb", "main"]);
