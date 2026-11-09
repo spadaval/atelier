@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Serve every mission's brief and debrief as JSON from its base commit: atelier serve, read-only, for every repository here"
-updated_at: "2026-11-09T16:33:53.361851600+00:00"
+updated_at: "2026-11-09T17:27:12.466556729+00:00"
 ---
 
 ## Goal
@@ -68,6 +68,7 @@ Decisions atelier-c5vk and atelier-8p7u and the Design in `docs/strategies/fleet
 - 2026-11-09 [decision] The base branch is read from its local branch (refs/heads/<base>); a base with no local branch is an error, never its remote-tracking ref. A repository's URL name is its committed project_slug, else its directory name, with -2 and on for a repeated name in common-directory order. Discovery searches at most four directories deep, never inside a checkout, hidden directories, node_modules or target. atelier serve binds 127.0.0.1:7341 by default.
   Reason: The CLI's commands and land read the local base, and agents push it after land; the other choices keep a scan of ~/projects cheap and URLs stable.
   Rejected: Falling back to refs/remotes/origin/<base>: it can lag or lead what land checked
+- 2026-11-09 [handoff] Escalated after review round 3: finding atelier-01wq (fix_now) remains. The views swallow Git read failures in about 23 places (optional record reads in history walks, merge-base --is-ancestor read as a boolean), so a debrief built while Git fails for a moment can be cached wrong; rounds 2 and 3 each found another such path. Options in the handoff: (A, recommended) record every Git failure at ReadContext's central reads in commit mode and never cache a view built after one; (B) defer atelier-01wq as a follow-up. Branch atelier-zpmb at 85f5acfe, clean; not pushed.
 
 ## Report
 
