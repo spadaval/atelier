@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Make atelier debrief one history walk instead of one per item: 7.4 s to under 1.5 s on mission atelier-k8h8"
-updated_at: "2026-11-09T15:34:36.240109563+00:00"
+updated_at: "2026-11-09T15:50:22.370673102+00:00"
 ---
 
 ## Goal
@@ -47,6 +47,7 @@ Found on 2026-11-09 by tracing `atelier debrief atelier-k8h8 -q` with `strace -f
   Reason: Git's walk cost grows with the number of pathspecs: 29 file pathspecs took 1.2 s, the directory 0.32 s. Separate merge diffs reproduce --full-history's selection exactly, so no argument about which commits can matter is needed.
   Rejected: One pathspec per record: 2.0 s for mission atelier-k8h8, only 3.7x faster
   Rejected: Reuse path_log's RecordGraph: debrief does not load it, and its load diffs every commit against every parent over reviews too
+- 2026-11-09 [handoff] Approved at a82086f7 by gpt-6.1-sol-r1 (atelier-d2nx) in one round with no findings; see the Report. PR https://github.com/spadaval/atelier/pull/76. Follow-up atelier-lr08 filed.
 
 ## Report
 
