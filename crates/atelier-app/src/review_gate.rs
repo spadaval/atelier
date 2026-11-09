@@ -46,6 +46,14 @@ pub enum Gap {
     AwaitingApproval(String),
     /// A `shell.check` command that failed, with the last line it printed.
     FailedCommand { command: String, output: String },
+    /// A fix_now finding whose fix `approval` saw, which `commit` made
+    /// stale by changing code after it.
+    StaleApproval {
+        finding: String,
+        approval: String,
+        commit: String,
+        subject: String,
+    },
     /// A done claim, made at `commit`, outside every current approval.
     UnreviewedClaim { claim: String, commit: String },
 }
@@ -300,9 +308,10 @@ pub fn approval_is_current(read: &mut git::ReadContext<'_>, pin: &str, base: &st
 /// current when it matches Git's own merge of its parents everywhere outside
 /// the records: those commits were reviewed on their own branches. Each
 /// commit is checked, so changing code and then restoring it does not
-/// recover an approval. `merge`'s `review.current`, the session gates and
-/// `land`'s check of done claims on the base all ask this; `end` must
-/// contain `pin`.
+/// recover an approval. `merge`'s `review.current` and the session gates
+/// ask this, and `land`'s check of done claims on the base asks it through
+/// `base_stale_edge`, which also lets another mission's strategy edit on the
+/// base pass; `end` must contain `pin`.
 pub fn approval_is_current_to(
     read: &mut git::ReadContext<'_>,
     pin: &str,
@@ -1380,7 +1389,8 @@ fn evaluate_scope(
             intact
                 && ((historical && retained(read, base_commit, record))
                     || if global {
-                        approval_is_current(read, &record.commit, base_commit).unwrap_or(false)
+                        base_stale_edge(read, index, record, "HEAD", base_commit)
+                            .is_ok_and(|edge| edge.is_none())
                     } else {
                         current_on_branch(read, record, base_commit)
                     })
@@ -1421,6 +1431,17 @@ fn evaluate_scope(
         applicable.contains(&record.target) && matches!(record.event, ReviewEvent::Finding { .. })
     }) {
         let finding_id = finding.header.id.clone();
+        // An approval of the owner, the finding's item or its parent that
+        // saw the fix.
+        let covers = |read: &mut git::ReadContext<'_>, approval: &ReviewRecord| {
+            matches!(approval.event, ReviewEvent::Approval)
+                && (approval.target == owner
+                    || approval.target == finding.target
+                    || index
+                        .get_issue(&finding.target)
+                        .is_some_and(|issue| issue.parent_id.as_deref() == Some(&approval.target)))
+                && fix_resolved(read, finding, approval)
+        };
         let settled = match settlement(finding) {
             Settlement::Decided => true,
             Settlement::Undecided => {
@@ -1443,13 +1464,7 @@ fn evaluate_scope(
                 };
                 resolution.is_none_or(|resolution| ancestor(read, resolution, "HEAD"))
                     && candidates.iter().any(|approval| {
-                        matches!(approval.event, ReviewEvent::Approval)
-                            && (approval.target == owner
-                                || approval.target == finding.target
-                                || index.get_issue(&finding.target).is_some_and(|issue| {
-                                    issue.parent_id.as_deref() == Some(&approval.target)
-                                }))
-                            && fix_resolved(read, finding, approval)
+                        covers(read, approval)
                             && (!historical
                                 || finding_retained
                                 || !retained(read, base_commit, approval))
@@ -1471,12 +1486,64 @@ fn evaluate_scope(
         };
         if settled {
             disposed.push(finding_id);
-        } else {
-            unresolved.push(format!(
-                "{finding_id}: fix_now needs a current approval after its fix"
-            ));
-            gaps.push(Gap::AwaitingApproval(finding_id));
+            continue;
         }
+        // When an approval saw the fix but code changed after it, the
+        // refusal names that change, not the finding (atelier-ygul).
+        let mut stale = None;
+        if let Some(approval) = index
+            .reviews()
+            .filter(|approval| covers(read, approval))
+            .max_by_key(|approval| approval.header.created_at)
+        {
+            let edge = if global {
+                let end = if historical {
+                    read.claim_endpoint(index, &finding.target, &approval.commit)
+                        .ok()
+                } else {
+                    Some("HEAD".to_owned())
+                };
+                end.and_then(|end| {
+                    base_stale_edge(read, index, approval, &end, base_commit)
+                        .ok()
+                        .flatten()
+                })
+                .map(|edge| edge.commit)
+            } else {
+                approval_stale_edges(read, &approval.commit, "HEAD", base_commit)
+                    .ok()
+                    .and_then(|edges| edges.into_iter().next())
+                    .map(|edge| edge.commit)
+            };
+            if let Some(commit) = edge {
+                let subject = String::from_utf8(git::git_output(
+                    read.repo,
+                    &["log", "-1", "--format=%s", &commit],
+                )?)?
+                .trim()
+                .to_owned();
+                stale = Some(Gap::StaleApproval {
+                    finding: finding_id.clone(),
+                    approval: approval.header.id.clone(),
+                    commit,
+                    subject,
+                });
+            }
+        }
+        match stale {
+            Some(Gap::StaleApproval {
+                ref approval,
+                ref commit,
+                ..
+            }) => unresolved.push(format!(
+                "{finding_id}: its fix's approval {approval} is stale, since {} changed code after it",
+                short(commit)
+            )),
+            _ => unresolved.push(format!(
+                "{finding_id}: fix_now needs a current approval after its fix"
+            )),
+        }
+        gaps.push(stale.unwrap_or(Gap::AwaitingApproval(finding_id)));
     }
     nodes.push(
         gate(
@@ -1735,7 +1802,78 @@ fn original_approval_valid(
     base: &str,
 ) -> Result<bool> {
     let end = read.claim_endpoint(index, target, &approval.commit)?;
-    approval_is_current_to(read, &approval.commit, &end, base)
+    Ok(base_stale_edge(read, index, approval, &end, base)?.is_none())
+}
+
+/// The first commit after `approval`'s pin that makes it stale at `end` for
+/// a done claim judged on the base, by [`approval_is_current_to`]'s rule
+/// with one more allowance: a commit the base already holds whose only code
+/// is the strategy of missions unrelated to the approval's target keeps it
+/// current. The merge policy lets a mission's planning be committed on the
+/// base, and that mission's own planning review covers it, as another
+/// branch's review covers its clean merge; so another mission's replan does
+/// not make every approval before it stale (atelier-ygul). An edit of a
+/// related mission's strategy, and any other code, still does.
+fn base_stale_edge(
+    read: &mut git::ReadContext<'_>,
+    index: &RecordIndex,
+    approval: &ReviewRecord,
+    end: &str,
+    base: &str,
+) -> Result<Option<git::CommitEdge>> {
+    let mut unrelated = None;
+    // Edges come newest first.
+    for (edge, clean_base_merge) in work_edges(read, &approval.commit, end, base)?
+        .into_iter()
+        .rev()
+    {
+        if edge_allowed(&edge, clean_base_merge) {
+            continue;
+        }
+        if ancestor(read, &edge.commit, base) {
+            let unrelated = match &unrelated {
+                Some(paths) => paths,
+                None => unrelated.insert(unrelated_strategies(index, &approval.target)?),
+            };
+            if code_paths(&edge.paths)
+                .iter()
+                .all(|path| unrelated.contains(&normalized(path)))
+            {
+                continue;
+            }
+        }
+        return Ok(Some(edge));
+    }
+    Ok(None)
+}
+
+/// The strategy files only missions unrelated to `target` link: none of
+/// them is `target`, holds it in its scope, or is in its scope.
+fn unrelated_strategies(index: &RecordIndex, target: &str) -> Result<HashSet<std::path::PathBuf>> {
+    let within = scope(index, target)?;
+    let mut linked = HashSet::new();
+    let mut related = HashSet::new();
+    for record in index
+        .issue_records()
+        .filter(|record| record.issue.issue_type == "mission")
+    {
+        let Some(strategy) = &record.issue.strategy else {
+            continue;
+        };
+        let path = normalized(Path::new(&strategy.path));
+        if within.contains(&record.issue.id) || scope(index, &record.issue.id)?.contains(target) {
+            related.insert(path.clone());
+        }
+        linked.insert(path);
+    }
+    Ok(linked.difference(&related).cloned().collect())
+}
+
+/// `path` without `.` components, as Git names it.
+fn normalized(path: &Path) -> std::path::PathBuf {
+    path.components()
+        .filter(|part| !matches!(part, std::path::Component::CurDir))
+        .collect()
 }
 
 fn retired_review_cluster(

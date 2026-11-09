@@ -1846,6 +1846,100 @@ fn retained_completion_keeps_valid_historical_proof_and_resolution_after_unrelat
     );
 }
 
+/// A planning approval of an item or mission done on the base stays current
+/// through another mission's strategy edits committed there, which that
+/// mission's own planning review covers, but not through an edit of its own
+/// mission's strategy (atelier-ygul: validation atelier-v3nm and mission
+/// atelier-fl12 were refused for another mission's replan).
+#[test]
+fn base_done_claims_keep_planning_approvals_through_other_missions_strategy_edits() {
+    for (closes_mission, edits_own) in [(false, false), (true, false), (false, true), (true, true)]
+    {
+        let f = Fixture::new();
+        git(f.path(), &["switch", "main"]);
+        let strategy = |name: &str, text: &str| {
+            fs::create_dir_all(f.path().join("docs/strategies")).unwrap();
+            fs::write(f.path().join(format!("docs/strategies/{name}.md")), text).unwrap();
+        };
+        let mission = |title: &str, name: &str| {
+            ok(
+                f.path(),
+                &[
+                    "-q",
+                    "issue",
+                    "create",
+                    title,
+                    "--issue-type",
+                    "mission",
+                    "--strategy",
+                    &format!("docs/strategies/{name}.md"),
+                ],
+            )
+        };
+        strategy("own", "# Own plan\n");
+        let own = mission("Own mission", "own");
+        let item = ok(f.path(), &["-q", "issue", "create", "Validate the mission"]);
+        ok(
+            f.path(),
+            &["issue", "link", &item, &own, "--role", "advances"],
+        );
+        commit(f.path(), "plan the mission");
+        let target = if closes_mission { &own } else { &item };
+        ok(
+            f.path(),
+            &[
+                "review",
+                "finding",
+                target,
+                "--identity",
+                "Reviewer",
+                "--recommendation",
+                "fix_now",
+                "The plan misses a case",
+            ],
+        );
+        commit(f.path(), "planning finding");
+        strategy("own", "# Own plan\n\nCovers the case.\n");
+        commit(f.path(), "fix the plan");
+        ok(
+            f.path(),
+            &[
+                "review",
+                "approve",
+                target,
+                "--identity",
+                "Reviewer",
+                "Plan approved",
+            ],
+        );
+        commit(f.path(), "planning approval");
+        strategy("other", "# Other plan\n");
+        mission("Other mission", "other");
+        commit(f.path(), "plan another mission");
+        let edited = if edits_own { "own" } else { "other" };
+        strategy(edited, "# Replanned\n");
+        commit(f.path(), "replan on the base");
+        f.terminal(target);
+        let (pass, output) = cli(f.path(), &["land"]);
+        if edits_own {
+            assert!(
+                !pass
+                    && output.contains("findings.disposed")
+                    && output.contains("replan on the base")
+                    && !output.contains("came after the current approval"),
+                "{output}"
+            );
+        } else {
+            assert!(pass, "closes mission {closes_mission}: {output}");
+            // Later, the base holds the claim, which land judges from history.
+            ok(f.path(), &["issue", "note", target, "Validated"]);
+            commit(f.path(), "note on the done claim");
+            let (pass, output) = cli(f.path(), &["land"]);
+            assert!(pass, "closes mission {closes_mission}, later: {output}");
+        }
+    }
+}
+
 #[test]
 fn retained_stale_approvals_never_age_into_acceptance() {
     // A decision or approval by an author identity is accepted now
