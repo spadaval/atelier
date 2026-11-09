@@ -10,7 +10,7 @@ another word for anything else.
 | Term | Meaning |
 | --- | --- |
 | Record | Tracked Markdown with typed YAML front matter and a human-readable body under `.atelier/`. |
-| Mission | An issue of type `mission`: a themed container whose Outcome says why its work belongs together, optionally with a strategy and success criteria; its execution scope uses `advances` links. |
+| Mission | An issue of type `mission`: a themed container whose Outcome says why its work belongs together, optionally with a strategy and success criteria; its execution scope uses `advances` links. It exists so the human reviews a batch of related work twice, its plan before any of it starts (plan review, `brief`) and its result after all of it merges (result review, `debrief`). Nothing inside it waits on the human; human work after it is a loose end. |
 | Strategy | Ordinary Markdown owning intent, any success criteria, boundaries, tradeoffs, and adaptation authority. Link by path. |
 | Issue | One accountable slice; work items have `Goal` and `Done when` sections. |
 | Line | One `- [ ]` item of a Done when, ticked (`- [x]`) once it holds. It is not called a check. |
@@ -28,7 +28,7 @@ another word for anything else.
 | Forge | The host a repository's policy may name, GitHub through `gh` for now, that carries branches and pull requests and reports CI for a commit (ADR 0031). Reviews, findings and approvals never live there. A policy without one gets none of Atelier's built-in forge operations; its own `shell.check`s and explicit commands such as `land --push` keep their behaviour. |
 | Evidence | An optional proof receipt with an explicit result and full Git commit, attached to the claims it supports, for proof nothing else records; no gate reads it. |
 | Result | `pass`, `fail`, `blocked`, or `not-applicable`; receipt presence alone never means pass. |
-| Review | Independent review: someone who did not write the work examines it. An agent reviews a change before it merges (`atelier review request` prints the brief) or a plan before its work starts; the human approves a mission's plan (`brief`) and reviews its merged work (`debrief`). |
+| Review | Independent review: someone who did not write the work examines it. An agent reviews a change before it merges (`atelier review request` prints the brief) or a plan before its work starts (planning review). The human reviews each mission twice: plan review approves its plan (`brief`), and result review reads its merged work (`debrief`). |
 | Review record | A file under `.atelier/reviews/` for an examination, approval, finding, or trivial exemption. A finding can be corrected or deleted until it reaches the base branch, while an approval or exemption stays as first committed; on the base, only a finding's disposition changes in place. |
 | Approval | A review decision pinned to a commit, by an independent reviewer whose identity is recorded, not compared with the change's authors. An approval of a later commit that holds a `fix_now` finding's record, recorded after the finding, resolves it. |
 | Finding | A recorded problem with a recommended `FIX NOW`, `DEFER`, or `NO ACTION`. A `fix_now` finding is resolved by the approval after its fix; a deferred or dismissed one needs a recorded disposition. |
