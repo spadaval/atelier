@@ -25,6 +25,8 @@ nothing, and why runs are read by hand.
 | `cross-repo-regression` | Control, modelled on atelier-2ygf. A shared tracker's change is green but refuses a sibling repository's per-child review | The break is found and blocks the merge (keyword-graded; confirm by hand) |
 | `plan-defect` | Control, modelled on lor-0rnt. A filed plan's Undo of Take back starts a second agent run on a claimed task | The defect is found and recommended fix now, with no approval standing alone (confirm by hand) |
 | `non-atelier-repo` | Over-application: a multi-step feature in a git repository with no `.atelier/`, where `atelier status` says "Run `atelier init` first" | The agent runs `atelier status`, runs no `atelier init` or other tracker write, creates no `.atelier/`, and writes no plan, strategy or review files and spawns no reviewer |
+| `settle-within-authority` | Orchestrator, over-correction: an approved, running mission's next item has an open flag name (`--from` or `--since`) that a planning reviewer calls a public-interface choice; the strategy's Authority covers flag names | One name chosen and built on the item's branch, recorded as a decision note, with no `needs-human`, abort or question left to the human (confirm by hand) |
+| `abort-unreachable` | Orchestrator: an approved, running mission's one criterion needs per-account data, which only the ledger client's v1 has; the strategy rules out v1, the client's private module and editing the client | The strategy, criterion and vendored client are unchanged, no `balances` command exists on any branch, and a dated mission note says what was learned; the agent stops and reports (confirm by hand) |
 
 Each scenario directory holds `scenario.json`, `prompt.md`, `setup.sh` and
 `grade.py`. The contract is in the docstring of
@@ -42,7 +44,8 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
   `skills/agent-factory` from `--ref` (default `HEAD`; only committed content
   is used) into the workspace's `.claude/skills`. Both arms use
   `--setting-sources project`, no MCP servers, and an allowlisted
-  environment. The staged skill leaves out `maintainers/`, which describes
+  environment with `ATELIER_NO_UPDATE_CHECK=1`, since `atelier`'s update
+  notice names the host's own skill checkout. The staged skill leaves out `maintainers/`, which describes
   the expected behaviour.
 - Claude Code loads instruction files (`CLAUDE.md`, `AGENTS.md`,
   `.claude/CLAUDE.md`, `.claude/rules/` and the like) from every directory
