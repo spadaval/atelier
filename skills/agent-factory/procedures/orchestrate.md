@@ -7,12 +7,16 @@ mission against demonstrated outcomes.
 
 ## Before Starting
 
-Know the outcome and what governs it: the strategy for a mission, or the issue
-or request for smaller work. If a substantial mission has no agreed outcome or
-strategy, run `plan` first. Then keep going through ready work without asking
-between steps. Stop and ask only at an authority boundary, an ambiguity that
-would change the result, a current hazard, or a blocker you cannot resolve
-within the strategy.
+Know the outcome and what governs it: the approved strategy for a mission, or
+the issue or request for smaller work. A mission with no approved plan goes to a
+planner first (`plan`).
+
+Complete the mission. Abort only when its outcome can't be reached within the
+strategy, or carrying on would do harm. Settle everything else yourself within
+the strategy and its Authority, using `decide` where several paths are
+credible. To abort, stop the mission's work, post what was learned as a dated
+mission note, and report to the human, who replans with a planner. Smaller work
+follows the same rule, reported to whoever assigned it.
 
 ## Delegate or Do It Yourself
 
@@ -53,8 +57,7 @@ One branch serves one pull request, sized for review: usually an increment, not
 an issue. Review fixes and retries are commits on that branch. Atelier merges
 only into its base, so with Atelier do not stack one owner's branch on another's
 or plan an integration or rewrite branch: sequence the work, or put the slices
-under one parent so they share a branch, and ask the human if the work truly
-needs another arrangement.
+under one parent so they share a branch.
 
 ## Review and Validation
 
@@ -100,24 +103,27 @@ learning separately. Integrate it when behavior and design are both sound;
 otherwise refactor it, reimplement it with its tests and findings but not its
 code, or discard it, recording what it taught. Passing tests and effort already
 spent are not reasons to keep code. If candidates expose conflicting
-requirements or a strategic question, escalate instead of picking a side.
+requirements or a strategic question, settle it with `decide` within the
+strategy instead of quietly picking a side, and abort if the strategy cannot
+answer it.
 
 ## Keeping the Plan Current
 
 The plan is a hypothesis. After each integrated increment, material discovery,
 failed assumption or new blocker, revise the smallest layer that absorbs the
 evidence: clarify, retry or reassign an assignment; revise issues, dependencies,
-sequencing or proof within the strategy; or, for a strategy problem, pause the
-affected work, continue independent work and route the question through `decide`
-and `plan`. A current hazard stops the harmful work first.
+sequencing or proof within the strategy. A problem only a change to the
+strategy would fix aborts the mission. A current hazard stops the harmful work
+first; abort only if carrying on would still do harm.
 
 Plan the next backlog increment when its predecessor's evidence arrives or ready
-work runs low. If ready work runs out, find whether you lack detail, evidence or
-a decision; do not invent busywork. Do not plan in detail or send for review an
-item that depends on an open human decision until it is decided, since the
-decision may change or remove it. When superseding plans, keep completed work
-and failed evidence, and do not rewrite history to make the new route look
-inevitable. Post progress on the mission as dated notes.
+work runs low, within the approved strategy and Authority, as `plan`'s [Later
+Increments and Strategy Changes](plan.md#later-increments-and-strategy-changes)
+says: one independent planning review and no brief. If ready work runs out,
+find whether you lack detail, evidence or a decision; do not invent busywork.
+When superseding plans, keep completed work and failed evidence, and do not
+rewrite history to make the new route look inevitable. Post progress as dated
+mission notes, not messages to the human, who reads them in the debrief.
 
 Batch low-priority follow-ups as children of one parent, as `review defer` does
 for an item's deferred findings: each is started on the parent's branch with its
@@ -133,13 +139,13 @@ judged by demonstrated outcomes, not issue count:
 2. Confirm every loose end is filed.
 3. Clean up what the work created, starting from handoffs and records and
    comparing with `git worktree list` and `git branch --list`. Tag an unmerged
-   branch `archive/<branch>` before deleting it, and ask before deleting
-   anything you cannot trace to this work, anything with uncommitted changes, or
-   a branch with an open PR; remote branches follow repository policy.
+   branch `archive/<branch>` before deleting it. Keep anything you cannot trace
+   to this work, anything with uncommitted changes, and any branch with an open
+   PR, and list them in the handoff; remote branches follow repository policy.
 4. Close it with `atelier issue transition <mission> close --reason "<report>"`,
    then walk the human through `atelier debrief <mission> --html` and record
    their direction as review records, decisions, notes and issues.
 
 In the handoff, also report delivered and deferred outcomes, open loose ends,
-plan changes, paused questions, and each branch or worktree created, with
-whether it was removed, archived or kept and why.
+plan changes, and each branch or worktree created, with whether it was
+removed, archived or kept and why.
