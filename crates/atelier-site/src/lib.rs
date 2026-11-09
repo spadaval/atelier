@@ -265,7 +265,7 @@ impl Fleet {
                             .unwrap_or_else(|| discovery::commit_facts(&common_dir, commit));
                         // A policy that cannot be read may be Git failing
                         // for a moment, so it is read again next scan.
-                        if facts.base_branch.is_ok() {
+                        if facts.base_branch.is_ok() && facts.failed_read.is_none() {
                             kept.insert(key, facts.clone());
                         }
                         facts
@@ -424,6 +424,16 @@ impl Snapshot {
             }),
             ViewKind::Strategy => Ok(self.strategy(records, &mut read, mission)),
         };
+        // A file Git could not read was read as missing; the view would
+        // misstate the commit.
+        if let Some(failed) = read.failed_read() {
+            return Reply::json(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &ApiError {
+                    error: failed.to_owned(),
+                },
+            );
+        }
         built.unwrap_or_else(|error| {
             Reply::json(
                 StatusCode::INTERNAL_SERVER_ERROR,

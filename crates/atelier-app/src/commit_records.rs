@@ -5,7 +5,7 @@
 //! `git cat-file --batch` process.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use atelier_records::is_local_atelier_path;
@@ -33,6 +33,12 @@ const CONFIG_PATH: &str = ".atelier/config.toml";
 /// on the commit's first-parent history, as commands read a committed policy.
 pub fn load(read: &mut ReadContext<'_>) -> Result<CommitRecords> {
     let commit = read.commit_id("HEAD")?;
+    // The policy resolution falls back to an older policy when this one
+    // cannot be read; a read Git fails at must not pass for that.
+    let _ = read.file_text(crate::workflow_policy::WORKFLOW_POLICY_PATH);
+    if let Some(failed) = read.failed_read() {
+        anyhow::bail!("{failed}");
+    }
     let policy = crate::base_policy::from_captured(read, &commit)?.policy;
     let config = match read.entry(&commit, Path::new(CONFIG_PATH))? {
         Some(_) => Some(parse_project_config(
@@ -103,7 +109,8 @@ pub fn load(read: &mut ReadContext<'_>) -> Result<CommitRecords> {
 }
 
 /// The text of a repository-relative file at the commit `read` is pinned
-/// to, such as a mission's strategy.
+/// to, such as a mission's strategy. A failure other than the file's
+/// absence is also kept as [`ReadContext::failed_read`].
 pub fn file_at(read: &mut ReadContext<'_>, path: &str) -> Result<String> {
-    read.blob("HEAD", &PathBuf::from(path))
+    read.file_text(path)
 }

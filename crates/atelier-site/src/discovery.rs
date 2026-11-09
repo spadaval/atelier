@@ -156,14 +156,23 @@ pub struct CommitFacts {
     /// The base branch its workflow policy names, or why it cannot be read.
     pub base_branch: std::result::Result<String, String>,
     pub slug: Option<String>,
+    /// Why a file Git holds could not be read, so these facts may be wrong
+    /// and are read again next time.
+    pub failed_read: Option<String>,
 }
 
 /// Reads [`CommitFacts`] at `commit`, through one `git cat-file --batch`.
 pub fn commit_facts(common_dir: &Path, commit: &str) -> CommitFacts {
     let mut read = ReadContext::at_commit(common_dir, commit.to_owned());
-    let base_branch = atelier_app::base_policy::from_captured(&mut read, commit)
-        .map(|source| source.policy.branch_policy.base_branch)
-        .map_err(|error| format!("{error:#}"));
+    // The policy resolution falls back to an older policy when this one
+    // cannot be read; a read Git fails at must not pass for that.
+    let _ = read.file_text(atelier_app::workflow_policy::WORKFLOW_POLICY_PATH);
+    let base_branch = match read.failed_read() {
+        Some(failed) => Err(failed.to_owned()),
+        None => atelier_app::base_policy::from_captured(&mut read, commit)
+            .map(|source| source.policy.branch_policy.base_branch)
+            .map_err(|error| format!("{error:#}")),
+    };
     let slug = atelier_app::commit_records::file_at(&mut read, ".atelier/config.toml")
         .ok()
         .and_then(|text| {
@@ -174,7 +183,11 @@ pub fn commit_facts(common_dir: &Path, commit: &str) -> CommitFacts {
             .ok()
         })
         .map(|config| config.project_slug);
-    CommitFacts { base_branch, slug }
+    CommitFacts {
+        base_branch,
+        slug,
+        failed_read: read.failed_read().map(str::to_owned),
+    }
 }
 
 /// The base branch of the repository whose common Git directory is

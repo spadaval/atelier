@@ -459,3 +459,58 @@ fn a_failure_reading_git_is_not_kept_once_git_reads_again() {
     let repos = get_json(&fresh, "/api/repos", 200);
     assert!(repos["repos"][0]["error"].is_null(), "{repos}");
 }
+
+/// Makes the loose object holding `path` at the base unreadable, or readable
+/// again.
+fn object_readable(repo: &Repo, path: &str, yes: bool) {
+    let oid = repo.git(&["rev-parse", &format!("main:{path}")]);
+    let file = repo
+        .dir
+        .join(".git/objects")
+        .join(&oid[..2])
+        .join(&oid[2..]);
+    let mode = if yes { "u+r" } else { "000" };
+    let status = Command::new("chmod").arg(mode).arg(file).status().unwrap();
+    assert!(status.success());
+}
+
+#[test]
+fn a_strategy_git_cannot_read_for_a_moment_is_never_served_or_kept_as_missing() {
+    let root = scratch();
+    let (alpha, _) = fleet(root.path());
+    let client = client(root.path());
+    get_json(&client, "/api/alpha/mission/alpha-m1", 200);
+    object_readable(&alpha, "docs/strategies/one.md", false);
+    let answers = ["brief", "debrief", "strategy"]
+        .map(|view| client.get(&format!("/api/alpha/mission/alpha-m1/{view}")));
+    object_readable(&alpha, "docs/strategies/one.md", true);
+    for (status, body) in &answers {
+        assert_eq!(*status, 500, "{body}");
+        assert!(body.contains("docs/strategies/one.md"), "{body}");
+    }
+    let brief = get_json(&client, "/api/alpha/mission/alpha-m1/brief", 200);
+    assert_eq!(brief["brief"]["outcome"], "Every plan is read on the base.");
+    assert_eq!(length(&brief, "/brief/criteria/parse/criteria"), 2);
+    let debrief = get_json(&client, "/api/alpha/mission/alpha-m1/debrief", 200);
+    assert_eq!(debrief["debrief"]["why"], "Plans go unread.");
+    get_json(&client, "/api/alpha/mission/alpha-m1/strategy", 200);
+}
+
+#[test]
+fn a_config_git_cannot_read_for_a_moment_does_not_keep_the_wrong_name() {
+    let root = scratch();
+    let repo = Repo::init(
+        &root.path().join("checkout"),
+        "gamma",
+        "main",
+        &fixture::policy("main"),
+    );
+    let client = client(root.path());
+    object_readable(&repo, ".atelier/config.toml", false);
+    let during = get_json(&client, "/api/repos", 200);
+    object_readable(&repo, ".atelier/config.toml", true);
+    assert!(during["repos"][0]["error"].is_string(), "{during}");
+    let after = get_json(&client, "/api/repos", 200);
+    assert_eq!(after["repos"][0]["repo"], "gamma", "{after}");
+    assert!(after["repos"][0]["error"].is_null(), "{after}");
+}

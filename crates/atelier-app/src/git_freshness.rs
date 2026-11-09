@@ -34,6 +34,10 @@ pub struct ReadContext<'a> {
     /// Whether files are read from the pinned HEAD's tree rather than the
     /// working tree, as `atelier serve` reads a base commit (atelier-zpmb).
     at_commit: bool,
+    /// The first file read from the pinned commit that failed for a reason
+    /// other than the file not being in it, such as Git failing to read an
+    /// object.
+    failed_read: Option<String>,
 }
 
 struct ObjectReader {
@@ -236,6 +240,7 @@ impl<'a> ReadContext<'a> {
             cache: ObjectCache::default(),
             reader: None,
             at_commit: false,
+            failed_read: None,
         }
     }
     /// A read phase over one captured commit and nothing else: HEAD is
@@ -253,13 +258,36 @@ impl<'a> ReadContext<'a> {
         self.at_commit
     }
     /// The text of a repository-relative file: from the pinned HEAD's tree
-    /// in a read phase [`Self::at_commit`], else from the working tree.
-    pub(crate) fn file_text(&mut self, path: &str) -> Result<String> {
-        if self.at_commit {
-            self.blob("HEAD", Path::new(path))
-        } else {
-            Ok(std::fs::read_to_string(self.repo.join(path))?)
+    /// in a read phase [`Self::at_commit`], else from the working tree. From
+    /// a commit, a file it does not hold is an error like any other, but a
+    /// read that fails for another reason is also kept as
+    /// [`Self::failed_read`], since views treat an unreadable file as a
+    /// missing one and that would misstate the commit.
+    pub fn file_text(&mut self, path: &str) -> Result<String> {
+        if !self.at_commit {
+            return Ok(std::fs::read_to_string(self.repo.join(path))?);
         }
+        let head = self.pinned("HEAD")?;
+        match self.entry(&head, Path::new(path)) {
+            Ok(Some(_)) => {}
+            Ok(None) => bail!("{path} is not in commit {head}"),
+            Err(error) => return Err(self.fail_read(path, &head, error)),
+        }
+        self.blob(&head, Path::new(path))
+            .map_err(|error| self.fail_read(path, &head, error))
+    }
+    /// Keeps the first failed read of `path` at `head`, and returns its error.
+    fn fail_read(&mut self, path: &str, head: &str, error: anyhow::Error) -> anyhow::Error {
+        if self.failed_read.is_none() {
+            self.failed_read = Some(format!("cannot read {path} at {head}: {error:#}"));
+        }
+        error
+    }
+    /// Why a file could not be read from the pinned commit, when a read
+    /// failed for a reason other than its absence; a view built in this read
+    /// phase is then incomplete.
+    pub fn failed_read(&self) -> Option<&str> {
+        self.failed_read.as_deref()
     }
     pub fn from_snapshot(repo: &'a Path, head: String, dirty: &[PathBuf]) -> Self {
         Self::from_head(repo, head).with_working_paths(dirty)
@@ -272,6 +300,7 @@ impl<'a> ReadContext<'a> {
             cache: ObjectCache::default(),
             reader: None,
             at_commit: false,
+            failed_read: None,
         }
     }
     /// Attach successful fresh working-path proof for this same read phase.

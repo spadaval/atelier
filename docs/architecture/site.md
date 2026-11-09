@@ -120,6 +120,11 @@ the latest commit of each repository is kept. What the policy and config of
 a default or base commit say is kept the same way. Only successes are kept:
 a load, view or policy read that fails is tried again by the next request,
 since the failure may be Git failing for a moment rather than the commit.
+The views read a missing strategy as no strategy, so a read phase over a
+commit tells a file the commit does not hold from one Git could not read
+(`ReadContext::failed_read`); after the second, the view or the commit's
+facts are an error, never kept, rather than a page that misstates the
+commit.
 
 Refs are never cached. Every request scans the roots and reads each
 repository's refs again, so it reads the base as of its arrival; requests
