@@ -92,6 +92,7 @@ export function BriefView({ brief }: { brief: Brief }) {
                     id={item.issue.id}
                     issueType={item.issue.issue_type}
                     status={item.issue.status}
+                    priority={item.issue.priority}
                     title={item.issue.title}
                     cues={cues}
                   />
@@ -124,7 +125,13 @@ export function BriefView({ brief }: { brief: Brief }) {
         <ul className="rows">
           {brief.human_decisions.map((issue) => (
             <li key={issue.id}>
-              <ItemLine id={issue.id} issueType={issue.issue_type} status={issue.status} title={issue.title} />
+              <ItemLine
+                id={issue.id}
+                issueType={issue.issue_type}
+                status={issue.status}
+                priority={issue.priority}
+                title={issue.title}
+              />
             </li>
           ))}
         </ul>

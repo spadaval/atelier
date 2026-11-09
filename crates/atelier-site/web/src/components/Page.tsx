@@ -54,17 +54,19 @@ export function Facts({ facts }: { facts: [string, ReactNode][] }) {
   );
 }
 
-/** An item as the CLI lists it: id, type, status, title, then any cues. */
+/** An item as the CLI lists it: id, type, status, priority, title, then any cues. */
 export function ItemLine({
   id,
   issueType,
   status,
+  priority,
   title,
   cues = [],
 }: {
   id: string;
   issueType?: string;
   status?: string;
+  priority?: string;
   title?: string;
   cues?: ReactNode[];
 }) {
@@ -73,6 +75,7 @@ export function ItemLine({
       <code>{id}</code>
       {issueType && issueType !== "mission" ? <span className="tag">{issueType}</span> : null}
       {status ? <span className={`status status-${status}`}>{status}</span> : null}
+      {priority ? <span className="priority">{priority}</span> : null}
       {title ? <span className="title">{title}</span> : null}
       {cues.map((cue, at) => (
         <span className="cue" key={at}>

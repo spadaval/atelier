@@ -152,6 +152,7 @@ td {
   margin-left: 0.4rem;
 }
 .tag,
+.priority,
 .status {
   font-size: 0.8rem;
   color: var(--muted);

@@ -75,6 +75,17 @@ describe("a draft mission with a strategy", () => {
     expect(screen.getByText("The brief shows the plan.")).toBeInTheDocument();
     expect(screen.getByText("Load records from a commit")).toBeInTheDocument();
     expect(screen.getByText("size M")).toBeInTheDocument();
+    // Each Scope and Open Human Decisions row shows the item's priority, as `atelier brief` does.
+    const scope = screen.getByRole("heading", { level: 2, name: "Scope" }).closest("section")!;
+    const decisions = screen.getByRole("heading", { level: 2, name: "Open Human Decisions" }).closest("section")!;
+    for (const [section, id] of [
+      [scope, "alpha-a1"],
+      [scope, "alpha-a2"],
+      [decisions, "alpha-a2"],
+    ] as const) {
+      const row = within(section).getByText(id).closest("li")!;
+      expect(within(row).getByText("high")).toHaveClass("priority");
+    }
     expect(screen.getByText("Whether it is fast.")).toBeInTheDocument();
     expect(screen.getByText("No plan approval recorded.")).toBeInTheDocument();
     expect(screen.getByText("docs/strategies/one.md")).toBeInTheDocument();
