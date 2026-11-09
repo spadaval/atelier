@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add the GitHub forge and a ci.passed merge check, so a docs-only base change no longer forces a CI rerun"
-updated_at: "2026-11-09T03:19:10.689727945+00:00"
+updated_at: "2026-11-09T03:29:57.326306212+00:00"
 ---
 
 ## Goal
@@ -56,6 +56,7 @@ The script's logic (code paths, matching an earlier commit's code, the record-on
   Reason: The implement procedure asks for a size estimate before editing.
 - 2026-11-08 [decision] No schema_version bump for the forge block.
   Reason: The block is optional and additive, so a policy without it parses exactly as before. An older atelier cannot misread a forge policy: it already refuses the unknown top-level key forge (workflow_config_unknown_field) and the unknown validator ci.passed, which is the failure a version bump guards against. A bump would make every new binary accept versions 3 and 4 and tie the forge key to 4, only to change the old binary's message to 'needs a newer atelier'. This repo's switch is handled by merging with the branch build and reinstalling, as the item's Context says.
+- 2026-11-08 [note] Handoff: implementation committed at 52d90f75; see ## Report. Review outstanding (not requested, per the assignment). Merge with the branch build, then reinstall before land.
 
 ## Report
 
