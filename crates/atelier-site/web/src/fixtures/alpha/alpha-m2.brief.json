@@ -1,6 +1,6 @@
 {
   "body": {
-    "base_commit": "74c84a186e3f7e1cb583299d367bfe0622836337",
+    "base_commit": "f9b2eb763830b9c32dd544b1b32fcb110d3a5b7e",
     "brief": {
       "criteria": {
         "mission_id": "alpha-m2",
@@ -18,7 +18,7 @@
         }
       },
       "derisking": null,
-      "generated_from": "74c84a186e3f7e1cb583299d367bfe0622836337",
+      "generated_from": "f9b2eb763830b9c32dd544b1b32fcb110d3a5b7e",
       "human_decisions": [],
       "items": [
         {

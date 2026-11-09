@@ -1,6 +1,6 @@
 {
   "body": {
-    "base_commit": "74c84a186e3f7e1cb583299d367bfe0622836337",
+    "base_commit": "f9b2eb763830b9c32dd544b1b32fcb110d3a5b7e",
     "debrief": {
       "added": [],
       "asks": [
@@ -48,8 +48,8 @@
             "receipts": [
               {
                 "captured_at": "2026-01-01T00:36:00Z",
-                "code_commits_since": 1,
-                "commit": "c3f62793f973303afd20932b92b4594cbeb9d9cf",
+                "code_commits_since": 2,
+                "commit": "6c485654016f95d612d1560c640bbd8eeeb9b040",
                 "evidence_id": "alpha-e2",
                 "in_history": true,
                 "result": "pass",
@@ -108,7 +108,7 @@
         }
       ],
       "found": [],
-      "generated_from": "74c84a186e3f7e1cb583299d367bfe0622836337",
+      "generated_from": "f9b2eb763830b9c32dd544b1b32fcb110d3a5b7e",
       "left": [
         {
           "added_after_start": false,
@@ -189,6 +189,16 @@
           "summary": "Write it.",
           "title": "Write the loader"
         },
+        "alpha-l1": {
+          "id": "alpha-l1",
+          "issue_type": "loose_end",
+          "outcome": null,
+          "parent": null,
+          "status": "todo",
+          "status_category": "todo",
+          "summary": "Check it there.",
+          "title": "Check the loader on the server"
+        },
         "alpha-m1": {
           "id": "alpha-m1",
           "issue_type": "mission",
@@ -242,8 +252,8 @@
         "runs": [
           {
             "at": "2026-01-01T00:36:00Z",
-            "code_commits_since": 1,
-            "commit": "c3f62793f973303afd20932b92b4594cbeb9d9cf",
+            "code_commits_since": 2,
+            "commit": "6c485654016f95d612d1560c640bbd8eeeb9b040",
             "identity": "fixture-validator",
             "later_work": [],
             "receipts": [

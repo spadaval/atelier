@@ -114,6 +114,8 @@ pub struct Issue<'a> {
     /// `(issue, link type)` links stored on this record.
     pub relates: &'a [(&'a str, &'a str)],
     pub blocks: &'a [&'a str],
+    /// The work branch it was started on.
+    pub branch: Option<&'a str>,
     /// Minutes after the epoch: created, updated, and closed when done.
     pub created: i64,
     pub updated: i64,
@@ -132,6 +134,7 @@ impl Default for Issue<'_> {
             strategy: None,
             relates: &[],
             blocks: &[],
+            branch: None,
             created: 0,
             updated: 0,
             closed: None,
@@ -161,6 +164,9 @@ impl Issue<'_> {
         }
         if let Some(path) = self.strategy {
             text.push_str(&format!("strategy:\n  path: {path}\n"));
+        }
+        if let Some(branch) = self.branch {
+            text.push_str(&format!("workflow_branch:\n  work_branch: {branch}\n"));
         }
         text.push_str("priority: \"P1\"\nrelationships:\n");
         if self.blocks.is_empty() {
@@ -231,6 +237,15 @@ pub fn approval(id: &str, target: &str, commit: &str, minutes: i64) -> String {
     )
 }
 
+/// A finding on `target` at `commit`, recommending `recommendation`, with no
+/// disposition.
+pub fn finding(id: &str, target: &str, commit: &str, recommendation: &str, minutes: i64) -> String {
+    format!(
+        "---\nschema: atelier.review\nschema_version: 4\nid: {id}\ntitle: finding on {target}\ntarget: {target}\nidentity: fixture-reviewer\ncommit: {commit}\ncreated_at: {}\nevent:\n  event: finding\n  recommendation: {recommendation}\n---\n\nR1 low: the loader skips empty files.\n",
+        Repo::at(minutes)
+    )
+}
+
 /// The starter policy with `base` as its base branch.
 pub fn policy(base: &str) -> String {
     atelier_workflow::starter_policy_yaml(base)
@@ -264,8 +279,10 @@ pub fn proposed_policy(base: &str) -> String {
 }
 
 /// Repository `alpha`: a draft mission with a strategy and a done mission
-/// without one, with receipts, an approval and code commits between them.
-/// Returns the repository and its commits by name.
+/// without one, with receipts, an approval and code commits between them; a
+/// loose end in no mission; and work branch `alpha-a1`, where `alpha-a1` is
+/// started with a code commit and an undecided finding, one base commit
+/// behind `main`. Returns the repository and its commits by name.
 pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
     let repo = Repo::init(dir, "alpha", "main", &policy("main"));
     let mut commits = Vec::new();
@@ -296,7 +313,7 @@ pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
         id: "alpha-a2",
         issue_type: "decision",
         title: "Choose the server",
-        body: "## Question\n\nWhich server?",
+        body: "## Question\n\nWhich server?\n\n## Options\n\n- axum on tokio.\n- A static file server.",
         relates: &[("alpha-m1", "advances")],
         ..Issue::default()
     }
@@ -400,6 +417,43 @@ pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
         ),
     );
     commits.push(("closed", repo.commit("Close alpha-m2")));
+    Issue {
+        id: "alpha-l1",
+        issue_type: "loose_end",
+        title: "Check the loader on the server",
+        body: "## Goal\n\nCheck it there.\n\n## Done when\n\n- [ ] It loads on the server.",
+        labels: &["ops"],
+        relates: &[("alpha-a1", "blocked_by")],
+        created: 70,
+        updated: 70,
+        ..Issue::default()
+    }
+    .write(&repo);
+    commits.push(("loose-end", repo.commit("File a loose end")));
+    repo.git(&["checkout", "-q", "-b", "alpha-a1"]);
+    Issue {
+        id: "alpha-a1",
+        status: "in_progress",
+        title: "Load records from a commit",
+        body: "## Goal\n\nLoad them.\n\n## Done when\n\n- [ ] They load.\n\n## Unknowns\n\nWhether it is fast.",
+        labels: &["size-m"],
+        relates: &[("alpha-m1", "advances")],
+        branch: Some("alpha-a1"),
+        updated: 80,
+        ..Issue::default()
+    }
+    .write(&repo);
+    repo.commit("Start alpha-a1");
+    repo.write("src/commit.txt", "read a commit\n");
+    let work = repo.commit("Read records from a commit");
+    repo.write(
+        ".atelier/reviews/alpha-r2.md",
+        &finding("alpha-r2", "alpha-a1", &work, "defer", 90),
+    );
+    commits.push(("branch", repo.commit("Review alpha-a1")));
+    repo.git(&["checkout", "-q", "main"]);
+    repo.write("docs/notes.txt", "notes\n");
+    commits.push(("after-branch", repo.commit("Add notes on main")));
     (repo, commits)
 }
 

@@ -150,7 +150,8 @@ pub struct Board {
     pub ready: Vec<BoardRow>,
     /// Ready work only the human can do, as `atelier work ready` lists it.
     pub human: Vec<BoardRow>,
-    /// Work closed within `recent_days` of `today`, newest first.
+    /// Work closed on `today` or one of the `recent_days` days before it,
+    /// newest first.
     pub recently_done: Vec<BoardRow>,
 }
 
@@ -248,7 +249,7 @@ pub fn board(
         .iter()
         .filter_map(|row| index.issue_record(&row.id))
         .map(|record| &record.issue)
-        .filter(|issue| issue.closed_at.unwrap_or(issue.updated_at).date_naive() > since)
+        .filter(|issue| issue.closed_at.unwrap_or(issue.updated_at).date_naive() >= since)
         .collect::<Vec<_>>();
     recently_done.sort_by(|left, right| {
         right

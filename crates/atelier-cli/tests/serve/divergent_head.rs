@@ -110,9 +110,9 @@ fn views_read_the_base_commit_when_head_is_a_diverging_work_branch() {
     let receipts = shown["receipts"].as_array().unwrap();
     assert_eq!(receipts.len(), 1, "only the base's receipt: {receipts:?}");
     assert_eq!(receipts[0]["evidence_id"], "alpha-e2");
-    // One code commit on the base since the receipt's pin; the branch's
-    // own code commit is not counted.
-    assert_eq!(receipts[0]["code_commits_since"], 1);
+    // Two code commits on the base since the receipt's pin (the loader's
+    // speed-up and the notes); the branch's own code commit is not counted.
+    assert_eq!(receipts[0]["code_commits_since"], 2);
     let strategy = get_json(&client, "/api/alpha/mission/alpha-m1/strategy", 200);
     assert!(strategy["markdown"]
         .as_str()
