@@ -58,9 +58,9 @@ request, before the first tag is cut.
 - Upgrades go through the installer. Atelier itself gets no self-update
   command and no network code; it stays a local tool.
 - The release workflow builds what CI tests. Release targets are only those
-  CI also tests on (Linux and macOS). Since 2026-11-09 the one exception is
-  macOS: CI tests only Linux, and releases keep the macOS archives as
-  best-effort builds (README.md, Platform support).
+  CI also tests on. Since 2026-11-09 that is Linux only: macOS is no longer
+  supported, and releases carry no macOS archives (README.md, Platform
+  support).
 - Simplicity wins over coverage: no Windows, crates.io, Homebrew or
   `cargo binstall` until someone needs them.
 
@@ -77,7 +77,7 @@ GitHub-hosted runners.
 # Authority
 
 The orchestrator may change the increment breakdown, the CI layout, `dist`
-settings and the targets within Linux and macOS, and may push work branches
+settings and the targets within Linux, and may push work branches
 to run CI. When the human asks for a specific release, that request
 authorizes pushing its tag: push it once master CI passes on the release
 commit, and report the published release rather than leaving the tag as an
