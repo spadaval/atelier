@@ -2,8 +2,8 @@
 
 `atelier serve` is a read-only server over every Atelier repository on this
 host ([ADR 0030](../adr/0030-a-read-only-site-a-session-database-and-t3-code.md)).
-It serves each mission's brief and debrief, each repository's board and each
-item as JSON, read from one captured commit of the repository's base branch,
+It serves each mission's brief and debrief, each repository's board, each
+item and an inbox of what waits on the human as JSON, read from one captured commit of the repository's base branch,
 never from a checkout, and writes nothing to any repository. The board's work
 in flight is the one exception to reading only the base: it comes from each
 owned work branch's own records, read at the branch's tip. The design is in
@@ -98,6 +98,7 @@ models serialized with `serde`, plus the base commit and links
 | `/api/<repo>/mission/<id>/strategy` | The strategy's path and Markdown as committed. |
 | `/api/<repo>/board` | The `Board` view, the work in progress on each work branch, and the branches that cannot be read. |
 | `/api/<repo>/item/<id>` | The `ItemView` of one item: its record's Markdown, where it stands, its links and the review events on it. |
+| `/api/inbox` | What waits on the human in every repository, with its count. |
 
 `review` is the one judgment the server makes: `brief` while the mission is
 in its workflow's initial status, `debrief` afterwards, read from the
@@ -131,6 +132,31 @@ the branch's records are loaded at its tip; and each owner's review state is
 are those `findings.disposed` would not count as settled. `board::in_progress`
 lists the owners in branch order, then active work on the base that no
 branch read owns.
+
+### The inbox
+
+`atelier_app::inbox::inbox` reads what waits on the human from a base
+commit's records (atelier-uma8):
+
+- Items: the work `atelier status` counts under Needs a human, from the same
+  `status_view`, in its order. That is open decisions and ready work
+  labelled `needs-human`, without the ready gates `atelier work ready` and
+  the board's needs-human list apply.
+- Each item's missions: every mission whose scope holds it, as
+  `mission_overview` computes scope, and every mission it links under any
+  role, among both its typed relations and its blockers, leaving out
+  superseded and declined missions. A loose end, never in a mission's scope,
+  reaches the mission it waits on through `blocked_by`. An item whose only
+  mission is retired links only its own page.
+- Draft missions: missions in their workflow's initial status that an
+  approval targets, in `atelier work missions` order. An approval is what a
+  planning review leaves, so a draft no one has reviewed stays off the
+  queue.
+
+The inbox is built with the records of each base commit and kept with them.
+`/api/inbox` lists each repository that has an entry or an error, in
+`/api/repos` order, each mission as `/api/repos` summarizes it, and `count`,
+its items and drafts over every repository.
 
 An unknown repository, mission, item, route or a mission without a strategy
 is a 404, and a repository whose base or records cannot be read is a 500 naming
@@ -209,9 +235,11 @@ routes mirror the API's:
 | `/<repo>/mission/<id>/strategy` | The strategy's Markdown, rendered. |
 | `/<repo>` | The board: open missions with progress, work in progress with its branch, review state, open findings and how far behind, ready and needs-human work, open work by mission and label, and work done in the last 14 days. |
 | `/<repo>/item/<id>` | An item's record as Markdown (a decision's Question and Options among its sections), its links and its review events. |
+| `/inbox` | By repository, each needs-human item linking its page and its missions' pages (`Brief: <title>` or `Debrief: <title>`, by the API's `review`), then the draft missions to approve. |
 
 The repository list links each board, the board links each mission and item,
-and every page under a repository links back to its board.
+and every page under a repository links back to its board. The repository
+list and every board link `/inbox` as `Inbox (<count>)`.
 An API error shows on the page; a 404 is a not-found page. Each page puts the
 view's facts into the words the CLI uses (`web/src/debrief.ts` follows
 `crates/atelier-cli/src/commands/mission_review.rs`). React escapes every
@@ -276,8 +304,8 @@ In `crates/atelier-site/web/`:
   Run `pnpm build` and `cargo build -p atelier-cli` first, and once
   `pnpm exec playwright install chromium-headless-shell`.
 - `pnpm exec playwright test -c playwright.host.config.ts` loads every
-  mission's brief and debrief from a running server over this host's
-  repositories, named by `ATELIER_SERVE`.
+  mission's brief and debrief, and every page the inbox links, from a
+  running server over this host's repositories, named by `ATELIER_SERVE`.
 
 CI's `web` job (`.github/workflows/ci.yml`) runs all but the last on every
 change the Rust jobs run for, and on every change to `web/`
