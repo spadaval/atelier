@@ -4,6 +4,9 @@ id: "atelier-t7pb"
 issue_type: "task"
 labels:
 - "fleet-dashboard"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-t7pb
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make atelier debrief one history walk instead of one per item: 7.4 s to under 1.5 s on mission atelier-k8h8"
-updated_at: "2026-11-09T14:30:20.861505709+00:00"
+updated_at: "2026-11-09T15:11:21.454218996+00:00"
 ---
 
 ## Goal

@@ -9,7 +9,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use atelier_core::{EvidenceResult, IssueSectionName, ReviewEvent};
-use atelier_records::{issue_record_path, CanonicalIssueRecord};
+use atelier_records::{issue_record_path, CanonicalIssueRecord, ISSUE_KIND};
 use chrono::{DateTime, TimeZone, Utc};
 
 use crate::git_freshness::{git_output, ReadContext};
@@ -65,15 +65,7 @@ pub fn issue_histories(
     let Ok(head) = read.pinned("HEAD") else {
         return Ok(history);
     };
-    let paths = ids
-        .iter()
-        .map(|id| {
-            Path::new(".atelier")
-                .join(issue_record_path(id))
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect::<Vec<_>>();
+    let paths = ids.iter().map(|id| record_path(id)).collect::<Vec<_>>();
     let output = walk(read, &head, base, &paths)?;
     let entries = output.split('\0').filter(|entry| !entry.trim().is_empty());
     for (position, entry) in entries.enumerate() {
@@ -422,10 +414,7 @@ fn written_at(
         Some(since) => format!("{since}..{}", joined.commit),
         None => joined.commit.clone(),
     };
-    let path = Path::new(".atelier")
-        .join(issue_record_path(link.holder()))
-        .to_string_lossy()
-        .into_owned();
+    let path = record_path(link.holder());
     let listed = read.history(&[
         "log",
         "--reverse",
@@ -507,20 +496,9 @@ pub fn done_when_edits(
             .section(IssueSectionName::DoneWhen)
             .map(str::to_string)
     };
+    let mut histories = full_histories(read, &head, ids)?;
     for id in ids {
-        let path = Path::new(".atelier")
-            .join(issue_record_path(id))
-            .to_string_lossy()
-            .into_owned();
-        let commits = read.history(&[
-            "log",
-            "--reverse",
-            "--full-history",
-            "--format=%H %P",
-            &head,
-            "--",
-            &path,
-        ])?;
+        let commits = histories.remove(id).unwrap_or_default();
         let version = |read: &mut ReadContext<'_>, commit: &str| {
             read.issue_at(commit, id)
                 .ok()
@@ -530,7 +508,7 @@ pub fn done_when_edits(
         // Each change, with its first parent: an ancestor of the parent is a
         // strict ancestor of the change.
         let mut changed = Vec::new();
-        for line in commits.lines() {
+        for line in &commits {
             let mut parts = line.split_whitespace();
             let Some(commit) = parts.next() else {
                 continue;
@@ -581,6 +559,69 @@ pub fn done_when_edits(
     Ok(edits)
 }
 
+/// Each record's `git log --reverse --full-history --format="%H %P" <head>
+/// -- <record>` lines, from one walk over every record (atelier-t7pb).
+/// `--full-history` follows every parent whatever the pathspec, so each
+/// record's commits keep their order in the shared walk. A commit is listed
+/// for a record whose file differs from any of its parents, as Git lists it:
+/// `--diff-merges=separate` names a merge's changes from each parent in
+/// turn, and `--root` a root commit's.
+fn full_histories(
+    read: &mut ReadContext<'_>,
+    head: &str,
+    ids: &BTreeSet<String>,
+) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut histories = BTreeMap::new();
+    if ids.is_empty() {
+        return Ok(histories);
+    }
+    let paths = ids
+        .iter()
+        .map(|id| (record_path(id), id.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    // Git's cost grows with the number of pathspecs, so the walk takes the
+    // records' directory and keeps only their paths.
+    let directory = format!(".atelier/{}/", ISSUE_KIND.canonical_dir);
+    let args = [
+        "log",
+        "--reverse",
+        "--full-history",
+        "--diff-merges=separate",
+        "--root",
+        "--no-renames",
+        "--name-only",
+        "--format=%x00%H %P",
+        head,
+        "--",
+        &directory,
+    ];
+    let output = read.history(&args)?;
+    for entry in output.split('\0') {
+        let mut lines = entry.lines();
+        let Some(commit) = lines.next().map(str::trim).filter(|line| !line.is_empty()) else {
+            continue;
+        };
+        for path in lines {
+            let Some(id) = paths.get(path) else {
+                continue;
+            };
+            let listed: &mut Vec<String> = histories.entry(id.to_string()).or_default();
+            // A merge repeats its header for each parent it differs from.
+            if listed.last().map(String::as_str) != Some(commit) {
+                listed.push(commit.to_string());
+            }
+        }
+    }
+    Ok(histories)
+}
+
+fn record_path(id: &str) -> String {
+    Path::new(".atelier")
+        .join(issue_record_path(id))
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// The newest finding or failing receipt on `id` pinned to an ancestor of
 /// `parent`, by when it was recorded.
 fn precedent(
@@ -623,4 +664,120 @@ fn precedent(
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git_freshness::{git_output, head_commit};
+    use crate::test_records::{issue_record, Records};
+    use atelier_core::IssueBody;
+    use std::fs;
+
+    fn record(id: &str, status: &str, criterion: &str) -> String {
+        let mut record = issue_record(id, "task", status);
+        if let IssueBody::Issue { done_when, .. } = &mut record.sections.body {
+            *done_when = criterion.to_string();
+        }
+        atelier_records::render_issue_record(&record).unwrap()
+    }
+
+    /// Three items started together; two Done whens change on `main` and
+    /// one on a branch merged in, so the walk crosses a merge.
+    #[test]
+    fn done_when_edits_reads_every_item_from_one_git_log_walk() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path();
+        let git = |args: &[&str]| {
+            git_output(repo, args).unwrap();
+        };
+        for args in [
+            &["init", "-q", "-b", "main"][..],
+            &["config", "user.name", "Author"],
+            &["config", "user.email", "author@example.test"],
+            &["config", "commit.gpgsign", "false"],
+        ] {
+            git(args);
+        }
+        let ids = ["atelier-a001", "atelier-b002", "atelier-c003"];
+        let write = |id: &str, status: &str, criterion: &str| {
+            let path = repo.join(record_path(id));
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, record(id, status, criterion)).unwrap();
+        };
+        let commit = |message: &str| {
+            git(&["add", "-A"]);
+            git(&["commit", "-q", "-m", message]);
+            head_commit(repo).unwrap()
+        };
+        for id in ids {
+            write(id, "todo", "- [ ] D");
+        }
+        commit("plan");
+        for id in ids {
+            write(id, "in_progress", "- [ ] D");
+        }
+        commit("start");
+        git(&["switch", "-q", "-c", "side"]);
+        write("atelier-b002", "in_progress", "- [ ] D on the branch");
+        let side = commit("edit b on a branch");
+        git(&["switch", "-q", "main"]);
+        write("atelier-a001", "in_progress", "- [x] D");
+        commit("tick a, which changes no text");
+        write("atelier-a001", "in_progress", "- [ ] D, loosened");
+        write("atelier-c003", "in_progress", "- [ ] D, loosened");
+        let edit = commit("edit a and c");
+        git(&["merge", "-q", "--no-ff", "-m", "merge side", "side"]);
+        let head = head_commit(repo).unwrap();
+
+        let ids = ids.iter().map(|id| id.to_string()).collect::<BTreeSet<_>>();
+        let mut records = Records::default();
+        for id in &ids {
+            records.issue(id, "task", "in_progress");
+        }
+        let index = records.index();
+        let mut read = ReadContext::new(repo);
+        let edits = done_when_edits(&mut read, None, &index, &ids).unwrap();
+        assert_eq!(read.logs_run(), 1, "one git log for every item");
+        let expected = |issue: &str, commit: &str| DoneWhenEdit {
+            issue: issue.to_string(),
+            commit: commit.to_string(),
+            after: None,
+        };
+        assert_eq!(
+            edits,
+            [
+                expected("atelier-a001", &edit),
+                expected("atelier-b002", &side),
+                expected("atelier-c003", &edit),
+            ]
+        );
+
+        // Each item's share of the walk is what its own walk lists.
+        let mut read = ReadContext::new(repo);
+        let shared = full_histories(&mut read, &head, &ids).unwrap();
+        for id in &ids {
+            let own = String::from_utf8(
+                git_output(
+                    repo,
+                    &[
+                        "log",
+                        "--reverse",
+                        "--full-history",
+                        "--format=%H %P",
+                        &head,
+                        "--",
+                        &record_path(id),
+                    ],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let own = own.lines().map(str::trim).collect::<Vec<_>>();
+            assert_eq!(shared[id], own, "{id}");
+        }
+        assert!(shared["atelier-b002"]
+            .iter()
+            .any(|line| line.starts_with(&head)));
+    }
 }
