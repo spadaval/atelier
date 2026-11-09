@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Take approved work to the published base in one command, through a forge"
-updated_at: "2026-11-09T02:01:46.682662332+00:00"
+updated_at: "2026-11-09T02:41:45.818322753+00:00"
 ---
 
 ## Outcome
