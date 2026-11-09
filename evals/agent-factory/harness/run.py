@@ -104,6 +104,9 @@ def agent_env(work: Path) -> dict:
     env = {k: os.environ[k] for k in ENV_KEEP if k in os.environ}
     env["TERM"] = "dumb"
     env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
+    # atelier's update notice names the host's own skill checkout and its age,
+    # which is not the skill a run stages.
+    env["ATELIER_NO_UPDATE_CHECK"] = "1"
     if (work / "bin").is_dir():
         env["PATH"] = f"{work / 'bin'}:{env['PATH']}"
     env["TMPDIR"] = str(work / "tmp")
