@@ -421,7 +421,7 @@ pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
         id: "alpha-l1",
         issue_type: "loose_end",
         title: "Check the loader on the server",
-        body: "## Goal\n\nCheck it there.\n\n## Done when\n\n- [ ] It loads on the server.",
+        body: "## Goal\n\nCheck it there.\n\n## Done when\n\n- [ ] It loads on the server.\n\n## Notes\n\n- 2026-01-01 The server is not set up yet.",
         labels: &["ops"],
         relates: &[("alpha-a1", "blocked_by")],
         created: 70,

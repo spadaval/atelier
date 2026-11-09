@@ -157,6 +157,8 @@ describe("an item page", () => {
     await heading("Check the loader on the server");
     expect(screen.getByText("loose_end")).toBeInTheDocument();
     expect(screen.getByText("ops")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByText("2026-01-01 The server is not set up yet.")).toBeInTheDocument();
     const links = section("Links");
     expect(within(links).getByText("blocked by")).toBeInTheDocument();
     expect(within(links).getByRole("link")).toHaveAttribute("href", "/alpha/item/alpha-a1");

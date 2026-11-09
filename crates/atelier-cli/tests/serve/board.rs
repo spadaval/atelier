@@ -311,6 +311,10 @@ fn item_pages_show_a_task_a_decision_and_a_loose_end() {
     assert_eq!(loose["state"], "blocked");
     assert_eq!(loose["labels"], serde_json::json!(["ops"]));
     assert!(links(&loose).contains(&link("blocked_by", "alpha-a1", false)));
+    assert!(loose["body"]
+        .as_str()
+        .unwrap()
+        .ends_with("## Notes\n\n- 2026-01-01 The server is not set up yet."));
 
     // A short id resolves; an unknown one is a 404.
     assert_eq!(item("a1")["issue"]["id"], "alpha-a1");
