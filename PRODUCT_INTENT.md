@@ -100,7 +100,12 @@ each branch's records distinct.
 ## Boundaries
 
 Atelier is a local CLI, not an agent runner, daemon, scheduler, review provider,
-or process framework. Strategies and design documents remain ordinary files.
+or process framework. Reviews, findings and approvals are records in the
+repository, never state on a forge. When a repository's policy names a forge,
+Atelier may push branches and the base, open pull requests and read CI
+results for a commit through it; a policy that names none uses no network
+([ADR 0031](docs/adr/0031-a-forge-carries-branches-and-ci.md)).
+Strategies and design documents remain ordinary files.
 There are no transition actions, activity sidecars, review rooms, SQLite cache,
 backup import/export path, or Mission Control TUI.
 

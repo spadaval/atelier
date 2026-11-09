@@ -22,6 +22,8 @@ process ownership, review providers, transition actions, and the cache.
 - [ADRs](adr/0019-verified-repo-native-tracker.md): decision history; consult each
   decision's status and the supersession lists of ADR 0019 and
   [ADR 0028](adr/0028-simpler-lifecycle.md#supersession) before applying older rules.
+  [ADR 0031](adr/0031-a-forge-carries-branches-and-ci.md) lets a forge carry
+  branches and report CI, with review staying in the repository.
 - [Development setup](product/development-setup.md): local tools and verification.
 - [Repository contribution](product/repository-contribution.md): ownership and
   integration policy.

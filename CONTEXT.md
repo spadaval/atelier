@@ -24,7 +24,8 @@ another word for anything else.
 | Status | Repository-defined lifecycle state; its category supports work queries. Agent Factory decides the process. |
 | Transition | A permitted status change plus read-only validators; it writes records and has no Git or provider actions. |
 | Gate | A rule `merge` and `land` evaluate, such as `review.current` or a policy validator; it is not a persisted record. Their verdict lines still count gates as `checks`, and some output still calls terminal work `closed`, until atelier-xz5c. |
-| Check | One of three things: `atelier check`, which validates records and their graph; the merge checks, the policy's `merge_checks` commands run on the merged tree; and `atelier merge --check`, which evaluates the merge gates without merging. |
+| Check | One of three things: `atelier check`, which validates records and their graph; the merge checks, the policy's `merge_checks`, whose `shell.check` commands run on the merged tree and whose `ci.passed` accepts the pull request CI run for the branch head; and `atelier merge --check`, which evaluates the merge gates without merging. |
+| Forge | The host a repository's policy may name, GitHub through `gh` for now, that carries branches and pull requests and reports CI for a commit (ADR 0031). Reviews, findings and approvals never live there. A policy without one uses no network. |
 | Evidence | An optional proof receipt with an explicit result and full Git commit, attached to the claims it supports, for proof nothing else records; no gate reads it. |
 | Result | `pass`, `fail`, `blocked`, or `not-applicable`; receipt presence alone never means pass. |
 | Review | Independent review: someone who did not write the work examines it. An agent reviews a change before it merges (`atelier review request` prints the brief) or a plan before its work starts; the human approves a mission's plan (`brief`) and reviews its merged work (`debrief`). |
@@ -38,7 +39,7 @@ another word for anything else.
 | Done | The terminal status work gets when `atelier merge` integrates it; the status a decision, loose end or validation gets on the base by its own transition; and the status of a closed mission. Superseded is the other terminal status. Work has no close step. |
 | Close | What a mission does, by its `close` transition, once all its work is merged and its validation, if it has one, is done. Nothing else closes; the `close_reason` policy key and `--reason` keep their names and write the Report. |
 | Done claim | A terminal status in a record; for work, the one integration writes. An item an older Atelier marked done on its branch carries its own. |
-| Integration | A gated merge commit onto the base branch whose tree passed `merge_checks` and which marks the owner's open work done; the only commit Atelier creates. |
+| Integration | A gated merge commit onto the base branch that passed `merge_checks` and which marks the owner's open work done; the only commit Atelier creates. |
 | `atelier status` | Session orientation from records, Git state, proof, and review; `prime` is its deprecated alias. |
 | Land | `atelier land`, run at every handoff: it judges committed records, what changed since the base and the commits about to be pushed, reports work in progress on a branch, and refuses only on the base or a detached HEAD, including unreviewed commits about to be pushed there. |
 | Active tree | Current `.atelier/` records, distinct from records retained only in Git history. |

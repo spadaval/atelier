@@ -24,8 +24,9 @@ Suites, formatting and lint that CI or the policy's `merge_checks` run need
 no receipt, and nothing in Atelier asks for one after a review fix or a base
 merge. Run the test fresh after the last change and read its output all the
 same; the item's Report names the targeted test that proves each claim and
-its result. CI and the merge checks test the merged tree
-where a repository has them; a repository without CI puts its suite in the
+its result. The merge checks test the merged tree where a repository has
+them, and CI tests the branch head merged with the base as it was when the run
+started ([`ci.passed`](reviews-and-merge.md#what-cipassed-proves)); a repository without CI puts its suite in the
 policy's `merge_checks` (a `shell.check`; see [workflow
 configuration](workflow-configuration.md)), or nothing tests its merged tree
 ([ADR 0026](../adr/0026-evidence-records-only-what-nothing-else-records.md)).

@@ -426,7 +426,9 @@ merge: refused — 4 checks (review.current, findings.disposed, atelier-jb2t blo
   placeholder (`<identity>`, `<commit>`, `"…"`).
 - The passes are one line for the owner's checks, naming the approval or
   exemption `review.current` passed with, and a count of the other done
-  claims that hold.
+  claims that hold. A `ci.passed` pass is the exception: it has a line of its
+  own, which says what the CI run tested (see [CI on a
+  forge](reviews-and-merge.md#what-cipassed-proves)).
 
 A passing `land` starts with `✓ records committed`, then the passes; a done
 owner ends with `Next: atelier merge <owner>`, and an active owner with
@@ -440,7 +442,9 @@ merge](reviews-and-merge.md#a-done-when-edited-after-the-start)). A successful
 `merge` prints no gate lines, only those notes, what it did and the next step:
 `✓ Merged atelier-nqgr into master at c24af21a; branch deleted. Next:
 atelier land, then git push.` It notes that Git hooks did not run only when
-the repository has hooks of its own.
+the repository has hooks of its own. `merge --push` ends with what it pushed
+instead, `merge: passed — pushed master to origin, pull request #42 merged`
+(see [`merge --push`](reviews-and-merge.md#merge---push-step-by-step)).
 
 ### Mutation Confirmation
 
