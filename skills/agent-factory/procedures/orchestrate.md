@@ -113,7 +113,8 @@ The plan is a hypothesis. After each integrated increment, material discovery,
 failed assumption or new blocker, revise the smallest layer that absorbs the
 evidence: clarify, retry or reassign an assignment; revise issues, dependencies,
 sequencing or proof within the strategy. A problem only a change to the
-strategy would fix aborts the mission, and so does a current hazard.
+strategy would fix aborts the mission. A current hazard stops the harmful work
+first; abort only if carrying on would still do harm.
 
 Plan the next backlog increment when its predecessor's evidence arrives or ready
 work runs low, within the approved strategy and Authority, as `plan`'s [Later
