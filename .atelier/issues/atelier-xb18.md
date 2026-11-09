@@ -33,11 +33,12 @@ Nobody owns planning today, so missions reach the human without a technical desi
 - [ ] Readiness: a mission is ready only when nothing in its scope needs the human, apart from the boundaries its Authority reserves; a `needs-human` item inside a mission's scope fails readiness, and human work after the mission is a loose end.
 - [ ] Review: every mission plan gets two independent planning review passes before the human's brief, from model families other than the planner's and different from each other when available, run in parallel without seeing each other's findings; a fix is re-reviewed by either. With one family, both passes still run as fresh agents. A later increment of an approved mission, planned by the orchestrator within its strategy and Authority, gets one independent planning review and no brief; a change to the strategy goes back to a planner and the human. `references/atelier.md`'s Planning on the Base says the same in one line and links here.
 - [ ] Handoff: after the human approves the brief, the planner hands the mission to an orchestrator; `SKILL.md`'s Subskills lists `plan` as the planner's role (take a mission to the human's approval), and SKILL.md stays within 100 lines.
+- [ ] `maintainers/skill-evaluation.md` agrees with the new contract: its "Strategy as design doc" row (and any other row that sends design out of the strategy) expects the design in the strategy's Design section, and plan.md's strategy length guidance ("under about 150 lines") allows for it.
 - [ ] The Report gives the planner's read path (SKILL.md, plan.md, every file it links, references/atelier.md) and every role's path whose count changed, before and after, without a target (Sumeet dropped the limits for this mission).
 
 ## Scope
 
-`skills/agent-factory/procedures/plan.md`, `SKILL.md` and `references/atelier.md`. Not orchestrate.md (the next item) or `atelier brief` (its own item).
+`skills/agent-factory/procedures/plan.md`, `SKILL.md`, `references/atelier.md` and the planning rows of `maintainers/skill-evaluation.md`. Not orchestrate.md (the next item) or `atelier brief` (its own item).
 
 ## Context
 

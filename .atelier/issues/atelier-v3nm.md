@@ -38,7 +38,7 @@ Show mission atelier-fl12's criterion planner-end-to-end holds: the planner role
 
 ## Done when
 
-- [ ] A fresh planner agent that did not write atelier-xb18, atelier-n7c4 or atelier-cfq9, given only the installed skill, the repository and atelier-yfqu's 2026-11-08 note of Sumeet's direction, replans atelier-yfqu on the base, and the agent running this item reads the result by hand.
+- [ ] A fresh planner agent that did not write or review atelier-xb18, atelier-n7c4, atelier-cfq9, atelier-ss4y or atelier-ixdi, given only the installed skill, the repository and atelier-yfqu's 2026-11-08 note of Sumeet's direction, replans atelier-yfqu on the base, and the agent running this item reads the result by hand.
 - [ ] The replan's strategy has: a Design section that settles where the site's code lives, how it ships and which libraries it uses, with reasons (the note leaves these open, so any well-argued answer passes); a Sizing section with a reason per scale and a worth-it sentence; a Derisking section naming the riskiest assumption, with the item that tests it ordered first; and no `needs-human` item inside the mission's scope.
 - [ ] Two planning review passes are recorded on the replan, from two model families other than the planner's and different from each other, run without seeing each other's findings, and every fix they asked for is re-reviewed.
 - [ ] `atelier brief atelier-yfqu` shows the Sizing and Derisking sections under the Outcome.
