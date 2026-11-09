@@ -68,4 +68,3 @@ HTML-only test assertions were deleted with the renderer. Where a test checked a
 
 - No other repository's docs or workflow call `--html`. Only atelier's own historical evidence receipts (atelier-1dpt, atelier-9mk4, atelier-9r9q) name it, as records of past runs.
 - The CLI names a repository by its own `project_slug`; one whose slug repeats another's on the host, which the site serves as `<slug>-<n>`, gets the other's URL. None does today.
-
