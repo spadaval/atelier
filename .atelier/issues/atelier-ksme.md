@@ -27,4 +27,8 @@ R4 low: skills/agent-factory/SKILL.md:35 Core Rules still say workers report fin
 
 ## Done when
 
-Done when was not specified.
+- [x] SKILL.md's Separate evidence from scope rule says the accountable agent decides what findings mean "for current scope", matching constitution §5 and Independent Review's Findings bullet.
+
+## Report
+
+Fixed in passing in 2504f748 on atelier-ss4y's branch ("decides what they mean for current scope"). Re-reviewed with that commit by codex-reviewer (gpt-6.1-sol), approval atelier-acli at 1bfb2fa5, which says this issue is fixed.
