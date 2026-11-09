@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-11-09T19:08:58.293335786+00:00"
+status: "done"
 title: "Make each mission a human review boundary: a planner gets it approved, an orchestrator completes it or aborts"
-updated_at: "2026-11-09T17:52:28.050953326+00:00"
+updated_at: "2026-11-09T19:08:58.293335786+00:00"
 ---
 
 ## Outcome
@@ -42,3 +43,7 @@ Planned 2026-11-08 at Sumeet's direction, in the discussion that reframed the si
 - 2026-11-09 [note] 2026-11-09: All 10 items merged; atelier-xc5y merged last (4438f93d, PR #72): 12/12 eval runs passed on old and new skill. planner-end-to-end is proven (atelier-ze4f); since that receipt only atelier-v5zk's 5 lines in plan.md changed the skill, and a fresh atelier brief atelier-yfqu still shows Sizing and Derisking. Closing refused: land's findings.disposed judged the items' settled review findings against Sumeet's planning approval atelier-op8x (same defect as atelier-ygul, noted there). I undid the close commit rather than have an agent approve the mission, since the mission's result review is Sumeet's. The mission stays in_progress with nothing left to do; recording Sumeet's result review as an approval of atelier-fl12 at the debrief would let it close, or atelier-ygul's fix would.
 - 2026-11-09 [decision] 2026-11-09: Sumeet asked to remove plan.md's rule that a strategy's Authority may delegate his approval of the brief; added as atelier-zzpp to this mission. He also asked about land: atelier-ygul (land refuses a done validation item or closed mission when unrelated code merged after its approvals) is raised to high and started now, outside this mission's scope, since this mission's close waits on it.
   Reason: Sumeet's direction, 2026-11-09.
+
+## Report
+
+All 11 items merged, and criterion planner-end-to-end is proven (receipt atelier-ze4f). Since that receipt the skill changed only by atelier-v5zk (blind planning reviewers) and atelier-zzpp (no strategy can waive the human's plan approval), neither touching what the criterion checks; a fresh atelier brief atelier-yfqu still shows Sizing and Derisking. Delivered: plan.md is the planner's procedure with Design, Sizing and Derisking and two blind planning reviews from different families (xb18, v5zk); the human approves every plan (zzpp); orchestrators complete or abort, and a mission is two human reviews (n7c4); implementers own code and review loop and escalate (ss4y, ixdi, pxme, ksme); the brief shows Sizing and Derisking (cfq9). Evals 12/12 on old and new skill: no regression, no measured change (xc5y). Deferred: atelier-c1sr. The land refusal that blocked this close was fixed outside the mission as atelier-ygul.
