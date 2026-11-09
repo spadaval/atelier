@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Make each mission a human review boundary: a planner gets it approved, an orchestrator completes it or aborts"
-updated_at: "2026-11-09T05:33:40.470486210+00:00"
+updated_at: "2026-11-09T05:34:33.430472253+00:00"
 ---
 
 ## Outcome
@@ -30,3 +30,7 @@ Agent Factory treats a mission as a human review boundary: the human reviews its
 ## Background
 
 Planned 2026-11-08 at Sumeet's direction, in the discussion that reframed the site mission (atelier-yfqu). atelier-ss4y, already planned and reviewed, joins this mission because it settles the implementer's side of the same question: who decides what.
+
+## Notes
+
+- 2026-11-09 [note] 2026-11-09: Orchestration started (Opus 5.5). Started atelier-xb18 and atelier-cfq9 in parallel on their own branches. Estimates: xb18 about 150-250 changed lines across plan.md, SKILL.md, references/atelier.md, skill-evaluation.md; cfq9 about 150-250 lines in mission_review.rs, its tests and docs/product/mission-reviews.md.
