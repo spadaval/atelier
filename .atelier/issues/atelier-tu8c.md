@@ -61,4 +61,3 @@ All four Done when lines hold. `docs/adr/0030-a-read-only-site-a-session-databas
 
 - Decision 1 of the ADR adds the forge's CI result from ADR 0031 to "consult only Git", because `merge`'s `ci.passed` already reads it through `gh`.
 - Decision 2 allows the server's in-memory views, keyed by commit, which the fleet-dashboard strategy's Design relies on. It says why they are not a record cache, so the record store's "no cache" holds.
-
