@@ -84,8 +84,8 @@ exception: `[decision one-way]` notes must be rewritten (see Removed). The
   `[decision]` note, and record a costly choice as a decision record instead.
 - `start --base` no longer chooses where the branch is created from. It is
   still accepted, prints a deprecation note and is ignored, so starting from
-  a detached HEAD with `--base` now refuses unless the item has a recorded
-  branch.
+  a detached HEAD with `--base` now refuses when it would need to create a
+  new branch.
 - `land`'s warning about unpushed base commits.
 
 ### Fixed
