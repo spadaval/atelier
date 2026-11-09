@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Record ADR 0031 and document the forge, ci.passed and the one-command merge before building them"
-updated_at: "2026-11-09T02:42:21.785184840+00:00"
+updated_at: "2026-11-09T02:48:10.937187001+00:00"
 ---
 
 ## Goal
@@ -42,6 +42,10 @@ Docs and the ADR only; no code. Strategy files stay as they are.
 ## Context
 
 The interface these docs set is what atelier-7tul builds. Name policy keys and flags here; the strategy's Authority lets the orchestrator choose them.
+
+## Notes
+
+- 2026-11-08 [note] Handoff: docs and ADR 0031 committed at 833e19bc; see the Report. Review outstanding.
 
 ## Report
 
