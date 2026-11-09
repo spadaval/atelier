@@ -70,7 +70,9 @@ base directly, so every branch sees the plan; a started item's own record
 changes only on its work branch. A non-trivial planning commit is reviewed
 before the work it defines starts: brief the reviewer with the planning commits
 (`review request` is for finished work), and it records `review approve` or
-`finding` against the issue, the mission (for a strategy) or the decision.
+`finding` against the issue, the mission (for a strategy) or the decision. A
+mission plan gets two passes and a later increment one, as
+[plan](../procedures/plan.md#planning-review) says.
 Everything else goes through a branch and `atelier merge`, except a trivial
 commit exempted with `review trivial --base` where policy allows, and the result
 that marks a loose end or validation done, which needs no review (below).
