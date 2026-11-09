@@ -278,10 +278,11 @@ pub fn proposed_policy(base: &str) -> String {
     format!("{head}  objective:\n{objective}  work:\n{tail}")
 }
 
-/// Repository `alpha`: a draft mission with a strategy and a done mission
-/// without one, with receipts, an approval and code commits between them; a
-/// loose end in no mission; and work branch `alpha-a1`, where `alpha-a1` is
-/// started with a code commit and an undecided finding, one base commit
+/// Repository `alpha`: a draft mission with a strategy and a planning
+/// approval, and a done mission without one, with receipts, an approval and
+/// code commits between them; a loose end in no mission, and a needs-human
+/// one waiting on the done mission; and work branch `alpha-a1`, where
+/// `alpha-a1` is started with a code commit and an undecided finding, one base commit
 /// behind `main`. Returns the repository and its commits by name.
 pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
     let repo = Repo::init(dir, "alpha", "main", &policy("main"));
@@ -429,6 +430,25 @@ pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
         ..Issue::default()
     }
     .write(&repo);
+    // For the inbox: a needs-human loose end waiting on done mission
+    // alpha-m2, and a planning approval of draft mission alpha-m1.
+    Issue {
+        id: "alpha-l2",
+        issue_type: "loose_end",
+        title: "Read the loader's debrief",
+        body:
+            "## Goal\n\nRead how the loader shipped.\n\n## Done when\n\n- [ ] The debrief is read.",
+        labels: &["needs-human"],
+        relates: &[("alpha-m2", "blocked_by")],
+        created: 71,
+        updated: 71,
+        ..Issue::default()
+    }
+    .write(&repo);
+    repo.write(
+        ".atelier/reviews/alpha-r3.md",
+        &approval("alpha-r3", "alpha-m1", &code, 72),
+    );
     commits.push(("loose-end", repo.commit("File a loose end")));
     repo.git(&["checkout", "-q", "-b", "alpha-a1"]);
     Issue {
@@ -459,7 +479,8 @@ pub fn alpha(dir: &Path) -> (Repo, Vec<(&'static str, String)>) {
 
 /// Repository `beta`: a mission workflow whose initial status is
 /// `proposed`, with one mission still proposed and one moved on to
-/// `ready`, in the same category.
+/// `ready`, in the same category; and a needs-human validation related only
+/// to a superseded mission.
 pub fn beta(dir: &Path) -> Repo {
     let repo = Repo::init(dir, "beta", "main", &proposed_policy("main"));
     Issue {
@@ -486,6 +507,29 @@ pub fn beta(dir: &Path) -> Repo {
         title: "List the asks",
         body: "## Goal\n\nList them.\n\n## Done when\n\n- [ ] They are listed.",
         relates: &[("beta-m2", "advances")],
+        ..Issue::default()
+    }
+    .write(&repo);
+    // For the inbox: a needs-human validation related only to a superseded
+    // mission, which it therefore does not link.
+    Issue {
+        id: "beta-m3",
+        issue_type: "mission",
+        status: "superseded",
+        title: "Mail the asks",
+        body: "## Outcome\n\nAsks are mailed.\n\n## Success criteria\n\n- mailed: Each ask is mailed.",
+        updated: 6,
+        closed: Some(6),
+        ..Issue::default()
+    }
+    .write(&repo);
+    Issue {
+        id: "beta-v1",
+        issue_type: "validation",
+        title: "Read the mailed asks",
+        body: "## Goal\n\nRead them.\n\n## Done when\n\n- [ ] They are read.",
+        labels: &["needs-human"],
+        relates: &[("beta-m3", "related")],
         ..Issue::default()
     }
     .write(&repo);

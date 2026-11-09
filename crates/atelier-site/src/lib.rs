@@ -38,9 +38,9 @@ use serde::Serialize;
 use tokio::sync::Semaphore;
 
 use api::{
-    ApiError, BoardResponse, BriefResponse, DebriefResponse, ItemResponse, MissionLinks,
-    MissionResponse, MissionSummary, RepoCounts, RepoSummary, ReposResponse, Review,
-    StrategyResponse, UnreadableBranch,
+    ApiError, BoardResponse, BriefResponse, DebriefResponse, InboxEntry, InboxRepo, InboxResponse,
+    ItemResponse, MissionLinks, MissionResponse, MissionSummary, RepoCounts, RepoSummary,
+    ReposResponse, Review, StrategyResponse, UnreadableBranch,
 };
 use discovery::{Base, CommitFacts};
 
@@ -537,6 +537,7 @@ struct Snapshot {
 struct Loaded {
     records: CommitRecords,
     counts: RepoCounts,
+    inbox: atelier_app::inbox::Inbox,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -568,7 +569,10 @@ impl Snapshot {
         let status =
             atelier_app::work_classification::status_view(&records.index, Some(&records.policy))
                 .map_err(|error| format!("{error:#}"))?;
+        let inbox = atelier_app::inbox::inbox(&records.index, &records.policy)
+            .map_err(|error| format!("{error:#}"))?;
         Ok(Arc::new(Loaded {
+            inbox,
             counts: RepoCounts {
                 work: (&status.work).into(),
                 current_missions: status.current_mission_count,
@@ -751,6 +755,7 @@ pub fn router(site: Arc<Site>) -> Router {
 pub fn router_with(site: Arc<Site>, assets: app::Assets) -> Router {
     Router::new()
         .route("/api/repos", get(repos))
+        .route("/api/inbox", get(inbox))
         .route("/api/{repo}/mission/{id}", get(mission))
         .route("/api/{repo}/mission/{id}/brief", get(brief))
         .route("/api/{repo}/mission/{id}/debrief", get(debrief))
@@ -763,7 +768,7 @@ pub fn router_with(site: Arc<Site>, assets: app::Assets) -> Router {
                 return Reply::json(
                     StatusCode::NOT_FOUND,
                     &ApiError {
-                        error: "no such route; the API is GET /api/repos, /api/<repo>/board, /api/<repo>/item/<id> and /api/<repo>/mission/<id>[/brief|/debrief|/strategy]".into(),
+                        error: "no such route; the API is GET /api/repos, /api/inbox, /api/<repo>/board, /api/<repo>/item/<id> and /api/<repo>/mission/<id>[/brief|/debrief|/strategy]".into(),
                     },
                 )
                 .into_response();
@@ -819,6 +824,70 @@ async fn repo_summaries(site: &Site) -> Result<Vec<RepoSummary>, Reply> {
             }
         }
         repos.push(summary);
+    }
+    Ok(repos)
+}
+
+async fn inbox(State(site): State<Arc<Site>>) -> Reply {
+    match inbox_repos(&site).await {
+        Ok(repos) => Reply::json(
+            StatusCode::OK,
+            &InboxResponse {
+                count: repos
+                    .iter()
+                    .map(|repo| repo.items.len() + repo.drafts.len())
+                    .sum(),
+                repos,
+            },
+        ),
+        Err(reply) => reply,
+    }
+}
+
+/// Each repository's inbox, read from the records its base commit loaded
+/// with, leaving out repositories with nothing waiting and no error.
+async fn inbox_repos(site: &Site) -> Result<Vec<InboxRepo>, Reply> {
+    let fleet = site.fleet().await?;
+    let mut repos = Vec::new();
+    for entry in &fleet.repos {
+        let mut repo = InboxRepo {
+            repo: entry.repo.clone(),
+            base_branch: None,
+            base_commit: None,
+            error: None,
+            items: Vec::new(),
+            drafts: Vec::new(),
+        };
+        match &entry.located {
+            Err(error) => repo.error = Some(error.clone()),
+            Ok(located) => {
+                repo.base_branch = Some(located.base.branch.clone());
+                repo.base_commit = Some(located.base.commit.clone());
+                match site.loaded(&site.snapshot(located)).await {
+                    Ok(loaded) => {
+                        let summary =
+                            |id: &String| mission_summary(&entry.repo, &loaded.records, id);
+                        repo.items = loaded
+                            .inbox
+                            .items
+                            .iter()
+                            .map(|item| InboxEntry {
+                                item: item.row.clone(),
+                                missions: item.missions.iter().filter_map(summary).collect(),
+                            })
+                            .collect();
+                        repo.drafts = loaded.inbox.drafts.iter().filter_map(summary).collect();
+                    }
+                    Err(reply) if reply.status == StatusCode::SERVICE_UNAVAILABLE => {
+                        return Err(reply)
+                    }
+                    Err(reply) => repo.error = Some(error_text(&reply)),
+                }
+            }
+        }
+        if repo.error.is_some() || !repo.items.is_empty() || !repo.drafts.is_empty() {
+            repos.push(repo);
+        }
     }
     Ok(repos)
 }

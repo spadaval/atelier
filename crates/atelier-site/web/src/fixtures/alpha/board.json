@@ -1,7 +1,7 @@
 {
   "body": {
     "base_branch": "main",
-    "base_commit": "07da884d20eedb4506de6ce29e7747397f59cf7b",
+    "base_commit": "8e792cce2ce6ea82885c80fc33ded941f45c2537",
     "board": {
       "active": [],
       "groups": [
@@ -36,6 +36,28 @@
               "status": "todo",
               "status_category": "todo",
               "title": "Choose the server",
+              "work_branch": null
+            }
+          ]
+        },
+        {
+          "label": "needs-human",
+          "mission": null,
+          "title": "needs-human",
+          "work": [
+            {
+              "closed_at": null,
+              "id": "alpha-l2",
+              "issue_type": "loose_end",
+              "labels": [
+                "needs-human"
+              ],
+              "open_blockers": [],
+              "priority": "high",
+              "state": "needs human",
+              "status": "todo",
+              "status_category": "todo",
+              "title": "Read the loader's debrief",
               "work_branch": null
             }
           ]
@@ -77,6 +99,21 @@
           "status": "todo",
           "status_category": "todo",
           "title": "Choose the server",
+          "work_branch": null
+        },
+        {
+          "closed_at": null,
+          "id": "alpha-l2",
+          "issue_type": "loose_end",
+          "labels": [
+            "needs-human"
+          ],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "needs human",
+          "status": "todo",
+          "status_category": "todo",
+          "title": "Read the loader's debrief",
           "work_branch": null
         }
       ],
@@ -175,7 +212,7 @@
             "alpha-r2"
           ],
           "review": "not_approved",
-          "tip": "b615599c74d074c966ad9f2d6e52b28d45fd623b"
+          "tip": "03d96cf422588fccb156e1404afa0da2e875f376"
         }
       }
     ],

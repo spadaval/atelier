@@ -17,6 +17,7 @@ pub mod epic_migration;
 pub mod evidence_freshness;
 pub mod forge;
 pub mod git_freshness;
+pub mod inbox;
 pub mod init;
 pub mod issue_inventory;
 pub mod issue_read;

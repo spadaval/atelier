@@ -1,7 +1,7 @@
 {
   "body": {
     "base_branch": "main",
-    "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+    "base_commit": "b03900cba0856ca8a0d37476749b5f9d31bac9e0",
     "board": {
       "active": [],
       "groups": [
@@ -30,9 +30,47 @@
               "work_branch": null
             }
           ]
+        },
+        {
+          "label": "needs-human",
+          "mission": null,
+          "title": "needs-human",
+          "work": [
+            {
+              "closed_at": null,
+              "id": "beta-v1",
+              "issue_type": "validation",
+              "labels": [
+                "needs-human"
+              ],
+              "open_blockers": [],
+              "priority": "high",
+              "state": "needs human",
+              "status": "todo",
+              "status_category": "todo",
+              "title": "Read the mailed asks",
+              "work_branch": null
+            }
+          ]
         }
       ],
-      "human": [],
+      "human": [
+        {
+          "closed_at": null,
+          "id": "beta-v1",
+          "issue_type": "validation",
+          "labels": [
+            "needs-human"
+          ],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "needs human",
+          "status": "todo",
+          "status_category": "todo",
+          "title": "Read the mailed asks",
+          "work_branch": null
+        }
+      ],
       "missions": [
         {
           "criteria": 1,
@@ -93,7 +131,21 @@
         }
       ],
       "recent_days": 14,
-      "recently_done": [],
+      "recently_done": [
+        {
+          "closed_at": "2026-01-01T00:06:00Z",
+          "id": "beta-m3",
+          "issue_type": "mission",
+          "labels": [],
+          "open_blockers": [],
+          "priority": "high",
+          "state": "done",
+          "status": "superseded",
+          "status_category": "done",
+          "title": "Mail the asks",
+          "work_branch": null
+        }
+      ],
       "today": "2026-01-10"
     },
     "in_progress": [],

@@ -9,6 +9,7 @@ mod serve {
     mod discovery;
     mod divergent_head;
     pub mod fixture;
+    mod inbox;
     mod read_only;
 
     use std::path::{Path, PathBuf};

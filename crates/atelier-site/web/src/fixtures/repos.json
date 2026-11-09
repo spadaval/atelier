@@ -3,7 +3,7 @@
     "repos": [
       {
         "base_branch": "main",
-        "base_commit": "07da884d20eedb4506de6ce29e7747397f59cf7b",
+        "base_commit": "8e792cce2ce6ea82885c80fc33ded941f45c2537",
         "counts": {
           "current_missions": 1,
           "work": {
@@ -12,7 +12,7 @@
             "blocked": 1,
             "context": 0,
             "done": 2,
-            "human": 1,
+            "human": 2,
             "ready": 1
           }
         },
@@ -49,7 +49,7 @@
       },
       {
         "base_branch": "main",
-        "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+        "base_commit": "b03900cba0856ca8a0d37476749b5f9d31bac9e0",
         "counts": {
           "current_missions": 2,
           "work": {
@@ -57,13 +57,26 @@
             "backlog": 1,
             "blocked": 0,
             "context": 1,
-            "done": 0,
-            "human": 0,
+            "done": 1,
+            "human": 1,
             "ready": 1
           }
         },
         "error": null,
         "missions": [
+          {
+            "id": "beta-m3",
+            "links": {
+              "brief": "/api/beta/mission/beta-m3/brief",
+              "debrief": "/api/beta/mission/beta-m3/debrief",
+              "strategy": null,
+              "summary": "/api/beta/mission/beta-m3"
+            },
+            "review": "debrief",
+            "status": "superseded",
+            "status_category": "done",
+            "title": "Mail the asks"
+          },
           {
             "id": "beta-m2",
             "links": {

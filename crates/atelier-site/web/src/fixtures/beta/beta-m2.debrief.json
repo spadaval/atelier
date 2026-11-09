@@ -1,6 +1,6 @@
 {
   "body": {
-    "base_commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+    "base_commit": "b03900cba0856ca8a0d37476749b5f9d31bac9e0",
     "debrief": {
       "added": [],
       "asks": [
@@ -72,7 +72,7 @@
         }
       ],
       "found": [],
-      "generated_from": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+      "generated_from": "b03900cba0856ca8a0d37476749b5f9d31bac9e0",
       "left": [
         {
           "added_after_start": false,
@@ -141,6 +141,26 @@
           "status_category": "todo",
           "summary": "An inbox.",
           "title": "Build the inbox"
+        },
+        "beta-m3": {
+          "id": "beta-m3",
+          "issue_type": "mission",
+          "outcome": null,
+          "parent": null,
+          "status": "superseded",
+          "status_category": "done",
+          "summary": "Asks are mailed.",
+          "title": "Mail the asks"
+        },
+        "beta-v1": {
+          "id": "beta-v1",
+          "issue_type": "validation",
+          "outcome": null,
+          "parent": null,
+          "status": "todo",
+          "status_category": "todo",
+          "summary": "Read them.",
+          "title": "Read the mailed asks"
         }
       },
       "status_category": "todo",
@@ -150,7 +170,7 @@
         "closed": null,
         "reopened": [],
         "started": {
-          "commit": "7285e3746ae73ad52838b10fdb0347b21da5b8aa",
+          "commit": "b03900cba0856ca8a0d37476749b5f9d31bac9e0",
           "position": 0,
           "since": null,
           "time": "2026-01-01T00:02:00Z"
