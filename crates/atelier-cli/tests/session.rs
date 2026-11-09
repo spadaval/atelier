@@ -1969,6 +1969,87 @@ fn base_done_claims_keep_planning_approvals_through_other_missions_strategy_edit
     }
 }
 
+/// A parent's approval covers its child, so an edit of the strategy of the
+/// child's mission after it stays stale, though the parent advances no
+/// mission (review finding atelier-ezxy).
+#[test]
+fn base_done_child_keeps_its_mission_strategy_edit_stale_under_a_parent_approval() {
+    let f = Fixture::new();
+    git(f.path(), &["switch", "main"]);
+    fs::create_dir_all(f.path().join("docs/strategies")).unwrap();
+    fs::write(f.path().join("docs/strategies/own.md"), "# Own plan\n").unwrap();
+    let mission = ok(
+        f.path(),
+        &[
+            "-q",
+            "issue",
+            "create",
+            "Own mission",
+            "--issue-type",
+            "mission",
+            "--strategy",
+            "docs/strategies/own.md",
+        ],
+    );
+    let parent = ok(f.path(), &["-q", "issue", "create", "Parent work"]);
+    let child = ok(
+        f.path(),
+        &["-q", "issue", "create", "Child work", "--parent", &parent],
+    );
+    ok(
+        f.path(),
+        &["issue", "link", &child, &mission, "--role", "advances"],
+    );
+    commit(f.path(), "plan the mission and its child");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "finding",
+            &child,
+            "--identity",
+            "Reviewer",
+            "--recommendation",
+            "fix_now",
+            "The plan misses a case",
+        ],
+    );
+    commit(f.path(), "planning finding");
+    fs::write(
+        f.path().join("docs/strategies/own.md"),
+        "# Own plan\n\nCovers the case.\n",
+    )
+    .unwrap();
+    commit(f.path(), "fix the plan");
+    ok(
+        f.path(),
+        &[
+            "review",
+            "approve",
+            &parent,
+            "--identity",
+            "Reviewer",
+            "Plan approved",
+        ],
+    );
+    commit(f.path(), "parent approval");
+    fs::write(f.path().join("docs/strategies/own.md"), "# Replanned\n").unwrap();
+    commit(f.path(), "replan the child's mission");
+    f.terminal(&child);
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains("replan the child's mission"),
+        "{output}"
+    );
+    ok(f.path(), &["issue", "note", &child, "Validated"]);
+    commit(f.path(), "note on the done claim");
+    let (pass, output) = cli(f.path(), &["land"]);
+    assert!(
+        !pass && output.contains("findings.disposed"),
+        "later: {output}"
+    );
+}
+
 #[test]
 fn retained_stale_approvals_never_age_into_acceptance() {
     // A decision or approval by an author identity is accepted now

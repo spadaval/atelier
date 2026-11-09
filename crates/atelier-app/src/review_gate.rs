@@ -1857,8 +1857,10 @@ fn only_unrelated_strategies(
         .all(|path| unrelated.contains(&normalized(path))))
 }
 
-/// The strategy files only missions unrelated to `target` link: none of
-/// them is `target`, holds it in its scope, or is in its scope.
+/// The strategy files only missions unrelated to `target` link: no such
+/// mission's scope shares an issue with `target`'s, so none is `target`,
+/// holds it or anything under it, or is under it. A parent's approval
+/// covers its children, so a child's mission is related to the parent.
 fn unrelated_strategies(index: &RecordIndex, target: &str) -> Result<HashSet<std::path::PathBuf>> {
     let within = scope(index, target)?;
     let mut linked = HashSet::new();
@@ -1871,7 +1873,7 @@ fn unrelated_strategies(index: &RecordIndex, target: &str) -> Result<HashSet<std
             continue;
         };
         let path = normalized(Path::new(&strategy.path));
-        if within.contains(&record.issue.id) || scope(index, &record.issue.id)?.contains(target) {
+        if !scope(index, &record.issue.id)?.is_disjoint(&within) {
             related.insert(path.clone());
         }
         linked.insert(path);
