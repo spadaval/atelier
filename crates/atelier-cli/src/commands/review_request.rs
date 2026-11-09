@@ -655,6 +655,7 @@ pub fn render(facts: &Facts) -> String {
     out.push_str("\n## Working rules\n\n");
     out.push_str("- Stay read-only on code: do not edit it, commit code, switch branches, rebase, merge or push. Your only writes are review records.\n");
     out.push_str("- Judge in order: does it do what Done when says, then is it fit to integrate. Check the proof exercises the claims.\n");
+    out.push_str("- Size the change's complexity, value and risk, and ask which requirement needs each moving part it adds (a type, layer, flag, option, cache or branch). Record a part that traces to none as a `fix_now` finding.\n");
     if facts.checks.is_empty() {
         out.push_str("- Run the proof yourself and read the full output.\n");
     } else {
@@ -680,7 +681,7 @@ pub fn render(facts: &Facts) -> String {
             .map(FindingDecision::as_str)
             .join("|"),
     ));
-    out.push_str("\nReport: Contract and Fitness verdicts, findings (R-number, severity, recommendation), open questions, residual risk, and the IDs of the records you created.\n");
+    out.push_str("\nReport: your Verdict (merge, shrink or reject), Sizes, Contract and Fitness, findings (R-number, severity, recommendation), open questions, residual risk, and the IDs of the records you created.\n");
     out
 }
 
@@ -813,6 +814,7 @@ Second line.
 
 - Stay read-only on code: do not edit it, commit code, switch branches, rebase, merge or push. Your only writes are review records.
 - Judge in order: does it do what Done when says, then is it fit to integrate. Check the proof exercises the claims.
+- Size the change's complexity, value and risk, and ask which requirement needs each moving part it adds (a type, layer, flag, option, cache or branch). Record a part that traces to none as a `fix_now` finding.
 - Run the proof yourself and read the full output. The merge checks are:
   - `cargo test`
 - Approve only when you recommend no `fix_now` finding and the proof passes. Your approval of a later commit resolves the `fix_now` findings recorded before it.
@@ -830,7 +832,7 @@ atelier review finding atelier-own1 --identity \"Independent reviewer\" --commit
 atelier review approve atelier-own1 --identity \"Independent reviewer\" --commit 2222222222222222222222222222222222222222 --commit-records \"<what you checked>\"
 ```
 
-Report: Contract and Fitness verdicts, findings (R-number, severity, recommendation), open questions, residual risk, and the IDs of the records you created.
+Report: your Verdict (merge, shrink or reject), Sizes, Contract and Fitness, findings (R-number, severity, recommendation), open questions, residual risk, and the IDs of the records you created.
 ";
         assert_eq!(render(&facts()), expected);
     }

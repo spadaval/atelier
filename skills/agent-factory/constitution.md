@@ -94,11 +94,14 @@ understand, test, and change it.
 
 ### Simplicity
 
-Good engineering is marked by the absence of unnecessary moving parts. Solve
-current requirements with the least total system complexity. Do not build
-machinery whose only justification is a possible future. Do not preserve
-obsolete paths, shims, or compatibility layers unless compatibility is the
-explicit deliverable.
+Code should be as complex as its requirements call for, and no more. Every
+moving part (a type, layer, flag, option, cache or branch) traces to a current
+requirement. Do not build machinery whose only justification is a possible
+future. Do not preserve obsolete paths, shims, or compatibility layers unless
+compatibility is the explicit deliverable. Judge simplicity on the system after
+the change, not on the diff: a larger change that removes parts, such as one
+that unifies two copies of logic, is simpler than a small one that adds a
+special case.
 
 Change keeps the main line working. Breaking changes merge atomically where
 possible. Where they cannot, the old path survives only temporarily, with a

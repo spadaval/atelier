@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "agent-factory"
 - "review"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-fnlu
 priority: "P1"
 relationships:
   blocks: []
@@ -13,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Have reviewers flag code no requirement needs: 1 shrink verdict and no overbuilt-code findings in 1,252 reviews"
-updated_at: "2026-11-09T20:24:27.371132427+00:00"
+updated_at: "2026-11-09T22:05:32.910164251+00:00"
 ---
 
 ## Goal
