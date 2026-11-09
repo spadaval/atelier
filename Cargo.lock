@@ -75,7 +75,7 @@ checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
 name = "atelier-app"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atelier-core",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-cli"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -119,7 +119,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-core"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "serde",
@@ -129,7 +129,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-records"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atelier-core",
@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-site"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atelier-app",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "atelier-workflow"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "atelier-core",
