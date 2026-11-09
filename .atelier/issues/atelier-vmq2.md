@@ -20,7 +20,7 @@ updated_at: "2026-11-09T02:01:20.594187627+00:00"
 
 ## Context
 
-The merged-tree rule (`docs/product/reviews-and-merge.md`) was written for local `shell.check`s, which run on the merge commit. A CI run only ever saw the branch head, so the script fakes the rule by refusing whenever the base gained code, docs included.
+The merged-tree rule (`docs/product/reviews-and-merge.md`) was written for local `shell.check`s, which run on the merge commit Atelier builds. A pull request's CI run tests GitHub's synthetic merge of the branch head with the base as it was when the run started (`refs/pull/<n>/merge`, the default `actions/checkout` ref for `pull_request` events), not the tree Atelier merges later. `scripts/merge-ci-passed.sh` therefore refuses whenever the base gained code since the branch forked, docs and strategies included, and asks for a sync and a new run (corrected 2026-11-08 per planning review finding atelier-z56c).
 
 ## Question
 
@@ -34,7 +34,7 @@ May Atelier talk to a forge (GitHub) to push work branches, open pull requests a
 
 ## Decision
 
-Allow a forge for transport and CI. The Forgejo provider was cut in the rebuild to shed complexity, not because Atelier should not reach a forge. What stays from ADR 0019: reviews, findings and approvals are records in the repository (Decision 6), there is no external review provider, and the guards decide from Git and records. A forge only carries branches and reports CI. GitHub first, through `gh`; add another forge only when a repository moves to one. A CI result proves the branch head, not the merged tree; a base that moved since that run needs no new run, and CI on the base after the push is the backstop. Decided by Sumeet on 2026-11-08 in a design discussion; ADR 0031 records it (mission forge-delivery's first item).
+Allow a forge for transport and CI. The Forgejo provider was cut in the rebuild to shed complexity, not because Atelier should not reach a forge. What stays from ADR 0019: reviews, findings and approvals are records in the repository (Decision 6), there is no external review provider, and the guards decide from Git and records. A forge only carries branches and reports CI. GitHub first, through `gh`; add another forge only when a repository moves to one. A CI run on the branch's pull request tested the branch head merged with the base as it was then; Atelier accepts that as the CI gate, so a base that moved since the run needs no new run, and CI on the base after the push is the backstop for the combination nobody tested. Decided by Sumeet on 2026-11-08 in a design discussion; ADR 0031 records it (mission forge-delivery's first item).
 
 ## Report
 

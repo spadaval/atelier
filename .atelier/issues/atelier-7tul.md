@@ -25,7 +25,7 @@ updated_at: "2026-11-09T02:02:16.894255456+00:00"
 
 ## Goal
 
-Build what atelier-ah82 documents: a GitHub forge provider that shells out to `gh`, and a typed `ci.passed` merge check that passes when the trusted CI workflow succeeded on a commit whose code matches the branch head. Switch this repository's policy from `scripts/merge-ci-passed.sh` to it and delete the script, so a base that gained only docs, strategies or records since the CI run no longer needs a sync and a new run.
+Build what atelier-ah82 documents: a GitHub forge provider that shells out to `gh`, and a typed `ci.passed` merge check that passes when the trusted CI workflow succeeded on a pull request run for a commit whose code matches the branch head. Switch this repository's policy from `scripts/merge-ci-passed.sh` to it, so once this merges a base that gained only docs, strategies or records since the CI run no longer needs a sync and a new run. Keep the script: this branch merges under master's committed policy, which still runs it, and atelier-7o4r deletes it once master's policy uses `ci.passed`.
 
 ## Done when
 
@@ -33,7 +33,7 @@ Build what atelier-ah82 documents: a GitHub forge provider that shells out to `g
 - [ ] A test where the base gained a docs-only commit after the branch's CI run: `ci.passed` passes without a new run, and the merge's local `shell.check`s still run on the merged tree.
 - [ ] A test where the base gained a code commit after the run: `ci.passed` still passes, and the merge output says CI on the base after the push covers the combination, as atelier-ah82's docs say.
 - [ ] A policy with no forge parses and merges exactly as before (existing merge tests pass unchanged), and `atelier check` refuses a policy whose forge or CI workflow key is malformed, naming the key.
-- [ ] `.atelier/workflow.yaml` uses `ci.passed` and `scripts/merge-ci-passed.sh` is deleted; this item merges through the new check, with the Report linking the run it trusted.
+- [ ] `.atelier/workflow.yaml` uses `ci.passed` in place of the script's `shell.check`, and the script stays. An integration test shows the switch: with a base policy that runs a CI script check and a branch whose policy switches to `ci.passed`, the branch's merge runs the base's check, and the next branch's merge onto the new base runs `ci.passed`.
 
 ## Scope
 
@@ -41,7 +41,7 @@ The provider, `ci.passed`, policy parsing and this repository's policy. Not push
 
 ## Context
 
-The script's logic (code paths, matching an earlier commit's code, the record-only shortcut) is in `scripts/merge-ci-passed.sh`; keep its record-only behaviour. Merge checks run from the base's committed policy, so the installed binary must read the new keys before this merges: install the branch build first (`cargo install --path crates/atelier-cli --locked`, as `AGENTS.md` says).
+The script's logic (code paths, matching an earlier commit's code, the record-only shortcut) is in `scripts/merge-ci-passed.sh`; keep its record-only behaviour. Merge checks run from the base's committed policy, so this branch merges under the script's check. After it merges, install the new binary (`cargo install --path crates/atelier-cli --locked`, as `AGENTS.md` says) before `atelier land` or any later merge, since the old binary cannot read the new policy.
 
 ## Unknowns
 
