@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add `review` and `verdict`, with the brief and one file per review"
-updated_at: "2026-11-10T16:50:20.825982654+00:00"
+updated_at: "2026-11-10T16:59:56.934431533+00:00"
 ---
 
 ## Goal
@@ -44,6 +44,37 @@ Build the reviewer's side of the loop: one command that gives a reviewer everyth
 ## Scope
 
 Reviews of items. Plan reviews of missions belong to step B, and findings settled by a decision to step C. The rule that a rebuttal goes to a fresh reviewer is the skill's to state; this item does not enforce it.
+
+## Context
+
+Behaviour: `docs/strategies/redesign-product.md`, Commands (Reviewer), Review, and "When a thread dies". The reviewer works in the implementer's checkout, where T3 starts a delegated child by default.
+
+## Notes
+
+- 2026-11-10 [decision] The orchestrator narrowed the Done when line on a reviewer's wrong command from `submit` or `merge` to `submit` only
+  Reason: `merge` does not exist until atelier-syyj; the orchestrator will tell that item's implementer to cover a reviewer who runs `merge`.
+  Rejected: Build a stub merge here to test the reviewer's refusal
+- 2026-11-10 [decision] Expected size: about 900 non-test lines of Rust, scenario and unit tests about as large again, and about 40 changed lines of the architecture specification
+  Reason: The orchestrator's brief gives this size; past about twice it, the implementer escalates.
+- 2026-11-10 [decision] The review file's model is set by an optional `verdict --model <name>`; without it the file says `model: null`
+  Reason: Nothing on this host names the model in the environment (T3 and the harnesses set thread and session IDs only), the handoff line must stay as printed, and nobody edits front matter. The brief prints the flag on both verdict commands and says to leave it out when unknown.
+  Rejected: A `review <id> --model` flag, which the fixed handoff line never passes
+- 2026-11-10 [decision] `review` writes the round's file in the checkout and commits nothing; `verdict` commits it with item.md
+  Reason: The act table says verdict commits the review file, no act commits only to change a status, and the Done when line has verdict commit the file in one commit.
+  Rejected: Commit the file at `review`, which adds a commit per review and per take-over
+- 2026-11-10 [decision] A round of an item ends with the first verdict among its reviews, not when every review has one
+  Reason: A verdict moves the item out of review. With the other rule, a second reviewer's file left open in a round (two threads running `review` at once in one checkout) would stay the round's file after the first verdict, and the next submission would never open a new round.
+  Rejected: The latest round stays open while any of its reviews has no verdict
+- 2026-11-10 [decision] `verdict approve` is refused while any fix-now finding of the item is open, not only the file's own
+  Reason: A reviewer that deletes a carried finding from its file would otherwise approve the item over an open finding, which the product's rule that only a reviewer withdraws a finding forbids. With carrying done right the two rules agree.
+  Rejected: Count only the file's own findings, as the act table first said
+- 2026-11-10 [decision] A carried finding starts as `Now: kept` in the template, followed by a comment naming the three values
+  Reason: The template must parse, since every reader of the branch reads it; kept is the safe default, so approve is refused until the reviewer closes it on purpose.
+  Rejected: Leave `Now:` blank, which does not parse
+- 2026-11-10 [decision] The reviewer's one-line role refusal covers every implementer act (`start`, the take-over, `submit`, `merge`), and the implementer gets the matching line for `verdict`
+  Reason: The product specification says a thread that runs another role's command gets one line back; checking the role before the status is what makes `submit` by a reviewer of an item in review say so rather than name the status.
+  Rejected: Only `submit`, as the Done when line names
+- 2026-11-10 [handoff] Approved by gpt-6.1-sol at 03d8a1df (atelier-hh3f) after two rounds; atelier-5edt fixed in b2d8d01c. Not merged: the orchestrator merges. See the Report.
 
 ## Report
 
@@ -234,33 +265,3 @@ The final binary in a scratch repository, two rounds:
     Response: fixed in c14bbc9
     Now: fixed
     <!-- Set Now: to fixed, withdrawn or kept. -->
-
-## Context
-
-Behaviour: `docs/strategies/redesign-product.md`, Commands (Reviewer), Review, and "When a thread dies". The reviewer works in the implementer's checkout, where T3 starts a delegated child by default.
-
-## Notes
-
-- 2026-11-10 [decision] The orchestrator narrowed the Done when line on a reviewer's wrong command from `submit` or `merge` to `submit` only
-  Reason: `merge` does not exist until atelier-syyj; the orchestrator will tell that item's implementer to cover a reviewer who runs `merge`.
-  Rejected: Build a stub merge here to test the reviewer's refusal
-- 2026-11-10 [decision] Expected size: about 900 non-test lines of Rust, scenario and unit tests about as large again, and about 40 changed lines of the architecture specification
-  Reason: The orchestrator's brief gives this size; past about twice it, the implementer escalates.
-- 2026-11-10 [decision] The review file's model is set by an optional `verdict --model <name>`; without it the file says `model: null`
-  Reason: Nothing on this host names the model in the environment (T3 and the harnesses set thread and session IDs only), the handoff line must stay as printed, and nobody edits front matter. The brief prints the flag on both verdict commands and says to leave it out when unknown.
-  Rejected: A `review <id> --model` flag, which the fixed handoff line never passes
-- 2026-11-10 [decision] `review` writes the round's file in the checkout and commits nothing; `verdict` commits it with item.md
-  Reason: The act table says verdict commits the review file, no act commits only to change a status, and the Done when line has verdict commit the file in one commit.
-  Rejected: Commit the file at `review`, which adds a commit per review and per take-over
-- 2026-11-10 [decision] A round of an item ends with the first verdict among its reviews, not when every review has one
-  Reason: A verdict moves the item out of review. With the other rule, a second reviewer's file left open in a round (two threads running `review` at once in one checkout) would stay the round's file after the first verdict, and the next submission would never open a new round.
-  Rejected: The latest round stays open while any of its reviews has no verdict
-- 2026-11-10 [decision] `verdict approve` is refused while any fix-now finding of the item is open, not only the file's own
-  Reason: A reviewer that deletes a carried finding from its file would otherwise approve the item over an open finding, which the product's rule that only a reviewer withdraws a finding forbids. With carrying done right the two rules agree.
-  Rejected: Count only the file's own findings, as the act table first said
-- 2026-11-10 [decision] A carried finding starts as `Now: kept` in the template, followed by a comment naming the three values
-  Reason: The template must parse, since every reader of the branch reads it; kept is the safe default, so approve is refused until the reviewer closes it on purpose.
-  Rejected: Leave `Now:` blank, which does not parse
-- 2026-11-10 [decision] The reviewer's one-line role refusal covers every implementer act (`start`, the take-over, `submit`, `merge`), and the implementer gets the matching line for `verdict`
-  Reason: The product specification says a thread that runs another role's command gets one line back; checking the role before the status is what makes `submit` by a reviewer of an item in review say so rather than name the status.
-  Rejected: Only `submit`, as the Done when line names
