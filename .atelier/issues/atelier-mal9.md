@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T14:58:34.868784826+00:00"
+updated_at: "2026-11-10T15:36:19.838251337+00:00"
 ---
 
 ## Goal
@@ -50,6 +50,13 @@ Item, review and config records. Mission records, and checking that an item's `m
 ## Context
 
 Design: `docs/strategies/redesign-architecture.md`, Records and Crates. The two pieces to copy are in `crates/atelier-records/src/lib.rs` and `crates/atelier-records/src/record_id.rs`. The rule for copying is in the architecture specification's section "The rule for this work". This is the first item of step A in `docs/strategies/redesign-2-core.md`.
+
+## Notes
+
+- 2026-11-10 [decision] The orchestrator reworded the CI Done when line: the Report shows the new job's steps, run as written in a scratch clone, failing on a throwaway commit that adds a path dependency on an old crate (and passing without it), instead of a real CI run.
+  Reason: A real CI run needs a hand-pushed throwaway branch on origin; the merge policy forbids pushing branches by hand, and only the owner may delete remote branches.
+  Rejected: Push a throwaway branch to origin and let CI fail on it
+- 2026-11-10 [handoff] Escalated to the orchestrator after three Sol review rounds: rounds 1-3 recorded four fix_now findings (atelier-wvqx, atelier-6a6v, atelier-x7cu, atelier-86l6), all fixed with regression tests seen failing first; the last fix (dc635ae8 head, code at 3d21d702) has not been reviewed. Outcome, proof and open items are in the Report.
 
 ## Report
 
@@ -83,9 +90,3 @@ In `docs/strategies/redesign-architecture.md`, Records: the one written form of 
 - `merge_strategy` has one possible value, `merge_commit`, so the field carries nothing; the spec could drop it (Sumeet's call, since it is a config option the spec names).
 - A carried finding's `Was:` must name the latest finding of its chain for the open rule to work; a reviewer who names the round-1 finding in round 3 leaves round 2's kept finding open. The review brief (atelier-engh) should print the name to carry.
 - Review files under a mission, and mission records, are step B. Reading records at a commit is the object reader's item; the parse and render functions take text, so it can feed them.
-
-## Notes
-
-- 2026-11-10 [decision] The orchestrator reworded the CI Done when line: the Report shows the new job's steps, run as written in a scratch clone, failing on a throwaway commit that adds a path dependency on an old crate (and passing without it), instead of a real CI run.
-  Reason: A real CI run needs a hand-pushed throwaway branch on origin; the merge policy forbids pushing branches by hand, and only the owner may delete remote branches.
-  Rejected: Push a throwaway branch to origin and let CI fail on it
