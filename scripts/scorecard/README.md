@@ -105,32 +105,24 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 - **Thread tied to an item**: the first known item ID in the thread's branch, else in its title,
   else in its first message. Every T3 thread counts, including the subagents Claude's Agent
   tool started, each tied by its own prompt.
-- **Shell commands** are parsed the way a shell splits them (`commands.simple_commands`): quotes,
-  heredoc bodies, `&&`, `;`, pipes, `$(...)`, keywords such as `do` and `then`, wrappers such as
-  `env`, `nice` and `timeout`, and `bash -c` scripts. A call of atelier is a simple command whose
-  first word is `atelier` (the installed binary, any subcommand); a mention in quoted text or a
-  heredoc is not one.
 - **Process share**: over threads tied to a merged item, the share of shell commands that call
-  atelier, name a path under `.atelier/`, or ran `git commit` and printed the hash of a commit on
-  the manifest commit's history that changes only `.atelier/`. A quiet commit (`-q`) prints no
-  hash, so a bare one of records staged earlier is not recognised. The token form gives each model
-  response's list-price cost to its tool calls in equal parts and sums the parts that went to
-  process commands. A call T3 recorded is judged from T3's copy, which includes its output.
+  atelier, read or write records, or make a record commit (see [Command forms](#command-forms)).
+  The token form gives each model response's list-price cost to its tool calls in equal parts and
+  sums the parts that went to process commands. A call T3 recorded is judged from T3's copy, which
+  includes its output.
 - **Confusion**: over every thread of the repository, shell commands in the window that call
   atelier, and of those, the ones whose output has one of atelier's refusal or error lines
-  (`<command>: refused`, `Error: `, clap's `error: unexpected argument` and kin) or that ask for
-  help (`--help`, `-h`, `atelier help`, `atelier man`), per 100.
+  (`<command>: refused`, `Error: ` other than a harness's `Error: Exit code N`, and clap's
+  `error: unexpected argument`, `unrecognized subcommand`, `the argument`, `the following
+  required arguments` and `invalid value`) or that look up help, per 100.
 - **Tokens per merged item**: the list-price cost of every thread tied to the item, summed. An
   item counts only when every such thread has a transcript and every request in them is to a
   priced model. Coverage is threads with a transcript out of threads counted.
 - **Calls before first edit**: in each thread tied to a merged item whose role is
   `implementation` or unlabelled (no "Act as the ... sub-agent" opening) and that edited a file,
-  the tool calls before its first edit outside `.atelier/` and scratch, build and harness
-  directories. An edit is a T3 `file_change`, or a shell command that writes a source,
-  configuration or documentation file by redirection, `tee`, `sed -i`, `perl -i`, `cp`, `mv`, a
-  patch, or Python (`open(p, "w")`, `Path(p).write_text()`, `p.open("w")`, with `p` a literal path
-  or a name bound to one). A relative target is taken from the last `cd` before it in the same
-  command. Shell commands alone are reported beside it.
+  the tool calls before its first edit: a T3 `file_change`, or a shell command's file write (see
+  [Command forms](#command-forms)), to a file outside `.atelier/` and scratch, build and harness
+  directories. Shell commands alone are reported beside it.
 - **Rework**: the first-parent history replayed line by line, each line dated when its commit
   reached the base. Of lines written from the window start to 14 days before the cutoff, the
   share deleted within 14 days. `.atelier/` and lock files are left out.
@@ -138,6 +130,63 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 - **Line count**: for a Rust repository, `scripts/count_non_test_rust.py` at the manifest commit;
   otherwise the main language's non-test physical lines, the main language being the one with the
   most non-test bytes outside dot-directories. `counted.md` says what counted as a test.
+
+## Command forms
+
+`commands.py` reads shell commands by heuristic over the forms below, not as a shell. It splits a
+command into simple commands at `;`, `&&`, `||`, `|`, `&`, newlines and `(`/`)`, honouring single
+quotes, double quotes, backslashes and line continuations, and reads each simple command on its own
+with the heredoc it is fed and the directory the last `cd` before it changed to. Before reading a
+simple command it drops leading `NAME=value` assignments, the keywords `!`, `{`, `do`, `elif`,
+`else`, `if`, `then`, `until` and `while`, and the wrappers `command`, `env`, `exec`, `ionice`,
+`nice`, `stdbuf`, `time`, `timeout` and `xargs` with their options. It reads the script of
+`bash`, `sh` or `zsh` given with a `-c` flag (`-c`, `-lc` and the like), and the command inside
+each `$(...)` that is neither single-quoted nor escaped, as commands of their own.
+
+Recognised:
+
+- **A call of atelier**: a simple command whose first word is `atelier`, or a path ending
+  `/.cargo/bin/atelier`, with any arguments. `command -v atelier` and `command -V atelier` are
+  lookups, not calls.
+- **A help lookup**: a call of atelier with `--help` or `-h` among its arguments, or whose first
+  argument not starting with `-` is `help` or `man`.
+- **A read or write of records**: any command whose text names `.atelier` (not after a letter,
+  digit, `_` or `-`) followed by `/`, whitespace, a quote or backtick, `;`, `)`, `|`, `&` or the end. This one is textual and counts the name anywhere,
+  quoted, in a heredoc or in a commit message.
+- **A record commit**: a simple command `git ... commit ...` whose output has a line
+  `[<branch> <hash>]` (or `[<branch> (root-commit) <hash>]`) naming a commit on the manifest
+  commit's history that changes only `.atelier/`.
+- **A file write**, to these targets: the file after `>`, `>>` or `&>` (not `>&`); the files `tee`
+  is given; the files `sed` or `perl` edit with `-i` (or `--in-place`), after the script or `-e`/`-f`
+  script; the last path given to `cp` or `mv`; each `*** Add File:`, `*** Update File:` or
+  `*** Delete File:` path in the heredoc or arguments of `apply_patch`; and, in code a `python`,
+  `python3` or `python3.N` command runs with `-c` or from a heredoc (with no script argument or
+  `-`), `open(p, mode)` with a mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()`
+  and `p.open(mode)` likewise, where `p` is a quoted literal, `Path("...")`, or a name the code
+  bound earlier to one (`p = "..."` or `p = Path("...")`). A relative target is joined to the
+  directory of the last `cd` before it. A write counts as an edit only to a path that is not under
+  `/dev/`, holds no `$`, has no component
+  `.atelier`, `.cache`, `.claude`, `.codex`, `.local`, `target`, `node_modules`, a name starting
+  `tmp` or a name containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
+  `.cjs`, `.svelte`, `.kt`, `.kts`, `.py`, `.go`, `.java`, `.swift`, `.md`, `.toml`, `.json`,
+  `.yaml`, `.yml`, `.sh`, `.css`, `.html` or `.sql`.
+
+Not recognised (each is a stated limit; such a command is read only for the forms above):
+
+- Backtick substitution, process substitution (`<(...)`, `>(...)`), `eval`, shell functions and
+  aliases, and variable values: `atelier $c` is a call, but `$c` is not expanded, and a write to a
+  path holding `$` is not an edit.
+- A `$(...)` inside a heredoc body, and a heredoc whose delimiter line is missing (its body runs to
+  the end of the command).
+- Scripts run from files (`bash x.sh`, `python3 x.py`, `node x.js`) and code in any other
+  interpreter (`node -e`, `perl -e` without `-i`, `ruby -e`).
+- Any other way to write a file: `install`, `rsync`, `dd`, `truncate`, `touch`, `ln`, `git apply`,
+  `git checkout -- <path>`, `git mv`, Python through `shutil`, `os.rename` or `os.replace`, a path
+  built at run time, or a handle opened outside the code shown.
+- Directory changes other than `cd <dir>` (`pushd`, `cd -`, `cd` with no argument), and the end of a
+  subshell's `cd` at `)`.
+- A record commit that prints no hash (`git commit -q`), or whose records were staged by an earlier
+  command and that names no `.atelier/` path itself.
 
 ## Privacy
 

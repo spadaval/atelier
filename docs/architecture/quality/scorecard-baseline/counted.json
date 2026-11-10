@@ -41,7 +41,7 @@
  "repositories": {
   "astromech": {
    "calls_before_first_edit": {
-    "implementer_threads": 134,
+    "implementer_threads": 132,
     "median_shell_commands": 16.5,
     "median_tool_calls": 18.0
    },
@@ -313,16 +313,16 @@
   },
   "atelier": {
    "calls_before_first_edit": {
-    "implementer_threads": 81,
-    "median_shell_commands": 19.0,
-    "median_tool_calls": 20.0
+    "implementer_threads": 80,
+    "median_shell_commands": 20.0,
+    "median_tool_calls": 22.0
    },
    "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
    "confusion": {
-    "atelier_calls": 4617,
+    "atelier_calls": 4624,
     "confused_calls": 1165,
     "help_lookups": 632,
-    "per_100_calls": 25.23,
+    "per_100_calls": 25.19,
     "refused_or_error": 566
    },
    "items": {
@@ -735,11 +735,11 @@
    },
    "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
    "confusion": {
-    "atelier_calls": 1237,
-    "confused_calls": 278,
+    "atelier_calls": 1239,
+    "confused_calls": 279,
     "help_lookups": 213,
-    "per_100_calls": 22.47,
-    "refused_or_error": 78
+    "per_100_calls": 22.52,
+    "refused_or_error": 79
    },
    "items": {
     "done_in_window": 51,

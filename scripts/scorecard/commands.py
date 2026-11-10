@@ -1,9 +1,9 @@
 """What a shell command, its output or an edited path says, for the counted measures.
 
 One owner for the patterns, so the thread reader, the transcript reader and the measures
-classify a command the same way. A command is parsed into simple commands the way a shell
-would split it (quotes, heredoc bodies, `&&`, `;`, pipes, `env`/`nice`-style wrappers and
-`bash -c` scripts), so a word inside a quoted argument or a heredoc is never taken for a call.
+classify a command the same way. This is a heuristic over the closed list of command forms in
+`README.md`, not a shell: a command is split into simple commands as a shell would split it, and
+each simple command is read on its own, with the heredoc it is fed and the directory it runs in.
 """
 import re
 import shlex
@@ -12,9 +12,12 @@ from dataclasses import dataclass, field
 PUNCTUATION = ";&|()<>\n"
 WRAPPERS = {"command", "env", "exec", "ionice", "nice", "stdbuf", "time", "timeout", "xargs"}
 KEYWORDS = {"!", "{", "do", "elif", "else", "if", "then", "until", "while"}
-SUBSTITUTION = re.compile(r"\$\(([^()]*)\)")
 SHELLS = {"bash", "sh", "zsh"}
-HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1[^\n]*\n.*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|\Z)", re.S)
+# A heredoc: its delimiter (not one already lifted), the rest of its line, and its body up to the delimiter
+# on a line of its own (which may end a quoted `bash -c` script or a `$(...)`).
+HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(?!__heredoc_)(\w+)\1([^\n]*)\n(.*?)(?:\n[ \t]*\2[ \t]*(?=[\n'\")]|$)|\Z)", re.S)
+PLACEHOLDER = re.compile(r"__(heredoc|subst)_(\d+)__")
+PYTHON = re.compile(r"python[\d.]*")
 RECORDS_PATH = re.compile(r"(?<![\w-])\.atelier(?:/|(?=[\s\"'`;)|&]|$))")
 COMMIT_LINE = re.compile(r"^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]", re.M)
 PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (\S+)", re.M)
@@ -36,14 +39,23 @@ SOURCE_FILE = re.compile(r"\.(?:rs|ts|tsx|js|jsx|mjs|cjs|svelte|kt|kts|py|go|jav
 
 @dataclass
 class Simple:
-    """One simple command: its words after wrappers, and the files it redirects output to."""
+    """One simple command: its words after wrappers, the files it redirects output to, and the heredoc it reads."""
     words: list = field(default_factory=list)
     writes: list = field(default_factory=list)
+    stdin: str = ""
 
 
-def simple_commands(command):
-    """The simple commands a shell would run for this text, recursing into `bash -c` scripts."""
-    text = HEREDOC.sub(lambda m: m.group(0).split("\n", 1)[0] + "\n", (command or "").replace("\\\n", " "))
+def simple_commands(command, _bodies=None):
+    """The simple commands a shell would run for this text, in order, entering `$(...)` and `bash -c` scripts."""
+    bodies = [] if _bodies is None else _bodies  # shared, since a lifted heredoc can sit inside either
+
+    def lift_heredoc(match):
+        bodies.append(match.group(4))
+        return f"<< __heredoc_{len(bodies) - 1}__{match.group(3)}\n"
+
+    text = HEREDOC.sub(lift_heredoc, (command or "").replace("\\\n", " "))
+    text, substitutions = _lift_substitutions(text)
+    result = [s for inner in substitutions for s in simple_commands(inner, bodies)]
     lexer = shlex.shlex(text, posix=True, punctuation_chars=PUNCTUATION)
     lexer.whitespace, lexer.commenters = " \t\r", ""
     lexer.wordchars += "$@%+:,{}^!#"  # keep `$f` and `${dir}/x` whole
@@ -59,24 +71,49 @@ def simple_commands(command):
             elif redirect:
                 if ">" in redirect and not redirect.endswith("&"):
                     current.writes.append(token)
+                elif redirect == "<<" and (lifted := PLACEHOLDER.fullmatch(token)):
+                    current.stdin = bodies[int(lifted.group(2))]
                 redirect = None
             else:
                 current.words.append(token)
     except ValueError:  # an unbalanced quote: keep what parsed before it
         pass
     found.append(current)
-    result = []
     for simple in found:
-        for word in simple.words:  # a substitution in double quotes, "$(atelier ...)", runs; one in single quotes is taken as running too
-            for inner in SUBSTITUTION.findall(word):
-                result += simple_commands(inner)
         words = _unwrap(simple.words)
         script = _shell_script(words)
         if script is not None:
-            result += simple_commands(script)
+            result += simple_commands(script, bodies)
         elif words or simple.writes:
-            result.append(Simple(words, simple.writes))
+            result.append(Simple(words, simple.writes, simple.stdin))
     return result
+
+
+def _lift_substitutions(text):
+    """Replace each `$(...)` a shell would run (not single-quoted, not escaped) with a placeholder; return the text and their contents."""
+    out, inner, i, quote = [], [], 0, None
+    while i < len(text):
+        char = text[i]
+        if char == "\\" and quote != "'":
+            out.append(text[i : i + 2])
+            i += 2
+            continue
+        if char == "'" and quote != '"':
+            quote = None if quote == "'" else "'"
+        elif char == '"' and quote != "'":
+            quote = None if quote == '"' else '"'
+        elif quote != "'" and text.startswith("$(", i):
+            depth, end = 1, i + 2
+            while end < len(text) and depth:
+                depth += {"(": 1, ")": -1}.get(text[end], 0)
+                end += 1
+            inner.append(text[i + 2 : end - 1])
+            out.append(f"__subst_{len(inner) - 1}__")
+            i = end
+            continue
+        out.append(char)
+        i += 1
+    return "".join(out), inner
 
 
 def _unwrap(words):
@@ -142,9 +179,10 @@ def is_product_edit(path):
 
 
 def shell_writes(command):
-    """Files a shell command writes: redirections, `tee`, `sed -i`, `perl -i`, `cp`/`mv` targets, patches and Python `open(..., 'w')`.
+    """Files a shell command writes: redirections, `tee`, `sed -i`, `perl -i`, `cp`/`mv` targets, `apply_patch`
+    files and Python writes in code a Python interpreter runs (`-c` or a heredoc).
 
-    A relative path is taken from the directory the command last changed to with `cd`, if any.
+    A relative path is taken from the directory the last `cd` before the write changed to, if any.
     """
     targets, cwd = [], ""
 
@@ -172,13 +210,20 @@ def shell_writes(command):
             add(positional)
         elif name in ("cp", "mv") and len(positional) >= 2:
             add(positional[-1:])
-    add(PATCH_FILE.findall(command or ""))
-    binds = [(m.start(), m.group(1), m.group(2)) for m in PYTHON_BIND.finditer(command or "")]
-    for match in PYTHON_WRITE.finditer(command or ""):
+        elif name == "apply_patch":
+            add(PATCH_FILE.findall("\n".join([simple.stdin, *args])))
+        elif PYTHON.fullmatch(name):
+            add(_python_writes(args[args.index("-c") + 1] if "-c" in args[:-1] else simple.stdin if args[:1] in ([], ["-"]) else ""))
+    return targets
+
+
+def _python_writes(code):
+    """Paths Python code writes with a literal path, or a name bound to one earlier in the code."""
+    binds = [(m.start(), m.group(1), m.group(2)) for m in PYTHON_BIND.finditer(code)]
+    for match in PYTHON_WRITE.finditer(code):
         literal, name = match.group(1) or match.group(3), match.group(2) or match.group(4)
         bound = [path for at, var, path in binds if var == name and at < match.start()]
-        add([literal] if literal else bound[-1:])
-    return targets
+        yield from [literal] if literal else bound[-1:]
 
 
 def writes_product(command):

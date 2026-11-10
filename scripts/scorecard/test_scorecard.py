@@ -119,11 +119,11 @@ def build_db(path, record_commit):
         item("t8", 1, "command_execution", t0, input="ls", output=""),  # a shell-only implementer
         item("t8", 2, "dynamic_tool", t0, toolName="Read"),
         item("t8", 3, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record"),
-        item("t8", 4, "command_execution", t0, input="git status", output=""),
+        item("t8", 4, "command_execution", t0, input="echo \"open('src/x.ts', 'w')\"", output=""),  # prints, writes nothing
         item("t8", 5, "command_execution", t0, input="python3 -c \"p = 'src/f.ts'; open(p, 'w').write('x')\"", output=""),
         item("t9", 0, "user_message", t0, text="Act as the implementation sub-agent for demo-ffff"),
         item("t9", 1, "command_execution", t0, output="",  # writes first
-             input="python3 - <<'EOF'\nfrom pathlib import Path\np = Path('src/b.ts')\np.write_text('x')\nEOF"),
+             input="python3 - <<'EOF'\nfrom pathlib import Path\np = Path('src/b.ts')\np.write_text('x')\nEOF\ncd /tmp/check"),
         item("t9", 2, "command_execution", t0, input="cargo test", output=""),
         item("t9", 3, "file_change", t0, fileName="/w/demo/src/c.ts"),
     ]
@@ -309,6 +309,12 @@ class Commands(unittest.TestCase):
                            "A=$(command -v atelier)"):
             self.assertFalse(commands.atelier_calls(not_a_call), not_a_call)
         self.assertFalse(commands.is_help("grep -n 'atelier merge --help' f"))
+        # R7: only a substitution outside single quotes runs
+        for literal in ("echo '$(atelier status)'", "echo \"\\$(atelier status)\"", "grep '$(atelier merge --help)' f"):
+            self.assertEqual(commands.atelier_calls(literal), [], literal)
+            self.assertFalse(commands.is_process(literal), literal)
+        self.assertEqual(commands.atelier_calls('echo "id: $(atelier issue create -q x)" $(atelier status)'),
+                         [["issue", "create", "-q", "x"], ["status"]])
 
     def test_shell_writes(self):
         self.assertEqual(commands.shell_writes("sed -i 's/a/b/' src/lib.rs && perl -pi -e s/x/y/ a.rs"), ["src/lib.rs", "a.rs"])
@@ -325,6 +331,16 @@ class Commands(unittest.TestCase):
         self.assertEqual(commands.shell_writes("cd /tmp/x && echo a > src.rs; cd /w/repo && echo b > src/a.rs"),
                          ["/tmp/x/src.rs", "/w/repo/src/a.rs"])
         self.assertFalse(commands.writes_product("cd ~/.cache/t && python3 -c \"open('src/a.rs', 'w')\""))
+        # R5: a write is resolved in the directory it ran in, not one a later cd moves to
+        self.assertEqual(commands.shell_writes("python3 -c \"open('src/lib.rs', 'w')\"; cd /tmp/check"), ["src/lib.rs"])
+        self.assertEqual(commands.shell_writes("cd /tmp/x && python3 - <<'EOF'\nopen('a.rs', 'w')\nEOF\ncd /w/demo"), ["/tmp/x/a.rs"])
+        self.assertEqual(commands.shell_writes("apply_patch <<'EOF'\n*** Add File: b.rs\nEOF\ncd /tmp"), ["b.rs"])
+        self.assertEqual(commands.shell_writes("x=$(python3 - <<'EOF'\nopen('c.rs', 'w')\nEOF\n)"), ["c.rs"])
+        self.assertEqual(commands.shell_writes("bash -lc 'python3 - <<EOF\nopen(\"d.rs\", \"w\")\nEOF'"), ["d.rs"])
+        # R6: Python is read only where a Python interpreter runs it
+        for not_run in ("echo \"open('src/lib.rs', 'w')\"", "grep -n \"write_text(\" src/a.py",
+                        "cat > notes.md <<'EOF'\nopen('src/lib.rs', 'w')\nEOF"):
+            self.assertNotIn("src/lib.rs", commands.shell_writes(not_run), not_run)
 
     def test_help_and_refusal(self):
         self.assertTrue(commands.is_help("atelier review finding --help"))
