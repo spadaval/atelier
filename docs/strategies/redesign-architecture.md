@@ -737,8 +737,10 @@ binary (`atelier-cli`'s `check.rs`).
 `atelier check` reads every record in the checkout one file at a time
 (`atelier-records`' `load`), so one that does not parse leaves the rest
 read and validated. It prints each problem with its file and field, exits 1
-when it found one, and lists the record changes not committed yet, as
-`status` on the base does, whatever it found. It needs no readable config
+when it found one, and lists the record changes not committed yet, those
+`status` on the base lists and `config.toml`, whatever it found. A review
+whose item or mission is missing or does not parse is a problem of the
+review's own. It needs no readable config
 and no base branch, so it reports a broken `config.toml` rather than
 stopping at it.
 

@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use atelier_app::acts::TABLE;
 use atelier_core::Status;
 use atelier_records::{
-    is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store,
+    is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store, CONFIG,
 };
 use std::io::{ErrorKind, Read};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -41,7 +41,12 @@ pub fn check() -> Result<Outcome> {
     }
     let loaded = load(files);
     let counts = (loaded.items.len(), loaded.missions.len());
-    let uncommitted = repo::planning(&root)?;
+    let mut uncommitted = repo::planning(&root)?;
+    let config = git::uncommitted(&root)?.iter().any(|path| path == CONFIG)
+        || !git::untracked(&root, CONFIG)?.is_empty();
+    if config {
+        uncommitted.insert(0, CONFIG.to_string());
+    }
     if loaded.unread.is_empty() && loaded.invalid.is_empty() {
         return Ok(Outcome::Done(output::checked(counts, &uncommitted)));
     }

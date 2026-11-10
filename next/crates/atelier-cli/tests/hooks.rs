@@ -139,20 +139,25 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
     assert!(said.contains("Fix each in the file named, then run atelier check again.\n"));
     // Uncommitted record changes are listed, and changing no outcome.
     assert!(said.ends_with(&format!(
-        "Record changes not committed yet: {}, {}\n",
+        "Record changes not committed yet: .atelier/config.toml, {}, {}\n",
         item_path(ID),
         item_path(OTHER)
     )));
 
     git(&root, &["checkout", "--", "."]);
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
+    append(
+        &root,
+        ".atelier/config.toml",
+        "\n[[merge_check]]\nrun = \"true\"\n",
+    );
     let run = atelier(&root, "t1", &["check"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(
         run.stdout,
         format!(
             "Every record is valid: 2 items, 0 missions and config.toml.\n\
-             Record changes not committed yet: {}\n",
+             Record changes not committed yet: .atelier/config.toml, {}\n",
             item_path(ID)
         )
     );
