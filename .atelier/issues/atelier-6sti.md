@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Write the baseline report, and propose a target for each cost measure"
-updated_at: "2026-11-10T17:09:06.669974016+00:00"
+updated_at: "2026-11-10T17:25:58.086319172+00:00"
 ---
 
 ## Goal
@@ -50,6 +50,10 @@ Assembly and targets. No new measurement.
 ## Context
 
 Strategy: `docs/strategies/redesign-1-baseline.md`. The assessment's numbers, which the Scorecard table holds today, are in `/var/tmp/atelier-assessment/reports/`.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by GPT-6.1 Sol (atelier-4aeu) at 9ef39081 after two review rounds. Round 1's two fix-now findings (atelier-0gcc, model mix lowers tokens per item; atelier-zj1b, an equal window caps merge age but does not equalise it) were fixed in cd2dd902 and 865a9623. No follow-ups filed, nothing undisposed. Outcome and open items are in the Report.
 
 ## Report
 
