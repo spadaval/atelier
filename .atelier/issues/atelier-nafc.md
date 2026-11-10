@@ -26,19 +26,13 @@ relationships:
     id: "atelier-pz1y"
     type: "blocked_by"
   - kind: "issue"
-    id: "atelier-t2jo"
-    type: "blocked_by"
-  - kind: "issue"
     id: "atelier-ym3z"
-    type: "blocked_by"
-  - kind: "issue"
-    id: "atelier-zrss"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Rehearse the converter and the new binary on all five repositories, with one item taken to done in two"
-updated_at: "2026-11-10T21:49:02.946155827+00:00"
+updated_at: "2026-11-10T23:55:48.238353677+00:00"
 ---
 
 ## Goal
@@ -62,3 +56,8 @@ The rehearsal, and small fixes to `scripts/cutover/convert_records.py` or `next/
 Design: `docs/strategies/redesign-architecture.md`, Transition ("2. Rehearse") and Testing. The converter is atelier-1sbw; `check` and the hooks are atelier-pz1y, `setup` is atelier-ym3z. The strategy's Risks name the one performance question: reading started items from their branches on every `status` may be slow in the repository with the most branches, and if it is, the fix is a cache inside one command's run, not a stored index.
 
 This is the second of step E's two items in `docs/strategies/redesign-2-core.md`, and the mission's last.
+
+## Notes
+
+- 2026-11-10 [decision] The rehearsal starts beside atelier-zrss and before atelier-t2jo, not after them
+  Reason: It needs the converter, check and setup, which are merged, and nothing of the bypass or the second fresh-agent scenario. Its proof is rerun from fresh clones on the final master before the mission closes, so nothing built later escapes it. The orchestrator of atelier-fcb7 changed the order, which the strategy's Authority leaves to it.
