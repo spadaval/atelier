@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Script the scorecard's counted measures, so the baseline can be rerun after the cutover"
-updated_at: "2026-11-10T14:15:28.429508957+00:00"
+updated_at: "2026-11-10T15:45:44.228494940+00:00"
 ---
 
 ## Goal
@@ -46,6 +46,10 @@ Python with the standard library only. Nothing changes in the `atelier` binary. 
 ## Context
 
 Each measure's definition is in `docs/strategies/redesign-1-baseline.md`, Design; do not change a definition, and escalate if one cannot be computed as written. The snapshot is at `~/.local/share/atelier-baseline/2026-11/`, described by `docs/architecture/quality/scorecard-baseline/manifest.json`. Starting material, not to be committed as it is: `/var/tmp/atelier-assessment/transcripts/` and `/var/tmp/atelier-assessment/history/`. Tie a thread to an item by the branch it worked on and the item IDs in its title and first message.
+
+## Notes
+
+- 2026-11-10 [note] Escalated to the orchestrator after three review rounds: round 3 (gpt-6.1-sol-5fsj-r3) left fix_now findings atelier-vj7n (R5), atelier-tu8a (R6) and atelier-h5kn (R7), all in the shell-command recogniser in scripts/scorecard/commands.py. Rounds 1 and 2's findings (pu40, ss09, d6fh, fvq9) are fixed at 31d3c6a1 and await an approval. Work is committed at 8b36a366; see the Report.
 
 ## Report
 
