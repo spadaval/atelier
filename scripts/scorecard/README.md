@@ -171,12 +171,13 @@ Recognised:
   `python3` or `python3.N` command runs with `-c` or from a heredoc (with no script argument or
   `-`), read with Python's own parser so strings and comments are not calls: `open(p, mode)` with a
   mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()` and `p.open(mode)` likewise,
-  where `p` is a string literal, `Path(...)` of one, or a name the code bound earlier to one. A relative target is joined to the
-  directory of the last `cd` before it. A write counts as an edit only to a path that is not under
-  `/dev/`, holds no `$`, has no component `.atelier`, `.cache`, `.claude`, `.codex`, `.local`,
-  `target`, `node_modules`, a name starting `tmp` or a name containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
-  `.cjs`, `.svelte`, `.kt`, `.kts`, `.py`, `.go`, `.java`, `.swift`, `.md`, `.toml`, `.json`,
-  `.yaml`, `.yml`, `.sh`, `.css`, `.html` or `.sql`.
+  where `p` is a string literal, `Path(...)` of one, or a name the code bound earlier to one. A
+  relative target is joined to the directory of the last `cd` before it. A write counts as an edit
+  only to a path that is not under `/dev/`, holds no `$`, has no component `.atelier`, `.cache`,
+  `.claude`, `.codex`, `.local`, `target`, `node_modules`, a name starting `tmp` or a name
+  containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`,
+  `.svelte`, `.kt`, `.kts`, `.py`, `.go`, `.java`, `.swift`, `.md`, `.toml`, `.json`, `.yaml`,
+  `.yml`, `.sh`, `.css`, `.html` or `.sql`.
 
 Not recognised (each is a stated limit; such a command is read only for the forms above):
 
