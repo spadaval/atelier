@@ -754,6 +754,26 @@ fn field_lines_in_a_fenced_example_are_text() {
 }
 
 #[test]
+fn inline_code_on_a_line_of_its_own_opens_no_fence() {
+    let review = "items/atelier-06jc/reviews/2-m2bn.md";
+    let inline = (review, "## Summary\n", "## Summary\n\n```inline code```\n");
+    let problems = problems_after(&[inline, (review, "verdict: changes", "verdict: approve")]);
+    assert_one_problem(
+        &problems,
+        review,
+        "verdict",
+        "fix-now finding 2-m2bn.1 is open",
+    );
+    let problems = problems_after(&[inline, (review, "Recommendation: defer\n", "")]);
+    assert_one_problem(
+        &problems,
+        review,
+        "## Finding 3: Not worth it",
+        "Recommendation",
+    );
+}
+
+#[test]
 fn a_fix_now_finding_stays_open_until_a_later_round_or_a_decision_closes_it() {
     let open = |edits: &[(&str, &str, &str)]| -> Vec<String> {
         let mut files = example();

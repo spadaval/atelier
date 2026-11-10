@@ -42,13 +42,15 @@ pub(crate) fn unfenced_lines(text: &str) -> Vec<(usize, &str)> {
 }
 
 /// A fence line's character, its length, and what follows it: three or
-/// more backticks or tildes, indented by at most three spaces.
+/// more backticks or tildes, indented by at most three spaces. After
+/// backticks no backtick may follow, so ```` ```code``` ```` is inline code.
 fn fence(line: &str) -> Option<(char, usize, &str)> {
     let marks = line.trim_start_matches(' ');
     let c = marks.chars().next().filter(|c| matches!(c, '`' | '~'))?;
     let rest = marks.trim_start_matches(c);
     let len = marks.len() - rest.len();
-    (line.len() - marks.len() <= 3 && len >= 3).then_some((c, len, rest))
+    let is_fence = line.len() - marks.len() <= 3 && len >= 3 && !(c == '`' && rest.contains('`'));
+    is_fence.then_some((c, len, rest))
 }
 
 /// The sections of a Markdown `text` under headings of one `level`, as
@@ -126,6 +128,8 @@ mod tests {
         // Only a line of the same character, at least as long, closes.
         assert_eq!(lines("````\n```\nTaken: x\n```\n````\nb"), ["b"]);
         assert_eq!(lines("~~~~\n~~~\n~~~~ not closing\nx\n~~~~~\nb"), ["b"]);
+        // Backticks with a backtick after them are inline code, not a fence.
+        assert_eq!(lines("```inline code```\nb"), ["```inline code```", "b"]);
         // Four spaces of indent is no fence.
         assert_eq!(lines("    ```\na"), ["    ```", "a"]);
     }
