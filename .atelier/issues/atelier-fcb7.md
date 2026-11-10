@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T15:44:54.427583649+00:00"
+updated_at: "2026-11-10T16:32:47.668024286+00:00"
 ---
 
 ## Outcome
@@ -39,3 +39,4 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
   Reason: The Authority lets the orchestrator cut what proves unnecessary, and the product specification adds a named option only when a second real project needs one.
   Rejected: Keep a field that every reader ignores
 - 2026-11-10 [note] 2026-11-10: atelier-mal9 escalated after three review rounds, each with one or two fix-now findings, all fixed. Three of the four came from the hand-written check for fenced code blocks. Answered: a fourth round on the fix as it stands, no refusal for an unclosed fence and no Markdown parser dependency.
+- 2026-11-10 [note] 2026-11-10: atelier-mal9 (records, the next/ workspace and its CI job; pull request 96, four review rounds) and atelier-engh (identity, the act table, start, submit, status; pull request 97, two rounds) are merged. next/ holds 2,914 non-test lines. The act table holds only the rows of commands that exist; each later step adds its rows with its commands. atelier-5cuc is next.
