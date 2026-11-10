@@ -110,6 +110,11 @@ impl Repo {
             .collect()
     }
 
+    /// The item `id` as `commit` holds it.
+    pub fn item_at(&mut self, commit: &str, id: &str) -> Result<Option<ItemDir>> {
+        Ok(self.reader.item(commit, id)?)
+    }
+
     /// What `merge` reads from this checkout, on the branch of `record`,
     /// whose HEAD is the commit `head`.
     pub fn checkout(&mut self, record: &ItemDir, head: &str) -> Result<Checkout> {

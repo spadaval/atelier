@@ -44,14 +44,25 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     // The commit everything below is checked against, read first: a commit
     // made after this is caught before anything is written.
     let head = git::head(&repo.root)?;
-    let Some(located) = repo.current()? else {
+    let Some(mut located) = repo.current()? else {
         return Ok(Outcome::Refused(output::not_on_item(
             "merge",
             repo.branch.as_deref(),
         )));
     };
+    // What merges is that commit, so the item is read from it, not from
+    // the checkout, whose uncommitted changes are a condition of their own.
+    if let Some(branch) = located.branch.as_mut() {
+        branch.record = repo.item_at(&head, &located.id)?;
+    }
     let config = repo.base_config()?;
-    let record = located.record().expect("the current item has a record");
+    let Some(record) = located.record() else {
+        // Its record is in the checkout and in no commit.
+        return Ok(Outcome::Refused(output::not_on_item(
+            "merge",
+            repo.branch.as_deref(),
+        )));
+    };
     let id = record.item.id.clone();
     let merged = located.branch.as_ref().is_some_and(|branch| branch.merged);
     if record.item.status == Status::Done && merged {

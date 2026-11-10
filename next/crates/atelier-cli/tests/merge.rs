@@ -373,6 +373,32 @@ fn an_unanswered_question_stops_the_merge_and_is_named() {
 }
 
 #[test]
+fn merge_judges_the_committed_item_not_the_checkouts() {
+    // The committed Goal changed since the review; the checkout puts the
+    // reviewed Goal back without committing it.
+    let scratch = approved();
+    let root = scratch.root();
+    let path = root.join(item_path(ID));
+    let reviewed = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        reviewed.replacen("Print hello.", "Print hello twice.", 1),
+    )
+    .unwrap();
+    git(&root, &["commit", "-qam", "Change the Goal"]);
+    fs::write(&path, &reviewed).unwrap();
+    let before = state(&root);
+    let run = merge(&root, "t1", &[]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.contains("(changed: this item's Goal)\n"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(state(&root), before);
+}
+
+#[test]
 fn uncommitted_changes_in_the_checkout_stop_the_merge() {
     let scratch = approved();
     let root = scratch.root();
