@@ -53,21 +53,21 @@ edited by this work. It is deleted whole at the switch.
 
 | Area | Lines today | In the new workspace |
 | --- | --- | --- |
-| Record parsing, validation and index | 7,930 | Written new. Front-matter splitting and ID generation are copied. |
-| Merge, gates, freshness, light path | 6,190 | Written new. The merged-tree checkout, the merge commit and the push are copied from `merge.rs` and `merge_push.rs` and put on the new types. |
+| Record parsing, validation and index | 7,930 | Written new. Front-matter splitting is copied with one change, so that it keeps a record's body byte for byte where today it strips a newline at each end. ID generation is copied from `record_id.rs`. |
+| Merge, gates, freshness, light path | 6,190 | Written new. Copied and put on the new types: the merged-tree checkout, the merge commit and the push from `merge.rs` and `merge_push.rs`, and the protection around them described under The forge. |
 | Issue and work views and output | 5,304 | Written new, as `status`, `show` and `list` |
 | Missions, brief, debrief, criteria | 4,753 | Only what the site's pages need, at the site step |
 | Review and findings | 4,669 | Written new, as `review` and `verdict` over one file per review |
 | Site, Rust and web | 4,926 | Copied at the site step, with its loader written new |
 | Workflow policy | 3,418 | Not carried over; a short config section replaces it |
 | Status, land and hooks | 2,438 | Written new. The harness hook installer is copied. |
-| Prune and history | 2,410 | Not carried over. The loader that reads records at a commit, 116 lines, is copied. |
+| Prune and history | 2,410 | Not carried over |
 | Evidence | 1,931 | Not carried over |
 | Bundle | 1,665 | Not carried over |
 | Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | `forge.rs`, 382 lines, is copied with its contract tests, and takes the new config |
-| Git and shell adapters (`commands/git.rs`) | 1,437 | The calls the new commands use are copied |
+| Git and shell adapters (`commands/git.rs`, `git_freshness.rs`) | 3,501 | Copied: the Git calls the new commands use, and the object reader, which reads files at a pinned commit through one `git cat-file --batch` process and reports a missing path, a non-regular file and a failed subprocess. The record loader on top of it is written new; today's is bound to types that go. |
 | Migrate | 883 | Not carried over |
-| Setup | 821 | The installer is copied; it gains Git hooks and Codex hooks |
+| Setup | 821 | The merging of hook settings into a harness's config is copied; what it installs is new, and it gains Git hooks and Codex hooks |
 
 No old test is ported, except the contract tests that come with a copied
 piece. The new workspace has its own.
@@ -86,10 +86,21 @@ lock file, built to `next/target/`. It has the crates the old one has, less
 | `atelier-site` | `atelier serve` |
 | `atelier-cli` | Arguments, dispatch, Git and shell adapters, output |
 
-The dependency direction is `cli` to `site` to `app` to `records` to `core`.
-No file under `next/` names a path under `crates/`, and CI fails if one does.
-`scripts/ci-jobs.sh` runs the new workspace's build and tests when a path
-under `next/` changes, and the old ones when a path under `crates/` does.
+The crates sit at `next/crates/<name>/`, so the switch can move them to the
+root `crates/` without changing a path inside them. The dependency direction
+is `cli` to `site` to `app` to `records` to `core`.
+
+Nothing in the new workspace builds from the old one. `cargo metadata`, run
+in `next/`, lists no package or path dependency outside `next/`, and a CI
+step fails if it does. The rule is about what the build reads, not about
+text: a document or a comment in `next/` may name the old code a piece came
+from.
+
+CI builds and tests both workspaces. `scripts/ci-jobs.sh` says which a
+change needs, the new one when a path under `next/` changes and the old one
+when a path under `crates/` does, and `.github/workflows/ci.yml` gains the
+jobs that build and test `next/`. `next/target/` is ignored by Git, and
+`scripts/count_non_test_rust.py` can count one workspace at a time.
 
 The new binary is `next/target/debug/atelier`. It is called "the new binary"
 below, and it is installed nowhere until the cutover.
@@ -409,8 +420,21 @@ come with it. The merged-tree checkout, the merge commit and the push live
 today in `atelier-cli`'s `merge.rs` and `merge_push.rs`, bound to
 `WorkflowPolicy` and `RecordIndex`. They are copied and put on the config
 and item types, and their contract tests are rewritten against the new
-command. Nothing else from today's merge is carried over: not the gate code,
-the polling in `merge_wait.rs`, nor `merge_sync.rs`.
+command.
+
+One more thing is kept, because it is the kind a rewrite loses by accident.
+Today's merge protects itself against the world moving while its checks run.
+It takes the lock that serialises Atelier's writers. After the checks, and
+before it writes anything, it confirms that the branch tip and the base tip
+are the ones the checks ran on and that the checkout has not changed, and it
+refuses if any has. The new `merge` does the same, with the lock and that
+confirmation copied from `merge.rs`, `mutation_lock` and
+`committed_snapshot.rs`, and with tests that move the base, move the branch
+and run two merges at once. The parts of that code that guard against
+tampering with file modes and index flags are not carried over.
+
+Nothing else from today's merge is carried over: not the gate code, the
+polling in `merge_wait.rs`, nor `merge_sync.rs`.
 
 ## Site
 
@@ -472,9 +496,12 @@ old tool:
   test.
 - The site is rebuilt, as above.
 - The switch: `crates/`, the old workspace with all its tests, and
-  `scripts/smoke-repos.sh` are deleted, and the contents of `next/` move to
-  the repository root, so the root workspace, the release build and
-  `cargo install --path crates/atelier-cli` are all the new tool. CI's
+  `scripts/smoke-repos.sh` are deleted, and the tracked contents of `next/`
+  move to the repository root, so the root workspace, the release build and
+  `cargo install --path crates/atelier-cli` are all the new tool. The move
+  also touches the root manifest and lock file, the release profile and
+  metadata, CI's two sets of jobs and the web paths in the release workflow;
+  the full list is made when the switch is planned. CI's
   `check` step runs the fallback release while the repository holds
   `.atelier/issues/` and the tree's binary once it does not. `AGENTS.md`
   says the installed binary stays the tracker and nobody installs from the

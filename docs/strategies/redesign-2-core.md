@@ -56,9 +56,11 @@ and the records, which a skill cannot provide.
 - **Copy on purpose, write the rest.** A piece of old code is copied only
   when its behaviour is wanted as it is, the item that copies it names it,
   and it is reviewed as new code. The architecture specification lists the
-  pieces: the forge code, the Git adapters, the merged-tree checkout,
-  front-matter splitting, ID generation, the hook installer and the loader
-  that reads records at a commit.
+  pieces: the forge code; the Git calls the commands use and the reader of
+  files at a commit; the merged-tree checkout with the lock and the
+  re-check that protect a merge from a base or branch that moved; the
+  front-matter splitter, changed to keep a body byte for byte; ID
+  generation; and the merging of hook settings.
 - **The old workspace is not edited.** Its binary, its tests, the CI `check`
   step and `scripts/smoke-repos.sh` keep working. Deleting it, rebuilding
   the site and switching belong to mission 3. The tree is larger until then
