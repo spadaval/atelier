@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn a_fix_now_finding_stays_open_until_a_later_round_closes_it() {
         let first = finding("1-aaaa.1", Recommendation::FixNow);
-        assert_eq!(open(&[first.clone()], &[]), ["1-aaaa.1"]);
+        assert_eq!(open(std::slice::from_ref(&first), &[]), ["1-aaaa.1"]);
 
         // Carried as fixed or withdrawn: closed, and the carrier is not open.
         for now in [Now::Fixed, Now::Withdrawn] {

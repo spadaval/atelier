@@ -6,6 +6,7 @@ cfg(test) app test_records helper, and full cfg(test) item spans. It masks Rust
 comments and literals before balancing item braces; unrelated blank/comment
 lines remain included. This is a source-budget count, not an executable-SLOC
 metric. Run from the repository: scripts/count_non_test_rust.py REVISION
+[DIRECTORY]; a DIRECTORY such as crates or next counts that workspace alone.
 """
 import argparse
 import collections
@@ -117,6 +118,7 @@ def self_check():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('revision', nargs='?', default='HEAD')
+    parser.add_argument('directory', nargs='?', help='count only files under this directory')
     parser.add_argument('--self-check', action='store_true', help='verify Rust item boundaries')
     args = parser.parse_args()
     if args.self_check:
@@ -127,18 +129,22 @@ def main():
     excluded_files = []
     item_count = 0
     excluded_lines = 0
+    prefix = args.directory.strip('/') + '/' if args.directory else ''
     files = git('ls-tree', '-r', '--name-only', revision).splitlines()
     for path in files:
-        if not path.endswith('.rs'):
+        if not path.endswith('.rs') or not path.startswith(prefix):
             continue
+        workspace_path = path[len(prefix):]
         if '/tests/' in path or path.endswith('/src/test_records.rs'):
             excluded_files.append(path)
             continue
         lines, items, removed = count(git('show', revision + ':' + path))
-        totals[path.split('/')[1] if path.startswith('crates/') else '(root)'] += lines
+        # A crate's name, or the top directory of anything else.
+        group = re.match(r'(?:crates/)?([^/]+)/', workspace_path)
+        totals[group.group(1) if group else '(root)'] += lines
         item_count += items
         excluded_lines += removed
-    print('Command: scripts/count_non_test_rust.py ' + args.revision)
+    print('Command: scripts/count_non_test_rust.py ' + ' '.join(filter(None, [args.revision, args.directory])))
     print('Commit: ' + revision)
     print('Method: physical Rust lines including blanks/comments; exclude tests/ files,')
     print('        cfg(test) test_records helper, and complete cfg(test) item spans.')

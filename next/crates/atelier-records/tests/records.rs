@@ -515,6 +515,76 @@ fn a_finding_name_in_another_form_is_refused() {
 }
 
 #[test]
+fn records_whose_names_or_lines_are_ambiguous_are_refused() {
+    let item = "items/atelier-06jc/item.md";
+    let review = "items/atelier-06jc/reviews/2-m2bn.md";
+    let finding_1 = "## Finding 1: The brief omits Scope";
+    let decision = "Decisions: 2026-11-10: Should the brief carry the parent's Scope?";
+    let answer = "Answer by t3-decider: No; the item's own Scope is enough.\n";
+    let cases = [
+        (
+            "items/atelier-b10c/item.md",
+            "id: atelier-b10c",
+            "id: atelier-b10d",
+            "id",
+            "not its directory's name",
+        ),
+        (
+            review,
+            "round: 2",
+            "round: 3",
+            "round",
+            "round 3 is not the file name's round",
+        ),
+        (
+            review,
+            "Finding 3: Not",
+            "Finding 2: Not",
+            "## Finding 2: Not worth it",
+            "appears twice",
+        ),
+        (
+            review,
+            "Now: kept\n",
+            "",
+            finding_1,
+            "a carried finding has a `Was:` line",
+        ),
+        (
+            review,
+            "Was: 1-k3fa.1\n",
+            "",
+            finding_1,
+            "a carried finding has a `Was:` line",
+        ),
+        (
+            review,
+            "Now: kept\n",
+            "Now: kept\nDecided: defer\n",
+            finding_1,
+            "a carried finding",
+        ),
+        (
+            item,
+            "Finding: 2-m2bn.2\n",
+            "",
+            decision,
+            "an `Outcome:` needs",
+        ),
+        (item, answer, "", decision, "an `Outcome:` needs"),
+    ];
+    for (file, old, new, field, words) in cases {
+        let problems = problems_after(&[(file, old, new)]);
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.file.ends_with(file) && p.field == field && p.message.contains(words)),
+            "{new}: {problems:#?}"
+        );
+    }
+}
+
+#[test]
 fn caused_by_holds_an_item_id_or_a_commit_hash_checked_for_form_only() {
     let file = "items/atelier-06jc/item.md";
     for cause in [
