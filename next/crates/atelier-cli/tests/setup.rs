@@ -370,7 +370,11 @@ fn a_symbolic_link_or_a_hook_that_is_not_executable_is_kept_as_it_was_and_runs_o
     assert_eq!(run.code, 0, "{}", run.stderr);
     // The kept hook is not run, so neither runs nor fails.
     assert!(!run.stderr.contains("should not run"), "{}", run.stderr);
-    assert!(!run.stderr.contains("post-checkout.local"), "{}", run.stderr);
+    assert!(
+        !run.stderr.contains("post-checkout.local"),
+        "{}",
+        run.stderr
+    );
     assert!(run.stderr.contains("You are thread t1"), "{}", run.stderr);
 }
 
