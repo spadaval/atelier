@@ -29,7 +29,7 @@ Let work end without being built, and let a plan be reviewed before Sumeet says 
 
 ## Done when
 
-- [ ] `drop <id> --reason "<why>"`, run on the base, sets a draft or ready item or mission to `dropped` and stores the reason in the record. It is refused without a reason and on a done record. Dropping a mission changes no item; `start` on one of its items is then refused and says the mission was dropped.
+- [ ] `drop <id> --reason "<why>"`, run on the base, sets a draft or ready item or mission to `dropped` and stores the reason in the record's body, since the specified front matter has no field for it: as a line `Dropped: <reason>` at the end of an item's Report section, or of a mission's Result section, creating the section when the record has none. A reason is one line. It is refused without a reason and on a done record. The reader of that line (the first line that starts `Dropped: `, outside fenced code, in that section) is built here, in `atelier-records` beside the other body readers, and this item's `status` and refusals use it. Dropping a mission changes no item; `start` on one of its items is then refused and says the mission was dropped.
 - [ ] Scenario test, a started item dropped on the base: `drop` writes the base's record whatever the item's branch holds. Once that is committed, `status` from the base and from the item's branch says the item was dropped and why, and `submit`, `merge` and a take-over `start` on it are each refused with the same reason and nothing changed.
 - [ ] `close <item> "<result>"` sets a draft or ready item with no branch to `done` and writes the result into its Report. It is refused without a result text, and for an item whose branch exists, naming `merge` as the way that item ends.
 - [ ] `close <mission>` sets a ready mission to `done`. It is refused, listing what is in the way, while any of its items is neither done nor dropped or its Result section is empty.
@@ -40,11 +40,11 @@ Let work end without being built, and let a plan be reviewed before Sumeet says 
 - [ ] `ready <mission>` prints whether the plan has a review, each latest review's verdict, and whether the mission's directory or any of its items changed since the commit reviewed. It never refuses for any of that.
 - [ ] `drop` and `close` make no commit: each prints the paths it wrote and a `Then:` line with the Git command that commits them. `verdict` commits, as it does for an item.
 - [ ] The act table gains the rows for `drop`, `close` on an item, `close` on a mission and `verdict` on a mission review, and the unit test over the table covers them from every status.
-- [ ] `docs/strategies/redesign-architecture.md` matches what was built: where a drop's reason and a close's result are stored, the plan review's rounds, and the four rows.
+- [ ] `docs/strategies/redesign-architecture.md` matches what was built: the `Dropped:` line and where a close's result is stored, the plan review's rounds, and the four rows.
 
 ## Scope
 
-`drop`, `close`, and `review` and `verdict` on a mission, in `next/`. Dropping a deferred finding is step C. `show`, `list` and `lead` are atelier-jciw, which another implementer builds at the same time in new files of its own (`atelier-app`'s and `atelier-cli`'s view modules); keep out of those, and keep additions to shared files (`main.rs`, `output.rs`) to what this item needs. Nothing is copied from the old workspace. No file under `crates/` is changed.
+`drop`, `close`, and `review` and `verdict` on a mission, in `next/`. Dropping a deferred finding is step C. `show`, `list` and `lead` are atelier-jciw, which another implementer builds at the same time in new files of its own (`atelier-app`'s and `atelier-cli`'s view modules); it prints a record's Report or Result as text and a status of `dropped` as a status, and does not read the `Dropped:` line. Keep out of its files, and keep additions to shared files (`main.rs`, `output.rs`) to what this item needs. Nothing is copied from the old workspace. No file under `crates/` is changed.
 
 ## Context
 

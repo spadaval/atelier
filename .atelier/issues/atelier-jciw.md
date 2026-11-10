@@ -40,7 +40,7 @@ Give a lead, a planner and Sumeet's agents every view of the work they have toda
 
 ## Scope
 
-`show`, `list`, `lead` and the base's `status`, in `next/`. Everything but `lead` only reads. `list --deferred` is step C and `log` is mission 4. New code goes in new view modules in `atelier-app` and `atelier-cli`, since another implementer builds atelier-jq24 (`drop`, `close`, plan reviews) at the same time; keep additions to shared files (`main.rs`, `output.rs`, `acts.rs`) to what this item needs. No cache and no index: if reading started items from their branches proves slow, step E's rehearsal on real repositories is where it shows. Nothing is copied from the old workspace. No file under `crates/` is changed.
+`show`, `list`, `lead` and the base's `status`, in `next/`. Everything but `lead` only reads. `list --deferred` is step C and `log` is mission 4. A dropped record is shown with its status, and its reason appears where `show` prints its Report or Result as text; the reader of the `Dropped:` line belongs to atelier-jq24, and this item does not need it. New code goes in new view modules in `atelier-app` and `atelier-cli`, since another implementer builds atelier-jq24 (`drop`, `close`, plan reviews) at the same time; keep additions to shared files (`main.rs`, `output.rs`, `acts.rs`) to what this item needs. No cache and no index: if reading started items from their branches proves slow, step E's rehearsal on real repositories is where it shows. Nothing is copied from the old workspace. No file under `crates/` is changed.
 
 ## Context
 
