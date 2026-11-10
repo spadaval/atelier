@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add missions and the planning commands: `new`, `set`, `ready`, `drop`, `close`, `list`, `show`, `lead` and `start --new`"
-updated_at: "2026-11-10T02:41:07.697443848+00:00"
+updated_at: "2026-11-10T02:49:55.360277533+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 ## Unknowns
 
 - What step A's scenario runs change in `status`, which `lead` and `list` share.
+- Which flags of `list` show finished missions, answered questions and work in progress, so that today's `work missions --all`, `work decisions` and `work active` lose nothing (planning finding atelier-50br).

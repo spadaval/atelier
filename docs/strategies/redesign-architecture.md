@@ -218,7 +218,8 @@ hold several things, and `status` lists each.
 
 Harness hooks give orientation at session start: `atelier setup claude`
 exists, and `atelier setup codex` is added, since Codex 0.167 has hooks. The
-session-end hook runs `atelier check`. Where no harness hook runs, a
+session-end hook runs `atelier check`, which also reports record changes
+not yet committed. Where no harness hook runs, a
 project's `AGENTS.md` says to run `atelier status` first, and the
 post-checkout Git hook prints it on every branch switch.
 
@@ -246,10 +247,13 @@ post-checkout Git hook prints it on every branch switch.
   worktrees. Two clones on different hosts are not coordinated.
 - Apart from that check, a command on a work branch reads and writes that
   branch's `.atelier/`.
-- The pre-push hook applies one rule to each new commit in a push of the
-  base: it is a merge made by `atelier merge`, or it touches only paths
-  under `.atelier/missions/` and `.atelier/items/`. A commit on the base may
-  not set `done` on an item whose branch exists.
+- The pre-push hook applies one rule to each new commit on the base's
+  first-parent line in a push of the base: it is a merge made by
+  `atelier merge`, known by the trailer that command writes in its message,
+  or it touches only paths under `.atelier/missions/` and `.atelier/items/`.
+  What a merge brings in on its second parent is not examined. A commit
+  that is not such a merge may not set `done` on an item whose branch
+  exists.
 - A plan reviewer works in its own detached worktree so two reviewers stay
   blind to each other. Review files have distinct names, so the planner
   cherry-picks both onto the base without a conflict.
@@ -262,9 +266,10 @@ post-checkout Git hook prints it on every branch switch.
 3. Check no Decisions entry is unanswered.
 4. Build the merged tree in a temporary checkout and run each merge check.
 5. Where a forge is configured: push the branch and open its pull request,
-   if they are not there yet. Where it names a CI workflow and that workflow
+   if they are not there yet. Where it names a CI workflow: if that workflow
    has not finished on the head, print the pull request and stop with an
-   exit status of its own, distinct from a refusal.
+   exit status of its own, distinct from a refusal; if it finished and did
+   not pass, refuse.
 6. Make one merge commit on the base that sets the item `done`.
 7. Where a forge is configured: push the base.
 
@@ -279,7 +284,7 @@ which all its worktrees share. Each is a one-line script that runs
 
 | Hook | Rule |
 | --- | --- |
-| pre-commit | Every staged file under `.atelier/` parses and validates. Where a record's status differs from the one in `HEAD`, the act table allows that change and its conditions hold. |
+| pre-commit | Every staged record parses and validates: a `mission.md`, an `item.md`, a review file or `config.toml`. Other files under `.atelier/`, such as a mission's documents and an item's artifacts, are not examined. Where a record's status differs from the one in `HEAD`, the act table lists that change. The conditions of an act are the command's to check, not the hook's. |
 | pre-push | The base rule above, for each new commit when the push updates the base. |
 | post-checkout | None. On a branch switch it prints what `status` prints. |
 
@@ -297,11 +302,11 @@ reports a clone with no hooks.
 takes the forge section of the new config, whose CI workflow is optional,
 where today it takes `workflow_policy::ForgeConfig` with a required workflow
 name. Its behaviour and its contract tests stay. The merged-tree checkout,
-the merge commit and the push live today in `atelier-cli`'s `merge.rs`,
-`merge_push.rs` and `merge_wait.rs`, bound to `WorkflowPolicy` and
-`RecordIndex`. They are extracted onto the config and item types, and their
-contract tests are rewritten against the new command. Nothing else from
-today's merge is kept.
+the merge commit and the push live today in `atelier-cli`'s `merge.rs` and
+`merge_push.rs`, bound to `WorkflowPolicy` and `RecordIndex`. They are
+extracted onto the config and item types, and their contract tests are
+rewritten against the new command. Nothing else from today's merge is kept:
+not the polling in `merge_wait.rs`, nor `merge_sync.rs`.
 
 ## Site
 
@@ -386,11 +391,14 @@ ready, the runbook runs on the base, and the item is closed at the end.
 3. Install the binary from master, run `atelier setup` for each harness and
    for Git hooks, move the skill checkout forward, and restart the
    `atelier-serve` service. Check the site answers for atelier.
-4. Push master. CI now runs the tree's binary on the converted records.
+4. Push master, with `ATELIER_SKIP="cutover conversion"`, since the hook
+   just installed would refuse a commit that is not a merge and changes
+   `AGENTS.md` and the skill. CI now runs the tree's binary on the converted
+   records.
 5. In each of the other four repositories: convert, replace the process text
    in `AGENTS.md` and any workflow that runs Atelier with the reviewed ones,
    commit, run `--verify` and `atelier check`, run `atelier setup` for Git
-   hooks, and push.
+   hooks, and push with the same skip.
 6. Close the cutover item with `atelier close`, the first act recorded by the
    new tool.
 
@@ -408,9 +416,11 @@ thing that does it.
 | Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
 | Converted and pushed | Reverting its conversion commit and pushing |
 
-If step 3 had run, it also reinstalls the fallback release, runs its `setup`, moves the
-skill checkout back to the commit it was on, restarts `atelier-serve`, and
-checks the site answers.
+If step 3 had run, it also reinstalls the fallback release, runs its `setup`,
+removes the Git hooks the new `setup` installed from each clone, since the
+old tool has none and they would call commands it lacks, moves the skill
+checkout back to the commit it was on, restarts `atelier-serve`, and checks
+the site answers.
 
 The rollback is tried on scratch clones before the real cutover, stopping
 after each of these: a conversion that fails `--verify` before its commit;
@@ -440,11 +450,13 @@ does, it must not fetch a repository that has been converted.
 - Hook scenarios in a scratch repository: a commit of an invalid record
   refused; a commit of a status change the act table does not allow refused;
   a push of the base holding a plain commit that touches code refused, and
-  one holding only planning commits allowed; the same push allowed with
-  `ATELIER_SKIP` set, and the skip printed; a branch switch printing
-  `status`.
+  one holding only planning commits allowed; a push of the base whose new
+  commit is an Atelier merge of a branch with ordinary code commits allowed;
+  the refused push allowed with `ATELIER_SKIP` set, and the skip printed; a
+  branch switch printing `status`.
 - `merge` with CI still running: it stops with its "not yet" exit status and
-  changes nothing; run again after CI passed, it merges.
+  changes nothing; run again after CI passed, it merges; run again after CI
+  failed, it refuses.
 - A fresh-agent scenario, run by the eval harness: an agent given only "run
   `atelier status`" takes a ready item to done. It is run with Claude Opus
   and with a Codex model.
@@ -465,7 +477,7 @@ evidence.
 | Sessions as records | Attribution is a field on the record that the act writes |
 | Records on a separate branch | Records with the code are the reason the tool exists |
 | A plan as its own branch | Grooming touches many items and planning branches collide |
-| `land`, a check an agent had to run | Agents forgot it, or hid its refusal behind a pipe; a pre-push hook cannot be forgotten or hidden |
+| `land`, a check an agent had to run | Agents forgot it, or hid its refusal behind a pipe; a pre-push hook runs without being remembered and fails the push itself |
 | Waiting for CI inside `merge` | A command that sleeps for minutes fights the harness, and one network timeout failed it |
 
 ## Decisions

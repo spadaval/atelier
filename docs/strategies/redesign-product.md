@@ -348,8 +348,9 @@ finishes the merge. The harness does the waiting: under T3 Code, watching the
 pull request wakes the thread when its checks finish. A forge with no CI
 workflow still gets the branch pushed and a pull request opened and merged.
 
-An item that is approved, has passed CI and is not merged shows that way in
-`status`, `show` and on the site, so a wait that was lost is visible.
+An item that is approved and not merged shows that way, with how long it has
+been so, in `status`, `show` and on the site, so a wait that was lost is
+visible. That comes from the records; nothing looks up CI to show it.
 
 A base that moved on needs no catch-up unless the merge conflicts or a check
 fails on the merged tree. Catching up is `git merge` of the base, and the
@@ -363,7 +364,7 @@ check` and says what it found in the output of the Git command it guards.
 | Hook | Guards | Rule |
 | --- | --- | --- |
 | pre-commit | `git commit` | Every staged record is valid, and a changed status is one the lifecycle allows from the status before |
-| pre-push | `git push` of the base | Every new commit is an Atelier merge, or touches only `.atelier/missions/` and `.atelier/items/` |
+| pre-push | `git push` of the base | Each new commit on the base's own line is an Atelier merge, or touches only `.atelier/missions/` and `.atelier/items/`. The commits a merge brought in are not looked at; the merge was checked when it was made. |
 | post-checkout | `git switch` | Nothing; it prints `status` for the branch just switched to |
 
 Every rule a hook or a command applies can be skipped on purpose:
@@ -402,7 +403,7 @@ second real project needs one.
 | The light path and base exemptions | `start --new` and `merge --trivial` cover them with one path |
 | Issue types, parents, loose ends, validations, decision records | An item either has files to merge or it does not; the rest are labels |
 | `bundle`, `migrate`, `doctor`, `prune` | Unused by the skill, one-off, or not yet needed |
-| `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook cannot be forgotten or hidden |
+| `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook runs without being remembered and fails the push itself |
 | `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; waiting is the harness's; catching up is `git merge`; what merge would check is in `status` |
 | `brief` and `debrief` commands | The site shows them |
 | The nine `work` views and nine `review` subcommands | `status`, `list`, `review` and `verdict` replace them |
