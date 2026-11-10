@@ -120,7 +120,7 @@ not that layout. The body after the closing `---` line is kept byte for
 byte, so a record it reads and writes back unchanged is the same file. An
 unknown front-matter key or value is refused, naming the key. Headings and
 field lines inside a fenced code block in a body are text, never read;
-a fence closes as in CommonMark.
+a fence opens and closes as in CommonMark.
 
 ### `items/<id>/item.md`
 
