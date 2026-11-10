@@ -118,7 +118,8 @@ order shown, block style (`labels:` then `- review`, `ready:` then indented
 offset, UTC as `Z`; the examples below show the fields and their values,
 not that layout. The body after the closing `---` line is kept byte for
 byte, so a record it reads and writes back unchanged is the same file. An
-unknown front-matter key or value is refused, naming the key.
+unknown front-matter key or value is refused, naming the key. Headings and
+field lines inside a fenced code block in a body are text, never read.
 
 ### `items/<id>/item.md`
 
@@ -198,7 +199,8 @@ entry's `Finding:`, must be a finding of the item's reviews.
 
 A fix-now finding is open until a later round carries it as fixed,
 withdrawn or decided, or a Decisions entry naming it has an outcome.
-Carried as kept, it moves: the carrying finding is then the open one. A
+Carried as kept, it moves: the carrying finding is then the open one, and
+must say `Recommendation: fix now`. A
 carrying finding that says fixed, withdrawn or decided is not itself open.
 A review whose verdict is approve while one of its own findings is open is
 refused.
