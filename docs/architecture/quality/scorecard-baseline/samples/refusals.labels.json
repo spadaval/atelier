@@ -1,0 +1,446 @@
+{
+ "measure": "refusals",
+ "rater": "claude-opus-5-5 (first rater, the implementer of atelier-3kr7)",
+ "labels": [
+  {
+   "n": 1,
+   "label": "friction"
+  },
+  {
+   "n": 2,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 3,
+   "label": "excluded"
+  },
+  {
+   "n": 4,
+   "label": "friction"
+  },
+  {
+   "n": 5,
+   "label": "friction"
+  },
+  {
+   "n": 6,
+   "label": "friction"
+  },
+  {
+   "n": 7,
+   "label": "friction"
+  },
+  {
+   "n": 8,
+   "label": "friction"
+  },
+  {
+   "n": 9,
+   "label": "friction"
+  },
+  {
+   "n": 10,
+   "label": "friction"
+  },
+  {
+   "n": 11,
+   "label": "friction"
+  },
+  {
+   "n": 12,
+   "label": "excluded"
+  },
+  {
+   "n": 13,
+   "label": "excluded"
+  },
+  {
+   "n": 14,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 15,
+   "label": "friction"
+  },
+  {
+   "n": 16,
+   "label": "friction"
+  },
+  {
+   "n": 17,
+   "label": "friction"
+  },
+  {
+   "n": 18,
+   "label": "friction"
+  },
+  {
+   "n": 19,
+   "label": "friction"
+  },
+  {
+   "n": 20,
+   "label": "friction"
+  },
+  {
+   "n": 21,
+   "label": "friction"
+  },
+  {
+   "n": 22,
+   "label": "friction"
+  },
+  {
+   "n": 23,
+   "label": "friction"
+  },
+  {
+   "n": 24,
+   "label": "friction"
+  },
+  {
+   "n": 25,
+   "label": "friction"
+  },
+  {
+   "n": 26,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 27,
+   "label": "friction"
+  },
+  {
+   "n": 28,
+   "label": "friction"
+  },
+  {
+   "n": 29,
+   "label": "friction"
+  },
+  {
+   "n": 30,
+   "label": "friction"
+  },
+  {
+   "n": 31,
+   "label": "friction"
+  },
+  {
+   "n": 32,
+   "label": "friction"
+  },
+  {
+   "n": 33,
+   "label": "friction"
+  },
+  {
+   "n": 34,
+   "label": "friction"
+  },
+  {
+   "n": 35,
+   "label": "friction"
+  },
+  {
+   "n": 36,
+   "label": "friction"
+  },
+  {
+   "n": 37,
+   "label": "excluded"
+  },
+  {
+   "n": 38,
+   "label": "friction"
+  },
+  {
+   "n": 39,
+   "label": "friction"
+  },
+  {
+   "n": 40,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 41,
+   "label": "friction"
+  },
+  {
+   "n": 42,
+   "label": "friction"
+  },
+  {
+   "n": 43,
+   "label": "friction"
+  },
+  {
+   "n": 44,
+   "label": "friction"
+  },
+  {
+   "n": 45,
+   "label": "friction"
+  },
+  {
+   "n": 46,
+   "label": "friction"
+  },
+  {
+   "n": 47,
+   "label": "friction"
+  },
+  {
+   "n": 48,
+   "label": "friction"
+  },
+  {
+   "n": 49,
+   "label": "friction"
+  },
+  {
+   "n": 50,
+   "label": "friction"
+  },
+  {
+   "n": 51,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 52,
+   "label": "friction"
+  },
+  {
+   "n": 53,
+   "label": "friction"
+  },
+  {
+   "n": 54,
+   "label": "friction"
+  },
+  {
+   "n": 55,
+   "label": "friction"
+  },
+  {
+   "n": 56,
+   "label": "friction"
+  },
+  {
+   "n": 57,
+   "label": "friction"
+  },
+  {
+   "n": 58,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 59,
+   "label": "friction"
+  },
+  {
+   "n": 60,
+   "label": "friction"
+  },
+  {
+   "n": 61,
+   "label": "friction"
+  },
+  {
+   "n": 62,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 63,
+   "label": "excluded"
+  },
+  {
+   "n": 64,
+   "label": "friction"
+  },
+  {
+   "n": 65,
+   "label": "friction"
+  },
+  {
+   "n": 66,
+   "label": "friction"
+  },
+  {
+   "n": 67,
+   "label": "friction"
+  },
+  {
+   "n": 68,
+   "label": "friction"
+  },
+  {
+   "n": 69,
+   "label": "friction"
+  },
+  {
+   "n": 70,
+   "label": "friction"
+  },
+  {
+   "n": 71,
+   "label": "friction"
+  },
+  {
+   "n": 72,
+   "label": "friction"
+  },
+  {
+   "n": 73,
+   "label": "friction"
+  },
+  {
+   "n": 74,
+   "label": "friction"
+  },
+  {
+   "n": 75,
+   "label": "friction"
+  },
+  {
+   "n": 76,
+   "label": "friction"
+  },
+  {
+   "n": 77,
+   "label": "friction"
+  },
+  {
+   "n": 78,
+   "label": "friction"
+  },
+  {
+   "n": 79,
+   "label": "friction"
+  },
+  {
+   "n": 80,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 81,
+   "label": "friction"
+  },
+  {
+   "n": 82,
+   "label": "friction"
+  },
+  {
+   "n": 83,
+   "label": "friction"
+  },
+  {
+   "n": 84,
+   "label": "friction"
+  },
+  {
+   "n": 85,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 86,
+   "label": "friction"
+  },
+  {
+   "n": 87,
+   "label": "friction"
+  },
+  {
+   "n": 88,
+   "label": "friction"
+  },
+  {
+   "n": 89,
+   "label": "friction"
+  },
+  {
+   "n": 90,
+   "label": "friction"
+  },
+  {
+   "n": 91,
+   "label": "friction"
+  },
+  {
+   "n": 92,
+   "label": "friction"
+  },
+  {
+   "n": 93,
+   "label": "friction"
+  },
+  {
+   "n": 94,
+   "label": "friction"
+  },
+  {
+   "n": 95,
+   "label": "friction"
+  },
+  {
+   "n": 96,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 97,
+   "label": "friction"
+  },
+  {
+   "n": 98,
+   "label": "friction"
+  },
+  {
+   "n": 99,
+   "label": "friction"
+  },
+  {
+   "n": 100,
+   "label": "friction"
+  },
+  {
+   "n": 101,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 102,
+   "label": "friction"
+  },
+  {
+   "n": 103,
+   "label": "friction"
+  },
+  {
+   "n": 104,
+   "label": "friction"
+  },
+  {
+   "n": 105,
+   "label": "friction"
+  },
+  {
+   "n": 106,
+   "label": "stopped_mistake"
+  },
+  {
+   "n": 107,
+   "label": "friction"
+  },
+  {
+   "n": 108,
+   "label": "friction"
+  },
+  {
+   "n": 109,
+   "label": "friction"
+  },
+  {
+   "n": 110,
+   "label": "friction"
+  }
+ ]
+}

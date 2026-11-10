@@ -1,0 +1,1446 @@
+{
+ "measure": "interventions",
+ "seed": 20261110,
+ "population": 142,
+ "drawn_by": "scripts/scorecard/draw_samples.py",
+ "note": "Every typed message in a closed mission's threads, in seeded order.",
+ "entries": [
+  {
+   "n": 1,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "7ff6b368-fa17-4336-b361-b4d9858f6056",
+   "message": "524b782f-fdca-4e87-83ba-c03189312d26",
+   "timestamp": "2026-11-05T05:09:20.552Z"
+  },
+  {
+   "n": 2,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "d9254461-5752-4c54-b104-c34082287906",
+   "timestamp": "2026-10-22T19:40:58.602Z"
+  },
+  {
+   "n": 3,
+   "repository": "atelier",
+   "missions": [
+    "atelier-yfqu"
+   ],
+   "thread": "5a591f14-7524-47e4-8da4-04f133ab64c3",
+   "message": "90625ae2-6666-4433-9d96-9943e1430b42",
+   "timestamp": "2026-11-09T20:50:16.076Z"
+  },
+  {
+   "n": 4,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "1385c695-f5ab-455b-a556-f06a19aa3a94",
+   "timestamp": "2026-11-07T22:47:52.312Z"
+  },
+  {
+   "n": 5,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-fl12",
+    "atelier-yfqu"
+   ],
+   "thread": "8fdd495a-ec2f-43a4-b1b7-d2052f5259ec",
+   "message": "bd736122-ac73-4997-9b1e-6de84de5e4c5",
+   "timestamp": "2026-11-09T17:57:28.723Z"
+  },
+  {
+   "n": 6,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "097126e6-dc10-4d52-b535-8bcf0f3ac68b",
+   "timestamp": "2026-10-31T00:55:18.998Z"
+  },
+  {
+   "n": 7,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-yfqu"
+   ],
+   "thread": "mcp:launch:9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e",
+   "message": "c9e793a3-772b-4918-8ed6-e4eb229df0ea:compact",
+   "timestamp": "2026-11-09T17:47:53.766Z"
+  },
+  {
+   "n": 8,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "8c634503-f826-464d-9978-c52271074e3d",
+   "timestamp": "2026-11-08T07:06:20.233Z"
+  },
+  {
+   "n": 9,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "9c55ef1c-4a37-4df0-8034-e1ef8163788a",
+   "timestamp": "2026-10-31T01:38:47.716Z"
+  },
+  {
+   "n": 10,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "96be4b5b-d890-4071-8cee-c44f5c9eff45",
+   "message": "bbf720e1-8c16-4197-a888-6324884a71f7",
+   "timestamp": "2026-11-05T04:21:50.524Z"
+  },
+  {
+   "n": 11,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "1bb38162-06d2-4b69-b6a9-aca46f925acd",
+   "timestamp": "2026-10-29T23:49:52.802Z"
+  },
+  {
+   "n": 12,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "4588fa32-2d8a-4919-9b3b-840e3f7f6b0b",
+   "message": "314ba51c-04e9-4131-baee-0772176580be",
+   "timestamp": "2026-11-07T04:59:09.835Z"
+  },
+  {
+   "n": 13,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "2d3d1be1-74bf-4f9e-a11d-eba01b373a04",
+   "timestamp": "2026-11-08T06:01:29.009Z"
+  },
+  {
+   "n": 14,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "70f37e37-3f8e-4823-9a45-46f60576a902",
+   "timestamp": "2026-11-07T20:36:56.494Z"
+  },
+  {
+   "n": 15,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "275df3bf-7eaa-4ffe-891e-9758029ebe52",
+   "timestamp": "2026-11-07T03:23:22.217Z"
+  },
+  {
+   "n": 16,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "mcp:63ae5dfd-4e9c-408b-8949-2efda02efe9f",
+   "message": "fb1db05d-a76a-4879-8ddc-aacdccd4703e",
+   "timestamp": "2026-11-07T02:48:54.408Z"
+  },
+  {
+   "n": 17,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "518cb30b-5d7a-426e-82fc-7fc8fc95a47e",
+   "timestamp": "2026-11-07T20:15:11.786Z"
+  },
+  {
+   "n": 18,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "thread:delegated-task:command%3Amcp%3Af6857727-7cf2-4507-84c8-8a26ae16657d%3Adelegate-task%3Ae09d89c2-7e89-410f-aaed-667d9cf8e709",
+   "message": "limit-resume:thread:delegated-task:command%3Amcp%3Af6857727-7cf2-4507-84c8-8a26ae16657d%3Adelegate-task%3Ae09d89c2-7e89-410f-aaed-667d9cf8e709:run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253Af6857727-7cf2-4507-84c8-8a26ae16657d%253Adelegate-task%253Ae09d89c2-7e89-410f-aaed-667d9cf8e709:ordinal:1:1794210777000:3da95dec-3eb7-4e5a-a50c-14bcf4fab171",
+   "timestamp": "2026-11-09T07:52:57.801Z"
+  },
+  {
+   "n": 19,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "dac1f42e-f85e-4125-8a05-a4f791c398dc",
+   "timestamp": "2026-11-07T20:45:09.436Z"
+  },
+  {
+   "n": 20,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "da4c44ce-0794-4d58-842f-4bf80b31989f",
+   "message": "e8bcfe6d-3124-43a3-a723-3ba0bdced3a3",
+   "timestamp": "2026-11-04T21:42:20.927Z"
+  },
+  {
+   "n": 21,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "bc8c52b7-9c22-45b0-b9d2-8f2d04815844",
+   "timestamp": "2026-10-18T06:10:17.413Z"
+  },
+  {
+   "n": 22,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "e2e8a97e-38c6-478e-9f25-7a1297e5d31f",
+   "timestamp": "2026-10-31T01:42:14.988Z"
+  },
+  {
+   "n": 23,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "4d6148de-b248-4203-99c3-c3adbba90165",
+   "timestamp": "2026-11-07T20:02:51.242Z"
+  },
+  {
+   "n": 24,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "ab92ac56-716e-4103-b796-a70bf70229da",
+   "timestamp": "2026-10-31T01:27:07.217Z"
+  },
+  {
+   "n": 25,
+   "repository": "atelier",
+   "missions": [
+    "atelier-yfqu"
+   ],
+   "thread": "5a591f14-7524-47e4-8da4-04f133ab64c3",
+   "message": "bd97d7a1-bd93-47ba-bbea-56b77d4244f1",
+   "timestamp": "2026-11-09T20:51:03.177Z"
+  },
+  {
+   "n": 26,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "8bae66e9-686e-476c-9512-18a425f13e11",
+   "timestamp": "2026-11-08T03:27:33.200Z"
+  },
+  {
+   "n": 27,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "ecb0edc5-4259-4fac-8901-3c92f6e7e76a",
+   "timestamp": "2026-10-30T00:13:09.752Z"
+  },
+  {
+   "n": 28,
+   "repository": "atelier",
+   "missions": [
+    "atelier-yfqu"
+   ],
+   "thread": "8fdd495a-ec2f-43a4-b1b7-d2052f5259ec",
+   "message": "1128e965-d2bb-4f63-9d37-32d9ed2b7b0a",
+   "timestamp": "2026-11-09T20:00:34.757Z"
+  },
+  {
+   "n": 29,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "48081791-6615-49c3-8350-0be99dee1ca6",
+   "timestamp": "2026-10-31T00:48:48.614Z"
+  },
+  {
+   "n": 30,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "8a5f14cb-89ae-46cd-afcc-7634ba8dbf38",
+   "timestamp": "2026-10-22T19:36:13.524Z"
+  },
+  {
+   "n": 31,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "96be4b5b-d890-4071-8cee-c44f5c9eff45",
+   "message": "3ea29de8-2dd5-4871-9fdd-0e21bb1a9bab",
+   "timestamp": "2026-11-05T03:17:32.602Z"
+  },
+  {
+   "n": 32,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "7ff6b368-fa17-4336-b361-b4d9858f6056",
+   "message": "191b7a47-3422-4156-bdde-789e0644d7bc",
+   "timestamp": "2026-11-05T05:06:31.134Z"
+  },
+  {
+   "n": 33,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "fcdbd7dd-9d09-4f1b-84b1-ca12d17a5188",
+   "timestamp": "2026-11-08T05:17:46.492Z"
+  },
+  {
+   "n": 34,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-fl12",
+    "atelier-yfqu"
+   ],
+   "thread": "mcp:launch:2dafce9e5c8cd444ce58153f5adab2c6f8bbbc0b69f52efd70a5508c6cd98cfc",
+   "message": "3e0de5c7-7b1f-4db9-aab1-4a16ec262f77",
+   "timestamp": "2026-11-09T17:50:30.625Z"
+  },
+  {
+   "n": 35,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "79e5e2f1-dfa4-4e97-afed-6dd1bffc90ad",
+   "timestamp": "2026-10-22T19:44:13.478Z"
+  },
+  {
+   "n": 36,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "50e8f06b-ef9a-4e2b-809f-79d772b13dbe",
+   "message": "ee51cdc3-045b-40a4-870c-1aac10344561",
+   "timestamp": "2026-11-04T23:16:47.662Z"
+  },
+  {
+   "n": 37,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "92f0266b-8b18-47b2-b936-817cfe177502",
+   "timestamp": "2026-11-08T03:21:20.319Z"
+  },
+  {
+   "n": 38,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "7626a608-db53-420b-8fdf-2c5547617023",
+   "message": "ec4ee2a4-2573-4a81-b960-2e3b768482f4",
+   "timestamp": "2026-10-31T03:25:43.264Z"
+  },
+  {
+   "n": 39,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "mcp:63ae5dfd-4e9c-408b-8949-2efda02efe9f",
+   "message": "9edf2a80-226a-40ea-af53-649fbcc0d619",
+   "timestamp": "2026-11-07T02:50:17.905Z"
+  },
+  {
+   "n": 40,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "ed1b18e3-e110-480a-8982-956dbcbbecc0",
+   "timestamp": "2026-11-09T03:49:47.476Z"
+  },
+  {
+   "n": 41,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "16c9441b-612e-40f3-bd35-d420911a1bf6",
+   "timestamp": "2026-11-07T17:17:34.885Z"
+  },
+  {
+   "n": 42,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "e897e8db-4ddf-468f-896b-13d586ca4f98",
+   "timestamp": "2026-10-30T21:09:20.743Z"
+  },
+  {
+   "n": 43,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-fl12",
+    "atelier-yfqu"
+   ],
+   "thread": "8fdd495a-ec2f-43a4-b1b7-d2052f5259ec",
+   "message": "80cf69ca-5708-4c68-b2cf-a745f85410d9",
+   "timestamp": "2026-11-09T17:55:00.159Z"
+  },
+  {
+   "n": 44,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "711ca7a9-6378-4a72-a18c-397ec5538e58",
+   "timestamp": "2026-10-22T19:45:41.832Z"
+  },
+  {
+   "n": 45,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "50e8f06b-ef9a-4e2b-809f-79d772b13dbe",
+   "message": "3498f073-f38a-4119-9e9b-92be527b29e2",
+   "timestamp": "2026-11-04T23:19:04.286Z"
+  },
+  {
+   "n": 46,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "8ba49733-4f81-410e-a431-e830a74bdcff",
+   "timestamp": "2026-10-30T23:27:40.793Z"
+  },
+  {
+   "n": 47,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "8f6a9c75-854a-417e-8811-0af22ab89f4f",
+   "timestamp": "2026-10-17T21:00:02.012Z"
+  },
+  {
+   "n": 48,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "d615cf60-2d99-4dc5-9448-26e77c7132f8",
+   "timestamp": "2026-11-08T05:59:05.259Z"
+  },
+  {
+   "n": 49,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "87accfea-0845-4d59-85f0-88902a0e2c60",
+   "timestamp": "2026-10-17T21:28:13.409Z"
+  },
+  {
+   "n": 50,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "7f3723e3-40a2-4c16-9ba8-8d70c5ad82a6",
+   "timestamp": "2026-11-08T07:04:45.276Z"
+  },
+  {
+   "n": 51,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "343033ea-3ec7-4a79-a87f-a244dad1f92d",
+   "timestamp": "2026-11-07T21:58:14.679Z"
+  },
+  {
+   "n": 52,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "mcp:launch:0332fa0a84f63ec2399c08095a26f658f6fbbc324cb5ce243bb166b8d29323d1",
+   "message": "9423b995-2f63-4a8a-b9fb-09a60f10cedf",
+   "timestamp": "2026-10-30T23:30:39.705Z"
+  },
+  {
+   "n": 53,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "447ad5cf-e386-45b8-9092-cb75b237aba3",
+   "timestamp": "2026-10-29T23:53:28.216Z"
+  },
+  {
+   "n": 54,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "50e8f06b-ef9a-4e2b-809f-79d772b13dbe",
+   "message": "817d895e-841f-464a-8325-c774271f2091",
+   "timestamp": "2026-11-04T23:06:55.163Z"
+  },
+  {
+   "n": 55,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "54b2c1af-c112-4554-9c7f-0155c53fecba",
+   "timestamp": "2026-11-07T03:25:52.438Z"
+  },
+  {
+   "n": 56,
+   "repository": "atelier",
+   "missions": [
+    "atelier-yfqu"
+   ],
+   "thread": "5a591f14-7524-47e4-8da4-04f133ab64c3",
+   "message": "59118a4f-4969-4536-a1a5-698e48aeb0bd",
+   "timestamp": "2026-11-09T21:43:25.859Z"
+  },
+  {
+   "n": 57,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "55b8d689-9d4f-4488-a2f5-fd01afc1d130",
+   "timestamp": "2026-11-09T03:56:51.419Z"
+  },
+  {
+   "n": 58,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "8d3f25eb-ab6c-468e-8559-e7036cc89063",
+   "timestamp": "2026-10-30T21:57:45.402Z"
+  },
+  {
+   "n": 59,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "thread:delegated-task:command%3Amcp%3A5479153e-051d-4772-b412-1c98031f26e9%3Adelegate-task%3Ac1290ed6-3dbb-49fd-9c31-50e3a7bc0eed",
+   "message": "limit-resume:thread:delegated-task:command%3Amcp%3A5479153e-051d-4772-b412-1c98031f26e9%3Adelegate-task%3Ac1290ed6-3dbb-49fd-9c31-50e3a7bc0eed:run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A5479153e-051d-4772-b412-1c98031f26e9%253Adelegate-task%253Ac1290ed6-3dbb-49fd-9c31-50e3a7bc0eed:ordinal:1:1794192771000:limit-arm:thread:delegated-task:command%3Amcp%3A5479153e-051d-4772-b412-1c98031f26e9%3Adelegate-task%3Ac1290ed6-3dbb-49fd-9c31-50e3a7bc0eed:run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A5479153e-051d-4772-b412-1c98031f26e9%253Adelegate-task%253Ac1290ed6-3dbb-49fd-9c31-50e3a7bc0eed:ordinal:1:1794192771000",
+   "timestamp": "2026-11-09T02:52:51.071Z"
+  },
+  {
+   "n": 60,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "8f861a34-75a3-4814-b64d-1eb79394c238",
+   "timestamp": "2026-10-31T02:13:26.854Z"
+  },
+  {
+   "n": 61,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "mcp:launch:70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2",
+   "message": "58cba3b0-aa7b-42db-9183-57f28dfb3305",
+   "timestamp": "2026-11-08T01:59:35.540Z"
+  },
+  {
+   "n": 62,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "3f99b394-3324-486a-b0af-25ffc753b218",
+   "timestamp": "2026-11-09T03:16:27.674Z"
+  },
+  {
+   "n": 63,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "e89de152-4669-404f-aa3d-6159e3135a18",
+   "timestamp": "2026-11-09T03:22:13.397Z"
+  },
+  {
+   "n": 64,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "62b4dea9-d351-4760-bbed-2fcf7ac9c06e",
+   "timestamp": "2026-11-07T03:59:43.957Z"
+  },
+  {
+   "n": 65,
+   "repository": "atelier",
+   "missions": [
+    "atelier-kgcr"
+   ],
+   "thread": "mcp:d6a4c27d-c9c7-4ae7-b71c-20933ea34245",
+   "message": "9437f21b-4285-49b9-b13f-48dbf70f8345",
+   "timestamp": "2026-10-15T18:48:35.566Z"
+  },
+  {
+   "n": 66,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-yfqu"
+   ],
+   "thread": "mcp:launch:9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e",
+   "message": "c9e793a3-772b-4918-8ed6-e4eb229df0ea",
+   "timestamp": "2026-11-09T17:47:53.852Z"
+  },
+  {
+   "n": 67,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1w8c",
+    "atelier-k8h8"
+   ],
+   "thread": "e0f42435-a482-476b-afa9-89aa88a424f4",
+   "message": "48396730-b109-496d-814c-7c44e8f47af5",
+   "timestamp": "2026-10-17T18:31:46.717Z"
+  },
+  {
+   "n": 68,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "291aaa92-2850-47aa-9ca3-4ed642ba584c",
+   "timestamp": "2026-10-31T04:43:53.162Z"
+  },
+  {
+   "n": 69,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "9570b4ce-3aff-43b3-812f-488dae5f86a0",
+   "message": "c354899e-f0d3-4fc5-aefa-ef6615f698e4",
+   "timestamp": "2026-10-28T15:59:17.488Z"
+  },
+  {
+   "n": 70,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "f37f1f7e-3407-4f70-af6f-ca92cabefba8",
+   "timestamp": "2026-11-09T03:55:42.935Z"
+  },
+  {
+   "n": 71,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "0836aa89-a7bf-449c-af40-7fa33381c126",
+   "timestamp": "2026-10-22T20:27:34.108Z"
+  },
+  {
+   "n": 72,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "9f9a8c17-906b-4cb6-a077-9782c0c778bf",
+   "timestamp": "2026-11-08T03:32:22.254Z"
+  },
+  {
+   "n": 73,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "72bf4bca-fc61-4724-95a2-1936d08a528a",
+   "timestamp": "2026-11-07T22:34:54.067Z"
+  },
+  {
+   "n": 74,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "04b5706d-4bec-4fd3-a95d-62d7b951666f",
+   "timestamp": "2026-10-30T00:03:04.667Z"
+  },
+  {
+   "n": 75,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "9570b4ce-3aff-43b3-812f-488dae5f86a0",
+   "message": "fb7a36d5-81f7-458d-a308-b127795eda7a",
+   "timestamp": "2026-10-28T20:57:45.771Z"
+  },
+  {
+   "n": 76,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "82ad1413-6089-4146-96a8-87cb014ed2be",
+   "timestamp": "2026-11-09T05:33:21.886Z"
+  },
+  {
+   "n": 77,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "d988e055-86d5-4409-b817-f4b74f7f0bd7",
+   "timestamp": "2026-11-07T20:47:20.243Z"
+  },
+  {
+   "n": 78,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "cf863dd7-019d-4c84-8cee-845a1c0a2639",
+   "timestamp": "2026-10-30T21:51:35.255Z"
+  },
+  {
+   "n": 79,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1w8c",
+    "atelier-k8h8"
+   ],
+   "thread": "e0f42435-a482-476b-afa9-89aa88a424f4",
+   "message": "2c60637a-ae6d-4b36-b5de-c7301d1e1854",
+   "timestamp": "2026-10-17T18:58:26.041Z"
+  },
+  {
+   "n": 80,
+   "repository": "atelier",
+   "missions": [
+    "atelier-yfqu"
+   ],
+   "thread": "8fdd495a-ec2f-43a4-b1b7-d2052f5259ec",
+   "message": "9d3041db-21cf-482c-9adc-cc44fec9cc16",
+   "timestamp": "2026-11-09T19:58:12.728Z"
+  },
+  {
+   "n": 81,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "76bb6539-7332-46d8-832c-cad8ff20737d",
+   "timestamp": "2026-10-30T20:19:14.182Z"
+  },
+  {
+   "n": 82,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "6dacb44c-5694-47a6-b84d-e3521160d373",
+   "timestamp": "2026-11-07T03:16:58.352Z"
+  },
+  {
+   "n": 83,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "dbdc08dc-c231-4d50-badc-f6d924b30ed8",
+   "timestamp": "2026-11-08T05:54:49.555Z"
+  },
+  {
+   "n": 84,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "a4d47ad6-901b-4b96-a297-061eecb2b34a",
+   "timestamp": "2026-11-07T20:29:13.210Z"
+  },
+  {
+   "n": 85,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-fl12",
+    "atelier-yfqu"
+   ],
+   "thread": "mcp:launch:2dafce9e5c8cd444ce58153f5adab2c6f8bbbc0b69f52efd70a5508c6cd98cfc",
+   "message": "829f3ce8-74ea-4862-a313-8a8bd75d2796",
+   "timestamp": "2026-11-09T17:46:51.084Z"
+  },
+  {
+   "n": 86,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "1ab44a10-9bd9-4be8-ab5f-6ca9aa68c333",
+   "timestamp": "2026-10-22T19:55:32.990Z"
+  },
+  {
+   "n": 87,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "64ef6b5f-8321-4fa6-9fae-aeea091fd5c0",
+   "timestamp": "2026-10-30T21:28:14.190Z"
+  },
+  {
+   "n": 88,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "070e0e1d-e6ff-4474-9de4-519453c945bb",
+   "timestamp": "2026-11-09T03:43:44.946Z"
+  },
+  {
+   "n": 89,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "mcp:launch:70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2",
+   "message": "1142e519-99db-469b-b6d6-98140c84203d",
+   "timestamp": "2026-11-08T01:54:03.889Z"
+  },
+  {
+   "n": 90,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "1d4290b7-3332-4995-96ae-e861fa5ad610",
+   "timestamp": "2026-10-22T19:56:03.971Z"
+  },
+  {
+   "n": 91,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "mcp:launch:0332fa0a84f63ec2399c08095a26f658f6fbbc324cb5ce243bb166b8d29323d1",
+   "message": "1994c70f-0186-4b53-a599-b69e6ff93fc2",
+   "timestamp": "2026-10-31T00:03:56.067Z"
+  },
+  {
+   "n": 92,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "mcp:launch:0332fa0a84f63ec2399c08095a26f658f6fbbc324cb5ce243bb166b8d29323d1",
+   "message": "847ea58a-898c-4081-80a9-7fdcd7b85be3",
+   "timestamp": "2026-10-30T16:52:44.117Z"
+  },
+  {
+   "n": 93,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "1a3dfdd1-6bc5-431d-b93c-a041796a1a05",
+   "timestamp": "2026-11-08T04:02:43.335Z"
+  },
+  {
+   "n": 94,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1w8c",
+    "atelier-k8h8"
+   ],
+   "thread": "e0f42435-a482-476b-afa9-89aa88a424f4",
+   "message": "2845ff2d-8d14-4549-b64f-681cc4a54f5b",
+   "timestamp": "2026-10-17T19:28:06.501Z"
+  },
+  {
+   "n": 95,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "3aa7f459-d81c-4cb0-ab86-f5e1c62515a7",
+   "timestamp": "2026-10-22T19:52:08.207Z"
+  },
+  {
+   "n": 96,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "2eb1b354-ec8b-4ded-804a-0ba263eb80af",
+   "timestamp": "2026-11-07T03:32:41.127Z"
+  },
+  {
+   "n": 97,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "bc0a3746-9486-467e-851a-de1d27cbc9b0",
+   "timestamp": "2026-11-08T05:51:23.860Z"
+  },
+  {
+   "n": 98,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "7626a608-db53-420b-8fdf-2c5547617023",
+   "message": "710f58cd-0718-4698-a94a-ccef921d62bb",
+   "timestamp": "2026-10-31T03:43:40.771Z"
+  },
+  {
+   "n": 99,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "f342b36a-fd3a-4e65-9804-f8d56d30e5c0",
+   "timestamp": "2026-10-31T05:18:44.659Z"
+  },
+  {
+   "n": 100,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "95d5b0a3-e6f8-4add-99cc-973f267e471f",
+   "timestamp": "2026-11-09T03:40:01.650Z"
+  },
+  {
+   "n": 101,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "6bfde15f-84b6-4b55-a069-d94b3d845693",
+   "timestamp": "2026-10-29T23:49:52.631Z"
+  },
+  {
+   "n": 102,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "de97be9f-6b7b-44a3-85c1-5bda00bec904",
+   "timestamp": "2026-10-22T19:30:43.432Z"
+  },
+  {
+   "n": 103,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "21b8cbb4-406f-4d0f-9627-1b2b2b1b9501",
+   "timestamp": "2026-11-08T05:49:37.236Z"
+  },
+  {
+   "n": 104,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "da4c44ce-0794-4d58-842f-4bf80b31989f",
+   "message": "63f36ebb-8051-4f70-8d1b-eab4ec0f79cb",
+   "timestamp": "2026-11-04T21:35:47.621Z"
+  },
+  {
+   "n": 105,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "e14c48fb-be75-4b31-9d8e-38e395526210",
+   "timestamp": "2026-10-29T23:55:40.431Z"
+  },
+  {
+   "n": 106,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-fl12",
+    "atelier-yfqu"
+   ],
+   "thread": "mcp:launch:2dafce9e5c8cd444ce58153f5adab2c6f8bbbc0b69f52efd70a5508c6cd98cfc",
+   "message": "632fda4e-98a9-46ed-a709-ce09cc543c12",
+   "timestamp": "2026-11-09T17:51:46.581Z"
+  },
+  {
+   "n": 107,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "10ff51d1-b23b-4578-94f9-5669220cc5cf",
+   "timestamp": "2026-10-31T01:03:49.473Z"
+  },
+  {
+   "n": 108,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "9cbeacee-379f-4f39-9bae-908abef7aeeb",
+   "timestamp": "2026-11-07T21:53:12.080Z"
+  },
+  {
+   "n": 109,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "2586a264-903e-4e5d-a8b1-d3357b4fa357",
+   "timestamp": "2026-11-07T20:43:58.394Z"
+  },
+  {
+   "n": 110,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "52f1eed3-877e-42b8-b6c5-76d5be35b903",
+   "timestamp": "2026-10-23T03:49:39.385Z"
+  },
+  {
+   "n": 111,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "aa70e01e-a853-480a-8b9d-be8135186fdf",
+   "timestamp": "2026-10-18T06:30:29.426Z"
+  },
+  {
+   "n": 112,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "4a274385-8f38-460e-bf80-0a6433dd03e2",
+   "timestamp": "2026-10-17T21:33:20.975Z"
+  },
+  {
+   "n": 113,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "da4c44ce-0794-4d58-842f-4bf80b31989f",
+   "message": "35592647-99bb-42c0-bdcc-ff069a86ee86",
+   "timestamp": "2026-11-04T21:41:19.822Z"
+  },
+  {
+   "n": 114,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "7f26c5a0-6b30-4b34-8132-f48325b996c9",
+   "timestamp": "2026-10-30T21:48:39.572Z"
+  },
+  {
+   "n": 115,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "14372bb6-da84-4d8c-a10c-df939cbb76f8",
+   "timestamp": "2026-10-18T06:26:51.966Z"
+  },
+  {
+   "n": 116,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "message": "23fad641-14c6-4715-8eff-ca2f120dc419",
+   "timestamp": "2026-10-18T06:10:17.612Z"
+  },
+  {
+   "n": 117,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "84670992-8feb-425c-b71f-9e969f28a3aa",
+   "timestamp": "2026-11-07T20:50:31.683Z"
+  },
+  {
+   "n": 118,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "bf8afb58-6d44-407f-9930-64fd1e3e51bf",
+   "timestamp": "2026-10-30T06:13:47.449Z"
+  },
+  {
+   "n": 119,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "f8e943af-d789-44c7-a175-67da11c7a954",
+   "timestamp": "2026-11-09T03:35:15.780Z"
+  },
+  {
+   "n": 120,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "022fc086-d1a1-4579-9080-38cb78bd06c7",
+   "timestamp": "2026-10-22T20:14:33.961Z"
+  },
+  {
+   "n": 121,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "352dda3e-3747-4149-80c5-40c97f412ec5",
+   "timestamp": "2026-10-22T20:09:49.598Z"
+  },
+  {
+   "n": 122,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "9570b4ce-3aff-43b3-812f-488dae5f86a0",
+   "message": "0d4b6244-158e-4acd-9d0e-9d10ed61562e",
+   "timestamp": "2026-10-28T20:57:45.970Z"
+  },
+  {
+   "n": 123,
+   "repository": "atelier",
+   "missions": [
+    "atelier-r6bt"
+   ],
+   "thread": "96be4b5b-d890-4071-8cee-c44f5c9eff45",
+   "message": "48d44e65-e226-4677-b80d-8749ad2a0e1e",
+   "timestamp": "2026-11-05T04:23:58.453Z"
+  },
+  {
+   "n": 124,
+   "repository": "atelier",
+   "missions": [
+    "atelier-vt8q"
+   ],
+   "thread": "da4c44ce-0794-4d58-842f-4bf80b31989f",
+   "message": "862abfa7-4089-4d5a-8264-92df350daa97",
+   "timestamp": "2026-11-04T21:56:01.256Z"
+  },
+  {
+   "n": 125,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "139f868d-1ed8-4b89-96d6-90ca34b3aacf",
+   "timestamp": "2026-11-07T20:25:16.341Z"
+  },
+  {
+   "n": 126,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "mcp:63ae5dfd-4e9c-408b-8949-2efda02efe9f",
+   "message": "e9282bdd-48ef-4fe8-bfc9-27ec68d5aa44",
+   "timestamp": "2026-11-07T02:42:24.508Z"
+  },
+  {
+   "n": 127,
+   "repository": "atelier",
+   "missions": [
+    "atelier-k8h8"
+   ],
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "message": "97e6ce8c-3500-448a-a27d-19c2bf82b3bd",
+   "timestamp": "2026-10-22T20:31:43.260Z"
+  },
+  {
+   "n": 128,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "af9e03bd-3c83-4680-96e4-2a505146057f",
+   "timestamp": "2026-10-31T05:09:32.492Z"
+  },
+  {
+   "n": 129,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "mcp:launch:70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2",
+   "message": "1b09bce3-f606-48b5-9cf0-1a9a904ff77a",
+   "timestamp": "2026-11-08T02:04:35.448Z"
+  },
+  {
+   "n": 130,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "af04e1fe-6de9-4412-9c2c-4065d5c08fa5",
+   "timestamp": "2026-11-08T07:00:06.963Z"
+  },
+  {
+   "n": 131,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "bf57da16-c17d-463f-9728-252fb325639e",
+   "timestamp": "2026-11-07T20:42:31.489Z"
+  },
+  {
+   "n": 132,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "5484f030-b369-4197-aefc-8b90f0aafc9b",
+   "timestamp": "2026-10-30T20:19:13.815Z"
+  },
+  {
+   "n": 133,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "6de1ddde-f202-40cd-b707-bcac163bf8de",
+   "message": "2bac4307-1763-4b58-b61d-ac6c86319d99",
+   "timestamp": "2026-11-08T03:18:17.417Z"
+  },
+  {
+   "n": 134,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3",
+    "atelier-fl12",
+    "atelier-yfqu"
+   ],
+   "thread": "8fdd495a-ec2f-43a4-b1b7-d2052f5259ec",
+   "message": "78f709fb-262f-4fb2-901a-a03113dc5e7d",
+   "timestamp": "2026-11-09T17:56:43.418Z"
+  },
+  {
+   "n": 135,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "714da85a-ee13-4cf6-bb43-4408bdfc0f31",
+   "timestamp": "2026-10-31T05:13:22.701Z"
+  },
+  {
+   "n": 136,
+   "repository": "atelier",
+   "missions": [
+    "atelier-mmpv"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "58076552-adc1-4dd9-8524-33f0dd7fab7b",
+   "timestamp": "2026-11-07T17:00:18.364Z"
+  },
+  {
+   "n": 137,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "a6ff6699-27e5-44ca-8140-9b73cd958202",
+   "timestamp": "2026-10-31T00:48:48.259Z"
+  },
+  {
+   "n": 138,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "4588fa32-2d8a-4919-9b3b-840e3f7f6b0b",
+   "message": "0e0d1e88-f75e-4a37-a12d-41bbbf641f94",
+   "timestamp": "2026-11-07T04:59:09.806Z"
+  },
+  {
+   "n": 139,
+   "repository": "life-on-rails",
+   "missions": [
+    "lor-uj0r"
+   ],
+   "thread": "c2e31971-b065-40e3-9104-f131309d490b",
+   "message": "cfa31306-7aa9-4d47-827b-07dd9e875ad3",
+   "timestamp": "2026-11-07T21:51:31.906Z"
+  },
+  {
+   "n": 140,
+   "repository": "atelier",
+   "missions": [
+    "atelier-1gb3"
+   ],
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "message": "d7f61500-c560-4ed5-b879-e4386b86928e",
+   "timestamp": "2026-11-09T03:28:54.232Z"
+  },
+  {
+   "n": 141,
+   "repository": "demiurge",
+   "missions": [
+    "worldcrafter-z9qs"
+   ],
+   "thread": "fcee898b-529e-4d62-b6d2-0b4aff674e54",
+   "message": "c713c0ac-8a6a-428c-9691-bf429db39919",
+   "timestamp": "2026-10-30T23:33:26.400Z"
+  },
+  {
+   "n": 142,
+   "repository": "atelier",
+   "missions": [
+    "atelier-n4mj"
+   ],
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "message": "c12eb774-3b96-4199-9c70-835aa6c156e9",
+   "timestamp": "2026-11-07T03:19:54.208Z"
+  }
+ ]
+}

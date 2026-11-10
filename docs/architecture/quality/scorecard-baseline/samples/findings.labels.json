@@ -1,0 +1,406 @@
+{
+ "measure": "findings",
+ "rater": "claude-opus-5-5 (first rater, the implementer of atelier-3kr7)",
+ "labels": [
+  {
+   "n": 1,
+   "label": "process_nit"
+  },
+  {
+   "n": 2,
+   "label": "process_nit"
+  },
+  {
+   "n": 3,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 4,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 5,
+   "label": "process_nit"
+  },
+  {
+   "n": 6,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 7,
+   "label": "user_bug"
+  },
+  {
+   "n": 8,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 9,
+   "label": "user_bug"
+  },
+  {
+   "n": 10,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 11,
+   "label": "user_bug"
+  },
+  {
+   "n": 12,
+   "label": "user_bug"
+  },
+  {
+   "n": 13,
+   "label": "user_bug"
+  },
+  {
+   "n": 14,
+   "label": "process_nit"
+  },
+  {
+   "n": 15,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 16,
+   "label": "process_nit"
+  },
+  {
+   "n": 17,
+   "label": "process_nit"
+  },
+  {
+   "n": 18,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 19,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 20,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 21,
+   "label": "user_bug"
+  },
+  {
+   "n": 22,
+   "label": "test_gap"
+  },
+  {
+   "n": 23,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 24,
+   "label": "user_bug"
+  },
+  {
+   "n": 25,
+   "label": "wording_nit"
+  },
+  {
+   "n": 26,
+   "label": "process_nit"
+  },
+  {
+   "n": 27,
+   "label": "process_nit"
+  },
+  {
+   "n": 28,
+   "label": "process_nit"
+  },
+  {
+   "n": 29,
+   "label": "user_bug"
+  },
+  {
+   "n": 30,
+   "label": "user_bug"
+  },
+  {
+   "n": 31,
+   "label": "process_nit"
+  },
+  {
+   "n": 32,
+   "label": "user_bug"
+  },
+  {
+   "n": 33,
+   "label": "process_nit"
+  },
+  {
+   "n": 34,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 35,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 36,
+   "label": "user_bug"
+  },
+  {
+   "n": 37,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 38,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 39,
+   "label": "process_nit"
+  },
+  {
+   "n": 40,
+   "label": "process_nit"
+  },
+  {
+   "n": 41,
+   "label": "process_nit"
+  },
+  {
+   "n": 42,
+   "label": "process_nit"
+  },
+  {
+   "n": 43,
+   "label": "user_bug"
+  },
+  {
+   "n": 44,
+   "label": "user_bug"
+  },
+  {
+   "n": 45,
+   "label": "user_bug"
+  },
+  {
+   "n": 46,
+   "label": "user_bug"
+  },
+  {
+   "n": 47,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 48,
+   "label": "user_bug"
+  },
+  {
+   "n": 49,
+   "label": "user_bug"
+  },
+  {
+   "n": 50,
+   "label": "user_bug"
+  },
+  {
+   "n": 51,
+   "label": "process_nit"
+  },
+  {
+   "n": 52,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 53,
+   "label": "wording_nit"
+  },
+  {
+   "n": 54,
+   "label": "user_bug"
+  },
+  {
+   "n": 55,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 56,
+   "label": "user_bug"
+  },
+  {
+   "n": 57,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 58,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 59,
+   "label": "user_bug"
+  },
+  {
+   "n": 60,
+   "label": "user_bug"
+  },
+  {
+   "n": 61,
+   "label": "user_bug"
+  },
+  {
+   "n": 62,
+   "label": "test_gap"
+  },
+  {
+   "n": 63,
+   "label": "process_nit"
+  },
+  {
+   "n": 64,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 65,
+   "label": "test_gap"
+  },
+  {
+   "n": 66,
+   "label": "process_nit"
+  },
+  {
+   "n": 67,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 68,
+   "label": "process_nit"
+  },
+  {
+   "n": 69,
+   "label": "user_bug"
+  },
+  {
+   "n": 70,
+   "label": "process_nit"
+  },
+  {
+   "n": 71,
+   "label": "test_gap"
+  },
+  {
+   "n": 72,
+   "label": "process_nit"
+  },
+  {
+   "n": 73,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 74,
+   "label": "user_bug"
+  },
+  {
+   "n": 75,
+   "label": "test_gap"
+  },
+  {
+   "n": 76,
+   "label": "wording_nit"
+  },
+  {
+   "n": 77,
+   "label": "user_bug"
+  },
+  {
+   "n": 78,
+   "label": "process_nit"
+  },
+  {
+   "n": 79,
+   "label": "process_nit"
+  },
+  {
+   "n": 80,
+   "label": "process_nit"
+  },
+  {
+   "n": 81,
+   "label": "process_nit"
+  },
+  {
+   "n": 82,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 83,
+   "label": "process_nit"
+  },
+  {
+   "n": 84,
+   "label": "process_nit"
+  },
+  {
+   "n": 85,
+   "label": "user_bug"
+  },
+  {
+   "n": 86,
+   "label": "user_bug"
+  },
+  {
+   "n": 87,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 88,
+   "label": "wrong_statement"
+  },
+  {
+   "n": 89,
+   "label": "process_nit"
+  },
+  {
+   "n": 90,
+   "label": "process_nit"
+  },
+  {
+   "n": 91,
+   "label": "user_bug"
+  },
+  {
+   "n": 92,
+   "label": "user_bug"
+  },
+  {
+   "n": 93,
+   "label": "user_bug"
+  },
+  {
+   "n": 94,
+   "label": "process_nit"
+  },
+  {
+   "n": 95,
+   "label": "user_bug"
+  },
+  {
+   "n": 96,
+   "label": "process_nit"
+  },
+  {
+   "n": 97,
+   "label": "process_nit"
+  },
+  {
+   "n": 98,
+   "label": "process_nit"
+  },
+  {
+   "n": 99,
+   "label": "tooling_bug"
+  },
+  {
+   "n": 100,
+   "label": "process_nit"
+  }
+ ]
+}

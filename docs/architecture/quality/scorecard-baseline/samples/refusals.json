@@ -1,0 +1,1049 @@
+{
+ "measure": "refusals",
+ "seed": 20261110,
+ "population": 430,
+ "drawn_by": "scripts/scorecard/draw_samples.py",
+ "note": "Seeded order. Judge in order; gate precision counts the first 100 entries not labelled excluded.",
+ "entries": [
+  {
+   "n": 1,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Aa42b027d-469a-4c0f-9e24-717ea7f7ccf5%253Aordinal%253A1%3Aa39a96caf88f68b47",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01W2ddvctjQmmJdqtGNstBqQ",
+   "ordinal": 87,
+   "timestamp": "2026-10-22T21:29:48.418Z"
+  },
+  {
+   "n": 2,
+   "repository": "life-on-rails",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2%253Aordinal%253A1%3Aa5682a0bf12f63ab2",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01SfyfRjEtzTC1L3Ypf64s6X",
+   "ordinal": 279,
+   "timestamp": "2026-11-08T00:06:43.743Z"
+  },
+  {
+   "n": 3,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A10306659-c2b7-44a0-aac2-ac707796c533%253Aordinal%253A1%3Aa6507d9657e4f84f5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_015VRPKk1FXfniaxxYs8EnyS",
+   "ordinal": 4,
+   "timestamp": "2026-10-17T09:06:38.973Z"
+  },
+  {
+   "n": 4,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253Aa45aacaf1c79da8a6e806e0235c338771cb1fed9d2a748c982a71ceaab09987f%253Aordinal%253A1%3Aac76e4ddb65a6de20",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_017oYSSL3TSqPtzaHDsQMrcS",
+   "ordinal": 3,
+   "timestamp": "2026-11-07T10:36:01.894Z"
+  },
+  {
+   "n": 5,
+   "repository": "life-on-rails",
+   "thread": "77c777c9-5ad6-454f-8ffd-29ebbe541e48",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01VZqvrnkhNmkwc6Uh4EW6SS",
+   "ordinal": 3000033,
+   "timestamp": "2026-11-09T01:36:22.716Z"
+  },
+  {
+   "n": 6,
+   "repository": "atelier",
+   "thread": "5d04b6d1-c9e3-4ba2-9dbe-7689f2be58b1",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019GymJNsksqYtXvMKGc1k7t",
+   "ordinal": 14000002,
+   "timestamp": "2026-11-09T02:06:26.316Z"
+  },
+  {
+   "n": 7,
+   "repository": "demiurge",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A2eea2627e5b2a21bc2c45d776e5c4838ed659b402d08476a631bc9cb4ba14102%253Aordinal%253A1%3Aa5b705089bca6228f",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01QGY2Gid6BhgGUGzNMLoLki",
+   "ordinal": 15,
+   "timestamp": "2026-11-05T09:31:00.327Z"
+  },
+  {
+   "n": 8,
+   "repository": "atelier",
+   "thread": "7781f8bb-5ea6-4898-9b68-a15f8c1baebb",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01U3Tr94js49CJouaqbNKPki",
+   "ordinal": 6000004,
+   "timestamp": "2026-11-09T02:08:58.717Z"
+  },
+  {
+   "n": 9,
+   "repository": "life-on-rails",
+   "thread": "mcp:launch:bcf4775ba87f864cbcc4fc35c49f21953dc04b6a6ed24e5094d87650f8107ade",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01KPStbLJCdC2r4zzuCZ8qHG",
+   "ordinal": 5000005,
+   "timestamp": "2026-11-08T07:45:36.312Z"
+  },
+  {
+   "n": 10,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A0332fa0a84f63ec2399c08095a26f658f6fbbc324cb5ce243bb166b8d29323d1%253Aordinal%253A1%3Aada5dc18eba854eda",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01UvEznCKnbRF4vjgSWTrxtn",
+   "ordinal": 3,
+   "timestamp": "2026-10-30T06:27:48.762Z"
+  },
+  {
+   "n": 11,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Aa20c8165-5c46-4df9-823b-03c5f3f2d1d5%253Aordinal%253A1%3Aa8b95c315739bf5c5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_015qbuXCUvG5Fn6dQdVfpaWo",
+   "ordinal": 175,
+   "timestamp": "2026-10-22T23:08:55.549Z"
+  },
+  {
+   "n": 12,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A10306659-c2b7-44a0-aac2-ac707796c533%253Aordinal%253A1%3Aa5f3a551a70e66443",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01FmHFb3ax5nAfrx7jK9pKwj",
+   "ordinal": 41,
+   "timestamp": "2026-10-17T09:41:12.880Z"
+  },
+  {
+   "n": 13,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc%253Aordinal%253A1%3Aa31fabd7374ead157",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_015S7wJtjyGwa7svi6VGEWtc",
+   "ordinal": 36,
+   "timestamp": "2026-11-07T09:31:21.846Z"
+  },
+  {
+   "n": 14,
+   "repository": "atelier",
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01VUGhBebNQDAvLpUsq9bxt9",
+   "ordinal": 79000006,
+   "timestamp": "2026-10-23T00:10:46.770Z"
+  },
+  {
+   "n": 15,
+   "repository": "demiurge",
+   "thread": "ebf97a01-98e0-41e9-9cb5-e8046f119688",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01KK5rvqaC8pVy4HQbH5ZUMs",
+   "ordinal": 13000018,
+   "timestamp": "2026-10-17T21:32:31.997Z"
+  },
+  {
+   "n": 16,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3A0b56dfcc-d3b0-4782-a75f-118dd717d3f1%3Adelegate-task%3A7aaac8b6-af4e-42e0-9af4-505c6af6c144",
+   "item": "turn-item:provider:codex:native-item:exec-26794595-18a5-406c-96b3-1d6bcd2fa567",
+   "ordinal": 1000070,
+   "timestamp": "2026-11-09T17:56:58.854Z"
+  },
+  {
+   "n": 17,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e%253Aordinal%253A1%3Aa30d2fe73dcd6e238",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_014skC8ktbM9KQ1PChbcsRm3",
+   "ordinal": 2,
+   "timestamp": "2026-11-09T17:58:13.474Z"
+  },
+  {
+   "n": 18,
+   "repository": "life-on-rails",
+   "thread": "4588fa32-2d8a-4919-9b3b-840e3f7f6b0b",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01KNQpUM4xPTNWSiKhiyebbm",
+   "ordinal": 28000023,
+   "timestamp": "2026-11-07T05:00:40.657Z"
+  },
+  {
+   "n": 19,
+   "repository": "astromech",
+   "thread": "mcp:launch:a45aacaf1c79da8a6e806e0235c338771cb1fed9d2a748c982a71ceaab09987f",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_011ReABSJMx7eLzvdhq8E5VK",
+   "ordinal": 5000011,
+   "timestamp": "2026-11-07T06:35:15.095Z"
+  },
+  {
+   "n": 20,
+   "repository": "atelier",
+   "thread": "50e8f06b-ef9a-4e2b-809f-79d772b13dbe",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01SXkJXCdpAnNdGYQy3HKrxR",
+   "ordinal": 5000015,
+   "timestamp": "2026-11-05T00:22:46.377Z"
+  },
+  {
+   "n": 21,
+   "repository": "atelier",
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_016TbT7jgK4G8rSJeVBRbcik",
+   "ordinal": 10000045,
+   "timestamp": "2026-11-07T05:01:17.370Z"
+  },
+  {
+   "n": 22,
+   "repository": "astromech",
+   "thread": "a402427f-3929-4ff3-863d-607fe75fce04",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01XxfngcjPeVWzhrrBJ111Vs",
+   "ordinal": 1000012,
+   "timestamp": "2026-10-17T06:20:18.674Z"
+  },
+  {
+   "n": 23,
+   "repository": "atelier",
+   "thread": "mcp:10e567ca-6f5c-482b-b36d-f1748ac5cb6d",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_018DxSvnhYjY3QxFzbgQmsYv",
+   "ordinal": 44000004,
+   "timestamp": "2026-10-23T18:03:43.455Z"
+  },
+  {
+   "n": 24,
+   "repository": "atelier",
+   "thread": "5d04b6d1-c9e3-4ba2-9dbe-7689f2be58b1",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01F5eeDzsMy2JGwVfattQepx",
+   "ordinal": 3000025,
+   "timestamp": "2026-11-09T00:07:05.794Z"
+  },
+  {
+   "n": 25,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc%253Aordinal%253A1%3Aa2f16d1e5ca334c5d",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01GsVkNpjNBWkMBLXn3cPvBQ",
+   "ordinal": 26,
+   "timestamp": "2026-11-07T16:42:20.059Z"
+  },
+  {
+   "n": 26,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A28287e4764e578a4bf0610c79b0f955c188fac5d5ec767b35312bba9f91831c4%253Aordinal%253A1%3Aa278ca50afc883e21",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01GbkNHL9h2D3axmk4z2brRh",
+   "ordinal": 62,
+   "timestamp": "2026-11-05T06:48:43.886Z"
+  },
+  {
+   "n": 27,
+   "repository": "life-on-rails",
+   "thread": "thread:delegated-task:command%3Amcp%3Ad10d09d6-e194-477a-ba8e-d9607e957bfa%3Adelegate-task%3A2e8c5da9-58d8-4033-8504-b70c9f1948d0",
+   "item": "turn-item:provider:codex:native-item:exec-e10a1b87-fc1c-4acb-9eff-50c6396b8f0f",
+   "ordinal": 1000070,
+   "timestamp": "2026-11-09T02:09:47.303Z"
+  },
+  {
+   "n": 28,
+   "repository": "atelier",
+   "thread": "50e8f06b-ef9a-4e2b-809f-79d772b13dbe",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019tDidsgJNGCkg6NEVVSaFX",
+   "ordinal": 5000002,
+   "timestamp": "2026-11-05T00:22:16.595Z"
+  },
+  {
+   "n": 29,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e%253Aordinal%253A1%3Aa0a0bdbc7d03f8cb0",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01ACR1m1dYg3jGEfGpGuFqXL",
+   "ordinal": 9,
+   "timestamp": "2026-11-09T07:55:42.282Z"
+  },
+  {
+   "n": 30,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7d9733ff-6275-49ab-96e5-e53e756f0759%253Aordinal%253A1%3Aae723585e5463065d",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Let1vqgxMHzNPnAaKtRn5G",
+   "ordinal": 271,
+   "timestamp": "2026-10-17T19:41:52.853Z"
+  },
+  {
+   "n": 31,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3Ac92d4ef8-a3fa-417b-9cc3-b5aff32145a2%3Adelegate-task%3A40ae8e42-90ad-49dc-8787-a103b717e139",
+   "item": "turn-item:provider:codex:native-item:exec-31a3501e-ed8d-4108-9f59-21dc853dd8e0",
+   "ordinal": 1000011,
+   "timestamp": "2026-11-09T21:44:04.314Z"
+  },
+  {
+   "n": 32,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3Ac92d4ef8-a3fa-417b-9cc3-b5aff32145a2%3Adelegate-task%3A40ae8e42-90ad-49dc-8787-a103b717e139",
+   "item": "turn-item:provider:codex:native-item:exec-94421459-8f33-4ac1-a5fc-122d5e0be011",
+   "ordinal": 1000006,
+   "timestamp": "2026-11-09T21:43:54.479Z"
+  },
+  {
+   "n": 33,
+   "repository": "atelier",
+   "thread": "mcp:launch:a916a668bab2c60a2b681b702e7df157cdb9443c5efe08fd5835350ea7ccddb4",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01S8diL3oyKzEhiE2tBntH4G",
+   "ordinal": 7000041,
+   "timestamp": "2026-11-08T22:47:26.404Z"
+  },
+  {
+   "n": 34,
+   "repository": "astromech",
+   "thread": "0667f4c8-b9c0-47f9-a6dd-66238eb718c5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01RfWcZ836KLPzZ5KXgd4JmH",
+   "ordinal": 2000084,
+   "timestamp": "2026-11-07T00:08:17.078Z"
+  },
+  {
+   "n": 35,
+   "repository": "astromech",
+   "thread": "mcp:launch:a45aacaf1c79da8a6e806e0235c338771cb1fed9d2a748c982a71ceaab09987f",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_0177Jxiv8UeE8iNCzVWqb2zb",
+   "ordinal": 4000006,
+   "timestamp": "2026-11-07T06:33:35.756Z"
+  },
+  {
+   "n": 36,
+   "repository": "astromech",
+   "thread": "7d9733ff-6275-49ab-96e5-e53e756f0759",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_013joZ9FW4TPyYBZtisPkJAc",
+   "ordinal": 22000014,
+   "timestamp": "2026-10-17T17:25:36.187Z"
+  },
+  {
+   "n": 37,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A10306659-c2b7-44a0-aac2-ac707796c533%253Aordinal%253A1%3Aae7b04b7f32b5a33c",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_013XVVK3wHwW6iisALE4job7",
+   "ordinal": 4,
+   "timestamp": "2026-10-17T07:20:31.894Z"
+  },
+  {
+   "n": 38,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A6fe2b4b6-6924-4e6b-9c42-7c7e47eeb7b3%253Aordinal%253A1%3Aaa5beafdec98a1c0a",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01XYyoaQwxJn49ZheoiCgxsP",
+   "ordinal": 35,
+   "timestamp": "2026-10-17T07:40:46.983Z"
+  },
+  {
+   "n": 39,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3A52ef55f7-ebae-4c80-bf26-fb52390a2fac%3Adelegate-task%3A1c826eca-af5f-40c8-a0ce-ef94a5b6a59d",
+   "item": "turn-item:provider:grok:native-item:provider-instance%3Agrok%3A01a1bf0c-a789-7a40-87cc-b7bf203f74ca%3Atool%3Acall-f0e3f446-a45a-4971-b07f-1b9f7215de4b-93",
+   "ordinal": 1000121,
+   "timestamp": "2026-11-09T06:50:45.982Z"
+  },
+  {
+   "n": 40,
+   "repository": "demiurge",
+   "thread": "d5f46ef3-bb14-49be-a568-4a5e8264cbb5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01K1bUjZWF4zzdH21WEabJQZ",
+   "ordinal": 10000029,
+   "timestamp": "2026-10-19T15:20:37.818Z"
+  },
+  {
+   "n": 41,
+   "repository": "life-on-rails",
+   "thread": "thread:delegated-task:command%3Amcp%3Ad10d09d6-e194-477a-ba8e-d9607e957bfa%3Adelegate-task%3Ab472cefc-04ca-4957-899c-894e3a080dc6",
+   "item": "turn-item:provider:codex:native-item:exec-b402cf62-8ffe-4bf3-8e56-f8be9bee049f",
+   "ordinal": 1000079,
+   "timestamp": "2026-11-09T03:29:20.660Z"
+  },
+  {
+   "n": 42,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A3115d968-897e-41dc-b053-8dae960e0169%253Aordinal%253A1%3Aacbbf4b084e7e46bf",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01S8PFyFnVjgTT7WYyo3VFHB",
+   "ordinal": 5,
+   "timestamp": "2026-10-16T20:03:11.336Z"
+  },
+  {
+   "n": 43,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A3115d968-897e-41dc-b053-8dae960e0169%253Aordinal%253A1%3Aa7765c23c57657cfd",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01BAxvydBFHyyjS9eCyuUPLw",
+   "ordinal": 11,
+   "timestamp": "2026-10-16T20:11:42.313Z"
+  },
+  {
+   "n": 44,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Aa20c8165-5c46-4df9-823b-03c5f3f2d1d5%253Aordinal%253A1%3Aa60628906ebe65327",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01XzWCEy7BmWRWwvAfM75bDq",
+   "ordinal": 9,
+   "timestamp": "2026-10-22T21:37:51.428Z"
+  },
+  {
+   "n": 45,
+   "repository": "demiurge",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A2eea2627e5b2a21bc2c45d776e5c4838ed659b402d08476a631bc9cb4ba14102%253Aordinal%253A1%3Aa9bcfb13a94477dcf",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Vf7eyAejHbQcnmxfk4jxeW",
+   "ordinal": 5,
+   "timestamp": "2026-11-05T11:20:16.490Z"
+  },
+  {
+   "n": 46,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Ad6V74uwKPk5bKqubq6Ay6",
+   "ordinal": 6000507,
+   "timestamp": "2026-10-16T19:13:01.000Z"
+  },
+  {
+   "n": 47,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A081a1e8a-745f-4dc3-a3eb-316fa7f625e0%253Aordinal%253A1%3Aa1bad804aad6ea83c",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Cg8QT6LASPquQ4HmKbijc2",
+   "ordinal": 287,
+   "timestamp": "2026-10-16T20:50:21.132Z"
+  },
+  {
+   "n": 48,
+   "repository": "atelier",
+   "thread": "1d06e688-5cec-4481-b28f-9dea69516236",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01FX6ZwQhgGr6ZeL9pmS3Bun",
+   "ordinal": 1000016,
+   "timestamp": "2026-10-17T15:37:58.928Z"
+  },
+  {
+   "n": 49,
+   "repository": "atelier",
+   "thread": "5d04b6d1-c9e3-4ba2-9dbe-7689f2be58b1",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_0193sTkBHR4JEhZ5YqbmwnKa",
+   "ordinal": 10000002,
+   "timestamp": "2026-11-09T01:34:11.995Z"
+  },
+  {
+   "n": 50,
+   "repository": "atelier",
+   "thread": "mcp:launch:982b4e222f9c1b8cf14354409a53449ed109a04fc5723fe00f9e49dbbc0bcb37",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01UNCZhwtrpsahYD6UKHEVT7",
+   "ordinal": 1000031,
+   "timestamp": "2026-11-04T23:08:09.341Z"
+  },
+  {
+   "n": 51,
+   "repository": "life-on-rails",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2%253Aordinal%253A1%3Aa9e2203ed674c5cbe",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_0156nkfDLGtVeXPBdB3ySN44",
+   "ordinal": 208,
+   "timestamp": "2026-11-08T03:46:31.537Z"
+  },
+  {
+   "n": 52,
+   "repository": "demiurge",
+   "thread": "ebf97a01-98e0-41e9-9cb5-e8046f119688",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01FQG5gS3BZym9YbV6dtJrCd",
+   "ordinal": 15000017,
+   "timestamp": "2026-10-17T22:52:20.167Z"
+  },
+  {
+   "n": 53,
+   "repository": "astromech",
+   "thread": "thread:delegated-task:command%3Amcp%3A51d8afe4-93ff-4aee-a904-48aa7396dfc8%3Adelegate-task%3Ab91bfe90-80c9-4ffa-adb9-6251f37ff929",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01M4RVducwrz2AjoJxv4cjrh",
+   "ordinal": 1000201,
+   "timestamp": "2026-11-05T09:52:24.844Z"
+  },
+  {
+   "n": 54,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e%253Aordinal%253A1%3Aa30d2fe73dcd6e238",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01BuegDAXnzNCM5A75yAjGJU",
+   "ordinal": 12,
+   "timestamp": "2026-11-09T17:59:31.992Z"
+  },
+  {
+   "n": 55,
+   "repository": "astromech",
+   "thread": "mcp:081a1e8a-745f-4dc3-a3eb-316fa7f625e0",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01BYWpB6JDZnCjx5hEzNTgEN",
+   "ordinal": 101000052,
+   "timestamp": "2026-10-16T22:42:41.600Z"
+  },
+  {
+   "n": 56,
+   "repository": "atelier",
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019v7GoDC5gYsr1H7EEH4Y2E",
+   "ordinal": 2000508,
+   "timestamp": "2026-10-17T18:16:58.649Z"
+  },
+  {
+   "n": 57,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3A0b56dfcc-d3b0-4782-a75f-118dd717d3f1%3Adelegate-task%3A7aaac8b6-af4e-42e0-9af4-505c6af6c144",
+   "item": "turn-item:provider:codex:native-item:exec-8d89aad0-1aba-49f5-b7a6-3136c256baa4",
+   "ordinal": 1000062,
+   "timestamp": "2026-11-09T17:56:33.158Z"
+  },
+  {
+   "n": 58,
+   "repository": "astromech",
+   "thread": "mcp:launch:28287e4764e578a4bf0610c79b0f955c188fac5d5ec767b35312bba9f91831c4",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_018fkRYFeF58stmcQU9Z6gsx",
+   "ordinal": 14000018,
+   "timestamp": "2026-11-05T09:14:14.376Z"
+  },
+  {
+   "n": 59,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7ff6b368-fa17-4336-b361-b4d9858f6056%253Aordinal%253A1%3Aa28e224d6cacd8b15",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_017evsrmCTVRwZH767v86qo4",
+   "ordinal": 18,
+   "timestamp": "2026-11-05T06:05:32.593Z"
+  },
+  {
+   "n": 60,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A081a1e8a-745f-4dc3-a3eb-316fa7f625e0%253Aordinal%253A1%3Aa1bad804aad6ea83c",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01UT8YzBXnW4bVxSFjKozqAx",
+   "ordinal": 296,
+   "timestamp": "2026-10-16T20:52:26.032Z"
+  },
+  {
+   "n": 61,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc%253Aordinal%253A1%3Aac016d9953fb5cf19",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01BNMGs5vEPztA3rJBBGn7ZP",
+   "ordinal": 116,
+   "timestamp": "2026-11-07T21:06:45.602Z"
+  },
+  {
+   "n": 62,
+   "repository": "astromech",
+   "thread": "6fe2b4b6-6924-4e6b-9c42-7c7e47eeb7b3",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Fkk7t8HxA6XPbachCVG6bv",
+   "ordinal": 19000048,
+   "timestamp": "2026-10-17T05:30:33.363Z"
+  },
+  {
+   "n": 63,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A0b61223f-fedd-44cd-85ed-73e7bbd27bc4%253Aordinal%253A1%3Aa756e89987e8a2d19",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_013uctTjwKQGTZcKdKgf6BCH",
+   "ordinal": 15,
+   "timestamp": "2026-10-16T18:13:12.239Z"
+  },
+  {
+   "n": 64,
+   "repository": "atelier",
+   "thread": "mcp:launch:9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01W4Jv8GNyVqo1ht2AaZw3wt",
+   "ordinal": 13000003,
+   "timestamp": "2026-11-09T04:14:43.983Z"
+  },
+  {
+   "n": 65,
+   "repository": "atelier",
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01ELqTounAp9dK2qutrRDXF4",
+   "ordinal": 5000042,
+   "timestamp": "2026-10-22T19:48:12.249Z"
+  },
+  {
+   "n": 66,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A2e00f7b4-1c57-4d8b-8356-2e7acfb8cb56%253Aordinal%253A1%3Aadb7e7a56c235ac60",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Gz1uNuU9FcWL3stJ1Jmofg",
+   "ordinal": 4,
+   "timestamp": "2026-10-24T23:07:51.470Z"
+  },
+  {
+   "n": 67,
+   "repository": "atelier",
+   "thread": "mcp:10306659-c2b7-44a0-aac2-ac707796c533",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_011kEgG9JwMugtDPBMm8UXVZ",
+   "ordinal": 5000004,
+   "timestamp": "2026-10-17T06:31:33.097Z"
+  },
+  {
+   "n": 68,
+   "repository": "atelier",
+   "thread": "581882bb-d6d5-4004-ab51-fdc62a977fef",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_013ZLxXqzt5GBXwFTJLUTuyr",
+   "ordinal": 2000633,
+   "timestamp": "2026-10-17T18:58:40.494Z"
+  },
+  {
+   "n": 69,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3A12c1425f-283d-41ea-bb40-b69f9a6e96bd%3Adelegate-task%3A5e9f3222-cdae-4473-aa6f-3a9fccace488",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019RZnAvMfh6Yz6sMoGaerJg",
+   "ordinal": 2000043,
+   "timestamp": "2026-11-09T07:01:00.157Z"
+  },
+  {
+   "n": 70,
+   "repository": "atelier",
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01FYPEQEzhWMKyeyy7bx1Gw3",
+   "ordinal": 35000004,
+   "timestamp": "2026-10-22T21:37:31.969Z"
+  },
+  {
+   "n": 71,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A6fe2b4b6-6924-4e6b-9c42-7c7e47eeb7b3%253Aordinal%253A1%3Aa1b4e3fd5915d94d4",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_016JuGjjgKHnAF45DdFfpGQf",
+   "ordinal": 5,
+   "timestamp": "2026-10-17T05:47:07.604Z"
+  },
+  {
+   "n": 72,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A3115d968-897e-41dc-b053-8dae960e0169%253Aordinal%253A1%3Aacbbf4b084e7e46bf",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_018RZjUrAAqfUDYVEwKDwDaj",
+   "ordinal": 46,
+   "timestamp": "2026-10-16T20:07:29.729Z"
+  },
+  {
+   "n": 73,
+   "repository": "atelier",
+   "thread": "5d04b6d1-c9e3-4ba2-9dbe-7689f2be58b1",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01WzwhZ3QgY8QTGZuSh4Az4d",
+   "ordinal": 15000002,
+   "timestamp": "2026-11-09T02:22:34.932Z"
+  },
+  {
+   "n": 74,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A081a1e8a-745f-4dc3-a3eb-316fa7f625e0%253Aordinal%253A1%3Aa3f6fe3c41765f14f",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01S7RuwwQC1Lf6vgRmfCtbCo",
+   "ordinal": 38,
+   "timestamp": "2026-10-16T18:58:53.714Z"
+  },
+  {
+   "n": 75,
+   "repository": "atelier",
+   "thread": "45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01W1mKykdWcfFKwjbHuy6wPj",
+   "ordinal": 64000009,
+   "timestamp": "2026-11-07T16:19:22.116Z"
+  },
+  {
+   "n": 76,
+   "repository": "atelier",
+   "thread": "a20c8165-5c46-4df9-823b-03c5f3f2d1d5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Hv222xkuJTXCiYhw3MBFdM",
+   "ordinal": 23000006,
+   "timestamp": "2026-10-22T20:56:10.088Z"
+  },
+  {
+   "n": 77,
+   "repository": "atelier",
+   "thread": "66b1d93a-79e1-4af1-ac5f-30b795529dab",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_0163Jjjw3kuNaAVnrwa9kLa6",
+   "ordinal": 3000032,
+   "timestamp": "2026-11-09T14:30:51.320Z"
+  },
+  {
+   "n": 78,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01SkKa2PnN2ZD2e54HVDizya",
+   "ordinal": 3000004,
+   "timestamp": "2026-10-16T02:55:17.986Z"
+  },
+  {
+   "n": 79,
+   "repository": "life-on-rails",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2%253Aordinal%253A1%3Aa23a90e83ba659008",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01LwNL9sTEN9nAvxzpvyRS1H",
+   "ordinal": 9,
+   "timestamp": "2026-11-07T21:11:14.380Z"
+  },
+  {
+   "n": 80,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Aa20c8165-5c46-4df9-823b-03c5f3f2d1d5%253Aordinal%253A1%3Aacbad88b7effd5150",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01LeMnmvPamsXMiGNVL1fh19",
+   "ordinal": 105,
+   "timestamp": "2026-10-22T22:36:38.245Z"
+  },
+  {
+   "n": 81,
+   "repository": "astromech",
+   "thread": "dcd3ff11-b3b4-4048-a8d4-ae60f4f2d75f",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01L9u4PkgEYjDAMjBLrup64z",
+   "ordinal": 27000069,
+   "timestamp": "2026-10-16T18:13:06.306Z"
+  },
+  {
+   "n": 82,
+   "repository": "demiurge",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A2eea2627e5b2a21bc2c45d776e5c4838ed659b402d08476a631bc9cb4ba14102%253Aordinal%253A1%3Aad819e926b44b8005",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01L6vJdTsW6zX7qr5Yh3cf9X",
+   "ordinal": 7,
+   "timestamp": "2026-11-05T07:02:14.560Z"
+  },
+  {
+   "n": 83,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7d9733ff-6275-49ab-96e5-e53e756f0759%253Aordinal%253A1%3Aaee27bd728cf693d7",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01PMLFximckqmQkcoWbaCye3",
+   "ordinal": 8,
+   "timestamp": "2026-10-17T17:03:46.751Z"
+  },
+  {
+   "n": 84,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7d9733ff-6275-49ab-96e5-e53e756f0759%253Aordinal%253A1%3Aab11cebf8b37d1994",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Y8ArHa2J96fuBbk7cYo8x8",
+   "ordinal": 473,
+   "timestamp": "2026-10-17T23:35:56.645Z"
+  },
+  {
+   "n": 85,
+   "repository": "life-on-rails",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2%253Aordinal%253A1%3Aad7761ac4476c7b4b",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01TDToenmXfxqHmF15PuAGY6",
+   "ordinal": 8,
+   "timestamp": "2026-11-07T22:08:52.983Z"
+  },
+  {
+   "n": 86,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A28287e4764e578a4bf0610c79b0f955c188fac5d5ec767b35312bba9f91831c4%253Aordinal%253A1%3Aa3cca4dd87345ff15",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019bB6jaaXGYGdMzhgwndCdR",
+   "ordinal": 35,
+   "timestamp": "2026-11-05T09:13:08.713Z"
+  },
+  {
+   "n": 87,
+   "repository": "atelier",
+   "thread": "mcp:launch:982b4e222f9c1b8cf14354409a53449ed109a04fc5723fe00f9e49dbbc0bcb37",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_013BkqfZTWdruTuhfjp6oDXG",
+   "ordinal": 1000028,
+   "timestamp": "2026-11-04T23:08:01.662Z"
+  },
+  {
+   "n": 88,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A10306659-c2b7-44a0-aac2-ac707796c533%253Aordinal%253A1%3Aa058e19da1dd81503",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01EoWutwRTXqCooJ69P2BY7Y",
+   "ordinal": 12,
+   "timestamp": "2026-10-17T08:23:15.557Z"
+  },
+  {
+   "n": 89,
+   "repository": "astromech",
+   "thread": "thread:delegated-task:command%3Amcp%3A51d8afe4-93ff-4aee-a904-48aa7396dfc8%3Adelegate-task%3Aa9f995f7-0896-4a8b-a049-cf880bc4d9ee",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01SDCvgpu7b7BCCe3eWihuse",
+   "ordinal": 1000006,
+   "timestamp": "2026-11-05T09:14:14.031Z"
+  },
+  {
+   "n": 90,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7d9733ff-6275-49ab-96e5-e53e756f0759%253Aordinal%253A1%3Aa807b81da0f8cb051",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01T8tFuou4hkag1okbWK4tCD",
+   "ordinal": 9,
+   "timestamp": "2026-10-17T17:03:29.056Z"
+  },
+  {
+   "n": 91,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A28287e4764e578a4bf0610c79b0f955c188fac5d5ec767b35312bba9f91831c4%253Aordinal%253A1%3Aa480f41ad9f5ac705",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_015k9tqpesbt8M5mJXhQCAwk",
+   "ordinal": 10,
+   "timestamp": "2026-11-05T06:29:56.315Z"
+  },
+  {
+   "n": 92,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01GFc2A2YzpEKRihpN41gv4A",
+   "ordinal": 1001479,
+   "timestamp": "2026-10-16T01:48:18.940Z"
+  },
+  {
+   "n": 93,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Aa20c8165-5c46-4df9-823b-03c5f3f2d1d5%253Aordinal%253A1%3Aa496a117c463cea72",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01NgbvrJrTHoLZaVP6AL2SuM",
+   "ordinal": 40,
+   "timestamp": "2026-10-22T20:38:45.692Z"
+  },
+  {
+   "n": 94,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Ad6a4c27d-c9c7-4ae7-b71c-20933ea34245%253Aordinal%253A1%3Aa91d8c1dd113a26fb",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01HWQPeAx5mdBDCd65t2iuNE",
+   "ordinal": 38,
+   "timestamp": "2026-10-15T19:19:34.940Z"
+  },
+  {
+   "n": 95,
+   "repository": "astromech",
+   "thread": "a42b027d-469a-4c0f-9e24-717ea7f7ccf5",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01ENjBecpJRNNjoiTW86hJsN",
+   "ordinal": 19000004,
+   "timestamp": "2026-10-22T21:06:55.724Z"
+  },
+  {
+   "n": 96,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Aa20c8165-5c46-4df9-823b-03c5f3f2d1d5%253Aordinal%253A1%3Aaa27628d3969ca10d",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01D5UDkzkt5RwYDB8FPxrXZ7",
+   "ordinal": 113,
+   "timestamp": "2026-10-22T23:26:40.961Z"
+  },
+  {
+   "n": 97,
+   "repository": "atelier",
+   "thread": "mcp:launch:982b4e222f9c1b8cf14354409a53449ed109a04fc5723fe00f9e49dbbc0bcb37",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Sp76Yon8s4a22vTpLeTtd9",
+   "ordinal": 20000002,
+   "timestamp": "2026-11-05T01:00:12.293Z"
+  },
+  {
+   "n": 98,
+   "repository": "life-on-rails",
+   "thread": "thread:delegated-task:command%3Amcp%3Ad10d09d6-e194-477a-ba8e-d9607e957bfa%3Adelegate-task%3Afc97ec6d-c6af-4472-9a10-fe4b50c95224",
+   "item": "turn-item:provider:codex:native-item:exec-0c076b56-30d2-4ec1-b4be-70b3d63d09c7",
+   "ordinal": 1000045,
+   "timestamp": "2026-11-09T04:10:02.460Z"
+  },
+  {
+   "n": 99,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A63ae5dfd-4e9c-408b-8949-2efda02efe9f%253Aordinal%253A1%3Aaf65abb7a15113c84",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01CF179hBahNcBeNFvQmb4Q1",
+   "ordinal": 49,
+   "timestamp": "2026-11-07T03:43:56.484Z"
+  },
+  {
+   "n": 100,
+   "repository": "life-on-rails",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2%253Aordinal%253A1%3Aa2ced6a844614f58e",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01RrkWAJ8usfn7Y3fP9pMHrv",
+   "ordinal": 55,
+   "timestamp": "2026-11-07T23:33:55.535Z"
+  },
+  {
+   "n": 101,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A10e567ca-6f5c-482b-b36d-f1748ac5cb6d%253Aordinal%253A1%3Aa7f0123f4d90f35a6",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01DrKTb32vn9qWX5k5aJmR61",
+   "ordinal": 326,
+   "timestamp": "2026-10-23T17:03:04.985Z"
+  },
+  {
+   "n": 102,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A3115d968-897e-41dc-b053-8dae960e0169%253Aordinal%253A1%3Aa9e210c516ed3bf91",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019S2Nf62FXUapdYKkQmwqH2",
+   "ordinal": 4,
+   "timestamp": "2026-10-16T19:50:04.532Z"
+  },
+  {
+   "n": 103,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A081a1e8a-745f-4dc3-a3eb-316fa7f625e0%253Aordinal%253A1%3Aa704dd0b476148b83",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_018bS45HLLNRsK19Hpsznrvi",
+   "ordinal": 111,
+   "timestamp": "2026-10-16T18:42:48.295Z"
+  },
+  {
+   "n": 104,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01U5kvtb9U1Ks5B5L436fPP6",
+   "ordinal": 1000138,
+   "timestamp": "2026-10-15T23:03:24.351Z"
+  },
+  {
+   "n": 105,
+   "repository": "life-on-rails",
+   "thread": "thread:delegated-task:command%3Amcp%3A0d333443-0a27-4a08-b48e-7bf6f4ffa3e1%3Adelegate-task%3Alor-ncpw-pmzz-impl-1",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01L2q65wb3FxFNVQGjezcsYn",
+   "ordinal": 2000038,
+   "timestamp": "2026-11-08T19:45:01.335Z"
+  },
+  {
+   "n": 106,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_016ZsSSEKMjmUAzZ2XiUWZLN",
+   "ordinal": 6000729,
+   "timestamp": "2026-10-16T19:48:47.246Z"
+  },
+  {
+   "n": 107,
+   "repository": "atelier",
+   "thread": "mcp:launch:2dafce9e5c8cd444ce58153f5adab2c6f8bbbc0b69f52efd70a5508c6cd98cfc",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_018wqRKpwVNChpCuq7qMPbbK",
+   "ordinal": 24000011,
+   "timestamp": "2026-11-09T17:47:50.305Z"
+  },
+  {
+   "n": 108,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A081a1e8a-745f-4dc3-a3eb-316fa7f625e0%253Aordinal%253A1%3Aa9133a6afc156413f",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_017JVVoqyaY8u5CHCwW4Vapa",
+   "ordinal": 9,
+   "timestamp": "2026-10-16T20:56:44.980Z"
+  },
+  {
+   "n": 109,
+   "repository": "life-on-rails",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253Alaunch%25253A70b8824e06b17be9c685e0f95e6588a5f0fade783db8c19c82ef2aaba55babe2%253Aordinal%253A1%3Aa886653f0a6786be2",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_019AUtoa9QUeLBPKBPfAXeec",
+   "ordinal": 38,
+   "timestamp": "2026-11-08T02:37:27.496Z"
+  },
+  {
+   "n": 110,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Kf2sdmXJ2E2fBr4fGpNPBb",
+   "ordinal": 6000802,
+   "timestamp": "2026-10-16T20:01:42.391Z"
+  },
+  {
+   "n": 111,
+   "repository": "atelier",
+   "thread": "mcp:3115d968-897e-41dc-b053-8dae960e0169",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01YJZLRBro34qJssSdkPHM4L",
+   "ordinal": 1001721,
+   "timestamp": "2026-10-16T02:42:55.309Z"
+  },
+  {
+   "n": 112,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7d9733ff-6275-49ab-96e5-e53e756f0759%253Aordinal%253A1%3Aa66e9b4423957bb1e",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_0132mPMaqhJvdDK4tUYM56DZ",
+   "ordinal": 151,
+   "timestamp": "2026-10-17T21:52:18.078Z"
+  },
+  {
+   "n": 113,
+   "repository": "astromech",
+   "thread": "49d82931-f661-47be-a178-3a3dee68d11a",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Nw1CgpSMg9N6A9Y53hs9rm",
+   "ordinal": 14000015,
+   "timestamp": "2026-11-07T03:00:10.111Z"
+  },
+  {
+   "n": 114,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A45ca3af3-1afb-47fa-9ac7-14bf3dc8b8cc%253Aordinal%253A1%3Aacc7a4fedf3c2068c",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01F9fVpRPgUKUruFGjk8xeqE",
+   "ordinal": 96,
+   "timestamp": "2026-11-07T14:08:50.606Z"
+  },
+  {
+   "n": 115,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A10306659-c2b7-44a0-aac2-ac707796c533%253Aordinal%253A1%3Aaa9ca27bd0b86936d",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01VQUQqnGARGR2z3jVyjb9Rj",
+   "ordinal": 65,
+   "timestamp": "2026-10-17T07:23:37.452Z"
+  },
+  {
+   "n": 116,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3A12c1425f-283d-41ea-bb40-b69f9a6e96bd%3Adelegate-task%3A5e9f3222-cdae-4473-aa6f-3a9fccace488",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_015wwtDUjBaCZrDeUCRdkQGv",
+   "ordinal": 2000057,
+   "timestamp": "2026-11-09T07:02:25.041Z"
+  },
+  {
+   "n": 117,
+   "repository": "atelier",
+   "thread": "mcp:launch:982b4e222f9c1b8cf14354409a53449ed109a04fc5723fe00f9e49dbbc0bcb37",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01NFpjAbxqpxH7HTAG938hoH",
+   "ordinal": 15000002,
+   "timestamp": "2026-11-05T00:33:58.310Z"
+  },
+  {
+   "n": 118,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A0b61223f-fedd-44cd-85ed-73e7bbd27bc4%253Aordinal%253A1%3Aa756e89987e8a2d19",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01LEKPPFe2SQgeyNQR2aMnky",
+   "ordinal": 18,
+   "timestamp": "2026-10-16T18:13:29.616Z"
+  },
+  {
+   "n": 119,
+   "repository": "astromech",
+   "thread": "mcp:launch:28287e4764e578a4bf0610c79b0f955c188fac5d5ec767b35312bba9f91831c4",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01Euxbj7MCtHEZ5Vec2CqQFC",
+   "ordinal": 14000021,
+   "timestamp": "2026-11-05T09:14:18.043Z"
+  },
+  {
+   "n": 120,
+   "repository": "atelier",
+   "thread": "mcp:launch:9e071fa0d26990f7acd29410c84c2465eb2fb21751fc68dfa36ac3816960606e",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01PjEeGfsbzeoaNpvEdPgcP9",
+   "ordinal": 31000021,
+   "timestamp": "2026-11-09T17:59:21.480Z"
+  },
+  {
+   "n": 121,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A7d9733ff-6275-49ab-96e5-e53e756f0759%253Aordinal%253A1%3Aa66e9b4423957bb1e",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_012btLYzHMmYB6M8cZTHjgpg",
+   "ordinal": 138,
+   "timestamp": "2026-10-17T21:49:25.648Z"
+  },
+  {
+   "n": 122,
+   "repository": "life-on-rails",
+   "thread": "thread:delegated-task:command%3Amcp%3Ad10d09d6-e194-477a-ba8e-d9607e957bfa%3Adelegate-task%3A0f2efef0-1efe-4d04-8d60-6a5e3006b7bb",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_018Vi5oc369j1g41CUF3izsi",
+   "ordinal": 1000194,
+   "timestamp": "2026-11-09T03:08:31.366Z"
+  },
+  {
+   "n": 123,
+   "repository": "demiurge",
+   "thread": "ebf97a01-98e0-41e9-9cb5-e8046f119688",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_017HsXJ9SGxhseFK2nVnh9vp",
+   "ordinal": 13000016,
+   "timestamp": "2026-10-17T21:32:28.151Z"
+  },
+  {
+   "n": 124,
+   "repository": "astromech",
+   "thread": "9d019fa1-a2b1-4fb0-aebc-89632c8d9696",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01GAqicYgkxcf6XxCNdkNHcH",
+   "ordinal": 1000182,
+   "timestamp": "2026-10-23T01:19:35.472Z"
+  },
+  {
+   "n": 125,
+   "repository": "atelier",
+   "thread": "mcp:launch:2dafce9e5c8cd444ce58153f5adab2c6f8bbbc0b69f52efd70a5508c6cd98cfc",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01CPGgEMyGcvgUYrX3eGYZGh",
+   "ordinal": 20000018,
+   "timestamp": "2026-11-09T07:05:36.700Z"
+  },
+  {
+   "n": 126,
+   "repository": "atelier",
+   "thread": "thread:delegated-task:command%3Amcp%3A68999850-c316-47fc-bf5c-6f4fb7a566a7%3Adelegate-task%3Ad2a10d34-6a4d-478b-a8c4-760af9cce167",
+   "item": "turn-item:provider:codex:native-item:exec-93b3f05d-d45d-4124-a8fd-26a65757653f",
+   "ordinal": 1000054,
+   "timestamp": "2026-11-09T14:38:55.926Z"
+  },
+  {
+   "n": 127,
+   "repository": "astromech",
+   "thread": "mcp:launch:28287e4764e578a4bf0610c79b0f955c188fac5d5ec767b35312bba9f91831c4",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01XMYWLsuLTqn7xQSQxTcLST",
+   "ordinal": 4000025,
+   "timestamp": "2026-11-05T06:47:17.203Z"
+  },
+  {
+   "n": 128,
+   "repository": "life-on-rails",
+   "thread": "thread:delegated-task:command%3Amcp%3Ad10d09d6-e194-477a-ba8e-d9607e957bfa%3Adelegate-task%3Afc97ec6d-c6af-4472-9a10-fe4b50c95224",
+   "item": "turn-item:provider:codex:native-item:exec-0079c3a6-1e00-4797-8d97-46ed7f9795c1",
+   "ordinal": 1000012,
+   "timestamp": "2026-11-09T04:07:35.379Z"
+  },
+  {
+   "n": 129,
+   "repository": "atelier",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253A0b61223f-fedd-44cd-85ed-73e7bbd27bc4%253Aordinal%253A1%3Aa756e89987e8a2d19",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_012btUDrLoVksPCFHiLfvV65",
+   "ordinal": 17,
+   "timestamp": "2026-10-16T18:13:25.181Z"
+  },
+  {
+   "n": 130,
+   "repository": "astromech",
+   "thread": "thread:provider:claudeAgent:native-thread:provider-thread%3Aprovider%3AclaudeAgent%3Anative-thread%3Apending%253Arun%253Athread%253Amcp%25253A081a1e8a-745f-4dc3-a3eb-316fa7f625e0%253Aordinal%253A1%3Aacb1ddc56a6ca5960",
+   "item": "turn-item:provider:claudeAgent:native-item:toolu_01R6PDgN8Zcqafoc6THqA2gd",
+   "ordinal": 10,
+   "timestamp": "2026-10-16T23:56:16.009Z"
+  }
+ ]
+}

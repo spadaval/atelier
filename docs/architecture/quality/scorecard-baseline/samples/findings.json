@@ -1,0 +1,915 @@
+{
+ "measure": "findings",
+ "seed": 20261110,
+ "population": {
+  "atelier": 478,
+  "astromech": 372,
+  "demiurge": 72,
+  "life-on-rails": 76,
+  "cosplay-studio": 58
+ },
+ "drawn_by": "scripts/scorecard/draw_samples.py",
+ "note": "20 fix-now findings drawn from each repository, then all 100 shuffled.",
+ "entries": [
+  {
+   "n": 1,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-rgy3.md",
+   "finding": "lor-rgy3",
+   "target": "lor-clgw",
+   "reviewed_commit": "eb55ab18732df0d6c8f05848e04166eee26a01b2"
+  },
+  {
+   "n": 2,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-1hbc.md",
+   "finding": "lor-1hbc",
+   "target": "lor-f3vn",
+   "reviewed_commit": "76cf4b6f44b8b417186b911909134c835dbcbd24"
+  },
+  {
+   "n": 3,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-wo4m.md",
+   "finding": "cosplay-studio-wo4m",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "e5a8ad9b4f58b9280ac8388a4870eeec156bdf40"
+  },
+  {
+   "n": 4,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-b3f4.md",
+   "finding": "astromech-b3f4",
+   "target": "astromech-ja5a",
+   "reviewed_commit": "27fd64e65f24e4623e6ace3ee29140d9bc58e4a0"
+  },
+  {
+   "n": 5,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-72ox.md",
+   "finding": "astromech-72ox",
+   "target": "astromech-y6d6",
+   "reviewed_commit": "4fd165420c02c19f3ef7e56ac925d164d100aa81"
+  },
+  {
+   "n": 6,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-nnj6.md",
+   "finding": "astromech-nnj6",
+   "target": "astromech-jp36",
+   "reviewed_commit": "e2a7b6bb7dfdbdef096bb343d095fa592db019c8"
+  },
+  {
+   "n": 7,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-ktq8.md",
+   "finding": "astromech-ktq8",
+   "target": "astromech-a50f",
+   "reviewed_commit": "7b16a416221f0c3618e1b9af5e7092c8f690c71c"
+  },
+  {
+   "n": 8,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-bo4x.md",
+   "finding": "atelier-bo4x",
+   "target": "atelier-4yqd",
+   "reviewed_commit": "8d34b60cc52f33f439f67b16b9e5d50ccaa90a3b"
+  },
+  {
+   "n": 9,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-bzad.md",
+   "finding": "cosplay-studio-bzad",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "920380f083f58e1b85dce379291d4f3e1ce9fadb"
+  },
+  {
+   "n": 10,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-6wd1.md",
+   "finding": "worldcrafter-6wd1",
+   "target": "worldcrafter-hdly",
+   "reviewed_commit": "fa0537a4b35749535be1c801d32bf3d40ec7ccb4"
+  },
+  {
+   "n": 11,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-usc6.md",
+   "finding": "lor-usc6",
+   "target": "lor-2imw",
+   "reviewed_commit": "44d7fe1cefecbfb8d727880c9124dc32206233ca"
+  },
+  {
+   "n": 12,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-02z6.md",
+   "finding": "cosplay-studio-02z6",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "c0c068a29d6fa7055b2dc9e7b3c614c5ea8f777a"
+  },
+  {
+   "n": 13,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-hkvl.md",
+   "finding": "cosplay-studio-hkvl",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "e5a8ad9b4f58b9280ac8388a4870eeec156bdf40"
+  },
+  {
+   "n": 14,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-exay.md",
+   "finding": "worldcrafter-exay",
+   "target": "worldcrafter-xzee",
+   "reviewed_commit": "5f9d33b9235fe6c4d4bd76741e16010649643ac5"
+  },
+  {
+   "n": 15,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-duxv.md",
+   "finding": "worldcrafter-duxv",
+   "target": "worldcrafter-xzee",
+   "reviewed_commit": "5f9d33b9235fe6c4d4bd76741e16010649643ac5"
+  },
+  {
+   "n": 16,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-bvd9.md",
+   "finding": "lor-bvd9",
+   "target": "lor-2mh2",
+   "reviewed_commit": "3fbf8e2f41de4224c179a986e39fe3bf15234bc3"
+  },
+  {
+   "n": 17,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-uplq.md",
+   "finding": "atelier-uplq",
+   "target": "atelier-pmib",
+   "reviewed_commit": "859f41a2454c4278bc33d18868729b139e7e90f7"
+  },
+  {
+   "n": 18,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-x565.md",
+   "finding": "cosplay-studio-x565",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "00c639dc0c4bfeab8ab7a584c22045c5937e0b5e"
+  },
+  {
+   "n": 19,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-h6sd.md",
+   "finding": "worldcrafter-h6sd",
+   "target": "worldcrafter-hdly",
+   "reviewed_commit": "070f68ec952ed78ac1c5266349183c3b1fd310aa"
+  },
+  {
+   "n": 20,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-tdxc.md",
+   "finding": "worldcrafter-tdxc",
+   "target": "worldcrafter-iu6l",
+   "reviewed_commit": "db7ef9a07d087fad948d5a6bc0c7cbe125933009"
+  },
+  {
+   "n": 21,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-f0j4.md",
+   "finding": "lor-f0j4",
+   "target": "lor-2imw",
+   "reviewed_commit": "44d7fe1cefecbfb8d727880c9124dc32206233ca"
+  },
+  {
+   "n": 22,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-864f.md",
+   "finding": "astromech-864f",
+   "target": "astromech-y5mz",
+   "reviewed_commit": "86b43b9ab8ce023b7e2b826fe1f49a21410607c2"
+  },
+  {
+   "n": 23,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-ghcr.md",
+   "finding": "worldcrafter-ghcr",
+   "target": "worldcrafter-o8b7",
+   "reviewed_commit": "8ee08cddeab6d68787594388e15093aa0054ce81"
+  },
+  {
+   "n": 24,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-kl16.md",
+   "finding": "atelier-kl16",
+   "target": "atelier-fad5",
+   "reviewed_commit": "0ae80c75f4325cfeab5d0802e3318af8b08f818a"
+  },
+  {
+   "n": 25,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-in5r.md",
+   "finding": "astromech-in5r",
+   "target": "astromech-5llf",
+   "reviewed_commit": "7f8ac0ec61e9e671fd74bd73380fda5a0b0040ba"
+  },
+  {
+   "n": 26,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-8w5k.md",
+   "finding": "atelier-8w5k",
+   "target": "atelier-hrgx",
+   "reviewed_commit": "859f41a2454c4278bc33d18868729b139e7e90f7"
+  },
+  {
+   "n": 27,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-2w69.md",
+   "finding": "lor-2w69",
+   "target": "lor-ncpw",
+   "reviewed_commit": "1267cf20b62f0089676f733b61cf021bae15892a"
+  },
+  {
+   "n": 28,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-od0y.md",
+   "finding": "lor-od0y",
+   "target": "lor-5qkq",
+   "reviewed_commit": "2970a884bbb9d4dcf0bb86b82173d7608cc7c879"
+  },
+  {
+   "n": 29,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-w7k4.md",
+   "finding": "cosplay-studio-w7k4",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "28d41a0667ec52b282f31a4ed8a7257e78d02b74"
+  },
+  {
+   "n": 30,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-3tvf.md",
+   "finding": "worldcrafter-3tvf",
+   "target": "worldcrafter-s2mz",
+   "reviewed_commit": "87093f723c888cfa56a358b3225708ebb5ee6c8e"
+  },
+  {
+   "n": 31,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-72rq.md",
+   "finding": "cosplay-studio-72rq",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "c1acd3b5401887a9f8294b651c9814605f4d0c51"
+  },
+  {
+   "n": 32,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-h9qd.md",
+   "finding": "cosplay-studio-h9qd",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "6e55ad4e68d9a6815940dd3191a55c33a9fc4bd7"
+  },
+  {
+   "n": 33,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-kmac.md",
+   "finding": "lor-kmac",
+   "target": "lor-ncpw",
+   "reviewed_commit": "289fabd1afb007c07078e404586279134f3795d7"
+  },
+  {
+   "n": 34,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-chqn.md",
+   "finding": "cosplay-studio-chqn",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "fcd50477764bc493575212fe324abf7c18974859"
+  },
+  {
+   "n": 35,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-rjt2.md",
+   "finding": "astromech-rjt2",
+   "target": "astromech-vkzj",
+   "reviewed_commit": "4e90dfca157f1221cc850df5f1a0908f11f9bc8c"
+  },
+  {
+   "n": 36,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-otbw.md",
+   "finding": "worldcrafter-otbw",
+   "target": "worldcrafter-3fqq",
+   "reviewed_commit": "9afff1fd99391e25a22b258c653c069bba59aa32"
+  },
+  {
+   "n": 37,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-go4d.md",
+   "finding": "astromech-go4d",
+   "target": "astromech-9mb9",
+   "reviewed_commit": "dc75ae895c3a6700e9b2403ee127389b066bb525"
+  },
+  {
+   "n": 38,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-l8sl.md",
+   "finding": "atelier-l8sl",
+   "target": "atelier-yn69",
+   "reviewed_commit": "a9cd1265fafcb1a44917fc15c10033f3120137b2"
+  },
+  {
+   "n": 39,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-3q8b.md",
+   "finding": "worldcrafter-3q8b",
+   "target": "worldcrafter-5pks",
+   "reviewed_commit": "48598a49e94108247fa93fb81b24d7e4ecaf555b"
+  },
+  {
+   "n": 40,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-71bo.md",
+   "finding": "worldcrafter-71bo",
+   "target": "worldcrafter-5pks",
+   "reviewed_commit": "48598a49e94108247fa93fb81b24d7e4ecaf555b"
+  },
+  {
+   "n": 41,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-ci12.md",
+   "finding": "atelier-ci12",
+   "target": "atelier-qr5s",
+   "reviewed_commit": "378eb60a7695bdea855a47332bda78b1218b3445"
+  },
+  {
+   "n": 42,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-ehje.md",
+   "finding": "astromech-ehje",
+   "target": "astromech-y6d6",
+   "reviewed_commit": "ab14505e796bee36cf0670bb126f90c2319b831c"
+  },
+  {
+   "n": 43,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-6vjm.md",
+   "finding": "lor-6vjm",
+   "target": "lor-fhk5",
+   "reviewed_commit": "91276e158165fc89ca239b11d714f17dbd26904f"
+  },
+  {
+   "n": 44,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-7p1o.md",
+   "finding": "astromech-7p1o",
+   "target": "astromech-ztrb",
+   "reviewed_commit": "dc088e97a1c102de48fc5760605c3cbedc4f3e46"
+  },
+  {
+   "n": 45,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-6nob.md",
+   "finding": "cosplay-studio-6nob",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "f68e3e0b178883a18078d2c1efa5b4a82e9a6659"
+  },
+  {
+   "n": 46,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-y93g.md",
+   "finding": "lor-y93g",
+   "target": "lor-bdus",
+   "reviewed_commit": "9723a4ab34281ed020b0afbcd336fc781827c1ac"
+  },
+  {
+   "n": 47,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-emc0.md",
+   "finding": "cosplay-studio-emc0",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "4d329b7dc26bca447a9737eadde2fb51b5e37c1d"
+  },
+  {
+   "n": 48,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-x7z7.md",
+   "finding": "worldcrafter-x7z7",
+   "target": "worldcrafter-hqgq",
+   "reviewed_commit": "0805b7a5c60f73c9e697e6dc399f28bda05b9a5c"
+  },
+  {
+   "n": 49,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-x38u.md",
+   "finding": "worldcrafter-x38u",
+   "target": "worldcrafter-hqgq",
+   "reviewed_commit": "152f480bb097d11aa2828b8f52232b961e14fe02"
+  },
+  {
+   "n": 50,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-ca6u.md",
+   "finding": "atelier-ca6u",
+   "target": "atelier-ydv0",
+   "reviewed_commit": "7185c3d00f161519ba59396b48f26ff2595cd28b"
+  },
+  {
+   "n": 51,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-l6gt.md",
+   "finding": "atelier-l6gt",
+   "target": "atelier-fcb7",
+   "reviewed_commit": "dab1f733ffb6d2e4bfc406ed27ccda58563b272d"
+  },
+  {
+   "n": 52,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-i92w.md",
+   "finding": "cosplay-studio-i92w",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "2c29a76c4d2b2bd36d2576d10d8b993251f0aa7d"
+  },
+  {
+   "n": 53,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-37yn.md",
+   "finding": "astromech-37yn",
+   "target": "astromech-p4um",
+   "reviewed_commit": "3016a38cbc2f5f1ad89e54e688a5e24cf30b272d"
+  },
+  {
+   "n": 54,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-ricy.md",
+   "finding": "cosplay-studio-ricy",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "5cbf74d037478e0c5e9070056c424d75ec73a063"
+  },
+  {
+   "n": 55,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-bxjj.md",
+   "finding": "astromech-bxjj",
+   "target": "astromech-rpsb",
+   "reviewed_commit": "5f02b645b125ba32a44502aa4c84b61edfa8acfc"
+  },
+  {
+   "n": 56,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-pptp.md",
+   "finding": "cosplay-studio-pptp",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "5087845b853288f92e063e85e1a20056aec3bb66"
+  },
+  {
+   "n": 57,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-ci4u.md",
+   "finding": "worldcrafter-ci4u",
+   "target": "worldcrafter-i2uz",
+   "reviewed_commit": "c5fea91ec84335b6db2b6460d10b2c154c24abd3"
+  },
+  {
+   "n": 58,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-3dj9.md",
+   "finding": "astromech-3dj9",
+   "target": "astromech-vucf",
+   "reviewed_commit": "86b4d3e81bb36e6f278617b25d59ae0d32c6e4b9"
+  },
+  {
+   "n": 59,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-tr4g.md",
+   "finding": "astromech-tr4g",
+   "target": "astromech-sfys",
+   "reviewed_commit": "8c44864ffb8b65cc78872de4fd3c564004816b0a"
+  },
+  {
+   "n": 60,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-spmw.md",
+   "finding": "cosplay-studio-spmw",
+   "target": "cosplay-studio-a197",
+   "reviewed_commit": "f68e3e0b178883a18078d2c1efa5b4a82e9a6659"
+  },
+  {
+   "n": 61,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-ryff.md",
+   "finding": "atelier-ryff",
+   "target": "atelier-n0qh",
+   "reviewed_commit": "1dc540c65e66c1445b741d4920a979592d02b7e2"
+  },
+  {
+   "n": 62,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-rdws.md",
+   "finding": "astromech-rdws",
+   "target": "astromech-bh0c",
+   "reviewed_commit": "47cf61a028e78d7c0ac688b3d4322fa5145bc4a2"
+  },
+  {
+   "n": 63,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-w2l1.md",
+   "finding": "worldcrafter-w2l1",
+   "target": "worldcrafter-5pks",
+   "reviewed_commit": "48598a49e94108247fa93fb81b24d7e4ecaf555b"
+  },
+  {
+   "n": 64,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-puh1.md",
+   "finding": "astromech-puh1",
+   "target": "astromech-h95t",
+   "reviewed_commit": "f19cd827b023ba7d64a0e93f3cf1bc7c8ce070f8"
+  },
+  {
+   "n": 65,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-8m6c.md",
+   "finding": "astromech-8m6c",
+   "target": "astromech-yin0",
+   "reviewed_commit": "341ba05b19a82e6408967f82cc8d08938091901f"
+  },
+  {
+   "n": 66,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-0f6g.md",
+   "finding": "lor-0f6g",
+   "target": "lor-sghw",
+   "reviewed_commit": "289fabd1afb007c07078e404586279134f3795d7"
+  },
+  {
+   "n": 67,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-6kcz.md",
+   "finding": "atelier-6kcz",
+   "target": "atelier-bw0b",
+   "reviewed_commit": "6c51447373552e58ab54acc8783d3a64c6a9991e"
+  },
+  {
+   "n": 68,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-c4ap.md",
+   "finding": "lor-c4ap",
+   "target": "lor-83uq",
+   "reviewed_commit": "e6a8ee35a9054f7a420caf2129d62cbd61b63f28"
+  },
+  {
+   "n": 69,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-xuos.md",
+   "finding": "cosplay-studio-xuos",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "896162c9f712ce691f10de02f636f24ed8b61737"
+  },
+  {
+   "n": 70,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-49qz.md",
+   "finding": "worldcrafter-49qz",
+   "target": "worldcrafter-i2uz",
+   "reviewed_commit": "0ab62e802d68ff301ed02a2eab90465791483487"
+  },
+  {
+   "n": 71,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-plu8.md",
+   "finding": "atelier-plu8",
+   "target": "atelier-r28p",
+   "reviewed_commit": "dc4ce18d56aa480c2546165683341572b1d78b2a"
+  },
+  {
+   "n": 72,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-5103.md",
+   "finding": "lor-5103",
+   "target": "lor-2imw",
+   "reviewed_commit": "2970a884bbb9d4dcf0bb86b82173d7608cc7c879"
+  },
+  {
+   "n": 73,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-5vmi.md",
+   "finding": "worldcrafter-5vmi",
+   "target": "worldcrafter-5pks",
+   "reviewed_commit": "48598a49e94108247fa93fb81b24d7e4ecaf555b"
+  },
+  {
+   "n": 74,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-81d4.md",
+   "finding": "lor-81d4",
+   "target": "lor-iyc3",
+   "reviewed_commit": "ff1d78b599bf2fa939723a1de83b245098b3ddfc"
+  },
+  {
+   "n": 75,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-yik3.md",
+   "finding": "astromech-yik3",
+   "target": "astromech-hnar",
+   "reviewed_commit": "03cae6ee3cf1304e8251b029a0e372680b140bf0"
+  },
+  {
+   "n": 76,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-snof.md",
+   "finding": "astromech-snof",
+   "target": "astromech-k20i",
+   "reviewed_commit": "db710854f0e9f85a36289c23b479587b482ca2dc"
+  },
+  {
+   "n": 77,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-glg9.md",
+   "finding": "lor-glg9",
+   "target": "lor-eh0y",
+   "reviewed_commit": "9f6b69c1418517426cf146005d2931daea388e5c"
+  },
+  {
+   "n": 78,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-3fxs.md",
+   "finding": "lor-3fxs",
+   "target": "lor-ncpw",
+   "reviewed_commit": "b200c72aa8a9cecf72e229914d5ca4d0fb35e571"
+  },
+  {
+   "n": 79,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-w2dj.md",
+   "finding": "atelier-w2dj",
+   "target": "atelier-fcb7",
+   "reviewed_commit": "61c42ae925d43631e91b5584cb9d22878e0c55f2"
+  },
+  {
+   "n": 80,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-qs5e.md",
+   "finding": "worldcrafter-qs5e",
+   "target": "worldcrafter-lsu3",
+   "reviewed_commit": "026337549474674e38de0fe75662168b99e2ab18"
+  },
+  {
+   "n": 81,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-0rnt.md",
+   "finding": "lor-0rnt",
+   "target": "lor-clgw",
+   "reviewed_commit": "eb55ab18732df0d6c8f05848e04166eee26a01b2"
+  },
+  {
+   "n": 82,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-fq99.md",
+   "finding": "atelier-fq99",
+   "target": "atelier-l58v",
+   "reviewed_commit": "9ea0a19b4fb5a0f3488d5efd40e58bbaeff0d91b"
+  },
+  {
+   "n": 83,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-i4al.md",
+   "finding": "lor-i4al",
+   "target": "lor-v692",
+   "reviewed_commit": "a6e2353c1fafa291df521c2df934ac3fe16c5723"
+  },
+  {
+   "n": 84,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-hq8b.md",
+   "finding": "lor-hq8b",
+   "target": "lor-ph30",
+   "reviewed_commit": "5c15edd8a66009178af7a4a3b46b7f7136f6dabb"
+  },
+  {
+   "n": 85,
+   "repository": "astromech",
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "record": ".atelier/reviews/astromech-xzxn.md",
+   "finding": "astromech-xzxn",
+   "target": "astromech-spxx",
+   "reviewed_commit": "5be1fd9d36d54090b790953b33c879ddbe6d8057"
+  },
+  {
+   "n": 86,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-62pr.md",
+   "finding": "atelier-62pr",
+   "target": "atelier-yn69",
+   "reviewed_commit": "38c7c1c179431d9864ccf95622a7cedc1cfa1981"
+  },
+  {
+   "n": 87,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-ja4w.md",
+   "finding": "cosplay-studio-ja4w",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "ebfa7cbd26a23b6343efb2176b590dee55b705c8"
+  },
+  {
+   "n": 88,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-s01r.md",
+   "finding": "atelier-s01r",
+   "target": "atelier-od8b",
+   "reviewed_commit": "903423d35d443e1238acad167b032ccc50a7228f"
+  },
+  {
+   "n": 89,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-epyf.md",
+   "finding": "worldcrafter-epyf",
+   "target": "worldcrafter-03rp",
+   "reviewed_commit": "e9db738ce72f889cc01ae6da80c82063ff299986"
+  },
+  {
+   "n": 90,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-ek0k.md",
+   "finding": "atelier-ek0k",
+   "target": "atelier-qr5s",
+   "reviewed_commit": "4110367ed43420776a2dc79903f251980c2ec2a0"
+  },
+  {
+   "n": 91,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-k79z.md",
+   "finding": "atelier-k79z",
+   "target": "atelier-nexd",
+   "reviewed_commit": "ea0cc2c06466337e760dcb831b7f06b3516d3580"
+  },
+  {
+   "n": 92,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-cjyu.md",
+   "finding": "cosplay-studio-cjyu",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "fcd50477764bc493575212fe324abf7c18974859"
+  },
+  {
+   "n": 93,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-5yna.md",
+   "finding": "cosplay-studio-5yna",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "f972398759e0c0e54807021850bb51f29a700055"
+  },
+  {
+   "n": 94,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-0ybf.md",
+   "finding": "worldcrafter-0ybf",
+   "target": "worldcrafter-i2uz",
+   "reviewed_commit": "ba1230c5302a25e35ec56fca128ca194088b0f1f"
+  },
+  {
+   "n": 95,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-ooay.md",
+   "finding": "atelier-ooay",
+   "target": "atelier-h1nc",
+   "reviewed_commit": "342d93ff699a891b98de38b3ab5c4b932a1d303b"
+  },
+  {
+   "n": 96,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-roov.md",
+   "finding": "atelier-roov",
+   "target": "atelier-yfqu",
+   "reviewed_commit": "28ae3d61ecce47e8befb0e1469e16122d8addf04"
+  },
+  {
+   "n": 97,
+   "repository": "atelier",
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "record": ".atelier/reviews/atelier-i31q.md",
+   "finding": "atelier-i31q",
+   "target": "atelier-fcb7",
+   "reviewed_commit": "92440ff2e8f3329a98a00693863a77326e86d044"
+  },
+  {
+   "n": 98,
+   "repository": "demiurge",
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "record": ".atelier/reviews/worldcrafter-mrwc.md",
+   "finding": "worldcrafter-mrwc",
+   "target": "worldcrafter-xzee",
+   "reviewed_commit": "5f9d33b9235fe6c4d4bd76741e16010649643ac5"
+  },
+  {
+   "n": 99,
+   "repository": "cosplay-studio",
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "record": ".atelier/reviews/cosplay-studio-z155.md",
+   "finding": "cosplay-studio-z155",
+   "target": "cosplay-studio-n2p9",
+   "reviewed_commit": "f972398759e0c0e54807021850bb51f29a700055"
+  },
+  {
+   "n": 100,
+   "repository": "life-on-rails",
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "record": ".atelier/reviews/lor-5yd5.md",
+   "finding": "lor-5yd5",
+   "target": "lor-sqfe",
+   "reviewed_commit": "5c15edd8a66009178af7a4a3b46b7f7136f6dabb"
+  }
+ ]
+}
