@@ -408,19 +408,22 @@ into place. This is the one time a commit that is not an Atelier merge
 changes more than planning records on a base, and the runbook is the only
 thing that does it.
 
-**Rollback.** The runbook undoes its own work from what it recorded in step
-1, repository by repository:
+**Rollback.** The runbook undoes its own work in this order:
 
-| A repository that is | Is undone by |
-| --- | --- |
-| Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
-| Converted and pushed | Reverting its conversion commit and pushing |
+1. If step 3 had run, remove the Git hooks the new `setup` installed, from
+   every clone that has them. This comes first: the old tool has no Git
+   hooks, the new ones would refuse the pushes below, and once the fallback
+   is installed they would call commands it lacks.
+2. Undo each repository from what step 1 of the cutover recorded:
 
-If step 3 had run, it also reinstalls the fallback release, runs its `setup`,
-removes the Git hooks the new `setup` installed from each clone, since the
-old tool has none and they would call commands it lacks, moves the skill
-checkout back to the commit it was on, restarts `atelier-serve`, and checks
-the site answers.
+   | A repository that is | Is undone by |
+   | --- | --- |
+   | Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
+   | Converted and pushed | Reverting its conversion commit and pushing |
+
+3. If step 3 had run, reinstall the fallback release, run its `setup`, move
+   the skill checkout back to the commit it was on, restart `atelier-serve`,
+   and check the site answers.
 
 The rollback is tried on scratch clones before the real cutover, stopping
 after each of these: a conversion that fails `--verify` before its commit;
