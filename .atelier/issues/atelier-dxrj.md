@@ -4,6 +4,9 @@ id: "atelier-dxrj"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-dxrj
 priority: "P2"
 relationships:
   blocks: []
@@ -21,9 +24,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Settle deferred findings: `list --deferred`, `new --from` and `drop` on a finding"
-updated_at: "2026-11-10T21:30:47.812872344+00:00"
+updated_at: "2026-11-10T22:05:53.729057535+00:00"
 ---
 
 ## Goal

@@ -1,7 +1,9 @@
 //! What `show`, `list` and `lead` print, and the missions `status` lists.
 //! The wording lives here, beside `output.rs`, so it is cheap to change.
 
-use crate::output::{condition, handoff, holder, priority_name, status_name, verdict_name};
+use crate::output::{
+    condition, handoff, holder, priority_name, settled, status_name, verdict_name,
+};
 use atelier_app::acts::{Condition, PLANNED, STARTED};
 use atelier_app::{Entry, Filter, Group, Overview, LIFECYCLE};
 use atelier_core::{Decision, Finding, Mission, Ready, Status, Thread};
@@ -166,7 +168,12 @@ pub fn item(
                 atelier_core::Recommendation::Defer => "defer",
                 atelier_core::Recommendation::NoAction => "no action",
             };
-            text += &format!("    {} ({state}): {}\n", finding.name, finding.title);
+            let settled = finding.settlement.as_ref().map(settled);
+            let settled = settled.map_or(String::new(), |s| format!(", {s}"));
+            text += &format!(
+                "    {} ({state}{settled}): {}\n",
+                finding.name, finding.title
+            );
         }
     }
     text
@@ -281,6 +288,21 @@ pub fn list(groups: &[Group], filter: &Filter) -> String {
         }
     }
     text
+}
+
+/// `list --deferred`: each finding, as `<item>/<finding>`, with its title.
+pub fn deferred(findings: &[(String, Finding)]) -> String {
+    let Some((id, first)) = findings.first() else {
+        return "No deferred finding of a done item is left to settle.\n".into();
+    };
+    let mut text = "Deferred findings of done items that nobody has settled:\n".to_string();
+    for (id, finding) in findings {
+        text += &format!("  {id}/{}: {}\n", finding.name, finding.title);
+    }
+    let name = format!("{id}/{}", first.name);
+    text + &format!(
+        "Settle each once: take it into a new item, or drop it with a reason.\nThen: atelier new \"<title>\" --from {name}, or atelier drop {name} --reason \"<why>\"\n"
+    )
 }
 
 /// What `status` adds on the base: the missions in progress and the items

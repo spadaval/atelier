@@ -57,6 +57,9 @@ enum Command {
         /// Finished missions and items, done or dropped, instead of open ones.
         #[arg(long)]
         done: bool,
+        /// Instead, the deferred findings of done items that nobody has taken into an item or dropped.
+        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done"])]
+        deferred: bool,
     },
     /// Create a draft item, or with --mission a draft mission, in this checkout of the base, without committing it.
     New {
@@ -68,6 +71,9 @@ enum Command {
         /// Create a mission instead of an item.
         #[arg(long)]
         mission: bool,
+        /// Make the item from a deferred finding of a done item, named as `atelier list --deferred` prints it, and mark the finding taken; also on the branch of an item you implement.
+        #[arg(long, value_name = "FINDING", conflicts_with = "mission")]
+        from: Option<String>,
     },
     /// Change front-matter fields of a draft or ready item or mission, without committing them.
     #[command(group(ArgGroup::new("fields").required(true).multiple(true)))]
@@ -99,8 +105,9 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
-    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it.
+    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped; also on the branch of an item you implement.
     Drop {
+        /// An item, a mission, or a finding.
         id: String,
         /// Why it will not be done, on one line.
         #[arg(long)]
@@ -162,6 +169,7 @@ fn main() -> ExitCode {
     let result = repo::Repo::open().and_then(|mut repo| match cli.command {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
         Command::Show { id } => views::show(&mut repo, &id),
+        Command::List { deferred: true, .. } => views::deferred(&mut repo),
         Command::List {
             ready,
             blocked,
@@ -170,6 +178,7 @@ fn main() -> ExitCode {
             label,
             mine,
             done,
+            deferred: false,
         } => {
             let filter = atelier_app::Filter {
                 ready,
@@ -186,7 +195,8 @@ fn main() -> ExitCode {
             title,
             into,
             mission,
-        } => plan::new(&mut repo, &title, into, mission),
+            from,
+        } => plan::new(&mut repo, &title, into, mission, from.as_deref()),
         Command::Set {
             id,
             title,

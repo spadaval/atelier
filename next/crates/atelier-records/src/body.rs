@@ -119,6 +119,28 @@ fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, Str
     })
 }
 
+/// `body`, a review's, with the line that records `settlement` added to
+/// finding `number`, right after its Recommendation line: that line is
+/// outside any fence, so the new one is read whatever else the finding
+/// holds. `None` when the review has no such finding.
+pub(crate) fn settle(body: &str, number: u32, settlement: &Settlement) -> Option<String> {
+    let prefix = format!("Finding {number}: ");
+    let (_, content) = sections(body, 2)
+        .into_iter()
+        .find(|(heading, _)| heading.starts_with(&prefix))?;
+    let (offset, first) = unfenced_lines(content)
+        .into_iter()
+        .find(|(_, line)| !line.trim().is_empty())?;
+    // The content is a slice of the body.
+    let at = content.as_ptr() as usize - body.as_ptr() as usize + offset + first.len();
+    let line = match settlement {
+        Settlement::Taken { item, by } => format!("Taken: {item} by {by}"),
+        Settlement::Dropped { by, reason } => format!("Dropped by {by}: {reason}"),
+    };
+    let (head, rest) = body.split_at(at);
+    Some(format!("{head}\n{line}{rest}"))
+}
+
 /// The `### <date>: <question>` entries of an item's `## Decisions`.
 pub(crate) fn decisions(file: &Path, body: &str) -> Result<Vec<Decision>, Problem> {
     let Some(entries) = section(body, 2, "Decisions") else {
@@ -342,6 +364,31 @@ mod tests {
             "## Report\n### Validation\n```\n# a shell comment\n```\n"
         ));
         assert!(report_written("## Report\n#hashtag is text\n"));
+    }
+
+    #[test]
+    fn a_settlement_goes_right_after_the_recommendation_where_a_fence_cannot_hide_it() {
+        let taken = Settlement::Taken {
+            item: "demo-x1y2".into(),
+            by: Thread("t9".into()),
+        };
+        let body = "## Summary\ns\n## Finding 1: One\n\nRecommendation: defer\n```\nopen fence\n## Finding 10: Ten\nRecommendation: defer";
+        assert_eq!(
+            settle(body, 1, &taken).unwrap(),
+            "## Summary\ns\n## Finding 1: One\n\nRecommendation: defer\nTaken: demo-x1y2 by t9\n```\nopen fence\n## Finding 10: Ten\nRecommendation: defer"
+        );
+        let body =
+            "## Finding 1: One\nRecommendation: fix now\n## Finding 10: Ten\nRecommendation: defer";
+        let dropped = Settlement::Dropped {
+            by: Thread("t9".into()),
+            reason: "gone".into(),
+        };
+        let settled = settle(body, 10, &dropped).unwrap();
+        assert!(settled.ends_with("Recommendation: defer\nDropped by t9: gone"));
+        let read = findings(Path::new("r.md"), &"1-aaaa".parse().unwrap(), &settled).unwrap();
+        assert_eq!(read[1].settlement, Some(dropped));
+        assert_eq!(read[0].settlement, None);
+        assert_eq!(settle(body, 2, &taken), None);
     }
 
     #[test]
