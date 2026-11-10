@@ -338,7 +338,7 @@ class Links:
     relative link that resolved, and replaces each mention of a moved
     strategy file's old path with its mission's directory."""
 
-    def __init__(self, tracked, moved):
+    def __init__(self, tracked, moved, renamed):
         self.tracked = set(tracked)
         self.dirs = {posixpath.dirname(p) for p in tracked}
         for d in list(self.dirs):
@@ -346,6 +346,7 @@ class Links:
                 d = posixpath.dirname(d)
                 self.dirs.add(d)
         self.moved = moved  # old path -> (mission dir, {slug: file name})
+        self.renamed = renamed  # an open record's old file -> its new one
 
     def target(self, old_path, fragment):
         new_dir, where = self.moved[old_path]
@@ -364,7 +365,9 @@ class Links:
             if re.match(r"[A-Za-z][\w+.-]*:", path) or path.startswith("/"):
                 return m.group(0)
             resolved = posixpath.normpath(posixpath.join(posixpath.dirname(old_file), path))
-            if resolved in self.moved:
+            if resolved in self.renamed:
+                resolved = self.renamed[resolved]
+            elif resolved in self.moved:
                 resolved = self.target(resolved, fragment)
             elif resolved not in self.tracked and resolved not in self.dirs:
                 return m.group(0)
@@ -592,7 +595,9 @@ def convert(root):
             taken, rest, where = split_strategy(read(root, path))
             strategies[rid] = (path, taken, rest, where)
             moved[path] = (f".atelier/missions/{rid}", where)
-    links = Links(tracked, moved)
+    renamed = {f".atelier/issues/{rid}.md": f".atelier/missions/{rid}/mission.md" if r["issue_type"] == "mission"
+               else f".atelier/items/{rid}/item.md" for rid, r in records.items() if r["status"] in OPEN}
+    links = Links(tracked, moved, renamed)
 
     writes = {".atelier/config.toml": config}
     count = {"converted": {}, "left": {}}

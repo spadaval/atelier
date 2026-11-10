@@ -85,6 +85,7 @@ status: approved
 # Why
 
 Widgets are square. See [the architecture](architecture.md "the design"), [the shape](#shape) and [the mock][m].
+[The item](../../.atelier/issues/demo-a1ta.md) does it, after [the second mission](../../.atelier/issues/demo-m2nd.md).
 
 ## Detail
 
@@ -383,6 +384,7 @@ Shapes vary.
 ## Why
 
 Widgets are square. See [the architecture](../../../docs/strategies/architecture.md "the design"), [the shape](design.md#shape) and [the mock][m].
+[The item](../../items/demo-a1ta/item.md) does it, after [the second mission](../demo-m2nd/mission.md).
 
 ### Detail
 
@@ -444,13 +446,14 @@ Corners.
             rel = str(path.relative_to(self.repo))
             text = path.read_text()
             inline = re.findall(r"\]\(<?([^)\s>]+)>?(?: \"[^\"]*\")?\)", text)
-            for target in inline + re.findall(r"^\[[^\]]+\]: <?([^\s>]+)>?$", text, re.M):
+            definitions = dict(re.findall(r"^\[([^\]]+)\]:\s*<?([^\s>]+)>?$", text, re.M))
+            for target in inline + list(definitions.values()):
                 links += 1
                 self.assertTrue(resolves(self.repo, rel, target), f"{rel}: {target}")
             # Each reference a document uses is defined in that document.
             for label in re.findall(r"\]\[([^\]]+)\]", text) + re.findall(r"\[([^\]]+)\]\[\]", text):
-                self.assertIn(f"\n[{label}]: ", text, f"{rel}: [{label}]")
-        self.assertEqual(links, 7)
+                self.assertIn(label, definitions, f"{rel}: [{label}]")
+        self.assertEqual(links, 9)
         self.assertEqual(self.read("docs/strategies/architecture.md"), FILES["docs/strategies/architecture.md"])
         self.assertIn("Tracked files that still name a moved file's old path, left unchanged:\n"
                       "  docs/other.md: docs/strategies/plan.md\n"
