@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T17:36:39.889143433+00:00"
+updated_at: "2026-11-10T18:43:02.478728317+00:00"
 ---
 
 ## Outcome
@@ -43,3 +43,4 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
 - 2026-11-10 [decision] submit starts CI where a forge is configured, and merge waits for CI for a bounded time (9 minutes, not configurable, no flag). Sumeet decided both on 2026-11-10; the mission's planner relayed them from the thread 'Further cut Agent Factory overhead'. This reverses the architecture specification's decision that merge never waits. They enter the mission as one item, atelier-xtvh, after atelier-syyj and beside atelier-67nn
   Reason: CI is nearly all of the approval-to-merge wait (median 5.5 minutes on 25 items), and the implementer that runs merge is a delegated child that T3 neither lets watch a pull request nor wakes reliably. atelier-syyj was 2,400 lines into the build as specified, so it finishes unchanged and the reversal is one reviewed change on top.
   Rejected: Amend atelier-syyj mid-build
+- 2026-11-10 [note] 2026-11-10: atelier-5cuc (review and verdict; pull request 99, two rounds) and atelier-syyj (merge; pull request 102, six Sol rounds and an Astra second opinion) are merged, so the six work-loop commands exist in next/ at 4,798 non-test lines. atelier-xtvh's plan was approved on its third planning round. atelier-67nn (the fresh-agent runs) and atelier-xtvh now run side by side in their own worktrees.
