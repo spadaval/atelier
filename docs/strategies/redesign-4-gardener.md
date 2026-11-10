@@ -13,9 +13,10 @@ before it can edit. Its one digest, atelier-j86z, is ten entries about the
 tool and none about a codebase, and it waits in a queue where 6 of 63 items
 have been answered.
 
-After the cutover every act is a commit that changes a stored status, so the
-history of what happened to each item can be read from Git. Nothing reads it
-yet.
+After the cutover the acts that move an item leave their mark in its records,
+and so in Git: a status, a holder, a verdict, an answered question. The
+history of what happened to each item can be read from there. Nothing reads
+it yet.
 
 # Outcome
 

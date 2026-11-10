@@ -314,8 +314,8 @@ the ways below. Each is one line.
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
 
 A skip is shown on the line of the act whose commit carries its trailer,
-which is any act where Atelier makes the commit: `submit`, `verdict` and
-`merge`.
+which is every act where Atelier makes the commit. Today those are `start`,
+`submit`, `verdict` and `merge`.
 
 What `log` does not show: `new`, `set` and edits to a record's text, which
 Git's own log has, so an item's time as a draft is read from its
