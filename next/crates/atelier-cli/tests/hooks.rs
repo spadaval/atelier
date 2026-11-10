@@ -161,6 +161,25 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
             item_path(ID)
         )
     );
+
+    // A record Git ignores is still read by the commands, so it is checked.
+    fs::write(
+        root.join(".git/info/exclude"),
+        ".atelier/items/demo-ig00/\n",
+    )
+    .unwrap();
+    let ignored = ".atelier/items/demo-ig00/item.md";
+    fs::create_dir_all(root.join(ignored).parent().unwrap()).unwrap();
+    fs::write(root.join(ignored), "no front matter\n").unwrap();
+    let run = atelier(&root, "t1", &["check"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(
+        run.stderr.contains(&format!(
+            "  {ignored}: front matter: the file does not start with front matter"
+        )),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]

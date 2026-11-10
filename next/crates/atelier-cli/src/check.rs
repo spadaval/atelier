@@ -27,8 +27,14 @@ pub enum Hook {
 /// not committed yet, which change nothing about its outcome.
 pub fn check() -> Result<Outcome> {
     let root = git::root()?;
+    // Tracked, and untracked whether Git ignores them or not: the commands
+    // read every file there.
+    let mut paths = git::staged_files(&root, ".atelier")?;
+    paths.extend(git::untracked(&root, ".atelier")?);
+    paths.sort();
+    paths.dedup();
     let mut files = Vec::new();
-    for path in git::files(&root, ".atelier")? {
+    for path in paths {
         if !is_record(&path) {
             continue;
         }
