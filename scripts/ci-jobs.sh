@@ -9,9 +9,12 @@
 # runs. Every change still gets a pull request, review and a CI run; a run
 # whose jobs are skipped concludes success.
 #
-# rust (build and tests) reads everything except tracker records and Markdown
-# outside crates/ and docs/strategies/: crates/ holds test fixtures, and a test
-# parses every strategy.
+# rust (the old workspace's build and tests) reads everything except tracker
+# records, Markdown outside crates/ and docs/strategies/, and the new workspace
+# next/: crates/ holds test fixtures, and a test parses every strategy.
+#
+# next (the new workspace's build and tests) reads next/ and what configures
+# its build from outside it: the toolchain, .cargo/ and the CI workflow.
 #
 # web (the site's app: typecheck, Vitest, build and Playwright) runs whenever
 # rust does, since the API it shows is the shared view models any Rust change
@@ -23,10 +26,17 @@ head=${2:-HEAD}
 
 needs_rust() {
   case $1 in
-    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/*) return 1 ;;
+    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/* | next/*) return 1 ;;
     crates/* | docs/strategies/*) return 0 ;;
     *.md) return 1 ;;
     *) return 0 ;;
+  esac
+}
+
+needs_next() {
+  case $1 in
+    next/* | rust-toolchain.toml | .cargo/* | .github/workflows/*) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -34,6 +44,7 @@ if [[ -z $base || $base =~ ^0+$ ]] || ! git rev-parse -q --verify "$base^{commit
   echo "ci-jobs: no base commit to compare against, so every job runs." >&2
   echo "rust=true"
   echo "web=true"
+  echo "next=true"
   exit 0
 fi
 
@@ -41,6 +52,7 @@ fi
 # out of crates/ still counts as a change to crates/.
 rust=false
 web=false
+next=false
 while IFS= read -r path; do
   if [ "$rust" = false ] && needs_rust "$path"; then
     echo "ci-jobs: rust runs for $path." >&2
@@ -50,11 +62,17 @@ while IFS= read -r path; do
     echo "ci-jobs: web runs for $path." >&2
     web=true
   fi
+  if [ "$next" = false ] && needs_next "$path"; then
+    echo "ci-jobs: next runs for $path." >&2
+    next=true
+  fi
 done < <(git diff --no-renames --name-only "$base" "$head")
 [ "$rust" = true ] || echo "ci-jobs: rust skipped; the change touches nothing it tests." >&2
 if [ "$rust" = true ]; then
   web=true
 fi
 [ "$web" = true ] || echo "ci-jobs: web skipped; the change touches neither Rust nor the app." >&2
+[ "$next" = true ] || echo "ci-jobs: next skipped; the change touches nothing it builds." >&2
 echo "rust=$rust"
 echo "web=$web"
+echo "next=$next"

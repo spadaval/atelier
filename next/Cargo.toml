@@ -1,0 +1,19 @@
+# The rewritten tool (docs/strategies/redesign-architecture.md). It is a
+# workspace of its own and reads nothing outside next/: CI deletes the root
+# crates/ directory before it builds this one.
+[workspace]
+members = ["crates/atelier-core", "crates/atelier-records"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/spadaval/atelier"
+publish = false
+
+[workspace.dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+tempfile = "3"
+toml = "0.8"

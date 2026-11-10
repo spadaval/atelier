@@ -30,6 +30,7 @@ jobs:
     outputs:
       rust: ${{ steps.jobs.outputs.rust }}
       web: ${{ steps.jobs.outputs.web }}
+      next: ${{ steps.jobs.outputs.next }}
     env:
       BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
@@ -72,6 +73,31 @@ jobs:
       - run: target/debug/atelier check
       - run: cargo nextest run
       - run: cargo nextest run --features test-hooks
+
+  # The new workspace, next/ (docs/strategies/redesign-architecture.md). It
+  # deletes the old workspace first, so a build that reads anything under
+  # crates/, by a path dependency, a module path, an include, a symlink or a
+  # build script, fails here. The steps run as written in a clone.
+  next:
+    needs: changes
+    if: needs.changes.outputs.next == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: next
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          build-warnings: warn
+          cache-workspaces: next
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: rm -rf ../crates
+      - run: cargo fmt -- --check
+      - run: cargo build --locked --all-targets
+      - run: cargo nextest run --locked
 
   # The site's app (crates/atelier-site/web): typecheck, Vitest, the build,
   # then Playwright against a debug `atelier serve` that embeds that build.

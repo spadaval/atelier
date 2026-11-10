@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: a full rewrite in a fresh workspace; the view of what changed from the plan is the dashboard's, and the tool supplies its data"
+last_changed: "2026-11-10: Records brought up to date with the record store atelier-mal9 built"
 ---
 
 # Atelier redesign: architecture specification
@@ -101,7 +101,8 @@ comment in `next/` may name the old code a piece came from.
 
 CI builds and tests both workspaces. `scripts/ci-jobs.sh` says which a
 change needs, the new one when a path under `next/` changes and the old one
-when a path under `crates/` does, and `.github/workflows/ci.yml` gains the
+when a path under `crates/` does, and both when the toolchain, `.cargo/` or
+the CI workflow does, and `.github/workflows/ci.yml` gains the
 jobs that build and test `next/`. `next/target/` is ignored by Git, and
 `scripts/count_non_test_rust.py` can count one workspace at a time.
 
@@ -111,6 +112,15 @@ below, and it is installed nowhere until the cutover.
 ## Records
 
 All records are Markdown with YAML front matter, `schema_version: 3`.
+`atelier-records` writes the front matter in one form: the fields in the
+order shown, block style (`labels:` then `- review`, `ready:` then indented
+`by:` and `at:`), absent values as `null`, and times in RFC 3339 with their
+offset, UTC as `Z`; the examples below show the fields and their values,
+not that layout. The body after the closing `---` line is kept byte for
+byte, so a record it reads and writes back unchanged is the same file. An
+unknown front-matter key or value is refused, naming the key. Headings and
+field lines inside a fenced code block in a body are text, never read;
+a fence opens and closes as in CommonMark.
 
 ### `items/<id>/item.md`
 
@@ -122,23 +132,27 @@ title: Put open findings in full in the review brief
 status: building        # draft ready building in_review changes_requested approved done dropped
 mission: atelier-icv4   # optional
 labels: [review]
-priority: high
-blocked_by: []
-implementers: [<thread>]  # start appends; the last entry holds the item
+priority: high          # critical high medium low
+blocked_by: []          # each names an item in the checkout
+implementers: [<thread>]  # start appends unless the thread already holds it; the last entry holds the item
 ready: {by: sumeet, at: <time>}
 trivial: null           # or the reason given to merge --trivial
-caused_by: null         # on a bug: the item, or the commit, that introduced the defect
+caused_by: null         # on a bug: an item ID, or a commit hash of 7 to 64 hex digits
 created_at: <time>
 ```
 
-Sections: Goal, Done when, Scope, Report, Decisions. Report has Validation
-and Responses subsections when they apply. Responses holds one line per open
-fix-now finding: `2-m2bn.1: fixed in <commit>` or
+The item lives in a directory named for its `id`. Sections are `##`
+headings: Goal, Done when, Scope, Report, Decisions; Goal and Done when are
+required. Report has `### Validation` and `### Responses` subsections when
+they apply. Responses holds one line per open fix-now finding, optionally
+as a list item: `2-m2bn.1: fixed in <commit>` or
 `2-m2bn.1: rebutted: <fact>`.
 
-A Decisions entry is a dated question and, once answered, the answer and the
-deciding thread. An entry may name a finding (`Finding: 2-m2bn.1`), and its
-answer may then carry `Outcome: defer` or `Outcome: no action`.
+A Decisions entry is a `### <date>: <question>` heading under Decisions.
+Its lines may name a finding (`Finding: 2-m2bn.1`); once answered it has
+`Answer by <thread>: <answer>`, and then, for a finding, `Outcome: defer` or
+`Outcome: no action`. An `Outcome:` without a `Finding:` and an answer is
+refused.
 
 ### `missions/<id>/mission.md`
 
@@ -171,20 +185,33 @@ verdict: null           # approve or changes, set by verdict
 created_at: <time>
 ```
 
-The suffix is four random characters. Sections: Summary, then
-`## Finding <k>: <title>` with a first line
-`Recommendation: fix now | defer | no action`. A finding's name is its
-review's file stem and its number, as in `2-m2bn.1`. A finding carried from
-an earlier round also has `Was: <finding name>` and one of `Now: fixed`,
+The suffix is four random base-36 characters, and the front matter's
+`round` is the file name's. Creating a review picks a suffix no file of the
+item has, so blind reviews of one round never share a name. Sections:
+Summary, then `## Finding <k>: <title>`, numbered without repeats, whose
+first line is `Recommendation: fix now | defer | no action`. A finding's
+name is its review's file stem and its number, as in `2-m2bn.1`. A finding
+carried from an earlier round also has `Was: <finding name>`, naming a
+finding of an earlier round, and exactly one of `Now: fixed`,
 `Now: withdrawn`, `Now: kept`, or `Decided: defer | no action`, which the
-tool writes from the Decisions entry and the reviewer cannot change.
+tool writes from the Decisions entry and the reviewer cannot change. Every
+finding name a record gives, in `Was:`, in Responses or in a Decisions
+entry's `Finding:`, must be a finding of the item's reviews.
 
-A fix-now finding is open until a later review marks it fixed or withdrawn,
-or a decision settles it.
+A fix-now finding is open until a later round carries it as fixed,
+withdrawn or decided, or a Decisions entry naming it has an outcome.
+Carried as kept, it moves: the carrying finding is then the open one, and
+must say `Recommendation: fix now`. A
+carrying finding that says fixed, withdrawn or decided is not itself open.
+A review whose verdict is approve while one of its own findings is open is
+refused.
 
-A deferred finding is unsettled until its text gains
+A finding is deferred when its recommendation is defer or a decision
+deferred it (`Decided: defer`). A deferred finding is unsettled until its
+text gains
 `Taken: <item> by <thread>`, written by `new --from`, or
-`Dropped by <thread>: <reason>`, written by `drop`. Only a finding of a done
+`Dropped by <thread>: <reason>`, written by `drop`; `<item>` is an item
+ID, and a finding with both lines is refused. Only a finding of a done
 item can be settled, and a settled one is refused. The line is written in
 the checkout the command runs in, like any record write: on the base, or on
 the branch of a gardener's run, where the staleness rule counts it as a
@@ -203,7 +230,6 @@ recording.
 schema_version = 3
 slug = "atelier"
 base_branch = "master"
-merge_strategy = "merge_commit"
 
 [[merge_check]]
 run = "cargo fmt -- --check"
@@ -214,7 +240,10 @@ remote = "origin"
 ci_workflow = "ci.yml"   # optional; without it nothing waits for CI
 ```
 
-`merge` reads this file from the base branch's tip.
+`merge` reads this file from the base branch's tip. `slug` is lowercase
+letters, digits and single inner hyphens. `merge` always makes a merge
+commit, so there is no merge strategy to set. `provider` has one value,
+`github`. `merge_check` and `forge` may be left out. An unknown key is refused with its name.
 
 ### IDs
 
