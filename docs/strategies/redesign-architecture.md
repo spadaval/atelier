@@ -90,15 +90,11 @@ The crates sit at `next/crates/<name>/`, so the switch can move them to the
 root `crates/` without changing a path inside them. The dependency direction
 is `cli` to `site` to `app` to `records` to `core`.
 
-Nothing in the new workspace builds from the old one. A CI step fails
-unless all three of these hold:
-
-- Every local package `cargo metadata` lists for `next/`, meaning a
-  workspace member or a path dependency and not a package from the registry,
-  has its manifest under `next/`.
-- No tracked symlink under `next/` points outside `next/`.
-- No `include!`, `include_str!` or `include_bytes!` in a tracked file under
-  `next/`, and no path a build script there reads, resolves outside `next/`.
+Nothing in the new workspace builds from the old one, and CI proves it the
+direct way: the job that builds and tests `next/` deletes the root `crates/`
+directory first. If anything under `next/` reads the old code, by a path
+dependency, a module path, an include, a symlink or a build script, that job
+fails. No list of the ways to reach the old code has to be kept complete.
 
 The rule is about what the build reads, not about text: a document or a
 comment in `next/` may name the old code a piece came from.

@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T04:57:20.652101200+00:00"
+updated_at: "2026-11-10T04:58:57.565503641+00:00"
 ---
 
 ## Goal
@@ -35,7 +35,7 @@ Build the record store the new commands stand on: `items/<id>/item.md`, `reviews
 - [ ] Unit tests cover when a fix-now finding is open: it stays open until a later round marks it fixed or withdrawn, or a Decisions entry naming it has an outcome.
 - [ ] Creating a review for round 2 writes `reviews/2-<suffix>.md` with four random characters, and two reviews created for the same round have different names.
 - [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks, and a forge with and without `ci_workflow`; an unknown key is an error that names it.
-- [ ] `next/` is a Cargo workspace of its own with its own lock file, and `next/target/` is ignored by Git. A CI step runs a script that fails unless: every local package `cargo metadata` lists for `next/` (a workspace member or a path dependency, not a registry package) has its manifest under `next/`; no tracked symlink under `next/` points outside it; and no `include!`, `include_str!` or `include_bytes!` in a tracked file under `next/`, nor a path a build script there reads, resolves outside it. The script has a test with one passing tree and one failing case for each of the three.
+- [ ] `next/` is a Cargo workspace of its own with its own lock file, and `next/target/` is ignored by Git. The CI job that builds and tests `next/` deletes the root `crates/` directory before it builds, so the new workspace cannot build from the old one by any route. The Report shows that job failing on a throwaway commit that adds a path dependency on an old crate.
 - [ ] `.github/workflows/ci.yml` has jobs that build and test `next/`. `scripts/ci-jobs.sh` says which workspace a change needs, the new one when a path under `next/` changes and the old one when a path under `crates/` does, and `scripts/ci-jobs.test.sh` covers both. No file under `crates/` is changed.
 - [ ] `scripts/count_non_test_rust.py` takes a directory and counts only under it, so the two workspaces can be reported apart.
 - [ ] The Records section of `docs/strategies/redesign-architecture.md` matches what was built; the Report lists each difference corrected there.
