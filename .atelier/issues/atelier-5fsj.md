@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Script the scorecard's counted measures, so the baseline can be rerun after the cutover"
-updated_at: "2026-11-10T16:30:57.819357548+00:00"
+updated_at: "2026-11-10T17:02:16.325175024+00:00"
 ---
 
 ## Goal
@@ -57,6 +57,7 @@ Each measure's definition is in `docs/strategies/redesign-1-baseline.md`, Design
 - 2026-11-10 [note] Escalated to the orchestrator after round 5 under its standing decision: round 5 (gpt-6.1-sol-5fsj-r5) left fix_now findings atelier-o0la (R12), atelier-tys3 (R13) and atelier-jdos (R14) on listed forms. Fixing all three in a scratch copy (about 10 lines) changed no headline number on the frozen inputs; only atelier's implementer threads with a first edit went from 80 to 81. Rounds 1 to 4's findings are fixed at cbe5bcfb and await an approval. Work is committed at e05b779a; see the Report.
 - 2026-11-10 [decision] 2026-11-10, orchestrator of atelier-jah8, replacing the earlier contract: the shell-command recogniser is a heuristic, and it is judged on the frozen inputs, not on constructed commands. A misreading is a defect of this item when correcting it moves a headline number in counted.md on the frozen inputs, or when it breaks one of the plain forms the tests cover. A misreading shown only by a constructed command that moves no headline number is a stated limit: the README names the form and says what was measured. Recognition that moves no headline number is removed, not perfected.
   Reason: Five review rounds found 14 misreadings; after round 1 none moved a baseline number, and two fixes introduced regressions. Calls before first edit is a codebase-health trend, which the product specification says is not a limit and not scored. A smaller recogniser with a measured limit is better code than a larger one that is still wrong on the next constructed case.
+- 2026-11-10 [note] Handoff: approved by gpt-6.1-sol-5fsj-r6 (atelier-aw8q) at f6d2d4c6 after six review rounds; all 14 findings settled by that approval. counted.json SHA-256 5e7b3c52ab2221fba0d727193793a6fa2b58db44294ec18d088d2c8ed4c848d6, reproduced by a GPT-6 Luna rerun from the README alone at 16:50 UTC. See the Report. Merge waits on the orchestrator (atelier merge atelier-5fsj --push --wait).
 
 ## Report
 
