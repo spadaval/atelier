@@ -550,3 +550,82 @@ fn a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_
         "{held}"
     );
 }
+
+/// `atelier check` finds every record of the checkout at `root` valid.
+fn checked(root: &Path) {
+    let run = atelier(root, "t9", &["check"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    assert!(
+        run.stdout.starts_with("Every record is valid"),
+        "{}",
+        run.stdout
+    );
+}
+
+/// An item whose fix-now finding a decider deferred, carried as decided
+/// in round 2 and merged, with `check` passing on each record written
+/// along the way; and the round-2 carrier's name.
+fn deferred_and_merged() -> (Scratch, String) {
+    let (scratch, finding) = changes_requested();
+    let root = scratch.root();
+    assert_eq!(escalate(&root, Some(&finding)).code, 0);
+    checked(&root);
+    assert_eq!(
+        atelier(&root, "d1", &["decide", ID, "Not now.", "--defer"]).code,
+        0
+    );
+    checked(&root);
+    assert_eq!(atelier(&root, "t1", &["submit"]).code, 0);
+    assert_eq!(atelier(&root, "r2", &["review", ID]).code, 0);
+    checked(&root);
+    assert_eq!(atelier(&root, "r2", &["verdict", "approve"]).code, 0);
+    let merged = atelier(&root, "t1", &["merge"]);
+    assert_eq!(merged.code, 0, "{}", merged.stderr);
+    git(&root, &["switch", "-q", "main"]);
+    checked(&root);
+    (scratch, format!("{}.1", review_of(&root, 2).0))
+}
+
+#[test]
+fn a_finding_deferred_by_a_decision_is_listed_under_its_carriers_name_and_settled_once() {
+    for settle in ["new", "drop"] {
+        let (scratch, carrier) = deferred_and_merged();
+        let root = scratch.root();
+        let name = format!("{ID}/{carrier}");
+        let run = atelier(&root, "t9", &["list", "--deferred"]);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert!(
+            run.stdout.starts_with(&format!(
+                "Deferred findings of done items that nobody has settled:\n  {name}: No period\n"
+            )),
+            "{}",
+            run.stdout
+        );
+        let args = match settle {
+            "new" => vec!["new", "Add the period", "--from", &name],
+            _ => vec![
+                "drop",
+                &name,
+                "--reason",
+                "Punctuation is not worth an item.",
+            ],
+        };
+        let run = atelier(&root, "t9", &args);
+        assert_eq!(run.code, 0, "{settle}: {}", run.stderr);
+        checked(&root);
+        let (_, path) = review_of(&root, 2);
+        let line = match settle {
+            "new" => "Taken: ",
+            _ => "Dropped by t9: Punctuation is not worth an item.",
+        };
+        assert!(read(&root, &path).contains(line), "{}", read(&root, &path));
+        assert_eq!(
+            atelier(&root, "t9", &["list", "--deferred"]).stdout,
+            "No deferred finding of a done item is left to settle.\n",
+            "{settle}"
+        );
+        // Settled once, it is not settled again.
+        let again = atelier(&root, "t9", &["drop", &name, "--reason", "Again."]);
+        assert_eq!(again.code, 1, "{settle}: {}", again.stdout);
+    }
+}
