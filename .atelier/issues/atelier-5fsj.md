@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Script the scorecard's counted measures, so the baseline can be rerun after the cutover"
-updated_at: "2026-11-10T15:47:40.902361168+00:00"
+updated_at: "2026-11-10T16:28:59.849448778+00:00"
 ---
 
 ## Goal
@@ -54,6 +54,7 @@ Each measure's definition is in `docs/strategies/redesign-1-baseline.md`, Design
 - 2026-11-10 [note] Escalated to the orchestrator after three review rounds: round 3 (gpt-6.1-sol-5fsj-r3) left fix_now findings atelier-vj7n (R5), atelier-tu8a (R6) and atelier-h5kn (R7), all in the shell-command recogniser in scripts/scorecard/commands.py. Rounds 1 and 2's findings (pu40, ss09, d6fh, fvq9) are fixed at 31d3c6a1 and await an approval. Work is committed at 8b36a366; see the Report.
 - 2026-11-10 [decision] 2026-11-10, orchestrator of atelier-jah8: the shell-command recogniser is a heuristic over a closed list of command forms, not a shell. The README lists every form it recognises (calls of atelier, reads and writes of records, record commits, file writes), and the scripts are right for those forms, with a test for each. A form the README does not list is a stated limit, named in the README as not recognised. It becomes this item's work only if recognising it moves a headline number in counted.md, shown in aggregate on the frozen inputs. Calls before first edit keeps the strategy's definition (first write outside .atelier/); T3 file_change alone is not accepted as a proxy, because it moved atelier's median from 20 to 33. Fable 5.1, Fable 5.2 and GPT-6 Astra stay unpriced: the assessment's table is the source of list prices, and an item with an unpriced request stays out of tokens per item, with the coverage saying so.
   Reason: Each review round found a new shell form the recogniser misread, none of which moved a baseline number after round 1. Parsing shell by heuristic has no last edge case, so the contract is the listed forms plus a measured limit. Precision wins over coverage, and the owner asked for better code, not more.
+- 2026-11-10 [note] Escalated to the orchestrator after round 5 under its standing decision: round 5 (gpt-6.1-sol-5fsj-r5) left fix_now findings atelier-o0la (R12), atelier-tys3 (R13) and atelier-jdos (R14) on listed forms. Fixing all three in a scratch copy (about 10 lines) changed no headline number on the frozen inputs; only atelier's implementer threads with a first edit went from 80 to 81. Rounds 1 to 4's findings are fixed at cbe5bcfb and await an approval. Work is committed at e05b779a; see the Report.
 
 ## Report
 
