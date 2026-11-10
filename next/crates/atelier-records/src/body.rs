@@ -104,6 +104,10 @@ fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, Str
     {
         return Err("a carried finding has a `Was:` line and one `Now:` or `Decided:` line".into());
     }
+    // Keeping a fix-now finding moves it to this one, which must stay fix now.
+    if now == Some(Now::Kept) && recommendation != Recommendation::FixNow {
+        return Err("a finding carried as `Now: kept` is `Recommendation: fix now`".into());
+    }
     Ok(Finding {
         name,
         title: title.to_string(),

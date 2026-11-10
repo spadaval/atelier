@@ -344,6 +344,18 @@ fn an_approve_verdict_is_refused_while_its_file_holds_an_open_fix_now_finding() 
         "fix-now finding 2-m2bn.1 is open",
     );
 
+    // Keeping it while weakening its recommendation is refused, approve or not.
+    let weakened = problems_after(&[
+        (file, "verdict: changes", "verdict: approve"),
+        (file, "fix now\nWas: 1-k3fa.1", "defer\nWas: 1-k3fa.1"),
+    ]);
+    assert_one_problem(
+        &weakened,
+        file,
+        "## Finding 1: The brief omits Scope",
+        "`Now: kept`",
+    );
+
     // Approving round 1 is wrong too, until round 2 carries its finding.
     let file = "items/atelier-06jc/reviews/1-k3fa.md";
     let problems = problems_after(&[
@@ -563,6 +575,20 @@ fn records_whose_names_or_lines_are_ambiguous_are_refused() {
             "Now: kept\nDecided: defer\n",
             finding_1,
             "a carried finding",
+        ),
+        (
+            review,
+            "fix now\nWas: 1-k3fa.1",
+            "defer\nWas: 1-k3fa.1",
+            finding_1,
+            "carried as `Now: kept`",
+        ),
+        (
+            review,
+            "fix now\nWas: 1-k3fa.1",
+            "no action\nWas: 1-k3fa.1",
+            finding_1,
+            "carried as `Now: kept`",
         ),
         (
             item,
