@@ -4,6 +4,9 @@ id: "atelier-mal9"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-mal9
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T04:58:57.565503641+00:00"
+updated_at: "2026-11-10T14:58:34.868784826+00:00"
 ---
 
 ## Goal
@@ -35,7 +38,7 @@ Build the record store the new commands stand on: `items/<id>/item.md`, `reviews
 - [ ] Unit tests cover when a fix-now finding is open: it stays open until a later round marks it fixed or withdrawn, or a Decisions entry naming it has an outcome.
 - [ ] Creating a review for round 2 writes `reviews/2-<suffix>.md` with four random characters, and two reviews created for the same round have different names.
 - [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks, and a forge with and without `ci_workflow`; an unknown key is an error that names it.
-- [ ] `next/` is a Cargo workspace of its own with its own lock file, and `next/target/` is ignored by Git. The CI job that builds and tests `next/` deletes the root `crates/` directory before it builds, so the new workspace cannot build from the old one by any route. The Report shows that job failing on a throwaway commit that adds a path dependency on an old crate.
+- [ ] `next/` is a Cargo workspace of its own with its own lock file, and `next/target/` is ignored by Git. The CI job that builds and tests `next/` deletes the root `crates/` directory before it builds, so the new workspace cannot build from the old one by any route. The Report shows that job's steps, run as written in a scratch clone, failing on a throwaway commit that adds a path dependency on an old crate.
 - [ ] `.github/workflows/ci.yml` has jobs that build and test `next/`. `scripts/ci-jobs.sh` says which workspace a change needs, the new one when a path under `next/` changes and the old one when a path under `crates/` does, and `scripts/ci-jobs.test.sh` covers both. No file under `crates/` is changed.
 - [ ] `scripts/count_non_test_rust.py` takes a directory and counts only under it, so the two workspaces can be reported apart.
 - [ ] The Records section of `docs/strategies/redesign-architecture.md` matches what was built; the Report lists each difference corrected there.
@@ -47,3 +50,9 @@ Item, review and config records. Mission records, and checking that an item's `m
 ## Context
 
 Design: `docs/strategies/redesign-architecture.md`, Records and Crates. The two pieces to copy are in `crates/atelier-records/src/lib.rs` and `crates/atelier-records/src/record_id.rs`. The rule for copying is in the architecture specification's section "The rule for this work". This is the first item of step A in `docs/strategies/redesign-2-core.md`.
+
+## Notes
+
+- 2026-11-10 [decision] The orchestrator reworded the CI Done when line: the Report shows the new job's steps, run as written in a scratch clone, failing on a throwaway commit that adds a path dependency on an old crate (and passing without it), instead of a real CI run.
+  Reason: A real CI run needs a hand-pushed throwaway branch on origin; the merge policy forbids pushing branches by hand, and only the owner may delete remote branches.
+  Rejected: Push a throwaway branch to origin and let CI fail on it

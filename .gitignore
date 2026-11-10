@@ -1,4 +1,5 @@
 /target/
+/next/target/
 # The release workflow writes it before building, which would mark the
 # version dirty (crates/atelier-cli/build.rs).
 /dist-manifest.json
