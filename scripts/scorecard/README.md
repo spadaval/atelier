@@ -151,14 +151,15 @@ Recognised:
 - **A help lookup**: a call of atelier with `--help` or `-h` among its arguments, or whose first
   argument not starting with `-` is `help` or `man`.
 - **A read or write of records**: any command whose text names `.atelier` (not after a letter,
-  digit, `_` or `-`) followed by `/`, whitespace, a quote or backtick, `;`, `)`, `|`, `&` or the end. This one is textual and counts the name anywhere,
-  quoted, in a heredoc or in a commit message.
+  digit, `_` or `-`) followed by `/`, whitespace, a quote or backtick, `;`, `)`, `|`, `&` or the
+  end. This one is textual and counts the name anywhere, quoted, in a heredoc or in a commit
+  message.
 - **A record commit**: a simple command `git ... commit ...` whose output has a line
   `[<branch> <hash>]` (or `[<branch> (root-commit) <hash>]`) naming a commit on the manifest
   commit's history that changes only `.atelier/`.
 - **A file write**, to these targets: the file after `>`, `>>` or `&>` (not `>&`); the files `tee`
-  is given; the files `sed` or `perl` edit with `-i` (or `--in-place`), after the script or `-e`/`-f`
-  script; the last path given to `cp` or `mv`; each `*** Add File:`, `*** Update File:` or
+  is given; the files `sed` or `perl` edit with `-i` (or `--in-place`), after the script or the
+  `-e`/`-f` script; the last path given to `cp` or `mv`; each `*** Add File:`, `*** Update File:` or
   `*** Delete File:` path in the heredoc or arguments of `apply_patch`; and, in code a `python`,
   `python3` or `python3.N` command runs with `-c` or from a heredoc (with no script argument or
   `-`), `open(p, mode)` with a mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()`
