@@ -28,7 +28,7 @@ CODEX_CMD = re.compile(r"""\bcmd\s*:\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:
 
 @dataclass
 class Request:
-    """One model response: its tokens by kind, and its tool calls as (tool-use id or None, shell command or None)."""
+    """One model response: its tokens by kind, and its tool calls, each its shell command or None."""
     model: str
     tokens: dict
     calls: list = field(default_factory=list)
@@ -82,7 +82,7 @@ def _claude(path, cutoff):
         usage = message["usage"]
         tokens = dict(zip(TOKEN_KINDS, (usage.get("input_tokens") or 0, usage.get("cache_read_input_tokens") or 0,
                                         usage.get("cache_creation_input_tokens") or 0, usage.get("output_tokens") or 0)))
-        calls = [(b.get("id"), (b.get("input") or {}).get("command") or "" if b.get("name") == "Bash" else None)
+        calls = [(b.get("input") or {}).get("command") or "" if b.get("name") == "Bash" else None
                  for b in entry["blocks"].values()]
         yield Request(message.get("model"), tokens, calls)
 
@@ -99,10 +99,10 @@ def _codex(path, cutoff):
                 text = payload.get("input") or payload.get("arguments") or ""
                 starts = [(m.start(), m.group(1)) for m in CODEX_TOOL.finditer(text)]
                 if not starts:  # a direct call rather than a script calling tools
-                    calls.append((None, _codex_cmd(text) if payload.get("name") in ("exec_command", "shell") else None))
+                    calls.append(_codex_cmd(text) if payload.get("name") in ("exec_command", "shell") else None)
                 for n, (start, name) in enumerate(starts):
                     segment = text[start : starts[n + 1][0] if n + 1 < len(starts) else len(text)]
-                    calls.append((None, _codex_cmd(segment) if name == "exec_command" else None))
+                    calls.append(_codex_cmd(segment) if name == "exec_command" else None)
             elif payload.get("type") == "token_count" and (payload.get("info") or {}).get("total_token_usage"):
                 if not cutoff(record.get("timestamp")):
                     break

@@ -7,14 +7,14 @@ Written by `scripts/scorecard/counted.py` from the snapshot described by `manife
 | Merged items (done in window) | 243 (305) | 339 (383) | 83 (107) | 48 (51) | 8 (23) |
 | Merged items with a tied thread | 147 | 196 | 27 | 34 | 3 |
 | Threads tied to a merged item | 346 of 721 | 476 of 602 | 64 of 105 | 89 of 296 | 6 of 49 |
-| Process share of shell commands | 28.1% of 14295 | 17.9% of 17485 | 7.6% of 3021 | 20.4% of 5314 | 12.2% of 408 |
+| Process share of shell commands | 28.0% of 14295 | 17.9% of 17485 | 7.6% of 3021 | 20.3% of 5314 | 12.2% of 408 |
 | Process share of token cost | 21.6% (342 of 346 threads) | 13.2% (476 of 476 threads) | 12.5% (64 of 64 threads) | 16.2% (89 of 89 threads) | 7.0% (6 of 6 threads) |
-| Confusion per 100 atelier calls | 25.13 of 4640 | 23.57 of 4140 | 16.39 of 671 | 22.52 of 1239 | 24.27 of 342 |
-| Refused or errored atelier calls | 567 | 410 | 43 | 79 | 37 |
+| Confusion per 100 atelier calls | 25.2 of 4619 | 23.6 of 4136 | 16.39 of 671 | 22.52 of 1239 | 24.27 of 342 |
+| Refused or errored atelier calls | 565 | 410 | 43 | 79 | 37 |
 | Help lookups | 632 | 589 | 72 | 213 | 50 |
 | Tokens per merged item, median USD | 3.06 (142 items; 342 of 346 threads) | 3.22 (191 items; 476 of 476 threads) | 7.9 (27 items; 64 of 64 threads) | 11.96 (34 items; 89 of 89 threads) | 13.81 (3 items; 6 of 6 threads) |
 | Tokens per merged item, mean USD | 7.61 | 9.11 | 11.79 | 13.4 | 18.2 |
-| Calls before first edit, median tool calls | 22.0 (80 threads) | 18.0 (132 threads) | 10.0 (49 threads) | 17.0 (31 threads) | 21.0 (4 threads) |
+| Calls before first edit, median tool calls | 22.0 (81 threads) | 18.0 (130 threads) | 10.0 (49 threads) | 17.0 (31 threads) | 21.0 (4 threads) |
 | Calls before first edit, median shell commands | 20.0 | 16.5 | 10.0 | 16.0 | 17.5 |
 | Rework | 10.8% of 57671 lines | 7.2% of 209453 lines | 3.4% of 38189 lines | 5.5% of 74203 lines | n/a of 0 lines |
 | Rework: commits old enough to count | 169 (e2c03600..5abb3651) | 116 (d242981a..320366a0) | 34 (8f8a86fe..a658fe5d) | 33 (82cfadf8..b1aa4880) | 0 (-..-) |

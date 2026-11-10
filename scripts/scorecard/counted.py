@@ -37,21 +37,17 @@ class ThreadStats:
     confused: int = 0
     calls_before_edit: int = None  # every tool call before its first product edit
     shell_before_edit: int = None
-    call_ids: set = None  # provider ids of the thread's calls, and of those that are process commands
-    process_ids: set = None
     transcript: bool = False
     unpriced: int = 0  # requests to a model with no list price
     cost: float = 0.0
     process_cost: float = 0.0
 
 
-def thread_stats(thread, item_ids, calls, window, record_commits):
+def thread_stats(thread, item_ids, calls, window):
     item, tied_by = threads.tie(thread, item_ids)
-    stats = ThreadStats(item, tied_by, thread.role, call_ids=set(), process_ids=set())
+    stats = ThreadStats(item, tied_by, thread.role)
     tool_calls = shell_calls = 0
     for call in calls:
-        if call.native_id:
-            stats.call_ids.add(call.native_id)
         edits = (commands.is_product_edit(call.path) if call.kind == "edit"
                  else call.kind == "shell" and commands.writes_product(call.command))
         if edits and stats.calls_before_edit is None:
@@ -61,9 +57,7 @@ def thread_stats(thread, item_ids, calls, window, record_commits):
             continue
         shell_calls += 1
         stats.shell += 1
-        if commands.is_process(call.command, call.output, record_commits):
-            stats.process += 1
-            stats.process_ids.add(call.native_id)
+        stats.process += commands.is_process(call.command)
         if commands.atelier_calls(call.command) and call.started_at in window:
             refused, help_ = commands.refused(call.output), commands.is_help(call.command)
             stats.atelier += 1
@@ -86,9 +80,8 @@ def add_tokens(stats, thread, files, claimed, cutoff):
                     stats.unpriced += 1
                     continue
                 stats.cost += request.cost
-                if request.calls:  # a call T3 recorded is judged as T3 judged it, with its output
-                    process = sum(tool_id in stats.process_ids if tool_id in stats.call_ids else
-                                  shell is not None and commands.is_process(shell) for tool_id, shell in request.calls)
+                if request.calls:
+                    process = sum(shell is not None and commands.is_process(shell) for shell in request.calls)
                     stats.process_cost += request.cost * process / len(request.calls)
 
 
@@ -96,11 +89,9 @@ def measure(db, files, repo, name, commit, window):
     all_items = records.items(repo, commit)
     merged = records.merged(repo, commit, all_items, window)
     found = threads.threads(db, name, window.before_cutoff)
-    history = gitreader.commits(repo, commit)
-    record_commits = frozenset(sha for sha, _, only in history if only)
     claimed, stats = set(), []
     for thread in sorted(found, key=lambda t: (t.created_at, t.id)):
-        s = thread_stats(thread, all_items.keys(), threads.calls(db, thread.id, window.before_cutoff), window, record_commits)
+        s = thread_stats(thread, all_items.keys(), threads.calls(db, thread.id, window.before_cutoff), window)
         if s.item in merged:
             add_tokens(s, thread, files, claimed, window.before_cutoff)
         stats.append(s)
@@ -155,7 +146,7 @@ def measure(db, files, repo, name, commit, window):
             "median_shell_commands": _median([s.shell_before_edit for s in implementers]),
         },
         "rework": gitreader.rework(repo, commit, window),
-        "record_only_commits": gitreader.record_only(history, window),
+        "record_only_commits": gitreader.record_only(repo, commit, window),
         "line_count": gitreader.line_count(repo, commit),
     }
 

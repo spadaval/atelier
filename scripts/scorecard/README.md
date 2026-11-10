@@ -91,7 +91,7 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 | `threads.py` | T3's database | `threads()`: each thread's repository, title, branch, first message, role and transcript keys; `calls()`: its shell commands with output, edits and other tool calls; `tie()`: the item it worked on |
 | `transcripts.py` | the transcripts | `index()`: transcript files by thread key; `requests()`: each model response's tokens, list price and shell commands; `PRICES` |
 | `records.py` | `.atelier/issues/` and history at the manifest commit | `items()`, `merged()`, `id_pattern()` |
-| `gitreader.py` | history up to the manifest commit | `commits()`, `rework()`, `record_only()`, `line_count()` |
+| `gitreader.py` | history up to the manifest commit | `rework()`, `record_only()`, `line_count()` |
 | `commands.py` | a command, its output or an edited path | `simple_commands()`, `atelier_calls()`, `is_process()`, `is_help()`, `refused()`, `shell_writes()`, `is_product_edit()` |
 | `counted.py` | the readers | the seven measures, `counted.json` and `counted.md` |
 | `test_scorecard.py` | a small database, transcripts and Git repository it builds | each measure's arithmetic |
@@ -107,10 +107,9 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
   else in its first message. Every T3 thread counts, including the subagents Claude's Agent
   tool started, each tied by its own prompt.
 - **Process share**: over threads tied to a merged item, the share of shell commands that call
-  atelier, read or write records, or make a record commit (see [Command forms](#command-forms)).
-  The token form gives each model response's list-price cost to its tool calls in equal parts and
-  sums the parts that went to process commands. A call T3 recorded is judged from T3's copy, which
-  includes its output.
+  atelier or read or write records (see [Command forms](#command-forms)). The token form gives each
+  model response's list-price cost to its tool calls in equal parts and sums the parts that went to
+  process commands.
 - **Confusion**: over every thread of the repository, shell commands in the window that call
   atelier, and of those, the ones whose output has one of atelier's refusal or error lines
   (`<command>: refused`, `Error: ` other than a harness's `Error: Exit code N`, and clap's
@@ -134,21 +133,18 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 
 ## Command forms
 
-`commands.py` reads shell commands by heuristic over the forms below, not as a shell. It reads a
+`commands.py` reads shell commands by heuristic, not as a shell, and is judged on the frozen inputs:
+it keeps only the recognition that moves a headline number in `counted.md` there. It reads a
 command into words and operators as a shell does: single quotes, double quotes and backslashes
-quote what they cover, a backslash before a newline joins lines, a `#` starting a word begins a
-comment, and a number written against a redirection (`2>`) is part of it. Outside quotes, `;`,
-`;;`, `&&`, `||`, `|`, `|&`, `&`, `(`, `)` and newlines end a simple command; `<`, `>`, `>>`,
-`>|`, `&>`, `&>>`, `>&` and `<<` redirect. Each simple command is read on its own, with the
-heredoc it is fed and the directory the last `cd` before it changed to. Before reading it, leading
-`NAME=value` assignments, the keywords `!`, `{`, `do`, `elif`, `else`, `if`, `then`, `until` and
-`while`, and these wrappers with their options are dropped: `command`, `env` (`-u`, `-C`, `-S`
-take an argument), `exec` (`-a`), `ionice` (`-c`, `-n`, `-p`), `nice` (`-n`), `stdbuf` (`-i`,
-`-o`, `-e`), `time` (`-f`, `-o`), `timeout` (`-s`, `-k`, then its duration) and `xargs` (`-I`,
-`-n`, `-P`, `-d`, `-E`, `-L`, `-s`, `-a`); other options take no argument. The script of
-`bash`, `sh` or `zsh` given with a `-c` flag (`-c`, `-lc` and the like) is read as commands of its
-own. So is each `$(...)` outside single quotes and not escaped: it runs before the command that
-holds it, from that command's directory, and a `cd` inside it stays inside it.
+quote what they cover, a backslash before a newline joins lines, and a number written against a
+redirection (`2>`) is part of it. Outside quotes, `;`, `;;`, `&&`, `||`, `|`, `|&`, `&`, `(`,
+`)` and newlines end a simple command; `<`, `>`, `>>`, `>|`, `&>`, `&>>`, `>&` and `<<`
+redirect. Each simple command is read with the heredoc it is fed and the directory the last `cd`
+before it changed to. Before reading it, leading `NAME=value` assignments, the keywords `!`, `{`,
+`do`, `elif`, `else`, `if`, `then`, `until` and `while`, and the wrappers `command`, `env`,
+`exec`, `ionice`, `nice`, `stdbuf`, `time`, `timeout` and `xargs` with the words after them that
+start with `-` or a digit are dropped. The script of `bash`, `sh` or `zsh` given with a `-c` flag
+(`-c`, `-lc` and the like) is read as commands of its own.
 
 Recognised:
 
@@ -161,41 +157,51 @@ Recognised:
   digit, `_` or `-`) followed by `/`, whitespace, a quote or backtick, `;`, `)`, `|`, `&` or the
   end. This one is textual and counts the name anywhere, quoted, in a heredoc or in a commit
   message.
-- **A record commit**: a simple command `git ... commit ...` whose output has a line
-  `[<branch> <hash>]` (or `[<branch> (root-commit) <hash>]`) naming a commit on the manifest
-  commit's history that changes only `.atelier/`.
-- **A file write**, to these targets: the file after `>`, `>>` or `&>` (not `>&`); the files `tee`
-  is given; the files `sed` or `perl` edit with `-i` (or `--in-place`), after the script or the
-  `-e`/`-f` script; the last path given to `cp` or `mv`; each `*** Add File:`, `*** Update File:` or
-  `*** Delete File:` path in the heredoc or arguments of `apply_patch`; and, in code a `python`,
+- **A file write**: the file after `>`, `>>` or `&>` (not `>&`); the files `sed` or `perl` edit
+  with `-i` (or `--in-place`), after the script or the `-e`/`-f` script; and, in code a `python`,
   `python3` or `python3.N` command runs with `-c` or from a heredoc (with no script argument or
-  `-`), read with Python's own parser so strings and comments are not calls: `open(p, mode)` with a
-  mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()` and `p.open(mode)` likewise,
-  where `p` is a string literal, `Path(...)` of one, or a name the code bound earlier to one. A
-  relative target is joined to the directory of the last `cd` before it. A write counts as an edit
-  only to a path that is not under `/dev/`, holds no `$`, has no component `.atelier`, `.cache`,
+  `-`), read with Python's own parser so strings and comments are not calls: `open(p, mode)` with
+  a mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()` and `p.open(mode)`
+  likewise, where `p` is a string literal, `Path(...)` of one, or a name the code bound earlier to
+  one (an assignment binds after its right-hand side runs). A relative target is joined to the
+  directory of the last `cd` before it, with `.` and `..` reduced. A write counts as an edit only
+  to a path that is not under `/dev/`, holds no `$`, has no component `.atelier`, `.cache`,
   `.claude`, `.codex`, `.local`, `target`, `node_modules`, a name starting `tmp` or a name
   containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`,
   `.svelte`, `.kt`, `.kts`, `.py`, `.go`, `.java`, `.swift`, `.md`, `.toml`, `.json`, `.yaml`,
   `.yml`, `.sh`, `.css`, `.html` or `.sql`.
 
-Not recognised (each is a stated limit; such a command is read only for the forms above):
+Not recognised, removed because recognising it moved no headline number on the frozen inputs
+(each change is what removing that form alone did):
 
-- Backtick substitution, process substitution (`<(...)`, `>(...)`), `eval`, shell functions and
-  aliases, and variable values: `atelier $c` is a call, but `$c` is not expanded, and a write to a
-  path holding `$` is not an edit.
-- A `$(...)` inside a heredoc body; a heredoc whose delimiter line is missing (its body runs to
-  the end of the command); and `<<` written inside quotes, which is still read as a heredoc.
+- `$(...)` as a command of its own: an unquoted one splits at its parentheses like any `(`, and a
+  quoted one is text. Removing it changed 5 of 4,640 atelier calls and 4 of 4,140 astromech calls.
+- `tee`, `cp`, `mv` and `apply_patch` as file writes. Removing `cp` and `mv` dropped 2 of 132
+  astromech threads with a first edit; `tee` and `apply_patch` changed nothing.
+- A record commit found by the hash `git commit` printed: one life-on-rails command, 0.02 points
+  of its process share.
+- Wrapper options that take a non-numeric argument (`env -u NAME`, `stdbuf -o L`, `xargs -I {}`):
+  the argument is read as the command. 16 of 4,640 atelier calls, 0.06 points of its process share
+  and 0.06 per 100 of its confusion.
+- `#` comments, which are read as words: no change.
+
+Removed together, these moved atelier by 21 of 4,640 calls (confusion +0.07 per 100, process share
+−0.07 points), astromech by 4 calls and 2 threads with a first edit, and life-on-rails's process
+share by 0.02 points; no median of calls before first edit moved.
+
+Not recognised, and never measured as part of the recogniser:
+
+- Backtick and process substitution, `eval`, shell functions and aliases, and variable values:
+  `atelier $c` is a call, but `$c` is not expanded, and a write to a path holding `$` is not an
+  edit.
+- A heredoc whose delimiter line is missing (its body runs to the end of the command), and `<<`
+  written inside quotes, which is still read as a heredoc.
 - Python code that Python's parser rejects, which is not read at all.
-- Scripts run from files (`bash x.sh`, `python3 x.py`, `node x.js`) and code in any other
-  interpreter (`node -e`, `perl -e` without `-i`, `ruby -e`).
-- Any other way to write a file: `install`, `rsync`, `dd`, `truncate`, `touch`, `ln`, `git apply`,
-  `git checkout -- <path>`, `git mv`, Python through `shutil`, `os.rename` or `os.replace`, a path
-  built at run time, or a handle opened outside the code shown.
-- Directory changes other than `cd <dir>` (`pushd`, `cd -`, `cd` with no argument), and the end of a
-  subshell's `cd` at `)`.
-- A record commit that prints no hash (`git commit -q`), or whose records were staged by an earlier
-  command and that names no `.atelier/` path itself.
+- Scripts run from files (`bash x.sh`, `python3 x.py`) and code in any other interpreter.
+- Any other way to write a file (`install`, `rsync`, `dd`, `touch`, `ln`, `git apply`, `git mv`,
+  Python through `shutil` or `os.replace`, a path built at run time).
+- Directory changes other than `cd <dir>`, and the end of a subshell's `cd` at `)`.
+- A commit of records that names no `.atelier/` path in its own command.
 
 ## Privacy
 

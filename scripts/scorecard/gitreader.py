@@ -22,21 +22,17 @@ RUST_RULE = "as `scripts/count_non_test_rust.py` counts them: files whose path c
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 
 
-def commits(repo, commit):
-    """Every non-merge commit on the commit's history: (hash, commit time, changes only `.atelier/`)."""
-    found = []
-    for record in git(repo, "log", "--no-merges", "--no-renames", "--name-only", "--format=%x1e%H %cI", commit).split("\x1e")[1:]:
-        head, _, files = record.partition("\n")
-        sha, when = head.split()
+def record_only(repo, commit, window):
+    """Non-merge commits in the window on the commit's history, and those that change only `.atelier/`."""
+    commits = only = 0
+    for record in git(repo, "log", "--no-merges", "--no-renames", "--name-only", "--format=%x1e%cI", commit).split("\x1e")[1:]:
+        when, _, files = record.partition("\n")
+        if when not in window:
+            continue
         files = [f for f in files.splitlines() if f]
-        found.append((sha, when, bool(files) and all(f.startswith(".atelier/") for f in files)))
-    return found
-
-
-def record_only(all_commits, window):
-    """Commits in the window, and those that change only `.atelier/`."""
-    in_window = [only for _, when, only in all_commits if when in window]
-    return {"commits": len(in_window), "record_only": sum(in_window), "share": _share(sum(in_window), len(in_window))}
+        commits += 1
+        only += bool(files) and all(f.startswith(".atelier/") for f in files)
+    return {"commits": commits, "record_only": only, "share": _share(only, commits)}
 
 
 def rework(repo, commit, window):

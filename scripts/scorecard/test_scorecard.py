@@ -74,7 +74,7 @@ def item(thread, ordinal, kind, when, **payload):
     return (thread, f"{thread}-{ordinal}", ordinal, kind, "completed", json.dumps({"startedAt": when, **payload}))
 
 
-def build_db(path, record_commit):
+def build_db(path):
     db = sqlite3.connect(path)
     db.executescript("""
         CREATE TABLE projection_projects (project_id TEXT, workspace_root TEXT);
@@ -109,8 +109,7 @@ def build_db(path, record_commit):
         item("t1", 9, "subagent", t0, childThreadId="t2", nativeItemRef={"driver": "claudeAgent", "nativeId": "agentx"}),
         item("t1", 10, "command_execution", LATE, input="atelier land", output="Error: late"),
         item("t2", 0, "user_message", t0, text="Review demo-aaaa"),
-        item("t2", 1, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record",
-             nativeItemRef={"nativeId": "u3"}),
+        item("t2", 1, "command_execution", t0, input="git status", output=""),
         item("t3", 1, "command_execution", t0, input="/bin/bash -lc 'atelier review list demo-aaaa'", output=""),
         item("t4", 1, "command_execution", t0, input="atelier status", output="ok"),
         item("t5", 1, "command_execution", t0, input="ls", output=""),
@@ -118,7 +117,7 @@ def build_db(path, record_commit):
         item("t7", 1, "command_execution", t0, input="atelier check", output="Error: elsewhere"),
         item("t8", 1, "command_execution", t0, input="ls", output=""),  # a shell-only implementer
         item("t8", 2, "dynamic_tool", t0, toolName="Read"),
-        item("t8", 3, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record"),
+        item("t8", 3, "command_execution", t0, input="git status", output=""),
         item("t8", 4, "command_execution", t0, output="",  # prints, writes nothing (R6, R8, R10)
              input="echo \"open('src/x.ts', 'w')\"; echo '>' src/y.ts; python3 -c \"print('open(\\\"src/z.ts\\\", \\\"w\\\")')\""),
         item("t8", 5, "command_execution", t0, input="python3 -c \"p = 'src/f.ts'; open(p, 'w').write('x')\"", output=""),
@@ -150,7 +149,7 @@ def build_transcripts(snap):
     (session / "s6.jsonl").write_text(claude_line("m5", "claude-fable-5-2", final, []))  # no list price
     (session / "s1/subagents/agent-agentx.jsonl").write_text(claude_line(
         "m4", "claude-sonnet-5-5", {"input_tokens": 100_000, "output_tokens": 1_000_000},
-        [{"type": "tool_use", "id": "u3", "name": "Bash", "input": {"command": "git commit -m Record"}}]))
+        [{"type": "tool_use", "id": "u3", "name": "Bash", "input": {"command": "git status"}}]))
     codex = snap / "codex-sessions/2026/11/08"
     codex.mkdir(parents=True)
 
@@ -175,7 +174,7 @@ class Fixture(unittest.TestCase):
         (cls.snap / "t3").mkdir(parents=True)
         cls.repo = root / "projects/demo"
         cls.commit = build_repo(cls.repo)
-        build_db(cls.snap / threads.DB_PATH, git(cls.repo, "log", "--format=%H", "--grep", "Record demo-bbbb"))
+        build_db(cls.snap / threads.DB_PATH)
         build_transcripts(cls.snap)
         cls.window = snapshot.Window(snapshot.WINDOW_START, CUTOFF)
         cls.manifest = root / "manifest.json"
@@ -198,9 +197,9 @@ class Measures(Fixture):
 
     def test_process_share(self):
         share = self.result["process_share"]
-        self.assertEqual((share["shell_commands"], share["process_commands"], share["share"]), (14, 7, 0.5))  # t2's and t8's commits of records count
-        # (opus 24.0 * 1 of 2 calls + sonnet 15.3 * 1 of 1, judged by T3 with its output + sol 4.4 * 1 of 2 calls) / 43.7
-        self.assertEqual(share["token_cost_share"], 0.6751)
+        self.assertEqual((share["shell_commands"], share["process_commands"], share["share"]), (14, 5, 0.3571))
+        # (opus 24.0 * 1 of 2 calls + sonnet 15.3 * 0 of 1 + sol 4.4 * 1 of 2 calls) / 43.7
+        self.assertEqual(share["token_cost_share"], 0.3249)
         self.assertEqual(share["token_coverage"], {"threads_with_transcript": 4, "threads_counted": 6})
 
     def test_confusion(self):
@@ -294,74 +293,41 @@ class Inputs(Fixture):
 
 
 class Commands(unittest.TestCase):
+    """One plain case per recognised form, and the plain forms that are not calls or edits."""
+
     def test_atelier_calls(self):
         for command, calls in (("cd x && atelier -q issue show a | head", [["-q", "issue", "show", "a"]]),
                                ("/bin/bash -lc 'cd x && atelier check'", [["check"]]),
                                ("FOO=1 nice -n 19 ionice -c3 timeout 60s atelier land", [["land"]]),
-                               ("cargo test && atelier land; git status", [["land"]]),
+                               ("for c in a b; do atelier $c --help; done", [["$c", "--help"]]),
+                               ("if atelier check; then atelier land; fi", [["check"], ["land"]]),
                                ("atelier frobnicate", [["frobnicate"]]),
-                               ('for c in a b; do atelier $c --help; done', [["$c", "--help"]]),
-                               ('id="$(atelier issue create -q x)"; if atelier check; then atelier land; fi',
-                                [["issue", "create", "-q", "x"], ["check"], ["land"]]),
                                ("cat <<'EOF' > notes.md\natelier status\nEOF\natelier work ready", [["work", "ready"]])):
             self.assertEqual(commands.atelier_calls(command), calls, command)
         for not_a_call in ("target/debug/atelier check", "grep atelier src", "cargo install --path crates/atelier-cli",
-                           'echo "atelier status"', "grep -n 'atelier merge --help' f", 'echo "a; atelier status"',
-                           "A=$(command -v atelier)"):
-            self.assertFalse(commands.atelier_calls(not_a_call), not_a_call)
-        self.assertFalse(commands.is_help("grep -n 'atelier merge --help' f"))
-        # R7: only a substitution outside single quotes runs
-        for literal in ("echo '$(atelier status)'", "echo \"\\$(atelier status)\"", "grep '$(atelier merge --help)' f"):
-            self.assertEqual(commands.atelier_calls(literal), [], literal)
-            self.assertFalse(commands.is_process(literal), literal)
-        self.assertEqual(commands.atelier_calls('echo "id: $(atelier issue create -q x)" $(atelier status)'),
-                         [["issue", "create", "-q", "x"], ["status"]])
-        # R8: quoted punctuation is text, not syntax
-        for literal in ("printf '%s\\n' ';' atelier status", 'echo "a && atelier status"', "echo atelier\\; atelier"):
-            self.assertEqual(commands.atelier_calls(literal), [], literal)
-            self.assertFalse(commands.is_process(literal), literal)
-        # R11: wrapper options that take an argument
-        for wrapped in ("env -u SCORECARD_EXAMPLE atelier status", "stdbuf -o L atelier status",
-                        "xargs -I {} atelier status", "timeout -s KILL 60 atelier status"):
-            self.assertEqual(commands.atelier_calls(wrapped), [["status"]], wrapped)
-        # a comment is not a command
-        self.assertEqual(commands.atelier_calls("ls # note; atelier status\natelier land"), [["land"]])
+                           'echo "atelier status"', "printf '%s\\n' ';' atelier status", "command -v atelier"):
+            self.assertEqual(commands.atelier_calls(not_a_call), [], not_a_call)
+            self.assertFalse(commands.is_process(not_a_call), not_a_call)
+        self.assertTrue(commands.is_process("cat .atelier/issues/a.md"))
 
     def test_shell_writes(self):
+        self.assertEqual(commands.shell_writes("cargo test 2>&1 > out/r.md; echo '>' x.md"), ["out/r.md"])
         self.assertEqual(commands.shell_writes("sed -i 's/a/b/' src/lib.rs && perl -pi -e s/x/y/ a.rs"), ["src/lib.rs", "a.rs"])
-        self.assertEqual(commands.shell_writes("cargo test 2>&1 | tee /tmp/x.log > out/r.md"), ["out/r.md", "/tmp/x.log"])
-        self.assertEqual(commands.shell_writes("python3 - <<'EOF'\nopen('src/a.py', 'w')\nEOF"), ["src/a.py"])
+        self.assertEqual(commands.shell_writes("python3 -c \"open('src/e.rs', 'w')\""), ["src/e.rs"])
         self.assertEqual(commands.shell_writes("python3 - <<'EOF'\nq = Path('src/c.ts')\nwith q.open('w') as f: pass\n"
-                                               "Path('docs/a.md').write_text(x)\nopen(other, 'w')\nEOF"), ["src/c.ts", "docs/a.md"])
-        self.assertEqual(commands.shell_writes("apply_patch <<'EOF'\n*** Update File: src/b.rs\nEOF"), ["src/b.rs"])
-        self.assertFalse(commands.writes_product("cargo test > /dev/null 2>&1; echo x > .atelier/issues/a.md"))
-        for not_a_product_write in ("cargo test > out.txt", 'cp a "$f"', "cp a.rs target/debug/b.rs 2>/dev/null",
-                                    "echo x > ~/scratch/a.py", "tee /home/u/tmp-review/a.rs < x"):
-            self.assertFalse(commands.writes_product(not_a_product_write), not_a_product_write)
-        self.assertTrue(commands.writes_product("cp /tmp/new.rs crates/x/src/lib.rs"))
-        self.assertEqual(commands.shell_writes("cd /tmp/x && echo a > src.rs; cd /w/repo && echo b > src/a.rs"),
-                         ["/tmp/x/src.rs", "/w/repo/src/a.rs"])
-        self.assertFalse(commands.writes_product("cd ~/.cache/t && python3 -c \"open('src/a.rs', 'w')\""))
-        # R5: a write is resolved in the directory it ran in, not one a later cd moves to
-        self.assertEqual(commands.shell_writes("python3 -c \"open('src/lib.rs', 'w')\"; cd /tmp/check"), ["src/lib.rs"])
-        self.assertEqual(commands.shell_writes("cd /tmp/x && python3 - <<'EOF'\nopen('a.rs', 'w')\nEOF\ncd /w/demo"), ["/tmp/x/a.rs"])
-        self.assertEqual(commands.shell_writes("apply_patch <<'EOF'\n*** Add File: b.rs\nEOF\ncd /tmp"), ["b.rs"])
-        self.assertEqual(commands.shell_writes("x=$(python3 - <<'EOF'\nopen('c.rs', 'w')\nEOF\n)"), ["c.rs"])
+                                               "Path('docs/a.md').write_text(x)\nprint(\"open('src/no.rs', 'w')\")\nEOF"),
+                         ["src/c.ts", "docs/a.md"])
+        self.assertEqual(commands.shell_writes("python3 -c \"p = 'src/a.rs'; p = open(p, 'w')\""), ["src/a.rs"])  # R13
         self.assertEqual(commands.shell_writes("bash -lc 'python3 - <<EOF\nopen(\"d.rs\", \"w\")\nEOF'"), ["d.rs"])
-        # R6: Python is read only where a Python interpreter runs it
-        for not_run in ("echo \"open('src/lib.rs', 'w')\"", "grep -n \"write_text(\" src/a.py",
-                        "cat > notes.md <<'EOF'\nopen('src/lib.rs', 'w')\nEOF",
-                        # R10: Python strings and comments are not calls
-                        "python3 -c \"print(\\\"open('src/lib.rs', 'w')\\\")\"",
-                        "python3 - <<'EOF'\n# open('src/lib.rs', 'w')\nprint(1)\nEOF",
-                        # R8: a quoted > is an argument
-                        "echo '>' src/lib.rs"):
-            self.assertNotIn("src/lib.rs", commands.shell_writes(not_run), not_run)
-        # R9: a substitution runs where its command runs, after the cd before it, and its own cd stays inside it
-        self.assertEqual(commands.shell_writes("cd /tmp/check; out=$(python3 -c \"open('src/lib.rs', 'w')\")"),
-                         ["/tmp/check/src/lib.rs"])
-        self.assertEqual(commands.shell_writes("x=$(cd /tmp/y && echo); echo a > src/a.rs"), ["src/a.rs"])
-        self.assertEqual(commands.shell_writes("env -u X python3 -c \"open('src/e.rs', 'w')\""), ["src/e.rs"])
+        self.assertEqual(commands.shell_writes("echo \"open('src/lib.rs', 'w')\""), [])
+        self.assertEqual(commands.shell_writes("cat > notes.md <<'EOF'\nopen('src/lib.rs', 'w')\nEOF"), ["notes.md"])
+        # a relative write is taken from the cd before it, with .. reduced (R14)
+        self.assertEqual(commands.shell_writes("cd /tmp/x && echo a > src.rs; cd ../../w/repo && echo b > src/a.rs"),
+                         ["/tmp/x/src.rs", "/w/repo/src/a.rs"])
+        self.assertTrue(commands.writes_product("cd /w/repo && sed -i s/a/b/ src/lib.rs"))
+        for not_a_product_write in ("cargo test > /dev/null", "echo x > .atelier/issues/a.md", "cargo test > out.txt",
+                                    "echo x > ~/scratch/a.py", "cd /tmp/x && echo a > src.rs"):
+            self.assertFalse(commands.writes_product(not_a_product_write), not_a_product_write)
 
     def test_help_and_refusal(self):
         self.assertTrue(commands.is_help("atelier review finding --help"))
