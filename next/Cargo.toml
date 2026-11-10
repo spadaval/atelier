@@ -2,7 +2,12 @@
 # workspace of its own and reads nothing outside next/: CI deletes the root
 # crates/ directory before it builds this one.
 [workspace]
-members = ["crates/atelier-core", "crates/atelier-records"]
+members = [
+    "crates/atelier-app",
+    "crates/atelier-cli",
+    "crates/atelier-core",
+    "crates/atelier-records",
+]
 resolver = "2"
 
 [workspace.package]
@@ -12,7 +17,9 @@ repository = "https://github.com/spadaval/atelier"
 publish = false
 
 [workspace.dependencies]
+anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 tempfile = "3"

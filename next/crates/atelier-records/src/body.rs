@@ -227,3 +227,84 @@ fn set<T>(slot: &mut Option<T>, key: &str, value: T) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// The checklist of an item's `## Done when`: each list line outside a
+/// fenced code block that starts `[ ]` or `[x]`, as whether it is ticked and
+/// its text. Other lines, such as a wrapped line's continuation, are text.
+pub(crate) fn done_when(body: &str) -> Vec<(bool, String)> {
+    let Some(content) = section(body, 2, "Done when") else {
+        return Vec::new();
+    };
+    unfenced_lines(content)
+        .into_iter()
+        .filter_map(|(_, line)| check(line))
+        .collect()
+}
+
+fn check(line: &str) -> Option<(bool, String)> {
+    let item = line.trim_start();
+    let rest = ["- ", "* ", "+ "]
+        .iter()
+        .find_map(|marker| item.strip_prefix(marker))?;
+    let (ticked, text) = if let Some(text) = rest.strip_prefix("[ ]") {
+        (false, text)
+    } else {
+        let text = rest.strip_prefix("[x]").or(rest.strip_prefix("[X]"))?;
+        (true, text)
+    };
+    (text.is_empty() || text.starts_with(' ')).then(|| (ticked, text.trim().to_string()))
+}
+
+/// Whether an item's `## Report` holds a line that is neither blank nor a
+/// heading. A line inside a fenced code block, such as a transcript, counts.
+pub(crate) fn report_written(body: &str) -> bool {
+    let Some(report) = section(body, 2, "Report") else {
+        return false;
+    };
+    let written = report
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    let headings = unfenced_lines(report)
+        .into_iter()
+        .filter(|(_, line)| {
+            let hashes = line.len() - line.trim_start_matches('#').len();
+            (1..=6).contains(&hashes) && (line.len() == hashes || line[hashes..].starts_with(' '))
+        })
+        .count();
+    written > headings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_done_when_checklist_outside_fences() {
+        let body = "## Done when\n\n- [ ] One\n  wrapped\n* [x] Two\n  - [X] Nested\n- [ ]\n\
+                    - [-] Not a box\n- [ ]x glued\n```\n- [ ] In a fence\n```\n## Report\n- [ ] Elsewhere\n";
+        assert_eq!(
+            done_when(body),
+            [
+                (false, "One".to_string()),
+                (true, "Two".to_string()),
+                (true, "Nested".to_string()),
+                (false, String::new()),
+            ]
+        );
+        assert!(done_when("## Goal\n- [ ] x\n").is_empty());
+    }
+
+    #[test]
+    fn a_report_is_written_when_it_holds_more_than_headings() {
+        assert!(!report_written("## Goal\ng\n"));
+        assert!(!report_written(
+            "## Report\n\n### Validation\n\n### Responses\n\n## Next\nx\n"
+        ));
+        assert!(report_written("## Report\nDone.\n"));
+        assert!(report_written(
+            "## Report\n### Validation\n```\n# a shell comment\n```\n"
+        ));
+        assert!(report_written("## Report\n#hashtag is text\n"));
+    }
+}

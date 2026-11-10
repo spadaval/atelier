@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: Records brought up to date with the record store atelier-mal9 built"
+last_changed: "2026-11-10: Status, threads and cross-branch reads brought up to date with what atelier-engh built"
 ---
 
 # Atelier redesign: architecture specification
@@ -252,10 +252,11 @@ accepts either kind.
 
 ## Status
 
-Status is a stored field. One table in `atelier-app` lists every act: the
-command, the role that may run it, the statuses it may run from, the status
-it sets, and its conditions. Each command and the `status` view read that
-table, so what `status` says a thing needs is what the command will check.
+Status is a stored field. One table in `atelier-app` (`acts::TABLE`) lists
+every act: the command, the role that may run it, the statuses it may run
+from, the status it sets, and its conditions. Each command and the `status`
+view read that table, so what `status` says a thing needs is what the command
+will check.
 
 | Act | Role | From | To | Conditions |
 | --- | --- | --- | --- | --- |
@@ -282,6 +283,37 @@ Each act writes the status in the commit the act already makes: `submit`
 commits the Report, `verdict` commits the review file, `merge` writes `done`
 in the merge commit. No act makes a commit only to change a status.
 
+How the table is built:
+
+- A row joins the table with its command. The table holds the rows of
+  `start`, `start` taking over, `submit`, `review`, both verdicts and
+  `merge` with and without `--trivial`; the conditions of `review`,
+  `verdict` and `merge` arrive with those commands, except `review`'s,
+  which `status` already uses.
+- `acts::check` refuses an act whose From does not hold the item's status,
+  then one that needs a role the caller does not hold, then one with an unmet
+  condition, and otherwise gives the status to set. An act that binds a role
+  (`start`, `review`) needs nothing held; `submit` and `merge` need the
+  caller to be the item's last implementer.
+- `acts::next` names the act the caller would run next: `start` on a ready
+  item; as its holder, `submit` from building or changes requested, `merge`
+  from approved, and nothing while it is in review; as anyone else, `review`
+  when it is in review and they never implemented it, else the take-over.
+  `status` prints that act's unmet conditions from `acts::unmet`, the function
+  `check` calls, and ends with its command.
+- `start` takes the take-over row when the item's status is a started one,
+  and the plain row otherwise, so a draft, done or dropped item is refused by
+  that row's From.
+- `start`'s condition that the base's record is not dropped needs no check of
+  its own: the base's dropped record is the item's status (below), and
+  `start` does not run from `dropped`. Its condition on the mission waits for
+  missions. A blocker counts as done only when its status, found the same
+  way, is `done`; a blocker that names no item is unmet.
+- Done when is ticked when every checklist line under `## Done when` (`- [ ]`
+  or `- [x]`, outside fenced code) is ticked. The Report is written when
+  `## Report` holds a line that is neither blank nor a heading; a fenced
+  transcript counts.
+
 Two facts are checked live and never stored:
 
 - **The approval covers the head.** Since the reviewed commit, nothing
@@ -297,7 +329,8 @@ Two facts are checked live and never stored:
 
 A thread's identity is `T3CODE_THREAD_ID` when it is set, else the harness's
 session ID (`CLAUDE_CODE_SESSION_ID`, `CODEX_SESSION_ID`,
-`GROK_SESSION_ID`), else `human`.
+`GROK_SESSION_ID`), else `human`. A variable set to an empty value counts as
+unset.
 
 Entry commands store the identity in the record: `start` appends it to the
 item's `implementers`, `review` to the review file's `reviewers`, and `lead`
@@ -308,7 +341,12 @@ implemented an item can never review it.
 There is no local state file. A command works out who is calling by looking
 for the caller's identity in the records it can see: the item of the current
 branch, an open review of that item, and missions on the base. A thread may
-hold several things, and `status` lists each.
+hold several things, and `status` lists each. Built so far: on a branch named
+for an item, `status` speaks to the item's holder as its implementer and to
+anyone else as a visitor, naming the holder; anywhere else it lists the
+started items the caller holds, with `start <id>` to return to one, the
+ready items, and the started items others hold. Reviews and missions join
+with their commands.
 
 Harness hooks give orientation at session start: `atelier setup claude`
 exists, and `atelier setup codex` is added, since Codex 0.167 has hooks. The
@@ -320,16 +358,29 @@ post-checkout Git hook prints it on every branch switch.
 ## Where records are read and written
 
 - **A started item is found by its branch.** An item is started when a local
-  branch named for its ID exists and is not merged into the base. Its record
-  is then read from that branch's tip, wherever the reader stands. Once the
-  branch is merged, the base's record is the item's record. Nothing is copied
-  between branches.
+  branch named for its ID exists and is not merged into the base, meaning
+  its tip is not in the history of the base's tip. Its record is then read
+  from that branch's tip, wherever the reader stands, except on that branch,
+  where it is read from the checkout so that uncommitted ticks count. Once
+  the branch is merged, the base's record is the item's record. Nothing is
+  copied between branches. A branch named for an item whose tip holds no
+  record of it starts nothing, and blocks `start` until it is deleted.
+- **The base's record is the one at the base branch's tip** (`base_branch`
+  in the checkout's `config.toml`), read through the commit reader, never the
+  base checkout's working tree. A planning edit counts once it is committed.
+- **Who decides what.** `atelier-app` holds the rule, as `Located::record`:
+  the base's record when it says done or dropped, else the unmerged branch's,
+  else the base's. `atelier-cli` gathers what the rule reads: the base's tip,
+  each local branch whose name is an item ID, whether it is merged, and its
+  record. `atelier-app` runs no Git.
 - **A terminal status on the base wins.** If the base's record is `dropped`
   or `done`, that is the item's status whatever its branch holds. This is how
   a started item is cancelled. Every command checks the base's record of its
   item first, including `status` and `merge` run on the item's own branch.
 - **Who reads this way:** `status` on the base, `lead`, `list`, `show` and
   the site. The site already enumerates local branches for work in flight.
+  Every command also reads its item, and each blocker of a ready item, this
+  way.
 - **Starting is one atomic step.** `start` writes the commit that sets
   `building` first, with no branch, and then creates branch `<id>` pointing
   at it. Git creates a branch atomically, so a branch named for an item
@@ -337,6 +388,24 @@ post-checkout Git hook prints it on every branch switch.
   branch. When two threads in separate checkouts start the same item, one
   creates the branch and the other finds it and is told who holds it. Its
   `start` is then the take-over, which it runs again only if it means to.
+  The commit is built on the base's tip through a temporary index
+  (`read-tree`, `update-index`, `write-tree`, `commit-tree`), so no checkout
+  changes, and the branch is created with `git update-ref refs/heads/<id>
+  <commit> ""`, which fails when the branch exists. Only then does the
+  checkout switch to it. Debug builds can be held between the two steps
+  through `ATELIER_TEST_HOLD_BEFORE_BRANCH`, which the tests of an
+  interrupted start and of two starting threads use.
+- **Taking over** switches the checkout to the branch, appends the caller to
+  `implementers` and commits `item.md` alone, leaving the status as it is. A
+  branch checked out in another worktree cannot be switched to; `start`
+  then changes nothing and says to run it there. The holder running `start`
+  again only switches.
+- **`submit` commits the item's directory** and nothing else in the
+  checkout.
+- **A refused commit changes nothing.** When `git commit` fails, as when a
+  hook refuses it, `submit` and the take-over put the item's file and the
+  index under the paths they staged back as they were, so the act can be run
+  again.
 - **One clone.** All of this coordinates the threads in one clone and its
   worktrees. Two clones on different hosts are not coordinated.
 - Apart from that check, a command on a work branch reads and writes that
@@ -348,9 +417,12 @@ post-checkout Git hook prints it on every branch switch.
   What a merge brings in on its second parent is not examined. A commit
   that is not such a merge may not set `done` on an item whose branch
   exists.
-- Records can be read at any commit, without a checkout. The site reads
-  this way, and so does anything that compares a record now with the same
-  record at the commit of an earlier act.
+- Records can be read at any commit, without a checkout, through
+  `atelier-records`' `CommitReader`: one `git cat-file --batch` process
+  serves every read, and it tells a path the commit lacks, an entry that is
+  not a regular file and a failing Git apart. The site reads this way, and
+  so does anything that compares a record now with the same record at the
+  commit of an earlier act.
 - A plan reviewer works in its own detached worktree so two reviewers stay
   blind to each other. Review files have distinct names, so the planner
   cherry-picks both onto the base without a conflict.
