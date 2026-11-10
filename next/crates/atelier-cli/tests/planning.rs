@@ -738,3 +738,71 @@ fn a_start_new_stopped_before_its_branch_leaves_no_branch_and_no_item() {
         "You are thread t1, on the base branch main.\nNothing is ready to start.\n"
     );
 }
+
+#[test]
+fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_split() {
+    // From a subdirectory, the Then line names the checkout's root.
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    let sub = root.join("src");
+    fs::create_dir_all(&sub).unwrap();
+    let new = atelier(&sub, "p1", &["new", "Say hello"]);
+    assert_eq!(new.code, 0, "{}", new.stderr);
+    let line = then(&new.stdout);
+    assert!(
+        line.starts_with(&format!("git -C {} add -- ", root.display())),
+        "{line}"
+    );
+    shell(&sub, &line);
+    assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
+
+    // The base checked out at a path with a space, with an uncommitted
+    // mission document whose name has a space and a quote; `start` is run
+    // from another checkout.
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    git(&root, &["switch", "-q", "--detach"]);
+    let base = scratch.dir.path().join("base copy");
+    git(
+        &root,
+        &["worktree", "add", "-q", base.to_str().unwrap(), "main"],
+    );
+    write_mission(&base, MISSION, "draft");
+    join_mission(&base, ID, MISSION);
+    commit_all(&base, "Plan");
+    assert_eq!(
+        atelier(&base, "p1", &["ready", ID, MISSION, "--by", "s"]).code,
+        0
+    );
+    let document = format!(".atelier/missions/{MISSION}/design notes 'v2'.md");
+    fs::write(base.join(&document), "# Design\n").unwrap();
+
+    let status = atelier(&base, "p1", &["status"]).stdout;
+    let line = status
+        .lines()
+        .find_map(|l| l.strip_prefix("Commit it with: "))
+        .unwrap();
+    assert!(
+        line.contains("'.atelier/missions/demo-m1ss/design notes '\\''v2'\\''.md'"),
+        "{line}"
+    );
+
+    let run = atelier(&root, "t1", &["start", ID]);
+    assert_eq!(run.code, 1);
+    let line = run
+        .stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("Commit the planning with: "))
+        .unwrap();
+    assert!(
+        line.starts_with(&format!("git -C '{}' add -- ", base.display())),
+        "{line}"
+    );
+    shell(&root, line);
+    assert_eq!(git(&base, &["status", "--porcelain", "-uall"]), "");
+    assert!(
+        git(&base, &["show", "--name-only", "--format=", "HEAD"]).contains("design notes 'v2'.md")
+    );
+    let run = atelier(&root, "t1", &["start", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+}

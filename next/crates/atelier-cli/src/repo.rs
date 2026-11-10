@@ -221,6 +221,13 @@ impl Repo {
     }
 }
 
+/// `root` when the caller's directory is not that checkout's root, so that
+/// a printed Git command naming paths from the root needs `git -C <root>`.
+pub fn git_at(root: &Path) -> Option<&Path> {
+    let here = std::env::current_dir().and_then(std::fs::canonicalize).ok();
+    (here.is_none() || here != std::fs::canonicalize(root).ok()).then_some(root)
+}
+
 /// The directories planning is written in.
 const PLANNING: [&str; 2] = [".atelier/missions", ".atelier/items"];
 

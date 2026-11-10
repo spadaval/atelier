@@ -4,7 +4,7 @@
 //! ends with the Git command that commits what it wrote.
 
 use crate::commands::{refused as refused_act, Outcome};
-use crate::repo::{item_path, mission_path, Repo};
+use crate::repo::{git_at, item_path, mission_path, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check, check_mission, Act, Facts, Refusal, PLANNED, STARTED};
@@ -317,5 +317,6 @@ fn save(
         store.write_mission(mission)?;
     }
     let paths: Vec<String> = written.into_iter().map(|(_, shown)| shown).collect();
-    Ok(Outcome::Done(output::planned(said, &paths, message)))
+    let at = git_at(&repo.root);
+    Ok(Outcome::Done(output::planned(said, at, &paths, message)))
 }

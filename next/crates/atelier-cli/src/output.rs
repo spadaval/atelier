@@ -282,13 +282,15 @@ fn gates(config: &Config) -> String {
 }
 
 /// `status` away from an item's branch. `planning` is the record changes
-/// the base's checkout has not committed.
+/// the base's checkout has not committed, and `at` that checkout, as for
+/// [`commit_line`].
 pub fn overview(
     caller: &Thread,
     branch: Option<&str>,
     base: &str,
     overview: &Overview,
     planning: &[String],
+    at: Option<&Path>,
 ) -> String {
     let place = match branch {
         Some(branch) if branch == base => format!("the base branch {base}"),
@@ -337,7 +339,7 @@ pub fn overview(
         text += &format!(
             "Planning not committed yet, which `atelier start` does not read until it is: {}\nCommit it with: {}\n",
             some(planning),
-            commit_line(None, planning, "Plan")
+            commit_line(at, planning, "Plan")
         );
     }
     let startable = overview.ready.iter().find(|entry| entry.unmet.is_empty());
@@ -447,26 +449,42 @@ pub fn started_new(id: &str) -> String {
     format!("Created {id} and started it on branch {id}.\n")
 }
 
-/// The Git command that commits `paths`, and only them, with `message`,
-/// in the checkout at `at` when it is not the one the caller is in.
+/// `word` as one shell word: as it is when it holds nothing a shell reads,
+/// else in single quotes.
+fn quoted(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_-./:@%+=,".contains(c));
+    match plain {
+        true => word.to_string(),
+        false => format!("'{}'", word.replace('\'', "'\\''")),
+    }
+}
+
+/// The Git command that commits `paths`, and only them, with `message`.
+/// `at` is the checkout they are in, which the command names with `-C`
+/// when the caller is not at its root (see [`crate::repo::git_at`]).
 fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
     let git = match at {
-        Some(at) => format!("git -C {}", at.display()),
+        Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
         None => "git".into(),
     };
+    let paths: Vec<String> = paths.iter().map(|path| quoted(path)).collect();
     let paths = paths.join(" ");
     format!("{git} add -- {paths} && {git} commit -m \"{message}\" -- {paths}")
 }
 
-/// What a planning command prints once it has written `paths`.
-pub fn planned(said: &str, paths: &[String], message: &str) -> String {
+/// What a planning command prints once it has written `paths`, which are
+/// in the checkout `at` names, as for [`commit_line`].
+pub fn planned(said: &str, at: Option<&Path>, paths: &[String], message: &str) -> String {
     let mut text = format!("{said}Wrote, and did not commit:\n");
     for path in paths {
         text += &format!("  {path}\n");
     }
     text + &format!(
         "Planning counts once it is committed on the base.\nThen: {}\n",
-        commit_line(None, paths, message)
+        commit_line(at, paths, message)
     )
 }
 
@@ -573,16 +591,18 @@ pub fn readied(ids: &[&str], by: &str) -> String {
 }
 
 /// A `start` refused because `ready`, the planning it needs, is in the
-/// base's checkout and not committed. `at` is that checkout when it is not
-/// the caller's; `paths` its uncommitted planning.
+/// base's checkout and not committed. `other` is that checkout when it is
+/// not the caller's, `at` names it as for [`commit_line`], and `paths` are
+/// its uncommitted planning.
 pub fn not_committed_ready(
     id: &str,
     ready: &[String],
     base: &str,
+    other: Option<&Path>,
     at: Option<&Path>,
     paths: &[String],
 ) -> String {
-    let checkout = match at {
+    let checkout = match other {
         Some(path) => format!("the checkout of {base} at {}", path.display()),
         None => "this checkout".into(),
     };

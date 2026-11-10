@@ -1,7 +1,7 @@
 //! `status`, `start` and `submit`, and what the commands share.
 
 use crate::forge::Github;
-use crate::repo::{item_dir, item_path, planning, Links, Repo};
+use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
 use crate::{git, merge, output, plan};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, row, Act, Checkout, Facts, Refusal, STARTED};
@@ -40,6 +40,7 @@ pub fn status(repo: &mut Repo) -> Result<String> {
         &repo.base,
         &overview,
         &uncommitted,
+        git_at(&repo.root),
     ))
 }
 
@@ -173,12 +174,13 @@ fn not_committed(
     if ready.is_empty() {
         return Ok(None);
     }
-    let here = (checkout != repo.root).then_some(checkout.as_path());
+    let other = (checkout != repo.root).then_some(checkout.as_path());
     Ok(Some(output::not_committed_ready(
         id,
         &ready,
         &repo.base,
-        here,
+        other,
+        git_at(&checkout),
         &planning(&checkout)?,
     )))
 }
