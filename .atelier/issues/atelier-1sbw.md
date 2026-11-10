@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Write the converter from today's records to the new layout, with a `--verify` mode"
-updated_at: "2026-11-10T23:37:12.203059536+00:00"
+updated_at: "2026-11-10T23:38:18.425293908+00:00"
 ---
 
 ## Goal
@@ -37,7 +37,7 @@ Write the script that moves a repository from today's records to the new ones, s
 - [x] An item keeps its title, priority, labels, creation time and its Goal, Done when and Scope; its other sections and its Notes follow as text, so nothing an agent wrote on an open item is lost. Its issue type becomes a label, except `task`. Its `mission` is the mission it advances, the first by ID when it names several, or, when it advances none itself, the mission its nearest parent advances; a parent that is not a mission is named in the item's text. `blocked_by` keeps the blockers that are still open.
 - [x] An open decision record becomes an item labelled `needs-human` whose Goal is the question and whose Done when has one line, that the question is answered and the answer is written in the item's Report. Wherever an old record lacks a section the new format requires, the script writes that heading with one fixed line saying it was not specified, so every record it writes is valid. Evidence records, and review records of every kind, are not carried over; Git keeps them.
 - [x] A mission's `mission.md` takes Why, Outcome, Success criteria, Scope and Authority from the strategy file its record links, and the rest of that file becomes `design.md` beside it; the strategy file is removed from where it was. What the mission's own record holds beyond those sections, such as its Background and its Notes, becomes `notes.md` beside them, so no mission loses text. A mission with no strategy file takes its sections from its record.
-- [x] Moving a strategy file breaks no link the script can see. Relative Markdown links in the moved text are rewritten to resolve from the new place, and a test resolves each. In the records the script writes, a mention of a moved file's old path becomes its new path. Every other tracked file that still names a moved file's old path is listed in the script's output and left unchanged.
+- [x] Moving a strategy file breaks no link in the five repositories. Relative Markdown links in the moved text, in the forms those repositories use and the forms review rounds 1 to 3 added (inline links with and without a title, `<...>` destinations, and reference definitions on one line or two), are rewritten to resolve from the new place, and a test resolves each. On each scratch clone, every relative link that resolved before the conversion resolves after it. In the records the script writes, a mention of a moved file's old path becomes its new path. Every other tracked file that still names a moved file's old path is listed in the script's output and left unchanged.
 - [x] `config.toml` holds the slug, the base branch, each shell merge check and the forge from `workflow.yaml`, with `ci_workflow` only where `workflow.yaml` names one and the repository has that workflow file.
 - [x] The script's output says what it did in counts: records converted by kind, records left behind by kind and status, and each thing it could not place, by ID. It exits non-zero and writes nothing when it meets an old record it cannot read.
 - [x] Run twice on the same old commit it writes the same bytes: no clock, no random value and no ordering that depends on the file system. `--verify`, run in a converted tree with the old commit named, converts that commit afresh and exits non-zero, listing the differences, unless the tree's `.atelier/` and moved files match byte for byte.
@@ -60,6 +60,9 @@ This is the first of step E's two items in `docs/strategies/redesign-2-core.md`.
   Reason: Without it, a mission's lead would not see those items and close on the mission would not wait for them; 35 open items (12 in astromech, 23 in cosplay-studio) are in a mission only through their parent.
   Rejected: Leave such items with no mission and only name the parent in their Links section
 - 2026-11-10 [blocker] Escalated to the orchestrator after review round 4: each round finds new Markdown link syntax the script does not rewrite (8 cases in rounds 1 to 4; round 4: atelier-lbfe, atelier-4ril, atelier-rc3i). None of the round 4 forms occurs in the five repositories, and on each clone every relative link that resolved before the conversion resolves after it. The Done when line on links has no bound, so a fifth round may find more.
+- 2026-11-10 [decision] The orchestrator narrowed the Done when line on links to the five repositories: the forms they use and the forms rounds 1 to 3 added are rewritten and tested, and on each scratch clone every relative link that resolved before the conversion resolves after it.
+  Reason: The old line had no bound: four review rounds found eight Markdown link forms, and the last three occur in none of the five repositories. A one-off script for five known repositories needs to keep their links working, not implement Markdown; --verify and the per-clone link count are the cutover's proof.
+  Rejected: Fix each further link form a review finds
 
 ## Report
 
@@ -75,6 +78,8 @@ All eleven Done when lines hold. `scripts/cutover/convert_records.py` (standard 
 
 Other counts the script printed, in the same order: blocked_by entries dropped because the blocker is closed: 16, 104, 3, 8, 8. Records made ready from `in_progress`: 0, 1, 0, 0, 0. Records given a Links section: 72, 83, 9, 19, 34. Items given their nearest ancestor's mission: 0, 12, 0, 0, 23. Tracked files that still name a moved strategy's old path: 3, 1, 4, 0, 3.
 
+Links: the script rewrites relative destinations in inline links with and without a title, in `<...>` destinations, and in reference definitions on one line or two (the destination on the next line), and a link to an open record's old file under `.atelier/issues/` goes to its new one. Other link forms are left as written; none occurs in the five repositories (the orchestrator recorded `wont_fix` on atelier-lbfe, atelier-4ril and atelier-rc3i). On each clone every relative link in the written text that resolved before the conversion resolves after it: 6, 3, 0, 0 and 4 links in atelier, astromech, demiurge, life-on-rails and cosplay-studio. The 8 and 16 that do not resolve in atelier and astromech never did: they are root-style links in old records and links already broken in a strategy. The cutover should take a `--verify` pass and the resolved-link count as the proof for each repository. That count came from a 20-line checker kept outside this repository (it resolves each relative link in the converted `.atelier/` from its file), so the runbook needs its own copy.
+
 ### Decisions
 
 - Old strategy files put their sections at `#`. Their mission sections are demoted one level into `mission.md` (`## Why`, and `### ` inside), matched without regard to case (`Success Criteria`). `design.md` keeps the rest of the file as written, front matter included.
@@ -84,7 +89,7 @@ Other counts the script printed, in the same order: blocked_by entries dropped b
 - The old tool reads `advances` as one edge that either end may hold, and `blocks` as the other side of `blocked_by`, so the script does too. A relationship no new field holds (a parent, `related`, `discovered_from`, a second mission, a blocker that is a mission) is listed in a `## Links` section at the end of the record, with the other record's title when it exists.
 - A decision record becomes an item labelled `decision` and `needs-human`: the type label the item rule gives every type but `task`, plus the label the decision rule names.
 - `--verify` makes a `git clone --shared` of the repository in `$TMPDIR`, checks out the named commit there, converts it, and compares with every file under `.atelier/`, ignored by Git or not (atelier-t4hu), plus the absence of each moved strategy. The new binary's `check`, `status` and `list` leave no file there.
-- A relative link's destination is found inline, with or without a title, and in a reference definition (atelier-muf9), bare or in `<...>` (atelier-11on), and in a reference definition its destination may start on the next line (atelier-stns). A link to an open record's old file, `.atelier/issues/<id>.md`, goes to its new one (atelier-49wf). When a strategy splits, each of `mission.md` and `design.md` gets the reference definitions it uses and lacks, after its last section (atelier-y3ex). None of the five repositories has these forms in a moved strategy; their conversions are byte for byte the same with and without these fixes.
+- When a strategy splits, each of `mission.md` and `design.md` gets the reference definitions it uses and lacks, after its last section (atelier-y3ex).
 - Front matter is written as `serde_yaml` and `chrono` write it (plain or single-quoted strings, `Z` for UTC, fractions of 0, 3, 6 or 9 digits), so the new tool's first write of a converted record changes only the field it sets.
 
 ### Surprises
