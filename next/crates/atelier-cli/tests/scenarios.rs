@@ -1137,6 +1137,10 @@ fn a_reviewer_that_runs_an_implementers_command_is_told_its_role() {
     let scratch = submitted();
     let root = scratch.root();
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
+    // A finding still being written, which does not parse yet, does not
+    // hide the role line.
+    let (_, path) = review_of(&root, 1);
+    append(&root, &path, "\n## Finding 1: Half written\n");
     let head = git(&root, &["rev-parse", "HEAD"]);
     let status = git(&root, &["status", "--porcelain"]);
     for args in [&["submit"][..], &["start", ID][..]] {

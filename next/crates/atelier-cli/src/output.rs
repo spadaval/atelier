@@ -217,8 +217,16 @@ pub fn overview(caller: &Thread, branch: Option<&str>, base: &str, overview: &Ov
     text
 }
 
-pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> String {
-    let id = &entry.id;
+/// `entry` is what `status` shows the caller, which a refusal of the
+/// item's status or of the act's conditions ends with.
+pub fn refusal(
+    act: Act,
+    refusal: &Refusal,
+    caller: &Thread,
+    id: &str,
+    entry: Option<&Entry>,
+) -> String {
+    let shown = || entry.expect("a refusal that says what comes next has the entry");
     match refusal {
         Refusal::Role(Role::Reviewer) => {
             format!("You are the reviewer of {id}. Reviewers run `review` and `verdict`.\n")
@@ -233,7 +241,7 @@ pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> S
                 status_name(*status),
                 row(*act).command,
                 from.join(", "),
-                next(entry)
+                next(shown())
             )
         }
         Refusal::NotHolder {
@@ -258,7 +266,7 @@ pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> S
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, entry.status, id, unmet)
+            needs(act, shown().status, id, unmet)
         ),
         Refusal::Record(problem) => format!("{problem}\n"),
     }

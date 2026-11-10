@@ -162,14 +162,27 @@ pub(crate) fn facts<'a>(
 pub(crate) fn refusal(act: Act, facts: &Facts) -> Result<Option<String>> {
     match check(act, facts) {
         Ok(_) => Ok(None),
-        Err(Refusal::Record(problem)) => Err(problem.into()),
-        Err(refusal) => Ok(Some(output::refusal(
-            act,
-            &refusal,
-            facts.caller,
-            &entry(facts)?,
-        ))),
+        Err(refusal) => refused(act, refusal, facts).map(Some),
     }
+}
+
+/// What the caller is told when `act` is refused for `refusal`. Only a
+/// refusal that says what comes next reads the item's findings, so a
+/// reviewer's draft that does not parse yet cannot hide its role line.
+pub(crate) fn refused(act: Act, refusal: Refusal, facts: &Facts) -> Result<String> {
+    let entry = match &refusal {
+        Refusal::Record(problem) => return Err(problem.clone().into()),
+        Refusal::From { .. } | Refusal::Unmet(_) => Some(entry(facts)?),
+        Refusal::Role(_) | Refusal::NotHolder { .. } => None,
+    };
+    let id = &facts.item.item.id;
+    Ok(output::refusal(
+        act,
+        &refusal,
+        facts.caller,
+        id,
+        entry.as_ref(),
+    ))
 }
 
 /// Tests stop `start` here, between its commit and its branch, by naming a

@@ -1,12 +1,12 @@
 //! `review` and `verdict`: the reviewer's side of the loop.
 
-use crate::commands::{facts, refusal, write_and_commit, Outcome};
+use crate::commands::{facts, refusal, refused, write_and_commit, Outcome};
 use crate::git;
 use crate::output::{self, Brief};
 use crate::repo::{item_dir, item_path, Repo};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, row, Act, Facts, Refusal};
-use atelier_app::{carried, entry};
+use atelier_app::carried;
 use atelier_core::{Review, ReviewSchema, SchemaVersion, Threads, Verdict};
 use atelier_records::{render_item, render_review, validate_id};
 
@@ -27,11 +27,7 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
             let brief = brief(repo, &facts, None)?;
             return Ok(Outcome::Refused(output::author(id, &repo.caller) + &brief));
         }
-        Err(Refusal::Record(problem)) => return Err(problem.into()),
-        Err(refused) => {
-            let said = output::refusal(Act::Review, &refused, &repo.caller, &entry(&facts)?);
-            return Ok(Outcome::Refused(said));
-        }
+        Err(refusal) => return Ok(Outcome::Refused(refused(Act::Review, refusal, &facts)?)),
     }
     if repo.branch.as_deref() != Some(id) {
         return Ok(Outcome::Refused(output::review_elsewhere(
