@@ -68,16 +68,9 @@ def git(repo, *args):
 def records(repo, commit, directory):
     """Every Markdown record in a directory at a commit: (path, header, body)."""
     paths = [p for p in git(repo, "ls-tree", "-r", "--name-only", commit, directory).split() if p.endswith(".md")]
-    raw = subprocess.run(["git", "-C", str(REPOS / repo), "cat-file", "--batch"],
-                         input="".join(f"{commit}:{p}\n" for p in paths).encode(),
-                         capture_output=True, check=True).stdout
-    out, i = [], 0
+    out = []
     for path in paths:
-        end = raw.index(b"\n", i)
-        size = int(raw[i:end].split()[2])
-        text = raw[end + 1:end + 1 + size].decode()
-        i = end + 1 + size + 1
-        m = re.match(r"---\n(.*?)\n---\n?(.*)", text, re.S)
+        m = re.match(r"---\n(.*?)\n---\n?(.*)", git(repo, "show", f"{commit}:{path}"), re.S)
         if m:
             out.append((path, m.group(1), m.group(2)))
     return out
