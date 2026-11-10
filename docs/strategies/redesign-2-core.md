@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: hooks and the bypass replace `land`; `merge` never waits"
+last_changed: "2026-11-09: amended at Sumeet's direction: `caused_by` and settled deferred findings join the records; `log` is mission 4's"
 ---
 
 # Why
@@ -10,7 +10,7 @@ or what stage the work is in. They find their place by running a command and
 reading the refusal: 38 of 50 sampled refusals were friction, agents ran 541
 help lookups in five days, and orchestrators spent 48% of delegated spend on
 coordination. The [product specification](redesign-product.md) replaces the
-47 commands and eight issue types with 17 commands over missions, items and
+47 commands and eight issue types with 18 commands over missions, items and
 reviews, each bound to a thread and a stored status.
 
 # Outcome
@@ -77,7 +77,7 @@ it in five steps:
 | --- | --- | --- |
 | A. Skeleton | Item, review and config records; thread identity; the act table; finding started items by branch; `start` with take-over, `submit`, `review` with rounds, `verdict`, `merge`, `status`; the fresh-agent scenario | Yes |
 | B. Planning | Mission records; `new`, `set`, `ready`, `drop`, `close`, `list`, `show`, `lead`, `start --new`; plan reviews | No |
-| C. Disagreement | `escalate`, `decide` with its two outcomes, rebuttals and decisions in the brief, `list --deferred` | No |
+| C. Disagreement | `escalate`, `decide` with its two outcomes, rebuttals and decisions in the brief, `list --deferred`, and settling a deferred finding with `new --from` and `drop` | No |
 | D. Guards | `check`, the three Git hooks, `ATELIER_SKIP`, and `setup` for Git and for Codex | No |
 | E. Rehearsal | The converter, with `config.toml` written from `workflow.yaml` and a `--verify` mode, and the rehearsal on a scratch clone of each of the five repositories | No |
 
@@ -111,7 +111,8 @@ new binary on scratch clones of all five repositories.
 
 - In: the records, commands, status model, thread binding, merge, config and
   converter in the two specifications.
-- Out: installing the binary; converting any real repository; the site;
+- Out: `log`, which mission 4 builds, so this mission builds 17 of the 18
+  commands; installing the binary; converting any real repository; the site;
   switching the `atelier` binary or deleting the old code, which mission 3
   does; coordinating two clones of one repository; the
   Agent Factory skill; the gardener and scorecard; a session database; live

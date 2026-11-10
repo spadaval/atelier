@@ -19,17 +19,17 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Compute the scorecard from the new records' status history and thread fields"
-updated_at: "2026-11-10T01:14:42.577802653+00:00"
+title: "Add `atelier log`, the history of acts, and cut the scorecard scripts down to what needs T3's data"
+updated_at: "2026-11-10T03:58:05.047106672+00:00"
 ---
 
 ## Goal
 
-Remove the thread-title matching the baseline needed, now that records say which thread held what.
+Give the gardener, a lead and a thread taking over an item one read of what happened: the history of acts, derived from Git. Then remove from the scorecard scripts everything that read can supply.
 
 ## Done when
 
-- [ ] Provisional: the mission criterion `from-records`. The event and transcript readers stay, and each number states its coverage.
+- [ ] Provisional: `atelier log` prints one line per act for an item, a mission, or everything since a time, as the architecture specification's section The log describes, and adds nothing up. The mission criterion `from-log` holds for the scripts that remain.
 
 ## Context
 
@@ -38,3 +38,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 ## Unknowns
 
 - Which measures still need T3's events and the transcripts; expected: tool calls, tokens and interventions.
+- How long the history walk takes in astromech, which has the most records.

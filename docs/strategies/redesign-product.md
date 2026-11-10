@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: Git hooks guard and `land` goes; one bypass; `merge` never waits; the views are spelled out"
+last_changed: "2026-11-09: amended at Sumeet's direction: the gardener is a role; `log` gives the history of acts; a bug names what caused it; a deferred finding can be settled"
 ---
 
 # Atelier redesign: product specification
@@ -85,7 +85,8 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Verdict | A review's conclusion: approve or changes. |
 | Ready | Someone with authority said this should start now. Ready is about intent. It says nothing about review. |
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
-| Role | Lead, implementer, reviewer, decider or planner. A thread gets a role from the command it enters with. |
+| Role | Lead, implementer, reviewer, decider, planner or gardener. A thread gets a role from the command it enters with. |
+| Gardener | The role that keeps a repository easy to navigate, easy to change and easy to validate. A gardener's run is an item labelled `garden`, which it holds as its implementer, and the item's Report is the one page Sumeet reads. |
 | Status | A stored field on a mission or item, set only by the command that performs the act. |
 | Done | The end state of merged work, of an item closed on the base, and of a closed mission. |
 | Check | `atelier check`, which the Git hooks and CI also run, or one of a project's configured merge checks. |
@@ -164,7 +165,7 @@ was dropped and why.
 
 ## Commands
 
-Seventeen commands, plus `init`, `setup` and `serve`.
+Eighteen commands, plus `init`, `setup` and `serve`.
 
 ### Anyone
 
@@ -173,6 +174,7 @@ Seventeen commands, plus `init`, `setup` and `serve`.
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: ready items, missions in progress and what waits on Sumeet. |
 | `show <id>` | An item in full, with its reviews. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
 | `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`. |
+| `log` | The history of acts, one line each: when, which item, the act, the thread and its role, and what changed. For one item, one mission, or everything `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
 `show` and `list` keep what today's `work mission`, `work missions`,
@@ -183,10 +185,10 @@ no view; nine commands become two.
 
 | Command | Behaviour |
 | --- | --- |
-| `new "<title>"` | Creates a draft item and prints its path. `--mission` creates a mission directory instead. `--in <mission>` sets membership. |
-| `set <id> ...` | Changes front-matter fields: title, priority, labels, mission, blocked-by. |
+| `new "<title>"` | Creates a draft item and prints its path. `--mission` creates a mission directory instead. `--in <mission>` sets membership. `--from <finding>` makes the item from a deferred finding and marks the finding taken. |
+| `set <id> ...` | Changes front-matter fields: title, priority, labels, mission, blocked-by, and, on a bug, `--caused-by <item>` for the item that introduced it. |
 | `ready <id>... --by <name>` | Marks each named item or mission ready and records who said so and when. |
-| `drop <id> --reason` | Ends work that will not be done. |
+| `drop <id> --reason` | Ends work that will not be done. Given a deferred finding, it marks the finding dropped. |
 | `close <id>` | Ends a mission whose items are all done or dropped and whose Result is written. With a result text, ends a draft or ready item that has no files to change. |
 
 Agents edit the Markdown body of a record directly. They never hand-edit front
@@ -260,7 +262,7 @@ with the harness's own tool, using a line the tool prints:
 | --- | --- | --- | --- |
 | `mission.md` | status, labels, lead thread, ready (who, when) | Why, Outcome, Success criteria (optional), Scope, Authority, Result | Sumeet's direction, recorded by the planner; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
-| `item.md` | status, mission, labels, priority, blocked-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses), Decisions | The planner writes the definition; the implementer writes the Report |
+| `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses), Decisions | The planner writes the definition; the implementer writes the Report |
 | `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer threads and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
 
 Rules:
@@ -312,9 +314,11 @@ Rules:
   fresh agent given the item, the finding and both positions when it does
   not. Anything that touches product direction goes to Sumeet as a
   `needs-human` item.
-- **Deferred findings stay in their review file.** `list --deferred` shows
-  them across done items, and the gardener turns the ones worth doing into
-  items. Merge creates no follow-up records.
+- **Deferred findings stay in their review file.** Merge creates no
+  follow-up records. `list --deferred` shows the ones not yet settled, across
+  done items, and the gardener settles each: `new --from` takes it into an
+  item, and `drop` drops it with a reason. Either is written into the
+  finding, so the list shrinks.
 - **Plan reviews.** A mission's plan gets two blind reviews from different
   labs where two are available. Each reviewer works in its own checkout, and
   the planner cherry-picks both review files onto the base.
@@ -433,12 +437,18 @@ it drives down, and exchange rates decide what to cut.
 The codebase health rows are trends for one repository against its own past.
 Agents are not scored on them, and none is a limit.
 
+The tool computes none of this. `log` says what happened and `list` says how
+things stand; which numbers to take from them, and what to make of them, is
+the gardener's procedure in the skill. The measures that need T3's events or
+the transcripts come from scripts on the host that has them. A defect found
+after merge is traced by the `caused-by` a bug item carries.
+
 ## Out of scope
 
 - Atelier starting, stopping or steering agents.
 - A session database, and live thread status on the site.
 - Per-project lifecycles.
-- A scorecard page on the site.
+- A command that computes the scorecard, and a scorecard page on the site.
 - A site view of what changed between a mission's go-ahead and its result.
   Git history holds what such a view would need.
 - Coordinating two clones of one repository. Atelier coordinates the threads

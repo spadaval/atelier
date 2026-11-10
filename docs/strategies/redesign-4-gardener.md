@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 1: what thread fields do and do not give"
+last_changed: "2026-11-09: amended at Sumeet's direction: the gardener is a role; the mission builds `atelier log` and puts the arithmetic in the procedure"
 ---
 
 # Why
@@ -13,31 +13,34 @@ before it can edit. Its one digest, atelier-j86z, is ten entries about the
 tool and none about a codebase, and it waits in a queue where 6 of 63 items
 have been answered.
 
-After the cutover, records carry each item's status and the threads that
-held it, so the scorecard can tie a thread to an item without guessing from
-thread titles. Tool calls, tokens and Sumeet's messages still come from T3's
-events and the transcripts.
+After the cutover every act is a commit that changes a stored status, so the
+history of what happened to each item can be read from Git. Nothing reads it
+yet.
 
 # Outcome
 
-A gardener run starts from two things it does not have to assemble by hand: a
-readiness checklist for the repository and the scorecard's current numbers
-against the baseline. It reads transcripts only to explain a number that
-moved. It ends with one page for Sumeet: the numbers, the worst spots, and at
-most three proposals. One run has been made in each of the five repositories.
+`atelier log` prints the history of acts. A gardener run starts from that,
+from `atelier list`, and from a readiness checklist for the repository, and
+its procedure says which numbers to take from them. It reads transcripts
+only to explain a number that moved. It settles the deferred findings. It
+ends with one page for Sumeet: the numbers against the baseline, the worst
+spots, and at most three proposals. One run has been made in each of the
+five repositories.
 
 # Success Criteria
 
 - one-page: a gardener run in each of the five repositories produces a report
   of one page that holds the scorecard, the worst spots under each of the
   three codebase properties, and at most three proposals.
-- from-records: the scorecard scripts find each item's threads from the
-  records' thread fields and their Git history, with no matching on thread
-  titles.
+- from-log: every scorecard number that needs no T3 data is computed from
+  the output of `atelier log` and `atelier list` by the steps the gardener's
+  procedure gives. The scripts that remain read only T3's events and the
+  transcripts, and tie a thread to an item by the thread IDs in the log, with
+  no matching on thread titles.
 
 # Sizing
 
-- Complexity: medium. It rewrites one procedure, extends existing scripts and
+- Complexity: medium. It adds one read command, rewrites one procedure and
   adds one checklist.
 - Value: medium. It is how the redesign's results are seen and kept, and it
   is not needed for the redesign to work.
@@ -48,8 +51,11 @@ mission 1 and never again, and the redesign's effect stays an impression.
 
 # Shape
 
+- **The tool gives facts and the skill does the arithmetic.** `log` says what
+  happened and `list` how things stand. The binary computes no measure and
+  knows no threshold, so nothing in it changes when the measures do.
 - **Numbers first, transcripts second.** The run is cheap because it starts
-  from the scripts' output.
+  from two commands' output.
 - **Two layers.** The checklist is static and covers preconditions: can an
   agent build, test, launch and find its way. The scorecard lags and shows
   effects. A criterion stays on the checklist only while failing it shows up
@@ -59,8 +65,9 @@ mission 1 and never again, and the redesign's effect stays an impression.
   changed defaults and restructures. It never changes a rule on its own.
 - **Net size.** A run that proposes a rule or check names one it considered
   removing.
-- **No new tool surface.** The scripts stay scripts. The checklist is a file.
-  Nothing is added to the `atelier` binary or the site.
+- **A run is an item.** It is labelled `garden`, the gardener holds it as its
+  implementer, and its Report is the page. The next run's window starts
+  where the last one's item closed.
 
 # Design
 
@@ -68,9 +75,9 @@ Four steps, all in the backlog until the cutover has happened.
 
 | Step | Does |
 | --- | --- |
-| A. Scorecard from records | Extend `scripts/scorecard/` to read the new records: status changes and earlier holders of a role from Git history, current holders from the records' fields. Remove the title matching mission 1 needed. Keep the event and transcript readers, and state each number's coverage. |
+| A. The log | Build `atelier log` as the [architecture specification](redesign-architecture.md#the-log) describes. Cut `scripts/scorecard/` down to the measures that need T3's events and the transcripts, tied to items by the log's thread IDs. |
 | B. Readiness checklist | A short default list in the skill, mapped to the three properties, each line with the command or observation that tests it. A repository may add lines. Drawn from Factory's agent-readiness pillars, without the team-shaped criteria. |
-| C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report. Fold `audit.md` into it. The gardener also sorts `list --deferred`. |
+| C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report, with the steps that turn `log` and `list` output into each number. Fold `audit.md` into it. The gardener settles deferred findings with `new --from` and `drop`. |
 | D. First runs | One run in each of the five repositories. |
 
 The three properties and what the report shows for each:
@@ -79,7 +86,7 @@ The three properties and what the report shows for each:
 | --- | --- |
 | Easy to navigate | Files agents read most before their first edit |
 | Easy and reliable to change | Files with the most rework and the most fix-now findings |
-| Easy to validate | Features with no proof command in the verify skill; defects caught after merge |
+| Easy to validate | Features with no proof command in the verify skill; defects caught after merge, by the `caused-by` their bug items carry |
 
 # Derisking
 
@@ -92,22 +99,28 @@ mission, atelier-pwhn, picked up two weeks after the cutover.
 
 # Scope
 
-- In: the scripts, the checklist, the gardener procedure, the first runs.
-- Out: a scorecard page on the site; a scheduler for the gardener; the groom
-  procedure; scoring agents on any measure; the comparison two weeks after
-  the cutover, which is its own item.
+- In: `atelier log`, the scripts that remain, the checklist, the gardener
+  procedure, the first runs.
+- Out: a command that computes the scorecard; a scorecard page on the site;
+  a command that starts a run or runs the checklist; a scheduler for the
+  gardener; the groom procedure; scoring agents on any measure; the
+  comparison two weeks after the cutover, which is its own item.
 - Target environment: the five repositories on this host.
 
 # Authority
 
-The orchestrator may choose the checklist's lines, the report's layout, and
-which transcript reading a run needs. It may not add a command or site page,
-add a rule or check to any repository from a gardener run, or change a
-measure's definition in the product specification.
+The orchestrator may choose the checklist's lines, the report's layout, the
+layout of a log line, and which transcript reading a run needs. It may not
+add a command beyond `log` or a site page, add a rule or check to any
+repository from a gardener run, or change a measure's definition in the
+product specification.
 
 # Risks and Unknowns
 
 - **Too little data.** See Derisking.
 - **The checklist grows.** Each line names the number that would show its
   failure, and a line with no such number is cut.
+- **The history walk is slow in a large repository.** Astromech has the most
+  records. The debrief's walk went from 7.8 s to 1.04 s when it became one
+  `git log` over the records, and `log` makes the same single walk.
 - **Where a repository's own checklist lines live** is settled in step B.

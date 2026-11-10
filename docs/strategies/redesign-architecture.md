@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: Git hooks guard and `land` goes; one bypass; `merge` never waits"
+last_changed: "2026-11-09: amended at Sumeet's direction: `log`, `caused_by`, settled deferred findings, the gardener as a role"
 ---
 
 # Atelier redesign: architecture specification
@@ -53,7 +53,7 @@ types.
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the site's views |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the log, the site's views |
 | `atelier-site` | `atelier serve` |
 | `atelier-cli` | Arguments, dispatch, Git and shell adapters, output |
 
@@ -79,6 +79,7 @@ blocked_by: []
 implementers: [<thread>]  # start appends; the last entry holds the item
 ready: {by: sumeet, at: <time>}
 trivial: null           # or the reason given to merge --trivial
+caused_by: null         # on a bug: the item that introduced the defect
 created_at: <time>
 ```
 
@@ -133,6 +134,11 @@ tool writes from the Decisions entry and the reviewer cannot change.
 A fix-now finding is open until a later review marks it fixed or withdrawn,
 or a decision settles it.
 
+A deferred finding is unsettled until its text gains `Taken: <item>`, written
+by `new --from`, or `Dropped: <reason>`, written by `drop`. Both are written
+on the base, into the review file of an item that may be done. They are the
+only writes to a review after its verdict.
+
 ### `config.toml`
 
 ```toml
@@ -182,6 +188,7 @@ table, so what `status` says a thing needs is what the command will check.
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
 | `drop` | Planner | any but `done` | `dropped` | a reason; written on the base, whatever the item's branch holds |
+| `new --from`, `drop` on a finding | Planner or gardener | a deferred finding not yet settled | unchanged | the finding's review has a verdict |
 | `lead` | Lead | a `ready` mission | unchanged | none |
 
 Each act writes the status in the commit the act already makes: `submit`
@@ -275,6 +282,21 @@ post-checkout Git hook prints it on every branch switch.
 
 `merge` never waits and has no flag but `--trivial`. Run again, it picks up
 where the facts now stand. Waiting is the harness's work.
+
+## The log
+
+`atelier log` prints the history of acts. Nothing stores it. One walk of Git
+history over `.atelier/` finds each commit where a record's status, its
+holder or a finding's settlement changed, and each is one act: the commit's
+time, the item or mission, the act the change implies, the thread from the
+record's own fields at that commit, and the statuses before and after. A
+skip appears where the commit carries its trailer. The walk covers the base
+and the branches of started items, and is the one walk the site's history
+views make today.
+
+`log` adds nothing up. Time in a status, rounds per item, roles taken over
+and skips by rule are all counts over its lines, and the gardener's
+procedure, not the binary, says which to take.
 
 ## Hooks and the bypass
 
@@ -454,6 +476,9 @@ does, it must not fetch a repository that has been converted.
   starting one item from separate checkouts; a started item dropped on the
   base, then refused at merge.
 - Unit tests on the act table: every act from every status.
+- `log` on the plain-path scenario prints its acts in order with the right
+  threads; on the take-over scenario it shows both holders; `new --from` on a
+  deferred finding writes `Taken:`, and `list --deferred` no longer shows it.
 - Hook scenarios in a scratch repository: a commit of an invalid record
   refused; a commit of a status change the act table does not allow refused;
   a push of the base holding a plain commit that touches code refused, and
@@ -505,6 +530,8 @@ Sumeet made each of these in conversation on 2026-11-09.
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
 | Hooks guard, commands act | A rule in a command applies only when the agent remembers the command |
+| The tool gives facts and the skill does the arithmetic: `log` and `list`, and no scorecard command | A fixed report in the binary would change every time the measures do, as the debrief did |
+| The gardener is a role, and its needs shape the records now | A bug's cause and a deferred finding's settlement are cheap in the first format and costly to add later |
 | Every rule can be skipped on purpose, with a reason | Atelier's rules are not hard blockers, and a bypass should be intended and leave a trace |
 | `merge` never waits | Waiting belongs to the harness, which already wakes a thread when a pull request's checks finish |
 | His go-ahead stays `ready --by` | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
