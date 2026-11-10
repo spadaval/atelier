@@ -773,10 +773,9 @@ nothing and says so.
   `<name>.local` and says so, a symbolic link moved as a link. Once its own
   rule passes, `check --hook <name>` runs `<name>.local` as Git would: only
   if it is executable, through the shell when it has no `#!` line, and with
-  the same arguments and input. For
-  pre-commit and pre-push a failure of the kept hook refuses the commit or
-  push; for post-checkout it is printed and the checkout still succeeds. A
-  `setup` stopped between moving a hook and writing its own leaves no hook
+  the same arguments and input. For pre-commit and pre-push a failure of the
+  kept hook refuses the commit or push; for post-checkout it is printed and
+  the checkout still succeeds. A `setup` stopped between moving a hook and writing its own leaves no hook
   and the kept one in place, and run again writes Atelier's.
 - **Where `<name>.local` is taken** as well, by a hook that is not
   Atelier's, `setup` refuses and changes no file, and says to put both into
