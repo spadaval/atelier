@@ -669,8 +669,10 @@ fn verdict(
 /// findings and the earlier rounds'.
 fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<Condition> {
     let settled = |name: &FindingName| {
-        let decision = decisions.iter().find(|d| d.finding.as_ref() == Some(name));
-        decision.and_then(|d| d.outcome)
+        let about = decisions
+            .iter()
+            .filter(|d| d.finding.as_ref() == Some(name));
+        about.into_iter().find_map(|d| d.outcome)
     };
     let (own, earlier): (Vec<&Finding>, Vec<&Finding>) =
         seen.iter().partition(|f| f.name.review == file.name);
@@ -691,8 +693,17 @@ fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<C
             });
         }
     }
+
     for finding in own {
         let as_written = match &finding.was {
+            // Said once, as the finding the file drops.
+            Some(was)
+                if (unmet.iter()).any(
+                    |c| matches!(c, Condition::DecisionDropped { finding, .. } if finding == was),
+                ) =>
+            {
+                true
+            }
             Some(was) if settled(was).is_some() => {
                 finding.decided == settled(was) && !carried_before(was)
             }

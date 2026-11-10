@@ -106,10 +106,10 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
         Condition::ReviewedFinding(finding) => format!("You have never reviewed finding {finding}"),
         Condition::NoQuestion => "A question waits under `## Decisions` (none does)".into(),
         Condition::DecisionDropped { finding, outcome } => format!(
-            "Your file carries {finding} with `Decided: {outcome}`, as the tool wrote it (a decision settled {finding}; put the finding back as it was)"
+            "Your file carries {finding} with the `Decided: {outcome}` line the tool wrote (a decision settled it; put that finding back as it was)"
         ),
         Condition::DecisionChanged(finding) => format!(
-            "Finding {finding} has a `Decided:` line only where the tool wrote one, and carries no finding a decision settled otherwise (put it back as it was)"
+            "Finding {finding} has no `Decided:` line the tool did not write, and carries no finding a decision settled (put it back as the tool wrote it, or remove it)"
         ),
         Condition::NoOpenFinding => "Your review file holds an open fix-now finding (it holds none; with nothing to fix, run `atelier verdict approve`)".into(),
         Condition::OpenFinding { finding, title } => {
@@ -139,7 +139,7 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
 /// What an entry needs and the command that follows, or what to do when no
 /// command of the caller's follows. `dropped` is why the item was dropped,
 /// from its record.
-fn next(entry: &Entry, dropped: Option<&str>) -> String {
+fn next(entry: &Entry, dropped: Option<&str>, decider: Option<&str>) -> String {
     let id = &entry.id;
     let Some(act) = entry.next else {
         if entry.reviewed.is_some() && !entry.holds {
@@ -162,7 +162,7 @@ fn next(entry: &Entry, dropped: Option<&str>) -> String {
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
-    needs(act, entry.status, id, &entry.unmet)
+    needs(act, entry.status, id, &entry.unmet, decider)
 }
 
 /// How an implementer gets its item reviewed.
@@ -194,7 +194,9 @@ pub(crate) fn handoff(who: &str, tasks: &[String], then: &str) -> String {
 }
 
 /// The conditions of `act` that do not hold, then its command.
-fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
+/// `decider` says who answers a question waiting on the item, where the
+/// caller knows.
+fn needs(act: Act, status: Status, id: &str, unmet: &[Condition], decider: Option<&str>) -> String {
     let mut text = String::new();
     if !unmet.is_empty() {
         text += &format!("To {}:\n", goal(act, status));
@@ -218,7 +220,10 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
             text += "Commit them, or set them aside with `git stash`.\n";
         }
         if unmet.iter().any(|c| matches!(c, Condition::Unanswered(_))) {
-            text += &format!("A decider answers each question with `atelier decide {id}`: a thread that never implemented this item nor reviewed the finding a question is about.\n");
+            text += &decider.map_or_else(
+                || format!("A decider answers each question with `atelier decide {id}`: a thread that never implemented this item nor reviewed the finding a question is about. `atelier status` says who.\n"),
+                str::to_string,
+            );
         }
         // A stale approval is answered by a fresh review, not by merging.
         if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
@@ -292,7 +297,7 @@ pub fn item(
             holder(entry)
         )
     };
-    let mut next = next(entry, dropped);
+    let mut next = next(entry, dropped, decider.filter(|_| entry.holds));
     // Before `merge`, what it will run and wait for; a stale approval is
     // sent to `submit` instead.
     let stale = entry
@@ -302,10 +307,6 @@ pub fn item(
     if entry.next == Some(Act::Merge) && !stale {
         let then = next.rfind("Then: ").expect("it ends with a Then line");
         next.insert_str(then, &gates(config));
-    }
-    if let Some(decider) = decider.filter(|_| entry.holds && next.contains("Then: ")) {
-        let then = next.rfind("Then: ").expect("it has a Then line");
-        next.insert_str(then, decider);
     }
     let code = outside(id, &entry.uncommitted);
     if entry.next == Some(Act::Submit) && !code.is_empty() {
@@ -474,7 +475,7 @@ pub fn refusal(
                 status_name(*status),
                 row(*act).command,
                 from.join(", "),
-                next(shown(), dropped)
+                next(shown(), dropped, None)
             )
         }
         Refusal::NotHolder {
@@ -499,7 +500,7 @@ pub fn refusal(
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, shown().status, id, unmet)
+            needs(act, shown().status, id, unmet, None)
         ),
         Refusal::Record(problem) => format!("{problem}\n"),
     }
@@ -1090,7 +1091,7 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, Status::Ready, id, unmet)
+            needs(act, Status::Ready, id, unmet, None)
         ),
         Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
             unreachable!("a mission's act is refused only for its status or conditions")
@@ -1332,7 +1333,8 @@ pub fn not_settled(id: &str, asked: &Decision, settled: Outcome) -> String {
 }
 
 /// `decide` refused for who the caller is, or for no question waiting;
-/// `handoff` says who decides the question that waits.
+/// `handoff` says who decides the question that waits, which an
+/// implementer is shown.
 pub fn not_decider(
     id: &str,
     caller: &Thread,
@@ -1348,7 +1350,16 @@ pub fn not_decider(
             other => unreachable!("decide has no condition {other:?}"),
         };
     }
-    text + handoff.unwrap_or_default()
+    if unmet.contains(&Condition::FormerImplementer) {
+        return text + handoff.unwrap_or_default();
+    }
+    match unmet
+        .iter()
+        .any(|c| matches!(c, Condition::ReviewedFinding(_)))
+    {
+        true => text + "Say so to whoever started you, and stop.\n",
+        false => text,
+    }
 }
 
 pub fn unreadable(path: &str) -> String {

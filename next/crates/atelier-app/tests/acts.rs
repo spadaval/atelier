@@ -1,8 +1,9 @@
 use atelier_app::acts::{
-    check, check_mission, next, row, Act, Condition, Facts, MissionFacts, Refusal, Role, TABLE,
+    check, check_mission, next, question, row, unmet, Act, Condition, Facts, MissionFacts, Refusal,
+    Role, TABLE,
 };
 use atelier_app::{carried, carried_plan, entry};
-use atelier_core::{MissionStatus, Status, Thread};
+use atelier_core::{MissionStatus, Outcome, Status, Thread};
 use atelier_records::{parse_item, parse_mission, parse_review, ItemDir, MissionDir, ReviewFile};
 use std::path::PathBuf;
 
@@ -713,6 +714,91 @@ fn submit_needs_each_open_finding_answered_and_each_question_decided() {
     );
     let decided = format!("{answered}\nAnswer by d1: No.\nOutcome: no action\n");
     assert_eq!(conditions(&decided), []);
+    // Answered with no outcome, finding 2 is still open and needs its
+    // response.
+    let answered_only = format!("{answered}\nAnswer by d1: Fix it.\n");
+    assert_eq!(conditions(&answered_only), [open(2, "Also wrong")]);
+}
+
+/// A finding carried as `2-bbbb.1` from `1-aaaa.1`, whose round 1 was
+/// reviewed by r1 and then r2, and round 2 by r3.
+fn carried_twice() -> [ReviewFile; 2] {
+    let kept = "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: kept\n";
+    [
+        review("1-aaaa", &["r1", "r2"], "changes", FIX_NOW),
+        review("2-bbbb", &["r3"], "changes", kept),
+    ]
+}
+
+#[test]
+fn a_kept_finding_whose_rebuttal_was_kept_has_had_its_one_try() {
+    let body = format!("{DONE}\n### Responses\n\n- 1-aaaa.1: rebutted: it is right\n");
+    let item = with_reviews(
+        record(Status::ChangesRequested, &["t1"], &body),
+        &carried_twice(),
+    );
+    let caller = thread("t1");
+    assert_eq!(
+        unmet(Act::Submit, &facts(&item, &caller)).unwrap(),
+        [Condition::NoResponse {
+            finding: "2-bbbb.1".parse().unwrap(),
+            title: "Wrong".into(),
+            rebutted: true,
+        }]
+    );
+}
+
+#[test]
+fn the_oldest_question_is_decided_by_a_thread_that_never_implemented_the_item_nor_reviewed_its_finding(
+) {
+    let reviews = carried_twice();
+    let item = |body: &str| {
+        let body = format!("{DONE}\n## Decisions\n\n{body}");
+        with_reviews(
+            record(Status::ChangesRequested, &["t1", "t2"], &body),
+            &reviews,
+        )
+    };
+    let answered = "### 2026-11-09: First?\n\nAnswer by d0: Yes.\n\n";
+    let about = "### 2026-11-10: Worth fixing?\n\nFinding: 2-bbbb.1\n\n";
+    let free = "### 2026-11-10: Later?\n";
+    let waiting = item(&format!("{answered}{about}{free}"));
+    assert_eq!(question(&waiting).unwrap().unwrap().0, 1);
+    let decide = |item: &ItemDir, caller: &str| {
+        let caller = thread(caller);
+        unmet(Act::Decide, &facts(item, &caller)).unwrap()
+    };
+    // Every implementer, the holder and the one before; every reviewer of
+    // the finding and of the one it carries, a taken-over one too.
+    for implementer in ["t1", "t2"] {
+        assert_eq!(
+            decide(&waiting, implementer),
+            [Condition::FormerImplementer]
+        );
+    }
+    let finding = "2-bbbb.1".parse().unwrap();
+    for reviewer in ["r1", "r2", "r3"] {
+        assert_eq!(
+            decide(&waiting, reviewer),
+            [Condition::ReviewedFinding(Clone::clone(&finding))]
+        );
+    }
+    assert_eq!(decide(&waiting, "d1"), []);
+    // The holder is refused by that condition, not told its role.
+    let holder = thread("t2");
+    assert!(matches!(
+        check(Act::Decide, &facts(&waiting, &holder)),
+        Err(Refusal::Unmet(unmet)) if unmet == [Condition::FormerImplementer]
+    ));
+    // Once it is answered, the next is about no finding: a reviewer may
+    // decide that one, an implementer still not.
+    let next = item(&format!("{answered}{about}Answer by d1: Fix it.\n\n{free}"));
+    assert_eq!(question(&next).unwrap().unwrap().0, 2);
+    assert_eq!(decide(&next, "r3"), []);
+    assert_eq!(decide(&next, "t1"), [Condition::FormerImplementer]);
+    // Nothing waits.
+    let none = item(answered);
+    assert_eq!(decide(&none, "d1"), [Condition::NoQuestion]);
 }
 
 #[test]
@@ -881,6 +967,90 @@ fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn a_verdict_keeps_what_a_decision_settled_as_the_tool_wrote_it() {
+    let first = review("1-aaaa", &["r1"], "changes", FIX_NOW);
+    let decided = format!(
+        "{DONE}\n## Decisions\n\n### 2026-11-10: Worth it?\n\nFinding: 1-aaaa.1\n\
+         Answer by d1: No.\nOutcome: defer\n"
+    );
+    let carry = |was: &str, line: &str| {
+        format!("\n## Finding 1: Wrong\nRecommendation: fix now\nWas: {was}\n{line}\n")
+    };
+    let as_written = carry("1-aaaa.1", "Decided: defer");
+    let caller = thread("r2");
+    let verdict = |body: &str, earlier: &[ReviewFile], file: &str, act: Act| {
+        let round = earlier.len() + 1;
+        let mut reviews = earlier.to_vec();
+        reviews.push(review(&format!("{round}-cccc"), &["r2"], "null", file));
+        let item = with_reviews(record(Status::InReview, &["t1"], body), &reviews);
+        match check(act, &facts(&item, &caller)) {
+            Ok(_) => Vec::new(),
+            Err(Refusal::Unmet(unmet)) => unmet,
+            Err(other) => panic!("{other:?}"),
+        }
+    };
+    let round_1 = std::slice::from_ref(&first);
+    let approve = |file: &str| verdict(&decided, round_1, file, Act::VerdictApprove);
+    let named = |name: &str| name.parse().unwrap();
+    let dropped = Condition::DecisionDropped {
+        finding: named("1-aaaa.1"),
+        outcome: Outcome::Defer,
+    };
+    // As the tool wrote it, the finding is closed and approve allowed.
+    assert_eq!(approve(&as_written), []);
+    // Changed, kept, or removed: refused, and said once.
+    assert_eq!(
+        approve(&carry("1-aaaa.1", "Decided: no action")),
+        [dropped.clone()]
+    );
+    let kept = carry("1-aaaa.1", "Now: kept");
+    assert_eq!(
+        verdict(&decided, round_1, &kept, Act::VerdictChanges),
+        [dropped.clone()]
+    );
+    assert_eq!(approve(""), [dropped]);
+    // Carried a second time, as kept, beside the tool's line: reopened.
+    let twice = format!(
+        "{as_written}\n## Finding 2: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: kept\n"
+    );
+    assert_eq!(
+        verdict(&decided, round_1, &twice, Act::VerdictChanges),
+        [Condition::DecisionChanged(named("2-cccc.2"))]
+    );
+    // A reviewer cannot write `Decided:` where no decision settled it.
+    assert_eq!(
+        verdict(DONE, round_1, &as_written, Act::VerdictApprove),
+        [Condition::DecisionChanged(named("2-cccc.1"))]
+    );
+    // A later round carries neither the finding nor its carrier again.
+    let round_2 = review("2-bbbb", &["r2"], "approve", &as_written);
+    let rounds = [first.clone(), round_2];
+    for was in ["1-aaaa.1", "2-bbbb.1"] {
+        assert_eq!(
+            verdict(
+                &decided,
+                &rounds,
+                &carry(was, "Now: kept"),
+                Act::VerdictChanges
+            ),
+            [Condition::DecisionChanged(named("3-cccc.1"))],
+            "{was}"
+        );
+    }
+    assert_eq!(verdict(&decided, &rounds, "", Act::VerdictApprove), []);
+    // What a round carries: the settled finding, once, with its decision.
+    let item = with_reviews(record(Status::InReview, &["t1"], &decided), &rounds);
+    let names = |round| carried_names(&item, round);
+    assert_eq!(names(2), ["1-aaaa.1"]);
+    assert!(names(3).is_empty());
+    let round_2 = carried(&item, 2).unwrap();
+    assert_eq!(
+        round_2[0].decision.as_ref().unwrap().outcome,
+        Some(Outcome::Defer)
+    );
 }
 
 #[test]
