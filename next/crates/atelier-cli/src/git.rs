@@ -198,24 +198,26 @@ pub fn switch(repo: &Path, branch: &str) -> Result<()> {
     run(repo, &["switch", "--quiet", branch]).map(drop)
 }
 
-/// Commits the changes under `path`, and only those, including new files.
-/// When the commit fails, as when a hook refuses it, the index under `path`
-/// is put back as it was.
-pub fn commit_path(repo: &Path, path: &str, message: &str) -> Result<()> {
-    let staged = output(repo, &["ls-files", "--stage", "-z", "--", path], None)?;
+/// Commits the changes under `paths`, and only those, including new files.
+/// When the commit fails, as when a hook refuses it, the index under
+/// `paths` is put back as it was.
+pub fn commit_paths(repo: &Path, paths: &[&str], message: &str) -> Result<()> {
+    let on_paths = |args: &[&'static str]| -> Vec<&str> {
+        args.iter().chain(&["--"]).chain(paths).copied().collect()
+    };
+    let staged = output(repo, &on_paths(&["ls-files", "--stage", "-z"]), None)?;
     if !staged.status.success() {
         bail!(
             "git ls-files failed: {}",
             String::from_utf8_lossy(&staged.stderr).trim()
         );
     }
-    let committed = run(repo, &["add", "--", path])
-        .and_then(|_| run(repo, &["commit", "--quiet", "-m", message, "--", path]));
+    let mut commit = vec!["commit", "--quiet", "-m", message, "--"];
+    commit.extend(paths);
+    let committed = run(repo, &on_paths(&["add"])).and_then(|_| run(repo, &commit));
     if committed.is_err() {
-        let _ = run(
-            repo,
-            &["rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", path],
-        );
+        let unstage = on_paths(&["rm", "--cached", "-r", "-q", "--ignore-unmatch"]);
+        let _ = run(repo, &unstage);
         let staged = String::from_utf8_lossy(&staged.stdout);
         let _ = run_with(repo, &["update-index", "-z", "--index-info"], Some(&staged));
     }

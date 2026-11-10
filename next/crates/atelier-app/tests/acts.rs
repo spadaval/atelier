@@ -1,5 +1,5 @@
-use atelier_app::acts::{check, next, row, Act, Condition, Facts, Refusal, TABLE};
-use atelier_app::entry;
+use atelier_app::acts::{check, next, row, Act, Condition, Facts, Refusal, Role, TABLE};
+use atelier_app::{carried, entry};
 use atelier_core::{Status, Thread};
 use atelier_records::{parse_item, parse_review, ItemDir, ReviewFile};
 use std::path::PathBuf;
@@ -56,6 +56,40 @@ fn thread(id: &str) -> Thread {
     Thread(id.to_string())
 }
 
+/// A review file named `name`, held by the last of `reviewers`, with
+/// `verdict` (`null` for none) and the findings in `findings`.
+fn review(name: &str, reviewers: &[&str], verdict: &str, findings: &str) -> ReviewFile {
+    let round = name.split('-').next().unwrap();
+    let reviewers: String = reviewers.iter().map(|t| format!("\n- {t}")).collect();
+    let text = format!(
+        "---\nschema: atelier.review\nschema_version: 3\nround: {round}\ncommit: abc1234\n\
+         reviewers:{reviewers}\nmodel: null\nverdict: {verdict}\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
+         ## Summary\ns\n{findings}"
+    );
+    let path = PathBuf::from(format!("{name}.md"));
+    ReviewFile {
+        name: name.parse().unwrap(),
+        review: parse_review(&path, &text).unwrap(),
+        path,
+    }
+}
+
+const FIX_NOW: &str = "\n## Finding 1: Wrong\nRecommendation: fix now\n";
+
+fn with_reviews(mut item: ItemDir, reviews: &[ReviewFile]) -> ItemDir {
+    item.reviews = reviews.to_vec();
+    item
+}
+
+fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
+    Facts {
+        item,
+        branch: true,
+        blockers: &[],
+        caller,
+    }
+}
+
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
 const SPECIFIED: [(Act, &[Status], Option<Status>); 8] = [
@@ -96,10 +130,21 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
     for (act, from, to) in SPECIFIED {
         for status in ALL {
             // Every condition holds: the caller holds the item, except a
-            // reviewer, who never implemented it; a take-over has its
-            // branch and a start has none.
-            let item = record(status, &["t1"], DONE);
-            let caller = thread(if act == Act::Review { "r1" } else { "t1" });
+            // reviewer, who never implemented it and, for a verdict, holds
+            // the round's review, which has an open fix-now finding for
+            // `changes` and none for `approve`; a take-over has its branch
+            // and a start has none.
+            let findings = if act == Act::VerdictChanges {
+                FIX_NOW
+            } else {
+                ""
+            };
+            let item = with_reviews(
+                record(status, &["t1"], DONE),
+                &[review("1-aaaa", &["r1"], "null", findings)],
+            );
+            let reviewer = matches!(act, Act::Review | Act::VerdictChanges | Act::VerdictApprove);
+            let caller = thread(if reviewer { "r1" } else { "t1" });
             let facts = Facts {
                 item: &item,
                 branch: act != Act::Start,
@@ -134,12 +179,27 @@ fn status_lists_the_conditions_the_command_reports() {
         (DONE, &blocked[..], true),
         (UNDONE, &blocked[..], true),
     ];
+    // No review; r1 holding the round's review, clean or with an open
+    // finding; and r1 holding round 2's, which does not carry round 1's
+    // open finding.
+    let reviews = [
+        vec![],
+        vec![review("1-aaaa", &["r1"], "null", "")],
+        vec![review("1-aaaa", &["r1"], "null", FIX_NOW)],
+        vec![
+            review("1-aaaa", &["r0"], "changes", FIX_NOW),
+            review("2-bbbb", &["r1"], "null", ""),
+        ],
+    ];
     let mut reported = 0;
     for status in ALL {
         for caller in ["t1", "t0", "r1"] {
-            for (body, blockers, branch) in cases {
+            for ((body, blockers, branch), reviews) in cases
+                .into_iter()
+                .flat_map(|case| reviews.iter().map(move |r| (case, r)))
+            {
                 // t1 holds the item, t0 held it before, r1 never did.
-                let item = record(status, &["t0", "t1"], body);
+                let item = with_reviews(record(status, &["t0", "t1"], body), reviews);
                 let caller = thread(caller);
                 let facts = Facts {
                     item: &item,
@@ -148,7 +208,7 @@ fn status_lists_the_conditions_the_command_reports() {
                     caller: &caller,
                 };
                 let shown = entry(&facts).unwrap();
-                assert_eq!(shown.next, next(&facts));
+                assert_eq!(shown.next, next(&facts).unwrap());
                 let Some(act) = shown.next else {
                     assert!(shown.unmet.is_empty());
                     continue;
@@ -193,7 +253,17 @@ fn the_next_act_follows_the_status_and_who_is_asking() {
             blockers: &[],
             caller: &caller,
         };
-        assert_eq!(next(&facts), expected, "{status:?} for {caller}");
+        assert_eq!(next(&facts).unwrap(), expected, "{status:?} for {caller}");
+    }
+    // The round's reviewer: changes while its file holds an open fix-now
+    // finding, else approve.
+    let r1 = thread("r1");
+    for (findings, expected) in [("", Act::VerdictApprove), (FIX_NOW, Act::VerdictChanges)] {
+        let item = with_reviews(
+            record(Status::InReview, &["t1"], DONE),
+            &[review("1-aaaa", &["r1"], "null", findings)],
+        );
+        assert_eq!(next(&facts(&item, &r1)).unwrap(), Some(expected));
     }
 }
 
@@ -209,7 +279,10 @@ fn only_the_holder_submits() {
             caller: &caller,
         };
         match check(Act::Submit, &facts) {
-            Err(Refusal::NotHolder { holder: found }) => {
+            Err(Refusal::NotHolder {
+                role: Role::Implementer,
+                holder: found,
+            }) => {
                 assert_eq!(found, holder.map(thread));
             }
             other => panic!("{other:?}"),
@@ -225,7 +298,7 @@ fn only_the_holder_submits() {
     };
     assert!(matches!(
         check(Act::Submit, &facts),
-        Err(Refusal::NotHolder { holder: None })
+        Err(Refusal::NotHolder { holder: None, .. })
     ));
 }
 
@@ -277,4 +350,238 @@ fn submit_needs_each_open_finding_answered_and_each_question_decided() {
     );
     let decided = format!("{answered}\nAnswer by d1: No.\nOutcome: no action\n");
     assert_eq!(conditions(&decided), []);
+}
+
+#[test]
+fn the_round_is_the_latest_until_a_verdict_ends_it_and_then_the_next() {
+    let caller = thread("r2");
+    let round = |reviews: &[ReviewFile]| {
+        let item = with_reviews(record(Status::InReview, &["t1"], DONE), reviews);
+        let round = facts(&item, &caller).round();
+        (round.number, round.review.map(|r| r.name.to_string()))
+    };
+    assert_eq!(round(&[]), (1, None));
+    let open = review("1-aaaa", &["r1"], "null", "");
+    assert_eq!(
+        round(std::slice::from_ref(&open)),
+        (1, Some("1-aaaa".into()))
+    );
+    let changes = review("1-aaaa", &["r1"], "changes", FIX_NOW);
+    assert_eq!(round(std::slice::from_ref(&changes)), (2, None));
+    let approved = review("2-bbbb", &["r1"], "approve", "");
+    assert_eq!(round(&[changes.clone(), approved.clone()]), (3, None));
+    // An open review of an earlier round is no longer this round's.
+    assert_eq!(round(&[open, approved]), (3, None));
+    // Of two open in the latest round, the caller's; else the first.
+    let first = review("2-cccc", &["r1"], "null", "");
+    let mine = review("2-dddd", &["r2"], "null", "");
+    assert_eq!(
+        round(&[changes.clone(), first.clone(), mine]),
+        (2, Some("2-dddd".into()))
+    );
+    let other = review("2-eeee", &["r3"], "null", "");
+    assert_eq!(
+        round(&[changes.clone(), first.clone(), other]),
+        (2, Some("2-cccc".into()))
+    );
+    // The first verdict in a round ends it, and a file left open in it by
+    // a second reviewer is not the next round's.
+    let decided = review("2-ffff", &["r3"], "changes", FIX_NOW);
+    assert_eq!(round(&[changes, first, decided]), (3, None));
+}
+
+#[test]
+fn a_thread_holding_one_role_is_told_it_when_it_runs_another_roles_command() {
+    let item = with_reviews(
+        record(Status::InReview, &["t0", "t1"], DONE),
+        &[review("1-aaaa", &["r0", "r1"], "null", "")],
+    );
+    let r1 = thread("r1");
+    for act in [Act::Submit, Act::TakeOver, Act::Merge, Act::Start] {
+        assert!(
+            matches!(
+                check(act, &facts(&item, &r1)),
+                Err(Refusal::Role(Role::Reviewer))
+            ),
+            "{act:?}"
+        );
+    }
+    let t1 = thread("t1");
+    for act in [Act::VerdictApprove, Act::VerdictChanges] {
+        assert!(
+            matches!(
+                check(act, &facts(&item, &t1)),
+                Err(Refusal::Role(Role::Implementer))
+            ),
+            "{act:?}"
+        );
+    }
+    // An author asking to review is refused by the condition, current
+    // holder or not.
+    for author in ["t0", "t1"] {
+        let author = thread(author);
+        match check(Act::Review, &facts(&item, &author)) {
+            Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [Condition::FormerImplementer]),
+            other => panic!("{other:?}"),
+        }
+    }
+    // A former reviewer, and anyone else, is told who holds the review.
+    for other in ["r0", "x9"] {
+        let other = thread(other);
+        match check(Act::VerdictApprove, &facts(&item, &other)) {
+            Err(Refusal::NotHolder {
+                role: Role::Reviewer,
+                holder,
+            }) => assert_eq!(holder, Some(thread("r1"))),
+            refused => panic!("{refused:?}"),
+        }
+    }
+    // Once the verdict is in, the reviewer holds no role, and no open file.
+    let decided = with_reviews(
+        record(Status::ChangesRequested, &["t1"], DONE),
+        &[review("1-aaaa", &["r1"], "changes", FIX_NOW)],
+    );
+    assert!(matches!(
+        check(Act::Submit, &facts(&decided, &r1)),
+        Err(Refusal::NotHolder {
+            role: Role::Implementer,
+            ..
+        })
+    ));
+    let unopened = record(Status::InReview, &["t1"], DONE);
+    assert!(matches!(
+        check(Act::VerdictApprove, &facts(&unopened, &r1)),
+        Err(Refusal::NotHolder {
+            role: Role::Reviewer,
+            holder: None
+        })
+    ));
+}
+
+#[test]
+fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
+    let r1 = thread("r1");
+    let verdict = |reviews: &[ReviewFile], act: Act| {
+        let item = with_reviews(record(Status::InReview, &["t1"], DONE), reviews);
+        check(act, &facts(&item, &r1))
+    };
+    let round_1 = review("1-aaaa", &["r0"], "changes", FIX_NOW);
+    let carry = |now: &str| {
+        review(
+            "2-bbbb",
+            &["r1"],
+            "null",
+            &format!("\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: {now}\n"),
+        )
+    };
+    let open_as = |name: &str| Condition::OpenFinding {
+        finding: name.parse().unwrap(),
+        title: "Wrong".into(),
+    };
+    // Kept, the carried finding is open in the file: changes, not approve.
+    let kept = [round_1.clone(), carry("kept")];
+    assert_eq!(
+        verdict(&kept, Act::VerdictChanges).unwrap(),
+        Some(Status::ChangesRequested)
+    );
+    match verdict(&kept, Act::VerdictApprove) {
+        Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [open_as("2-bbbb.1")]),
+        other => panic!("{other:?}"),
+    }
+    // Withdrawn, nothing is open: approve, not changes.
+    let withdrawn = [round_1.clone(), carry("withdrawn")];
+    assert_eq!(
+        verdict(&withdrawn, Act::VerdictApprove).unwrap(),
+        Some(Status::Approved)
+    );
+    match verdict(&withdrawn, Act::VerdictChanges) {
+        Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [Condition::NoOpenFinding]),
+        other => panic!("{other:?}"),
+    }
+    // Not carried at all, round 1's finding stays open and blocks approve.
+    let dropped = [round_1.clone(), review("2-bbbb", &["r1"], "null", "")];
+    match verdict(&dropped, Act::VerdictApprove) {
+        Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [open_as("1-aaaa.1")]),
+        other => panic!("{other:?}"),
+    }
+    // A `Was:` naming no earlier finding is refused as the file's problem.
+    let bad = review(
+        "2-bbbb",
+        &["r1"],
+        "null",
+        "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.7\nNow: fixed\n",
+    );
+    match verdict(&[round_1, bad], Act::VerdictApprove) {
+        Err(Refusal::Record(problem)) => {
+            assert_eq!(problem.file, PathBuf::from("2-bbbb.md"));
+            assert!(problem.message.contains("1-aaaa.7"), "{problem}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_round_carries_what_earlier_rounds_left_open_with_each_text_and_response() {
+    let body = format!(
+        "{DONE}\n### Responses\n\n- 2-bbbb.1: rebutted: it is right\n- 1-aaaa.1: fixed in abc1234\n"
+    );
+    let item = with_reviews(
+        record(Status::InReview, &["t1"], &body),
+        &[
+            review(
+                "1-aaaa",
+                &["r0"],
+                "changes",
+                "\n## Finding 1: Wrong\nRecommendation: fix now\nFirst text.\n\n\
+                 ## Finding 2: Later\nRecommendation: defer\n\n\
+                 ## Finding 3: Gone\nRecommendation: fix now\n",
+            ),
+            review(
+                "2-bbbb",
+                &["r1"],
+                "changes",
+                "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: kept\nStill.\n\n\
+                 ## Finding 2: Gone\nRecommendation: fix now\nWas: 1-aaaa.3\nNow: fixed\n",
+            ),
+            // This round's own file is not read.
+            review("3-cccc", &["r2"], "null", "\n## Finding 1: New\nRecommendation: fix now\n"),
+        ],
+    );
+    let carried = carried(&item, 3).unwrap();
+    assert_eq!(carried.len(), 1);
+    let only = &carried[0];
+    assert_eq!(only.finding.name.to_string(), "2-bbbb.1");
+    let texts: Vec<(String, &str)> = only
+        .texts
+        .iter()
+        .map(|(name, text)| (name.to_string(), text.as_str()))
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            (
+                "1-aaaa.1".to_string(),
+                "Recommendation: fix now\nFirst text.\n\n"
+            ),
+            (
+                "2-bbbb.1".to_string(),
+                "Recommendation: fix now\nWas: 1-aaaa.1\nNow: kept\nStill.\n\n"
+            ),
+        ]
+    );
+    assert_eq!(
+        only.response.as_ref().unwrap().finding().to_string(),
+        "2-bbbb.1"
+    );
+    // Round 2 carries round 1's two open fix-now findings, not the deferred one.
+    let names: Vec<String> = carried_names(&item, 2);
+    assert_eq!(names, ["1-aaaa.1", "1-aaaa.3"]);
+}
+
+fn carried_names(item: &ItemDir, round: u32) -> Vec<String> {
+    carried(item, round)
+        .unwrap()
+        .iter()
+        .map(|c| c.finding.name.to_string())
+        .collect()
 }

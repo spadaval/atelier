@@ -151,6 +151,11 @@ impl ItemDir {
         body::done_when(&self.item.body)
     }
 
+    /// The content under the item's `## <heading>`, if it has one.
+    pub fn section(&self, heading: &str) -> Option<&str> {
+        body::section(&self.item.body, 2, heading)
+    }
+
     /// Whether `## Report` holds anything besides headings and blank lines.
     pub fn report_written(&self) -> bool {
         body::report_written(&self.item.body)
@@ -188,6 +193,16 @@ impl ItemDir {
 impl ReviewFile {
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
         body::findings(&self.path, &self.name, &self.review.body)
+    }
+
+    /// The text under the heading of finding `number`, as the reviewer
+    /// wrote it.
+    pub fn finding_text(&self, number: u32) -> Option<&str> {
+        let prefix = format!("Finding {number}: ");
+        document::sections(&self.review.body, 2)
+            .into_iter()
+            .find(|(heading, _)| heading.starts_with(&prefix))
+            .map(|(_, content)| content)
     }
 }
 

@@ -1,9 +1,9 @@
 //! Everything `status` and the commands print. The wording lives here, in
 //! one place, so it is cheap to change.
 
-use atelier_app::acts::{row, Act, Condition, Refusal};
-use atelier_app::{Entry, Overview};
-use atelier_core::{Priority, Status, Thread};
+use atelier_app::acts::{row, Act, Condition, Refusal, Role};
+use atelier_app::{Carried, Entry, Overview};
+use atelier_core::{Priority, Response, Status, Thread, Verdict};
 
 fn status_name(status: Status) -> &'static str {
     match status {
@@ -65,6 +65,10 @@ fn condition(id: &str, condition: &Condition) -> String {
         Condition::NoResponse { finding, title } => format!("Finding {finding} (fix now): {title}"),
         Condition::Unanswered(question) => format!("Question answered: {question}"),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
+        Condition::NoOpenFinding => "Your review file holds an open fix-now finding (it holds none; with nothing to fix, run `atelier verdict approve`)".into(),
+        Condition::OpenFinding { finding, title } => {
+            format!("No fix-now finding is open; {finding} is: {title}")
+        }
     };
     format!("  [ ] {text}")
 }
@@ -103,8 +107,20 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
         {
             text += "Answer each finding under `### Responses` in the Report: `<finding>: fixed in <commit>` or `<finding>: rebutted: <fact>`.\n";
         }
+        if unmet
+            .iter()
+            .any(|c| matches!(c, Condition::OpenFinding { .. }))
+        {
+            text += "A finding that stands needs `atelier verdict changes`. A carried one closes when your file says `Now: fixed` or `Now: withdrawn` for it.\n";
+        }
     }
-    text + &format!("Then: {}\n", command(act, id))
+    let or = match act {
+        Act::VerdictApprove => {
+            " (or `atelier verdict changes`, once your file holds a fix-now finding)"
+        }
+        _ => "",
+    };
+    text + &format!("Then: {}{or}\n", command(act, id))
 }
 
 fn holder(entry: &Entry) -> String {
@@ -117,7 +133,13 @@ fn holder(entry: &Entry) -> String {
 /// `status` on an item's branch.
 pub fn item(caller: &Thread, entry: &Entry) -> String {
     let id = &entry.id;
-    let who = if entry.holds {
+    let who = if let Some(review) = &entry.review {
+        format!(
+            "You are the reviewer of {id} (thread {caller}), round {}.\nReview file: {}\n`atelier review {id}` prints the brief again.\n",
+            review.round,
+            review_path(id, &review.to_string())
+        )
+    } else if entry.holds {
         format!(
             "You are the implementer of {id} (thread {caller}).\nItem: {}\n",
             crate::repo::item_path(id)
@@ -195,9 +217,23 @@ pub fn overview(caller: &Thread, branch: Option<&str>, base: &str, overview: &Ov
     text
 }
 
-pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> String {
-    let id = &entry.id;
+/// `entry` is what `status` shows the caller, which a refusal of the
+/// item's status or of the act's conditions ends with.
+pub fn refusal(
+    act: Act,
+    refusal: &Refusal,
+    caller: &Thread,
+    id: &str,
+    entry: Option<&Entry>,
+) -> String {
+    let shown = || entry.expect("a refusal that says what comes next has the entry");
     match refusal {
+        Refusal::Role(Role::Reviewer) => {
+            format!("You are the reviewer of {id}. Reviewers run `review` and `verdict`.\n")
+        }
+        Refusal::Role(Role::Implementer) => format!(
+            "You are the implementer of {id}. Implementers run `start`, `submit` and `merge`.\n"
+        ),
         Refusal::From { act, status } => {
             let from: Vec<&str> = row(*act).from.iter().map(|s| status_name(*s)).collect();
             format!(
@@ -205,10 +241,20 @@ pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> S
                 status_name(*status),
                 row(*act).command,
                 from.join(", "),
-                next(entry)
+                next(shown())
             )
         }
-        Refusal::NotHolder { holder } => {
+        Refusal::NotHolder {
+            role: Role::Reviewer,
+            holder: Some(holder),
+        } => format!(
+            "You (thread {caller}) do not hold this round's review of {id}; {holder} does. Nothing changed.\nTo take it over: atelier review {id}\n"
+        ),
+        Refusal::NotHolder {
+            role: Role::Reviewer,
+            holder: None,
+        } => format!("No review of {id} is open in this round. Nothing changed.\nTo open one: atelier review {id}\n"),
+        Refusal::NotHolder { holder, .. } => {
             let holder = match holder {
                 Some(thread) => format!("{thread} does"),
                 None => "nobody does".into(),
@@ -220,7 +266,7 @@ pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> S
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, entry.status, id, unmet)
+            needs(act, shown().status, id, unmet)
         ),
         Refusal::Record(problem) => format!("{problem}\n"),
     }
@@ -276,9 +322,175 @@ pub fn submitted(id: &str) -> String {
     )
 }
 
-pub fn not_on_item(branch: Option<&str>) -> String {
-    let place = branch.map_or("a detached HEAD".to_string(), |b| format!("branch {b}"));
+fn place(branch: Option<&str>) -> String {
+    branch.map_or("a detached HEAD".to_string(), |b| format!("branch {b}"))
+}
+
+pub fn not_on_item(command: &str, branch: Option<&str>) -> String {
     format!(
-        "`atelier submit` runs on an item's branch, and this checkout is on {place}. Nothing changed.\n`atelier status` lists what you hold; `atelier start <id>` switches to its branch.\n"
+        "`atelier {command}` runs on an item's branch, and this checkout is on {}. Nothing changed.\n`atelier status` lists what you hold; `atelier start <id>` switches to its branch.\n",
+        place(branch)
+    )
+}
+
+fn review_path(id: &str, name: &str) -> String {
+    format!(".atelier/items/{id}/reviews/{name}.md")
+}
+
+pub fn review_elsewhere(id: &str, branch: Option<&str>) -> String {
+    format!(
+        "`atelier review {id}` runs in the checkout on branch {id}, where its implementer works, and this checkout is on {}. Nothing changed.\nRun it there, or `git switch {id}` here if no other checkout has that branch.\n",
+        place(branch)
+    )
+}
+
+pub fn review_taken_over(id: &str, round: u32, before: Option<&Thread>) -> String {
+    match before {
+        Some(thread) => format!(
+            "Took over round {round}'s review of {id}; {thread} held it. The file keeps what {thread} wrote.\n\n"
+        ),
+        None => format!("Took over round {round}'s review of {id}, which nobody held.\n\n"),
+    }
+}
+
+pub fn author(id: &str, caller: &Thread) -> String {
+    format!(
+        "You (thread {caller}) have implemented {id}, and an author does not review its own work. Nothing changed.\nIf no reviewer is working on it, start one with: Run `atelier review {id}` and follow what it prints.\nWhat a reviewer is shown:\n\n"
+    )
+}
+
+fn response(response: Option<&Response>) -> String {
+    match response {
+        Some(Response::Fixed { commit, .. }) => format!("fixed in {commit}"),
+        Some(Response::Rebutted { fact, .. }) => format!("rebutted: {fact}"),
+        None => "none in the Report".into(),
+    }
+}
+
+/// The body of a new review file: a Summary to write, then each finding
+/// it carries, kept until the reviewer says otherwise.
+pub fn template(carried: &[Carried]) -> String {
+    let mut text =
+        "\n## Summary\n\n<!-- What you checked and how, and what you could not check. -->\n"
+            .to_string();
+    for (number, carried) in (1..).zip(carried) {
+        text += &format!(
+            "\n## Finding {number}: {}\nRecommendation: fix now\nWas: {}\nResponse: {}\nNow: kept\n<!-- Set Now: to fixed, withdrawn or kept. -->\n",
+            carried.finding.title,
+            carried.finding.name,
+            response(carried.response.as_ref()),
+        );
+    }
+    text
+}
+
+/// What `review` prints: the item, the change, what earlier rounds left
+/// open, and, for a reviewer, its file and the verdict commands.
+pub struct Brief<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    pub caller: &'a Thread,
+    pub round: u32,
+    /// Goal, Done when, Scope and Report, those the item has.
+    pub sections: Vec<(&'a str, &'a str)>,
+    pub base: &'a str,
+    pub commit: &'a str,
+    /// The commit the round before reviewed.
+    pub previous: Option<&'a str>,
+    pub carried: &'a [Carried],
+    /// The caller's review file; `None` for an author.
+    pub path: Option<&'a str>,
+}
+
+pub fn brief(brief: &Brief) -> String {
+    let Brief { id, round, .. } = *brief;
+    let mut text = String::new();
+    if brief.path.is_some() {
+        text += &format!(
+            "You are the reviewer of {id} (thread {}), round {round}.\n\
+             Review the change on branch {id} as someone who did not write it: check that it meets each Done when line, that it is correct, and that the Report's claims hold. Read the code, run what proves it, and write down each problem you find. The author's reasoning is left out on purpose; judge what is there.\n\n",
+            brief.caller
+        );
+    }
+    text += &format!("Item {id}: {}\n", brief.title);
+    for (heading, content) in &brief.sections {
+        text += &format!("\n## {heading}\n{}", content.trim_end());
+        text += "\n";
+    }
+    text += &format!(
+        "\nThe change, at commit {commit}:\n  git diff {base}...{commit}\n",
+        commit = brief.commit,
+        base = brief.base
+    );
+    if let Some(previous) = brief.previous {
+        text += &format!(
+            "What changed since the last round's review:\n  git diff {previous} {}\n",
+            brief.commit
+        );
+    }
+    if !brief.carried.is_empty() {
+        text += "\nOpen findings from earlier rounds:\n";
+        if brief.path.is_some() {
+            text += "Your review file carries each as a finding of its own, with the author's response. Judge the response, then set the finding's `Now:` line to `fixed`, to `withdrawn` (the rebuttal holds, or the finding was wrong), or leave it `kept` (it still stands, and stays a fix-now finding).\n";
+        }
+        for (number, carried) in (1..).zip(brief.carried) {
+            text += &format!(
+                "\n{}, carried as Finding {number}: {}\n",
+                carried.finding.name, carried.finding.title
+            );
+            for (name, written) in &carried.texts {
+                text += &format!("  As {name}:\n");
+                for line in written.trim().lines() {
+                    text += &format!("    {line}\n");
+                }
+            }
+            text += &format!(
+                "  The author's response: {}\n",
+                response(carried.response.as_ref())
+            );
+        }
+    }
+    let Some(path) = brief.path else {
+        return text;
+    };
+    let next = brief.carried.len() + 1;
+    text += &format!(
+        "\nYour review file: {path}\n\
+         Write your review there, and change no other file. Leave its front matter, between the `---` lines, as it is.\n\
+         Under `## Summary`, say what you checked and how, and what you could not check. Then add a section for each problem, numbered on from {next}:\n\n\
+         ## Finding {next}: <a one-line title>\n\
+         Recommendation: fix now\n\
+         <What is wrong, where (file and line), and how you know.>\n\n\
+         The Recommendation is `fix now` (it must be fixed before the change merges), `defer` (real, but for later work) or `no action` (a note; nothing to do).\n\n\
+         When the file is written, record your verdict. It checks the file, then commits it with the item's new status:\n\
+         \x20 atelier verdict changes --model <your model>   if the file holds an open fix-now finding\n\
+         \x20 atelier verdict approve --model <your model>   if it holds none\n\
+         Give the name of the model you run on, such as gpt-6.1-sol, or leave out `--model` if you do not know it. Your review is then done.\n"
+    );
+    text
+}
+
+pub fn verdict_name(verdict: Verdict) -> &'static str {
+    match verdict {
+        Verdict::Approve => "approved",
+        Verdict::Changes => "changes requested",
+    }
+}
+
+pub fn verdict_recorded(
+    id: &str,
+    round: u32,
+    verdict: Verdict,
+    path: &str,
+    implementer: Option<&Thread>,
+) -> String {
+    let to = match verdict {
+        Verdict::Approve => "to merge",
+        Verdict::Changes => "to answer your open findings",
+    };
+    let implementer = implementer.map_or("nobody yet".to_string(), |t| t.to_string());
+    format!(
+        "Recorded your verdict on {id}, round {round}: {}. Committed {path} with it.\n{id} is back with its implementer, {implementer}, {to}. Your review is done: say so to whoever started you, and stop.\n",
+        verdict_name(verdict)
     )
 }

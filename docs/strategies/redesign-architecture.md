@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: Status, threads and cross-branch reads brought up to date with what atelier-engh built"
+last_changed: "2026-11-10: the review file, the verdicts and the reviewer's role brought up to date with what atelier-5cuc built"
 ---
 
 # Atelier redesign: architecture specification
@@ -180,7 +180,7 @@ schema_version: 3
 round: 2
 commit: <sha reviewed>
 reviewers: [<thread>]   # review appends; the last entry holds the review
-model: gpt-6.1-sol
+model: gpt-6.1-sol      # or null; set by verdict --model, never required
 verdict: null           # approve or changes, set by verdict
 created_at: <time>
 ```
@@ -196,7 +196,29 @@ finding of an earlier round, and exactly one of `Now: fixed`,
 `Now: withdrawn`, `Now: kept`, or `Decided: defer | no action`, which the
 tool writes from the Decisions entry and the reviewer cannot change. Every
 finding name a record gives, in `Was:`, in Responses or in a Decisions
-entry's `Finding:`, must be a finding of the item's reviews.
+entry's `Finding:`, must be a finding of the item's reviews. Other lines
+of a finding are the reviewer's text, and an HTML comment is text.
+
+`review` writes the file's front matter: the round, the commit at the tip
+of the item's branch, the caller as reviewer, `model: null` and
+`verdict: null`. Its body is the template: a `## Summary` heading over a
+comment saying what to write, then one finding for each fix-now finding
+the earlier rounds leave open, numbered from 1, under that finding's
+latest name:
+
+```markdown
+## Finding 1: <the open finding's title>
+Recommendation: fix now
+Was: 1-x7qd.1
+Response: fixed in 0123abc
+Now: kept
+<!-- Set Now: to fixed, withdrawn or kept. -->
+```
+
+`Response:` is the author's line for that finding in Responses, or `none
+in the Report`. A carried finding starts kept, so it stays open until its
+reviewer closes it. Nobody edits the front matter: `verdict` sets the
+verdict, and the model when given `--model`.
 
 A fix-now finding is open until a later round carries it as fixed,
 withdrawn or decided, or a Decisions entry naming it has an outcome.
@@ -267,8 +289,8 @@ will check.
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
-| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file has an open fix-now finding |
-| `verdict approve` | Reviewer | `in_review` | `approved` | the file has no open fix-now finding |
+| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding |
+| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry |
 | `verdict` on a mission review | Reviewer | any | unchanged | as above, for the file |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
 | `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor in the `reviewers` of the review that raised the finding |
@@ -287,20 +309,30 @@ How the table is built:
 
 - A row joins the table with its command. The table holds the rows of
   `start`, `start` taking over, `submit`, `review`, both verdicts and
-  `merge` with and without `--trivial`; the conditions of `review`,
-  `verdict` and `merge` arrive with those commands, except `review`'s,
-  which `status` already uses.
-- `acts::check` refuses an act whose From does not hold the item's status,
-  then one that needs a role the caller does not hold, then one with an unmet
-  condition, and otherwise gives the status to set. An act that binds a role
-  (`start`, `review`) needs nothing held; `submit` and `merge` need the
-  caller to be the item's last implementer.
+  `merge` with and without `--trivial`; the conditions of `merge` arrive
+  with that command.
+- A round of an item is the latest round of its reviews until one of them
+  has a verdict, which ends it; then it is the next round, which has no file
+  until `review` creates one. The round's file is the caller's when it holds
+  one of the latest round's, else the first by name. The caller is the
+  round's reviewer while the item is in review and it holds that file.
+- `acts::check` refuses a caller that holds one role on the item and runs
+  another role's act, with one line naming its role and that role's
+  commands. `review` is the exception: an implementer, current or past, is
+  refused by its condition, and is shown the brief. Then `check` refuses an
+  act whose From does not hold the item's status, then one that needs a role
+  the caller does not hold, then one with an unmet condition, and otherwise
+  gives the status to set. An act that binds a role (`start`, `review`)
+  needs nothing held; `submit` and `merge` need the caller to be the item's
+  last implementer, and a verdict needs it to be the round's reviewer.
 - `acts::next` names the act the caller would run next: `start` on a ready
   item; as its holder, `submit` from building or changes requested, `merge`
-  from approved, and nothing while it is in review; as anyone else, `review`
-  when it is in review and they never implemented it, else the take-over.
-  `status` prints that act's unmet conditions from `acts::unmet`, the function
-  `check` calls, and ends with its command.
+  from approved, and nothing while it is in review; as the round's
+  reviewer, `verdict changes` while its file holds an open fix-now finding,
+  else `verdict approve`; as anyone else, `review` when it is in review and
+  they never implemented it, else the take-over. `status` prints that act's
+  unmet conditions from `acts::unmet`, the function `check` calls, and ends
+  with its command.
 - `start` takes the take-over row when the item's status is a started one,
   and the plain row otherwise, so a draft, done or dropped item is refused by
   that row's From.
@@ -345,7 +377,8 @@ hold several things, and `status` lists each. Built so far: on a branch named
 for an item, `status` speaks to the item's holder as its implementer and to
 anyone else as a visitor, naming the holder; anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
-ready items, and the started items others hold. Reviews and missions join
+ready items, and the started items others hold. On the item's branch it
+speaks to the round's reviewer as reviewer, naming its file. Missions join
 with their commands.
 
 Harness hooks give orientation at session start: `atelier setup claude`
@@ -402,10 +435,16 @@ post-checkout Git hook prints it on every branch switch.
   again only switches.
 - **`submit` commits the item's directory** and nothing else in the
   checkout.
+- **A review is written where the implementer works.** `review` runs only
+  in the checkout on the item's branch, and refuses anywhere else, naming
+  it. It creates the round's file, or appends the caller to its
+  `reviewers`, and commits nothing. `verdict` commits the review file and
+  `item.md`, with its new status, in one commit, and nothing else in the
+  checkout.
 - **A refused commit changes nothing.** When `git commit` fails, as when a
-  hook refuses it, `submit` and the take-over put the item's file and the
-  index under the paths they staged back as they were, so the act can be run
-  again.
+  hook refuses it, `submit`, the take-over and `verdict` put the files they
+  wrote and the index under the paths they staged back as they were, so the
+  act can be run again.
 - **One clone.** All of this coordinates the threads in one clone and its
   worktrees. Two clones on different hosts are not coordinated.
 - Apart from that check, a command on a work branch reads and writes that

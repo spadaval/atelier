@@ -3,8 +3,8 @@
 //! an act with [`check`], and `status` lists what [`unmet`] gives for the
 //! act it names next, so the two cannot disagree.
 
-use atelier_core::{FindingName, Status, Thread};
-use atelier_records::{ItemDir, Problem};
+use atelier_core::{is_open, FindingName, Status, Thread};
+use atelier_records::{validate, ItemDir, Problem, ReviewFile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Act {
@@ -131,7 +131,17 @@ pub struct Facts<'a> {
     pub caller: &'a Thread,
 }
 
-impl Facts<'_> {
+/// The round of review an item is in.
+pub struct Round<'a> {
+    pub number: u32,
+    /// The round's review file: a review of the latest round, the
+    /// caller's when it holds one. `None` once a review of the latest round
+    /// has a verdict, since that verdict ended the round; `number` is then
+    /// the next round, whose file `review` creates.
+    pub review: Option<&'a ReviewFile>,
+}
+
+impl<'a> Facts<'a> {
     pub fn status(&self) -> Status {
         self.item.item.status
     }
@@ -142,6 +152,48 @@ impl Facts<'_> {
 
     pub fn holds(&self) -> bool {
         self.holder() == Some(self.caller)
+    }
+
+    pub fn round(&self) -> Round<'a> {
+        let reviews = &self.item.reviews;
+        let latest = reviews.iter().map(|r| r.name.round).max().unwrap_or(0);
+        let open: Vec<&ReviewFile> = reviews.iter().filter(|r| r.name.round == latest).collect();
+        let ended = open.iter().any(|r| r.review.verdict.is_some());
+        let Some(first) = open.first().filter(|_| !ended) else {
+            return Round {
+                number: latest + 1,
+                review: None,
+            };
+        };
+        let review = open
+            .iter()
+            .find(|r| r.review.reviewers.holder() == Some(self.caller))
+            .unwrap_or(first);
+        Round {
+            number: latest,
+            review: Some(review),
+        }
+    }
+
+    /// The round's review file, while the item is in review and the caller
+    /// holds that file.
+    pub fn reviewing(&self) -> Option<&'a ReviewFile> {
+        if self.status() != Status::InReview {
+            return None;
+        }
+        let review = self.round().review?;
+        (review.review.reviewers.holder() == Some(self.caller)).then_some(review)
+    }
+
+    /// The role the caller holds on the item, if any.
+    pub fn role(&self) -> Option<Role> {
+        if self.holds() {
+            Some(Role::Implementer)
+        } else if self.reviewing().is_some() {
+            Some(Role::Reviewer)
+        } else {
+            None
+        }
     }
 }
 
@@ -169,17 +221,28 @@ pub enum Condition {
     Unanswered(String),
     /// The caller has been the item's implementer, so cannot review it.
     FormerImplementer,
+    /// `verdict changes` needs an open fix-now finding in the caller's file.
+    NoOpenFinding,
+    /// `verdict approve` needs no fix-now finding of the item open.
+    OpenFinding {
+        finding: FindingName,
+        title: String,
+    },
 }
 
 #[derive(Debug)]
 pub enum Refusal {
+    /// The caller holds a role on the item, and the act is another role's.
+    Role(Role),
     /// The act does not run from the item's status.
     From {
         act: Act,
         status: Status,
     },
-    /// The act needs the caller to hold the item, and it does not.
+    /// The act needs the caller to hold its role on the item, the item
+    /// itself or this round's review, and it does not.
     NotHolder {
+        role: Role,
         holder: Option<Thread>,
     },
     Unmet(Vec<Condition>),
@@ -190,16 +253,37 @@ pub enum Refusal {
 /// refused.
 pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     let row = row(act);
+    // A thread that holds one role and runs another's command is told its
+    // role, whatever the status. `review` by an implementer is refused by
+    // its own condition instead, so the author sees the brief.
+    if let Some(role) = facts.role().filter(|role| *role != row.role) {
+        if act != Act::Review {
+            return Err(Refusal::Role(role));
+        }
+    }
     if !row.from.contains(&facts.status()) {
         return Err(Refusal::From {
             act,
             status: facts.status(),
         });
     }
-    if !row.binds && row.role == Role::Implementer && !facts.holds() {
-        return Err(Refusal::NotHolder {
-            holder: facts.holder().cloned(),
-        });
+    if !row.binds {
+        let (holds, holder) = match row.role {
+            Role::Implementer => (facts.holds(), facts.holder()),
+            Role::Reviewer => (
+                facts.reviewing().is_some(),
+                facts
+                    .round()
+                    .review
+                    .and_then(|r| r.review.reviewers.holder()),
+            ),
+        };
+        if !holds {
+            return Err(Refusal::NotHolder {
+                role: row.role,
+                holder: holder.cloned(),
+            });
+        }
     }
     let unmet = unmet(act, facts).map_err(Refusal::Record)?;
     if !unmet.is_empty() {
@@ -208,8 +292,8 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     Ok(row.to)
 }
 
-/// The conditions of `act` that do not hold. The review, verdict and merge
-/// conditions arrive with those commands.
+/// The conditions of `act` that do not hold. The merge conditions arrive
+/// with that command.
 pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
@@ -264,30 +348,69 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 unmet.push(Condition::FormerImplementer);
             }
         }
-        Act::VerdictChanges | Act::VerdictApprove | Act::Merge | Act::MergeTrivial => {}
+        Act::VerdictChanges | Act::VerdictApprove => {
+            let Some(file) = facts.reviewing() else {
+                return Ok(unmet);
+            };
+            let problems = validate(std::slice::from_ref(item));
+            if let Some(problem) = problems.into_iter().find(|p| p.file == file.path) {
+                return Err(problem);
+            }
+            let findings = item.findings()?;
+            let decisions = item.decisions()?;
+            let open = findings
+                .iter()
+                .filter(|f| is_open(f, &findings, &decisions));
+            if act == Act::VerdictChanges {
+                if !open.clone().any(|f| f.name.review == file.name) {
+                    unmet.push(Condition::NoOpenFinding);
+                }
+            } else {
+                // One the file should carry and does not stays open too.
+                unmet.extend(open.map(|f| Condition::OpenFinding {
+                    finding: f.name.clone(),
+                    title: f.title.clone(),
+                }));
+            }
+        }
+        Act::Merge | Act::MergeTrivial => {}
     }
     Ok(unmet)
 }
 
 /// The act the caller would run next on the item, if any: start a ready
-/// item; as its holder, submit it or merge it; as anyone else, review it
-/// when it is in review and they never implemented it, else take it over.
-pub fn next(facts: &Facts) -> Option<Act> {
+/// item; as its holder, submit it or merge it; as this round's reviewer,
+/// `verdict changes` while its file holds an open fix-now finding, else
+/// `verdict approve`; as anyone else, review it when it is in review and
+/// they never implemented it, else take it over.
+pub fn next(facts: &Facts) -> Result<Option<Act>, Problem> {
     let status = facts.status();
     if status == Status::Ready {
-        return Some(Act::Start);
+        return Ok(Some(Act::Start));
     }
     if !STARTED.contains(&status) {
-        return None;
+        return Ok(None);
+    }
+    if let Some(file) = facts.reviewing() {
+        let findings = facts.item.findings()?;
+        let decisions = facts.item.decisions()?;
+        let open = findings
+            .iter()
+            .any(|f| f.name.review == file.name && is_open(f, &findings, &decisions));
+        return Ok(Some(if open {
+            Act::VerdictChanges
+        } else {
+            Act::VerdictApprove
+        }));
     }
     if !facts.holds() {
         let implemented = facts.item.item.implementers.0.contains(facts.caller);
         let review = status == Status::InReview && !implemented;
-        return Some(if review { Act::Review } else { Act::TakeOver });
+        return Ok(Some(if review { Act::Review } else { Act::TakeOver }));
     }
-    match status {
+    Ok(match status {
         Status::Approved => Some(Act::Merge),
         Status::InReview => None,
         _ => Some(Act::Submit),
-    }
+    })
 }

@@ -4,8 +4,10 @@ mod commands;
 mod git;
 mod output;
 mod repo;
+mod review;
 
-use clap::{Parser, Subcommand};
+use atelier_core::Verdict;
+use clap::{Parser, Subcommand, ValueEnum};
 use commands::Outcome;
 use std::io::Write;
 use std::process::ExitCode;
@@ -28,6 +30,23 @@ enum Command {
     Start { id: String },
     /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
     Submit,
+    /// Open this round's review file of an item in review, or take it over, and print the brief.
+    Review { id: String },
+    /// Record your verdict in your review file and commit it.
+    Verdict {
+        verdict: VerdictArg,
+        /// The model you run on, such as gpt-6.1-sol; written into the review file.
+        #[arg(long)]
+        model: Option<String>,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum VerdictArg {
+    /// No fix-now finding is open.
+    Approve,
+    /// Your review file holds an open fix-now finding.
+    Changes,
 }
 
 fn main() -> ExitCode {
@@ -36,6 +55,14 @@ fn main() -> ExitCode {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
         Command::Start { id } => commands::start(&mut repo, &id),
         Command::Submit => commands::submit(&mut repo),
+        Command::Review { id } => review::review(&mut repo, &id),
+        Command::Verdict { verdict, model } => {
+            let verdict = match verdict {
+                VerdictArg::Approve => Verdict::Approve,
+                VerdictArg::Changes => Verdict::Changes,
+            };
+            review::verdict(&mut repo, verdict, model)
+        }
     });
     // A closed stdout, as under `| head`, is no failure of the command.
     match result {

@@ -213,6 +213,48 @@ fn each_record_kind_reads_and_writes_back_the_same_file() {
 }
 
 #[test]
+fn a_review_with_no_model_reads_and_writes_back_as_null() {
+    let unknown = REVIEW_1.replace("model: gpt-6.1-sol", "model: null");
+    let review = parse_review(Path::new("x"), &unknown).unwrap();
+    assert_eq!(review.model, None);
+    assert_eq!(render_review(&review), unknown);
+    assert_eq!(
+        parse_review(Path::new("x"), REVIEW_1)
+            .unwrap()
+            .model
+            .as_deref(),
+        Some("gpt-6.1-sol")
+    );
+}
+
+#[test]
+fn an_item_gives_its_sections_and_a_review_each_finding_as_written() {
+    let dir = load(
+        &example()
+            .iter()
+            .map(|(p, t)| (*p, t.as_str()))
+            .collect::<Vec<_>>(),
+        "atelier-06jc",
+    );
+    assert_eq!(
+        dir.section("Goal"),
+        Some("\nPrint open findings in full.\n\n")
+    );
+    assert_eq!(dir.section("Scope"), None);
+    assert!(dir.section("Report").unwrap().contains("### Responses"));
+    let second = &dir.reviews[1];
+    assert_eq!(
+        second.finding_text(1),
+        Some("Recommendation: fix now\nWas: 1-k3fa.1\nNow: kept\n\n")
+    );
+    assert_eq!(
+        second.finding_text(3),
+        Some("Recommendation: defer\n\nDropped by t3-gardener: the code it names is gone\n")
+    );
+    assert_eq!(second.finding_text(4), None);
+}
+
+#[test]
 fn a_body_keeps_its_leading_and_trailing_newlines() {
     let path = Path::new("item.md");
     let tight = BLOCKER.replace("---\n## Goal", "---\n\n## Goal") + "\n";
