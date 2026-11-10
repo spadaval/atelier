@@ -78,6 +78,7 @@ def rework(repo, commit, window):
             if window.start <= when <= last_written:
                 written += new_len
             pending = old_len + new_len
+    proc.stdout.close()
     if proc.wait():
         raise subprocess.CalledProcessError(proc.returncode, "git log")
     return {"written_from": window.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "written_until": last_written.strftime("%Y-%m-%dT%H:%M:%SZ"),
