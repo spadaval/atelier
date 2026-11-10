@@ -1,0 +1,42 @@
+---
+created_at: "2026-11-10T00:56:06.471222574+00:00"
+id: "atelier-mal9"
+issue_type: "task"
+labels:
+- "redesign"
+priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates:
+  - kind: "issue"
+    id: "atelier-fcb7"
+    type: "advances"
+schema: "atelier.issue"
+schema_version: 2
+status: "todo"
+title: "Read, write and validate item, review and config records in the new layout"
+updated_at: "2026-11-10T00:56:06.471222574+00:00"
+---
+
+## Goal
+
+Build the record store the new commands stand on: `items/<id>/item.md`, `reviews/<n>.md` and `config.toml` at schema version 3, as the architecture specification's Records section defines them, in new modules of `atelier-core` and `atelier-records`.
+
+## Done when
+
+- [ ] Unit tests parse and write each record kind and get the same file back, with the Markdown body preserved byte for byte.
+- [ ] Validation rejects each of these with a message naming the file and the field: an unknown status; an item with no Goal or no Done when section; a finding with no Recommendation line; a review whose verdict is approve while it holds a fix-now finding; a `mission` or `blocked_by` that names no record.
+- [ ] Creating a review under an item that has reviews 1 and 2 writes `reviews/3.md`.
+- [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks and the forge, and an unknown key is an error that names it.
+- [ ] The old binary's tests pass unchanged.
+- [ ] The Records section of `docs/strategies/redesign-architecture.md` matches what was built; the Report lists each difference corrected there.
+
+## Scope
+
+Item, review and config records. Mission records belong to step B. No CLI. The new modules reuse the existing front-matter splitting and ID generation and do not depend on `atelier-workflow` or on the old issue and review record types; the old code is not changed.
+
+## Context
+
+Design: `docs/strategies/redesign-architecture.md`, Records and Crates. The existing parser is `crates/atelier-records/src/lib.rs`. This is the first item of step A in `docs/strategies/redesign-2-core.md`.

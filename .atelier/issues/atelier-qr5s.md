@@ -1,0 +1,28 @@
+---
+created_at: "2026-11-10T00:56:04.626625678+00:00"
+id: "atelier-qr5s"
+issue_type: "mission"
+labels:
+- "redesign"
+strategy:
+  path: docs/strategies/redesign-3-cutover.md
+priority: "P1"
+relationships:
+  blocks: []
+  children: []
+  attachments: []
+  relates: []
+schema: "atelier.issue"
+schema_version: 2
+status: "draft"
+title: "Move all five repositories and Agent Factory onto the new loop, one cutover per host"
+updated_at: "2026-11-10T00:56:04.626625678+00:00"
+---
+
+## Outcome
+
+On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio run on the new records and the new binary. Agent Factory is rewritten against the new tool, and each procedure it keeps has an eval scenario it changed. The old product docs and the ADRs are replaced by the design record. Sumeet has a runbook to convert his work host.
+
+## Background
+
+One of four missions that redesign Atelier, in order: baseline, core loop, cutover, gardener. Sumeet set the direction in conversation on 2026-11-09, after an assessment of the project. The target design is in the [product specification](docs/strategies/redesign-product.md) and the [architecture specification](docs/strategies/redesign-architecture.md); this mission's own design is in its strategy. Other Atelier work is paused while the four run.
