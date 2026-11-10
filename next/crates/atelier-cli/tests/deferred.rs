@@ -151,12 +151,23 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(listed(&root).is_empty());
 
+    // `show` prints each settlement with its finding, before it is
+    // committed too.
+    let run = atelier(&root, "t9", &["show", DONE]);
+    assert!(
+        run.stdout.contains(&format!(
+        "    1-aaaa.1 (defer, taken into {created} by t9): The greeting ignores the locale\n\
+         \x20   1-aaaa.2 (defer, dropped by t9: The help was rewritten.): Old wording in the help\n"
+    )),
+        "{}",
+        run.stdout
+    );
+
     // Committed with the line `new --from` printed, which names the review
     // file too, they stay off the list.
     shell(&root, then(&taken));
     assert_eq!(changes(&root), "");
-    // `show`, which reads the base's last commit, prints each settlement
-    // with its finding.
+    // And once it is committed.
     let run = atelier(&root, "t9", &["show", DONE]);
     assert!(run.stdout.contains(&format!(
         "    1-aaaa.1 (defer, taken into {created} by t9): The greeting ignores the locale\n\
@@ -318,6 +329,10 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
     assert_eq!(listed(&root), ["demo-d0ne/1-aaaa.1", "demo-d0ne/1-aaaa.4"]);
     shell(&root, then(&run.stdout));
     assert_eq!(changes(&root), "");
+    let run = atelier(&root, "t1", &["show", DONE]);
+    assert!(run.stdout.contains(
+        "    1-aaaa.2 (defer, dropped by t1: The help was rewritten.): Old wording in the help\n"
+    ), "{}", run.stdout);
 
     let run = atelier(&root, "t1", &["merge"]);
     assert_eq!(run.code, 1, "{}", run.stdout);

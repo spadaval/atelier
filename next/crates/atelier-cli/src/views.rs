@@ -9,6 +9,7 @@ use crate::{plan, view_output};
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
 use atelier_app::{entries, entry, in_progress, items_of, list as groups, Filter};
+use atelier_core::Status;
 use atelier_records::validate_id;
 
 pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
@@ -38,11 +39,24 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
     };
     let links = repo.links(record)?;
     let entry = entry(&facts(repo, &located, &links, None))?;
+    // A settlement is written in the checkout it is run in, on the base or
+    // on an implementer's branch, so one this checkout holds is shown too.
+    let mut findings = record.findings()?;
+    if let Some(here) = repo
+        .checkout_item(id)?
+        .filter(|_| record.item.status == Status::Done)
+    {
+        for settled in here.findings()?.into_iter().filter(|f| f.is_settled()) {
+            if let Some(finding) = findings.iter_mut().find(|f| f.name == settled.name) {
+                finding.settlement = settled.settlement;
+            }
+        }
+    }
     Ok(Outcome::Done(view_output::item(
         record,
         &entry,
         links.mission.as_ref(),
-        &record.findings()?,
+        &findings,
         &record.open_findings()?,
     )))
 }

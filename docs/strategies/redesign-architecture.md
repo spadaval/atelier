@@ -267,6 +267,9 @@ finding and its review file and quotes the finding, heading and text, and
 the `Taken:` line, in one run: it validates both first, writes the item and
 then the review, and removes the item again if the review cannot be
 written. `drop <finding> --reason "<why>"` needs a reason on one line.
+A review file is written whole or not at all: into a file beside it, which
+then replaces it. `show` on a done item prints each finding's settlement,
+the base's or one the checkout holds, committed or not.
 
 `caused_by` is checked for form only. The item that caused a bug may have
 left the tree at the cutover, and then its ID or the commit is still worth
