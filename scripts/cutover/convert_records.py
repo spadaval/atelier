@@ -32,8 +32,11 @@ DECISION_DONE_WHEN = "- [ ] The question is answered and the answer is written i
 # A link's destination, inline or in a reference definition, bare or in <...>; each
 # alternative is (what comes before it, the destination).
 LINK = re.compile(r"(\]\(\s*<)([^>\n]+)(?=>)|(\]\(\s*)([^)\s<]+)(?=[\s)])"
-                  r"|^( {0,3}\[[^\]]+\]:[ \t]*<)([^>\n]+)(?=>)|^( {0,3}\[[^\]]+\]:[ \t]*)([^\s<]+)", re.M)
-REFERENCE = re.compile(r"^ {0,3}\[([^\]]+)\]:.*$", re.M)
+                  r"|^( {0,3}\[[^\]]+\]:[ \t]*\n?[ \t]*<)([^>\n]+)(?=>)"
+                  r"|^( {0,3}\[[^\]]+\]:[ \t]*\n?[ \t]*)([^\s<]+)", re.M)
+# A whole reference definition: its destination and its title may each start on the next line.
+REFERENCE = re.compile(r"^ {0,3}\[([^\]]+)\]:[ \t]*\n?[ \t]*(?:<[^>\n]*>|[^\s<]\S*)"
+                       r"(?:[ \t]*\n?[ \t]*(?:\"[^\"\n]*\"|'[^'\n]*'|\([^)\n]*\)))?[ \t]*$", re.M)
 
 
 def destination(m):

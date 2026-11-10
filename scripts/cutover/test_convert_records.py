@@ -103,7 +103,8 @@ Nobody complains.
 
 Mocks are in [mocks](<mocks/a.md> "a mock"), [the mock][m] and [n][].
 
-[m]: mocks/a.md#a-mock
+[m]:
+  mocks/a.md#a-mock
 [n]: <mocks/a.md>
 
 # Scope
@@ -406,7 +407,8 @@ Widgets only.
 
 The lead decides.
 
-[m]: ../../../docs/strategies/mocks/a.md#a-mock
+[m]:
+  ../../../docs/strategies/mocks/a.md#a-mock
 """)
         self.assertEqual(self.read(mission + "design.md"), """---
 status: approved
@@ -416,7 +418,8 @@ status: approved
 
 Mocks are in [mocks](<../../../docs/strategies/mocks/a.md> "a mock"), [the mock][m] and [n][].
 
-[m]: ../../../docs/strategies/mocks/a.md#a-mock
+[m]:
+  ../../../docs/strategies/mocks/a.md#a-mock
 [n]: <../../../docs/strategies/mocks/a.md>
 
 # Risks and Unknowns
