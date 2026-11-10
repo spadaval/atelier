@@ -672,12 +672,13 @@ fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<C
         let about = decisions
             .iter()
             .filter(|d| d.finding.as_ref() == Some(name));
-        about.into_iter().find_map(|d| d.outcome)
+        about.filter_map(|d| d.outcome).next()
     };
     let (own, earlier): (Vec<&Finding>, Vec<&Finding>) =
         seen.iter().partition(|f| f.name.review == file.name);
     let carried_before = |name: &FindingName| earlier.iter().any(|f| f.was.as_ref() == Some(name));
     let mut unmet = Vec::new();
+    let mut dropped = Vec::new();
     for finding in &earlier {
         let Some(outcome) = settled(&finding.name).filter(|_| !carried_before(&finding.name))
         else {
@@ -687,35 +688,28 @@ fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<C
             .iter()
             .any(|f| f.was.as_ref() == Some(&finding.name) && f.decided == Some(outcome));
         if !carried {
+            dropped.push(&finding.name);
             unmet.push(Condition::DecisionDropped {
                 finding: finding.name.clone(),
                 outcome,
             });
         }
     }
-
     for finding in own {
         let as_written = match &finding.was {
             // Said once, as the finding the file drops.
-            Some(was)
-                if (unmet.iter()).any(
-                    |c| matches!(c, Condition::DecisionDropped { finding, .. } if finding == was),
-                ) =>
-            {
-                true
-            }
-            Some(was) if settled(was).is_some() => {
-                finding.decided == settled(was) && !carried_before(was)
-            }
-            // A finding carried with a `Decided:` line is settled too.
-            Some(was)
-                if earlier
-                    .iter()
-                    .any(|f| f.name == *was && f.decided.is_some()) =>
-            {
-                false
-            }
-            _ => finding.decided.is_none(),
+            Some(was) if dropped.contains(&was) => true,
+            Some(was) => match settled(was) {
+                Some(outcome) => finding.decided == Some(outcome) && !carried_before(was),
+                // A finding carried as decided is settled too.
+                None => {
+                    let decided = earlier
+                        .iter()
+                        .any(|f| f.name == *was && f.decided.is_some());
+                    finding.decided.is_none() && !decided
+                }
+            },
+            None => finding.decided.is_none(),
         };
         if !as_written {
             unmet.push(Condition::DecisionChanged(finding.name.clone()));

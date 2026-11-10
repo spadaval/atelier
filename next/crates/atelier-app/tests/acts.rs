@@ -1004,12 +1004,12 @@ fn a_verdict_keeps_what_a_decision_settled_as_the_tool_wrote_it() {
     // Changed, kept, or removed: refused, and said once.
     assert_eq!(
         approve(&carry("1-aaaa.1", "Decided: no action")),
-        [dropped.clone()]
+        std::slice::from_ref(&dropped)
     );
     let kept = carry("1-aaaa.1", "Now: kept");
     assert_eq!(
         verdict(&decided, round_1, &kept, Act::VerdictChanges),
-        [dropped.clone()]
+        std::slice::from_ref(&dropped)
     );
     assert_eq!(approve(""), [dropped]);
     // Carried a second time, as kept, beside the tool's line: reopened.
