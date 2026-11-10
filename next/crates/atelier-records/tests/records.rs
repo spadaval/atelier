@@ -1,6 +1,6 @@
 use atelier_core::{
-    ForgeProvider, MissionStatus, Now, Outcome, Recommendation, Response, Settlement, Status,
-    Thread, Verdict,
+    is_deferred, ForgeProvider, MissionStatus, Now, Outcome, Recommendation, Response, Settlement,
+    Status, Thread, Verdict,
 };
 use atelier_records::create_review;
 use atelier_records::{
@@ -920,7 +920,8 @@ fn a_deferred_finding_is_settled_by_a_taken_or_dropped_line() {
     );
     let findings = dir.findings().unwrap();
     let taken = &findings[1];
-    assert!(taken.is_deferred() && taken.is_settled());
+    let decisions = dir.decisions().unwrap();
+    assert!(is_deferred(taken, &findings, &decisions) && taken.is_settled());
     assert_eq!(
         taken.settlement,
         Some(Settlement::Taken {
@@ -929,7 +930,7 @@ fn a_deferred_finding_is_settled_by_a_taken_or_dropped_line() {
         })
     );
     let dropped = &findings[4];
-    assert!(dropped.is_deferred() && dropped.is_settled());
+    assert!(is_deferred(dropped, &findings, &decisions) && dropped.is_settled());
     assert_eq!(
         dropped.settlement,
         Some(Settlement::Dropped {
@@ -956,8 +957,8 @@ fn a_deferred_finding_is_settled_by_a_taken_or_dropped_line() {
             .collect::<Vec<_>>(),
         "atelier-06jc",
     );
-    let finding = &dir.findings().unwrap()[1];
-    assert!(finding.is_deferred() && !finding.is_settled());
+    let findings = dir.findings().unwrap();
+    assert!(is_deferred(&findings[1], &findings, &[]) && !findings[1].is_settled());
 }
 
 #[test]

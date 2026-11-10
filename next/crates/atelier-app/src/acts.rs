@@ -5,8 +5,8 @@
 
 use crate::review::chain;
 use atelier_core::{
-    is_open, Decision, Finding, FindingName, MissionStatus, Outcome, Response, Status, Thread,
-    Verdict,
+    is_deferred, is_open, Decision, Finding, FindingName, MissionStatus, Outcome, Response,
+    Settlement, Status, Thread, Verdict,
 };
 use atelier_records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 
@@ -40,6 +40,8 @@ pub enum Act {
     PlanVerdictApprove,
     /// `lead` on a mission.
     Lead,
+    /// `new --from` or `drop` on a deferred finding of a done item.
+    Settle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,7 +85,7 @@ pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 /// Every status a mission can have.
 const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
 
-pub const TABLE: [Row; 19] = [
+pub const TABLE: [Row; 20] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -236,6 +238,17 @@ pub const TABLE: [Row; 19] = [
         role: Role::Reviewer,
         binds: false,
         from: MISSION,
+        to: None,
+    },
+    // A planner on the base, or the implementer of the item whose branch
+    // it runs on; the CLI checks where it runs. It changes the finding, not
+    // the status of its item, and checks the finding with `check_settle`.
+    Row {
+        act: Act::Settle,
+        command: "new --from, drop",
+        role: Role::Planner,
+        binds: false,
+        from: &[Status::Done],
         to: None,
     },
     Row {
@@ -513,6 +526,15 @@ pub enum Condition {
     },
     /// `close` on a mission needs its Result written.
     NoResult,
+    /// Settling a finding needs the item's reviews to have it.
+    NoFinding(FindingName),
+    /// Settling a finding needs it deferred.
+    NotDeferred(FindingName),
+    /// Settling a finding needs it not settled already.
+    Settled {
+        finding: FindingName,
+        settlement: Settlement,
+    },
 }
 
 #[derive(Debug)]
@@ -731,6 +753,8 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let mut unmet = Vec::new();
     match act {
         Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead | Act::Escalate => {}
+        // The finding's conditions are checked by `check_settle`.
+        Act::Settle => {}
         // A mission's act is checked with `unmet_mission`.
         Act::CloseMission | Act::PlanVerdictChanges | Act::PlanVerdictApprove => {}
         Act::Start => {
@@ -878,6 +902,44 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
         }
     }
     Ok(unmet)
+}
+
+/// `new --from` or `drop` on finding `name` of the item: the act's row
+/// needs the item done, and the finding must be one of its reviews',
+/// deferred and not yet settled. Gives the finding.
+pub fn check_settle(facts: &Facts, name: &FindingName) -> Result<Finding, Refusal> {
+    check(Act::Settle, facts)?;
+    let findings = facts.item.findings().map_err(Refusal::Record)?;
+    let decisions = facts.item.decisions().map_err(Refusal::Record)?;
+    let unmet = |condition| Err(Refusal::Unmet(vec![condition]));
+    let Some(finding) = findings.iter().find(|f| f.name == *name) else {
+        return unmet(Condition::NoFinding(name.clone()));
+    };
+    if !is_deferred(finding, &findings, &decisions) {
+        return unmet(Condition::NotDeferred(name.clone()));
+    }
+    if let Some(settlement) = &finding.settlement {
+        return unmet(Condition::Settled {
+            finding: name.clone(),
+            settlement: settlement.clone(),
+        });
+    }
+    Ok(finding.clone())
+}
+
+/// The deferred findings of `item` that nobody has settled, when it is
+/// done; what `list --deferred` shows.
+pub fn unsettled(item: &ItemDir) -> Result<Vec<Finding>, Problem> {
+    if item.item.status != Status::Done {
+        return Ok(Vec::new());
+    }
+    let findings = item.findings()?;
+    let decisions = item.decisions()?;
+    Ok(findings
+        .iter()
+        .filter(|f| is_deferred(f, &findings, &decisions) && !f.is_settled())
+        .cloned()
+        .collect())
 }
 
 /// Whether the approval still covers the head: since the commit it

@@ -6,7 +6,8 @@ use crate::merge::Moved;
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
 use atelier_core::{
-    Config, Decision, Finding, FindingName, Outcome, Priority, Response, Status, Thread, Verdict,
+    Config, Decision, Finding, FindingName, Outcome, Priority, Response, Settlement, Status,
+    Thread, Verdict,
 };
 use atelier_records::{Problem, ReviewFile};
 use std::path::Path;
@@ -65,6 +66,7 @@ fn goal(act: Act, status: Status) -> &'static str {
         Act::Close | Act::CloseMission => "close it",
         Act::PlanVerdictChanges | Act::PlanVerdictApprove => "record your verdict",
         Act::Lead => "lead it",
+        Act::Settle => "settle it",
     }
 }
 
@@ -132,6 +134,19 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
             format!("{item} is done or dropped (it is {})", status_name(*status))
         }
         Condition::NoResult => "Result: written under `## Result`".into(),
+        Condition::NoFinding(finding) => {
+            format!("A review of {id} has a finding {finding} (none does)")
+        }
+        Condition::NotDeferred(finding) => format!(
+            "Finding {id}/{finding} is deferred, by its recommendation or by a decision (it is not)"
+        ),
+        Condition::Settled {
+            finding,
+            settlement,
+        } => format!(
+            "Finding {id}/{finding} is not settled yet (it was {})",
+            settled(settlement)
+        ),
     };
     format!("  [ ] {text}")
 }
@@ -575,16 +590,26 @@ pub(crate) fn commit_line(at: Option<&Path>, paths: &[String], message: &str) ->
 }
 
 /// What a planning command prints once it has written `paths`, which are
-/// in the checkout `at` names, as for [`commit_line`].
-pub fn planned(said: &str, at: Option<&Path>, paths: &[String], message: &str) -> String {
+/// in the checkout `at` names, as for [`commit_line`]. `item` is the item
+/// whose branch it ran on, when it settled a finding there.
+pub fn planned(
+    said: &str,
+    item: Option<&str>,
+    at: Option<&Path>,
+    paths: &[String],
+    message: &str,
+) -> String {
     let mut text = format!("{said}Wrote, and did not commit:\n");
     for path in paths {
         text += &format!("  {path}\n");
     }
-    text + &format!(
-        "Planning counts once it is committed on the base.\nThen: {}\n",
-        commit_line(at, paths, message)
-    )
+    text += &match item {
+        None => "Planning counts once it is committed on the base.\n".into(),
+        Some(id) => format!(
+            "Once committed, it reaches the base when {id} merges. It is outside {id}'s directory, so a review of {id} must see it: an approval from before it is stale, and `atelier merge` will say to run `atelier submit`.\n"
+        ),
+    };
+    text + &format!("Then: {}\n", commit_line(at, paths, message))
 }
 
 pub fn created_item(id: &str) -> String {
@@ -599,23 +624,107 @@ pub fn created_mission(id: &str) -> String {
     )
 }
 
+/// Where to run a command that runs on the base branch `base`, which
+/// `checkout`, if any, has checked out.
+fn on_base(base: &str, checkout: Option<&Path>) -> String {
+    match checkout {
+        Some(path) => format!(
+            "Run it in {}, which has {base} checked out.",
+            path.display()
+        ),
+        None => format!("Run it in a checkout of {base}, as after `git switch {base}`."),
+    }
+}
+
 pub fn off_base(
     command: &str,
     base: &str,
     branch: Option<&str>,
     checkout: Option<&Path>,
 ) -> String {
-    let there = match checkout {
-        Some(path) => format!(
-            "Run it in {}, which has {base} checked out.",
-            path.display()
+    format!(
+        "`atelier {command}` writes planning, which happens on the base branch {base}, and this checkout is on {}. Nothing changed.\n{}\n",
+        place(branch),
+        on_base(base, checkout)
+    )
+}
+
+/// `new --from` or `drop` on a finding, run on a branch that is not the
+/// base's nor that of an item the caller implements.
+pub fn settle_elsewhere(
+    command: &str,
+    base: &str,
+    branch: Option<&str>,
+    checkout: Option<&Path>,
+) -> String {
+    format!(
+        "`atelier {command}` settles a finding on the base branch {base}, or on the branch of an item you implement, and this checkout is on {}. Nothing changed.\n{}\n",
+        place(branch),
+        on_base(base, checkout)
+    )
+}
+
+/// `name`, given to `new --from` or `drop`, is no finding's name.
+pub fn not_a_finding(command: &str, name: &str) -> String {
+    format!(
+        "`atelier {command} {name}` refused; nothing changed.\n`{name}` is not a finding's name, <item>/<review>.<number>, as `atelier list --deferred` prints it.\n"
+    )
+}
+
+/// `new --from` or `drop` on finding `name` of item `id`, refused for its
+/// item's status or for the finding.
+pub fn settle_refused(command: &str, name: &str, id: &str, refusal: &Refusal) -> String {
+    let why = match refusal {
+        Refusal::From { status, .. } => format!(
+            "  [ ] {id} is done (it is {}; only a done item's findings are settled)",
+            status_name(*status)
         ),
-        None => format!("Run it in a checkout of {base}, as after `git switch {base}`."),
+        Refusal::Unmet(unmet) => {
+            let lines: Vec<String> = unmet.iter().map(|c| condition(id, c)).collect();
+            lines.join("\n")
+        }
+        Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
+            unreachable!("settling a finding needs no role, and a record problem is an error")
+        }
     };
     format!(
-        "`atelier {command}` writes planning, which happens on the base branch {base}, and this checkout is on {}. Nothing changed.\n{there}\n",
-        place(branch)
+        "`atelier {command} {name}` refused; nothing changed.\n{why}\n`atelier list --deferred` lists the deferred findings nobody has settled.\n"
     )
+}
+
+/// How a finding was settled, after "it was".
+pub(crate) fn settled(settlement: &Settlement) -> String {
+    match settlement {
+        Settlement::Taken { item, by } => format!("taken into {item} by {by}"),
+        Settlement::Dropped { by, reason } => format!("dropped by {by}: {reason}"),
+    }
+}
+
+pub fn finding_taken(name: &str, id: &str) -> String {
+    format!(
+        "Created draft item {id} from finding {name}: its Goal quotes the finding, and its Done when and Scope are empty to write.\nMarked finding {name} taken into {id}.\nA planner makes {id} ready with: atelier ready {id} --by <name>\n"
+    )
+}
+
+/// A planning command's write failed. `created` says it had written a new
+/// item, which it removes, and `left` names the directories of those it
+/// could not remove.
+pub fn write_failed(command: &str, created: bool, left: &[String]) -> String {
+    let failed = format!("`atelier {command}` could not write its records");
+    match (created, left) {
+        (false, _) => failed,
+        (true, []) => {
+            format!("{failed}, so it removed the new item it had written; nothing changed")
+        }
+        (true, left) => format!(
+            "{failed}, and could not remove the new item it had written; remove {} by hand",
+            left.join(" and ")
+        ),
+    }
+}
+
+pub fn finding_dropped(name: &str, reason: &str) -> String {
+    format!("Dropped finding {name}: {reason}\n")
 }
 
 /// The problems a planning command found in what it would write, with
@@ -631,6 +740,173 @@ pub fn invalid(command: &str, root: &Path, problems: &[Problem]) -> String {
         text += &format!("  {shown}\n");
     }
     text
+}
+
+/// "2 items, 1 mission and config.toml".
+fn records((items, missions): (usize, usize)) -> String {
+    let plural = |n: usize, word: &str| match n {
+        1 => format!("1 {word}"),
+        n => format!("{n} {word}s"),
+    };
+    format!(
+        "{}, {} and config.toml",
+        plural(items, "item"),
+        plural(missions, "mission")
+    )
+}
+
+/// Records that do not read, and records that break the rule that every
+/// record is valid, each with its file and field.
+fn problems(unread: &[Problem], invalid: &[Problem]) -> String {
+    let mut text = String::new();
+    if !unread.is_empty() {
+        text += "These do not read as records. That is not a rule, and it cannot be skipped:\n";
+    }
+    for problem in unread {
+        text += &format!("  {problem}\n");
+    }
+    if !invalid.is_empty() {
+        text += "Rule: every record is valid. These are not:\n";
+    }
+    for problem in invalid {
+        text += &format!("  {problem}\n");
+    }
+    text
+}
+
+fn not_committed_records(paths: &[String]) -> String {
+    match paths.is_empty() {
+        true => String::new(),
+        false => format!("Record changes not committed yet: {}\n", some(paths)),
+    }
+}
+
+pub fn checked(counts: (usize, usize), uncommitted: &[String]) -> String {
+    format!(
+        "Every record is valid: {}.\n{}",
+        records(counts),
+        not_committed_records(uncommitted)
+    )
+}
+
+pub fn check_found(
+    counts: (usize, usize),
+    unread: &[Problem],
+    invalid: &[Problem],
+    uncommitted: &[String],
+) -> String {
+    let found = unread.len() + invalid.len();
+    let plural = if found == 1 { "" } else { "s" };
+    format!(
+        "`atelier check` found {found} problem{plural} in {}.\n{}Fix each in the file named, then run atelier check again.\n{}",
+        records(counts),
+        problems(unread, invalid),
+        not_committed_records(uncommitted)
+    )
+}
+
+/// The pre-commit hook's refusal: records that do not read or validate as
+/// staged, and each status changed as no act changes it, with the status
+/// `HEAD` has and the one staged.
+pub fn commit_refused(
+    unread: &[Problem],
+    invalid: &[Problem],
+    acts: &[(String, Status, Status)],
+) -> String {
+    let mut text = "Atelier's pre-commit hook refused this commit; nothing was committed.\n"
+        .to_string()
+        + &problems(unread, invalid);
+    if !acts.is_empty() {
+        text += "Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:\n";
+    }
+    for (path, before, now) in acts {
+        text += &format!(
+            "  {path}: status: {} to {}. Put back the status HEAD has; atelier status names the command for what comes next.\n",
+            status_name(*before),
+            status_name(*now)
+        );
+    }
+    text + "Fix each file named, stage it with git add, and commit again.\n"
+}
+
+/// How many commits a refused push lists.
+const LISTED: usize = 10;
+
+fn commits<T>(found: &[(String, String, T)], what: impl Fn(&T) -> String) -> String {
+    let mut text = String::new();
+    for (commit, subject, detail) in found.iter().take(LISTED) {
+        text += &format!("  {} {subject}: {}\n", short(commit), what(detail));
+    }
+    if found.len() > LISTED {
+        text += &format!("  and {} more\n", found.len() - LISTED);
+    }
+    text
+}
+
+/// The pre-push hook's refusal of a push of `base`, whose commit on the
+/// remote, if it has one this clone has, is `old`: records that do not
+/// read, commits that bring code without an Atelier merge, with the paths
+/// they change outside planning, and commits that set an item done while
+/// its branch exists, with the item.
+pub fn push_refused(
+    base: &str,
+    old: Option<&str>,
+    unread: &[Problem],
+    code: &[(String, String, Vec<String>)],
+    done: &[(String, String, String)],
+) -> String {
+    // With no commit of the remote's to name, the commands are described.
+    let (back, drop) = match old.map(short) {
+        Some(old) => (
+            format!("git branch -f {base} {old}"),
+            format!("git rebase -i {old}"),
+        ),
+        None => (
+            format!("moving {base} back to the remote's commit"),
+            "git rebase -i".to_string(),
+        ),
+    };
+    let mut text = "Atelier's pre-push hook refused this push; nothing was pushed.\n".to_string()
+        + &problems(unread, &[]);
+    if !unread.is_empty() {
+        text += "Fix each record in the commit that broke it: git commit --amend for the last commit, git rebase -i for an earlier one. A later commit that fixes it leaves the broken one in the push.\n";
+    }
+    if !code.is_empty() {
+        text += &format!(
+            "Rule: code and config.toml reach {base} only through atelier merge. Each new commit on {base}'s first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:\n"
+        );
+        text += &commits(code, |paths| format!("changes {}", some(paths)));
+        text += &format!(
+            "Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then {back} takes them off {base}, and atelier merge brings them in once the item is approved.\n"
+        );
+    }
+    if !done.is_empty() {
+        text += &format!(
+            "Rule: an item whose branch exists is done on {base} only through atelier merge. These set one done:\n"
+        );
+        text += &commits(done, |id| {
+            format!("sets {id} done while branch {id} exists")
+        });
+        text += &format!(
+            "Take each such commit off {base}: git reset --keep HEAD^ when it is the last, else {drop} and drop it. Then run atelier merge on the item's branch.\n"
+        );
+    }
+    text
+}
+
+/// The pre-push hook's refusal when the checkout's `config.toml`, which
+/// names the base it guards, does not read.
+pub fn push_no_config(problem: &Problem) -> String {
+    format!(
+        "Atelier's pre-push hook refused this push; nothing was pushed.\n{}Fix it in this checkout, then push again.\n",
+        problems(std::slice::from_ref(problem), &[])
+    )
+}
+
+/// What the post-checkout hook prints when `status` fails. The checkout
+/// itself went ahead.
+pub fn no_status(error: &anyhow::Error) -> String {
+    format!("Switched; `atelier status` cannot say more here: {error:#}\n")
 }
 
 pub fn no_mission(id: &str) -> String {

@@ -1,5 +1,6 @@
 //! The `atelier` command (docs/strategies/redesign-product.md, Commands).
 
+mod check;
 mod commands;
 mod forge;
 mod git;
@@ -33,6 +34,19 @@ struct Cli {
 enum Command {
     /// Who this thread is, what it holds, what each thing needs, and the next command.
     Status,
+    /// Validate every record in this checkout, and list record changes not committed yet.
+    Check {
+        /// Run as this Git hook, with the arguments Git gave the hook.
+        #[arg(long, value_name = "HOOK")]
+        hook: Option<check::Hook>,
+        #[arg(
+            requires = "hook",
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            hide = true
+        )]
+        args: Vec<String>,
+    },
     /// One item in full with its reviews, or one mission on one page with its items and questions.
     Show { id: String },
     /// All open work, grouped by mission and then by label; each flag given narrows it.
@@ -58,6 +72,9 @@ enum Command {
         /// Finished missions and items, done or dropped, instead of open ones.
         #[arg(long)]
         done: bool,
+        /// Instead, the deferred findings of done items that nobody has taken into an item or dropped.
+        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done"])]
+        deferred: bool,
     },
     /// Create a draft item, or with --mission a draft mission, in this checkout of the base, without committing it.
     New {
@@ -69,6 +86,9 @@ enum Command {
         /// Create a mission instead of an item.
         #[arg(long)]
         mission: bool,
+        /// Make the item from a deferred finding of a done item, named as `atelier list --deferred` prints it, and mark the finding taken; also on the branch of an item you implement.
+        #[arg(long, value_name = "FINDING", conflicts_with = "mission")]
+        from: Option<String>,
     },
     /// Change front-matter fields of a draft or ready item or mission, without committing them.
     #[command(group(ArgGroup::new("fields").required(true).multiple(true)))]
@@ -100,8 +120,9 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
-    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it.
+    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped; also on the branch of an item you implement.
     Drop {
+        /// An item, a mission, or a finding.
         id: String,
         /// Why it will not be done, on one line.
         #[arg(long)]
@@ -182,9 +203,19 @@ enum VerdictArg {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // `check` reads the records itself, and reports a config that does not
+    // read rather than stopping at it.
+    if let Command::Check { hook, args } = &cli.command {
+        return exit(match hook {
+            None => check::check(),
+            Some(hook) => check::hook(*hook, args),
+        });
+    }
     let result = repo::Repo::open().and_then(|mut repo| match cli.command {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
+        Command::Check { .. } => unreachable!("check runs before the repository is opened"),
         Command::Show { id } => views::show(&mut repo, &id),
+        Command::List { deferred: true, .. } => views::deferred(&mut repo),
         Command::List {
             ready,
             blocked,
@@ -193,6 +224,7 @@ fn main() -> ExitCode {
             label,
             mine,
             done,
+            deferred: false,
         } => {
             let filter = atelier_app::Filter {
                 ready,
@@ -209,7 +241,8 @@ fn main() -> ExitCode {
             title,
             into,
             mission,
-        } => plan::new(&mut repo, &title, into, mission),
+            from,
+        } => plan::new(&mut repo, &title, into, mission, from.as_deref()),
         Command::Set {
             id,
             title,
@@ -271,6 +304,10 @@ fn main() -> ExitCode {
         Command::Lead { mission } => views::lead(&mut repo, &mission),
         Command::Merge { trivial } => merge::merge(&repo.root, trivial),
     });
+    exit(result)
+}
+
+fn exit(result: anyhow::Result<Outcome>) -> ExitCode {
     // A closed stdout, as under `| head`, is no failure of the command.
     match result {
         Ok(Outcome::Done(text)) => {

@@ -32,7 +32,10 @@ pub(crate) fn findings(
         let (number, title) = rest
             .split_once(": ")
             .and_then(|(number, title)| {
-                Some((number.parse::<u32>().ok().filter(|n| *n > 0)?, title))
+                // One spelling per number, as a finding's name has, so the
+                // name read is the one the heading is found by.
+                let n = number.parse::<u32>().ok();
+                Some((n.filter(|n| *n > 0 && n.to_string() == number)?, title))
             })
             .ok_or_else(|| problem("a finding heading is `## Finding <k>: <title>`".into()))?;
         let name = FindingName {
@@ -117,6 +120,28 @@ fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, Str
         decided,
         settlement,
     })
+}
+
+/// `body`, a review's, with the line that records `settlement` added to
+/// finding `number`, right after its Recommendation line: that line is
+/// outside any fence, so the new one is read whatever else the finding
+/// holds. `None` when the review has no such finding.
+pub(crate) fn settle(body: &str, number: u32, settlement: &Settlement) -> Option<String> {
+    let prefix = format!("Finding {number}: ");
+    let (_, content) = sections(body, 2)
+        .into_iter()
+        .find(|(heading, _)| heading.starts_with(&prefix))?;
+    let (offset, first) = unfenced_lines(content)
+        .into_iter()
+        .find(|(_, line)| !line.trim().is_empty())?;
+    // The content is a slice of the body.
+    let at = content.as_ptr() as usize - body.as_ptr() as usize + offset + first.len();
+    let line = match settlement {
+        Settlement::Taken { item, by } => format!("Taken: {item} by {by}"),
+        Settlement::Dropped { by, reason } => format!("Dropped by {by}: {reason}"),
+    };
+    let (head, rest) = body.split_at(at);
+    Some(format!("{head}\n{line}{rest}"))
 }
 
 /// The `### <date>: <question>` entries of an item's `## Decisions`.
@@ -443,6 +468,41 @@ mod tests {
             .unwrap(),
             "## Decisions\n\n### Q\n\nFinding: 1-aaaa.1\nAnswer by d1: No.\nOutcome: no action\n\n### R\n"
         );
+    }
+
+    #[test]
+    fn a_settlement_goes_right_after_the_recommendation_where_a_fence_cannot_hide_it() {
+        let taken = Settlement::Taken {
+            item: "demo-x1y2".into(),
+            by: Thread("t9".into()),
+        };
+        let body = "## Summary\ns\n## Finding 1: One\n\nRecommendation: defer\n```\nopen fence\n## Finding 10: Ten\nRecommendation: defer";
+        assert_eq!(
+            settle(body, 1, &taken).unwrap(),
+            "## Summary\ns\n## Finding 1: One\n\nRecommendation: defer\nTaken: demo-x1y2 by t9\n```\nopen fence\n## Finding 10: Ten\nRecommendation: defer"
+        );
+        let body =
+            "## Finding 1: One\nRecommendation: fix now\n## Finding 10: Ten\nRecommendation: defer";
+        let dropped = Settlement::Dropped {
+            by: Thread("t9".into()),
+            reason: "gone".into(),
+        };
+        let settled = settle(body, 10, &dropped).unwrap();
+        assert!(settled.ends_with("Recommendation: defer\nDropped by t9: gone"));
+        let review = "1-aaaa".parse().unwrap();
+        let read = findings(Path::new("r.md"), &review, &settled).unwrap();
+        assert_eq!(read[1].settlement, Some(dropped));
+        assert_eq!(read[0].settlement, None);
+        assert_eq!(settle(body, 2, &taken), None);
+        // A heading whose number is spelt another way is not read as that
+        // finding, so no name is listed that settling cannot find.
+        for heading in ["## Finding 01: One", "## Finding +1: One"] {
+            let body = format!("{heading}\nRecommendation: defer\n");
+            assert!(
+                findings(Path::new("r.md"), &review, &body).is_err(),
+                "{heading}"
+            );
+        }
     }
 
     #[test]

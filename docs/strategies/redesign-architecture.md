@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: escalate and decide, a decision carried through the review loop, and since when an item is approved (atelier-axfa); drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
+last_changed: "2026-11-10: check and the three Git hook rules (atelier-pz1y); drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
 ---
 
 # Atelier redesign: architecture specification
@@ -263,18 +263,34 @@ A review whose verdict is approve while one of its own findings is open is
 refused.
 
 A finding is deferred when its recommendation is defer or a decision
-deferred it (`Decided: defer`). A deferred finding is unsettled until its
-text gains
+deferred it, by a `Decided: defer` line or by a Decisions entry naming it
+with `Outcome: defer`, unless a later round carries it: then the carrying
+finding is the one that stands (`atelier_core::is_deferred`). A deferred
+finding is unsettled until its text gains
 `Taken: <item> by <thread>`, written by `new --from`, or
 `Dropped by <thread>: <reason>`, written by `drop`; `<item>` is an item
-ID, and a finding with both lines is refused. Only a finding of a done
-item can be settled, and a settled one is refused. The line is written in
+ID, and a finding with both lines is refused. The tool writes the line
+right after the finding's `Recommendation:` line, which is outside any
+fence, so it is read whatever else the finding holds. Across items a
+finding is named `<item>/<finding>`, as in `atelier-06jc/2-m2bn.1`: `list
+--deferred` prints that name, and `new --from` and `drop` take it. Only a
+finding of a done item can be settled, and a settled one is refused. The
+line is written in
 the checkout the command runs in, like any record write: on the base, or on
 the branch of a gardener's run, where the staleness rule counts it as a
 change outside the run's own item, so it is reviewed and reaches the base in
 the run's merge. Two branches that settle one finding differently conflict
 when the second merges, and Git reports it. These are the only writes to a
 review after its verdict, and the only writes to a done item.
+
+`new "<title>" --from <finding>` writes a draft item whose Goal names the
+finding and its review file and quotes the finding, heading and text, and
+the `Taken:` line, in one run: it validates both first, writes the item and
+then the review, and removes the item again if the review cannot be
+written. `drop <finding> --reason "<why>"` needs a reason on one line.
+A review file is written whole or not at all: into a file beside it, which
+then replaces it. `show` on a done item prints each finding's settlement,
+the base's or one the checkout holds, committed or not.
 
 `caused_by` is checked for form only. The item that caused a bug may have
 left the tree at the cutover, and then its ID or the commit is still worth
@@ -334,7 +350,7 @@ will check.
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
 | `drop` | Planner | `draft`, `ready`, and an item's started statuses | `dropped` | a reason, on one line; written on the base, whatever the item's branch holds |
-| `new --from`, `drop` on a finding | Planner on the base, or an implementer on its branch | a deferred finding not yet settled | unchanged | the finding's item is done |
+| `new --from`, `drop` on a finding | Planner on the base, or an implementer on its branch | `done`, the finding's item | unchanged | a review of the item has the finding; it is deferred; it is not settled |
 | `lead` | Lead | a `ready` mission | unchanged | none |
 
 Each act writes the status in the commit the act already makes: `submit`
@@ -346,9 +362,10 @@ How the table is built:
 - A row joins the table with its command. The table holds the rows of
   `ready` on an item and on a mission, `start`, `start --new`, `start`
   taking over, `submit`, `review`, both verdicts, `escalate`, `decide`
-  and `merge` with and without `--trivial`, `lead`, `drop` (one row, for an item and a
-  mission), `close` on an item and on a mission, and both verdicts on a
-  plan review. A mission's row is checked with `acts::check_mission`, from
+  and `merge` with and without `--trivial`, `lead`, `drop` (one row, for an
+  item and a mission), `close` on an item and on a mission, both verdicts
+  on a plan review, and settling a finding (`Act::Settle`), whose finding's
+  conditions `acts::check_settle` checks after the row's. A mission's row is checked with `acts::check_mission`, from
   the mission's status and, for `close`, the status of each item that names
   it, each found as `Located::record` finds it, and its Result; for a
   verdict, from the caller's plan review. `start --new` runs from no
@@ -519,11 +536,15 @@ post-checkout Git hook prints it on every branch switch.
   prints the Git command that commits the checkout's planning.
 - **Planning is read and written in the checkout of the base.** `new`,
   `set`, `ready`, `drop` and `close` run only on the base branch, and are
-  refused elsewhere, naming the checkout that has the base. They read the checkout's records, with an
+  refused elsewhere, naming the checkout that has the base. `new --from`
+  and `drop` on a finding also run on the branch of a started item whose
+  last implementer is the caller; there they read and write that checkout
+  the same way, and their output says the write reaches the base in that
+  item's merge and makes an approval of it stale. They read the checkout's records, with an
   item's branch found as above, so uncommitted planning counts and a started
   item is still seen as started. Each validates the records it writes against
   every record of the checkout and writes nothing when one of them has a
-  problem; nothing else validates planning until the Git hooks exist. Each
+  problem; the pre-commit hook validates them again as they are committed. Each
   commits nothing, prints the paths it wrote, and ends with a `Then:` line
   giving the Git command that commits those paths alone. `new` picks an ID
   that no item or mission has in the checkout, at the base's tip, or as a
@@ -583,7 +604,11 @@ post-checkout Git hook prints it on every branch switch.
   the caller holds as implementer or as the round's reviewer, and missions
   it leads with their items; `--done` turns all of this to done and dropped
   items and missions. Flags narrow together; with `--ready`, `--blocked` or
-  `--needs-human` a mission is shown only for an item kept under it. The site already enumerates local branches for work in flight.
+  `--needs-human` a mission is shown only for an item kept under it.
+  `--deferred`, which takes no other flag, lists instead each unsettled
+  deferred finding of a done item, by its name and title; it reads the
+  items of the checkout it runs in, committed or not, as `new --from` and
+  `drop` do, so it lists what they would settle there. The site already enumerates local branches for work in flight.
   Every command also reads its item, and each blocker of a ready item, this
   way.
 - **Starting is one atomic step.** `start` writes the commit that sets
@@ -631,11 +656,12 @@ post-checkout Git hook prints it on every branch switch.
   branch's `.atelier/`.
 - The pre-push hook applies one rule to each new commit on the base's
   first-parent line in a push of the base: it is a merge made by
-  `atelier merge`, known by the trailer that command writes in its message,
-  or it touches only paths under `.atelier/missions/` and `.atelier/items/`.
+  `atelier merge`, known by its two parents and by the `Atelier-Merge:`
+  trailer that command writes in its message's last paragraph, or it changes from its
+  first parent only paths under `.atelier/missions/` and `.atelier/items/`.
   What a merge brings in on its second parent is not examined. A commit
-  that is not such a merge may not set `done` on an item whose branch
-  exists.
+  that is not such a merge may not set `done` on an item while a local
+  branch named for it exists.
 - Records can be read at any commit, without a checkout, through
   `atelier-records`' `CommitReader`: one `git cat-file --batch` process
   serves every read, and it tells a path the commit lacks, an entry that is
@@ -770,13 +796,49 @@ gardener's procedure, not the binary, says which to take.
 
 `atelier setup` installs three Git hooks into the clone's hooks directory,
 which all its worktrees share. Each is a one-line script that runs
-`atelier check --hook <name>`, so the rules live in the binary.
+`atelier check --hook <name>` with Git's arguments, so the rules live in the
+binary (`atelier-cli`'s `check.rs`).
 
 | Hook | Rule |
 | --- | --- |
 | pre-commit | Every staged record parses and validates: a `mission.md`, an `item.md`, a review file or `config.toml`. Other files under `.atelier/`, such as a mission's documents and an item's artifacts, are not examined. Where a record's status differs from the one in `HEAD`, the act table lists that change. The conditions of an act are the command's to check, not the hook's. |
 | pre-push | The base rule above, for each new commit when the push updates the base. |
 | post-checkout | None. On a branch switch it prints what `status` prints. |
+
+`atelier check` reads every record in the checkout, tracked or not and
+ignored or not, as the commands do, one file at a time
+(`atelier-records`' `load`), so one that does not parse leaves the rest
+read and validated. It prints each problem with its file and field, exits 1
+when it found one, and lists the record changes not committed yet, those
+`status` on the base lists and `config.toml`, whatever it found. A review
+whose item or mission is missing or does not parse is a problem of the
+review's own. It needs no readable config
+and no base branch, so it reports a broken `config.toml` rather than
+stopping at it.
+
+- **pre-commit** reads the index Git gives it, through the commit reader's
+  `staged`, and validates every record there against the others. The
+  problems it refuses are those of the records the commit adds or changes
+  from `HEAD`; a record deleted, or a commit's other records, are not
+  judged. A record renamed is judged at its new path. With no `HEAD` yet,
+  no status is compared.
+- **pre-push** reads the base's name from the checkout's `config.toml` and
+  judges each pushed line whose remote ref is the base, whatever the local
+  ref; a deletion adds nothing. The new commits are those on the local
+  commit's first-parent line not in the history of the remote's old commit.
+  When the remote has no base yet, or this clone lacks its commit after a
+  force push, every commit on the line is new, so the first push of a
+  repository's history is refused, and passes only as a skip.
+- **post-checkout** ends in success whatever it finds, a panic included:
+  when `status` fails, as on a record that does not parse, it prints why.
+
+A refusal is printed on stderr with exit 1, inside the Git command's own
+output. It names each rule broken, each file or commit (its short ID and
+subject) that breaks it, and the way out. A record that does not parse is
+listed apart, as no rule and not to be skipped; in a push, the way out is
+to rewrite the commit that broke it, since every new commit is read. A
+push from a checkout whose `config.toml` does not read is refused that
+way too, since the config names the base.
 
 `ATELIER_SKIP`, when set to a non-empty reason, lets any rule of a hook or a
 command pass. The tool prints the rule and the reason. Where Atelier makes
@@ -987,10 +1049,12 @@ does, it must not fetch a repository that has been converted.
 - Hook scenarios in a scratch repository: a commit of an invalid record
   refused; a commit of a status change the act table does not allow refused;
   a push of the base holding a plain commit that touches code refused, and
-  one holding only planning commits allowed; a push of the base whose new
-  commit is an Atelier merge of a branch with ordinary code commits allowed;
-  the refused push allowed with `ATELIER_SKIP` set, and the skip printed; a
-  branch switch printing `status`.
+  one changing `config.toml` refused; one holding only planning commits
+  allowed; a push of the base whose new commit is an Atelier merge of a
+  branch with ordinary code commits allowed; a push of an item's branch
+  allowed whatever it holds; the refused push allowed with `ATELIER_SKIP`
+  set, and the skip printed; a branch switch printing `status`, and one to
+  a branch holding a record that does not parse succeeding.
 - `merge` with CI still running: it waits, holding no lock, and merges as
   soon as CI passes or refuses as soon as it fails; at the bound it stops
   with its "not yet" exit status and changes nothing, also when the forge

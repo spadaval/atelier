@@ -187,6 +187,13 @@ impl CommitReader {
         })
     }
 
+    /// The content of the file staged at `path`, from the index Git names
+    /// in `GIT_INDEX_FILE` when it sets that for a hook, else the
+    /// checkout's.
+    pub fn staged(&mut self, path: &str) -> Result<Vec<u8>, ReadError> {
+        Ok(self.object(&format!(":0:{path}"), "blob")?.data)
+    }
+
     /// The names of the entries of the directory `dir` in `commit`; none
     /// when it is not there.
     fn names(&mut self, commit: &str, dir: &str) -> Result<Vec<String>, ReadError> {

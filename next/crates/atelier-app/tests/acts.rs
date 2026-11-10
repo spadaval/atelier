@@ -1,9 +1,9 @@
 use atelier_app::acts::{
-    check, check_mission, next, question, row, unmet, Act, Condition, Facts, MissionFacts, Refusal,
-    Role, TABLE,
+    check, check_mission, check_settle, next, question, row, unmet, unsettled, Act, Condition,
+    Facts, MissionFacts, Refusal, Role, TABLE,
 };
 use atelier_app::{carried, carried_plan, entry};
-use atelier_core::{MissionStatus, Outcome, Status, Thread};
+use atelier_core::{FindingName, MissionStatus, Outcome, Settlement, Status, Thread};
 use atelier_records::{parse_item, parse_mission, parse_review, ItemDir, MissionDir, ReviewFile};
 use std::path::PathBuf;
 
@@ -113,7 +113,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
+const SPECIFIED: [(Act, &[Status], Option<Status>); 15] = [
     (Act::Ready, &[Status::Draft], Some(Status::Ready)),
     (Act::Start, &[Status::Ready], Some(Status::Building)),
     // Created by the act, so it runs from no status at all.
@@ -178,6 +178,8 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
         &[Status::Draft, Status::Ready],
         Some(Status::Done),
     ),
+    // `new --from` and `drop` on a finding change the finding, not its item.
+    (Act::Settle, &[Status::Done], None),
 ];
 
 /// The acts on a mission, from the same table.
@@ -366,6 +368,64 @@ fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
         check_mission(Act::CloseMission, &facts).unwrap(),
         Some(MissionStatus::Done)
     );
+}
+
+#[test]
+fn a_finding_is_settled_only_when_its_item_is_done_and_it_is_deferred_and_unsettled() {
+    let findings = "\n## Finding 1: Later\nRecommendation: defer\n\
+        \n## Finding 2: Fine\nRecommendation: no action\n\
+        \n## Finding 3: Gone\nRecommendation: defer\nDropped by t9: obsolete\n\
+        \n## Finding 4: Slow\nRecommendation: fix now\n";
+    let decided = format!(
+        "{DONE}\n## Decisions\n\n### 2026-11-10: Now?\nFinding: 1-aaaa.4\nAnswer by t5: Later.\nOutcome: defer\n"
+    );
+    let reviews = [review("1-aaaa", &["r1"], "approve", findings)];
+    let done = with_reviews(record(Status::Done, &["t1"], &decided), &reviews);
+    let caller = thread("p1");
+    let name = |text: &str| text.parse::<FindingName>().unwrap();
+    let unmet = |text| match check_settle(&facts(&done, &caller), &name(text)) {
+        Err(Refusal::Unmet(unmet)) => unmet,
+        other => panic!("{text}: {other:?}"),
+    };
+    for settles in ["1-aaaa.1", "1-aaaa.4"] {
+        let found = check_settle(&facts(&done, &caller), &name(settles)).unwrap();
+        assert_eq!(found.name, name(settles));
+    }
+    assert_eq!(
+        unmet("1-aaaa.2"),
+        [Condition::NotDeferred(name("1-aaaa.2"))]
+    );
+    assert_eq!(
+        unmet("1-aaaa.3"),
+        [Condition::Settled {
+            finding: name("1-aaaa.3"),
+            settlement: Settlement::Dropped {
+                by: thread("t9"),
+                reason: "obsolete".into()
+            }
+        }]
+    );
+    assert_eq!(unmet("1-aaaa.5"), [Condition::NoFinding(name("1-aaaa.5"))]);
+    assert_eq!(unmet("2-aaaa.1"), [Condition::NoFinding(name("2-aaaa.1"))]);
+    assert_eq!(names_unsettled(&done), [name("1-aaaa.1"), name("1-aaaa.4")]);
+
+    // An item that is not done has no finding to settle yet.
+    for status in [Status::Approved, Status::Dropped] {
+        let open = with_reviews(record(status, &["t1"], &decided), &reviews);
+        match check_settle(&facts(&open, &caller), &name("1-aaaa.1")) {
+            Err(Refusal::From { act, status: at }) => assert_eq!((act, at), (Act::Settle, status)),
+            other => panic!("{other:?}"),
+        }
+        assert!(names_unsettled(&open).is_empty());
+    }
+}
+
+fn names_unsettled(item: &ItemDir) -> Vec<FindingName> {
+    unsettled(item)
+        .unwrap()
+        .into_iter()
+        .map(|f| f.name)
+        .collect()
 }
 
 #[test]
