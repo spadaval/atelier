@@ -166,9 +166,8 @@ Recognised:
   and `p.open(mode)` likewise, where `p` is a quoted literal, `Path("...")`, or a name the code
   bound earlier to one (`p = "..."` or `p = Path("...")`). A relative target is joined to the
   directory of the last `cd` before it. A write counts as an edit only to a path that is not under
-  `/dev/`, holds no `$`, has no component
-  `.atelier`, `.cache`, `.claude`, `.codex`, `.local`, `target`, `node_modules`, a name starting
-  `tmp` or a name containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
+  `/dev/`, holds no `$`, has no component `.atelier`, `.cache`, `.claude`, `.codex`, `.local`,
+  `target`, `node_modules`, a name starting `tmp` or a name containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
   `.cjs`, `.svelte`, `.kt`, `.kts`, `.py`, `.go`, `.java`, `.swift`, `.md`, `.toml`, `.json`,
   `.yaml`, `.yml`, `.sh`, `.css`, `.html` or `.sql`.
 
