@@ -18,6 +18,4 @@ atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
 clap.workspace = true
 serde_json.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true

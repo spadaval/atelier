@@ -1,7 +1,7 @@
 //! The GitHub forge `config.toml` names, reached through the `gh` CLI as
 //! Atelier reaches Git through `git`: authentication is whatever
 //! `gh auth login` set up. It finds or opens a branch's pull request and
-//! reads CI for a commit, for `merge`.
+//! reads the CI runs of its branch, for `submit` and `merge`.
 //!
 //! It calls the REST API through `gh api` with fixed fields rather than
 //! parsing `gh run list`, whose output is `gh`'s own and changes between
@@ -9,16 +9,20 @@
 //!
 //! Copied from `crates/atelier-app/src/forge.rs`, with one change to its
 //! interface: `Github::open` takes the new config's forge section, whose CI
-//! workflow is optional, and the workflow is passed to
-//! `pull_request_runs`. Trimmed: the base's push runs, the lookup of a
+//! workflow is optional, and the workflow is passed to `branch_runs`, which
+//! reads a branch's runs where the old code read a commit's. `until` bounds
+//! each call in time, for `merge`'s wait. Trimmed: the base's push runs, the lookup of a
 //! commit's pull requests, the check that a pull request merged, and the
 //! error codes and wording, which `output.rs` holds.
 
 use crate::git;
 use atelier_core::Forge;
 use serde_json::Value;
+use std::fs::File;
+use std::io::{Read, Seek};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 /// Why the forge could not answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +39,8 @@ pub enum ForgeError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CiRun {
     pub id: u64,
+    /// The commit it ran on.
+    pub head_sha: String,
     /// `queued`, `in_progress`, `completed` and the like.
     pub status: String,
     /// Set once completed: `success`, `failure`, `cancelled`, `timed_out`…
@@ -47,6 +53,17 @@ pub struct CiRun {
 impl CiRun {
     pub fn passed(&self) -> bool {
         self.status == "completed" && self.conclusion.as_deref() == Some("success")
+    }
+
+    /// Whether it passed or failed. A cancelled run did neither: this
+    /// repository's CI cancels a pull request's run when a newer commit is
+    /// pushed.
+    pub fn finished(&self) -> bool {
+        self.status == "completed" && self.conclusion.as_deref() != Some("cancelled")
+    }
+
+    pub fn running(&self) -> bool {
+        self.status != "completed"
     }
 }
 
@@ -72,6 +89,8 @@ pub struct Github {
     host: String,
     /// `owner/repo`.
     slug: String,
+    /// When set, a `gh` call still running then is ended and fails.
+    deadline: Option<Instant>,
 }
 
 impl Github {
@@ -97,19 +116,28 @@ impl Github {
                 forge.remote
             ))
         })?;
-        Ok(Self { host, slug })
+        Ok(Self {
+            host,
+            slug,
+            deadline: None,
+        })
     }
 
-    /// The `pull_request` runs of `workflow` for `commit`.
-    pub fn pull_request_runs(
-        &self,
-        workflow: &str,
-        commit: &str,
-    ) -> Result<Vec<CiRun>, ForgeError> {
+    /// This repository, with every call ended at `deadline`.
+    pub fn until(&self, deadline: Instant) -> Self {
+        Self {
+            deadline: Some(deadline),
+            ..self.clone()
+        }
+    }
+
+    /// The latest `pull_request` runs of `workflow` on the pull requests
+    /// from `branch`, on whichever commit each ran.
+    pub fn branch_runs(&self, workflow: &str, branch: &str) -> Result<Vec<CiRun>, ForgeError> {
         let value = self.api(
             &format!("repos/{}/actions/workflows/{workflow}/runs", self.slug),
             &[
-                ("head_sha", commit),
+                ("branch", branch),
                 ("event", "pull_request"),
                 ("per_page", "50"),
             ],
@@ -201,23 +229,44 @@ impl Github {
     /// Runs `gh` and returns its standard output, telling a missing or
     /// signed-out `gh` from other failures.
     fn gh(&self, args: &[&str], what: &str) -> Result<Vec<u8>, ForgeError> {
-        let output = match Command::new("gh")
+        let unreachable = |error: std::io::Error| ForgeError::Unreachable(error.to_string());
+        // Its output goes to files, not pipes, so a process it leaves
+        // behind holding them cannot keep this call past its deadline.
+        let (mut stdout, mut stderr) = (
+            tempfile::tempfile().map_err(unreachable)?,
+            tempfile::tempfile().map_err(unreachable)?,
+        );
+        let mut child = match Command::new("gh")
             .args(args)
             .env("GH_PROMPT_DISABLED", "1")
             .env("NO_COLOR", "1")
-            .output()
+            .stdin(Stdio::null())
+            .stdout(stdout.try_clone().map_err(unreachable)?)
+            .stderr(stderr.try_clone().map_err(unreachable)?)
+            .spawn()
         {
-            Ok(output) => output,
+            Ok(child) => child,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Err(ForgeError::GhMissing)
             }
             Err(error) => return Err(ForgeError::Unreachable(error.to_string())),
         };
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        let status = match wait(&mut child, self.deadline) {
+            Ok(Some(status)) => status,
+            Ok(None) => {
+                return Err(ForgeError::Unreachable(format!(
+                    "{what} did not answer in time"
+                )))
+            }
+            Err(error) => return Err(ForgeError::Unreachable(error.to_string())),
+        };
+        let stdout = read_all(&mut stdout).map_err(unreachable)?;
+        let stderr = read_all(&mut stderr).map_err(unreachable)?;
+        if !status.success() {
+            let stderr = String::from_utf8_lossy(&stderr);
             // gh exits 4 when it needs a sign-in; `gh auth status` exits 1
             // and names `gh auth login`.
-            if output.status.code() == Some(4) || stderr.contains("gh auth login") {
+            if status.code() == Some(4) || stderr.contains("gh auth login") {
                 return Err(ForgeError::SignedOut {
                     host: self.host.clone(),
                 });
@@ -229,12 +278,40 @@ impl Github {
                 .collect::<Vec<_>>()
                 .join(" ");
             return Err(ForgeError::Unreachable(if message.is_empty() {
-                format!("{what} exited with {:?}", output.status.code())
+                format!("{what} exited with {:?}", status.code())
             } else {
                 message
             }));
         }
-        Ok(output.stdout)
+        Ok(stdout)
+    }
+}
+
+/// Everything written to `file`, from its start.
+fn read_all(file: &mut File) -> std::io::Result<Vec<u8>> {
+    file.rewind()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+/// Waits for `child` to exit, or until `deadline`, when it is killed and
+/// `None` is returned.
+fn wait(child: &mut Child, deadline: Option<Instant>) -> std::io::Result<Option<ExitStatus>> {
+    let Some(deadline) = deadline else {
+        return child.wait().map(Some);
+    };
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return Ok(Some(status));
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            child.kill()?;
+            child.wait()?;
+            return Ok(None);
+        }
+        std::thread::sleep((deadline - now).min(Duration::from_millis(20)));
     }
 }
 
@@ -249,6 +326,7 @@ fn runs(value: &Value) -> Result<Vec<CiRun>, ForgeError> {
         .filter_map(|run| {
             Some(CiRun {
                 id: run["id"].as_u64()?,
+                head_sha: run["head_sha"].as_str()?.to_owned(),
                 status: run["status"].as_str()?.to_owned(),
                 conclusion: run["conclusion"].as_str().map(str::to_owned),
                 url: run["html_url"].as_str().unwrap_or_default().to_owned(),
