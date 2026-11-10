@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Start CI at `submit` and have `merge` wait up to 9 minutes for it: CI is nearly all of the approval-to-merge wait"
-updated_at: "2026-11-10T18:41:39.747175125+00:00"
+updated_at: "2026-11-10T19:24:09.826088661+00:00"
 ---
 
 ## Goal
@@ -57,6 +57,10 @@ The first change saves nothing unless a CI run started at `submit` still counts 
 Design: `docs/strategies/redesign-architecture.md`, Merge, The forge and Status. Behaviour: `docs/strategies/redesign-product.md`, Commands and Merge. The item that built `merge` is atelier-syyj; read its Report for what `merge` prints and its exit statuses. This repository's CI workflow cancels a pull request's running CI when a new commit is pushed to it (`concurrency` in `.github/workflows/ci.yml`), so when `merge` pushes a head that is ahead of the remote branch, the run on the older commit may end cancelled; a cancelled run is not a finished pass or fail.
 
 The 9 minutes sit under Claude Code's 10-minute limit on a foreground command. A harness with a shorter limit kills the command mid-wait, which is harmless by the line above.
+
+## Notes
+
+- 2026-11-10 [note] Implementer handoff: approved by gpt-6.1-sol at e4fe00ed (atelier-qtpf) after 3 rounds; 3 fix-now findings fixed, atelier-qu4a deferred to atelier-3iyd. Ready for the orchestrator to merge. See ## Report.
 
 ## Report
 
