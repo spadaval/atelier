@@ -20,7 +20,8 @@ pub fn status(repo: &mut Repo) -> Result<String> {
     if let Some(located) = repo.current()? {
         let record = located.record().expect("the current item has a record");
         let blockers = repo.blockers(record)?;
-        let checkout = repo.checkout(record)?;
+        let head = git::head(&repo.root)?;
+        let checkout = repo.checkout(record, &head)?;
         let entry = entry(&facts(repo, &located, &blockers, Some(&checkout)))?;
         return Ok(output::item(&repo.caller, &entry));
     }
@@ -63,7 +64,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
             &render_item(&item),
             &format!("Start {id}"),
         )?;
-        hold_before_branch();
+        hold("ATELIER_TEST_HOLD_BEFORE_BRANCH");
         if !git::create_branch(&repo.root, id, &commit)? {
             let holder = repo
                 .locate(id)?
@@ -192,12 +193,14 @@ pub(crate) fn refused(act: Act, refusal: Refusal, facts: &Facts) -> Result<Strin
     ))
 }
 
-/// Tests stop `start` here, between its commit and its branch, by naming a
-/// file in `ATELIER_TEST_HOLD_BEFORE_BRANCH`: `start` creates `<file>.held`
-/// and waits until `<file>` exists. Only debug builds have it.
-fn hold_before_branch() {
+/// Tests stop a command at a point between two of its steps by naming a
+/// file in `variable`: the command creates `<file>.held` and waits until
+/// `<file>` exists. `start` stops between its commit and its branch
+/// (`ATELIER_TEST_HOLD_BEFORE_BRANCH`), and `merge` after reading what it
+/// checks (`ATELIER_TEST_HOLD_AFTER_READ`). Only debug builds have it.
+pub(crate) fn hold(variable: &str) {
     #[cfg(debug_assertions)]
-    if let Some(release) = std::env::var_os("ATELIER_TEST_HOLD_BEFORE_BRANCH") {
+    if let Some(release) = std::env::var_os(variable) {
         let release = std::path::PathBuf::from(release);
         let _ = std::fs::write(release.with_extension("held"), "");
         for _ in 0..3000 {

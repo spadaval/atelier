@@ -110,15 +110,16 @@ impl Repo {
             .collect()
     }
 
-    /// What `merge` reads from this checkout, on the branch of `record`.
-    pub fn checkout(&mut self, record: &ItemDir) -> Result<Checkout> {
+    /// What `merge` reads from this checkout, on the branch of `record`,
+    /// whose HEAD is the commit `head`.
+    pub fn checkout(&mut self, record: &ItemDir, head: &str) -> Result<Checkout> {
         let approved = approval(record).filter(|_| record.item.status == Status::Approved);
         let since_approval = match approved {
             None => None,
             Some(review) => {
                 let commit = &review.review.commit;
                 Some(SinceApproval {
-                    changed: git::changed(&self.root, commit, "HEAD")?,
+                    changed: git::changed(&self.root, commit, head)?,
                     reviewed: self.reader.item(commit, &record.item.id)?,
                 })
             }

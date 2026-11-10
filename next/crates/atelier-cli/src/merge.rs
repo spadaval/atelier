@@ -15,7 +15,7 @@
 //! `committed_snapshot.rs`'s checks of file modes and index flags are not
 //! carried over.
 
-use crate::commands::{facts, refusal, Outcome};
+use crate::commands::{facts, hold, refusal, Outcome};
 use crate::forge::{ForgeError, Github, PullRequest};
 use crate::git;
 use crate::output;
@@ -41,6 +41,9 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     // another reads the base that one left.
     let _lock = lock(root)?;
     let repo = &mut Repo::open()?;
+    // The commit everything below is checked against, read first: a commit
+    // made after this is caught before anything is written.
+    let head = git::head(&repo.root)?;
     let Some(located) = repo.current()? else {
         return Ok(Outcome::Refused(output::not_on_item(
             "merge",
@@ -54,7 +57,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     if record.item.status == Status::Done && merged {
         return publish(repo, &config, &id);
     }
-    let checkout = repo.checkout(record)?;
+    let checkout = repo.checkout(record, &head)?;
     let blockers = repo.blockers(record)?;
     let facts = facts(repo, &located, &blockers, Some(&checkout));
     let act = if trivial.is_some() {
@@ -68,9 +71,9 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
 
     // What the checks run on, confirmed unchanged before anything is
     // written.
+    hold("ATELIER_TEST_HOLD_AFTER_READ");
     let root = repo.root.clone();
     let base = repo.base.clone();
-    let head = git::head(&root)?;
     let base_tip = repo.base_tip.clone();
     let base_checkout = git::checkout_of(&root, &base)?;
     if let Some(path) = &base_checkout {

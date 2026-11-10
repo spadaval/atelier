@@ -467,6 +467,41 @@ fn a_branch_that_moves_while_the_checks_run_is_not_written() {
 }
 
 #[test]
+fn a_commit_made_after_merge_read_its_facts_is_not_merged() {
+    // The commit lands after `merge` has checked the approval and before
+    // its checks run, so only the confirmation at the end can catch it.
+    let scratch = approved();
+    let root = scratch.root();
+    let tip = head(&root, "main");
+    let release = scratch.dir.path().join("read");
+    let child = atelier_command(&root, "t1", &["merge"])
+        .env("ATELIER_TEST_HOLD_AFTER_READ", &release)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let held = release.with_extension("held");
+    let since = Instant::now();
+    while !held.exists() {
+        assert!(since.elapsed() < Duration::from_secs(60), "never held");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    fs::write(root.join("hello.txt"), "unreviewed\n").unwrap();
+    git(&root, &["commit", "-qam", "Unreviewed"]);
+    fs::write(&release, "").unwrap();
+    let run = run(child.wait_with_output().unwrap());
+    wrote_nothing(&scratch, run, &format!("branch {ID}"), &tip);
+    // Run again, it sees the change and says to submit.
+    let again = merge(&root, "t1", &[]);
+    assert_eq!(again.code, 1);
+    assert!(
+        again.stderr.ends_with("Then: atelier submit\n"),
+        "{}",
+        again.stderr
+    );
+}
+
+#[test]
 fn a_checkout_that_changes_while_the_checks_run_is_not_written() {
     let (scratch, waiting) = held();
     let root = scratch.root();
