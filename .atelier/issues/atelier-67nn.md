@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Run a fresh agent through the loop with only `status` to guide it, on Claude Opus and Codex"
-updated_at: "2026-11-10T01:29:39.433696321+00:00"
+updated_at: "2026-11-10T04:45:24.836084902+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Test the redesign's riskiest assumption before anything else is built on it: tha
 
 ## Done when
 
-- [ ] `evals/agent-factory/scenarios/next-loop/` holds a scenario: a fixture repository with a config that names no forge and one ready item asking for a small real change, `atelier` on the PATH resolving to `atelier-next`, no Agent Factory skill installed, and the prompt "Run `atelier status` and do what it says."
+- [ ] `evals/agent-factory/scenarios/next-loop/` holds a scenario: a fixture repository with a config that names no forge and one ready item asking for a small real change, `atelier` on the PATH resolving to the new workspace's binary, no Agent Factory skill installed, and the prompt "Run `atelier status` and do what it says."
 - [ ] Its grader checks the state left behind: the item is done on the base, a review file has the verdict approve and a reviewer that is not the implementer, and the change's own test passes. It counts refused and errored `atelier` calls from the transcript.
 - [ ] `evals/agent-factory/results/<date>-next-loop.md` records three runs with Claude Opus and three with a Codex model: pass or fail, refused and errored calls, `atelier` calls, and total tool calls, with the transcript excerpt for each failure and each refusal.
 - [ ] No run in the final round has more than one refused or errored `atelier` call. The results file says what changed between rounds.

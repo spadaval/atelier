@@ -25,17 +25,17 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Convert the site to the new records"
-updated_at: "2026-11-10T01:29:40.511481020+00:00"
+title: "Rebuild the site on the new records, in the new workspace"
+updated_at: "2026-11-10T04:45:25.381737978+00:00"
 ---
 
 ## Goal
 
-Keep the dashboard working across the layout change by converting the site to the new records just before the old commands are deleted.
+Keep the dashboard working across the layout change by rebuilding the site on the new records, in the new workspace, before the old one is deleted.
 
 ## Done when
 
-- [ ] Provisional: the site's loader reads the three record kinds, its responses drop what the new model lacks, and its fixtures are regenerated in the new layout. `atelier-next serve` serves it, the web typecheck, unit and Playwright jobs run against it and pass in the change that does this, and `serve` is removed from the old binary in the tree.
+- [ ] Provisional: the site's loader reads the three record kinds, its responses drop what the new model lacks, and its fixtures are regenerated in the new layout. The site crate and its web app are copied into the new workspace; the new binary's `serve` serves it, and the web typecheck, unit and Playwright jobs run against it and pass. The old workspace's site is not changed.
 
 ## Context
 

@@ -16,12 +16,12 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Move all five repositories and Agent Factory onto the new loop, one cutover per host"
-updated_at: "2026-11-10T01:14:38.233058220+00:00"
+updated_at: "2026-11-10T04:55:19.844011012+00:00"
 ---
 
 ## Outcome
 
-On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio run on the new records and the new binary. Agent Factory is rewritten against the new tool, and each procedure it keeps has an eval scenario it changed. The old command layer and the library code only it used are deleted. The old product docs and the ADRs are replaced by the design record. Sumeet has a runbook to convert his work host.
+On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio run on the new records and the new binary. Agent Factory is rewritten against the new tool, and each procedure it keeps has an eval scenario it changed. The site reads the new records. The old workspace is deleted. The old product docs and the ADRs are replaced by the design record. Sumeet has a runbook to convert his work host.
 
 ## Background
 
