@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: submit's handoff line says a reviewer is another thread, not a subagent (atelier-67nn)"
+last_changed: "2026-11-10: submit starts CI where a forge is configured, and merge waits for it up to 9 minutes (atelier-xtvh); submit's handoff line says a reviewer is another thread, not a subagent (atelier-67nn)"
 ---
 
 # Atelier redesign: product specification
@@ -199,9 +199,9 @@ matter; `set` and the status commands write it.
 | Command | Behaviour |
 | --- | --- |
 | `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, and binds this thread as implementer. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work Sumeet asked for directly. |
-| `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review`; opens a new round; prints the reviewer's handoff line. |
+| `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review`; opens a new round; prints the reviewer's handoff line. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
 | `escalate "<question>"` | Adds an unanswered entry to Decisions and prints the decider's handoff line. `--finding <finding>` ties the question to a finding. |
-| `merge` | Runs the checks below, makes one merge commit that sets `done`, and pushes where a forge is configured. It never waits: if CI has not finished it says so and stops, and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
+| `merge` | Runs the checks below, makes one merge commit that sets `done`, and pushes where a forge is configured. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
 
@@ -355,14 +355,23 @@ Rules:
    and the item's Goal, Done when and Scope did not change.
 2. No question in Decisions is unanswered.
 3. The configured merge checks pass on the merged tree. Where the forge names
-   a CI workflow, that CI passed on the head.
+   a CI workflow, CI passed on the head, or on an earlier commit of the
+   branch from which the head differs only inside the item's directory, such
+   as the commit `submit` pushed before `verdict approve` committed. The
+   latest finished run among those decides.
 
-With a forge, `merge` pushes the branch and opens its pull request if they
-are not there yet. If CI is still running it prints the pull request and
-stops; that is "not yet", not a refusal, and the same command run again
-finishes the merge. The harness does the waiting: under T3 Code, watching the
-pull request wakes the thread when its checks finish. A forge with no CI
-workflow still gets the branch pushed and a pull request opened and merged.
+With a forge, `submit` has already pushed the branch and opened its pull
+request, so CI ran during the review. `merge` pushes the branch only when the
+forge's copy is missing or is not a commit whose CI would count, so it never
+cancels a run in progress, and opens the pull request if there is none. Then
+it waits for CI, for up to 9 minutes: it merges as soon as a run that counts
+passes, and refuses as soon as one fails. The wait holds no lock and writes
+nothing, so it can be interrupted. At the bound it stops with "not yet", not
+a refusal, and the same command run again picks up. `merge` does the waiting
+because the thread that runs it is almost always a delegated child, which
+the harness neither lets watch a pull request nor wakes reliably. A forge
+with no CI workflow still gets the branch pushed and a pull request opened,
+and `merge` waits for nothing.
 
 An item that is approved and not merged shows that way, with how long it has
 been so, in `status`, `show` and on the site, so a wait that was lost is
@@ -420,7 +429,7 @@ second real project needs one.
 | Issue types, parents, loose ends, validations, decision records | An item either has files to merge or it does not; the rest are labels |
 | `bundle`, `migrate`, `doctor`, `prune` | Unused by the skill, one-off, or not yet needed |
 | `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook runs without being remembered and fails the push itself |
-| `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; waiting is the harness's; catching up is `git merge`; what merge would check is in `status` |
+| `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; the wait for CI has a fixed bound and needs no flag; catching up is `git merge`; what merge would check is in `status` |
 | `brief` and `debrief` commands | The site shows them |
 | The nine `work` views and nine `review` subcommands | `status`, `list`, `review` and `verdict` replace them |
 | Strategy files in `docs/strategies/` | A mission's documents live in its directory |

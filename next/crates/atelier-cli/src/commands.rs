@@ -1,11 +1,12 @@
 //! `status`, `start` and `submit`, and what the commands share.
 
+use crate::forge::Github;
 use crate::repo::{item_dir, item_path, Repo};
-use crate::{git, output};
+use crate::{git, merge, output};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, Act, Checkout, Facts, Refusal, STARTED};
 use atelier_app::{entry, overview, Located};
-use atelier_core::Status;
+use atelier_core::{Forge, Status};
 use atelier_records::{render_item, validate_id};
 
 pub enum Outcome {
@@ -113,13 +114,36 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     if let Some(refused) = refusal(Act::Submit, &facts)? {
         return Ok(Outcome::Refused(refused));
     }
+    let config = repo.base_config()?;
     let mut item = record.item.clone();
     item.status = Status::InReview;
     let message = format!("Submit {} for review", item.id);
     let file = [(item_path(&item.id), render_item(&item))];
     write_and_commit(repo, &file, &[&item_dir(&item.id)], &message)?;
     let left = repo.uncommitted(&item.id)?;
-    Ok(Outcome::Done(output::submitted(&item.id, &left)))
+    let shared = match &config.forge {
+        Some(forge) => share(repo, forge, &item.id, &item.title)?,
+        None => String::new(),
+    };
+    Ok(Outcome::Done(output::submitted(&item.id, &left, &shared)))
+}
+
+/// Pushes the branch and opens its pull request, so CI runs during the
+/// review, and says what it did. A failure is only a warning: the item is
+/// in review, and `merge` pushes and opens what is missing.
+fn share(repo: &Repo, forge: &Forge, id: &str, title: &str) -> Result<String> {
+    let github = match Github::open(&repo.root, forge).and_then(|g| g.signed_in().map(|()| g)) {
+        Ok(github) => github,
+        Err(error) => return Ok(output::submit_no_pull_request(id, &error, false)),
+    };
+    let head = git::head(&repo.root)?;
+    if let Err(error) = merge::push(&repo.root, &forge.remote, &head, id) {
+        return Ok(output::submit_not_pushed(id, &forge.remote, &error));
+    }
+    Ok(match merge::pull_request(&github, id, title, &repo.base) {
+        Ok(pull) => output::pull_request(id, &forge.remote, &pull, true),
+        Err(error) => output::submit_no_pull_request(id, &error, true),
+    })
 }
 
 /// Writes each of `files`, a path in the checkout and its text, and

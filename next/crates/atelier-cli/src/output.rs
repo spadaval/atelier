@@ -7,6 +7,7 @@ use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
 use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
 use std::path::Path;
+use std::time::Duration;
 
 fn status_name(status: Status) -> &'static str {
     match status {
@@ -248,13 +249,14 @@ fn gates(config: &Config) -> String {
     }
     if let Some(forge) = &config.forge {
         text += &format!(
-            "It pushes the branch to {} and opens its pull request",
+            "It pushes the branch to {} and opens its pull request where `atelier submit` did not",
             forge.remote
         );
         text += &match &forge.ci_workflow {
-            Some(workflow) => {
-                format!(", and merges once {workflow} passes on the branch's head.\n")
-            }
+            Some(workflow) => format!(
+                ", waits up to {} for {workflow} to pass on the branch's latest code, then merges and pushes the base.\n",
+                span(crate::merge::WAIT)
+            ),
             None => ", then merges and pushes the base.\n".into(),
         };
     }
@@ -426,9 +428,10 @@ fn outside(id: &str, uncommitted: &[String]) -> Vec<String> {
     outside.cloned().collect()
 }
 
-pub fn submitted(id: &str, uncommitted: &[String]) -> String {
+/// `forge` is what `submit` did on the forge, if one is configured.
+pub fn submitted(id: &str, uncommitted: &[String], forge: &str) -> String {
     let code = outside(id, uncommitted);
-    let mut text = format!("Submitted {id} for review.\n");
+    let mut text = format!("Submitted {id} for review.\n{forge}");
     if !code.is_empty() {
         text += &format!(
             "These changes are not committed, so the reviewer will not see them: {}. Commit them now, before the reviewer starts.\n",
@@ -436,6 +439,24 @@ pub fn submitted(id: &str, uncommitted: &[String]) -> String {
         );
     }
     text + &start_reviewer(id)
+}
+
+pub fn submit_not_pushed(id: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Warning: pushing branch {id} to {remote} failed, so CI has not started: {error:#}. The item is in review all the same; `atelier merge` will push the branch.\n"
+    )
+}
+
+pub fn submit_no_pull_request(id: &str, error: &ForgeError, pushed: bool) -> String {
+    let (reason, _) = forge_reason(error);
+    let (pushed, push) = if pushed {
+        (format!("Pushed branch {id}, but "), "")
+    } else {
+        (String::new(), "push the branch and ")
+    };
+    format!(
+        "Warning: {pushed}opening its pull request failed, so CI has not started: {reason}. The item is in review all the same; `atelier merge` will {push}open the pull request.\n"
+    )
 }
 
 fn place(branch: Option<&str>) -> String {
@@ -677,8 +698,9 @@ pub fn check_failed(id: &str, base: &str, run: &str, code: Option<i32>, tail: &s
     )
 }
 
-pub fn forge_failed(error: &ForgeError, pushed: bool) -> String {
-    let (reason, next) = match error {
+/// Why the forge did not answer, and what to do about it.
+fn forge_reason(error: &ForgeError) -> (String, String) {
+    match error {
         ForgeError::GhMissing => (
             "gh, the GitHub CLI, is not on PATH".to_string(),
             "Install it (https://cli.github.com) and run `gh auth login`".to_string(),
@@ -691,7 +713,11 @@ pub fn forge_failed(error: &ForgeError, pushed: bool) -> String {
             format!("gh failed: {message}"),
             "Fix what it says (`gh auth status` shows the sign-in)".to_string(),
         ),
-    };
+    }
+}
+
+pub fn forge_failed(error: &ForgeError, pushed: bool) -> String {
+    let (reason, next) = forge_reason(error);
     let pushed = if pushed {
         " The branch was pushed."
     } else {
@@ -708,11 +734,14 @@ pub fn branch_push_failed(id: &str, remote: &str, error: &anyhow::Error) -> Stri
     )
 }
 
-pub fn pull_request(id: &str, remote: &str, pull: &PullRequest) -> String {
-    format!(
-        "Pushed branch {id} to {remote}. Pull request #{}: {}\n",
-        pull.number, pull.url
-    )
+/// The pull request, after the branch was pushed when `pushed`.
+pub fn pull_request(id: &str, remote: &str, pull: &PullRequest, pushed: bool) -> String {
+    let pushed = if pushed {
+        format!("Pushed branch {id} to {remote}. ")
+    } else {
+        String::new()
+    };
+    format!("{pushed}Pull request #{}: {}\n", pull.number, pull.url)
 }
 
 /// The title and body of the pull request `merge` opens.
@@ -725,10 +754,34 @@ pub fn pull_request_text(id: &str, title: &str, base: &str) -> (String, String) 
     )
 }
 
-pub fn ci_pending(workflow: &str, head: &str, newest: Option<&CiRun>) -> String {
-    let state = match newest {
-        Some(run) => format!("it is {} ({})", run.status.replace('_', " "), run.url),
-        None => "no run of it has started".into(),
+fn span(wait: Duration) -> String {
+    match wait.as_secs() {
+        seconds if seconds >= 60 && seconds % 60 == 0 => format!("{} minutes", seconds / 60),
+        seconds => format!("{seconds} seconds"),
+    }
+}
+
+pub fn waiting_for_ci(workflow: &str, pull: &PullRequest, wait: Duration) -> String {
+    format!(
+        "Waiting up to {} for {workflow} to finish on pull request #{}. Nothing is written while it waits, so this may be interrupted and `atelier merge` run again.\n",
+        span(wait),
+        pull.number
+    )
+}
+
+pub fn ci_pending(
+    workflow: &str,
+    head: &str,
+    newest: Option<&CiRun>,
+    error: Option<ForgeError>,
+) -> String {
+    let state = match (newest, error) {
+        (_, Some(error)) => format!("the forge did not answer, as {}", forge_reason(&error).0),
+        (Some(run), None) => match &run.conclusion {
+            Some(conclusion) => format!("the latest was {conclusion} ({})", run.url),
+            None => format!("it is {} ({})", run.status.replace('_', " "), run.url),
+        },
+        (None, None) => "no run of it has started".into(),
     };
     format!(
         "CI has not finished on {}, the branch's head: {state}. Nothing else changed.\nRun `atelier merge` again once {workflow} finishes.\n",
@@ -736,11 +789,11 @@ pub fn ci_pending(workflow: &str, head: &str, newest: Option<&CiRun>) -> String 
     )
 }
 
-pub fn ci_failed(workflow: &str, head: &str, run: &CiRun) -> String {
+pub fn ci_failed(workflow: &str, run: &CiRun) -> String {
     let conclusion = run.conclusion.as_deref().unwrap_or("without a conclusion");
     format!(
-        "`atelier merge` refused: {workflow} finished {conclusion} on {}, the branch's head ({}). Nothing was merged.\nIf it failed for a reason outside the change, rerun it with `gh run rerun {id}` and run `atelier merge` again once it passes. Otherwise read the log with `gh run view {id} --log-failed`, fix the change on the branch and commit; `atelier status` then says what comes next.\n",
-        short(head),
+        "`atelier merge` refused: CI failed: {workflow} finished {conclusion} on {} ({}). Nothing was merged.\nIf it failed for a reason outside the change, rerun it with `gh run rerun {id}` and run `atelier merge` again once it passes. Otherwise read the log with `gh run view {id} --log-failed`, fix the change on the branch and commit; `atelier status` then says what comes next.\n",
+        short(&run.head_sha),
         run.url,
         id = run.id
     )

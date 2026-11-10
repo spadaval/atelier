@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: a former reviewer is offered nothing, and what a harness's subagent is to Atelier (atelier-67nn)"
+last_changed: "2026-11-10: submit starts CI where a forge is configured, and merge waits for it up to 9 minutes before taking its lock (atelier-xtvh); a former reviewer is offered nothing, and what a harness's subagent is to Atelier (atelier-67nn)"
 ---
 
 # Atelier redesign: architecture specification
@@ -287,7 +287,7 @@ will check.
 | `start` | Implementer | `ready` | `building` | blockers done; its mission, if any, is ready; no branch `<id>` exists; the base's record is not dropped |
 | `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists |
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
-| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question |
+| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
 | `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding |
 | `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry |
@@ -361,8 +361,13 @@ Two facts are checked live and never stored:
   what the checkout has not committed; `acts::unmet` applies the rule. `status` gathers
   it on the item's branch, so it lists what `merge` will check.
 - **The merge checks pass.** The configured commands on the merged tree,
-  and CI on the head where the forge names a workflow. `merge` runs or reads
-  them; `status` lists them, from the base's config, and runs none.
+  and CI where the forge names a workflow. A CI run counts when it ran on
+  the head, or on an earlier commit of the branch from which the head
+  differs only inside the item's own directory, so the run `submit` started
+  still counts after `verdict approve` commits. The latest finished run that
+  counts decides; a cancelled run has not finished. `merge` runs or reads
+  them; `status` lists them, from the base's config, and runs none and looks
+  up no CI.
 
 ## Threads and roles
 
@@ -492,10 +497,26 @@ post-checkout Git hook prints it on every branch switch.
 
 `merge` runs in the checkout on the item's branch. In order:
 
-1. Take the merge lock, then read everything: first the head, which every
-   later step is checked against, then the item, and `config.toml` from the
-   base tip.
-2. Check the act's conditions from the table: the approval covers the
+1. Read everything, without a lock: first the head, which every later step
+   is checked against, then the item, and `config.toml` from the base tip.
+   Check the act's conditions, as in step 4. Where a forge is configured,
+   also refuse a branch that conflicts with the base, since CI does not run
+   on a pull request that conflicts.
+2. Where a forge is configured: push the branch when the forge's copy of it
+   is missing or its tip is not a commit whose CI run would count for the
+   head, as after a push that failed at `submit`; otherwise push nothing, so
+   no run in progress is cancelled. Open the pull request when the branch
+   has none. Where the forge names a CI workflow, wait for CI: ask the forge
+   every 15 seconds, for up to 9 minutes. While no run that counts has
+   finished, or the latest finished one failed and a newer one is running,
+   keep asking; a question that fails counts as not finished, and one still
+   unanswered at the bound is ended. Refuse as soon as CI fails; at the
+   bound, stop with exit status 3. The wait holds no lock and writes
+   nothing.
+3. Take the merge lock, then read everything again, as in step 1. Nothing
+   read before the lock is trusted, and a checkout now on another branch
+   is refused, so `merge` merges only the item it waited for.
+4. Check the act's conditions from the table: the approval covers the
    head, or `--trivial "<why>"` was given on a building item with no
    review file; no Decisions entry is unanswered; no tracked file has
    uncommitted changes and no file in the item's directory is untracked,
@@ -503,30 +524,30 @@ post-checkout Git hook prints it on every branch switch.
    The role is told from the checkout, as every command tells it; the rest
    is judged on the item as the head holds it. Where the base is checked out, that checkout must
    have none either, since merging moves it.
-3. Build the merged tree with `git merge-tree`; a conflict refuses, naming
-   the files. Write the merge commit object on it, base tip first and
+5. Build the merged tree with `git merge-tree`; a conflict refuses, naming
+   the files. Where the forge names a CI workflow, ask once more, without
+   waiting: a passing run must still count for the head as it now is.
+   Write the merge commit object on the merged tree, base tip first and
    branch tip second, with the item's record set `done` (and `trivial` set
    to the reason). Nothing points at it yet.
-4. Check out that commit in a temporary worktree in the Git directory and
+6. Check out that commit in a temporary worktree in the Git directory and
    run each merge check there with `sh -c`. A failure refuses, printing the
    command, its exit status and the last 20 lines of its output.
-5. Where a forge is configured: confirm nothing moved (as in step 6), then
-   push the branch tip and open its pull
-   request, if they are not there yet. Where it names a CI workflow: if no
-   run of it on the head has finished, print the pull request and stop
-   with exit status 3; if the newest one finished and did not pass, refuse.
-6. Confirm the branch tip, the base tip and both checkouts are what steps
-   1 to 5 read; otherwise write nothing and say to run it again. Then move
+7. Confirm the branch tip, the base tip and both checkouts are what steps
+   3 to 6 read; otherwise write nothing and say to run it again. Then move
    the base to the merge commit: a fast-forward of the base's checkout
    where one has it checked out, else `git update-ref` from the tip read.
-7. Where a forge is configured: push the base.
+8. Where a forge is configured: push the base.
 
-`merge` never waits for CI and has no flag but `--trivial`. Run again, it
-picks up where the facts now stand: on an item it already merged it only
-pushes the base where a forge is configured, which is what a run that
-stopped after step 6 left undone. Waiting is the harness's work. Its exit
-status is 0 when it merged or had nothing left to do, 1 for a refusal, 2
-for an error and 3 when CI has not finished.
+`merge` has no flag but `--trivial`, and the bound and the time between
+questions are constants; debug builds let tests shorten them through
+`ATELIER_TEST_CI_WAIT`. The 9 minutes sit under Claude Code's 10-minute limit
+on a command in the foreground; a harness with a shorter limit kills `merge`
+during the wait, which leaves nothing behind. Run again, it picks up where
+the facts now stand: on an item it already merged it only pushes the base
+where a forge is configured, which is what a run that stopped after step 7
+left undone. Its exit status is 0 when it merged or had nothing left to do,
+1 for a refusal, 2 for an error and 3 when CI has not finished by the bound.
 
 The merge commit's message ends with the trailer `Atelier-Merge: <id>`,
 which the pre-push hook knows an Atelier merge by. The branch is kept; it
@@ -616,9 +637,12 @@ command.
 One more thing is kept, because it is the kind a rewrite loses by accident.
 Today's merge protects itself against the world moving while its checks run.
 The new `merge` holds an exclusive lock on `atelier-merge.lock` in the Git
-directory every worktree of the clone shares, for its whole run, so a second
-merge waits for the first and then reads the base it left. `merge` is the
-only command that takes it, since it is the only one that writes the base.
+directory every worktree of the clone shares, from the read after its wait
+for CI to its end, so a second merge waits for the first and then reads the
+base it left. The wait itself holds no lock, so a merge waiting for CI does
+not hold up another item's merge, and what it read before the lock is read
+again under it. `merge` is the only command that takes the lock, since it is
+the only one that writes the base.
 After the checks, and before it writes anything, it confirms that the branch
 tip and the base tip are the ones the checks ran on and that neither the
 work checkout nor the base's checkout has changed, and it refuses if any
@@ -633,7 +657,9 @@ worktree behind; the next merge, holding the lock, removes it.
 shell adapters; `atelier-app` runs neither.
 
 Nothing else from today's merge is carried over: not the gate code, the
-polling in `merge_wait.rs`, nor `merge_sync.rs`.
+polling in `merge_wait.rs`, nor `merge_sync.rs`. The wait for CI is written
+new. `submit` pushes the branch and opens its pull request with the same code
+as `merge`.
 
 ## Site
 
@@ -801,9 +827,15 @@ does, it must not fetch a repository that has been converted.
   commit is an Atelier merge of a branch with ordinary code commits allowed;
   the refused push allowed with `ATELIER_SKIP` set, and the skip printed; a
   branch switch printing `status`.
-- `merge` with CI still running: it stops with its "not yet" exit status and
-  changes nothing; run again after CI passed, it merges; run again after CI
-  failed, it refuses.
+- `merge` with CI still running: it waits, holding no lock, and merges as
+  soon as CI passes or refuses as soon as it fails; at the bound it stops
+  with its "not yet" exit status and changes nothing, also when the forge
+  fails or never answers. A run that passed on the commit `submit` pushed
+  still counts after `verdict approve`; one before a change outside the
+  item's directory does not. A merge killed during the wait leaves
+  everything as it was, and another item's merge completes meanwhile.
+  Changes made during the wait are judged under the lock: a new base, a new
+  merge check, a branch gone stale.
 - A fresh-agent scenario, run by the eval harness: an agent given only "run
   `atelier status`" takes a ready item to done. It is run with Claude Opus
   and with a Codex model.
@@ -825,11 +857,12 @@ evidence.
 | Records on a separate branch | Records with the code are the reason the tool exists |
 | A plan as its own branch | Grooming touches many items and planning branches collide |
 | `land`, a check an agent had to run | Agents forgot it, or hid its refusal behind a pipe; a pre-push hook runs without being remembered and fails the push itself |
-| Waiting for CI inside `merge` | A command that sleeps for minutes fights the harness, and one network timeout failed it |
+| Waiting for CI inside `merge`, for as long as `--wait` and `--timeout` said | A command that sleeps for minutes fights the harness, and one network timeout failed it. It came back on 2026-11-10 in another form: bounded at 9 minutes, under the harness's limit, with no flag, holding no lock, and counting a failed question to the forge as not finished. The thread that runs `merge` is a delegated child that nobody wakes when CI finishes |
 
 ## Decisions
 
-Sumeet made each of these in conversation on 2026-11-09.
+Sumeet made each of these in conversation on 2026-11-09, except the two
+dated 2026-11-10.
 
 | Decision | Reason |
 | --- | --- |
@@ -850,7 +883,8 @@ Sumeet made each of these in conversation on 2026-11-09.
 | The tool gives facts and the skill does the arithmetic: `log` and `list`, and no scorecard command | A fixed report in the binary would change every time the measures do, as the debrief did |
 | The gardener is a role, and its needs shape the records now | A bug's cause and a deferred finding's settlement are cheap in the first format and costly to add later |
 | Every rule can be skipped on purpose, with a reason | Atelier's rules are not hard blockers, and a bypass should be intended and leave a trace |
-| `merge` never waits | Waiting belongs to the harness, which already wakes a thread when a pull request's checks finish |
+| `submit` pushes the branch and opens its pull request where a forge is configured (2026-11-10) | CI then runs during the review; it was nearly all of the wait between approval and merge, a median of 5.5 minutes on 25 items |
+| `merge` waits for CI, for up to 9 minutes, with no flag (2026-11-10, reversing "`merge` never waits") | The thread that runs `merge` is almost always a delegated child, which T3 neither lets watch a pull request nor wakes reliably, so "not yet, run me again" left approved items with nobody driving them |
 | His go-ahead stays `ready --by` | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
 
 Three points in this design go beyond what he confirmed, and his approval
