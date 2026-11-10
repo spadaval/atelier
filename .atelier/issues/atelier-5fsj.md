@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Script the scorecard's counted measures, so the baseline can be rerun after the cutover"
-updated_at: "2026-11-10T15:45:44.228494940+00:00"
+updated_at: "2026-11-10T15:47:40.902361168+00:00"
 ---
 
 ## Goal
@@ -43,6 +43,8 @@ Write the scripts that compute the scorecard's counted measures for a repository
 
 Python with the standard library only. Nothing changes in the `atelier` binary. The classified measures and the defect count are other items.
 
+The shell-command recogniser covers a closed list of command forms, which `scripts/scorecard/README.md` names in full: calls of atelier, reads and writes of records, record commits and file writes. It is right for each listed form, with a test for each. A form the README does not list as recognised is a stated limit, and recognising it is in scope only when that moves a headline number in `counted.md` on the frozen inputs.
+
 ## Context
 
 Each measure's definition is in `docs/strategies/redesign-1-baseline.md`, Design; do not change a definition, and escalate if one cannot be computed as written. The snapshot is at `~/.local/share/atelier-baseline/2026-11/`, described by `docs/architecture/quality/scorecard-baseline/manifest.json`. Starting material, not to be committed as it is: `/var/tmp/atelier-assessment/transcripts/` and `/var/tmp/atelier-assessment/history/`. Tie a thread to an item by the branch it worked on and the item IDs in its title and first message.
@@ -50,6 +52,8 @@ Each measure's definition is in `docs/strategies/redesign-1-baseline.md`, Design
 ## Notes
 
 - 2026-11-10 [note] Escalated to the orchestrator after three review rounds: round 3 (gpt-6.1-sol-5fsj-r3) left fix_now findings atelier-vj7n (R5), atelier-tu8a (R6) and atelier-h5kn (R7), all in the shell-command recogniser in scripts/scorecard/commands.py. Rounds 1 and 2's findings (pu40, ss09, d6fh, fvq9) are fixed at 31d3c6a1 and await an approval. Work is committed at 8b36a366; see the Report.
+- 2026-11-10 [decision] 2026-11-10, orchestrator of atelier-jah8: the shell-command recogniser is a heuristic over a closed list of command forms, not a shell. The README lists every form it recognises (calls of atelier, reads and writes of records, record commits, file writes), and the scripts are right for those forms, with a test for each. A form the README does not list is a stated limit, named in the README as not recognised. It becomes this item's work only if recognising it moves a headline number in counted.md, shown in aggregate on the frozen inputs. Calls before first edit keeps the strategy's definition (first write outside .atelier/); T3 file_change alone is not accepted as a proxy, because it moved atelier's median from 20 to 33. Fable 5.1, Fable 5.2 and GPT-6 Astra stay unpriced: the assessment's table is the source of list prices, and an item with an unpriced request stays out of tokens per item, with the coverage saying so.
+  Reason: Each review round found a new shell form the recogniser misread, none of which moved a baseline number after round 1. Parsing shell by heuristic has no last edge case, so the contract is the listed forms plus a measured limit. Precision wins over coverage, and the owner asked for better code, not more.
 
 ## Report
 
