@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Run a fresh agent through the loop with only `status` to guide it, on Claude Opus and Codex"
-updated_at: "2026-11-10T18:41:37.472953783+00:00"
+updated_at: "2026-11-10T19:25:57.689772823+00:00"
 ---
 
 ## Goal
@@ -49,9 +49,17 @@ This is the mission criterion `fresh-agent-loop` and the evidence boundary befor
 
 - Whether the eval harness can let the agent start its own reviewer child under Codex. If it cannot, the scenario runs the reviewer as a second invocation given the handoff line `submit` printed, and the results file says so.
 
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by sol-review-2 (atelier-kuwa) at 3bea3c89 after two review rounds; both round-1 fix-now findings fixed. Criterion fresh-agent-loop met in the final round; see the Report and evals/agent-factory/results/2026-11-10-next-loop.md. Ready for the orchestrator to merge.
+
 ## Report
 
 The criterion holds. In the final round (binary at ce0c2d4), three Claude Opus 5.5 runs and three Codex `gpt-6.1-sol` runs each took the ready item to done with a reviewer that was another thread; every run passed the grader, five had no refused or errored `atelier` call and one had one (Codex 9487: `submit` refused once because it had not ticked the Done when lines). The scenario is `evals/agent-factory/scenarios/next-loop/`; the grader's fixtures (`python3 -m unittest` there, with `NEXT_ATELIER` set, 8 tests OK) show it failing an approved but unmerged item, a review whose reviewers include the implementer, tests that pass on the old code, and a failing test on main. The results, every fumble with its excerpt, and the changes between rounds are in `evals/agent-factory/results/2026-11-10-next-loop.md`. `cargo fmt --check`, clippy with `-D warnings` and `cargo nextest run` in `next/` (105 tests) pass; the harness tests (7) pass; `git diff --check` is clean; nothing under `crates/` changed.
+
+### Review
+
+Two rounds by GPT-6.1 Sol. Round 1 (atelier-3k9r, atelier-g29j, both fix now) found the grader missed refusals an enclosing shell hid and counted shell calls rather than invocations; both fixed in 13d00d37, and the table recounted. Round 2 approved at 3bea3c89 (atelier-kuwa) with no new finding.
 
 ### Decisions
 
