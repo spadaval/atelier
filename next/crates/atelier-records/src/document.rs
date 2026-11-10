@@ -14,40 +14,48 @@ pub(crate) fn join(front_matter: &str, body: &str) -> String {
     format!("---\n{front_matter}---\n{body}")
 }
 
+/// The lines of a Markdown `text` that are not in a fenced code block, each
+/// with the offset it starts at and without its newline. The fence lines
+/// themselves are left out too, so an example in a fence is never read as a
+/// heading or a field.
+pub(crate) fn unfenced_lines(text: &str) -> Vec<(usize, &str)> {
+    let mut lines = Vec::new();
+    let mut fence: Option<&str> = None;
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let start = offset;
+        offset += line.len();
+        let line = line.trim_end_matches('\n');
+        let marker = ["```", "~~~"]
+            .into_iter()
+            .find(|marker| line.trim_start().starts_with(marker));
+        match (fence, marker) {
+            (Some(open), _) if line.trim_start().starts_with(open) => fence = None,
+            (Some(_), _) => {}
+            (None, Some(open)) => fence = Some(open),
+            (None, None) => lines.push((start, line)),
+        }
+    }
+    lines
+}
+
 /// The sections of a Markdown `text` under headings of one `level`, as
 /// (heading, content) pairs in order. A heading inside a fenced code block
 /// is text. Content runs to the next heading of the same or a higher level.
 pub(crate) fn sections(text: &str, level: usize) -> Vec<(&str, &str)> {
     let mut sections: Vec<(&str, usize)> = Vec::new();
     let mut ends = Vec::new();
-    let mut fence: Option<&str> = None;
-    let mut offset = 0;
-    for line in text.split_inclusive('\n') {
-        let start = offset;
-        offset += line.len();
-        let trimmed = line.trim_end_matches('\n');
-        if let Some(marker) = fence {
-            if trimmed.trim_start().starts_with(marker) {
-                fence = None;
-            }
-            continue;
-        }
-        if let Some(marker) = ["```", "~~~"]
-            .into_iter()
-            .find(|marker| trimmed.trim_start().starts_with(marker))
-        {
-            fence = Some(marker);
-            continue;
-        }
-        let hashes = trimmed.len() - trimmed.trim_start_matches('#').len();
+    for (start, line) in unfenced_lines(text) {
+        let hashes = line.len() - line.trim_start_matches('#').len();
         let is_heading = (1..=level).contains(&hashes)
-            && (trimmed.len() == hashes || trimmed[hashes..].starts_with(' '));
+            && (line.len() == hashes || line[hashes..].starts_with(' '));
         if is_heading {
-            if !sections.is_empty() && ends.len() < sections.len() {
+            if ends.len() < sections.len() {
                 ends.push(start);
             }
             if hashes == level {
-                sections.push((trimmed[hashes..].trim(), offset));
+                let content_start = (start + line.len() + 1).min(text.len());
+                sections.push((line[hashes..].trim(), content_start));
             }
         }
     }
@@ -93,5 +101,12 @@ mod tests {
         );
         assert_eq!(sections(text, 3), [("Sub", "b\n")]);
         assert_eq!(sections("##NoSpace\n#### Deeper\n", 2), []);
+    }
+
+    #[test]
+    fn leaves_out_fenced_lines_and_their_fences() {
+        let text = "a\n```text\nTaken: x\n~~~\n```\nb\n~~~\n```\n~~~\nc";
+        let lines: Vec<&str> = unfenced_lines(text).into_iter().map(|(_, l)| l).collect();
+        assert_eq!(lines, ["a", "b", "c"]);
     }
 }

@@ -688,6 +688,46 @@ fn settling_lines_in_another_form_are_refused() {
 }
 
 #[test]
+fn field_lines_in_a_fenced_example_are_text() {
+    let review = "items/atelier-06jc/reviews/1-k3fa.md";
+    let item = "items/atelier-06jc/item.md";
+    let fenced_taken = "```text\nTaken: atelier-bbbb by example-thread\n```";
+    let fenced_entry = "```text\nFinding: 2-m2bn.1\nAnswer by example-thread: Example only\nOutcome: no action\n```";
+    let mut files = example();
+    for (path, old, new) in [
+        (review, "Taken: atelier-n3w1 by t3-gardener", fenced_taken),
+        (item, "Finding: 2-m2bn.2\n\nAnswer by t3-decider: No; the item's own Scope is enough.\nOutcome: no action", fenced_entry),
+    ] {
+        let text = &mut files.iter_mut().find(|(p, _)| *p == path).unwrap().1;
+        assert!(text.contains(old), "{old}");
+        *text = text.replacen(old, new, 1);
+    }
+    let rendered: Vec<String> = files.iter().map(|(_, t)| t.clone()).collect();
+    let dir = load(
+        &files
+            .iter()
+            .map(|(p, t)| (*p, t.as_str()))
+            .collect::<Vec<_>>(),
+        "atelier-06jc",
+    );
+    assert!(!dir.findings().unwrap()[1].is_settled());
+    let decision = &dir.decisions().unwrap()[0];
+    assert_eq!(
+        (&decision.finding, &decision.answer, decision.outcome),
+        (&None, &None, None)
+    );
+    let open: Vec<String> = dir
+        .open_findings()
+        .unwrap()
+        .iter()
+        .map(|f| f.name.to_string())
+        .collect();
+    assert_eq!(open, ["2-m2bn.1", "2-m2bn.2"]);
+    assert_eq!(render_item(&dir.item), rendered[0]);
+    assert_eq!(render_review(&dir.reviews[0].review), rendered[1]);
+}
+
+#[test]
 fn a_fix_now_finding_stays_open_until_a_later_round_or_a_decision_closes_it() {
     let open = |edits: &[(&str, &str, &str)]| -> Vec<String> {
         let mut files = example();

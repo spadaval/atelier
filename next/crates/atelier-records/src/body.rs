@@ -1,7 +1,7 @@
 //! What the tool reads from a record's Markdown body: an item's sections,
 //! its Decisions entries and Responses lines, and a review's findings.
 
-use crate::document::sections;
+use crate::document::{sections, unfenced_lines};
 use crate::{ids, Problem};
 use atelier_core::{
     Answer, Decision, Finding, FindingName, Now, Outcome, Recommendation, Response, ReviewName,
@@ -48,7 +48,7 @@ pub(crate) fn findings(
 }
 
 fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, String> {
-    let mut lines = content.lines().map(str::trim_end).filter(|l| !l.is_empty());
+    let mut lines = fields(content).into_iter();
     let recommendation = lines
         .next()
         .and_then(|line| line.strip_prefix("Recommendation: "))
@@ -131,7 +131,7 @@ pub(crate) fn decisions(file: &Path, body: &str) -> Result<Vec<Decision>, Proble
 
 fn decision(question: &str, content: &str) -> Result<Decision, String> {
     let (mut finding, mut answer, mut outcome_line) = (None, None, None);
-    for line in content.lines().map(str::trim_end) {
+    for line in fields(content) {
         if let Some(value) = line.strip_prefix("Finding: ") {
             set(&mut finding, "Finding", value.parse::<FindingName>()?)?;
         } else if let Some(value) = line.strip_prefix("Answer by ") {
@@ -168,10 +168,8 @@ pub(crate) fn responses(file: &Path, body: &str) -> Result<Vec<Response>, Proble
     else {
         return Ok(Vec::new());
     };
-    lines
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty())
+    fields(lines)
+        .into_iter()
         .map(|line| response(line).map_err(|message| Problem::new(file, "Responses", message)))
         .collect()
 }
@@ -199,6 +197,16 @@ fn response(line: &str) -> Result<Response, String> {
     } else {
         Err(form())
     }
+}
+
+/// The non-blank lines of `text` outside fenced code blocks, where a
+/// record's field lines are; an example in a fence is not a field.
+fn fields(text: &str) -> Vec<&str> {
+    unfenced_lines(text)
+        .into_iter()
+        .map(|(_, line)| line.trim_end())
+        .filter(|line| !line.is_empty())
+        .collect()
 }
 
 fn outcome(key: &str, value: &str) -> Result<Outcome, String> {
