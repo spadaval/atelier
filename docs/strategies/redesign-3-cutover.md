@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 2: a simpler cutover, prepared by ordinary items and run from a runbook"
+last_changed: "2026-11-09: revised after planning review round 3: the fallback release comes before the site; the skill is written beside the live one"
 ---
 
 # Why
@@ -51,7 +51,8 @@ June system again: 31% of the Rust ever written here survives.
 
 - **Prepared by ordinary items, run from a runbook.** Everything that needs
   judgment is reviewed and merged under the old tool before the cutover: the
-  skill, the site, the switch of the binary, the new `AGENTS.md` text. The
+  skill, the site, the switch of the binary, the new `AGENTS.md` text and
+  the replacement CI workflows. The
   cutover itself only runs a reviewed script, so it needs no review while it
   runs and neither tool has to gate a change it cannot read.
 - **Judgment in the skill, procedure in the tool.** A role's file says how to
@@ -68,20 +69,21 @@ June system again: 31% of the Rust ever written here survives.
 
 # Design
 
-Eight steps, all in the backlog until mission 2's evidence is in. The
+Nine steps, all in the backlog until mission 2's evidence is in. The
 protocol is the Transition section of the
 [architecture specification](redesign-architecture.md#transition).
 
 | Step | Does |
 | --- | --- |
-| A. Skill | Rewrite `SKILL.md` and one file per role against the new commands. Move what the tool now prints out of the skill. Fold the constitution's live rules into the role files and delete the rest. It merges to master and does not go live until the cutover moves the skill checkout. |
+| A. Skill | Write the new skill in `skills/agent-factory-next/`, beside the live one: `SKILL.md` and one file per role against the new commands. Leave out what the tool now prints. Carry the constitution's live rules into the role files. The cutover moves it into place. |
 | B. Evals | Port the scenarios to `atelier-next`. Add a no-skill arm and a Codex arm. Cut each procedure no scenario supports. |
 | C. Backlog sort | Sort the 147 open items and five open missions: converted as they are, rewritten for the new tool, or dropped as obsolete, with the list in the report. |
-| D. Site | Convert the site to the new records, served by `atelier-next serve`, with its web tests passing. |
-| E. Switch | Cut release 0.4.1 of the old tool. Point the `atelier` binary at the new commands and delete the old command layer and its tests. Add the runbook, the new `AGENTS.md` texts and CI's two-way `check` step. Try each rollback row on scratch clones. |
-| F. Cutover | Run the runbook on this host. |
-| G. Clean-up and first work | Delete the library code nothing reaches any more. Run one item in atelier and one in a product repository. Fix what first use breaks. |
-| H. Docs | Replace `docs/product/`, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record and the current architecture pages. Move open missions' strategies into their directories. |
+| D. Fallback release | Cut release 0.4.1 of the old tool, before anything in the tree changes the old binary. |
+| E. Site | Convert the site to the new records, served by `atelier-next serve`, with its web tests passing. |
+| F. Switch | Point the `atelier` binary at the new commands and delete the old command layer and its tests. Add the runbook, the new `AGENTS.md` texts, the replacement CI workflows and CI's two-way `check` step. Try the rollback on scratch clones at each stopping point. |
+| G. Cutover | Run the runbook on this host. The item is never started; it is closed on the base at the end. |
+| H. Clean-up and first work | Delete the library code nothing reaches any more, and the old skill's leftovers. Run one item in atelier and one in a product repository. Fix what first use breaks. |
+| I. Docs | Replace `docs/product/`, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record and the current architecture pages. Move open missions' strategies into their directories. |
 
 The skill's size is reported before and after as an indication. The current
 agent-facing text is 1,219 lines.
@@ -90,9 +92,9 @@ agent-facing text is 1,219 lines.
 
 The riskiest assumption is that the cutover leaves no repository stuck.
 Mission 2's rehearsal converts scratch clones of all five and runs an item in
-each. Step E tries every row of the rollback table on scratch clones,
-including stopping straight after master is pushed and half-way through the
-other repositories.
+two. Step F tries the rollback on scratch clones at each stopping point the
+architecture specification lists, including a conversion that fails before
+its commit and one that is committed and not pushed.
 
 The second is that the evals can tell the arms apart at three runs per cell.
 If a scenario cannot, its procedure is cut. That is the cheap direction to be
@@ -100,8 +102,9 @@ wrong in: text can be added back when a real failure shows the need.
 
 # Scope
 
-- In: the skill, its evals, the backlog sort, the site, the switch, the
-  cutover on this host, clean-up, first use, and the docs.
+- In: the skill, its evals, the backlog sort, the fallback release, the
+  site, the switch, the cutover on this host, clean-up, first use, and the
+  docs.
 - Out: the work host, which Sumeet converts with the runbook; the gardener,
   groom and audit procedures, which mission 4 rewrites and which are carried
   over unchanged except for command names; new site features; new scenarios
@@ -131,9 +134,10 @@ specifications do not name is escalated, not fixed in place.
 - **Sumeet's other threads.** An agent working in a product repository during
   the cutover would meet a tool that changed under it. The runbook checks
   T3's running threads first and stops.
-- **A reinstall between the switch and the cutover** would install a binary
-  that cannot read any repository's records. `AGENTS.md` says not to, and
-  the cutover follows the switch at once.
+- **A reinstall between the site step and the cutover** would install an old
+  binary with no `serve`, and after the switch a binary that cannot read any
+  repository's records. `AGENTS.md` says not to, and steps E to G run one
+  after another.
 - **A repository whose forge requires a pull request for its base.** The
   rehearsal finds out, and that repository's conversion then goes as one.
 - **The evals may show the skill adds little.** Then the skill gets small.

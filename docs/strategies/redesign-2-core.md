@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 2: the site moves to mission 3; atomic start; one clone"
+last_changed: "2026-11-09: revised after planning review round 3: a lighter rehearsal"
 ---
 
 # Why
@@ -19,8 +19,8 @@ A second binary on master, `atelier-next`, implements the product
 specification's records and commands. It is not installed anywhere, and the
 old binary beside it is untouched. A fresh agent, told only to run
 `atelier status`, takes a ready item to done with an independent reviewer. A
-converted scratch clone of each of the five repositories passes `check` and
-completes one item.
+converted scratch clone of each of the five repositories passes `check`, and
+one item completes in two of them.
 
 # Success Criteria
 
@@ -30,8 +30,8 @@ completes one item.
   reviewer child. Three runs each. No run has more than one refused or
   errored `atelier` call.
 - rehearsal: the converter and the new binary, run on a scratch clone of each
-  of the five repositories, pass `check`, and one item in each clone goes
-  from ready to done.
+  of the five repositories, pass `--verify` and `check`. One item goes from
+  ready to done in the atelier clone and in one product clone.
 
 # Sizing
 

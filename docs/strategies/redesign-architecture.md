@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 2 (Astra, Grok)"
+last_changed: "2026-11-09: revised after planning review round 3 (Astra, Grok)"
 ---
 
 # Atelier redesign: architecture specification
@@ -229,7 +229,8 @@ runs, a project's `AGENTS.md` says to run `atelier status` first.
   between branches.
 - **A terminal status on the base wins.** If the base's record is `dropped`
   or `done`, that is the item's status whatever its branch holds. This is how
-  a started item is cancelled.
+  a started item is cancelled. Every command checks the base's record of its
+  item first, including `status` and `merge` run on the item's own branch.
 - **Who reads this way:** `status` on the base, `lead`, `list`, `show` and
   the site. The site already enumerates local branches for work in flight.
 - **Starting is one atomic step.** `start` writes the commit that sets
@@ -241,7 +242,8 @@ runs, a project's `AGENTS.md` says to run `atelier status` first.
   `start` is then the take-over, which it runs again only if it means to.
 - **One clone.** All of this coordinates the threads in one clone and its
   worktrees. Two clones on different hosts are not coordinated.
-- A command on a work branch reads and writes that branch's `.atelier/`.
+- Apart from that check, a command on a work branch reads and writes that
+  branch's `.atelier/`.
 - `land` on the base applies one rule to each unpushed commit: it is a merge
   made by `atelier merge`, or it touches only paths under
   `.atelier/missions/` and `.atelier/items/`. A commit on the base may not
@@ -309,61 +311,80 @@ them; deferred findings on them are not carried over, and the backlog sort is
 where any worth keeping become items. Run twice on the same input it writes
 the same bytes, and `--verify` checks a converted tree against a fresh run.
 The rehearsal converts a scratch clone of each of the five repositories and
-runs `atelier-next check`, `status` and one full item on each.
+runs `atelier-next check` and `status` on each. It runs one full item in the
+atelier clone and in one product clone; a full item runs the repository's
+merge checks, and some of those are too heavy to run for all five here.
 
 **3. Prepare (mission 3).** Each of these is reviewed and merged under the
 old tool:
 
-- The skill is rewritten on master. It does not go live, because the live
-  copy is a checkout that moves only when someone moves it.
+- The skill is rewritten in `skills/agent-factory-next/`, beside the live
+  one. The live skill is a checkout that follows master, and the installed
+  binary tells every session to move it forward when it falls behind, so the
+  new text must not sit at the live path before the cutover.
+- The last release of the old tool, 0.4.1, is cut from master before
+  anything in the tree changes the old binary. The installed binary today is
+  six commits past 0.4.0. It is the binary CI and the rollback use, and it
+  still has `serve`.
 - The site is converted, as above.
-- The last release of the old tool, 0.4.1, is cut from master. It is the
-  binary CI and the rollback use.
 - The switch: the `atelier` binary target points at the new command layer,
   and the old command layer, its integration tests and
   `scripts/smoke-repos.sh` are deleted. CI's `check` step runs the 0.4.1
   release while the repository holds `.atelier/issues/` and the tree's
   binary once it does not. `AGENTS.md` says the installed binary stays the
-  tracker and nobody installs from the tree. The new `AGENTS.md` text for
-  each repository is added under `scripts/cutover/`, so it is reviewed here.
+  tracker and nobody installs from the tree. Added under `scripts/cutover/`,
+  so that they are reviewed here: the runbook, the new `AGENTS.md` text for
+  each repository, and a replacement for each workflow that runs Atelier in
+  a repository's CI, installing it from this change's commit. Astromech's
+  workflow installs Atelier from a commit today and runs `doctor` and
+  `land`, which will not exist.
 
 After the switch merges, the tree's binary cannot read this repository's
 records, and only the installed binary tracks work. The cutover follows at
 once.
 
 **4. Cut over (mission 3).** One thread runs `scripts/cutover/cutover.sh`,
-which stops at the first failure:
+which stops at the first failure. The cutover item is never started: it stays
+ready, the runbook runs on the base, and the item is closed at the end.
 
 1. Confirm no item is in progress in any of the five repositories and no
-   other thread is running in them.
-2. In atelier, on master: run the converter and replace `AGENTS.md` with the
-   reviewed text. Commit. Run `--verify`, and the tree's `atelier check`.
-3. Install the binary from master, run `atelier setup` for each harness, and
-   move the skill checkout forward.
+   other thread is running in them. Record each repository's base commit.
+2. In atelier, on master: run the converter, replace `AGENTS.md` with the
+   reviewed text, and move `skills/agent-factory-next/` to
+   `skills/agent-factory/`. Commit. Run `--verify`, and the tree's
+   `atelier check`.
+3. Install the binary from master, run `atelier setup` for each harness,
+   move the skill checkout forward, and restart the `atelier-serve` service.
+   Check the site answers for atelier.
 4. Push master. CI now runs the tree's binary on the converted records.
 5. In each of the other four repositories: convert, replace the process text
-   in `AGENTS.md`, update any Atelier version its CI pins, commit, run
-   `--verify` and `atelier check`, and push.
+   in `AGENTS.md` and any workflow that runs Atelier with the reviewed ones,
+   commit, run `--verify` and `atelier check`, and push.
 6. Close the cutover item with `atelier close`, the first act recorded by the
    new tool.
 
 The conversion commits are pushed directly, by plain `git push`. They are the
-output of a reviewed script, checked by `--verify`, and the reviewed
-`AGENTS.md` text. This is the one time a commit that is not an Atelier merge
+output of a reviewed script, checked by `--verify`, and reviewed text moved
+into place. This is the one time a commit that is not an Atelier merge
 changes more than planning records on a base, and the runbook is the only
 thing that does it.
 
-**Rollback**, by where the run stopped:
+**Rollback.** The runbook undoes its own work from what it recorded in step
+1, repository by repository:
 
-| Stopped | Undo |
+| A repository that is | Is undone by |
 | --- | --- |
-| Before step 3 | Reset the unpushed commit |
-| After step 3 | Also reinstall 0.4.1, run its `setup`, and move the skill checkout back |
-| After step 4 | Also revert the conversion commit on master and push |
-| During step 5 | Also revert the conversion commit in each repository already pushed |
+| Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
+| Converted and pushed | Reverting its conversion commit and pushing |
 
-Each row is tried once on scratch clones before the real cutover, including
-stopping straight after step 4 and half-way through step 5.
+If step 3 had run, it also reinstalls 0.4.1, runs its `setup`, moves the
+skill checkout back to the commit it was on, restarts `atelier-serve`, and
+checks the site answers.
+
+The rollback is tried on scratch clones before the real cutover, stopping
+after each of these: a conversion that fails `--verify` before its commit;
+step 2's commit; step 3; step 4; and a second repository's conversion in step
+5 that is committed and not pushed.
 
 **After the cutover**, the first items under the new tool delete the library
 code nothing reaches any more: the workflow crate, the old record types, the

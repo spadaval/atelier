@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 2 (Astra, Grok)"
+last_changed: "2026-11-09: revised after planning review round 3 (Astra, Grok)"
 ---
 
 # Atelier redesign: product specification
@@ -98,7 +98,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | `building` | Implementer | `start` | Done when lines are ticked, the Report is written, and `submit` runs |
 | `in_review` | Reviewer | `submit` | The reviewer runs `verdict` |
 | `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed, rebutted or decided, and `submit` runs |
-| `approved` | Implementer | `verdict approve` | The merge checks pass on the head, and `merge` runs |
+| `approved` | Implementer | `verdict approve` | The merge checks pass on the head, and `merge` runs; or the approval went stale, and `submit` runs again |
 | `done` | Nobody | `merge` or `close` | Never |
 | `dropped` | Nobody | `drop` | Never |
 
@@ -151,9 +151,10 @@ item or decide a question on it, and a thread that has ever been a review's
 reviewer can never decide that review's findings. Taking a role over does not
 erase who held it before.
 
-Dropping is final and happens on the base. A dropped item cannot be merged,
-whatever its branch says, and its implementer's `status` says it was dropped
-and why.
+Dropping is final and happens on the base. Every command, on the base or on
+the item's branch, looks at the base's record first, so a dropped item cannot
+be merged whatever its branch says, and its implementer's `status` says it
+was dropped and why.
 
 ## Commands
 

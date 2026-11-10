@@ -32,7 +32,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Run the cutover on this host"
-updated_at: "2026-11-10T01:29:43.019538533+00:00"
+updated_at: "2026-11-10T01:39:35.366711469+00:00"
 ---
 
 ## Goal
@@ -41,11 +41,11 @@ Make the change of tool once, on this host, by running the reviewed runbook.
 
 ## Done when
 
-- [ ] Provisional: `scripts/cutover/cutover.sh` ran to its end on this host. The mission criteria `five-converted` and `no-old-surface` hold. This item was closed with `atelier close`, the first act the new tool recorded.
+- [ ] Provisional: `scripts/cutover/cutover.sh` ran to its end on this host: all five repositories are converted and pushed, `atelier check` passes in each under the installed new binary, and the site answers for each. This item was closed with `atelier close`, the first act the new tool recorded.
 
 ## Context
 
-Preliminary. This step is planned in full at its boundary, with one planning review, as `docs/strategies/redesign-3-cutover.md` says. Protocol: `docs/strategies/redesign-architecture.md`, Transition, part 4, with its rollback table. This item changes no file by hand: the runbook's conversion commits are the only direct pushes, and the mission's Authority allows them.
+Preliminary. This step is planned in full at its boundary, with one planning review, as `docs/strategies/redesign-3-cutover.md` says. Protocol: `docs/strategies/redesign-architecture.md`, Transition, part 4, with its rollback table. Do not run `atelier start` on this item: the runbook stops while any item is in progress, and `atelier close` ends an item that was never started. Run it on the base. This item changes no file by hand: the runbook's conversion commits are the only direct pushes, and the mission's Authority allows them.
 
 ## Unknowns
 

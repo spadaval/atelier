@@ -19,17 +19,17 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Rewrite Agent Factory against the new tool, one file per role"
-updated_at: "2026-11-10T00:56:09.122058912+00:00"
+title: "Write the new Agent Factory beside the live one, one file per role"
+updated_at: "2026-11-10T01:39:34.810632830+00:00"
 ---
 
 ## Goal
 
-Make the skill say how to decide and leave what to run to the tool: `SKILL.md` and one file each for lead, implementer, reviewer, decider and planner.
+Make the skill say how to decide and leave what to run to the tool: `SKILL.md` and one file each for lead, implementer, reviewer, decider and planner, written in `skills/agent-factory-next/` beside the live skill, which stays as it is until the cutover moves the new one into place.
 
 ## Done when
 
-- [ ] Provisional: no role file restates what `status` or `--help` prints; the constitution's live rules are in the role files and the rest is deleted; the agent-facing line count is reported against today's 1,219.
+- [ ] Provisional: no role file restates what `status` or `--help` prints; the constitution's live rules are in the role files; the agent-facing line count is reported against today's 1,219.
 
 ## Context
 
