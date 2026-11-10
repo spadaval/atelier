@@ -154,7 +154,12 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         .collect();
     let sections = MISSION_SECTIONS
         .into_iter()
-        .filter_map(|heading| Some((heading, mission.section(heading)?)))
+        .filter_map(|heading| {
+            Some((
+                heading,
+                mission.section(heading).filter(|c| !c.trim().is_empty())?,
+            ))
+        })
         .collect();
     let brief = output::plan_brief(&PlanBrief {
         id,

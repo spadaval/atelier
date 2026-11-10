@@ -979,8 +979,14 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
                 .filter(|s| atelier_core::MissionStatus::of(**s).is_some())
                 .map(|s| status_name(*s))
                 .collect();
+            let then = match status {
+                Status::Draft => {
+                    format!("A planner makes it ready with: atelier ready {id} --by <name>\n")
+                }
+                _ => "Nothing is left to do on it.\n".into(),
+            };
             format!(
-                "Mission {id} is {}, and `atelier {}` runs on a mission that is {}. Nothing changed.\n",
+                "Mission {id} is {}, and `atelier {}` runs on a mission that is {}. Nothing changed.\n{then}",
                 status_name(*status),
                 row(act).command,
                 from.join(", ")

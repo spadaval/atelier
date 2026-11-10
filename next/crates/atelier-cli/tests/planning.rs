@@ -961,7 +961,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
         run.stderr,
         format!(
             "Mission {MISSION} is dropped, and `atelier drop` runs on a mission that is draft, \
-             ready. Nothing changed.\n"
+             ready. Nothing changed.\nNothing is left to do on it.\n"
         )
     );
 }
@@ -1108,6 +1108,15 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
         );
     fs::write(&path, defined).unwrap();
     commit_all(&root, "Define it");
+    let run = atelier(&root, "p1", &["close", &mission]);
+    assert_eq!(run.code, 1);
+    assert_eq!(
+        run.stderr,
+        format!(
+            "Mission {mission} is draft, and `atelier close` runs on a mission that is ready. \
+             Nothing changed.\nA planner makes it ready with: atelier ready {mission} --by <name>\n"
+        )
+    );
     let ready = plan(&root, &["ready", &mission, &a, "--by", "sumeet"]);
     assert!(ready
         .stdout
