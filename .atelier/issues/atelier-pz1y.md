@@ -58,7 +58,7 @@ This is the first of step D's three items in `docs/strategies/redesign-2-core.md
 
 ## Report
 
-All seven Done when lines hold. In `next/crates/atelier-cli/tests/hooks.rs` (10 scenarios, Git driving hook scripts the tests write): `check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_records` (a record that does not parse, an invalid one and a config with an unknown key each named with file and field, exit 1; uncommitted record changes listed with exit 0); `a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_hand_edit_goes_through` (invalid, unparseable, ready to approved refused; a retitle and ready to dropped by hand committed; a deletion committed); `the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files` (mission document with no front matter and a binary artifact committed; staged-broken refused, working-tree-broken committed; a rename judged at its new path; a commit in a second worktree refused); `the_first_commit_of_a_repository_is_checked`; `a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused` (code, `config.toml`, another branch pushed to the base, a plain `git merge`, a non-merge carrying the trailer, a force push; code pushed under another name allowed); `planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_base` (planning allowed, several refs, a deletion); `an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branch_any_time` (the real `start`, `submit`, `review`, `verdict`, `merge` under the hooks, with planning pushed beside the merge); `a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused` (and allowed once the branch is gone); `a_first_push_of_a_base_judges_its_whole_line`; `a_branch_switch_prints_status_and_succeeds_whatever_it_finds` (status printed; a switch to a branch with an unparseable record exits 0 and prints the problem; a file checkout prints nothing). `next/crates/atelier-records/tests/load.rs` covers the loader directly. Each test was seen failing under a mutation of the rule it covers (refusals disabled, working tree read instead of the index, the trailer or two-parent test dropped, the branch test dropped, `is_planning` ignored, mission documents read). Full suite: 181 passed after round 2's fixes; fmt and clippy `-D warnings` clean; the CI `next` job's steps pass in a scratch clone. The architecture specification's "Hooks and the bypass", the pre-push bullet, the planning bullet and Testing match the build.
+All seven Done when lines hold. In `next/crates/atelier-cli/tests/hooks.rs` (11 scenarios, among them a push from a checkout whose config does not read; Git driving hook scripts the tests write): `check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_records` (a record that does not parse, an invalid one and a config with an unknown key each named with file and field, exit 1; uncommitted record changes listed with exit 0); `a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_hand_edit_goes_through` (invalid, unparseable, ready to approved refused; a retitle and ready to dropped by hand committed; a deletion committed); `the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files` (mission document with no front matter and a binary artifact committed; staged-broken refused, working-tree-broken committed; a rename judged at its new path; a commit in a second worktree refused); `the_first_commit_of_a_repository_is_checked`; `a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused` (code, `config.toml`, another branch pushed to the base, a plain `git merge`, a non-merge carrying the trailer, a force push; code pushed under another name allowed); `planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_base` (planning allowed, several refs, a deletion); `an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branch_any_time` (the real `start`, `submit`, `review`, `verdict`, `merge` under the hooks, with planning pushed beside the merge); `a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused` (and allowed once the branch is gone); `a_first_push_of_a_base_judges_its_whole_line`; `a_branch_switch_prints_status_and_succeeds_whatever_it_finds` (status printed; a switch to a branch with an unparseable record exits 0 and prints the problem; a file checkout prints nothing). `next/crates/atelier-records/tests/load.rs` covers the loader directly. Each test was seen failing under a mutation of the rule it covers (refusals disabled, working tree read instead of the index, the trailer or two-parent test dropped, the branch test dropped, `is_planning` ignored, mission documents read). Full suite: 182 passed after round 3's fixes; fmt and clippy `-D warnings` clean; the CI `next` job's steps pass in a scratch clone. The architecture specification's "Hooks and the bypass", the pre-push bullet, the planning bullet and Testing match the build.
 
 Timing, debug build, a fixture of 500 items with two reviews each (1,500 record files): `atelier check` 0.13 s, `check --hook pre-commit` with one staged change 0.15 s.
 
@@ -70,48 +70,48 @@ $ git commit -qm Set up Atelier
 $ git push -q origin trunk
 Atelier's pre-push hook refused this push; nothing was pushed.
 Rule: code and config.toml reach trunk only through atelier merge. Each new commit on trunk's first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:
-  77696df Set up Atelier: changes .atelier/config.toml
-Take these commits off trunk and onto an item's branch (atelier start --new "<title>" starts one), and atelier merge brings them in once the item is approved.
+  eb643dc Set up Atelier: changes .atelier/config.toml
+Move them to an item's branch: atelier start --new "<title>" starts one that holds them. Then moving trunk back to the remote's commit takes them off trunk, and atelier merge brings them in once the item is approved.
 error: failed to push some refs to '../remote.git'
 [exit 1]
 $ git push -q --no-verify origin trunk
 -- Planning, committed and pushed --
 $ atelier check
 Every record is valid: 2 items, 0 missions and config.toml.
-Record changes not committed yet: .atelier/items/demo-06wr/item.md, .atelier/items/demo-f746/item.md
+Record changes not committed yet: .atelier/items/demo-8dds/item.md, .atelier/items/demo-mzwv/item.md
 $ git commit -qm Plan greetings
-$ atelier ready demo-06wr demo-f746 --by sumeet
-Made ready, as sumeet said: demo-06wr, demo-f746.
+$ atelier ready demo-8dds demo-mzwv --by sumeet
+Made ready, as sumeet said: demo-8dds, demo-mzwv.
 Wrote, and did not commit:
-  .atelier/items/demo-06wr/item.md
-  .atelier/items/demo-f746/item.md
+  .atelier/items/demo-8dds/item.md
+  .atelier/items/demo-mzwv/item.md
 Planning counts once it is committed on the base.
-Then: git add -- .atelier/items/demo-06wr/item.md .atelier/items/demo-f746/item.md && git commit -m "Ready demo-06wr, demo-f746" -- .atelier/items/demo-06wr/item.md .atelier/items/demo-f746/item.md
+Then: git add -- .atelier/items/demo-8dds/item.md .atelier/items/demo-mzwv/item.md && git commit -m "Ready demo-8dds, demo-mzwv" -- .atelier/items/demo-8dds/item.md .atelier/items/demo-mzwv/item.md
 $ git commit -qam Ready greetings
 $ git push -q origin trunk
 -- check with two broken records --
 $ atelier check
 `atelier check` found 2 problems in 1 item, 0 missions and config.toml.
 These do not read as records. That is not a rule, and it cannot be skipped:
-  .atelier/items/demo-06wr/item.md: front matter: status: unknown variant `finished`, expected one of `draft`, `ready`, `building`, `in_review`, `changes_requested`, `approved`, `done`, `dropped` at line 5 column 9
+  .atelier/items/demo-8dds/item.md: front matter: status: unknown variant `finished`, expected one of `draft`, `ready`, `building`, `in_review`, `changes_requested`, `approved`, `done`, `dropped` at line 5 column 9
 Rule: every record is valid. These are not:
-  .atelier/items/demo-f746/item.md: blocked_by: `demo-zz99` names no item
+  .atelier/items/demo-mzwv/item.md: blocked_by: `demo-zz99` names no item
 Fix each in the file named, then run atelier check again.
-Record changes not committed yet: .atelier/items/demo-06wr/item.md, .atelier/items/demo-f746/item.md
+Record changes not committed yet: .atelier/items/demo-8dds/item.md, .atelier/items/demo-mzwv/item.md
 [exit 1]
 -- A refused commit of each kind --
 $ git commit -qam Break both
 Atelier's pre-commit hook refused this commit; nothing was committed.
 These do not read as records. That is not a rule, and it cannot be skipped:
-  .atelier/items/demo-06wr/item.md: front matter: status: unknown variant `finished`, expected one of `draft`, `ready`, `building`, `in_review`, `changes_requested`, `approved`, `done`, `dropped` at line 5 column 9
+  .atelier/items/demo-8dds/item.md: front matter: status: unknown variant `finished`, expected one of `draft`, `ready`, `building`, `in_review`, `changes_requested`, `approved`, `done`, `dropped` at line 5 column 9
 Rule: every record is valid. These are not:
-  .atelier/items/demo-f746/item.md: blocked_by: `demo-zz99` names no item
+  .atelier/items/demo-mzwv/item.md: blocked_by: `demo-zz99` names no item
 Fix each file named, stage it with git add, and commit again.
 [exit 1]
 $ git commit -qam Approve by hand
 Atelier's pre-commit hook refused this commit; nothing was committed.
 Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:
-  .atelier/items/demo-06wr/item.md: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.
+  .atelier/items/demo-8dds/item.md: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.
 Fix each file named, stage it with git add, and commit again.
 [exit 1]
 -- An allowed commit made by hand --
@@ -121,25 +121,25 @@ $ git commit -qm Say hello on trunk
 $ git push -q origin trunk
 Atelier's pre-push hook refused this push; nothing was pushed.
 Rule: code and config.toml reach trunk only through atelier merge. Each new commit on trunk's first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:
-  bcbd7da Say hello on trunk: changes hello.txt
-Take these commits off trunk and onto an item's branch (atelier start --new "<title>" starts one), and atelier merge brings them in once the item is approved.
+  2bc674a Say hello on trunk: changes hello.txt
+Move them to an item's branch: atelier start --new "<title>" starts one that holds them. Then git branch -f trunk 5fe46c6 takes them off trunk, and atelier merge brings them in once the item is approved.
 error: failed to push some refs to '../remote.git'
 [exit 1]
 $ git commit -qam Add a merge check
 $ git push -q origin trunk
 Atelier's pre-push hook refused this push; nothing was pushed.
 Rule: code and config.toml reach trunk only through atelier merge. Each new commit on trunk's first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:
-  deefe43 Add a merge check: changes .atelier/config.toml
-Take these commits off trunk and onto an item's branch (atelier start --new "<title>" starts one), and atelier merge brings them in once the item is approved.
+  9b67aa9 Add a merge check: changes .atelier/config.toml
+Move them to an item's branch: atelier start --new "<title>" starts one that holds them. Then git branch -f trunk 5fe46c6 takes them off trunk, and atelier merge brings them in once the item is approved.
 error: failed to push some refs to '../remote.git'
 [exit 1]
 -- An Atelier merge of a branch with code commits, pushed --
-$ atelier start demo-06wr
-Started demo-06wr on branch demo-06wr.
+$ atelier start demo-8dds
+Started demo-8dds on branch demo-8dds.
 
-You are the implementer of demo-06wr (thread impl).
-Item: .atelier/items/demo-06wr/item.md
-Title: Say goodbye
+You are the implementer of demo-8dds (thread impl).
+Item: .atelier/items/demo-8dds/item.md
+Title: Say hello
 Status: building
 To submit it for review:
   [ ] Done when: It greets.
@@ -148,38 +148,38 @@ To submit it for review:
 Then: atelier submit
 $ git commit -qm Say hello
 $ git commit -qam Say it louder
-$ git push -q origin demo-06wr
+$ git push -q origin demo-8dds
 $ atelier submit
-Submitted demo-06wr for review.
+Submitted demo-8dds for review.
 A reviewer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:
-  Run atelier review demo-06wr and follow what it prints.
+  Run atelier review demo-8dds and follow what it prints.
 Then wait for its verdict, and run `atelier status`.
 $ atelier verdict approve --model none
-Recorded your verdict on demo-06wr, round 1: approved. Committed .atelier/items/demo-06wr/reviews/1-keip.md with it.
-demo-06wr is back with its implementer, impl, to merge. Your review is done: say so to whoever started you, and stop.
+Recorded your verdict on demo-8dds, round 1: approved. Committed .atelier/items/demo-8dds/reviews/1-hlox.md with it.
+demo-8dds is back with its implementer, impl, to merge. Your review is done: say so to whoever started you, and stop.
 $ atelier merge
-Merged demo-06wr into trunk with merge commit 578e81b, which marks it done.
+Merged demo-8dds into trunk with merge commit d08c363, which marks it done.
 -- A branch switch --
 $ git switch trunk
 Switched to branch 'trunk'
 You are thread planner, on the base branch trunk.
 Ready to start:
-  demo-f746 (medium): Say hello, warmly
-Then: atelier start demo-f746
+  demo-mzwv (medium): Say goodbye, warmly
+Then: atelier start demo-mzwv
 $ git log --oneline --first-parent -4
-578e81b Merge demo-06wr: Say goodbye
-7c70dc7 Retitle
-8c74b8c Ready greetings
-3842b4f Plan greetings
+d08c363 Merge demo-8dds: Say hello
+68104aa Retitle
+5fe46c6 Ready greetings
+794f0d7 Plan greetings
 $ git push -q origin trunk
 $ git ls-remote origin trunk
-578e81b7917d8da97476319d15b86e26cca92838	refs/heads/trunk
+d08c3635fece93836683aaed9c1864cf4da4c1eb	refs/heads/trunk
 ```
 
 ### Decisions
 
 - Every record is read one file at a time by `atelier-records`' new `load`, from a list of (path, bytes): the working tree for `check`, the index (`CommitReader::staged`, reading `:0:<path>` through the same `cat-file --batch`) for pre-commit. A file that does not read leaves the others read and validated. Problems that do not parse are listed apart from rule breaks, so atelier-zrss can let rules pass and never a parse failure.
-- A review whose item or mission is missing or does not parse cannot be validated, so it is a problem on the review's own path (atelier-d7lx): a commit of such a review is refused. `check` lists an uncommitted `config.toml` with the other record changes (atelier-tv18), and reads records Git ignores, as the commands do (atelier-z02d). A pre-push refusal of a record that does not read says to rewrite the commit that broke it (atelier-dnlm).
+- A review whose item or mission is missing or does not parse cannot be validated, so it is a problem on the review's own path (atelier-d7lx): a commit of such a review is refused. `check` lists an uncommitted `config.toml` with the other record changes (atelier-tv18), and reads records Git ignores, as the commands do (atelier-z02d). A pre-push refusal of a record that does not read says to rewrite the commit that broke it (atelier-dnlm). The ways out of the two push rules are run as printed in the tests, with both hooks in place: `start --new` then `git branch -f <base> <remote's commit>` for code, `git reset --keep HEAD^` for a done commit (atelier-1ymx). A push from a checkout whose `config.toml` does not read is refused as a record that does not read, with the way out, not a raw error (atelier-vjqf).
 - Pre-commit validates the whole index and refuses only the problems of records the commit adds or changes. A deletion is not judged, so deleting an item another names in `blocked_by` passes the hook and shows in the next `check`.
 - A reference to a record that does not parse is reported as naming nothing as well (a cascade line beside the parse problem); stripping it was more code than it was worth.
 - An Atelier merge needs its trailer and two parents: a cherry-picked or hand-written commit carrying the trailer is judged as a plain commit.

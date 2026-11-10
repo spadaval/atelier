@@ -765,7 +765,9 @@ A refusal is printed on stderr with exit 1, inside the Git command's own
 output. It names each rule broken, each file or commit (its short ID and
 subject) that breaks it, and the way out. A record that does not parse is
 listed apart, as no rule and not to be skipped; in a push, the way out is
-to rewrite the commit that broke it, since every new commit is read.
+to rewrite the commit that broke it, since every new commit is read. A
+push from a checkout whose `config.toml` does not read is refused that
+way too, since the config names the base.
 
 `ATELIER_SKIP`, when set to a non-empty reason, lets any rule of a hook or a
 command pass. The tool prints the rule and the reason. Where Atelier makes
