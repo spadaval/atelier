@@ -64,7 +64,7 @@ All ten Done when lines hold, each proved by tests in `next/crates/atelier-cli/t
 
 What `merge` prints with a forge: `Pull request #7: <url>` (after `Pushed branch <id> to origin. ` when it pushed), then, before the first look at CI (which may itself take the whole bound), `Waiting up to 9 minutes for ci.yml to finish on pull request #7. Nothing is written while it waits, so this may be interrupted and `atelier merge` run again.`; these go out as they happen. Then the merge lines as before (exit 0), the CI failure as a refusal on stderr starting `` `atelier merge` refused: CI failed: `` (exit 1), or at the bound today's "CI has not finished" text on stdout (exit 3), naming why the forge did not answer when a poll failed. The bound is 9 minutes and the poll every 15 seconds; debug builds shorten both through `ATELIER_TEST_CI_WAIT=<wait ms>,<poll ms>`.
 
-A hand run of the new binary, a local bare `origin` (pushes rewritten by `pushInsteadOf`) and the test double for `gh` first on `PATH`; the binary path is shortened to `atelier`:
+A hand run (first at 2a970de8, run again at 5b6f8fb2 with the same output but for commit IDs) of the new binary, a local bare `origin` (pushes rewritten by `pushInsteadOf`) and the test double for `gh` first on `PATH`; the binary path is shortened to `atelier`:
 
 ```text
 $ T3CODE_THREAD_ID=implementer-1 atelier submit
@@ -109,6 +109,10 @@ The specifications: product, the `submit` and `merge` rows of the Implementer ta
 ### Open items
 
 - Asking for runs with `branch=` on the `pull_request` event is how `gh run list --branch` works, but it was not tried against GitHub, since nothing here may reach the network.
-- The look at CI under the lock, and `submit`'s pushes and `gh` calls, have no time bound, as before this item; only the wait's polls do.
+- The look at CI under the lock, and `submit`'s pushes and `gh` calls, have no time bound, as before this item; only the wait's polls do. The reviewer's deferred finding atelier-qu4a, on the look under the lock, is filed as atelier-3iyd.
 - A poll ended at the bound kills the `gh` process it started, not processes that one started; those are left to end on their own, and no longer hold `merge` up.
 - `tempfile` moved from the CLI's dev-dependencies to its dependencies, for `gh`'s output files; it is already in the workspace's dependencies and `Cargo.lock`.
+
+### Review
+
+Three rounds by gpt-6.1-sol. Round 1: atelier-0lkh (the waiting notice could be missed when the first poll stalled), fixed in f1ff5ad4. Round 2: atelier-bywd (a checkout switched to another approved item during the wait merged that item) and atelier-fvc4 (a process left holding `gh`'s output pipes kept `merge` past its bound), both fixed in 5b6f8fb2. Round 3 approved e4fe00ed (atelier-qtpf), with atelier-qu4a deferred to atelier-3iyd.
