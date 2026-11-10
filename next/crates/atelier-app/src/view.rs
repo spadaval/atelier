@@ -16,8 +16,8 @@ pub struct Located {
 pub struct Branch {
     /// Whether the branch's tip is in the base's history.
     pub merged: bool,
-    /// The item's record on the branch, read only when it is not merged:
-    /// from the checkout on the current branch, else from its tip.
+    /// The item's record on the branch: from the checkout on the current
+    /// branch, else from its tip.
     pub record: Option<ItemDir>,
 }
 

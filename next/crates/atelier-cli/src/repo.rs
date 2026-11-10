@@ -57,9 +57,7 @@ impl Repo {
             None => None,
             Some(tip) => {
                 let merged = git::is_ancestor(&self.root, &tip, &self.base_tip)?;
-                let record = if merged {
-                    None
-                } else if self.branch.as_deref() == Some(id) {
+                let record = if self.branch.as_deref() == Some(id) {
                     self.checkout_item(id)?
                 } else {
                     self.reader.item(&tip, id)?
