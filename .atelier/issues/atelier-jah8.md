@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Measure defects after merge and what process costs, before the redesign changes either"
-updated_at: "2026-11-10T05:07:03.305377565+00:00"
+updated_at: "2026-11-10T05:08:26.992715087+00:00"
 ---
 
 ## Outcome
@@ -26,3 +26,7 @@ One report gives each scorecard measure for the five Atelier repositories on thi
 ## Background
 
 One of four missions that redesign Atelier, in order: baseline, core loop, cutover, gardener. Sumeet set the direction in conversation on 2026-11-09, after an assessment of the project. The target design is in the [product specification](docs/strategies/redesign-product.md) and the [architecture specification](docs/strategies/redesign-architecture.md); this mission's own design is in its strategy. Other Atelier work is paused while the four run.
+
+## Notes
+
+- 2026-11-10 [note] 2026-11-10: Orchestration started on Sumeet's go-ahead (review atelier-b2t8). atelier-scx2 (freeze the inputs) goes first and alone; z5bp, 5fsj and 3kr7 follow in parallel once it merges. Implementers are Opus 5.5, reviewers GPT-6.1 Sol.
