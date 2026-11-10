@@ -4,6 +4,9 @@ id: "atelier-67nn"
 issue_type: "spike"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-67nn
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Run a fresh agent through the loop with only `status` to guide it, on Claude Opus and Codex"
-updated_at: "2026-11-10T04:45:24.836084902+00:00"
+updated_at: "2026-11-10T18:41:37.472953783+00:00"
 ---
 
 ## Goal

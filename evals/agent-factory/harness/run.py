@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Agent Factory scenarios against Claude Code and grade the result.
+"""Run Agent Factory scenarios against Claude Code or Codex and grade the result.
 
 Each scenario directory holds:
 
@@ -10,6 +10,18 @@ Each scenario directory holds:
   agent's working directory) and may create work/bin (prepended to PATH).
 - grade.py: called with the work directory and the transcript path; prints
   one JSON object {"pass": bool, "checks": {...}, "notes": [...]}.
+
+A scenario with "threads": true in scenario.json runs each agent as a thread,
+as T3 Code does: it gets its own T3CODE_THREAD_ID, and work/bin/delegate
+(harness/delegate.py) starts another agent of the same kind and model as a
+new thread in the caller's directory, waits for it and prints its final
+reply. The system prompt describes `delegate` in THREADS_NOTE, and nothing
+else. Each such thread's transcript goes to threads/ in the run directory.
+
+--agent codex runs `codex exec` instead of Claude Code (the none arm only),
+with HOME and CODEX_HOME in the work directory, so the host's ~/.codex
+instructions and ~/.agents/skills are not loaded; the host's Codex sign-in
+is linked in, never copied, and the link is removed when the run ends.
 
 Arms: "none" runs with no skills, "skill" stages skills/agent-factory from a
 git ref of this repository (without maintainers/, which describes the expected
@@ -61,7 +73,15 @@ NO_MCP = ["--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
 # loads where no CLAUDE.md does, so hiding a CLAUDE.md can expose one.
 INSTRUCTION_NAMES = ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md",
                      ".claude/CLAUDE.md", ".claude/AGENTS.md", ".claude/rules/**")
-CANARY_MODEL = "haiku"
+CANARY_MODEL = {"claude": "haiku", "codex": "gpt-6-luna"}
+THREADS_NOTE = (
+    "Agents here run as threads, each with its own thread ID in "
+    "T3CODE_THREAD_ID. To start another agent as a new thread, run "
+    "`delegate \"<task>\"` in a shell: it starts a fresh agent of your kind in "
+    "the current directory with that task as its only prompt, waits for it to "
+    "finish, and prints its final reply."
+)
+CODEX_AUTH = Path.home() / ".codex" / "auth.json"
 CANARY_PROMPT = (
     "This is an automated isolation check. Do not use any tools. List every "
     "instruction or memory file (such as CLAUDE.md, CLAUDE.local.md, AGENTS.md "
@@ -100,8 +120,41 @@ def claude_command(prompt: str, model: str, effort: str, budget, cwd: Path) -> l
     ]
 
 
-def agent_env(work: Path) -> dict:
+def codex_command(prompt: str, model: str, system=None) -> list:
+    """codex exec at Codex's default effort, in the directory it is run in."""
+    extra = ["-c", f"developer_instructions={json.dumps(system)}"] if system else []
+    return ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+            "--skip-git-repo-check", "-m", model, *extra, prompt]
+
+
+def agent_command(agent: str, prompt: str, model: str, effort: str, budget,
+                  cwd: Path, system=None) -> list:
+    if agent == "codex":
+        return codex_command(prompt, model, system)
+    cmd = claude_command(prompt, model, effort, budget, cwd)
+    return cmd + (["--append-system-prompt", system] if system else [])
+
+
+def codex_home(work: Path) -> Path:
+    """A scratch CODEX_HOME holding only a link to the host's sign-in."""
+    home = work / "home" / ".codex"
+    home.mkdir(parents=True, exist_ok=True)
+    link = home / "auth.json"
+    if not link.is_symlink():
+        link.symlink_to(CODEX_AUTH)
+    return home
+
+
+def unlink_auth(work: Path) -> None:
+    """Remove the sign-in from the scratch home, whether link or file."""
+    (work / "home" / ".codex" / "auth.json").unlink(missing_ok=True)
+
+
+def agent_env(work: Path, agent: str = "claude") -> dict:
     env = {k: os.environ[k] for k in ENV_KEEP if k in os.environ}
+    if agent == "codex":
+        env["CODEX_HOME"] = str(codex_home(work))
+        env["HOME"] = str(work / "home")
     env["TERM"] = "dumb"
     env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
     # atelier's update notice names the host's own skill checkout and its age,
@@ -115,7 +168,7 @@ def agent_env(work: Path) -> dict:
 
 
 def run_claude(cmd: list, cwd: Path, env: dict, transcript: Path, timeout):
-    """Run Claude Code into transcript; return its exit code or "timeout"."""
+    """Run the agent into transcript; return its exit code or "timeout"."""
     with transcript.open("w") as out:
         # Own process group, so servers the agent starts die with the run.
         proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=out,
@@ -156,13 +209,28 @@ def stage_skill(ref: str, repo_dir: Path) -> str:
 
 
 def read_transcript(transcript: Path) -> dict:
-    """The init event's isolation facts and the final result, if any."""
+    """The init event's isolation facts and the final result, if any. A
+    Codex run's result is its last reply once its turn completed; its init
+    names no MCP servers or skills because its scratch home has none."""
     info = {"init": None, "result": None}
+    reply = None
     for line in transcript.read_text().splitlines():
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if event.get("type") == "thread.started" and info["init"] is None:
+            info["init"] = {"thread_id": event.get("thread_id"), "mcp_servers": [],
+                            "agent_factory": False}
+        item = event.get("item") or {}
+        if event.get("type") == "item.completed" and item.get("type") == "agent_message":
+            reply = item.get("text")
+        if event.get("type") == "turn.completed":
+            info["result"] = {"subtype": "success", "result": reply,
+                              "usage": event.get("usage")}
+        if event.get("type") in ("turn.failed", "error"):
+            info["result"] = {"subtype": "error", "is_error": True, "result": reply,
+                              "error": event}
         if event.get("type") == "system" and event.get("subtype") == "init" \
                 and info["init"] is None:
             info["init"] = {
@@ -180,7 +248,7 @@ def read_transcript(transcript: Path) -> dict:
 
 def invalid_reason(arm: str, exit_code, info: dict):
     if exit_code != 0:
-        return f"claude exited {exit_code}"
+        return f"the agent exited {exit_code}"
     if info["init"] is None:
         return "no init event"
     if info["result"] is None or info["result"].get("is_error") \
@@ -204,7 +272,8 @@ def canary_verdict(reply: str, repo: Path, token: str):
     return own_seen, sorted(p for p in paths if not inside(Path(p), repo))
 
 
-def check_isolation(work_root: Path, effort: str, out_root: Path) -> None:
+def check_isolation(work_root: Path, effort: str, out_root: Path,
+                    agent: str = "claude") -> None:
     """Exit unless a run in this setup sees only its repository's own
     instruction file, an AGENTS.md whose heading carries a random token
     that appears nowhere else the run can see."""
@@ -218,13 +287,15 @@ def check_isolation(work_root: Path, effort: str, out_root: Path) -> None:
     (repo / "AGENTS.md").write_text(
         f"# Isolation canary {token}\n\nThis repository's own guide.\n")
     transcript = out_root / f"{name}.jsonl"
+    model = CANARY_MODEL[agent]
     exit_code = run_claude(
-        claude_command(CANARY_PROMPT, CANARY_MODEL, effort, 0.5, repo),
-        repo, agent_env(work), transcript, timeout=300)
+        agent_command(agent, CANARY_PROMPT, model, effort, 0.5, repo),
+        repo, agent_env(work, agent), transcript, timeout=300)
+    unlink_auth(work)
     reply = (read_transcript(transcript)["result"] or {}).get("result") or ""
     own_seen, foreign = canary_verdict(reply, repo, token)
     print(json.dumps({"canary": "pass" if exit_code == 0 and own_seen and not foreign
-                      else "fail", "model": CANARY_MODEL, "exit": exit_code,
+                      else "fail", "model": model, "exit": exit_code,
                       "foreign": foreign, "own_seen": own_seen,
                       "transcript": str(transcript)}), flush=True)
     if exit_code == 0 and own_seen and not foreign:
@@ -243,12 +314,28 @@ def check_isolation(work_root: Path, effort: str, out_root: Path) -> None:
              "No scenario was run.")
 
 
+def threads(work: Path, run_dir: Path, env: dict, agent: str, model: str,
+            effort: str, meta: dict) -> dict:
+    """Install `delegate` and what it needs; return the env with this run's
+    own thread ID."""
+    shutil.copy(Path(__file__).with_name("delegate.py"), work / "bin" / "delegate")
+    (work / "bin" / "delegate").chmod(0o755)
+    budget = meta.get("thread_budget_usd", meta.get("max_budget_usd", 5))
+    (work / ".threads.json").write_text(json.dumps({
+        "agent": agent, "env": env, "out": str(run_dir / "threads"),
+        "timeout": meta.get("thread_timeout_sec", 1200),
+        "argv": agent_command(agent, "{task}", model, effort, budget, work / "repo",
+                              THREADS_NOTE),
+    }))
+    return {**env, "T3CODE_THREAD_ID": f"thread-{secrets.token_hex(4)}"}
+
+
 def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
-            index: int, out_root: Path, work_root: Path) -> dict:
+            index: int, out_root: Path, work_root: Path, agent: str = "claude") -> dict:
     sdir = SCENARIOS / scenario
     meta = json.loads((sdir / "scenario.json").read_text())
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    name = f"{stamp}-{scenario}-{arm}-{model}-{index}-{secrets.token_hex(2)}"
+    name = f"{stamp}-{scenario}-{arm}-{agent}-{model}-{index}-{secrets.token_hex(2)}"
     run_dir = out_root / name
     work = work_root / name
     run_dir.mkdir(parents=True)
@@ -267,11 +354,17 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
     prompt = (sdir / "prompt.md").read_text()
     prompt = prompt.replace("{{skill}}", SKILL_LINE if arm == "skill" else "")
     transcript = run_dir / "transcript.jsonl"
-    cmd = claude_command(prompt, model, effort, meta.get("max_budget_usd", 5),
-                         repo_dir)
+    env, system = agent_env(work, agent), None
+    if meta.get("threads"):
+        env, system = threads(work, run_dir, env, agent, model, effort, meta), THREADS_NOTE
+    cmd = agent_command(agent, prompt, model, effort, meta.get("max_budget_usd", 5),
+                        repo_dir, system)
     started = datetime.datetime.now()
-    exit_code = run_claude(cmd, repo_dir, agent_env(work), transcript,
-                           timeout=meta.get("timeout_sec", 1200))
+    try:
+        exit_code = run_claude(cmd, repo_dir, env, transcript,
+                               timeout=meta.get("timeout_sec", 1200))
+    finally:
+        unlink_auth(work)
     seconds = (datetime.datetime.now() - started).total_seconds()
 
     info = read_transcript(transcript)
@@ -290,7 +383,7 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
 
     result = {
         "scenario": scenario, "arm": arm, "skill_ref": skill_sha,
-        "model": model, "effort": effort, "index": index,
+        "agent": agent, "model": model, "effort": effort, "index": index,
         "exit": exit_code, "seconds": round(seconds), "run_dir": str(run_dir),
         "work_dir": str(work), "init": info["init"],
         **verdict,
@@ -302,6 +395,7 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("scenarios", nargs="+")
+    p.add_argument("--agent", choices=("claude", "codex"), default="claude")
     p.add_argument("--arms", default="none,skill")
     p.add_argument("--ref", default="HEAD", help="git ref of the skill to stage")
     p.add_argument("--model", default="opus")
@@ -315,6 +409,8 @@ def main() -> None:
     p.add_argument("--keep", action="store_true",
                    help="keep work directories (default: keep only on failure)")
     a = p.parse_args()
+    if a.agent == "codex" and a.arms != "none":
+        p.error("--agent codex runs the none arm only: pass --arms none")
     if inside(a.work_root, Path.home()):
         p.error(f"--work-root {a.work_root} is inside $HOME, where the user's "
                 "own CLAUDE.md would load into every run")
@@ -324,10 +420,10 @@ def main() -> None:
     results_path = a.out / "results.jsonl"
     a.out.mkdir(parents=True, exist_ok=True)
     a.work_root.mkdir(parents=True, exist_ok=True)
-    check_isolation(a.work_root, a.effort, a.out)
+    check_isolation(a.work_root, a.effort, a.out, a.agent)
     with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:
         futures = [pool.submit(run_one, s, arm, a.ref, a.model, a.effort, i,
-                               a.out, a.work_root)
+                               a.out, a.work_root, a.agent)
                    for s, arm, i in jobs]
         for fut, (s, arm, i) in zip(futures, jobs):
             try:
