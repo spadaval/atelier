@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 3: a lighter rehearsal"
+last_changed: "2026-11-09: amended at Sumeet's direction: hooks and the bypass replace `land`; `merge` never waits"
 ---
 
 # Why
@@ -10,7 +10,7 @@ or what stage the work is in. They find their place by running a command and
 reading the refusal: 38 of 50 sampled refusals were friction, agents ran 541
 help lookups in five days, and orchestrators spent 48% of delegated spend on
 coordination. The [product specification](redesign-product.md) replaces the
-47 commands and eight issue types with 18 commands over missions, items and
+47 commands and eight issue types with 17 commands over missions, items and
 reviews, each bound to a thread and a stored status.
 
 # Outcome
@@ -78,7 +78,7 @@ it in five steps:
 | A. Skeleton | Item, review and config records; thread identity; the act table; finding started items by branch; `start` with take-over, `submit`, `review` with rounds, `verdict`, `merge`, `status`; the fresh-agent scenario | Yes |
 | B. Planning | Mission records; `new`, `set`, `ready`, `drop`, `close`, `list`, `show`, `lead`, `start --new`; plan reviews | No |
 | C. Disagreement | `escalate`, `decide` with its two outcomes, rebuttals and decisions in the brief, `list --deferred` | No |
-| D. Handoff | `land`, `check`, `setup codex`, the hooks' output | No |
+| D. Guards | `check`, the three Git hooks, `ATELIER_SKIP`, and `setup` for Git and for Codex | No |
 | E. Rehearsal | The converter, with `config.toml` written from `workflow.yaml` and a `--verify` mode, and the rehearsal on a scratch clone of each of the five repositories | No |
 
 Steps B to E wait in the backlog with preliminary goals. Each is planned at

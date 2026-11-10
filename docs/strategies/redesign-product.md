@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 3 (Astra, Grok)"
+last_changed: "2026-11-09: amended at Sumeet's direction: Git hooks guard and `land` goes; one bypass; `merge` never waits; the views are spelled out"
 ---
 
 # Atelier redesign: product specification
@@ -58,11 +58,17 @@ records and commands is not a goal.
 5. **Independent review is not negotiable.** Rounds of review are not a cost
    to cut. Records and relays are.
 6. **Trusted agents.** Show state before refusing. A refusal names the way
-   out.
+   out, and the way past: every rule can be skipped on purpose, with a
+   reason.
 7. **Records live with the code.** They are Markdown in the repository, on the
    branch that does the work, and each kind earns its place.
 8. **Judgment in the skill, procedure in the tool.** Agent Factory says how to
    decide. Atelier says what to run.
+9. **Hooks guard, commands act.** Agents use Git for what Git does: branches,
+   commits, pushes. A rule about a Git action is checked by a Git hook, where
+   the action happens. A command exists only to do what Git cannot: write a
+   record, print orientation, or run the forge's steps. No command exists
+   only to check.
 
 ## Words
 
@@ -82,8 +88,8 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Role | Lead, implementer, reviewer, decider or planner. A thread gets a role from the command it enters with. |
 | Status | A stored field on a mission or item, set only by the command that performs the act. |
 | Done | The end state of merged work, of an item closed on the base, and of a closed mission. |
-| Land | `atelier land`: validate records and push, before a handoff. |
-| Check | `atelier check`, or one of a project's configured merge checks. |
+| Check | `atelier check`, which the Git hooks and CI also run, or one of a project's configured merge checks. |
+| Skip | Going past a rule on purpose, with `ATELIER_SKIP="<reason>"` set for one command. |
 
 "Approve" means only a reviewer's verdict. Sumeet's go-ahead is "ready".
 
@@ -158,17 +164,20 @@ was dropped and why.
 
 ## Commands
 
-Eighteen commands, plus `init`, `setup` and `serve`.
+Seventeen commands, plus `init`, `setup` and `serve`.
 
 ### Anyone
 
 | Command | Behaviour |
 | --- | --- |
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: ready items, missions in progress and what waits on Sumeet. |
-| `show <id>` | A mission or item in full, with its reviews. |
-| `list` | One filtered view: `--ready`, `--mission <id>`, `--label <l>`, `--mine`, `--deferred`. |
-| `land` | Validates records. On the base it refuses an unpushed commit that is neither an Atelier merge nor confined to `.atelier/missions/` and `.atelier/items/`, then pushes with `--push`. |
-| `check` | Validates every record. CI runs it. |
+| `show <id>` | An item in full, with its reviews. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
+| `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`. |
+| `check` | Validates every record. The Git hooks and CI run it. |
+
+`show` and `list` keep what today's `work mission`, `work missions`,
+`work ready`, `work blocked` and `work human` show. A lead or a planner loses
+no view; nine commands become two.
 
 ### Planner, on the base
 
@@ -190,7 +199,7 @@ matter; `set` and the status commands write it.
 | `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, and binds this thread as implementer. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work Sumeet asked for directly. |
 | `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review`; opens a new round; prints the reviewer's handoff line. |
 | `escalate "<question>"` | Adds an unanswered entry to Decisions and prints the decider's handoff line. `--finding <finding>` ties the question to a finding. |
-| `merge` | Runs the checks below, makes one merge commit that sets `done`, and pushes where a forge is configured. `merge --trivial "<why>"` skips review for a change whose correctness is evident from the diff, and records the claim. |
+| `merge` | Runs the checks below, makes one merge commit that sets `done`, and pushes where a forge is configured. It never waits: if CI has not finished it says so and stops, and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
 
@@ -273,7 +282,8 @@ Rules:
 ### Where records change
 
 - Planning happens on the base: creating and editing drafts, `set`, `ready`,
-  `drop`, `close`, `lead`, and plan reviews.
+  `drop`, `close`, `lead`, and plan reviews. It is committed and pushed with
+  Git.
 - Once an item is started, its directory changes only on its branch, and those
   changes reach the base in the merge.
 - Code, and `config.toml`, reach the base one way: `atelier merge`.
@@ -331,9 +341,49 @@ Rules:
 3. The configured merge checks pass on the merged tree. Where the forge names
    a CI workflow, that CI passed on the head.
 
-A forge with no CI workflow still gets the branch pushed and a pull request
-opened and merged; nothing waits for CI. A base that moved on needs no
-catch-up unless the merge conflicts or a check fails on the merged tree.
+With a forge, `merge` pushes the branch and opens its pull request if they
+are not there yet. If CI is still running it prints the pull request and
+stops; that is "not yet", not a refusal, and the same command run again
+finishes the merge. The harness does the waiting: under T3 Code, watching the
+pull request wakes the thread when its checks finish. A forge with no CI
+workflow still gets the branch pushed and a pull request opened and merged.
+
+An item that is approved and not merged shows that way, with how long it has
+been so, in `status`, `show` and on the site, so a wait that was lost is
+visible. That comes from the records; nothing looks up CI to show it.
+
+A base that moved on needs no catch-up unless the merge conflicts or a check
+fails on the merged tree. Catching up is `git merge` of the base, and the
+approval then needs a fresh look, since the branch changed outside the item.
+
+## Hooks and the bypass
+
+`atelier setup` installs three Git hooks in a clone. Each runs `atelier
+check` and says what it found in the output of the Git command it guards.
+
+| Hook | Guards | Rule |
+| --- | --- | --- |
+| pre-commit | `git commit` | Every staged record is valid, and a changed status is one the lifecycle allows from the status before |
+| pre-push | `git push` of the base | Each new commit on the base's own line is an Atelier merge, or touches only `.atelier/missions/` and `.atelier/items/`. The commits a merge brought in are not looked at; the merge was checked when it was made. |
+| post-checkout | `git switch` | Nothing; it prints `status` for the branch just switched to |
+
+Every rule a hook or a command applies can be skipped on purpose:
+
+```text
+ATELIER_SKIP="the reviewer is down and Sumeet said to merge" atelier merge
+```
+
+- The reason is required; an empty one is refused.
+- The skip is printed. Where Atelier makes the commit, as `merge` does, the
+  commit message gets a line naming the rule and the reason. A skip in a
+  hook shows in the transcript, as the variable on the Git command.
+- Every refusal names the proper way out first and the skip second.
+- A record Atelier cannot parse cannot be skipped past. That is not a rule;
+  the tool has nothing to read.
+
+Git's own `--no-verify` still exists. It skips every hook, a project's own
+included, and leaves no trace, so agents are told to use `ATELIER_SKIP`.
+`status` says when a clone has no hooks installed.
 
 ## Configuration
 
@@ -353,6 +403,8 @@ second real project needs one.
 | The light path and base exemptions | `start --new` and `merge --trivial` cover them with one path |
 | Issue types, parents, loose ends, validations, decision records | An item either has files to merge or it does not; the rest are labels |
 | `bundle`, `migrate`, `doctor`, `prune` | Unused by the skill, one-off, or not yet needed |
+| `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook runs without being remembered and fails the push itself |
+| `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; waiting is the harness's; catching up is `git merge`; what merge would check is in `status` |
 | `brief` and `debrief` commands | The site shows them |
 | The nine `work` views and nine `review` subcommands | `status`, `list`, `review` and `verdict` replace them |
 | Strategy files in `docs/strategies/` | A mission's documents live in its directory |
@@ -372,6 +424,7 @@ it drives down, and exchange rates decide what to cut.
 | Cost | Tokens per merged item | About $11.50 to $20 at list price |
 | Exchange | Gate precision: refusals that stopped a real mistake | About 16% |
 | Exchange | Review yield: fix-now findings that are product defects | 39% |
+| Exchange | Skips: how often each rule is passed with `ATELIER_SKIP` | No such thing today |
 | Codebase health | Tool calls before an agent's first edit on an item | Not measured |
 | Codebase health | Rework: lines deleted within two weeks of being written | Not measured this way |
 | Codebase health | Where each defect was caught: the author's tests, CI, review, after merge | Only review is counted |
