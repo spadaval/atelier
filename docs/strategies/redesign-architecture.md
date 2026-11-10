@@ -355,8 +355,8 @@ Two facts are checked live and never stored:
   another item or the item's own requirements do. If it is stale, `status`
   and `merge` say to run `submit`. `atelier-cli` gathers what this reads, as
   `acts::Checkout`: the paths that differ between the reviewed commit and
-  the head, the item's record at the reviewed commit, and the checkout's
-  uncommitted tracked files; `acts::unmet` applies the rule. `status` gathers
+  the head, the item's record at the reviewed commit and at the head, and
+  what the checkout has not committed; `acts::unmet` applies the rule. `status` gathers
   it on the item's branch, so it lists what `merge` will check.
 - **The merge checks pass.** The configured commands on the merged tree,
   and CI on the head where the forge names a workflow. `merge` runs or reads
@@ -481,7 +481,8 @@ post-checkout Git hook prints it on every branch switch.
 2. Check the act's conditions from the table: the approval covers the
    head, or `--trivial "<why>"` was given on a building item with no
    review file; no Decisions entry is unanswered; no tracked file has
-   uncommitted changes and no file in the item's directory is untracked.
+   uncommitted changes and no file in the item's directory is untracked,
+   ignored or not.
    The role is told from the checkout, as every command tells it; the rest
    is judged on the item as the head holds it. Where the base is checked out, that checkout must
    have none either, since merging moves it.
