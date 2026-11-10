@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 4 (Astra, Grok)"
+last_changed: "2026-11-09: amended at Sumeet's direction: Git hooks guard and `land` goes; one bypass; `merge` never waits"
 ---
 
 # Atelier redesign: architecture specification
@@ -35,7 +35,7 @@ which 50,438 are CLI integration tests.
 | Review and findings | 4,669 | Replaced by `review` and `verdict` over one file per review |
 | Site, Rust and web | 4,926 | Kept; converted to the new records |
 | Workflow policy | 3,418 | Deleted; a short config section replaces it |
-| Status, land and hooks | 2,438 | Reshaped around thread and status |
+| Status, land and hooks | 2,438 | Reshaped around thread and status; `land` goes, and its base rule moves to a Git hook |
 | Prune and history | 2,410 | Deleted |
 | Evidence | 1,931 | Deleted |
 | Bundle | 1,665 | Deleted |
@@ -216,9 +216,11 @@ for the caller's identity in the records it can see: the item of the current
 branch, an open review of that item, and missions on the base. A thread may
 hold several things, and `status` lists each.
 
-Hooks give orientation at session start: `atelier setup claude` exists, and
-`atelier setup codex` is added, since Codex 0.167 has hooks. Where no hook
-runs, a project's `AGENTS.md` says to run `atelier status` first.
+Harness hooks give orientation at session start: `atelier setup claude`
+exists, and `atelier setup codex` is added, since Codex 0.167 has hooks. The
+session-end hook runs `atelier check`. Where no harness hook runs, a
+project's `AGENTS.md` says to run `atelier status` first, and the
+post-checkout Git hook prints it on every branch switch.
 
 ## Where records are read and written
 
@@ -244,10 +246,10 @@ runs, a project's `AGENTS.md` says to run `atelier status` first.
   worktrees. Two clones on different hosts are not coordinated.
 - Apart from that check, a command on a work branch reads and writes that
   branch's `.atelier/`.
-- `land` on the base applies one rule to each unpushed commit: it is a merge
-  made by `atelier merge`, or it touches only paths under
-  `.atelier/missions/` and `.atelier/items/`. A commit on the base may not
-  set `done` on an item whose branch exists.
+- The pre-push hook applies one rule to each new commit in a push of the
+  base: it is a merge made by `atelier merge`, or it touches only paths
+  under `.atelier/missions/` and `.atelier/items/`. A commit on the base may
+  not set `done` on an item whose branch exists.
 - A plan reviewer works in its own detached worktree so two reviewers stay
   blind to each other. Review files have distinct names, so the planner
   cherry-picks both onto the base without a conflict.
@@ -259,11 +261,37 @@ runs, a project's `AGENTS.md` says to run `atelier status` first.
    item with no review.
 3. Check no Decisions entry is unanswered.
 4. Build the merged tree in a temporary checkout and run each merge check.
-5. Where a forge is configured: push the branch and reuse or open its pull
-   request. Where it names a CI workflow, wait for that workflow on the head.
+5. Where a forge is configured: push the branch and open its pull request,
+   if they are not there yet. Where it names a CI workflow and that workflow
+   has not finished on the head, print the pull request and stop with an
+   exit status of its own, distinct from a refusal.
 6. Make one merge commit on the base that sets the item `done`.
-7. Where a forge is configured: push the base and confirm the pull request
-   merged.
+7. Where a forge is configured: push the base.
+
+`merge` never waits and has no flag but `--trivial`. Run again, it picks up
+where the facts now stand. Waiting is the harness's work.
+
+## Hooks and the bypass
+
+`atelier setup` installs three Git hooks into the clone's hooks directory,
+which all its worktrees share. Each is a one-line script that runs
+`atelier check --hook <name>`, so the rules live in the binary.
+
+| Hook | Rule |
+| --- | --- |
+| pre-commit | Every staged file under `.atelier/` parses and validates. Where a record's status differs from the one in `HEAD`, the act table allows that change and its conditions hold. |
+| pre-push | The base rule above, for each new commit when the push updates the base. |
+| post-checkout | None. On a branch switch it prints what `status` prints. |
+
+`ATELIER_SKIP`, when set to a non-empty reason, lets any rule of a hook or a
+command pass. The tool prints the rule and the reason. Where Atelier makes
+the commit, a trailer `Atelier-Skip: <rule>: <reason>` goes into its
+message. A skip in a hook writes nothing; it shows in the transcript as the
+variable on the Git command, which is where the scorecard counts it. A
+record that does not parse is not a rule and cannot be skipped. `status`
+reports a clone with no hooks.
+
+## The forge
 
 `atelier-app/src/forge.rs` is kept, with one change to its interface: it
 takes the forge section of the new config, whose CI workflow is optional,
@@ -355,13 +383,14 @@ ready, the runbook runs on the base, and the item is closed at the end.
    reviewed text, and move `skills/agent-factory-next/` to
    `skills/agent-factory/`. Commit. Run `--verify`, and the tree's
    `atelier check`.
-3. Install the binary from master, run `atelier setup` for each harness,
-   move the skill checkout forward, and restart the `atelier-serve` service.
-   Check the site answers for atelier.
+3. Install the binary from master, run `atelier setup` for each harness and
+   for Git hooks, move the skill checkout forward, and restart the
+   `atelier-serve` service. Check the site answers for atelier.
 4. Push master. CI now runs the tree's binary on the converted records.
 5. In each of the other four repositories: convert, replace the process text
    in `AGENTS.md` and any workflow that runs Atelier with the reviewed ones,
-   commit, run `--verify` and `atelier check`, and push.
+   commit, run `--verify` and `atelier check`, run `atelier setup` for Git
+   hooks, and push.
 6. Close the cutover item with `atelier close`, the first act recorded by the
    new tool.
 
@@ -408,6 +437,14 @@ does, it must not fetch a repository that has been converted.
   starting one item from separate checkouts; a started item dropped on the
   base, then refused at merge.
 - Unit tests on the act table: every act from every status.
+- Hook scenarios in a scratch repository: a commit of an invalid record
+  refused; a commit of a status change the act table does not allow refused;
+  a push of the base holding a plain commit that touches code refused, and
+  one holding only planning commits allowed; the same push allowed with
+  `ATELIER_SKIP` set, and the skip printed; a branch switch printing
+  `status`.
+- `merge` with CI still running: it stops with its "not yet" exit status and
+  changes nothing; run again after CI passed, it merges.
 - A fresh-agent scenario, run by the eval harness: an agent given only "run
   `atelier status`" takes a ready item to done. It is run with Claude Opus
   and with a Codex model.
@@ -428,6 +465,8 @@ evidence.
 | Sessions as records | Attribution is a field on the record that the act writes |
 | Records on a separate branch | Records with the code are the reason the tool exists |
 | A plan as its own branch | Grooming touches many items and planning branches collide |
+| `land`, a check an agent had to run | Agents forgot it, or hid its refusal behind a pipe; a pre-push hook cannot be forgotten or hidden |
+| Waiting for CI inside `merge` | A command that sleeps for minutes fights the harness, and one network timeout failed it |
 
 ## Decisions
 
@@ -446,6 +485,10 @@ Sumeet made each of these in conversation on 2026-11-09.
 | Proof is the configured merge checks plus manual validation with artifacts | Work has no CI; routine receipts were busywork |
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
+| Hooks guard, commands act | A rule in a command applies only when the agent remembers the command |
+| Every rule can be skipped on purpose, with a reason | Atelier's rules are not hard blockers, and a bypass should be intended and leave a trace |
+| `merge` never waits | Waiting belongs to the harness, which already wakes a thread when a pull request's checks finish |
+| His go-ahead stays `ready --by` | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
 
 Five points in this design go beyond what he confirmed, and his approval
 should weigh them:
@@ -477,6 +520,8 @@ None of these changes the shape of the work. Each is settled by the item that
 reaches it.
 
 - Which Codex hook event runs at session start.
+- Whether T3's pull request watch wakes a thread when a repository marks no
+  check as required.
 - Where video artifacts go when a project needs them.
 - The exact flags of `set` and `list`.
 - How much of the brief and debrief view code the site keeps.
