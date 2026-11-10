@@ -402,6 +402,10 @@ post-checkout Git hook prints it on every branch switch.
   again only switches.
 - **`submit` commits the item's directory** and nothing else in the
   checkout.
+- **A refused commit changes nothing.** When `git commit` fails, as when a
+  hook refuses it, `submit` and the take-over put the item's file and the
+  index under the paths they staged back as they were, so the act can be run
+  again.
 - **One clone.** All of this coordinates the threads in one clone and its
   worktrees. Two clones on different hosts are not coordinated.
 - Apart from that check, a command on a work branch reads and writes that

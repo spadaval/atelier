@@ -572,3 +572,94 @@ fn only_the_holder_submits_and_others_are_pointed_at_the_take_over() {
         run.stderr
     );
 }
+
+/// Installs a pre-commit hook that refuses every commit, and returns it.
+fn refusing_hook(root: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let hook = root.join(git(root, &["rev-parse", "--git-path", "hooks/pre-commit"]));
+    fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    fs::write(&hook, "#!/bin/sh\necho refused by the hook >&2\nexit 1\n").unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    hook
+}
+
+#[test]
+fn a_refused_commit_leaves_submit_to_be_run_again() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    let path = root.join(item_path(ID));
+    let written =
+        fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]") + "It prints hello.\n";
+    fs::write(&path, &written).unwrap();
+    fs::write(root.join("notes.txt"), "unrelated\n").unwrap();
+    git(&root, &["add", "notes.txt"]);
+    let hook = refusing_hook(&root);
+
+    let run = atelier(&root, "t1", &["submit"]);
+    assert_eq!(run.code, 2);
+    assert!(
+        run.stderr
+            .contains("The commit failed, so the record is as it was."),
+        "{}",
+        run.stderr
+    );
+    assert!(run.stderr.contains("refused by the hook"), "{}", run.stderr);
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+    assert_eq!(fs::read_to_string(&path).unwrap(), written);
+    assert_eq!(
+        git(&root, &["diff", "--cached", "--name-only"]),
+        "notes.txt"
+    );
+    assert!(atelier(&root, "t1", &["status"])
+        .stdout
+        .contains("Status: building\n"));
+
+    fs::remove_file(hook).unwrap();
+    let run = atelier(&root, "t1", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(field(&root, "HEAD", "status"), "in_review");
+    assert_eq!(
+        git(&root, &["show", "--format=", "--name-only", "HEAD"]),
+        item_path(ID)
+    );
+    assert_eq!(
+        git(&root, &["diff", "--cached", "--name-only"]),
+        "notes.txt"
+    );
+}
+
+#[test]
+fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    git(&root, &["switch", "-q", "-c", ID]);
+    write_item(&root, ID, "building", &["t1"], &[], "");
+    git(&root, &["commit", "-qam", "Started"]);
+    git(&root, &["switch", "-q", "main"]);
+    let tip = git(&root, &["rev-parse", ID]);
+    let hook = refusing_hook(&root);
+
+    let run = atelier(&root, "t2", &["start", ID]);
+    assert_eq!(run.code, 2);
+    assert!(
+        run.stderr
+            .contains("The commit failed, so the record is as it was."),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), tip);
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    assert!(atelier(&root, "t2", &["status"])
+        .stdout
+        .contains("which is held by t1."));
+
+    fs::remove_file(hook).unwrap();
+    let run = atelier(&root, "t2", &["start", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(run
+        .stdout
+        .starts_with(&format!("Took over {ID}; t1 held it.\n")));
+    assert_eq!(field(&root, "HEAD", "implementers"), "t1 t2");
+}

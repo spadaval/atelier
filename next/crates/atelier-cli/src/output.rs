@@ -85,15 +85,19 @@ fn next(entry: &Entry) -> String {
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
+    needs(act, entry.status, id, &entry.unmet)
+}
+
+/// The conditions of `act` that do not hold, then its command.
+fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
     let mut text = String::new();
-    if !entry.unmet.is_empty() {
-        text += &format!("To {}:\n", goal(act, entry.status));
-        for unmet in &entry.unmet {
+    if !unmet.is_empty() {
+        text += &format!("To {}:\n", goal(act, status));
+        for unmet in unmet {
             text += &condition(id, unmet);
             text += "\n";
         }
-        if entry
-            .unmet
+        if unmet
             .iter()
             .any(|c| matches!(c, Condition::NoResponse { .. }))
         {
@@ -245,6 +249,10 @@ pub fn switch_failed(id: &str) -> String {
     format!(
         "Could not switch to branch {id}, so nothing changed. If another worktree has it checked out, run `atelier start {id}` there"
     )
+}
+
+pub fn not_committed() -> String {
+    "The commit failed, so the record is as it was. Fix what Git says below, then run the command again".into()
 }
 
 pub fn started(id: &str) -> String {

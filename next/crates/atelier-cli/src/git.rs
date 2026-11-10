@@ -199,7 +199,25 @@ pub fn switch(repo: &Path, branch: &str) -> Result<()> {
 }
 
 /// Commits the changes under `path`, and only those, including new files.
+/// When the commit fails, as when a hook refuses it, the index under `path`
+/// is put back as it was.
 pub fn commit_path(repo: &Path, path: &str, message: &str) -> Result<()> {
-    run(repo, &["add", "--", path])?;
-    run(repo, &["commit", "--quiet", "-m", message, "--", path]).map(drop)
+    let staged = output(repo, &["ls-files", "--stage", "-z", "--", path], None)?;
+    if !staged.status.success() {
+        bail!(
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&staged.stderr).trim()
+        );
+    }
+    let committed = run(repo, &["add", "--", path])
+        .and_then(|_| run(repo, &["commit", "--quiet", "-m", message, "--", path]));
+    if committed.is_err() {
+        let _ = run(
+            repo,
+            &["rm", "--cached", "-r", "-q", "--ignore-unmatch", "--", path],
+        );
+        let staged = String::from_utf8_lossy(&staged.stdout);
+        let _ = run_with(repo, &["update-index", "-z", "--index-info"], Some(&staged));
+    }
+    committed.map(drop)
 }

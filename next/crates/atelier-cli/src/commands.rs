@@ -5,7 +5,7 @@ use crate::{git, output};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, Act, Facts, Refusal, STARTED};
 use atelier_app::{entry, overview, Located};
-use atelier_core::Status;
+use atelier_core::{Item, Status};
 use atelier_records::{render_item, validate_id};
 
 pub enum Outcome {
@@ -79,12 +79,11 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
             output::already_held(id)
         } else {
             dir.item.implementers.take(repo.caller.clone());
-            store.write_item(&dir.item)?;
             let message = match &before {
                 Some(thread) => format!("Take over {id} from {thread}"),
                 None => format!("Take over {id}"),
             };
-            git::commit_path(&repo.root, &item_path(id), &message)?;
+            write_and_commit(repo, &dir.item, &item_path(id), &message)?;
             output::taken_over(id, before.as_ref())
         }
     };
@@ -106,13 +105,21 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     }
     let mut item = record.item.clone();
     item.status = Status::InReview;
-    repo.store().write_item(&item)?;
-    git::commit_path(
-        &repo.root,
-        &item_dir(&item.id),
-        &format!("Submit {} for review", item.id),
-    )?;
+    let message = format!("Submit {} for review", item.id);
+    write_and_commit(repo, &item, &item_dir(&item.id), &message)?;
     Ok(Outcome::Done(output::submitted(&item.id)))
+}
+
+/// Writes `item` into the checkout and commits `path`. When the commit
+/// fails, the item's file is put back as it was, so the act can be run again.
+fn write_and_commit(repo: &Repo, item: &Item, path: &str, message: &str) -> Result<()> {
+    let file = repo.root.join(item_path(&item.id));
+    let before = std::fs::read(&file)?;
+    repo.store().write_item(item)?;
+    git::commit_path(&repo.root, path, message).map_err(|error| {
+        let _ = std::fs::write(&file, &before);
+        error.context(output::not_committed())
+    })
 }
 
 fn facts<'a>(
