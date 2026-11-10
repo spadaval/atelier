@@ -134,15 +134,21 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 
 ## Command forms
 
-`commands.py` reads shell commands by heuristic over the forms below, not as a shell. It splits a
-command into simple commands at `;`, `&&`, `||`, `|`, `&`, newlines and `(`/`)`, honouring single
-quotes, double quotes, backslashes and line continuations, and reads each simple command on its own
-with the heredoc it is fed and the directory the last `cd` before it changed to. Before reading a
-simple command it drops leading `NAME=value` assignments, the keywords `!`, `{`, `do`, `elif`,
-`else`, `if`, `then`, `until` and `while`, and the wrappers `command`, `env`, `exec`, `ionice`,
-`nice`, `stdbuf`, `time`, `timeout` and `xargs` with their options. It reads the script of
-`bash`, `sh` or `zsh` given with a `-c` flag (`-c`, `-lc` and the like), and the command inside
-each `$(...)` that is neither single-quoted nor escaped, as commands of their own.
+`commands.py` reads shell commands by heuristic over the forms below, not as a shell. It reads a
+command into words and operators as a shell does: single quotes, double quotes and backslashes
+quote what they cover, a backslash before a newline joins lines, a `#` starting a word begins a
+comment, and a number written against a redirection (`2>`) is part of it. Outside quotes, `;`,
+`;;`, `&&`, `||`, `|`, `|&`, `&`, `(`, `)` and newlines end a simple command; `<`, `>`, `>>`,
+`>|`, `&>`, `&>>`, `>&` and `<<` redirect. Each simple command is read on its own, with the
+heredoc it is fed and the directory the last `cd` before it changed to. Before reading it, leading
+`NAME=value` assignments, the keywords `!`, `{`, `do`, `elif`, `else`, `if`, `then`, `until` and
+`while`, and these wrappers with their options are dropped: `command`, `env` (`-u`, `-C`, `-S`
+take an argument), `exec` (`-a`), `ionice` (`-c`, `-n`, `-p`), `nice` (`-n`), `stdbuf` (`-i`,
+`-o`, `-e`), `time` (`-f`, `-o`), `timeout` (`-s`, `-k`, then its duration) and `xargs` (`-I`,
+`-n`, `-P`, `-d`, `-E`, `-L`, `-s`, `-a`); other options take no argument. The script of
+`bash`, `sh` or `zsh` given with a `-c` flag (`-c`, `-lc` and the like) is read as commands of its
+own. So is each `$(...)` outside single quotes and not escaped: it runs before the command that
+holds it, from that command's directory, and a `cd` inside it stays inside it.
 
 Recognised:
 
@@ -163,9 +169,9 @@ Recognised:
   `-e`/`-f` script; the last path given to `cp` or `mv`; each `*** Add File:`, `*** Update File:` or
   `*** Delete File:` path in the heredoc or arguments of `apply_patch`; and, in code a `python`,
   `python3` or `python3.N` command runs with `-c` or from a heredoc (with no script argument or
-  `-`), `open(p, mode)` with a mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()`
-  and `p.open(mode)` likewise, where `p` is a quoted literal, `Path("...")`, or a name the code
-  bound earlier to one (`p = "..."` or `p = Path("...")`). A relative target is joined to the
+  `-`), read with Python's own parser so strings and comments are not calls: `open(p, mode)` with a
+  mode starting `w`, `a` or `x`, `p.write_text()`, `p.write_bytes()` and `p.open(mode)` likewise,
+  where `p` is a string literal, `Path(...)` of one, or a name the code bound earlier to one. A relative target is joined to the
   directory of the last `cd` before it. A write counts as an edit only to a path that is not under
   `/dev/`, holds no `$`, has no component `.atelier`, `.cache`, `.claude`, `.codex`, `.local`,
   `target`, `node_modules`, a name starting `tmp` or a name containing `scratch`, and ends in `.rs`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
@@ -177,8 +183,9 @@ Not recognised (each is a stated limit; such a command is read only for the form
 - Backtick substitution, process substitution (`<(...)`, `>(...)`), `eval`, shell functions and
   aliases, and variable values: `atelier $c` is a call, but `$c` is not expanded, and a write to a
   path holding `$` is not an edit.
-- A `$(...)` inside a heredoc body, and a heredoc whose delimiter line is missing (its body runs to
-  the end of the command).
+- A `$(...)` inside a heredoc body; a heredoc whose delimiter line is missing (its body runs to
+  the end of the command); and `<<` written inside quotes, which is still read as a heredoc.
+- Python code that Python's parser rejects, which is not read at all.
 - Scripts run from files (`bash x.sh`, `python3 x.py`, `node x.js`) and code in any other
   interpreter (`node -e`, `perl -e` without `-i`, `ruby -e`).
 - Any other way to write a file: `install`, `rsync`, `dd`, `truncate`, `touch`, `ln`, `git apply`,

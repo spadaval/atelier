@@ -319,11 +319,11 @@
    },
    "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
    "confusion": {
-    "atelier_calls": 4624,
-    "confused_calls": 1165,
+    "atelier_calls": 4640,
+    "confused_calls": 1166,
     "help_lookups": 632,
-    "per_100_calls": 25.19,
-    "refused_or_error": 566
+    "per_100_calls": 25.13,
+    "refused_or_error": 567
    },
    "items": {
     "done_in_window": 305,
@@ -341,10 +341,10 @@
     "tests": "as `scripts/count_non_test_rust.py` counts them: files whose path contains `/tests/`, `src/test_records.rs`, and `#[cfg(test)]` items"
    },
    "process_share": {
-    "process_commands": 4008,
-    "share": 0.2804,
+    "process_commands": 4017,
+    "share": 0.281,
     "shell_commands": 14295,
-    "token_cost_share": 0.216,
+    "token_cost_share": 0.2164,
     "token_coverage": {
      "threads_counted": 346,
      "threads_with_transcript": 342

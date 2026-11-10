@@ -119,7 +119,8 @@ def build_db(path, record_commit):
         item("t8", 1, "command_execution", t0, input="ls", output=""),  # a shell-only implementer
         item("t8", 2, "dynamic_tool", t0, toolName="Read"),
         item("t8", 3, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record"),
-        item("t8", 4, "command_execution", t0, input="echo \"open('src/x.ts', 'w')\"", output=""),  # prints, writes nothing
+        item("t8", 4, "command_execution", t0, output="",  # prints, writes nothing (R6, R8, R10)
+             input="echo \"open('src/x.ts', 'w')\"; echo '>' src/y.ts; python3 -c \"print('open(\\\"src/z.ts\\\", \\\"w\\\")')\""),
         item("t8", 5, "command_execution", t0, input="python3 -c \"p = 'src/f.ts'; open(p, 'w').write('x')\"", output=""),
         item("t9", 0, "user_message", t0, text="Act as the implementation sub-agent for demo-ffff"),
         item("t9", 1, "command_execution", t0, output="",  # writes first
@@ -315,6 +316,16 @@ class Commands(unittest.TestCase):
             self.assertFalse(commands.is_process(literal), literal)
         self.assertEqual(commands.atelier_calls('echo "id: $(atelier issue create -q x)" $(atelier status)'),
                          [["issue", "create", "-q", "x"], ["status"]])
+        # R8: quoted punctuation is text, not syntax
+        for literal in ("printf '%s\\n' ';' atelier status", 'echo "a && atelier status"', "echo atelier\\; atelier"):
+            self.assertEqual(commands.atelier_calls(literal), [], literal)
+            self.assertFalse(commands.is_process(literal), literal)
+        # R11: wrapper options that take an argument
+        for wrapped in ("env -u SCORECARD_EXAMPLE atelier status", "stdbuf -o L atelier status",
+                        "xargs -I {} atelier status", "timeout -s KILL 60 atelier status"):
+            self.assertEqual(commands.atelier_calls(wrapped), [["status"]], wrapped)
+        # a comment is not a command
+        self.assertEqual(commands.atelier_calls("ls # note; atelier status\natelier land"), [["land"]])
 
     def test_shell_writes(self):
         self.assertEqual(commands.shell_writes("sed -i 's/a/b/' src/lib.rs && perl -pi -e s/x/y/ a.rs"), ["src/lib.rs", "a.rs"])
@@ -339,8 +350,18 @@ class Commands(unittest.TestCase):
         self.assertEqual(commands.shell_writes("bash -lc 'python3 - <<EOF\nopen(\"d.rs\", \"w\")\nEOF'"), ["d.rs"])
         # R6: Python is read only where a Python interpreter runs it
         for not_run in ("echo \"open('src/lib.rs', 'w')\"", "grep -n \"write_text(\" src/a.py",
-                        "cat > notes.md <<'EOF'\nopen('src/lib.rs', 'w')\nEOF"):
+                        "cat > notes.md <<'EOF'\nopen('src/lib.rs', 'w')\nEOF",
+                        # R10: Python strings and comments are not calls
+                        "python3 -c \"print(\\\"open('src/lib.rs', 'w')\\\")\"",
+                        "python3 - <<'EOF'\n# open('src/lib.rs', 'w')\nprint(1)\nEOF",
+                        # R8: a quoted > is an argument
+                        "echo '>' src/lib.rs"):
             self.assertNotIn("src/lib.rs", commands.shell_writes(not_run), not_run)
+        # R9: a substitution runs where its command runs, after the cd before it, and its own cd stays inside it
+        self.assertEqual(commands.shell_writes("cd /tmp/check; out=$(python3 -c \"open('src/lib.rs', 'w')\")"),
+                         ["/tmp/check/src/lib.rs"])
+        self.assertEqual(commands.shell_writes("x=$(cd /tmp/y && echo); echo a > src/a.rs"), ["src/a.rs"])
+        self.assertEqual(commands.shell_writes("env -u X python3 -c \"open('src/e.rs', 'w')\""), ["src/e.rs"])
 
     def test_help_and_refusal(self):
         self.assertTrue(commands.is_help("atelier review finding --help"))
