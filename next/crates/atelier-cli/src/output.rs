@@ -709,6 +709,9 @@ pub fn push_refused(
 ) -> String {
     let mut text = "Atelier's pre-push hook refused this push; nothing was pushed.\n".to_string()
         + &problems(unread, &[]);
+    if !unread.is_empty() {
+        text += "Fix each record in the commit that broke it: git commit --amend for the last commit, git rebase -i for an earlier one. A later commit that fixes it leaves the broken one in the push.\n";
+    }
     if !code.is_empty() {
         text += &format!(
             "Rule: code and config.toml reach {base} only through atelier merge. Each new commit on {base}'s first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:\n"

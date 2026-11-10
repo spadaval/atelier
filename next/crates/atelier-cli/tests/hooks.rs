@@ -567,6 +567,24 @@ fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     git(&root, &["branch", "-q", "-D", ID]);
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
+
+    // A record that does not read in a commit pushed, as when the commit
+    // went past the pre-commit hook, is refused with how to repair it.
+    fs::write(root.join(item_path(ID)), "no front matter\n").unwrap();
+    git(&root, &["commit", "-qam", "Break it", "--no-verify"]);
+    let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
+    let run = git_as(&root, &["push", "-q", "origin", "main"]);
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains(&format!(
+            "These do not read as records. That is not a rule, and it cannot be skipped:\n  {commit}:{}: front matter: ",
+            item_path(ID)
+        )) && run.stderr.contains(
+            "Fix each record in the commit that broke it: git commit --amend for the last commit, git rebase -i for an earlier one. A later commit that fixes it leaves the broken one in the push.\n"
+        ),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]
