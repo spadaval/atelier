@@ -38,6 +38,9 @@ use std::time::{Duration, Instant};
 pub(crate) const WAIT: Duration = Duration::from_secs(9 * 60);
 /// How often it asks the forge while it waits.
 const POLL: Duration = Duration::from_secs(15);
+/// How long it gives the forge to answer under the lock, where it holds up
+/// every other merge, and never longer than the wait.
+const LOCKED: Duration = Duration::from_secs(60);
 
 /// Merges the item of the checked-out branch into the base, in one merge
 /// commit that marks it done, once its checks pass. With `trivial`, an
@@ -99,16 +102,17 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     if let Some(forge) = &config.forge {
         if let Some(workflow) = &forge.ci_workflow {
             let github = match Github::open(&root, forge) {
-                Ok(github) => github,
+                Ok(github) => github.until(Instant::now() + LOCKED.min(wait_times().0)),
                 Err(error) => return Ok(Outcome::Refused(output::forge_failed(&error, false))),
             };
             let mut known = HashMap::new();
             match ci(&github, workflow, &root, &id, &head, &mut known)? {
                 Ci::Passed => {}
                 Ci::Failed(run) => return Ok(Outcome::Refused(output::ci_failed(workflow, &run))),
-                Ci::Pending { newest, error } => {
-                    let pending = output::ci_pending(workflow, &head, newest.as_ref(), error);
-                    return Ok(Outcome::NotYet(pending));
+                Ci::Pending(pending) => {
+                    return Ok(Outcome::NotYet(output::ci_pending(
+                        workflow, &head, &pending,
+                    )))
                 }
             }
         }
@@ -306,22 +310,27 @@ fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
     let github = github.until(deadline);
     // Said before the first poll, which may itself take the whole bound.
     say(&output::waiting_for_ci(workflow, &pull, wait));
+    let mut last = None;
     loop {
-        let pending = match ci(&github, workflow, root, id, head, &mut known)? {
+        let now = match ci(&github, workflow, root, id, head, &mut known)? {
             Ci::Passed => return Ok(Ok(judged.id.clone())),
             Ci::Failed(run) => return Ok(Err(Outcome::Refused(output::ci_failed(workflow, &run)))),
-            Ci::Pending { newest, error } => {
-                output::ci_pending(workflow, head, newest.as_ref(), error)
-            }
+            Ci::Pending(now) => now,
+        };
+        // A poll that fails, or that the bound ends, does not replace what
+        // an earlier one said: the last answer, or until one comes, the
+        // first failure.
+        let pending = match (last.take(), now) {
+            (Some(kept), Err(_)) => kept,
+            (_, now) => now,
         };
         let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            return Ok(Err(Outcome::NotYet(pending)));
-        }
         std::thread::sleep(poll.min(left));
         if left <= poll {
+            let pending = output::ci_pending(workflow, head, &pending);
             return Ok(Err(Outcome::NotYet(pending)));
         }
+        last = Some(pending);
     }
 }
 
@@ -353,12 +362,9 @@ enum Ci {
     Passed,
     Failed(CiRun),
     /// No run that counts has finished, or the latest finished one failed
-    /// and a newer one is running. `newest` is the newest that counts;
-    /// `error` is why the forge did not answer, when it did not.
-    Pending {
-        newest: Option<CiRun>,
-        error: Option<ForgeError>,
-    },
+    /// and a newer one is running: the newest that counts. Or the forge did
+    /// not answer, and why.
+    Pending(Result<Option<CiRun>, ForgeError>),
 }
 
 /// Where CI stands for `head`, from the runs that count for it: the latest
@@ -374,12 +380,7 @@ fn ci(
 ) -> Result<Ci> {
     let runs = match github.branch_runs(workflow, id) {
         Ok(runs) => runs,
-        Err(error) => {
-            return Ok(Ci::Pending {
-                newest: None,
-                error: Some(error),
-            })
-        }
+        Err(error) => return Ok(Ci::Pending(Err(error))),
     };
     let mut counting = Vec::new();
     for run in runs {
@@ -394,10 +395,7 @@ fn ci(
         Some(at) if !counting[at + 1..].iter().any(CiRun::running) => {
             Ci::Failed(counting.swap_remove(at))
         }
-        _ => Ci::Pending {
-            newest: counting.pop(),
-            error: None,
-        },
+        _ => Ci::Pending(Ok(counting.pop())),
     })
 }
 

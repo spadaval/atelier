@@ -721,7 +721,8 @@ fn merge_takes_no_flag_but_trivial() {
 /// requests. A POST to the pull requests opens #7 and adds a line to
 /// `opened`. Every call is logged to `calls`. While `down` exists a runs
 /// lookup fails, and while `stall` exists it never answers, after writing
-/// its process ID to `stalled`; while `helper` exists it answers but leaves
+/// its process ID to `stalled`; while `once` exists it answers and then
+/// creates `stall`, so every later one stalls; while `helper` exists it answers but leaves
 /// a process holding its output, whose ID it writes to `helped`; while
 /// `no-pulls` exists opening a pull request fails.
 const FAKE_GH: &str = r#"#!/bin/sh
@@ -742,6 +743,7 @@ case "$answer" in
   runs/*)
     if [ -f "$FAKE_GH/stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
     if [ -f "$FAKE_GH/down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [ -f "$FAKE_GH/once" ]; then touch "$FAKE_GH/stall"; fi
     if [ -f "$FAKE_GH/helper" ]; then sleep 60 & echo $! >> "$FAKE_GH/helped"; fi
     ;;
 esac
@@ -1168,7 +1170,7 @@ fn a_run_on_a_commit_before_a_change_outside_the_items_directory_does_not_count(
             ),
         ],
     );
-    let run = forge.merge_waiting(300);
+    let run = forge.merge_waiting(2000);
     assert_eq!(run.code, 3, "{}", run.stderr);
     assert!(
         run.stdout.ends_with(&format!(
@@ -1290,11 +1292,35 @@ fn at_the_bound_merge_exits_not_yet_and_changes_nothing() {
 }
 
 #[test]
+fn a_poll_the_bound_ends_does_not_hide_what_an_earlier_poll_said() {
+    let forge = Forge::new(Some("ci.yml"));
+    let root = forge.scratch.root();
+    let approved = head(&root, ID);
+    forge.ci(ID, &[(&approved, "in_progress", None)]);
+    // The first poll answers, and the second is still asking at the bound.
+    forge.flag("once", true);
+    let (before, branch, base) = (state(&root), forge.remote(ID), forge.remote("main"));
+    let run = forge.merge_waiting(2000);
+    assert_eq!(run.code, 3, "{}", run.stderr);
+    assert_eq!(forge.polls(ID), 2);
+    assert_eq!(
+        run.stdout,
+        format!(
+            "{PULL}{}CI has not finished on {}, the branch's head: it is in progress (https://github.com/owner/repo/actions/runs/1). Nothing else changed.\nRun `atelier merge` again once ci.yml finishes.\n",
+            waiting_for("2 seconds"),
+            &approved[..7]
+        )
+    );
+    assert_eq!(state(&root), before);
+    assert_eq!((forge.remote(ID), forge.remote("main")), (branch, base));
+}
+
+#[test]
 fn a_cancelled_run_is_not_a_finished_one() {
     let forge = Forge::new(Some("ci.yml"));
     let root = forge.scratch.root();
     forge.ci(ID, &[(&head(&root, ID), "completed", Some("cancelled"))]);
-    let run = forge.merge_waiting(300);
+    let run = forge.merge_waiting(2000);
     assert_eq!(run.code, 3, "{}", run.stderr);
     assert!(
         run.stdout.contains(
@@ -1361,6 +1387,51 @@ fn a_gh_that_never_answers_is_ended_at_the_bound() {
     let proc = PathBuf::from(format!("/proc/{}", stalled.trim()));
     assert!(!proc.exists(), "the stalled gh is still running");
     assert_eq!(state(&root), before);
+}
+
+#[test]
+fn a_look_at_ci_under_the_lock_that_stalls_is_ended_within_the_bound() {
+    let forge = Forge::new(Some("ci.yml"));
+    let root = forge.scratch.root();
+    forge.ci(ID, &[(&head(&root, ID), "completed", Some("success"))]);
+    // The wait's poll sees CI pass; the look under the lock stalls.
+    forge.flag("once", true);
+    let (before, branch, base) = (state(&root), forge.remote(ID), forge.remote("main"));
+    let since = Instant::now();
+    let mut child = forge
+        .command(&root, "t1", &["merge"])
+        .env("ATELIER_TEST_CI_WAIT", "2000,50")
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stalled = forge.gh.join("stalled");
+    while child.try_wait().unwrap().is_none() {
+        if since.elapsed() > Duration::from_secs(10) {
+            child.kill().unwrap();
+            let pid = fs::read_to_string(&stalled).unwrap_or_default();
+            let _ = Command::new("kill").arg(pid.trim()).status();
+            panic!("merge still holds the lock");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let run = run(child.wait_with_output().unwrap());
+    assert_eq!(run.code, 3, "{}", run.stderr);
+    assert_eq!(forge.polls(ID), 2);
+    assert!(
+        run.stdout.ends_with("the branch's head: the forge did not answer, as gh failed: gh api repos/owner/repo/actions/workflows/ci.yml/runs did not answer in time. Nothing else changed.\nRun `atelier merge` again once ci.yml finishes.\n"),
+        "{}",
+        run.stdout
+    );
+    let stalled = fs::read_to_string(&stalled).unwrap();
+    let proc = PathBuf::from(format!("/proc/{}", stalled.trim()));
+    assert!(!proc.exists(), "the stalled gh is still running");
+    assert_eq!(state(&root), before);
+    assert_eq!((forge.remote(ID), forge.remote("main")), (branch, base));
+    // Nothing is left locked: run again with the forge answering, it merges.
+    forge.flag("once", false);
+    forge.flag("stall", false);
+    let again = forge.merge();
+    assert_eq!(again.code, 0, "{}", again.stderr);
 }
 
 #[test]
