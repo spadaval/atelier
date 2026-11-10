@@ -1,6 +1,8 @@
-use atelier_app::acts::{check, next, row, Act, Condition, Facts, Refusal, Role, TABLE};
+use atelier_app::acts::{
+    check, check_mission, next, row, Act, Condition, Facts, Refusal, Role, TABLE,
+};
 use atelier_app::{carried, entry};
-use atelier_core::{Status, Thread};
+use atelier_core::{MissionStatus, Status, Thread};
 use atelier_records::{parse_item, parse_review, ItemDir, ReviewFile};
 use std::path::PathBuf;
 
@@ -86,6 +88,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
         item,
         branch: true,
         blockers: &[],
+        mission: None,
         caller,
         checkout: None,
     }
@@ -93,8 +96,11 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 8] = [
+const SPECIFIED: [(Act, &[Status], Option<Status>); 10] = [
+    (Act::Ready, &[Status::Draft], Some(Status::Ready)),
     (Act::Start, &[Status::Ready], Some(Status::Building)),
+    // Created by the act, so it runs from no status at all.
+    (Act::StartNew, &[], Some(Status::Building)),
     (
         Act::TakeOver,
         &[
@@ -127,7 +133,8 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 8] = [
 
 #[test]
 fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
-    assert_eq!(TABLE.len(), SPECIFIED.len());
+    // Each item's act, and the mission's `ready`.
+    assert_eq!(TABLE.len(), SPECIFIED.len() + 1);
     for (act, from, to) in SPECIFIED {
         for status in ALL {
             // Every condition holds: the caller holds the item, except a
@@ -149,11 +156,18 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
             };
             let item = with_reviews(record(status, &["t1"], DONE), &reviews);
             let reviewer = matches!(act, Act::Review | Act::VerdictChanges | Act::VerdictApprove);
-            let caller = thread(if reviewer { "r1" } else { "t1" });
+            // A planner holds nothing; the item's holder readying it is
+            // refused by its status too, never by its role.
+            let caller = thread(match act {
+                _ if reviewer => "r1",
+                Act::Ready if status == Status::Draft => "p1",
+                _ => "t1",
+            });
             let facts = Facts {
                 item: &item,
                 branch: act != Act::Start,
                 blockers: &[],
+                mission: None,
                 caller: &caller,
                 checkout: None,
             };
@@ -173,6 +187,63 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
             }
         }
         assert_eq!(row(act).from, from);
+    }
+    // A mission's `ready`, from each of a mission's statuses.
+    for status in MissionStatus::ALL {
+        match check_mission(Act::ReadyMission, status) {
+            Ok(set) => {
+                assert_eq!(status, MissionStatus::Draft);
+                assert_eq!(set, Some(MissionStatus::Ready));
+            }
+            Err(Refusal::From { act, status: at }) => {
+                assert_ne!(status, MissionStatus::Draft);
+                assert_eq!((act, at), (Act::ReadyMission, status.status()));
+            }
+            Err(other) => panic!("ready from {status:?}: {other:?}"),
+        }
+    }
+    let ready = row(Act::ReadyMission);
+    assert_eq!(
+        (ready.role, ready.from, ready.to),
+        (Role::Planner, &[Status::Draft][..], Some(Status::Ready))
+    );
+}
+
+#[test]
+fn start_needs_the_items_mission_ready_on_the_base() {
+    let item = record(Status::Ready, &[], DONE);
+    let caller = thread("t1");
+    let mission = |status| Some(("demo-m1ss".to_string(), status));
+    // No mission; a ready one; one that is not ready; one not found.
+    let cases = [
+        None,
+        mission(Some(Status::Ready)),
+        mission(Some(Status::Draft)),
+        mission(Some(Status::Done)),
+        mission(None),
+    ];
+    for named in cases {
+        let facts = Facts {
+            mission: named.clone(),
+            branch: false,
+            ..facts(&item, &caller)
+        };
+        let expected = match &named {
+            Some((id, status)) if *status != Some(Status::Ready) => {
+                vec![Condition::MissionNotReady {
+                    id: id.clone(),
+                    status: *status,
+                }]
+            }
+            _ => Vec::new(),
+        };
+        match check(Act::Start, &facts) {
+            Ok(set) => assert!(expected.is_empty() && set == Some(Status::Building)),
+            Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, expected, "{named:?}"),
+            Err(other) => panic!("{named:?}: {other:?}"),
+        }
+        // `status` lists what `start` checks.
+        assert_eq!(entry(&facts).unwrap().unmet, expected);
     }
 }
 
@@ -211,6 +282,7 @@ fn status_lists_the_conditions_the_command_reports() {
                     item: &item,
                     branch,
                     blockers,
+                    mission: None,
                     caller: &caller,
                     checkout: None,
                 };
@@ -258,6 +330,7 @@ fn the_next_act_follows_the_status_and_who_is_asking() {
             item: &item,
             branch: true,
             blockers: &[],
+            mission: None,
             caller: &caller,
             checkout: None,
         };
@@ -284,6 +357,7 @@ fn only_the_holder_submits() {
             item: &item,
             branch: true,
             blockers: &[],
+            mission: None,
             caller: &caller,
             checkout: None,
         };
@@ -303,6 +377,7 @@ fn only_the_holder_submits() {
         item: &unheld,
         branch: true,
         blockers: &[],
+        mission: None,
         caller: &caller,
         checkout: None,
     };
@@ -333,6 +408,7 @@ fn submit_needs_each_open_finding_answered_and_each_question_decided() {
             item: &item,
             branch: true,
             blockers: &[],
+            mission: None,
             caller: &caller,
             checkout: None,
         };

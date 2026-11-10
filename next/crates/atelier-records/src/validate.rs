@@ -1,31 +1,57 @@
 use crate::body::section;
-use crate::{ids, ItemDir, Problem};
+use crate::{ids, ItemDir, MissionDir, Problem};
 use atelier_core::{is_open, Finding, FindingName, Verdict};
+use std::path::Path;
 
-/// What is wrong with `items`, which are every item of a checkout, so that
-/// a `blocked_by` can be checked against them. Reading already refused what
-/// does not parse, such as an unknown status.
-pub fn validate(items: &[ItemDir]) -> Vec<Problem> {
+/// What is wrong with `items` and `missions`, which are every item and
+/// mission of a checkout, so that a `blocked_by` or a `mission` can be
+/// checked against them. Reading already refused what does not parse, such
+/// as an unknown status.
+pub fn validate(items: &[ItemDir], missions: &[MissionDir]) -> Vec<Problem> {
     let mut problems = Vec::new();
+    for dir in missions {
+        let mission = &dir.mission;
+        id_problem(&dir.path, &mission.id, &mut problems);
+        if section(&mission.body, 2, "Outcome").is_none() {
+            let message = "the mission has no `## Outcome` section";
+            problems.push(Problem::new(&dir.path, "Outcome", message));
+        }
+    }
     for dir in items {
-        validate_item(dir, items, &mut problems);
+        validate_item(dir, items, missions, &mut problems);
     }
     problems
 }
 
-fn validate_item(dir: &ItemDir, items: &[ItemDir], problems: &mut Vec<Problem>) {
-    let item = &dir.item;
-    let mut problem =
-        |field: &str, message: String| problems.push(Problem::new(&dir.path, field, message));
-    let dir_name = dir
-        .path
+/// A problem with `id` when it is no ID or not the name of the directory
+/// its record `path` is in.
+fn id_problem(path: &Path, id: &str, problems: &mut Vec<Problem>) {
+    let dir_name = path
         .parent()
         .and_then(|p| p.file_name())
         .unwrap_or_default();
-    if let Err(message) = ids::validate_id(&item.id) {
-        problem("id", message);
-    } else if dir_name != item.id.as_str() {
-        problem("id", format!("`{}` is not its directory's name", item.id));
+    if let Err(message) = ids::validate_id(id) {
+        problems.push(Problem::new(path, "id", message));
+    } else if dir_name != id {
+        let message = format!("`{id}` is not its directory's name");
+        problems.push(Problem::new(path, "id", message));
+    }
+}
+
+fn validate_item(
+    dir: &ItemDir,
+    items: &[ItemDir],
+    missions: &[MissionDir],
+    problems: &mut Vec<Problem>,
+) {
+    let item = &dir.item;
+    id_problem(&dir.path, &item.id, problems);
+    let mut problem =
+        |field: &str, message: String| problems.push(Problem::new(&dir.path, field, message));
+    if let Some(mission) = &item.mission {
+        if !missions.iter().any(|m| m.mission.id == *mission) {
+            problem("mission", format!("`{mission}` names no mission"));
+        }
     }
     for blocker in &item.blocked_by {
         if !items.iter().any(|other| other.item.id == *blocker) {

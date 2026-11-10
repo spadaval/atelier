@@ -4,6 +4,9 @@ id: "atelier-yptz"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-yptz
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add mission records and the commands that write a plan: `new`, `set`, `ready` and `start --new`"
-updated_at: "2026-11-10T19:34:04.477915158+00:00"
+updated_at: "2026-11-10T19:49:11.642444780+00:00"
 ---
 
 ## Goal

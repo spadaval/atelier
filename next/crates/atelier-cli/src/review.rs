@@ -18,8 +18,8 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let Some(record) = located.record() else {
         return Ok(Outcome::Refused(output::no_item(id, &repo.base)));
     };
-    let blockers = repo.blockers(record)?;
-    let facts = facts(repo, &located, &blockers, None);
+    let links = repo.links(record)?;
+    let facts = facts(repo, &located, &links, None);
     match check(Act::Review, &facts) {
         Ok(_) => {}
         // Its one condition: the caller never implemented the item.
@@ -70,7 +70,7 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     };
     // The brief reads the file as it now stands.
     let located = repo.locate(id)?;
-    let facts = self::facts(repo, &located, &blockers, None);
+    let facts = self::facts(repo, &located, &links, None);
     let path = format!("{}/reviews/{name}.md", item_dir(id));
     Ok(Outcome::Done(said + &brief(repo, &facts, Some(path))?))
 }
@@ -85,8 +85,8 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
         )));
     };
     let record = located.record().expect("the current item has a record");
-    let blockers = repo.blockers(record)?;
-    let facts = facts(repo, &located, &blockers, None);
+    let links = repo.links(record)?;
+    let facts = facts(repo, &located, &links, None);
     let act = match verdict {
         Verdict::Approve => Act::VerdictApprove,
         Verdict::Changes => Act::VerdictChanges,

@@ -10,7 +10,7 @@
 //! binary keeps Rust's default of ignoring SIGPIPE, so such a write fails
 //! with an error. The loader on top of it is new.
 
-use crate::{parse_item, store::review_file, ItemDir, Problem};
+use crate::{parse_item, parse_mission, store::review_file, ItemDir, MissionDir, Problem};
 use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -73,6 +73,7 @@ struct Entry {
 }
 
 const ITEMS: &str = ".atelier/items";
+const MISSIONS: &str = ".atelier/missions";
 
 impl CommitReader {
     pub fn new(repo: impl Into<PathBuf>) -> Self {
@@ -109,9 +110,31 @@ impl CommitReader {
         }))
     }
 
+    /// The mission `id` as `commit` holds it, or `None` when the commit has
+    /// no `mission.md` for it.
+    pub fn mission(&mut self, commit: &str, id: &str) -> Result<Option<MissionDir>, ReadError> {
+        let path = format!("{MISSIONS}/{id}/mission.md");
+        let text = match self.text(commit, &path) {
+            Err(ReadError::Missing { .. }) => return Ok(None),
+            text => text?,
+        };
+        let path = PathBuf::from(format!("{commit}:{path}"));
+        let mission = parse_mission(&path, &text).map_err(ReadError::Record)?;
+        Ok(Some(MissionDir { path, mission }))
+    }
+
     /// The names of the directories under `.atelier/items/` in `commit`.
     pub fn item_ids(&mut self, commit: &str) -> Result<Vec<String>, ReadError> {
-        let Some(entries) = self.tree_at(commit, ITEMS)? else {
+        self.dirs(commit, ITEMS)
+    }
+
+    /// The names of the directories under `.atelier/missions/` in `commit`.
+    pub fn mission_ids(&mut self, commit: &str) -> Result<Vec<String>, ReadError> {
+        self.dirs(commit, MISSIONS)
+    }
+
+    fn dirs(&mut self, commit: &str, dir: &str) -> Result<Vec<String>, ReadError> {
+        let Some(entries) = self.tree_at(commit, dir)? else {
             return Ok(Vec::new());
         };
         entries

@@ -3,17 +3,27 @@
 
 use crate::git;
 use anyhow::{Context, Result};
-use atelier_app::acts::{approval, Checkout, SinceApproval};
+use atelier_app::acts::{approval, mission_of, Checkout, SinceApproval};
 use atelier_app::{identity, Branch, Located};
 use atelier_core::{Config, Status, Thread};
-use atelier_records::{parse_config, validate_id, CommitReader, ItemDir, Store};
+use atelier_records::{
+    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, Store,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+
+/// What an item's start depends on, as [`Repo::links`] finds it.
+pub struct Links {
+    pub blockers: Vec<(String, Option<Status>)>,
+    pub mission: Option<(String, Option<Status>)>,
+}
 
 pub struct Repo {
     pub root: PathBuf,
     pub base: String,
     pub base_tip: String,
+    /// The prefix of every ID, from the checkout's config.
+    pub slug: String,
     /// The branch checked out, if any.
     pub branch: Option<String>,
     pub caller: Thread,
@@ -37,6 +47,7 @@ impl Repo {
             reader: CommitReader::new(&root),
             caller: identity(|name| std::env::var(name).ok()),
             base: config.base_branch,
+            slug: config.slug,
             base_tip,
             root,
         })
@@ -49,11 +60,25 @@ impl Repo {
     /// The item `id`: its record at the base's tip, and its branch.
     pub fn locate(&mut self, id: &str) -> Result<Located> {
         let tip = git::branch_tip(&self.root, id)?;
-        self.locate_at(id, tip)
+        let base = self.reader.item(&self.base_tip, id)?;
+        self.locate_at(id, tip, base)
     }
 
-    fn locate_at(&mut self, id: &str, tip: Option<String>) -> Result<Located> {
-        let base = self.reader.item(&self.base_tip, id)?;
+    /// The item `id` as a planning command on the base finds it: its record
+    /// in this checkout, where planning is written before it is committed,
+    /// and its branch.
+    pub fn locate_planned(&mut self, id: &str) -> Result<Located> {
+        let tip = git::branch_tip(&self.root, id)?;
+        let base = self.checkout_item(id)?;
+        self.locate_at(id, tip, base)
+    }
+
+    fn locate_at(
+        &mut self,
+        id: &str,
+        tip: Option<String>,
+        base: Option<ItemDir>,
+    ) -> Result<Located> {
         let branch = match tip {
             None => None,
             Some(tip) => {
@@ -96,18 +121,51 @@ impl Repo {
         ids.into_iter()
             .map(|id| {
                 let tip = tips.get(&id).cloned();
-                self.locate_at(&id, tip)
+                let base = self.reader.item(&self.base_tip, &id)?;
+                self.locate_at(&id, tip, base)
             })
             .collect()
     }
 
-    /// Each blocker of `item`, with its status.
-    pub fn blockers(&mut self, item: &ItemDir) -> Result<Vec<(String, Option<Status>)>> {
-        item.item
+    /// Every mission at the base's tip.
+    pub fn missions(&mut self) -> Result<Vec<MissionDir>> {
+        let ids = self.reader.mission_ids(&self.base_tip)?;
+        let mut missions = Vec::new();
+        for id in ids {
+            missions.extend(self.reader.mission(&self.base_tip, &id)?);
+        }
+        Ok(missions)
+    }
+
+    /// A new ID that no item or mission has, in this checkout, at the
+    /// base's tip or as a local branch.
+    pub fn new_id(&mut self) -> Result<String> {
+        let store = self.store();
+        let mut taken: BTreeSet<String> = store.ids("items")?.into_iter().collect();
+        taken.extend(store.ids("missions")?);
+        taken.extend(self.reader.item_ids(&self.base_tip)?);
+        taken.extend(self.reader.mission_ids(&self.base_tip)?);
+        taken.extend(git::branches(&self.root)?.into_iter().map(|(name, _)| name));
+        Ok(allocate_id(&self.slug, |id| taken.contains(id))?)
+    }
+
+    /// Each blocker of `item`, with its status, and its mission, with the
+    /// mission's status at the base's tip.
+    pub fn links(&mut self, item: &ItemDir) -> Result<Links> {
+        let blockers = item
+            .item
             .blocked_by
             .iter()
             .map(|id| Ok((id.clone(), self.locate(id)?.status())))
-            .collect()
+            .collect::<Result<_>>()?;
+        let mission = match &item.item.mission {
+            None => None,
+            Some(id) => {
+                let found = self.reader.mission(&self.base_tip, id)?;
+                mission_of(item, found.as_slice())
+            }
+        };
+        Ok(Links { blockers, mission })
     }
 
     /// The item `id` as `commit` holds it.
@@ -163,10 +221,35 @@ impl Repo {
     }
 }
 
+/// The directories planning is written in.
+const PLANNING: [&str; 2] = [".atelier/missions", ".atelier/items"];
+
+/// The record changes the checkout at `root` holds that no commit does:
+/// changed and new files under `.atelier/missions/` and `.atelier/items/`.
+pub fn planning(root: &Path) -> Result<Vec<String>> {
+    let mut paths: Vec<String> = git::uncommitted(root)?
+        .into_iter()
+        .filter(|path| {
+            PLANNING
+                .iter()
+                .any(|dir| path.starts_with(&format!("{dir}/")))
+        })
+        .collect();
+    for dir in PLANNING {
+        paths.extend(git::untracked(root, dir)?);
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 pub fn item_dir(id: &str) -> String {
     format!(".atelier/items/{id}")
 }
 
 pub fn item_path(id: &str) -> String {
     format!(".atelier/items/{id}/item.md")
+}
+
+pub fn mission_path(id: &str) -> String {
+    format!(".atelier/missions/{id}/mission.md")
 }

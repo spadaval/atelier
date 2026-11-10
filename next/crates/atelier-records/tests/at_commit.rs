@@ -1,4 +1,4 @@
-use atelier_core::{Status, Thread};
+use atelier_core::{MissionStatus, Status, Thread};
 use atelier_records::{CommitReader, ReadError};
 use std::fs;
 use std::path::Path;
@@ -167,4 +167,35 @@ fn a_record_that_does_not_parse_names_its_commit_and_path() {
         ),
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn reads_a_mission_as_a_commit_holds_it_and_none_where_it_has_none() {
+    let (dir, older, _) = repository();
+    let repo = dir.path();
+    let mission = |status: &str| {
+        format!(
+            "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: M\n\
+             status: {status}\nlabels: []\nlead: null\nready: null\n\
+             created_at: 2026-11-10T09:00:00Z\n---\n## Outcome\no\n"
+        )
+    };
+    let path = repo.join(".atelier/missions/demo-m1ss/mission.md");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, mission("draft")).unwrap();
+    git(repo, &["add", "-A"]);
+    git(repo, &["commit", "-qm", "mission"]);
+    let commit = git(repo, &["rev-parse", "HEAD"]);
+    fs::write(&path, mission("ready")).unwrap();
+
+    let mut reader = CommitReader::new(repo);
+    let read = reader.mission(&commit, "demo-m1ss").unwrap().unwrap();
+    assert_eq!(read.mission.status, MissionStatus::Draft);
+    assert_eq!(
+        read.path.to_str().unwrap(),
+        format!("{commit}:.atelier/missions/demo-m1ss/mission.md")
+    );
+    assert_eq!(reader.mission_ids(&commit).unwrap(), ["demo-m1ss"]);
+    assert!(reader.mission(&older, "demo-m1ss").unwrap().is_none());
+    assert!(reader.mission_ids(&older).unwrap().is_empty());
 }

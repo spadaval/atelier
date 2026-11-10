@@ -215,8 +215,8 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     // A reviewer is known by the review file it holds, which it may not
     // have committed, so its role is told from the checkout, as every
     // command tells it.
-    let blockers = repo.blockers(located.record().expect("the current item has a record"))?;
-    let seen = facts(repo, &located, &blockers, None);
+    let links = repo.links(located.record().expect("the current item has a record"))?;
+    let seen = facts(repo, &located, &links, None);
     if let Err(Refusal::Role(role)) = check(act, &seen) {
         let refused = refused(act, Refusal::Role(role), &seen)?;
         return Ok(Err(Outcome::Refused(refused)));
@@ -241,7 +241,7 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
         && located.branch.as_ref().is_some_and(|branch| branch.merged);
     if !merged {
         let checkout = repo.checkout(record, &head)?;
-        let facts = facts(repo, &located, &blockers, Some(&checkout));
+        let facts = facts(repo, &located, &links, Some(&checkout));
         if let Some(refused) = refusal(act, &facts)? {
             return Ok(Err(Outcome::Refused(refused)));
         }

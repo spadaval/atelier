@@ -1,12 +1,13 @@
 use crate::{body, document, ids, Problem};
-use atelier_core::{Config, Decision, Finding, Item, Response, Review, ReviewName};
+use atelier_core::{Config, Decision, Finding, Item, Mission, Response, Review, ReviewName};
 use serde::de::DeserializeOwned;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-/// A checkout's `.atelier/` directory: `config.toml`, and
-/// `items/<id>/item.md` with its `reviews/<round>-<suffix>.md`.
+/// A checkout's `.atelier/` directory: `config.toml`,
+/// `missions/<id>/mission.md`, and `items/<id>/item.md` with its
+/// `reviews/<round>-<suffix>.md`.
 pub struct Store {
     root: PathBuf,
 }
@@ -17,6 +18,14 @@ pub struct ItemDir {
     pub path: PathBuf,
     pub item: Item,
     pub reviews: Vec<ReviewFile>,
+}
+
+/// A mission record. The other files of its directory are planning
+/// documents with no required shape, and are not read.
+#[derive(Debug, Clone)]
+pub struct MissionDir {
+    pub path: PathBuf,
+    pub mission: Mission,
 }
 
 #[derive(Debug, Clone)]
@@ -50,8 +59,28 @@ impl Store {
 
     /// Every item, by ID.
     pub fn items(&self) -> Result<Vec<ItemDir>, Problem> {
+        self.ids("items")?.iter().map(|id| self.item(id)).collect()
+    }
+
+    pub fn mission(&self, id: &str) -> Result<MissionDir, Problem> {
+        let path = self.mission_path(id);
+        let mission = parse_mission(&path, &read(&path)?)?;
+        Ok(MissionDir { path, mission })
+    }
+
+    /// Every mission, by ID.
+    pub fn missions(&self) -> Result<Vec<MissionDir>, Problem> {
+        self.ids("missions")?
+            .iter()
+            .map(|id| self.mission(id))
+            .collect()
+    }
+
+    /// The names of the directories under `kind`, `items` or `missions`,
+    /// sorted.
+    pub fn ids(&self, kind: &str) -> Result<Vec<String>, Problem> {
         let mut ids = Vec::new();
-        for path in entries(&self.root.join("items"))? {
+        for path in entries(&self.root.join(kind))? {
             if path.is_dir() {
                 ids.push(
                     path.file_name()
@@ -62,13 +91,19 @@ impl Store {
             }
         }
         ids.sort();
-        ids.iter().map(|id| self.item(id)).collect()
+        Ok(ids)
     }
 
     pub fn write_item(&self, item: &Item) -> io::Result<()> {
         let dir = self.item_dir(&item.id);
         fs::create_dir_all(&dir)?;
         fs::write(dir.join("item.md"), render_item(item))
+    }
+
+    pub fn write_mission(&self, mission: &Mission) -> io::Result<()> {
+        let path = self.mission_path(&mission.id);
+        fs::create_dir_all(path.parent().expect("a mission's file is in its directory"))?;
+        fs::write(path, render_mission(mission))
     }
 
     /// Writes a new review of the item, under a file name no other review
@@ -112,6 +147,10 @@ impl Store {
 
     fn item_dir(&self, id: &str) -> PathBuf {
         self.root.join("items").join(id)
+    }
+
+    fn mission_path(&self, id: &str) -> PathBuf {
+        self.root.join("missions").join(id).join("mission.md")
     }
 
     fn reviews(&self, dir: &Path) -> Result<Vec<ReviewFile>, Problem> {
@@ -214,6 +253,16 @@ pub fn parse_item(path: &Path, text: &str) -> Result<Item, Problem> {
 
 pub fn render_item(item: &Item) -> String {
     document::join(&yaml(item), &item.body)
+}
+
+pub fn parse_mission(path: &Path, text: &str) -> Result<Mission, Problem> {
+    let (mut mission, body): (Mission, _) = parse_front(path, text)?;
+    mission.body = body.to_string();
+    Ok(mission)
+}
+
+pub fn render_mission(mission: &Mission) -> String {
+    document::join(&yaml(mission), &mission.body)
 }
 
 pub fn parse_review(path: &Path, text: &str) -> Result<Review, Problem> {

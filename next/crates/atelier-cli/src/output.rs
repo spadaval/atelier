@@ -6,6 +6,7 @@ use crate::merge::Moved;
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
 use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
+use atelier_records::Problem;
 use std::path::Path;
 use std::time::Duration;
 
@@ -34,6 +35,8 @@ fn priority_name(priority: Priority) -> &'static str {
 fn command(act: Act, id: &str) -> String {
     match act {
         Act::Start | Act::TakeOver | Act::Review => format!("atelier {} {id}", row(act).command),
+        Act::Ready | Act::ReadyMission => format!("atelier ready {id} --by <name>"),
+        Act::StartNew => "atelier start --new \"<title>\"".into(),
         Act::MergeTrivial => "atelier merge --trivial \"<why>\"".into(),
         _ => format!("atelier {}", row(act).command),
     }
@@ -41,7 +44,8 @@ fn command(act: Act, id: &str) -> String {
 
 fn goal(act: Act, status: Status) -> &'static str {
     match act {
-        Act::Start => "start it",
+        Act::Ready | Act::ReadyMission => "make it ready",
+        Act::Start | Act::StartNew => "start it",
         Act::TakeOver => "take it over",
         Act::Submit if status == Status::ChangesRequested => "return it to review",
         Act::Submit => "submit it for review",
@@ -60,6 +64,13 @@ fn condition(id: &str, condition: &Condition) -> String {
         Condition::Blocked { id: blocker, status: None } => {
             format!("{blocker} is done (no item {blocker} is found)")
         }
+        Condition::MissionNotReady { id: mission, status: Some(status) } => format!(
+            "Mission {mission} is ready (it is {}; a planner makes it ready with: atelier ready {mission} --by <name>)",
+            status_name(*status)
+        ),
+        Condition::MissionNotReady { id: mission, status: None } => format!(
+            "Mission {mission} is ready (no mission {mission} is in the base's last commit)"
+        ),
         Condition::BranchExists => format!(
             "No branch {id} exists yet (one does; if nothing on it is needed, delete it with `git branch -D {id}`)"
         ),
@@ -231,8 +242,15 @@ pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
         let then = next.rfind("Then: ").expect("it ends with a Then line");
         next.insert_str(then, &format!("Not committed: {}\n", some(&code)));
     }
+    let undefined = match entry.undefined {
+        true => format!(
+            "Write its Goal and its Done when lines in {} first: they say what the change must do, and the reviewer judges it against them.\n",
+            crate::repo::item_path(id)
+        ),
+        false => String::new(),
+    };
     format!(
-        "{who}Title: {}\nStatus: {}\n{next}",
+        "{who}Title: {}\nStatus: {}\n{undefined}{next}",
         entry.title,
         status_name(entry.status),
     )
@@ -263,8 +281,15 @@ fn gates(config: &Config) -> String {
     text
 }
 
-/// `status` away from an item's branch.
-pub fn overview(caller: &Thread, branch: Option<&str>, base: &str, overview: &Overview) -> String {
+/// `status` away from an item's branch. `planning` is the record changes
+/// the base's checkout has not committed.
+pub fn overview(
+    caller: &Thread,
+    branch: Option<&str>,
+    base: &str,
+    overview: &Overview,
+    planning: &[String],
+) -> String {
     let place = match branch {
         Some(branch) if branch == base => format!("the base branch {base}"),
         Some(branch) => format!("branch {branch}, which is no item's"),
@@ -308,6 +333,13 @@ pub fn overview(caller: &Thread, branch: Option<&str>, base: &str, overview: &Ov
             );
         }
     }
+    if !planning.is_empty() {
+        text += &format!(
+            "Planning not committed yet, which `atelier start` does not read until it is: {}\nCommit it with: {}\n",
+            some(planning),
+            commit_line(None, planning, "Plan")
+        );
+    }
     let startable = overview.ready.iter().find(|entry| entry.unmet.is_empty());
     match (overview.held.first(), startable) {
         (Some(held), _) => {
@@ -339,6 +371,7 @@ pub fn refusal(
         Refusal::Role(Role::Implementer) => format!(
             "You are the implementer of {id}. Implementers run `start`, `submit` and `merge`.\n"
         ),
+        Refusal::Role(Role::Planner) => unreachable!("no thread holds the planner's role"),
         Refusal::From { act, status } => {
             let from: Vec<&str> = row(*act).from.iter().map(|s| status_name(*s)).collect();
             format!(
@@ -408,6 +441,157 @@ pub fn not_committed() -> String {
 
 pub fn started(id: &str) -> String {
     format!("Started {id} on branch {id}.\n")
+}
+
+pub fn started_new(id: &str) -> String {
+    format!("Created {id} and started it on branch {id}.\n")
+}
+
+/// The Git command that commits `paths`, and only them, with `message`,
+/// in the checkout at `at` when it is not the one the caller is in.
+fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
+    let git = match at {
+        Some(at) => format!("git -C {}", at.display()),
+        None => "git".into(),
+    };
+    let paths = paths.join(" ");
+    format!("{git} add -- {paths} && {git} commit -m \"{message}\" -- {paths}")
+}
+
+/// What a planning command prints once it has written `paths`.
+pub fn planned(said: &str, paths: &[String], message: &str) -> String {
+    let mut text = format!("{said}Wrote, and did not commit:\n");
+    for path in paths {
+        text += &format!("  {path}\n");
+    }
+    text + &format!(
+        "Planning counts once it is committed on the base.\nThen: {}\n",
+        commit_line(None, paths, message)
+    )
+}
+
+pub fn created_item(id: &str) -> String {
+    format!(
+        "Created draft item {id}, with empty Goal, Done when and Scope sections to write.\nA planner makes it ready with: atelier ready {id} --by <name>\n"
+    )
+}
+
+pub fn created_mission(id: &str) -> String {
+    format!(
+        "Created draft mission {id}, with empty sections to write.\nIts items are created with: atelier new \"<title>\" --in {id}\nA planner makes it ready with: atelier ready {id} --by <name>\n"
+    )
+}
+
+pub fn off_base(
+    command: &str,
+    base: &str,
+    branch: Option<&str>,
+    checkout: Option<&Path>,
+) -> String {
+    let there = match checkout {
+        Some(path) => format!(
+            "Run it in {}, which has {base} checked out.",
+            path.display()
+        ),
+        None => format!("Run it in a checkout of {base}, as after `git switch {base}`."),
+    };
+    format!(
+        "`atelier {command}` writes planning, which happens on the base branch {base}, and this checkout is on {}. Nothing changed.\n{there}\n",
+        place(branch)
+    )
+}
+
+/// The problems a planning command found in what it would write, with
+/// paths shown from the checkout's root.
+pub fn invalid(command: &str, root: &Path, problems: &[Problem]) -> String {
+    let mut text = format!("`atelier {command}` refused; nothing changed.\n");
+    for problem in problems {
+        let file = problem.file.strip_prefix(root).unwrap_or(&problem.file);
+        let shown = Problem {
+            file: file.to_path_buf(),
+            ..problem.clone()
+        };
+        text += &format!("  {shown}\n");
+    }
+    text
+}
+
+pub fn no_mission(id: &str) -> String {
+    format!(
+        "`atelier new` refused; nothing changed.\nNo mission {id} is in this checkout. `atelier new --mission \"<title>\"` creates one.\n"
+    )
+}
+
+fn unknown(id: &str) -> String {
+    format!("  {id}: no item or mission has this ID in this checkout or on a branch\n")
+}
+
+pub fn set_unknown(id: &str) -> String {
+    format!(
+        "`atelier set {id}` refused; nothing changed.\n{}",
+        unknown(id)
+    )
+}
+
+pub fn item_only(id: &str, flags: &[&str]) -> String {
+    format!(
+        "`atelier set {id}` refused; nothing changed.\n{id} is a mission, and {} only an item has. A mission's fields are --title and --labels.\n",
+        flags.join(", ")
+    )
+}
+
+pub fn not_planned(id: &str, status: Status) -> String {
+    format!(
+        "`atelier set {id}` refused; nothing changed.\n{id} is {}, and its record no longer changes.\n",
+        status_name(status)
+    )
+}
+
+pub fn set_started(id: &str, status: Status) -> String {
+    format!(
+        "`atelier set {id}` refused; nothing changed.\n{id} is {}: it is started, and its record now changes only on branch {id}, by its implementer.\n",
+        status_name(status)
+    )
+}
+
+pub fn ready_refused(unknown_ids: &[&str], refused: &[(&str, Status)]) -> String {
+    let mut text = "`atelier ready` refused; nothing changed.\n".to_string();
+    for id in unknown_ids {
+        text += &unknown(id);
+    }
+    for (id, status) in refused {
+        text += &format!(
+            "  {id}: it is {}, and `atelier ready` readies a draft\n",
+            status_name(*status)
+        );
+    }
+    text + "Run it again with only the drafts to make ready.\n"
+}
+
+pub fn readied(ids: &[&str], by: &str) -> String {
+    format!("Made ready, as {by} said: {}.\n", ids.join(", "))
+}
+
+/// A `start` refused because `ready`, the planning it needs, is in the
+/// base's checkout and not committed. `at` is that checkout when it is not
+/// the caller's; `paths` its uncommitted planning.
+pub fn not_committed_ready(
+    id: &str,
+    ready: &[String],
+    base: &str,
+    at: Option<&Path>,
+    paths: &[String],
+) -> String {
+    let checkout = match at {
+        Some(path) => format!("the checkout of {base} at {}", path.display()),
+        None => "this checkout".into(),
+    };
+    let is = if ready.len() > 1 { "are" } else { "is" };
+    format!(
+        "`atelier start {id}` refused; nothing changed.\n{} {is} ready in {checkout}, but not in {base}'s last commit, which is what `atelier start` reads: the change is not committed yet.\nCommit the planning with: {}\nThen: atelier start {id}\n",
+        ready.join(" and "),
+        commit_line(at, paths, "Plan")
+    )
 }
 
 pub fn taken_over(id: &str, before: Option<&Thread>) -> String {
