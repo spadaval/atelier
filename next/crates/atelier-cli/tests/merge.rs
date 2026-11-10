@@ -401,6 +401,13 @@ fn merge_judges_the_committed_item_not_the_checkouts() {
         run.stderr
     );
     assert_eq!(state(&root), before);
+    // Status judges the same commit, and says the same.
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    let said = status.contains("(changed: this item's Goal)\n");
+    assert!(
+        said && status.ends_with("Then: atelier submit\n"),
+        "{status}"
+    );
 }
 
 #[test]
@@ -1006,13 +1013,16 @@ fn an_untracked_file_in_the_items_directory_stops_the_merge() {
     fs::create_dir_all(root.join(REVIEWS)).unwrap();
     fs::write(root.join(REVIEWS).join("1-aaaa.md"), UNDECIDED).unwrap();
     let before = state(&root);
-    let run = merge(&root, "t1", &["--trivial", "a typo"]);
-    assert_eq!(run.code, 1);
-    assert!(
-        run.stderr
-            .contains(&format!("(these are not: {REVIEWS}/1-aaaa.md)\n")),
-        "{}",
-        run.stderr
-    );
+    let refused = |run: Run| {
+        assert_eq!(run.code, 1);
+        let named = format!("(these are not: {REVIEWS}/1-aaaa.md)\n");
+        assert!(run.stderr.contains(&named), "{}", run.stderr);
+    };
+    refused(merge(&root, "t1", &["--trivial", "a typo"]));
     assert_eq!(state(&root), before);
+    // Ignored, it still counts.
+    let exclude = git(&root, &["rev-parse", "--git-path", "info/exclude"]);
+    fs::write(root.join(exclude), format!("{REVIEWS}/\n")).unwrap();
+    refused(merge(&root, "t1", &["--trivial", "a typo"]));
+    assert_eq!(field(&root, "main", "status"), "ready");
 }

@@ -126,6 +126,7 @@ impl Repo {
                 Some(SinceApproval {
                     changed: git::changed(&self.root, commit, head)?,
                     reviewed: self.reader.item(commit, &record.item.id)?,
+                    head: self.reader.item(head, &record.item.id)?,
                 })
             }
         };

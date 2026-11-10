@@ -152,6 +152,9 @@ pub struct SinceApproval {
     pub changed: Vec<String>,
     /// The item's record at the reviewed commit, if it had one.
     pub reviewed: Option<ItemDir>,
+    /// The item's record at the head, which is what merges, whatever the
+    /// checkout holds.
+    pub head: Option<ItemDir>,
 }
 
 /// The review whose verdict approved the item: one of the latest round's
@@ -462,8 +465,8 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
 
 /// Whether the approval still covers the head: since the commit it
 /// reviewed, nothing changed outside the item's own directory, and the
-/// item's requirements are as it read them. A Report, a response or a
-/// review file never makes it stale.
+/// item's requirements at the head are as it read them. A Report, a
+/// response or a review file never makes it stale.
 fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<Condition> {
     let own = format!(".atelier/items/{}/", item.item.id);
     let mut changed: Vec<String> = since
@@ -474,7 +477,8 @@ fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<C
         .collect();
     for heading in REQUIREMENTS {
         let before = since.reviewed.as_ref().and_then(|r| r.section(heading));
-        if before != item.section(heading) {
+        let now = since.head.as_ref().and_then(|r| r.section(heading));
+        if before != now {
             changed.push(format!("this item's {heading}"));
         }
     }

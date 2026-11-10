@@ -281,19 +281,9 @@ pub fn uncommitted(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// The files under `dir` that Git does not track and does not ignore.
+/// The files under `dir` that Git does not track, ignored or not.
 pub fn untracked(repo: &Path, dir: &str) -> Result<Vec<String>> {
-    let listed = listing(
-        repo,
-        &[
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            dir,
-        ],
-    )?;
+    let listed = listing(repo, &["ls-files", "--others", "-z", "--", dir])?;
     Ok(names(&listed))
 }
 
