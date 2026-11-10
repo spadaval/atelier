@@ -74,7 +74,7 @@ def item(thread, ordinal, kind, when, **payload):
     return (thread, f"{thread}-{ordinal}", ordinal, kind, "completed", json.dumps({"startedAt": when, **payload}))
 
 
-def build_db(path):
+def build_db(path, record_commit):
     db = sqlite3.connect(path)
     db.executescript("""
         CREATE TABLE projection_projects (project_id TEXT, workspace_root TEXT);
@@ -87,7 +87,8 @@ def build_db(path):
     for tid, title, branch, project in (("t1", "Implement demo-aaaa", "main", "p1"), ("t2", "Look around", "main", "p1"),
                                         ("t3", "Codex review, see demo-bbbb", "task/demo-aaaa", "p1"), ("t4", "Status", "main", "p1"),
                                         ("t5", "Work on demo-bbbb", "main", "p1"), ("t6", "Build demo-eeee", "main", "p1"),
-                                        ("t7", "demo-aaaa elsewhere", "main", "p2"), ("t8", "Build demo-ffff", "main", "p1")):
+                                        ("t7", "demo-aaaa elsewhere", "main", "p2"), ("t8", "Build demo-ffff", "main", "p1"),
+                                        ("t9", "Implement", "main", "p1")):
         db.execute("INSERT INTO orchestration_v2_projection_threads VALUES (?, ?, ?, ?, ?)",
                    (tid, project, title, t0, json.dumps({"branch": branch})))
     db.execute("INSERT INTO orchestration_v2_projection_provider_threads VALUES ('t1', ?), ('t3', ?), ('t6', ?)",
@@ -96,7 +97,8 @@ def build_db(path):
                 json.dumps({"nativeThreadRef": {"driver": "claudeAgent", "nativeId": "s6"}})))
     rows = [
         item("t1", 0, "user_message", t0, text="Act as the implementation sub-agent for demo-aaaa"),
-        item("t1", 1, "command_execution", t0, input="atelier start demo-aaaa", output="Branch: demo-aaaa"),
+        item("t1", 1, "command_execution", t0, input="atelier start demo-aaaa", output="Branch: demo-aaaa",
+             nativeItemRef={"nativeId": "u1"}),
         item("t1", 2, "command_execution", t0, input="cat .atelier/issues/demo-aaaa.md", output=""),
         item("t1", 3, "dynamic_tool", t0, toolName="Read"),
         item("t1", 4, "file_change", t0, fileName="/w/demo/.atelier/issues/demo-aaaa.md"),
@@ -107,13 +109,22 @@ def build_db(path):
         item("t1", 9, "subagent", t0, childThreadId="t2", nativeItemRef={"driver": "claudeAgent", "nativeId": "agentx"}),
         item("t1", 10, "command_execution", LATE, input="atelier land", output="Error: late"),
         item("t2", 0, "user_message", t0, text="Review demo-aaaa"),
-        item("t2", 1, "command_execution", t0, input="git status", output=""),
+        item("t2", 1, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record",
+             nativeItemRef={"nativeId": "u3"}),
         item("t3", 1, "command_execution", t0, input="/bin/bash -lc 'atelier review list demo-aaaa'", output=""),
         item("t4", 1, "command_execution", t0, input="atelier status", output="ok"),
         item("t5", 1, "command_execution", t0, input="ls", output=""),
         item("t6", 1, "command_execution", t0, input="ls", output=""),
         item("t7", 1, "command_execution", t0, input="atelier check", output="Error: elsewhere"),
-        item("t8", 1, "command_execution", t0, input="ls", output=""),
+        item("t8", 1, "command_execution", t0, input="ls", output=""),  # a shell-only implementer
+        item("t8", 2, "dynamic_tool", t0, toolName="Read"),
+        item("t8", 3, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record"),
+        item("t8", 4, "command_execution", t0, input="git status", output=""),
+        item("t8", 5, "command_execution", t0, input="echo hi > src/f.ts", output=""),
+        item("t9", 0, "user_message", t0, text="Act as the implementation sub-agent for demo-ffff"),
+        item("t9", 1, "command_execution", t0, input="sed -i 's/a/b/' src/b.ts", output=""),  # writes first
+        item("t9", 2, "command_execution", t0, input="cargo test", output=""),
+        item("t9", 3, "file_change", t0, fileName="/w/demo/src/c.ts"),
     ]
     db.executemany("INSERT INTO orchestration_v2_projection_turn_items VALUES (?, ?, ?, ?, ?, ?)", rows)
     db.commit()
@@ -137,7 +148,7 @@ def build_transcripts(snap):
     (session / "s6.jsonl").write_text(claude_line("m5", "claude-fable-5-2", final, []))  # no list price
     (session / "s1/subagents/agent-agentx.jsonl").write_text(claude_line(
         "m4", "claude-sonnet-5-5", {"input_tokens": 100_000, "output_tokens": 1_000_000},
-        [{"type": "tool_use", "id": "u3", "name": "Bash", "input": {"command": "git status"}}]))
+        [{"type": "tool_use", "id": "u3", "name": "Bash", "input": {"command": "git commit -m Record"}}]))
     codex = snap / "codex-sessions/2026/11/08"
     codex.mkdir(parents=True)
 
@@ -160,10 +171,10 @@ class Fixture(unittest.TestCase):
         root = Path(cls.tmp.name)
         cls.snap = root / "snapshot"
         (cls.snap / "t3").mkdir(parents=True)
-        build_db(cls.snap / threads.DB_PATH)
-        build_transcripts(cls.snap)
         cls.repo = root / "projects/demo"
         cls.commit = build_repo(cls.repo)
+        build_db(cls.snap / threads.DB_PATH, git(cls.repo, "log", "--format=%H", "--grep", "Record demo-bbbb"))
+        build_transcripts(cls.snap)
         cls.window = snapshot.Window(snapshot.WINDOW_START, CUTOFF)
         cls.manifest = root / "manifest.json"
         cls.manifest.write_text(json.dumps({"cutoff": CUTOFF, "repositories": {"demo": {"commit": cls.commit}}}))
@@ -179,16 +190,16 @@ class Fixture(unittest.TestCase):
 class Measures(Fixture):
     def test_items_and_ties(self):
         self.assertEqual(self.result["items"], {"done_in_window": 4, "merged": 3, "merged_with_threads": 3})
-        self.assertEqual(self.result["threads"], {"in_repository": 7, "tied_to_merged_item": 5, "untied": 1,
+        self.assertEqual(self.result["threads"], {"in_repository": 8, "tied_to_merged_item": 6, "untied": 1,
                                                   "tied_to_other_item": 1,
-                                                  "tied_by": {"branch": 1, "title": 3, "first_message": 1}})
+                                                  "tied_by": {"branch": 1, "title": 3, "first_message": 2}})
 
     def test_process_share(self):
         share = self.result["process_share"]
-        self.assertEqual((share["shell_commands"], share["process_commands"], share["share"]), (9, 5, 0.5556))
-        # (opus 24.0 * 1 of 2 calls + sonnet 15.3 * 0 + sol 4.4 * 1 of 2 calls) / 43.7
-        self.assertEqual(share["token_cost_share"], 0.3249)
-        self.assertEqual(share["token_coverage"], {"threads_with_transcript": 4, "threads_counted": 5})
+        self.assertEqual((share["shell_commands"], share["process_commands"], share["share"]), (14, 7, 0.5))  # t2's and t8's commits of records count
+        # (opus 24.0 * 1 of 2 calls + sonnet 15.3 * 1 of 1, judged by T3 with its output + sol 4.4 * 1 of 2 calls) / 43.7
+        self.assertEqual(share["token_cost_share"], 0.6751)
+        self.assertEqual(share["token_coverage"], {"threads_with_transcript": 4, "threads_counted": 6})
 
     def test_confusion(self):
         self.assertEqual(self.result["confusion"], {"atelier_calls": 5, "refused_or_error": 1, "help_lookups": 1,
@@ -196,15 +207,16 @@ class Measures(Fixture):
 
     def test_tokens_per_merged_item(self):
         tokens = self.result["tokens_per_merged_item"]
-        # demo-eeee's thread used a model with no list price; demo-ffff's thread has no transcript
+        # demo-eeee's thread used a model with no list price; demo-ffff's threads have no transcript
         self.assertEqual(tokens["per_item_usd"], {"demo-aaaa": 43.7})
         self.assertEqual(tokens["threads_with_unpriced_model"], 1)
         self.assertEqual((tokens["items_fully_covered"], tokens["median_usd"], tokens["mean_usd"]), (1, 43.7, 43.7))
 
     def test_calls_before_first_edit(self):
-        # start, cat, Read and the record edit come before the first product edit
+        # t1: start, cat, Read and the record edit come first (4, 2 shell); t8 writes by shell after 4 calls (3 shell);
+        # t9 writes by `sed -i` first (0)
         self.assertEqual(self.result["calls_before_first_edit"],
-                         {"implementer_threads": 1, "median_tool_calls": 4.0, "median_shell_commands": 2.0})
+                         {"implementer_threads": 3, "median_tool_calls": 4.0, "median_shell_commands": 2.0})
 
     def test_rework(self):
         rework = self.result["rework"]
@@ -281,10 +293,32 @@ class Inputs(Fixture):
 
 class Commands(unittest.TestCase):
     def test_atelier_calls(self):
-        self.assertTrue(commands.atelier_calls("cd x && atelier -q issue show a | head"))
-        self.assertTrue(commands.atelier_calls("/bin/bash -lc 'atelier check'"))
-        for not_a_call in ("target/debug/atelier check", "grep atelier src", "cargo install --path crates/atelier-cli"):
+        for command, calls in (("cd x && atelier -q issue show a | head", [["-q", "issue", "show", "a"]]),
+                               ("/bin/bash -lc 'cd x && atelier check'", [["check"]]),
+                               ("FOO=1 nice -n 19 ionice -c3 timeout 60s atelier land", [["land"]]),
+                               ("cargo test && atelier land; git status", [["land"]]),
+                               ("atelier frobnicate", [["frobnicate"]]),
+                               ('for c in a b; do atelier $c --help; done', [["$c", "--help"]]),
+                               ('id="$(atelier issue create -q x)"; if atelier check; then atelier land; fi',
+                                [["issue", "create", "-q", "x"], ["check"], ["land"]]),
+                               ("cat <<'EOF' > notes.md\natelier status\nEOF\natelier work ready", [["work", "ready"]])):
+            self.assertEqual(commands.atelier_calls(command), calls, command)
+        for not_a_call in ("target/debug/atelier check", "grep atelier src", "cargo install --path crates/atelier-cli",
+                           'echo "atelier status"', "grep -n 'atelier merge --help' f", 'echo "a; atelier status"',
+                           "A=$(command -v atelier)"):
             self.assertFalse(commands.atelier_calls(not_a_call), not_a_call)
+        self.assertFalse(commands.is_help("grep -n 'atelier merge --help' f"))
+
+    def test_shell_writes(self):
+        self.assertEqual(commands.shell_writes("sed -i 's/a/b/' src/lib.rs && perl -pi -e s/x/y/ a.rs"), ["src/lib.rs", "a.rs"])
+        self.assertEqual(commands.shell_writes("cargo test 2>&1 | tee /tmp/x.log > out/r.md"), ["out/r.md", "/tmp/x.log"])
+        self.assertEqual(commands.shell_writes("python3 - <<'EOF'\nopen('src/a.py', 'w')\nEOF"), ["src/a.py"])
+        self.assertEqual(commands.shell_writes("apply_patch <<'EOF'\n*** Update File: src/b.rs\nEOF"), ["src/b.rs"])
+        self.assertFalse(commands.writes_product("cargo test > /dev/null 2>&1; echo x > .atelier/issues/a.md"))
+        for not_a_product_write in ("cargo test > out.txt", 'cp a "$f"', "cp a.rs target/debug/b.rs 2>/dev/null",
+                                    "echo x > ~/scratch/a.py", "tee /home/u/tmp-review/a.rs < x"):
+            self.assertFalse(commands.writes_product(not_a_product_write), not_a_product_write)
+        self.assertTrue(commands.writes_product("cp /tmp/new.rs crates/x/src/lib.rs"))
 
     def test_help_and_refusal(self):
         self.assertTrue(commands.is_help("atelier review finding --help"))

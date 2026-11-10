@@ -43,6 +43,7 @@ class Call:
     command: str = ""
     output: str = ""
     path: str = ""
+    native_id: str = ""  # the provider's id for the call, which a Claude transcript's tool use carries
 
 
 def open_db(snapshot):
@@ -110,12 +111,13 @@ def calls(db, thread_id, cutoff):
         started = item.get("startedAt") or item.get("updatedAt")
         if not cutoff(started):
             continue
+        native_id = (item.get("nativeItemRef") or {}).get("nativeId") or ""
         if kind == "command_execution":
-            yield Call("shell", started, item.get("input") or "", item.get("output") or "")
+            yield Call("shell", started, item.get("input") or "", item.get("output") or "", native_id=native_id)
         elif kind == "file_change":
-            yield Call("edit", started, path=item.get("fileName") or "")
+            yield Call("edit", started, path=item.get("fileName") or "", native_id=native_id)
         else:
-            yield Call("tool", started)
+            yield Call("tool", started, native_id=native_id)
 
 
 def tie(thread, item_ids):

@@ -17,7 +17,7 @@ nice -n 19 ionice -c3 python3 scripts/scorecard/counted.py \
 sha256sum ~/.cache/scorecard-rerun/counted.json docs/architecture/quality/scorecard-baseline/counted.json
 ```
 
-It takes about 30 seconds. Leave out `--out` to overwrite the committed files. The two hashes
+It takes about a minute. Leave out `--out` to overwrite the committed files. The two hashes
 match when the rerun reproduces the baseline. Then check the snapshot is unchanged:
 
 ```sh
@@ -91,7 +91,7 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 | `transcripts.py` | the transcripts | `index()`: transcript files by thread key; `requests()`: each model response's tokens, list price and shell commands; `PRICES` |
 | `records.py` | `.atelier/issues/` and history at the manifest commit | `items()`, `merged()`, `id_pattern()` |
 | `gitreader.py` | history up to the manifest commit | `rework()`, `record_only()`, `line_count()` |
-| `commands.py` | a command, its output or an edited path | `atelier_calls()`, `is_process()`, `is_help()`, `refused()`, `is_product_edit()` |
+| `commands.py` | a command, its output or an edited path | `simple_commands()`, `atelier_calls()`, `is_process()`, `is_help()`, `refused()`, `shell_writes()`, `is_product_edit()` |
 | `counted.py` | the readers | the seven measures, `counted.json` and `counted.md` |
 | `test_scorecard.py` | a small database, transcripts and Git repository it builds | each measure's arithmetic |
 
@@ -105,11 +105,18 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 - **Thread tied to an item**: the first known item ID in the thread's branch, else in its title,
   else in its first message. Every T3 thread counts, including the subagents Claude's Agent
   tool started, each tied by its own prompt.
-- **Process share**: over threads tied to a merged item, the share of shell commands that run
-  atelier (the installed binary at command position) or name a path under `.atelier/`. A commit
-  of records counts when the command names them. The token form gives each model response's
-  list-price cost to its tool calls in equal parts and sums the parts that went to such commands.
-- **Confusion**: over every thread of the repository, shell commands in the window that run
+- **Shell commands** are parsed the way a shell splits them (`commands.simple_commands`): quotes,
+  heredoc bodies, `&&`, `;`, pipes, `$(...)`, keywords such as `do` and `then`, wrappers such as
+  `env`, `nice` and `timeout`, and `bash -c` scripts. A call of atelier is a simple command whose
+  first word is `atelier` (the installed binary, any subcommand); a mention in quoted text or a
+  heredoc is not one.
+- **Process share**: over threads tied to a merged item, the share of shell commands that call
+  atelier, name a path under `.atelier/`, or ran `git commit` and printed the hash of a commit on
+  the manifest commit's history that changes only `.atelier/`. A quiet commit (`-q`) prints no
+  hash, so a bare one of records staged earlier is not recognised. The token form gives each model
+  response's list-price cost to its tool calls in equal parts and sums the parts that went to
+  process commands, judging a call T3 recorded as T3's copy of it, with its output, judges it.
+- **Confusion**: over every thread of the repository, shell commands in the window that call
   atelier, and of those, the ones whose output has one of atelier's refusal or error lines
   (`<command>: refused`, `Error: `, clap's `error: unexpected argument` and kin) or that ask for
   help (`--help`, `-h`, `atelier help`, `atelier man`), per 100.
@@ -118,8 +125,10 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
   priced model. Coverage is threads with a transcript out of threads counted.
 - **Calls before first edit**: in each thread tied to a merged item whose role is
   `implementation` or unlabelled (no "Act as the ... sub-agent" opening) and that edited a file,
-  the tool calls before its first edit (a T3 `file_change`) outside `.atelier/` and scratch
-  directories. Shell commands alone are reported beside it.
+  the tool calls before its first edit outside `.atelier/` and scratch, build and harness
+  directories. An edit is a T3 `file_change`, or a shell command that writes a source,
+  configuration or documentation file by redirection, `tee`, `sed -i`, `perl -i`, `cp`, `mv`, a
+  patch or Python's `open(..., 'w')`. Shell commands alone are reported beside it.
 - **Rework**: the first-parent history replayed line by line, each line dated when its commit
   reached the base. Of lines written from the window start to 14 days before the cutoff, the
   share deleted within 14 days. `.atelier/` and lock files are left out.
