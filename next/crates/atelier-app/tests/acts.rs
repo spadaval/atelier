@@ -1,9 +1,9 @@
 use atelier_app::acts::{
-    check, check_mission, next, row, Act, Condition, Facts, Refusal, Role, TABLE,
+    check, check_mission, next, row, Act, Condition, Facts, MissionFacts, Refusal, Role, TABLE,
 };
-use atelier_app::{carried, entry};
+use atelier_app::{carried, carried_plan, entry};
 use atelier_core::{MissionStatus, Status, Thread};
-use atelier_records::{parse_item, parse_review, ItemDir, ReviewFile};
+use atelier_records::{parse_item, parse_mission, parse_review, ItemDir, MissionDir, ReviewFile};
 use std::path::PathBuf;
 
 const ALL: [Status; 8] = [
@@ -54,6 +54,22 @@ fn record(status: Status, implementers: &[&str], body: &str) -> ItemDir {
     }
 }
 
+/// A mission that is `status`, its Result written or not, with `reviews`.
+fn mission(status: MissionStatus, result: &str, reviews: &[ReviewFile]) -> MissionDir {
+    let status = status_text(status.status());
+    let text = format!(
+        "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: M\nstatus: {status}\n\
+         labels: []\nlead: null\nready: null\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
+         ## Outcome\no\n\n## Result\n{result}"
+    );
+    let path = PathBuf::from("demo-m1ss/mission.md");
+    MissionDir {
+        mission: parse_mission(&path, &text).unwrap(),
+        path,
+        reviews: reviews.to_vec(),
+    }
+}
+
 fn thread(id: &str) -> Thread {
     Thread(id.to_string())
 }
@@ -96,7 +112,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 10] = [
+const SPECIFIED: [(Act, &[Status], Option<Status>); 12] = [
     (Act::Ready, &[Status::Draft], Some(Status::Ready)),
     (Act::Start, &[Status::Ready], Some(Status::Building)),
     // Created by the act, so it runs from no status at all.
@@ -129,19 +145,60 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 10] = [
     ),
     (Act::Merge, &[Status::Approved], Some(Status::Done)),
     (Act::MergeTrivial, &[Status::Building], Some(Status::Done)),
+    (
+        Act::Drop,
+        &[
+            Status::Draft,
+            Status::Ready,
+            Status::Building,
+            Status::InReview,
+            Status::ChangesRequested,
+            Status::Approved,
+        ],
+        Some(Status::Dropped),
+    ),
+    (
+        Act::Close,
+        &[Status::Draft, Status::Ready],
+        Some(Status::Done),
+    ),
+];
+
+/// The acts on a mission, from the same table.
+const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 6] = [
+    // `lead` binds its lead to a ready mission, and its status stays.
+    (Act::Lead, &[Status::Ready], None),
+    (Act::ReadyMission, &[Status::Draft], Some(Status::Ready)),
+    (
+        Act::Drop,
+        &[Status::Draft, Status::Ready],
+        Some(Status::Dropped),
+    ),
+    (Act::CloseMission, &[Status::Ready], Some(Status::Done)),
+    // A plan review's verdict changes no status, from any.
+    (
+        Act::PlanVerdictChanges,
+        &[Status::Draft, Status::Ready, Status::Done, Status::Dropped],
+        None,
+    ),
+    (
+        Act::PlanVerdictApprove,
+        &[Status::Draft, Status::Ready, Status::Done, Status::Dropped],
+        None,
+    ),
 ];
 
 #[test]
 fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
-    // Each item's act, and the mission's `ready` and `lead`.
-    assert_eq!(TABLE.len(), SPECIFIED.len() + 2);
+    // Each item's act, and each mission's, `lead` among them; `drop` is both.
+    assert_eq!(TABLE.len(), SPECIFIED.len() + MISSION_SPECIFIED.len() - 1);
     for (act, from, to) in SPECIFIED {
         for status in ALL {
             // Every condition holds: the caller holds the item, except a
             // reviewer, who never implemented it and, for a verdict, holds
             // the round's review, which has an open fix-now finding for
             // `changes` and none for `approve`; a take-over has its branch
-            // and a start has none.
+            // and a start or a close has none.
             let findings = if act == Act::VerdictChanges {
                 FIX_NOW
             } else {
@@ -165,7 +222,7 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
             });
             let facts = Facts {
                 item: &item,
-                branch: act != Act::Start,
+                branch: !matches!(act, Act::Start | Act::Close),
                 blockers: &[],
                 mission: None,
                 caller: &caller,
@@ -188,42 +245,198 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
         }
         assert_eq!(row(act).from, from);
     }
-    // A mission's `ready`, from each of a mission's statuses.
-    for status in MissionStatus::ALL {
-        match check_mission(Act::ReadyMission, status) {
-            Ok(set) => {
-                assert_eq!(status, MissionStatus::Draft);
-                assert_eq!(set, Some(MissionStatus::Ready));
+    // Each mission's act, from each of a mission's statuses, with every
+    // condition holding: its items done or dropped, its Result written, and
+    // the caller's plan review holding an open fix-now finding for
+    // `changes` and none for `approve`.
+    let items = [
+        ("demo-d0ne".to_string(), Status::Done),
+        ("demo-dr0p".to_string(), Status::Dropped),
+    ];
+    for (act, from, to) in MISSION_SPECIFIED {
+        for status in MissionStatus::ALL {
+            let findings = if act == Act::PlanVerdictChanges {
+                FIX_NOW
+            } else {
+                ""
+            };
+            let file = review("1-aaaa", &["r1"], "null", findings);
+            let dir = mission(status, "Done.\n", std::slice::from_ref(&file));
+            let facts = MissionFacts {
+                mission: &dir,
+                items: &items,
+                review: Some(&file),
+            };
+            match check_mission(act, &facts) {
+                Ok(set) => {
+                    assert!(from.contains(&status.status()), "{act:?} from {status:?}");
+                    assert_eq!(
+                        set.map(MissionStatus::status),
+                        to,
+                        "{act:?} from {status:?}"
+                    );
+                }
+                Err(Refusal::From {
+                    act: refused,
+                    status: at,
+                }) => {
+                    assert!(!from.contains(&status.status()), "{act:?} from {status:?}");
+                    assert_eq!((refused, at), (act, status.status()));
+                }
+                Err(other) => panic!("{act:?} from {status:?}: {other:?}"),
             }
-            Err(Refusal::From { act, status: at }) => {
-                assert_ne!(status, MissionStatus::Draft);
-                assert_eq!((act, at), (Act::ReadyMission, status.status()));
-            }
-            Err(other) => panic!("ready from {status:?}: {other:?}"),
         }
+        // Drop's row also holds an item's started statuses.
+        assert!(from.iter().all(|status| row(act).from.contains(status)));
     }
     let ready = row(Act::ReadyMission);
     assert_eq!(
         (ready.role, ready.from, ready.to),
         (Role::Planner, &[Status::Draft][..], Some(Status::Ready))
     );
-    // `lead`, from each of a mission's statuses: only a ready mission, and
-    // its status stays.
-    for status in MissionStatus::ALL {
-        match check_mission(Act::Lead, status) {
-            Ok(set) => assert_eq!((status, set), (MissionStatus::Ready, None)),
-            Err(Refusal::From { act, status: at }) => {
-                assert_ne!(status, MissionStatus::Ready);
-                assert_eq!((act, at), (Act::Lead, status.status()));
-            }
-            Err(other) => panic!("lead from {status:?}: {other:?}"),
-        }
-    }
     let lead = row(Act::Lead);
     assert_eq!(
         (lead.role, lead.binds, lead.from, lead.to),
         (Role::Lead, true, &[Status::Ready][..], None)
     );
+}
+
+#[test]
+fn closing_a_mission_needs_each_item_done_or_dropped_and_its_result_written() {
+    let dir = mission(MissionStatus::Ready, "\n### Notes\n\n", &[]);
+    let items = [
+        ("demo-d0ne".to_string(), Status::Done),
+        ("demo-dr4f".to_string(), Status::Draft),
+        ("demo-bu1d".to_string(), Status::Building),
+        ("demo-dr0p".to_string(), Status::Dropped),
+    ];
+    let facts = MissionFacts {
+        mission: &dir,
+        items: &items,
+        review: None,
+    };
+    let Err(Refusal::Unmet(unmet)) = check_mission(Act::CloseMission, &facts) else {
+        panic!("closed a mission with open items");
+    };
+    assert_eq!(
+        unmet,
+        [
+            Condition::ItemOpen {
+                id: "demo-dr4f".into(),
+                status: Status::Draft
+            },
+            Condition::ItemOpen {
+                id: "demo-bu1d".into(),
+                status: Status::Building
+            },
+            Condition::NoResult,
+        ]
+    );
+    // A mission with no items closes once its Result is written.
+    let written = mission(MissionStatus::Ready, "It shipped.\n", &[]);
+    let facts = MissionFacts {
+        mission: &written,
+        items: &[],
+        review: None,
+    };
+    assert_eq!(
+        check_mission(Act::CloseMission, &facts).unwrap(),
+        Some(MissionStatus::Done)
+    );
+}
+
+#[test]
+fn closing_an_item_needs_no_branch_named_for_it() {
+    let item = record(Status::Ready, &[], DONE);
+    let caller = thread("p1");
+    let facts = facts(&item, &caller);
+    match check(Act::Close, &facts) {
+        Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [Condition::BranchExists]),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
+    // Round 1: two blind reviews, one with an open fix-now finding. Round
+    // 2's file carries it.
+    let raised = review("1-aaaa", &["r1"], "changes", FIX_NOW);
+    let blind = review("1-bbbb", &["r2"], "null", "");
+    let dir = mission(MissionStatus::Draft, "", &[raised.clone(), blind.clone()]);
+    let verdict = |dir: &MissionDir, file: &ReviewFile, act| {
+        let facts = MissionFacts {
+            mission: dir,
+            items: &[],
+            review: Some(file),
+        };
+        check_mission(act, &facts)
+    };
+    // The blind reviewer approves its own clean file, whatever the other holds.
+    assert!(verdict(&dir, &blind, Act::PlanVerdictApprove).is_ok());
+    assert!(matches!(
+        verdict(&dir, &blind, Act::PlanVerdictChanges),
+        Err(Refusal::Unmet(unmet)) if unmet == [Condition::NoOpenFinding]
+    ));
+    // Round 2 carries round 1's open finding, and opens until it says it
+    // was fixed.
+    assert_eq!(
+        carried_plan(&dir, 2)
+            .unwrap()
+            .iter()
+            .map(|c| c.finding.name.to_string())
+            .collect::<Vec<_>>(),
+        ["1-aaaa.1"]
+    );
+    let missing = review("2-cccc", &["r3"], "null", "");
+    let dir2 = mission(
+        MissionStatus::Draft,
+        "",
+        &[raised.clone(), blind.clone(), missing.clone()],
+    );
+    assert!(matches!(
+        verdict(&dir2, &missing, Act::PlanVerdictApprove),
+        Err(Refusal::Unmet(unmet)) if unmet.len() == 1
+    ));
+    let fixed = review(
+        "2-cccc",
+        &["r3"],
+        "null",
+        "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: fixed\n",
+    );
+    let dir2 = mission(
+        MissionStatus::Draft,
+        "",
+        &[raised.clone(), blind, fixed.clone()],
+    );
+    assert!(verdict(&dir2, &fixed, Act::PlanVerdictApprove).is_ok());
+    // A blind file of the same round that carries the earlier finding does
+    // not close it for a file that left it out.
+    let carrier = review(
+        "2-eeee",
+        &["r5"],
+        "changes",
+        "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: kept\n",
+    );
+    let both = mission(
+        MissionStatus::Draft,
+        "",
+        &[raised.clone(), missing.clone(), carrier],
+    );
+    assert!(matches!(
+        verdict(&both, &missing, Act::PlanVerdictApprove),
+        Err(Refusal::Unmet(unmet)) if unmet == [Condition::OpenFinding {
+            finding: "1-aaaa.1".parse().unwrap(),
+            title: "Wrong".into(),
+        }]
+    ));
+    // A file that does not validate is refused for its problem.
+    let mut wrong_round = review("2-dddd", &["r4"], "null", "");
+    wrong_round.review.round = 3;
+    let dir3 = mission(MissionStatus::Draft, "", std::slice::from_ref(&wrong_round));
+    assert!(matches!(
+        verdict(&dir3, &wrong_round, Act::PlanVerdictApprove),
+        Err(Refusal::Record(problem)) if problem.field == "round"
+    ));
 }
 
 #[test]
@@ -261,6 +474,29 @@ fn start_needs_the_items_mission_ready_on_the_base() {
         }
         // `status` lists what `start` checks.
         assert_eq!(entry(&facts).unwrap().unmet, expected);
+    }
+}
+
+#[test]
+fn taking_over_an_item_needs_its_mission_not_dropped() {
+    let item = record(Status::Building, &["t1"], DONE);
+    let caller = thread("t2");
+    for status in [Status::Ready, Status::Done, Status::Dropped] {
+        let facts = Facts {
+            mission: Some(("demo-m1ss".to_string(), Some(status))),
+            ..facts(&item, &caller)
+        };
+        let checked = check(Act::TakeOver, &facts);
+        match status {
+            Status::Dropped => assert!(matches!(
+                checked,
+                Err(Refusal::Unmet(unmet)) if unmet == [Condition::MissionNotReady {
+                    id: "demo-m1ss".into(),
+                    status: Some(Status::Dropped),
+                }]
+            )),
+            _ => assert!(checked.is_ok(), "{status:?}: {checked:?}"),
+        }
     }
 }
 

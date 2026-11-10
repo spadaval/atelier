@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: the gardener is a role; the mission builds `atelier log` and puts the arithmetic in the procedure"
+last_changed: "2026-11-10: amended at Sumeet's direction: a proposal is a root cause with its trips as evidence, and something broken today is a bug, not a gardener entry"
 ---
 
 # Why
@@ -12,6 +12,14 @@ and retry loops and misses slow costs, such as an agent reading 40 files
 before it can edit. Its one digest, atelier-j86z, is ten entries about the
 tool and none about a codebase, and it waits in a queue where 6 of 63 items
 have been answered.
+
+It also works like a firefighter. Its unit is the trip, and it asks Sumeet
+for a yes or no on each one, which gives every incident the same weight. A
+trip is a data point. Read by cause, the ten entries of atelier-j86z are four
+causes and one stray: records that live on the base while agents read
+elsewhere (two entries), docs and help that lag the code (three), checks that
+run in the wrong place (three), and an error the tool hides (one). Four of
+the ten are help or doc fixes that needed no decision.
 
 After the cutover the acts that move an item leave their mark in its records,
 and so in Git: a status, a holder, a verdict, an answered question. The
@@ -25,14 +33,17 @@ from `atelier list`, and from a readiness checklist for the repository, and
 its procedure says which numbers to take from them. It reads transcripts
 only to explain a number that moved. It settles the deferred findings. It
 ends with one page for Sumeet: the numbers against the baseline, the worst
-spots, and at most three proposals. One run has been made in each of the
+spots, and at most three proposals, each a root cause with the trips that
+show it. One run has been made in each of the
 five repositories.
 
 # Success Criteria
 
 - one-page: a gardener run in each of the five repositories produces a report
   of one page that holds the scorecard, the worst spots under each of the
-  three codebase properties, and at most three proposals.
+  three codebase properties, and at most three proposals. Each proposal
+  names one root cause, the trips or numbers that are its evidence, and the
+  number it should move. No page asks for an answer per trip.
 - from-log: the scorecard's numbers about what happened to items, which are
   time in each status from `ready` on, rounds, roles taken over, escalations
   and the skips `log` shows, are computed from the output of `atelier log`
@@ -66,6 +77,16 @@ mission 1 and never again, and the redesign's effect stays an impression.
   agent build, test, launch and find its way. The scorecard lags and shows
   effects. A criterion stays on the checklist only while failing it shows up
   in the numbers.
+- **Causes, not incidents.** A trip is evidence for a claim about one of the
+  three properties, and is never itself the thing Sumeet is asked about. The
+  run groups its trips by cause before it writes anything. A proposal is one
+  cause; its trips are listed under it with how often each happened. A trip
+  that fits no cause and happened once is left out.
+- **Not a firefighter.** Something broken today, such as a command that
+  fails or an error that hides its reason, is a bug filed by whoever hits
+  it. It does not wait for a run, and a run does not spend its page on it.
+  The gardener looks at what the numbers and the repeated trips say about
+  the ground.
 - **Three tiers of fix.** The gardener does upkeep and sign-level fixes
   itself, reviewed like any change. It proposes new or removed checks,
   changed defaults and restructures. It never changes a rule on its own.

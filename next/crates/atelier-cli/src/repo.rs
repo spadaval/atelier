@@ -7,7 +7,7 @@ use atelier_app::acts::{approval, mission_of, Checkout, SinceApproval};
 use atelier_app::{identity, Branch, Located};
 use atelier_core::{Config, Status, Thread};
 use atelier_records::{
-    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, ReviewFile, Store,
+    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, Store,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -127,6 +127,15 @@ impl Repo {
             .collect()
     }
 
+    /// Every item in this checkout and on a local branch named for one, as
+    /// a planning command finds them (see [`Repo::locate_planned`]).
+    pub fn planned(&mut self) -> Result<Vec<Located>> {
+        let mut ids: BTreeSet<String> = self.store().ids("items")?.into_iter().collect();
+        let branches = git::branches(&self.root)?.into_iter().map(|(name, _)| name);
+        ids.extend(branches.filter(|name| validate_id(name).is_ok()));
+        ids.iter().map(|id| self.locate_planned(id)).collect()
+    }
+
     /// Every mission at the base's tip.
     pub fn missions(&mut self) -> Result<Vec<MissionDir>> {
         let ids = self.reader.mission_ids(&self.base_tip)?;
@@ -166,11 +175,6 @@ impl Repo {
             }
         };
         Ok(Links { blockers, mission })
-    }
-
-    /// The plan reviews of mission `id` at the base's tip.
-    pub fn mission_reviews(&mut self, id: &str) -> Result<Vec<ReviewFile>> {
-        Ok(self.reader.mission_reviews(&self.base_tip, id)?)
     }
 
     /// The item `id` as `commit` holds it.
@@ -236,16 +240,20 @@ pub fn git_at(root: &Path) -> Option<&Path> {
 /// The directories planning is written in.
 const PLANNING: [&str; 2] = [".atelier/missions", ".atelier/items"];
 
+/// Whether `path`, from the root, is under a directory planning is
+/// written in.
+pub fn is_planning(path: &str) -> bool {
+    PLANNING
+        .iter()
+        .any(|dir| path.starts_with(&format!("{dir}/")))
+}
+
 /// The record changes the checkout at `root` holds that no commit does:
 /// changed and new files under `.atelier/missions/` and `.atelier/items/`.
 pub fn planning(root: &Path) -> Result<Vec<String>> {
     let mut paths: Vec<String> = git::uncommitted(root)?
         .into_iter()
-        .filter(|path| {
-            PLANNING
-                .iter()
-                .any(|dir| path.starts_with(&format!("{dir}/")))
-        })
+        .filter(|path| is_planning(path))
         .collect();
     for dir in PLANNING {
         paths.extend(git::untracked(root, dir)?);
@@ -260,6 +268,10 @@ pub fn item_dir(id: &str) -> String {
 
 pub fn item_path(id: &str) -> String {
     format!(".atelier/items/{id}/item.md")
+}
+
+pub fn mission_dir(id: &str) -> String {
+    format!(".atelier/missions/{id}")
 }
 
 pub fn mission_path(id: &str) -> String {

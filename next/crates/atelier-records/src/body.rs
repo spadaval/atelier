@@ -255,10 +255,11 @@ fn check(line: &str) -> Option<(bool, String)> {
     (text.is_empty() || text.starts_with(' ')).then(|| (ticked, text.trim().to_string()))
 }
 
-/// Whether an item's `## Report` holds a line that is neither blank nor a
-/// heading. A line inside a fenced code block, such as a transcript, counts.
-pub(crate) fn report_written(body: &str) -> bool {
-    let Some(report) = section(body, 2, "Report") else {
+/// Whether `## <heading>`, an item's Report or a mission's Result, holds a
+/// line that is neither blank nor a heading. A line inside a fenced code
+/// block, such as a transcript, counts.
+pub(crate) fn written(body: &str, heading: &str) -> bool {
+    let Some(report) = section(body, 2, heading) else {
         return false;
     };
     let written = report
@@ -273,6 +274,40 @@ pub(crate) fn report_written(body: &str) -> bool {
         })
         .count();
     written > headings
+}
+
+/// Why a record was dropped: the first line under its `## <heading>`, an
+/// item's Report or a mission's Result, when that line starts `Dropped: `.
+pub(crate) fn dropped<'a>(body: &'a str, heading: &str) -> Option<&'a str> {
+    let first = section(body, 2, heading)?
+        .lines()
+        .find(|line| !line.trim().is_empty())?;
+    first.strip_prefix("Dropped: ").map(str::trim)
+}
+
+/// `body` with `text` as the first lines under its `## <heading>`, before
+/// any other text or subsection, or under that heading added at its end.
+pub fn put_first(body: &str, heading: &str, text: &str) -> String {
+    let text = text.trim();
+    let Some(content) = section(body, 2, heading) else {
+        let sep = if body.is_empty() || body.ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
+        return format!("{body}{sep}\n## {heading}\n\n{text}\n");
+    };
+    // The content is a slice of the body, starting after the heading's line.
+    let at = content.as_ptr() as usize - body.as_ptr() as usize;
+    let (head, rest) = body.split_at(at);
+    let head = if head.ends_with('\n') {
+        head.to_string()
+    } else {
+        format!("{head}\n")
+    };
+    let rest = rest.trim_start_matches('\n');
+    let sep = if rest.is_empty() { "" } else { "\n" };
+    format!("{head}\n{text}\n{sep}{rest}")
 }
 
 #[cfg(test)]
@@ -297,6 +332,7 @@ mod tests {
 
     #[test]
     fn a_report_is_written_when_it_holds_more_than_headings() {
+        let report_written = |body| written(body, "Report");
         assert!(!report_written("## Goal\ng\n"));
         assert!(!report_written(
             "## Report\n\n### Validation\n\n### Responses\n\n## Next\nx\n"
@@ -306,5 +342,42 @@ mod tests {
             "## Report\n### Validation\n```\n# a shell comment\n```\n"
         ));
         assert!(report_written("## Report\n#hashtag is text\n"));
+    }
+
+    #[test]
+    fn a_line_put_first_under_a_heading_is_read_back_as_the_drop_reason() {
+        let put = |body| put_first(body, "Report", "Dropped: not needed");
+        // Under a Report with text and a subsection, before both.
+        let full = "\n## Goal\ng\n\n## Report\n\nIt half works.\n\n### Responses\n\n- 1-aaaa.1: fixed in abc1234\n\n## Decisions\n";
+        assert_eq!(
+            put(full),
+            "\n## Goal\ng\n\n## Report\n\nDropped: not needed\n\nIt half works.\n\n### Responses\n\n- 1-aaaa.1: fixed in abc1234\n\n## Decisions\n"
+        );
+        // Under an empty Report, one that ends the body, and none at all.
+        assert_eq!(
+            put("## Report\n\n## Decisions\n"),
+            "## Report\n\nDropped: not needed\n\n## Decisions\n"
+        );
+        assert_eq!(
+            put("## Goal\n\n## Report"),
+            "## Goal\n\n## Report\n\nDropped: not needed\n"
+        );
+        assert_eq!(
+            put("\n## Goal\ng"),
+            "\n## Goal\ng\n\n## Report\n\nDropped: not needed\n"
+        );
+        // A heading in a fence is text, so a section is added.
+        assert_eq!(
+            put("```\n## Report\n```\n"),
+            "```\n## Report\n```\n\n## Report\n\nDropped: not needed\n"
+        );
+        for body in [full, "## Report\n\n## Decisions\n", "\n## Goal\ng"] {
+            assert_eq!(dropped(&put(body), "Report"), Some("not needed"));
+        }
+        // Only the section's first line, and only under the heading named.
+        assert_eq!(dropped(full, "Report"), None);
+        assert_eq!(dropped("## Report\nx\nDropped: late\n", "Report"), None);
+        assert_eq!(dropped("## Result\nDropped: why\n", "Report"), None);
+        assert_eq!(dropped("## Result\nDropped: why\n", "Result"), Some("why"));
     }
 }

@@ -308,6 +308,31 @@ pub fn untracked(repo: &Path, dir: &str) -> Result<Vec<String>> {
     Ok(names(&listed))
 }
 
+/// The files under `dir` that are tracked, or untracked and not ignored.
+pub fn files(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    let args = [
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+    ];
+    let listed = listing(repo, &[&args[..], &["--", dir]].concat())?;
+    Ok(names(&listed))
+}
+
+/// The paths under `dirs` whose files in the checkout differ from the
+/// commit `from`, committed or not, and the files there Git does not track.
+pub fn changed_since(repo: &Path, from: &str, dirs: &[&str]) -> Result<Vec<String>> {
+    let args = ["diff", "--name-only", "-z", "--no-renames", from, "--"];
+    let mut paths = names(&listing(repo, &[&args[..], dirs].concat())?);
+    for dir in dirs {
+        paths.extend(untracked(repo, dir)?);
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 /// The paths that differ between the commits `from` and `to`.
 pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     let listed = listing(
@@ -315,6 +340,87 @@ pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
         &["diff", "--name-only", "-z", "--no-renames", from, to, "--"],
     )?;
     Ok(names(&listed))
+}
+
+/// The files the index holds under `dir`.
+pub fn staged_files(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    Ok(names(&listing(repo, &["ls-files", "-z", "--", dir])?))
+}
+
+/// The files under `dir` the index adds or changes from `HEAD`, or that it
+/// holds when there is no `HEAD` yet.
+pub fn staged_changes(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    let args = [
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--diff-filter=d",
+        "--",
+        dir,
+    ];
+    Ok(names(&listing(repo, &args)?))
+}
+
+/// A commit on a first-parent line, as [`first_parent_line`] lists it.
+pub struct LineCommit {
+    pub commit: String,
+    pub parents: Vec<String>,
+    pub subject: String,
+    /// Whether its message ends in an `Atelier-Merge:` trailer.
+    pub atelier_merge: bool,
+    /// The paths it changes from its first parent; a root commit's every
+    /// path.
+    pub paths: Vec<String>,
+}
+
+/// The commits on the first-parent line of `tip` that are not in the
+/// history of `known`, newest first.
+pub fn first_parent_line(repo: &Path, tip: &str, known: Option<&str>) -> Result<Vec<LineCommit>> {
+    let not = known.map(|commit| format!("^{commit}"));
+    let mut args = vec![
+        "log",
+        "-z",
+        "--no-color",
+        "--first-parent",
+        "--diff-merges=first-parent",
+        "--root",
+        "--no-renames",
+        "--name-only",
+        "--format=%x01%H %P%x02%s%x02%(trailers:key=Atelier-Merge,valueonly)",
+        tip,
+    ];
+    args.extend(not.as_deref());
+    args.push("--");
+    let listed = listing(repo, &args)?;
+    // Each commit is \x01, its ID and parents, \x02, its subject, \x02,
+    // its trailer's values, a NUL, a newline, and its paths each ended by
+    // a NUL.
+    listed
+        .split('\x01')
+        .skip(1)
+        .map(|entry| {
+            let mut fields = entry.splitn(3, '\x02');
+            let (Some(ids), Some(subject), Some(rest)) =
+                (fields.next(), fields.next(), fields.next())
+            else {
+                bail!("git log printed a commit this tool cannot read: {entry:?}");
+            };
+            let (trailer, paths) = rest.split_once('\0').unwrap_or((rest, ""));
+            let mut ids = ids
+                .split(' ')
+                .filter(|id| !id.is_empty())
+                .map(str::to_string);
+            Ok(LineCommit {
+                commit: ids.next().context("git log printed no commit ID")?,
+                parents: ids.collect(),
+                subject: subject.to_string(),
+                atelier_merge: !trailer.trim().is_empty(),
+                paths: names(paths.strip_prefix('\n').unwrap_or(paths)),
+            })
+        })
+        .collect()
 }
 
 /// Git's merge of the commit `theirs` into `ours`, made without a

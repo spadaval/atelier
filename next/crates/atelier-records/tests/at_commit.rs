@@ -183,14 +183,25 @@ fn reads_a_mission_as_a_commit_holds_it_and_none_where_it_has_none() {
     let path = repo.join(".atelier/missions/demo-m1ss/mission.md");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(&path, mission("draft")).unwrap();
+    let reviews = path.parent().unwrap().join("reviews");
+    fs::create_dir_all(&reviews).unwrap();
+    fs::write(reviews.join("1-p1an.md"), REVIEW).unwrap();
     git(repo, &["add", "-A"]);
     git(repo, &["commit", "-qm", "mission"]);
     let commit = git(repo, &["rev-parse", "HEAD"]);
     fs::write(&path, mission("ready")).unwrap();
+    fs::write(
+        reviews.join("2-l4te.md"),
+        REVIEW.replace("round: 1", "round: 2"),
+    )
+    .unwrap();
 
     let mut reader = CommitReader::new(repo);
     let read = reader.mission(&commit, "demo-m1ss").unwrap().unwrap();
     assert_eq!(read.mission.status, MissionStatus::Draft);
+    // Its plan reviews as the commit holds them.
+    let names: Vec<String> = read.reviews.iter().map(|r| r.name.to_string()).collect();
+    assert_eq!(names, ["1-p1an"]);
     assert_eq!(
         read.path.to_str().unwrap(),
         format!("{commit}:.atelier/missions/demo-m1ss/mission.md")

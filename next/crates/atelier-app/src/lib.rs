@@ -9,6 +9,6 @@ mod view;
 mod work;
 
 pub use identity::identity;
-pub use review::{carried, Carried};
+pub use review::{carried, carried_plan, Carried};
 pub use view::{entries, entry, overview, Branch, Entry, Located, Overview};
 pub use work::{in_progress, items_of, list, Filter, Group, LIFECYCLE, NEEDS_HUMAN};

@@ -25,11 +25,21 @@ pub fn status(repo: &mut Repo) -> Result<String> {
         let checkout = repo.checkout(record, &head)?;
         let entry = entry(&facts(repo, &located, &links, Some(&checkout)))?;
         let config = repo.base_config()?;
-        return Ok(output::item(&repo.caller, &entry, &config));
+        let dropped = record.dropped();
+        return Ok(output::item(&repo.caller, &entry, &config, dropped));
     }
     let items = repo.everything()?;
     let missions = repo.missions()?;
     let overview = overview(&items, &missions, &repo.caller)?;
+    // An item dropped on the base while its branch is there.
+    let dropped: Vec<(String, Option<String>)> = items
+        .iter()
+        .filter_map(|located| Some((located, located.record()?)))
+        .filter(|(located, record)| {
+            record.item.status == Status::Dropped && located.branch.is_some()
+        })
+        .map(|(located, record)| (located.id.clone(), record.dropped().map(str::to_string)))
+        .collect();
     let uncommitted = match repo.branch.as_deref() == Some(repo.base.as_str()) {
         true => planning(&repo.root)?,
         false => Vec::new(),
@@ -39,6 +49,7 @@ pub fn status(repo: &mut Repo) -> Result<String> {
         repo.branch.as_deref(),
         &repo.base,
         &overview,
+        &dropped,
         &uncommitted,
         git_at(&repo.root),
     ))
@@ -301,6 +312,7 @@ pub(crate) fn refused(act: Act, refusal: Refusal, facts: &Facts) -> Result<Strin
         facts.caller,
         id,
         entry.as_ref(),
+        facts.item.dropped(),
     ))
 }
 

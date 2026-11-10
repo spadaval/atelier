@@ -1,5 +1,6 @@
 //! The `atelier` command (docs/strategies/redesign-product.md, Commands).
 
+mod check;
 mod commands;
 mod forge;
 mod git;
@@ -32,6 +33,19 @@ struct Cli {
 enum Command {
     /// Who this thread is, what it holds, what each thing needs, and the next command.
     Status,
+    /// Validate every record in this checkout, and list record changes not committed yet.
+    Check {
+        /// Run as this Git hook, with the arguments Git gave the hook.
+        #[arg(long, value_name = "HOOK")]
+        hook: Option<check::Hook>,
+        #[arg(
+            requires = "hook",
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            hide = true
+        )]
+        args: Vec<String>,
+    },
     /// One item in full with its reviews, or one mission on one page with its items and questions.
     Show { id: String },
     /// All open work, grouped by mission and then by label; each flag given narrows it.
@@ -99,6 +113,19 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
+    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it.
+    Drop {
+        id: String,
+        /// Why it will not be done, on one line.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; on the base and without committing it.
+    Close {
+        id: String,
+        /// The item's result, written into its Report. A mission's is written in its file.
+        result: Option<String>,
+    },
     /// Start a ready item on a new branch named for it, or take over a started one.
     #[command(group(ArgGroup::new("what").required(true).args(["id", "new"])))]
     Start {
@@ -109,7 +136,7 @@ enum Command {
     },
     /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
     Submit,
-    /// Open this round's review file of an item in review, or take it over, and print the brief.
+    /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief.
     Review { id: String },
     /// Record your verdict in your review file and commit it.
     Verdict {
@@ -146,8 +173,17 @@ enum VerdictArg {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // `check` reads the records itself, and reports a config that does not
+    // read rather than stopping at it.
+    if let Command::Check { hook, args } = &cli.command {
+        return exit(match hook {
+            None => check::check(),
+            Some(hook) => check::hook(*hook, args),
+        });
+    }
     let result = repo::Repo::open().and_then(|mut repo| match cli.command {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
+        Command::Check { .. } => unreachable!("check runs before the repository is opened"),
         Command::Show { id } => views::show(&mut repo, &id),
         Command::List {
             ready,
@@ -200,6 +236,8 @@ fn main() -> ExitCode {
             plan::set(&mut repo, &id, fields)
         }
         Command::Ready { ids, by } => plan::ready(&mut repo, &ids, &by),
+        Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
+        Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
         Command::Start { id: Some(id), .. } => commands::start(&mut repo, &id),
         Command::Start {
             new: Some(title), ..
@@ -217,6 +255,10 @@ fn main() -> ExitCode {
         Command::Lead { mission } => views::lead(&mut repo, &mission),
         Command::Merge { trivial } => merge::merge(&repo.root, trivial),
     });
+    exit(result)
+}
+
+fn exit(result: anyhow::Result<Outcome>) -> ExitCode {
     // A closed stdout, as under `| head`, is no failure of the command.
     match result {
         Ok(Outcome::Done(text)) => {

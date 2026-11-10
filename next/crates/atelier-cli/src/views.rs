@@ -7,7 +7,7 @@ use crate::commands::{facts, Outcome};
 use crate::repo::{mission_path, Repo};
 use crate::{plan, view_output};
 use anyhow::{anyhow, Result};
-use atelier_app::acts::{check_mission, Act, Refusal};
+use atelier_app::acts::{check_mission, Act, MissionFacts, Refusal};
 use atelier_app::{entries, entry, in_progress, items_of, list as groups, Filter};
 use atelier_records::validate_id;
 
@@ -24,13 +24,12 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
                 questions.extend(asked.map(|d| (record.item.id.clone(), d)));
             }
         }
-        let reviews = repo.mission_reviews(id)?;
         return Ok(Outcome::Done(view_output::mission(
             dir,
             in_progress(dir, &entries),
             &items_of(id, &entries),
             &questions,
-            &reviews,
+            &dir.reviews,
         )));
     }
     let located = repo.locate(id)?;
@@ -67,7 +66,12 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(Outcome::Refused(view_output::lead_unknown(id)));
     }
     let mut dir = repo.store().mission(id)?;
-    if let Err(refusal) = check_mission(Act::Lead, dir.mission.status) {
+    let facts = MissionFacts {
+        mission: &dir,
+        items: &[],
+        review: None,
+    };
+    if let Err(refusal) = check_mission(Act::Lead, &facts) {
         let Refusal::From { status, .. } = refusal else {
             unreachable!("lead has no conditions: {refusal:?}")
         };
