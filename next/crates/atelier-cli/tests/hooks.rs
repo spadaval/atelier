@@ -286,6 +286,42 @@ fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
         run.stderr
     );
 
+    // A review whose item is missing, or does not read, cannot be
+    // validated, so it is not committed.
+    git(&root, &["reset", "-q", "--hard"]);
+    let review = "---\nschema: atelier.review\nschema_version: 3\nround: 2\ncommit: 0123abc\n\
+                  reviewers:\n- rev\nmodel: null\nverdict: null\n\
+                  created_at: 2026-11-10T09:00:00Z\n---\n\n## Summary\n\nFine.\n";
+    let orphan = ".atelier/items/demo-zz11/reviews/1-abcd.md";
+    fs::create_dir_all(root.join(orphan).parent().unwrap()).unwrap();
+    fs::write(root.join(orphan), review).unwrap();
+    let run = commit_all(&root, "Review nothing");
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains(&format!(
+            "  {orphan}: .atelier/items/demo-zz11/item.md is missing\n"
+        )),
+        "{}",
+        run.stderr
+    );
+    git(&root, &["reset", "-q", "--hard"]);
+    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    git(&root, &["commit", "-qam", "Break it", "--no-verify"]);
+    let reviewed = format!(".atelier/items/{ID}/reviews/1-abcd.md");
+    fs::create_dir_all(root.join(&reviewed).parent().unwrap()).unwrap();
+    fs::write(root.join(&reviewed), review).unwrap();
+    let run = commit_all(&root, "Review a broken item");
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains(&format!(
+            "  {reviewed}: not validated, since {} does not read\n",
+            item_path(ID)
+        )),
+        "{}",
+        run.stderr
+    );
+    git(&root, &["reset", "-q", "--hard", "HEAD^"]);
+
     // Valid as staged, and broken only in the working tree: committed.
     git(&root, &["add", "-A"]);
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");

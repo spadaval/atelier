@@ -11,6 +11,12 @@ fn item(id: &str, blocked_by: &str) -> Vec<u8> {
     .into_bytes()
 }
 
+fn review() -> &'static str {
+    "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: 0123abc\n\
+     reviewers:\n- rev\nmodel: null\nverdict: null\ncreated_at: 2026-11-10T09:00:00Z\n---\n\n\
+     ## Summary\n\nFine.\n"
+}
+
 fn file(path: &str, content: impl Into<Vec<u8>>) -> (String, Vec<u8>) {
     (path.to_string(), content.into())
 }
@@ -46,10 +52,13 @@ fn a_file_that_does_not_read_leaves_the_others_read_and_validated() {
         ),
         file(".atelier/items/demo-ab12/reviews/1-x7qd.md", [0xff, 0xfe]),
         file(".atelier/items/demo-cd34/item.md", "no front matter\n"),
+        file(".atelier/items/demo-cd34/reviews/1-x7qd.md", review()),
         file(
             ".atelier/items/demo-ef56/reviews/1-x7qd.md",
             "---\nround: 1\n---\n",
         ),
+        file(".atelier/items/demo-gh78/reviews/1-x7qd.md", review()),
+        file(".atelier/missions/demo-mm11/reviews/1-x7qd.md", review()),
         file(".atelier/missions/demo-mm11/notes.md", "Just notes.\n"),
         file(".atelier/items/demo-ab12/artifacts/shot.png", [0x89, 0xff]),
     ]);
@@ -63,7 +72,9 @@ fn a_file_that_does_not_read_leaves_the_others_read_and_validated() {
             ".atelier/items/demo-cd34/item.md: front matter: the file does not start with front matter between `---` lines",
             ".atelier/items/demo-ef56/reviews/1-x7qd.md: front matter: missing field `schema`",
             ".atelier/config.toml: the file is missing",
-            ".atelier/items/demo-ef56/item.md: its directory has reviews and no item.md",
+            ".atelier/items/demo-cd34/reviews/1-x7qd.md: not validated, since .atelier/items/demo-cd34/item.md does not read",
+            ".atelier/items/demo-gh78/reviews/1-x7qd.md: .atelier/items/demo-gh78/item.md is missing",
+            ".atelier/missions/demo-mm11/reviews/1-x7qd.md: .atelier/missions/demo-mm11/mission.md is missing",
         ]
     );
     assert_eq!(loaded.items.len(), 1);
