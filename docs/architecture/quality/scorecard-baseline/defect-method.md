@@ -72,10 +72,14 @@ are in step 4.
    (`git log --reverse "$C" -- .atelier/issues/$id.md`, then `git show
    <commit>:.atelier/issues/$id.md` until `status: "done"`) and list its
    first-parent line (`git log --first-parent --format='%h %s' <commit> -25`).
-   Reading down, the fix is the code-changing non-merge commits until the
-   first subject that names another item. Subjects there may use the short
-   form of the ID (`b0tn` for `astromech-b0tn`). Drop any commit that, read,
-   is other work bundled on the branch.
+   Reading down, the fix is the non-merge commits that change a file outside
+   `.atelier/`, stopping at the first subject that names another item and
+   not this one. "Names this one" includes the short form of its ID (`b0tn`
+   for `astromech-b0tn`), so a follow-up filed "from the b0tn review" does
+   not stop the walk. "Another item" means an ID with a record in
+   `.atelier/issues/`; finding, evidence and review IDs look the same but do
+   not count. Stop also at commits from before the item was created. Drop
+   any commit that, read, is other work bundled on the branch.
 
 2. **Blame the lines the fix removed or changed.** Skip these files, judged
    by path alone: `.atelier/`; Markdown and anything under `doc/` or
@@ -152,8 +156,10 @@ introduced the defect was found.
 
 ## The 30 Traces
 
-Astromech at `ae4d18ba`, adopted 2026-10-15. "Blamed" gives the commits
-that step 2 found, with lines blamed; "how" says whether blame alone named
+Astromech at `ae4d18ba`, adopted 2026-10-15. "Fix" lists the commits step 1
+finds that change a file step 2 blames; row 11 also has two docs-only
+commits. "Blamed" gives the commits that step 2 found, with lines blamed;
+"how" says whether blame alone named
 the cause, or step 3 or a reading of the fix was needed. Areas are
 paraphrased. Pull requests are astromech's, merged before adoption.
 
