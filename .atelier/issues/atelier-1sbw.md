@@ -4,6 +4,9 @@ id: "atelier-1sbw"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-1sbw
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Write the converter from today's records to the new layout, with a `--verify` mode"
-updated_at: "2026-11-10T21:49:02.103352734+00:00"
+updated_at: "2026-11-10T21:59:51.843742024+00:00"
 ---
 
 ## Goal
