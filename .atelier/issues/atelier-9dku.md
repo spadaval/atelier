@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Rewrite the gardener around the scorecard, three tiers of fix and a one-page report, and fold audit into it"
-updated_at: "2026-11-10T03:58:05.319636592+00:00"
+updated_at: "2026-11-10T04:11:01.216622672+00:00"
 ---
 
 ## Goal
@@ -32,7 +32,7 @@ Make a gardener run start from numbers and end with one page.
 
 ## Done when
 
-- [ ] Provisional: `garden.md` is rewritten with the steps that turn `atelier log` and `atelier list` output into each scorecard number, `audit.md` is gone, and a trial run by a fresh agent, held as an item labelled `garden`, settles the deferred findings it meets and produces the one-page report.
+- [ ] Provisional: `garden.md` is rewritten with the steps that turn `atelier log` output into the numbers the mission criterion `from-log` names, `audit.md` is gone, and a trial run by a fresh agent, held as an item labelled `garden`, settles the deferred findings it meets and produces the one-page report.
 
 ## Context
 

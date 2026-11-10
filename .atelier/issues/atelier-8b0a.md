@@ -19,13 +19,13 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Add `atelier log`, the history of acts, and cut the scorecard scripts down to what needs T3's data"
-updated_at: "2026-11-10T04:08:39.623699804+00:00"
+title: "Add `atelier log`, the history of acts, and remove from the scorecard scripts what it supplies"
+updated_at: "2026-11-10T04:11:01.577790594+00:00"
 ---
 
 ## Goal
 
-Give the gardener, a lead and a thread taking over an item one read of what happened: the history of acts, derived from Git. Then remove from the scorecard scripts everything that read can supply.
+Give the gardener, a lead and a thread taking over an item one read of what happened: the history of acts, derived from Git. Then remove from the scorecard scripts what that read supplies.
 
 ## Done when
 

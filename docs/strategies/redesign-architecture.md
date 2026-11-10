@@ -307,17 +307,27 @@ the ways below. Each is one line.
 | verdict | A review's verdict is set, on an item or a mission | The review's holder |
 | escalate | A Decisions entry appears | The item's holder |
 | decide | A Decisions entry gains its answer | The thread stored with the answer |
-| merge | An item's status becomes `done` in an Atelier merge | The item's holder; a skip, from the commit's trailer |
+| merge | An item's status becomes `done` in an Atelier merge | The item's holder |
 | settle | A finding gains `Taken` or `Dropped` | The thread in that line |
 | lead | A mission's `lead` is set or changes | That entry |
 | ready | A status becomes `ready` | None; the name given with `--by` |
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
 
+A skip is shown on the line of the act whose commit carries its trailer,
+which is any act where Atelier makes the commit: `submit`, `verdict` and
+`merge`.
+
 What `log` does not show: `new`, `set` and edits to a record's text, which
-Git's own log has; the executing thread of `ready`, `drop` and `close`,
-which no record holds; and a skip in a Git hook, which leaves nothing in
-Git. Acts committed together appear as separate lines with one time. An act
-undone before it was committed does not appear.
+Git's own log has, so an item's time as a draft is read from its
+`created_at` and not from `log`; the executing thread of `ready`, `drop` and
+`close`, which no record holds; and a skip in a Git hook or on a command
+that makes no commit, which leaves nothing in Git.
+
+`log` sees commits, not commands. Acts on different records committed
+together appear as separate lines with one time. Two acts on one record in
+one commit appear as their net change: an item made ready and closed in the
+same commit shows only as closed. An act undone before it was committed does
+not appear.
 
 The walk covers the base's history, the second-parent side of each Atelier
 merge, and the tips of started items' branches, so an item's acts stay
@@ -326,8 +336,8 @@ the debrief follows first parents only and would lose them; how to walk
 both sides without reading each record's history separately is settled when
 the command is planned.
 
-`log` adds nothing up. Time in a status, rounds per item, roles taken over,
-escalations and skips at merge are counts over its lines, and the
+`log` adds nothing up. Time in each status from `ready` on, rounds per item,
+roles taken over, escalations and skips are counts over its lines, and the
 gardener's procedure, not the binary, says which to take.
 
 ## Hooks and the bypass

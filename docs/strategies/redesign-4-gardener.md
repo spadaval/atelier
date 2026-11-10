@@ -33,8 +33,9 @@ five repositories.
   of one page that holds the scorecard, the worst spots under each of the
   three codebase properties, and at most three proposals.
 - from-log: the scorecard's numbers about what happened to items, which are
-  time in each status, rounds, roles taken over, escalations and skips at
-  merge, are computed from the output of `atelier log` by the steps the
+  time in each status from `ready` on, rounds, roles taken over, escalations
+  and the skips `log` shows, are computed from the output of `atelier log`
+  by the steps the
   gardener's procedure gives, and no script walks record history itself.
   The scripts that remain tie a thread to an item by the thread IDs in the
   log, with no matching on thread titles.
