@@ -165,7 +165,9 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 12] = [
 ];
 
 /// The acts on a mission, from the same table.
-const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 5] = [
+const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 6] = [
+    // `lead` binds its lead to a ready mission, and its status stays.
+    (Act::Lead, &[Status::Ready], None),
     (Act::ReadyMission, &[Status::Draft], Some(Status::Ready)),
     (
         Act::Drop,
@@ -188,7 +190,7 @@ const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 5] = [
 
 #[test]
 fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
-    // Each item's act, and each mission's; `drop` is both.
+    // Each item's act, and each mission's, `lead` among them; `drop` is both.
     assert_eq!(TABLE.len(), SPECIFIED.len() + MISSION_SPECIFIED.len() - 1);
     for (act, from, to) in SPECIFIED {
         for status in ALL {
@@ -291,6 +293,11 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
     assert_eq!(
         (ready.role, ready.from, ready.to),
         (Role::Planner, &[Status::Draft][..], Some(Status::Ready))
+    );
+    let lead = row(Act::Lead);
+    assert_eq!(
+        (lead.role, lead.binds, lead.from, lead.to),
+        (Role::Lead, true, &[Status::Ready][..], None)
     );
 }
 

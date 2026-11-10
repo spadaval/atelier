@@ -14,9 +14,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Medium: next/crates/atelier-cli/src/merge.rs:101 R1: CI revalidation under the merge lock uses a fresh Github with no d…"
-updated_at: "2026-11-10T19:23:14.887937319+00:00"
+updated_at: "2026-11-10T21:23:33.433956150+00:00"
 ---
 
 ## Goal
@@ -27,4 +27,5 @@ Medium: next/crates/atelier-cli/src/merge.rs:101 R1: CI revalidation under the m
 
 ## Done when
 
-Done when was not specified.
+- [ ] The CI check `merge` makes under its lock has a time limit, as its polls before the lock have. A test whose `gh` double answers the first poll and then stalls on the check under the lock sees `merge` exit "not yet" within the test's bound, with the lock released, nothing written and the stalled process ended.
+- [ ] The limit is a constant. `merge` gains no flag and `config.toml` no option.

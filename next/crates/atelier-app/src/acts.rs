@@ -34,6 +34,8 @@ pub enum Act {
     PlanVerdictChanges,
     /// `verdict approve` on a plan review.
     PlanVerdictApprove,
+    /// `lead` on a mission.
+    Lead,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,6 +43,7 @@ pub enum Role {
     Planner,
     Implementer,
     Reviewer,
+    Lead,
 }
 
 pub struct Row {
@@ -73,7 +76,7 @@ pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 /// Every status a mission can have.
 const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
 
-pub const TABLE: [Row; 16] = [
+pub const TABLE: [Row; 17] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -209,6 +212,14 @@ pub const TABLE: [Row; 16] = [
         role: Role::Reviewer,
         binds: false,
         from: MISSION,
+        to: None,
+    },
+    Row {
+        act: Act::Lead,
+        command: "lead",
+        role: Role::Lead,
+        binds: true,
+        from: &[Status::Ready],
         to: None,
     },
 ];
@@ -501,7 +512,8 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     }
     if !row.binds {
         let (holds, holder) = match row.role {
-            Role::Planner => (true, None),
+            // A mission's role binds, so its acts never come here.
+            Role::Planner | Role::Lead => (true, None),
             Role::Implementer => (facts.holds(), facts.holder()),
             Role::Reviewer => (
                 facts.reviewing().is_some(),
@@ -610,7 +622,7 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match act {
-        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop => {}
+        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead => {}
         // A mission's act is checked with `unmet_mission`.
         Act::CloseMission | Act::PlanVerdictChanges | Act::PlanVerdictApprove => {}
         Act::Start => {

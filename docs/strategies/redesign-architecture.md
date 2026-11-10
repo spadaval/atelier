@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24)"
+last_changed: "2026-11-10: drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw)"
 ---
 
 # Atelier redesign: architecture specification
@@ -325,14 +325,15 @@ How the table is built:
 - A row joins the table with its command. The table holds the rows of
   `ready` on an item and on a mission, `start`, `start --new`, `start`
   taking over, `submit`, `review`, both verdicts and `merge` with and
-  without `--trivial`, `drop` (one row, for an item and a mission),
-  `close` on an item and on a mission, and both verdicts on a plan review.
-  A mission's row is checked with `acts::check_mission`, from the
-  mission's status and, for `close`, the status of each item that names it,
-  each found as `Located::record` finds it, and its Result; for a verdict,
-  from the caller's plan review. `start --new` runs from no status, since
-  it creates its item, and takes the status it sets from its row. `close`
-  on an item and on a mission needs no role, like a planner's act.
+  without `--trivial`, `lead`, `drop` (one row, for an item and a
+  mission), `close` on an item and on a mission, and both verdicts on a
+  plan review. A mission's row is checked with `acts::check_mission`, from
+  the mission's status and, for `close`, the status of each item that names
+  it, each found as `Located::record` finds it, and its Result; for a
+  verdict, from the caller's plan review. `start --new` runs from no
+  status, since it creates its item, and takes the status it sets from its
+  row. `close` on an item and on a mission needs no role, like a planner's
+  act.
 - A round of a plan review is over once every file of it has a verdict,
   since its reviewers work blind in checkouts of their own
   (`acts::plan_round`). Until then it is the latest round, and the round's
@@ -436,10 +437,16 @@ thread that reviewed an earlier round as done with it, and to anyone else as
 a visitor, naming the holder; anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
 ready items, and the started items others hold; on the base branch it also
-lists the record changes the checkout has not committed, and anywhere but
-an item's branch it lists the items dropped on the base while their branch
-is there, each with its reason. On the item's branch it says a dropped
-item was dropped and why, as does the refusal of any act on it, and it
+lists the record changes the checkout has not committed. Away from an
+item's branch it also lists the missions in progress and, apart from the
+ready items, the items labelled `needs-human` that nobody has started, as
+waiting on a human, and the items dropped on the base while their branch
+is there, each with its reason. A thread that is the `lead` of a ready
+mission at the base's tip is told so, with each of the mission's items by
+status, what holds or blocks each, and the handoff line that starts a
+thread for each item that can start now; holding nothing else, it is
+pointed at no item itself. On the item's branch it says a dropped item
+was dropped and why, as does the refusal of any act on it, and it
 speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
 or that none does yet, and tells the implementer of a building item whose
@@ -520,7 +527,24 @@ post-checkout Git hook prints it on every branch switch.
   a started item is cancelled. Every command checks the base's record of its
   item first, including `status` and `merge` run on the item's own branch.
 - **Who reads this way:** `status` on the base, `lead`, `list`, `show` and
-  the site. The site already enumerates local branches for work in flight.
+  the site. `show` reads a mission and its plan reviews at the base's tip.
+  `lead` reads its items and the missions this way, so what it says can
+  start now is what `start` will start, and reads and writes its own
+  mission in the checkout of the base, as `set` does: it runs only on the
+  base branch, refuses a mission that is not ready there, sets the caller
+  as `lead`, commits nothing, and ends with the Git command that commits
+  `mission.md`. A thread that already leads the mission is shown it and
+  writes nothing.
+- **`list`'s flags.** With none, every item that is not done or dropped,
+  under its mission and then under its sorted labels, and every such
+  mission, even with no item. `--ready` keeps items whose `start` has no
+  unmet condition; `--blocked` items with a blocker that is not done;
+  `--needs-human` items with that label; `--mission <id>` that mission's
+  items; `--label <l>` items, and missions, with the label; `--mine` items
+  the caller holds as implementer or as the round's reviewer, and missions
+  it leads with their items; `--done` turns all of this to done and dropped
+  items and missions. Flags narrow together; with `--ready`, `--blocked` or
+  `--needs-human` a mission is shown only for an item kept under it. The site already enumerates local branches for work in flight.
   Every command also reads its item, and each blocker of a ready item, this
   way.
 - **Starting is one atomic step.** `start` writes the commit that sets
@@ -1002,5 +1026,4 @@ reaches it.
 - Whether T3's pull request watch wakes a thread when a repository marks no
   check as required.
 - Where video artifacts go when a project needs them.
-- The exact flags of `list`.
 - How much of the brief and debrief view code the site keeps.

@@ -8,6 +8,8 @@ mod output;
 mod plan;
 mod repo;
 mod review;
+mod view_output;
+mod views;
 
 use atelier_core::{Priority, Verdict};
 use clap::builder::NonEmptyStringValueParser;
@@ -30,6 +32,32 @@ struct Cli {
 enum Command {
     /// Who this thread is, what it holds, what each thing needs, and the next command.
     Status,
+    /// One item in full with its reviews, or one mission on one page with its items and questions.
+    Show { id: String },
+    /// All open work, grouped by mission and then by label; each flag given narrows it.
+    List {
+        /// Only items a thread could start now: ready, their blockers done, their mission ready.
+        #[arg(long)]
+        ready: bool,
+        /// Only items with a blocker that is not done.
+        #[arg(long)]
+        blocked: bool,
+        /// Only items labelled needs-human.
+        #[arg(long)]
+        needs_human: bool,
+        /// Only this mission's items.
+        #[arg(long, value_name = "ID")]
+        mission: Option<String>,
+        /// Only items, and missions, with this label.
+        #[arg(long, value_name = "LABEL")]
+        label: Option<String>,
+        /// Only what you hold as implementer, reviewer or lead.
+        #[arg(long)]
+        mine: bool,
+        /// Finished missions and items, done or dropped, instead of open ones.
+        #[arg(long)]
+        done: bool,
+    },
     /// Create a draft item, or with --mission a draft mission, in this checkout of the base, without committing it.
     New {
         #[arg(value_parser = NonEmptyStringValueParser::new())]
@@ -103,6 +131,8 @@ enum Command {
         #[arg(long)]
         model: Option<String>,
     },
+    /// Lead a ready mission, in this checkout of the base without committing it, and see what each of its items needs.
+    Lead { mission: String },
     /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done.
     Merge {
         /// Merge an item nobody reviewed, whose correctness is evident from its diff, giving why.
@@ -131,6 +161,27 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = repo::Repo::open().and_then(|mut repo| match cli.command {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
+        Command::Show { id } => views::show(&mut repo, &id),
+        Command::List {
+            ready,
+            blocked,
+            needs_human,
+            mission,
+            label,
+            mine,
+            done,
+        } => {
+            let filter = atelier_app::Filter {
+                ready,
+                blocked,
+                needs_human,
+                mission,
+                label,
+                mine,
+                done,
+            };
+            views::list(&mut repo, &filter)
+        }
         Command::New {
             title,
             into,
@@ -178,6 +229,7 @@ fn main() -> ExitCode {
             };
             review::verdict(&mut repo, verdict, model)
         }
+        Command::Lead { mission } => views::lead(&mut repo, &mission),
         Command::Merge { trivial } => merge::merge(&repo.root, trivial),
     });
     // A closed stdout, as under `| head`, is no failure of the command.

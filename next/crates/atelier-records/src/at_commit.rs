@@ -350,7 +350,7 @@ impl Drop for Batch {
     }
 }
 
-/// How a file read from `commit` is named in a problem with it.
+/// How a file read at a commit is named in a problem: `<commit>:<path>`.
 fn shown(commit: &str, path: &str) -> PathBuf {
     PathBuf::from(format!("{commit}:{path}"))
 }
