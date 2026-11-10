@@ -217,10 +217,10 @@ pub fn refusal(act: Act, refusal: &Refusal, caller: &Thread, entry: &Entry) -> S
                 "You (thread {caller}) do not hold {id}; {holder}. Nothing changed.\nTo take it over: atelier start {id}\n"
             )
         }
-        Refusal::Unmet(_) => format!(
+        Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            next(entry)
+            needs(act, entry.status, id, unmet)
         ),
         Refusal::Record(problem) => format!("{problem}\n"),
     }

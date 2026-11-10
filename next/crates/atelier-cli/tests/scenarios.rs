@@ -663,3 +663,22 @@ fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
         .starts_with(&format!("Took over {ID}; t1 held it.\n")));
     assert_eq!(field(&root, "HEAD", "implementers"), "t1 t2");
 }
+
+#[test]
+fn a_refusal_lists_the_conditions_of_the_act_refused() {
+    // Approved, so `status` names merge next; submit still has its own
+    // conditions, and its refusal lists them.
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    git(&root, &["switch", "-q", "-c", ID]);
+    write_item(&root, ID, "approved", &["t1"], &[], "");
+    git(&root, &["commit", "-qam", "Approved"]);
+    let run = atelier(&root, "t1", &["submit"]);
+    assert_eq!(run.code, 1);
+    assert_eq!(
+        run.stderr,
+        "`atelier submit` refused; nothing changed.\nTo submit it for review:\n  \
+         [ ] Done when: `hello` prints hello.\n  [ ] Done when: A test covers it.\n  \
+         [ ] Report: written under `## Report`\nThen: atelier submit\n"
+    );
+}
