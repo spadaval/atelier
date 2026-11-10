@@ -48,6 +48,11 @@ fn item(root: &Path, id: &str, status: &str, title: &str, fields: [&str; 4], bod
     );
 }
 
+/// The question waiting on `demo-d4dd`, as the lead's `status` lists it.
+const QUESTION: &str = "Questions waiting on a decider, oldest first on each item:\n  \
+                        demo-d4dd: 2026-11-10: Should waving be animated?\n    \
+                        Answer it in the checkout on branch demo-d4dd: atelier decide demo-d4dd \"<answer>\"\n";
+
 /// The fixture, with `demo-d4dd` started by t1 in the worktree `second`.
 fn fixture() -> (Scratch, PathBuf) {
     let scratch = Scratch::new(&[]);
@@ -306,10 +311,11 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     git(&root, &["commit", "-qm", "Lead demo-m1ss", "--", path]);
     git(&root, &["checkout", "--", &item_path("demo-c3cc")]);
 
-    // The lead's status: its mission and what each item needs.
+    // The lead's status: its mission, what each item needs, and the
+    // questions waiting on a decider, with the command that answers each.
     let status = stdout(&root, "lead1", &["status"]);
     let tail = format!(
-        "You lead mission demo-m1ss: Greet everyone\n{}{handoff}",
+        "You lead mission demo-m1ss: Greet everyone\n{}{QUESTION}{handoff}",
         &items[11..]
     );
     assert!(status.ends_with(&tail), "{status}");
@@ -350,7 +356,8 @@ fn show_prints_a_mission_on_one_page_with_its_items_questions_and_plan_reviews()
          demo-a1aa (high, can start now): Say hello\n    \
          demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
          Building:\n    demo-d4dd (medium, held by t1): Wave\n\n\
-         Questions:\n  demo-d4dd: 2026-11-10: Should waving be animated? (unanswered)\n  \
+         Questions:\n  demo-d4dd: 2026-11-10: Should waving be animated?\n    \
+         Answer it in the checkout on branch demo-d4dd: atelier decide demo-d4dd \"<answer>\"\n  \
          demo-a1aa: 2026-11-08: Which greeting first? Answer by lead1: hello.\n\n\
          Plan reviews:\n  None.\n"
     );

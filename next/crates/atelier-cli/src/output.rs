@@ -5,7 +5,10 @@ use crate::forge::{CiRun, ForgeError, PullRequest};
 use crate::merge::Moved;
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
-use atelier_core::{Config, Priority, Response, Settlement, Status, Thread, Verdict};
+use atelier_core::{
+    Config, Decision, Finding, FindingName, Outcome, Priority, Response, Settlement, Status,
+    Thread, Verdict,
+};
 use atelier_records::{Problem, ReviewFile};
 use std::path::Path;
 use std::time::Duration;
@@ -41,6 +44,8 @@ fn command(act: Act, id: &str) -> String {
         Act::Drop => format!("atelier drop {id} --reason \"<why>\""),
         Act::Close => format!("atelier close {id} \"<result>\""),
         Act::CloseMission => format!("atelier close {id}"),
+        Act::Escalate => "atelier escalate \"<question>\"".into(),
+        Act::Decide => format!("atelier decide {id} \"<answer>\""),
         _ => format!("atelier {}", row(act).command),
     }
 }
@@ -54,6 +59,8 @@ fn goal(act: Act, status: Status) -> &'static str {
         Act::Submit => "submit it for review",
         Act::Review => "review it",
         Act::VerdictChanges | Act::VerdictApprove => "record your verdict",
+        Act::Escalate => "ask a question",
+        Act::Decide => "decide its question",
         Act::Merge | Act::MergeTrivial => "merge it",
         Act::Drop => "drop it",
         Act::Close | Act::CloseMission => "close it",
@@ -90,9 +97,22 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
         Condition::NoBranch => format!("Branch {id} exists"),
         Condition::Unticked(line) => format!("Done when: {line}"),
         Condition::NoReport => "Report: written under `## Report`".into(),
-        Condition::NoResponse { finding, title } => format!("Finding {finding} (fix now): {title}"),
+        Condition::NoResponse { finding, title, rebutted: false } => {
+            format!("Finding {finding} (fix now): {title}")
+        }
+        Condition::NoResponse { finding, title, rebutted: true } => format!(
+            "Finding {finding} (fix now): {title} (its rebuttal was kept, and a rebuttal gets one try: fix it, or escalate it)"
+        ),
         Condition::Unanswered(question) => format!("Question answered: {question}"),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
+        Condition::ReviewedFinding(finding) => format!("You have never reviewed finding {finding}"),
+        Condition::NoQuestion => "A question waits under `## Decisions` (none does)".into(),
+        Condition::DecisionDropped { finding, outcome } => format!(
+            "Your file carries {finding} with the `Decided: {outcome}` line the tool wrote (a decision settled it; put that finding back as it was)"
+        ),
+        Condition::DecisionChanged(finding) => format!(
+            "Finding {finding} has no `Decided:` line the tool did not write, and carries no finding a decision settled (put it back as the tool wrote it, or remove it)"
+        ),
         Condition::NoOpenFinding => "Your review file holds an open fix-now finding (it holds none; with nothing to fix, run `atelier verdict approve`)".into(),
         Condition::OpenFinding { finding, title } => {
             format!("No fix-now finding is open; {finding} is: {title}")
@@ -134,7 +154,7 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
 /// What an entry needs and the command that follows, or what to do when no
 /// command of the caller's follows. `dropped` is why the item was dropped,
 /// from its record.
-fn next(entry: &Entry, dropped: Option<&str>) -> String {
+fn next(entry: &Entry, dropped: Option<&str>, decider: Option<&str>) -> String {
     let id = &entry.id;
     let Some(act) = entry.next else {
         if entry.reviewed.is_some() && !entry.holds {
@@ -157,7 +177,7 @@ fn next(entry: &Entry, dropped: Option<&str>) -> String {
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
-    needs(act, entry.status, id, &entry.unmet)
+    needs(act, entry.status, id, &entry.unmet, decider)
 }
 
 /// How an implementer gets its item reviewed.
@@ -189,7 +209,9 @@ pub(crate) fn handoff(who: &str, tasks: &[String], then: &str) -> String {
 }
 
 /// The conditions of `act` that do not hold, then its command.
-fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
+/// `decider` says who answers a question waiting on the item, where the
+/// caller knows.
+fn needs(act: Act, status: Status, id: &str, unmet: &[Condition], decider: Option<&str>) -> String {
     let mut text = String::new();
     if !unmet.is_empty() {
         text += &format!("To {}:\n", goal(act, status));
@@ -201,7 +223,7 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
             .iter()
             .any(|c| matches!(c, Condition::NoResponse { .. }))
         {
-            text += "Answer each finding under `### Responses` in the Report: `<finding>: fixed in <commit>` or `<finding>: rebutted: <fact>`.\n";
+            text += "Answer each finding under `### Responses` in the Report: `<finding>: fixed in <commit>` or `<finding>: rebutted: <fact>`. Or, when it is right but not worth fixing now, or its fix leaves the item's scope, escalate it: atelier escalate --finding <finding> \"<question>\"\n";
         }
         if unmet
             .iter()
@@ -212,10 +234,11 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
         if unmet.iter().any(|c| matches!(c, Condition::Uncommitted(_))) {
             text += "Commit them, or set them aside with `git stash`.\n";
         }
-        if matches!(act, Act::Merge | Act::MergeTrivial)
-            && unmet.iter().any(|c| matches!(c, Condition::Unanswered(_)))
-        {
-            text += "A question is answered under its heading in `## Decisions`, as `Answer by <thread>: <answer>`, by a thread that never implemented the item.\n";
+        if unmet.iter().any(|c| matches!(c, Condition::Unanswered(_))) {
+            text += &decider.map_or_else(
+                || format!("A decider answers each question with `atelier decide {id}`: a thread that never implemented this item nor reviewed the finding a question is about. `atelier status` says who.\n"),
+                str::to_string,
+            );
         }
         // A stale approval is answered by a fresh review, not by merging.
         if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
@@ -253,9 +276,15 @@ pub(crate) fn holder(entry: &Entry) -> String {
 }
 
 /// `status` on an item's branch. `config` is the base's, whose merge
-/// checks and forge `merge` goes through, and `dropped` why the item was
-/// dropped.
-pub fn item(caller: &Thread, entry: &Entry, config: &Config, dropped: Option<&str>) -> String {
+/// checks and forge `merge` goes through, `dropped` why the item was
+/// dropped, and `decider` who answers a question waiting on it.
+pub fn item(
+    caller: &Thread,
+    entry: &Entry,
+    config: &Config,
+    dropped: Option<&str>,
+    decider: Option<&str>,
+) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
         format!(
@@ -283,7 +312,7 @@ pub fn item(caller: &Thread, entry: &Entry, config: &Config, dropped: Option<&st
             holder(entry)
         )
     };
-    let mut next = next(entry, dropped);
+    let mut next = next(entry, dropped, decider.filter(|_| entry.holds));
     // Before `merge`, what it will run and wait for; a stale approval is
     // sent to `submit` instead.
     let stale = entry
@@ -306,8 +335,12 @@ pub fn item(caller: &Thread, entry: &Entry, config: &Config, dropped: Option<&st
         ),
         false => String::new(),
     };
+    let since = match &entry.approved {
+        Some(time) => format!(" since {time}"),
+        None => String::new(),
+    };
     format!(
-        "{who}Title: {}\nStatus: {}\n{undefined}{next}",
+        "{who}Title: {}\nStatus: {}{since}\n{undefined}{next}",
         entry.title,
         status_name(entry.status),
     )
@@ -360,12 +393,17 @@ pub fn overview(
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
+            let since = entry.approved.as_ref();
             text += &format!(
-                "  {} ({}): {}\n",
+                "  {} ({}{}): {}\n",
                 entry.id,
                 status_name(entry.status),
+                since.map_or(String::new(), |time| format!(" since {time}")),
                 entry.title
             );
+            for question in &entry.questions {
+                text += &format!("    A question waits on a decider: {question}\n");
+            }
         }
     }
     if !overview.ready.is_empty() {
@@ -445,10 +483,10 @@ pub fn refusal(
             format!("You are the reviewer of {id}. Reviewers run `review` and `verdict`.\n")
         }
         Refusal::Role(Role::Implementer) => format!(
-            "You are the implementer of {id}. Implementers run `start`, `submit` and `merge`.\n"
+            "You are the implementer of {id}. Implementers run `start`, `submit`, `escalate` and `merge`.\n"
         ),
-        Refusal::Role(Role::Planner | Role::Lead) => {
-            unreachable!("no thread holds a planner's or a lead's role on an item")
+        Refusal::Role(Role::Planner | Role::Lead | Role::Decider) => {
+            unreachable!("no thread holds a planner's, a lead's or a decider's role on an item")
         }
         Refusal::From { act, status } => {
             let from: Vec<&str> = row(*act).from.iter().map(|s| status_name(*s)).collect();
@@ -457,7 +495,7 @@ pub fn refusal(
                 status_name(*status),
                 row(*act).command,
                 from.join(", "),
-                next(shown(), dropped)
+                next(shown(), dropped, None)
             )
         }
         Refusal::NotHolder {
@@ -482,7 +520,7 @@ pub fn refusal(
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, shown().status, id, unmet)
+            needs(act, shown().status, id, unmet, None)
         ),
         Refusal::Record(problem) => format!("{problem}\n"),
     }
@@ -541,7 +579,7 @@ fn quoted(word: &str) -> String {
 /// The Git command that commits `paths`, and only them, with `message`.
 /// `at` is the checkout they are in, which the command names with `-C`
 /// when the caller is not at its root (see [`crate::repo::git_at`]).
-fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
+pub(crate) fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
     let git = match at {
         Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
         None => "git".into(),
@@ -1015,9 +1053,20 @@ fn review_path(id: &str, name: &str) -> String {
     format!(".atelier/items/{id}/reviews/{name}.md")
 }
 
-pub fn review_elsewhere(id: &str, branch: Option<&str>) -> String {
+/// `command` on item `id` refused in a checkout on `branch`; `checkout` has
+/// the item's branch, if one does.
+pub fn elsewhere(command: &str, id: &str, branch: Option<&str>, checkout: Option<&Path>) -> String {
+    let there = match checkout {
+        Some(path) => format!(
+            "Run it in {}, which has branch {id} checked out.",
+            path.display()
+        ),
+        None => {
+            format!("Run it there, or `git switch {id}` here if no other checkout has that branch.")
+        }
+    };
     format!(
-        "`atelier review {id}` runs in the checkout on branch {id}, where its implementer works, and this checkout is on {}. Nothing changed.\nRun it there, or `git switch {id}` here if no other checkout has that branch.\n",
+        "`atelier {command} {id}` runs in the checkout on branch {id}, where its implementer works, and this checkout is on {}. Nothing changed.\n{there}\n",
         place(branch)
     )
 }
@@ -1055,14 +1104,19 @@ pub fn template(carried: &[Carried], item: bool) -> String {
         "\n## Summary\n\n<!-- What you checked and how, and what you could not check. -->\n"
             .to_string();
     for (number, carried) in (1..).zip(carried) {
+        let (finding, title) = (&carried.finding.name, &carried.finding.title);
+        if let Some(outcome) = carried.decision.as_ref().and_then(|d| d.outcome) {
+            text += &format!(
+                "\n## Finding {number}: {title}\nRecommendation: fix now\nWas: {finding}\nDecided: {outcome}\n<!-- A decision settled it, and the tool wrote `Decided:`. Leave this finding as it is. -->\n"
+            );
+            continue;
+        }
         let response = match item {
             true => format!("Response: {}\n", response(carried.response.as_ref())),
             false => String::new(),
         };
         text += &format!(
-            "\n## Finding {number}: {}\nRecommendation: fix now\nWas: {}\n{response}Now: kept\n<!-- Set Now: to fixed, withdrawn or kept. -->\n",
-            carried.finding.title,
-            carried.finding.name,
+            "\n## Finding {number}: {title}\nRecommendation: fix now\nWas: {finding}\n{response}Now: kept\n<!-- Set Now: to fixed, withdrawn or kept. -->\n"
         );
     }
     text
@@ -1138,6 +1192,9 @@ fn carried_findings(carried: &[Carried], reviewer: bool, item: bool) -> String {
             ""
         };
         text += &format!("Your review file carries each as a finding of its own{with}. Judge it, then set the finding's `Now:` line to `fixed`, to `withdrawn` (the rebuttal holds, or the finding was wrong), or leave it `kept` (it still stands, and stays a fix-now finding).\n");
+        if carried.iter().any(|c| c.decision.is_some()) {
+            text += "One a decision settled has a `Decided:` line instead, which the tool wrote: leave it as it is.\n";
+        }
     }
     for (number, carried) in (1..).zip(carried) {
         text += &format!(
@@ -1150,7 +1207,16 @@ fn carried_findings(carried: &[Carried], reviewer: bool, item: bool) -> String {
                 text += &format!("    {line}\n");
             }
         }
-        if item {
+        if let Some(decision) = &carried.decision {
+            let outcome = decision.outcome.map_or(String::new(), |o| o.to_string());
+            text += &format!(
+                "  Decided: {outcome}. The question: {}\n",
+                decision.question
+            );
+            if let Some(answer) = &decision.answer {
+                text += &format!("  Answer by {}: {}\n", answer.by, answer.text);
+            }
+        } else if item {
             text += &format!(
                 "  The author's response: {}\n",
                 response(carried.response.as_ref())
@@ -1306,7 +1372,7 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, Status::Ready, id, unmet)
+            needs(act, Status::Ready, id, unmet, None)
         ),
         Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
             unreachable!("a mission's act is refused only for its status or conditions")
@@ -1425,6 +1491,165 @@ pub fn verdict_recorded(
         "Recorded your verdict on {id}, round {round}: {}. Committed {path} with it.\n{id} is back with its implementer, {implementer}, {to}. Your review is done: say so to whoever started you, and stop.\n",
         verdict_name(verdict)
     )
+}
+
+/// Who answers `question`, the oldest waiting on item `id`: `lead`, a
+/// mission and its lead, when it may decide it, else a new thread, which
+/// reads the question and, when it is about a finding, the `review` file
+/// that holds the finding. `commit` commits the question, when the lead
+/// cannot see it yet because it is not committed.
+pub fn decider(
+    id: &str,
+    question: &Decision,
+    review: Option<&str>,
+    lead: Option<(&str, &Thread)>,
+    commit: Option<&str>,
+) -> String {
+    if let Some((mission, lead)) = lead {
+        let commit = commit.map_or(String::new(), |line| {
+            format!("{lead}'s `atelier status` reads this branch's last commit, so commit the question first: {line}\n")
+        });
+        return format!(
+            "Thread {lead}, the lead of mission {mission}, decides it: {lead}'s `atelier status` lists the question.\n{commit}Tell whoever started you that it waits, and run `atelier status` once it is answered.\n"
+        );
+    }
+    let task = match (&question.finding, review) {
+        (Some(finding), Some(review)) => format!(
+            "Run atelier show {id}, and read the question waiting under its Decisions and finding {finding} in {review}. Answer it with atelier decide {id} '<your answer>', adding --defer to defer the finding or --no-action to close it without a fix, or neither to leave it to be fixed."
+        ),
+        _ => format!(
+            "Run atelier show {id}, and read the question waiting under its Decisions. Answer it with atelier decide {id} '<your answer>'."
+        ),
+    };
+    handoff(
+        "A decider",
+        &[task],
+        "Then wait for its answer, and run `atelier status`.",
+    )
+}
+
+pub fn escalated(id: &str, question: &str, finding: Option<&FindingName>, decider: &str) -> String {
+    let about = finding.map_or(String::new(), |f| format!("It is about finding {f}.\n"));
+    format!(
+        "Asked under `## Decisions` in {}, and did not commit it:\n  {question}\n{about}`atelier submit` and `atelier merge` wait until it is answered, and `atelier submit` commits it with the item.\n{decider}",
+        crate::repo::item_path(id)
+    )
+}
+
+/// `answered` is the question `decide` answered, `waiting` the next one,
+/// and `approved` whether the item is approved, so its implementer merges
+/// next rather than submits.
+pub fn decided(
+    id: &str,
+    answered: &Decision,
+    waiting: Option<&Decision>,
+    implementer: Option<&Thread>,
+    approved: bool,
+) -> String {
+    let answer = answered.answer.as_ref().expect("it was just answered");
+    let mut text = format!(
+        "Answered a question on {id}, as thread {}:\n  {}\n  Answer: {}\n",
+        answer.by, answered.question, answer.text
+    );
+    if let (Some(finding), Some(outcome)) = (&answered.finding, answered.outcome) {
+        text += &format!("Finding {finding} is settled, `Decided: {outcome}`: the next review carries it so, and no review reopens it.\n");
+    }
+    text += &format!(
+        "Wrote {}, and did not commit it.\n",
+        crate::repo::item_path(id)
+    );
+    if let Some(waiting) = waiting {
+        return text
+            + &format!(
+                "Another question waits on {id}:\n  {}\nThen: {}\n",
+                waiting.question,
+                command(Act::Decide, id)
+            );
+    }
+    let implementer = implementer.map_or("nobody yet".to_string(), |t| format!("thread {t}"));
+    let next = match approved {
+        true => "commits your answer, then runs `atelier merge`".to_string(),
+        false => "runs `atelier submit`, which commits your answer with the item".into(),
+    };
+    text + &format!(
+        "No other question waits. Its implementer, {implementer}, {next}. Your decision is done: say so to whoever started you, and stop.\n"
+    )
+}
+
+/// `act`'s `what`, a question or an answer, was empty or had a line break.
+pub fn not_one_line(act: Act, id: &str, what: &str) -> String {
+    format!(
+        "`{}` needs its {what} on one line. Nothing changed.\n",
+        command(act, id)
+    )
+}
+
+/// `escalate --finding <named>` on a finding that is not open; `known`
+/// when a review of the item has it, and `open` the item's open fix-now
+/// findings.
+pub fn not_open(id: &str, named: &str, known: bool, open: &[Finding]) -> String {
+    let mut text = "`atelier escalate` refused; nothing changed.\n".to_string();
+    text += &match known {
+        true => format!("Finding {named} of {id} is not an open fix-now finding.\n"),
+        false => format!("No review of {id} has a finding {named}.\n"),
+    };
+    if open.is_empty() {
+        return text + "It has no open fix-now finding. A question about anything else is asked without --finding.\n";
+    }
+    let names: Vec<String> = open.iter().map(|f| f.name.to_string()).collect();
+    text + &format!("Its open fix-now findings: {}\n", names.join(", "))
+}
+
+/// `decide` given `settled` on its question `asked`, whose finding there is
+/// none of, or is not open.
+pub fn not_settled(id: &str, asked: &Decision, settled: Outcome) -> String {
+    let flag = match settled {
+        Outcome::Defer => "--defer",
+        Outcome::NoAction => "--no-action",
+    };
+    let why = match &asked.finding {
+        None => "is about no finding".to_string(),
+        Some(finding) => format!("is about finding {finding}, which is no longer open"),
+    };
+    format!(
+        "`atelier decide {id} {flag}` refused; nothing changed.\nIts oldest question, which it answers, {why}, so there is nothing to settle:\n  {}\nThen: {}\n",
+        asked.question,
+        command(Act::Decide, id)
+    )
+}
+
+/// `decide` refused for who the caller is, or for no question waiting;
+/// `handoff` says who decides the question that waits, which an
+/// implementer is shown.
+pub fn not_decider(
+    id: &str,
+    caller: &Thread,
+    unmet: &[Condition],
+    handoff: Option<&str>,
+) -> String {
+    let mut text = format!("`atelier decide {id}` refused; nothing changed.\n");
+    for condition in unmet {
+        text += &match condition {
+            Condition::FormerImplementer => format!("You (thread {caller}) implemented {id}, and none of its implementers, past or present, decides its questions.\n"),
+            Condition::ReviewedFinding(finding) => format!("You (thread {caller}) reviewed finding {finding}, which its question is about, and none of its reviewers decides it.\n"),
+            Condition::NoQuestion => format!("{id} has no unanswered question under `## Decisions`.\n"),
+            other => unreachable!("decide has no condition {other:?}"),
+        };
+    }
+    if unmet.contains(&Condition::FormerImplementer) {
+        return text + handoff.unwrap_or_default();
+    }
+    match unmet
+        .iter()
+        .any(|c| matches!(c, Condition::ReviewedFinding(_)))
+    {
+        true => text + "Say so to whoever started you, and stop.\n",
+        false => text,
+    }
+}
+
+pub fn unreadable(path: &str) -> String {
+    format!("Written so, `## Decisions` in {path} would not read back as asked, so nothing was written. Look there for a code fence that is not closed")
 }
 
 fn short(commit: &str) -> &str {

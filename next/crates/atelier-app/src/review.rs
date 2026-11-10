@@ -3,7 +3,8 @@
 use atelier_core::{is_open, Decision, Finding, FindingName, Response};
 use atelier_records::{ItemDir, MissionDir, Problem, ReviewFile};
 
-/// A fix-now finding an earlier round left open.
+/// A finding an earlier round left open, or that a decision settled and no
+/// round has carried yet.
 pub struct Carried {
     /// The finding, under its latest name.
     pub finding: Finding,
@@ -12,11 +13,37 @@ pub struct Carried {
     pub texts: Vec<(FindingName, String)>,
     /// The author's line for it in the Report's Responses.
     pub response: Option<Response>,
+    /// The decision that settled it, which the review carries as
+    /// `Decided:`.
+    pub decision: Option<Decision>,
 }
 
-/// The fix-now findings that the rounds before `round` leave open, which
-/// round `round`'s review file carries. Its own file is not read, so what
-/// it carries does not change as its reviewer writes in it.
+/// The finding named `name` among `findings`, then each finding it carries,
+/// back to the one first raised.
+pub fn chain<'a>(name: &FindingName, findings: &'a [Finding]) -> Vec<&'a Finding> {
+    let mut chain: Vec<&Finding> = findings
+        .iter()
+        .find(|f| f.name == *name)
+        .into_iter()
+        .collect();
+    // Each step goes back a round, so the chain ends.
+    while let Some(was) = chain.last().and_then(|at| {
+        at.was
+            .as_ref()
+            .filter(|was| was.review.round < at.name.review.round)
+    }) {
+        let Some(found) = findings.iter().find(|f| f.name == *was) else {
+            break;
+        };
+        chain.push(found);
+    }
+    chain
+}
+
+/// The findings that round `round`'s review file carries from the rounds
+/// before it: each fix-now finding they leave open, and each a decision
+/// settled that none of them carries. Its own file is not read, so what it
+/// carries does not change as its reviewer writes in it.
 pub fn carried(item: &ItemDir, round: u32) -> Result<Vec<Carried>, Problem> {
     carry(&item.reviews, &item.responses()?, &item.decisions()?, round)
 }
@@ -46,32 +73,32 @@ fn carry(
             .unwrap_or_default()
             .to_string()
     };
-    let open = findings.iter().filter(|f| is_open(f, &findings, decisions));
-    let carried = open.map(|finding| {
-        let mut texts = vec![(finding.name.clone(), text(&finding.name))];
-        let mut at = finding;
-        // Each step goes back a round, so the chain ends.
-        while let Some(was) = at
-            .was
-            .as_ref()
-            .filter(|was| was.review.round < at.name.review.round)
-        {
-            let Some(found) = findings.iter().find(|f| f.name == *was) else {
-                break;
-            };
-            texts.push((found.name.clone(), text(&found.name)));
-            at = found;
+    let settled = |finding: &Finding| {
+        let carried = findings
+            .iter()
+            .any(|f| f.was.as_ref() == Some(&finding.name));
+        let decision = decisions
+            .iter()
+            .find(|d| d.finding.as_ref() == Some(&finding.name) && d.outcome.is_some());
+        decision.filter(|_| !carried).cloned()
+    };
+    let mut carried = Vec::new();
+    for finding in &findings {
+        let decision = settled(finding);
+        if decision.is_none() && !is_open(finding, &findings, decisions) {
+            continue;
         }
-        texts.reverse();
+        let texts = chain(&finding.name, &findings).into_iter().rev();
         let response = responses
             .iter()
             .find(|response| *response.finding() == finding.name)
             .cloned();
-        Carried {
+        carried.push(Carried {
             finding: finding.clone(),
-            texts,
+            texts: texts.map(|f| (f.name.clone(), text(&f.name))).collect(),
             response,
-        }
-    });
-    Ok(carried.collect())
+            decision,
+        });
+    }
+    Ok(carried)
 }

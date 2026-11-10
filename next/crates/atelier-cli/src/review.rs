@@ -34,9 +34,11 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         Err(refusal) => return Ok(Outcome::Refused(refused(Act::Review, refusal, &facts)?)),
     }
     if repo.branch.as_deref() != Some(id) {
-        return Ok(Outcome::Refused(output::review_elsewhere(
+        return Ok(Outcome::Refused(output::elsewhere(
+            "review",
             id,
             repo.branch.as_deref(),
+            None,
         )));
     }
     let round = facts.round();

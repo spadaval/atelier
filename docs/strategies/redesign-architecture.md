@@ -160,7 +160,11 @@ A Decisions entry is a `### <date>: <question>` heading under Decisions.
 Its lines may name a finding (`Finding: 2-m2bn.1`); once answered it has
 `Answer by <thread>: <answer>`, and then, for a finding, `Outcome: defer` or
 `Outcome: no action`. An `Outcome:` without a `Finding:` and an answer is
-refused.
+refused. `escalate` adds an entry at the end of the section, adding the
+section at the end of the body when there is none, dated in UTC, with its
+`Finding:` line when given one. `decide` writes its lines after the last
+line of the oldest entry with no answer. The question and the answer are
+each one line.
 
 ### `missions/<id>/mission.md`
 
@@ -232,6 +236,23 @@ in the Report`. A plan review's carried finding has no `Response:` line,
 since a mission has no Report. A carried finding starts kept, so it stays open until its
 reviewer closes it. Nobody edits the front matter: `verdict` sets the
 verdict, and the model when given `--model`.
+
+The template also carries each finding of an earlier round that a
+decision settled and no earlier round carries, once, in the same order:
+
+```markdown
+## Finding 2: <the settled finding's title>
+Recommendation: fix now
+Was: 1-x7qd.1
+Decided: defer
+<!-- A decision settled it, and the tool wrote `Decided:`. Leave this finding as it is. -->
+```
+
+`verdict` is refused while the file does not carry such a finding with the
+`Decided:` line the tool wrote, or while a finding of the file has a
+`Decided:` line no decision wrote, or carries a settled finding, or a
+finding carried as decided, any other way. So no later review reopens
+what a decision settled, and a reviewer cannot decide a finding itself.
 
 A fix-now finding is open until a later round carries it as fixed,
 withdrawn or decided, or a Decisions entry naming it has an outcome.
@@ -316,14 +337,14 @@ will check.
 | `start` | Implementer | `ready` | `building` | blockers done; its mission, if any, is ready; no branch `<id>` exists; the base's record is not dropped |
 | `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists; its mission, if any, is not dropped |
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
-| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
+| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or an unanswered question about it; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
-| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding |
-| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry |
-| `verdict changes` on a plan review | Reviewer | any | unchanged | the file validates; it has an open fix-now finding |
-| `verdict approve` on a plan review | Reviewer | any | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds |
+| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; it keeps what decisions settled, as the tool wrote it |
+| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; it keeps what decisions settled |
+| `verdict changes` on a plan review | Reviewer | any | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
+| `verdict approve` on a plan review | Reviewer | any | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
-| `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor in the `reviewers` of the review that raised the finding |
+| `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor, for the oldest unanswered question when it names a finding, in the `reviewers` of the review that raised that finding or of any review whose finding it carries |
 | `merge` | Implementer | `approved` | `done` | a review of the latest round approves it and still covers the head; no unanswered question; nothing uncommitted in tracked files or the item's directory; the base's record is not dropped |
 | `merge --trivial` | Implementer | `building` | `done` | Done when ticked; Report written; no review file; no unanswered question; nothing uncommitted in tracked files or the item's directory |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
@@ -340,10 +361,10 @@ How the table is built:
 
 - A row joins the table with its command. The table holds the rows of
   `ready` on an item and on a mission, `start`, `start --new`, `start`
-  taking over, `submit`, `review`, both verdicts and `merge` with and
-  without `--trivial`, `lead`, `drop` (one row, for an item and a
-  mission), `close` on an item and on a mission, both verdicts on a
-  plan review, and settling a finding (`Act::Settle`), whose finding's
+  taking over, `submit`, `review`, both verdicts, `escalate`, `decide`
+  and `merge` with and without `--trivial`, `lead`, `drop` (one row, for an
+  item and a mission), `close` on an item and on a mission, both verdicts
+  on a plan review, and settling a finding (`Act::Settle`), whose finding's
   conditions `acts::check_settle` checks after the row's. A mission's row is checked with `acts::check_mission`, from
   the mission's status and, for `close`, the status of each item that names
   it, each found as `Located::record` finds it, and its Result; for a
@@ -366,13 +387,15 @@ How the table is built:
   round's reviewer while the item is in review and it holds that file.
 - `acts::check` refuses a caller that holds one role on the item and runs
   another role's act, with one line naming its role and that role's
-  commands. `review` is the exception: an implementer, current or past, is
-  refused by its condition, and is shown the brief. Then `check` refuses an
+  commands. `review` and `decide` are the exceptions: an implementer,
+  current or past, is refused by their condition; `review` shows it the
+  brief, and `decide` the handoff that starts a decider. Then `check` refuses an
   act whose From does not hold the item's status, then one that needs a role
   the caller does not hold, then one with an unmet condition, and otherwise
   gives the status to set. An act that binds a role (`start`, `review`)
-  needs nothing held; `submit` and `merge` need the caller to be the item's
-  last implementer, and a verdict needs it to be the round's reviewer. No
+  needs nothing held, and `decide` binds its decider the same way;
+  `submit`, `escalate` and `merge` need the caller to be the item's last
+  implementer, and a verdict needs it to be the round's reviewer. No
   thread holds the planner's role, so a planner's act (`ready`) needs
   nothing held and is never refused for a role the caller holds.
 - `acts::next` names the act the caller would run next: `start` on a ready
@@ -468,7 +491,23 @@ speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
 or that none does yet, and tells the implementer of a building item whose
 Goal or Done when lines are empty, as after `start --new`, to write them
-first. That line is orientation, not a condition of `submit`. Missions join
+first. That line is orientation, not a condition of `submit`. The
+implementer's `status` lists each unanswered question as a condition of
+`submit` or `merge`, and says who decides the oldest: the lead of the
+item's mission, when the mission is ready and its lead may decide it, else
+a new thread, with the handoff `escalate` printed. The lead reads the item
+from its branch's last commit, so while the question is not committed the
+lead's handoff also gives the Git command that commits it. An open finding whose
+rebuttal a reviewer kept says that a rebuttal has had its one try, so the
+exits left are a fix or `escalate`. A lead's `status` lists, under each
+mission it leads, its items' unanswered questions with the `decide` that
+answers each, and `show <mission>` lists them too. An approved item says
+since when, in the implementer's and the lead's `status` and in `show`:
+the time of the commit on its branch that set the approving review's
+verdict, which `git log -S` finds; nothing stores it. Away from the item's
+branch, the implementer's list of what it holds gives the same: each
+item's unanswered questions, and since when an approved one is approved.
+Missions join
 with their commands.
 
 Harness hooks give orientation at session start: `atelier setup claude`
@@ -594,6 +633,13 @@ post-checkout Git hook prints it on every branch switch.
   again only switches.
 - **`submit` commits the item's directory** and nothing else in the
   checkout.
+- **A question and its answer are written where the implementer works.**
+  `escalate` runs on the item's branch, and `decide` only in the checkout
+  on it, refused anywhere else, naming the checkout that has the branch.
+  Each writes `item.md` there and commits nothing, so `submit` commits the
+  question and its answer with the item; an approved item's implementer
+  commits them before `merge`, which refuses anything uncommitted. A
+  refused `escalate` or `decide` writes nothing.
 - **A review is written where the implementer works.** `review` runs only
   in the checkout on the item's branch, and refuses anywhere else, naming
   it. It creates the round's file, or appends the caller to its

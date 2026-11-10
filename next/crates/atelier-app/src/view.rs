@@ -66,6 +66,11 @@ pub struct Entry {
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
     /// What the checkout has not committed, where the CLI gathered it.
     pub uncommitted: Vec<String>,
+    /// Once approved, the time of the commit that recorded the approving
+    /// verdict, where the CLI looked it up; nothing stores it.
+    pub approved: Option<String>,
+    /// Its unanswered questions, where the CLI read them.
+    pub questions: Vec<String>,
     /// The act the caller would run next, and its conditions that do not
     /// hold.
     pub next: Option<Act>,
@@ -112,6 +117,8 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
             .checkout
             .map(|checkout| checkout.uncommitted.clone())
             .unwrap_or_default(),
+        approved: None,
+        questions: Vec::new(),
         next,
         unmet,
     })
