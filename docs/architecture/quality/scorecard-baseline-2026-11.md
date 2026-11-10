@@ -63,9 +63,13 @@ every thread, so it is included there.
 - **Over what period.** The after-run takes the first 27 days of merges
   after the cutover, the baseline window's length, and counts at the end of
   day 27. Recent merges have had less time to show their defects; every
-  astromech cause merged in the first week of its window. Counting both at
-  the end of an equal window gives each the same spread of ages. Neither is
-  recounted later, since a later recount finds more in the older set.
+  astromech cause merged in the first week of its window. An equal window
+  caps how long any merge is watched, but does not make the ages equal: if
+  the after-window's merges sit later in it than the baseline's, they have
+  had less time to show defects. The after-run says how its merges are
+  spread over the window, and where they sit materially later, the raw rate
+  alone cannot show the constraint held. Neither count is redone later,
+  since a later recount finds more in the older set.
 - **When the comparison means nothing.** The method sees only defects filed
   as bug items. If the after-run files fewer bug fixes per 100 merged items
   than the baseline (atelier 77 of 277, 27.8; astromech 52 of 361, 14.4), a
