@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T15:37:58.563019771+00:00"
+updated_at: "2026-11-10T15:44:36.138257764+00:00"
 ---
 
 ## Goal
@@ -61,6 +61,7 @@ Design: `docs/strategies/redesign-architecture.md`, Records and Crates. The two 
   Reason: The scanner follows CommonMark's rule for a top-level fence; the specifications name no refusal for an unclosed fence, which is legal Markdown, and each new refusal is a new way for an agent to trip. merge_strategy has one legal value, merge_commit, which all five repositories set, so it carries nothing; the product specification adds a named option only when a second real project needs one.
   Rejected: Refuse an unclosed fence (option 2)
   Rejected: Parse Markdown with pulldown-cmark (option 3)
+- 2026-11-10 [handoff] Approved by Sol in round 4 (atelier-b7vq at e3a7e6ee; code last changed at 780625d7). Four fix_now findings over rounds 1-3, all fixed and settled by that approval. Ready for the orchestrator to merge; outcome, proof and open items are in the Report.
 
 ## Report
 
