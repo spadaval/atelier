@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw)"
+last_changed: "2026-11-10: drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
 ---
 
 # Atelier redesign: architecture specification
@@ -625,8 +625,9 @@ post-checkout Git hook prints it on every branch switch.
    finished, or the latest finished one failed and a newer one is running,
    keep asking; a question that fails counts as not finished, and one still
    unanswered at the bound is ended. Refuse as soon as CI fails; at the
-   bound, stop with exit status 3. The wait holds no lock and writes
-   nothing.
+   bound, stop with exit status 3 and say what the last answer said, or,
+   when none came, why the first question failed. The wait holds no lock
+   and writes nothing.
 3. Take the merge lock, then read everything again, as in step 1. Nothing
    read before the lock is trusted, and a checkout now on another branch
    is refused, so `merge` merges only the item it waited for.
@@ -640,7 +641,9 @@ post-checkout Git hook prints it on every branch switch.
    have none either, since merging moves it.
 5. Build the merged tree with `git merge-tree`; a conflict refuses, naming
    the files. Where the forge names a CI workflow, ask once more, without
-   waiting: a passing run must still count for the head as it now is.
+   waiting: a passing run must still count for the head as it now is. A
+   question unanswered after a minute is ended, and `merge` stops with exit
+   status 3, releasing the lock.
    Write the merge commit object on the merged tree, base tip first and
    branch tip second, with the item's record set `done` (and `trivial` set
    to the reason). Nothing points at it yet.
@@ -653,9 +656,10 @@ post-checkout Git hook prints it on every branch switch.
    where one has it checked out, else `git update-ref` from the tip read.
 8. Where a forge is configured: push the base.
 
-`merge` has no flag but `--trivial`, and the bound and the time between
-questions are constants; debug builds let tests shorten them through
-`ATELIER_TEST_CI_WAIT`. The 9 minutes sit under Claude Code's 10-minute limit
+`merge` has no flag but `--trivial`, and the bound, the time between
+questions and the minute under the lock are constants; debug builds let
+tests shorten them through `ATELIER_TEST_CI_WAIT`, the minute to no more
+than the bound. The 9 minutes sit under Claude Code's 10-minute limit
 on a command in the foreground; a harness with a shorter limit kills `merge`
 during the wait, which leaves nothing behind. Run again, it picks up where
 the facts now stand: on an item it already merged it only pushes the base
@@ -944,7 +948,9 @@ does, it must not fetch a repository that has been converted.
 - `merge` with CI still running: it waits, holding no lock, and merges as
   soon as CI passes or refuses as soon as it fails; at the bound it stops
   with its "not yet" exit status and changes nothing, also when the forge
-  fails or never answers. A run that passed on the commit `submit` pushed
+  fails or never answers, and names the run the last answer named when a
+  later question is cut off. A question under the lock that never answers
+  is ended within the bound. A run that passed on the commit `submit` pushed
   still counts after `verdict approve`; one before a change outside the
   item's directory does not. A merge killed during the wait leaves
   everything as it was, and another item's merge completes meanwhile.

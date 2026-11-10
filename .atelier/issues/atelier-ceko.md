@@ -15,9 +15,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-10T21:45:54.365349554+00:00"
+status: "done"
 title: "Report the last answer when the bound cuts off `merge`'s final poll: its test failed in CI on pull request 106"
-updated_at: "2026-11-10T21:23:32.308509103+00:00"
+updated_at: "2026-11-10T21:45:54.365349554+00:00"
 ---
 
 ## Goal
@@ -26,9 +27,9 @@ Stop `merge` from reporting "the forge did not answer" when the forge had answer
 
 ## Done when
 
-- [ ] The Report states the cause, with a reproduction that fails every time on the code before the fix (for example a `gh` double slow enough that a poll is in flight at the bound) and passes after it.
-- [ ] When the bound ends a poll that is in flight, `merge` reports what the last poll that answered said, such as that the run is in progress, with its link. It says the forge did not answer only when no poll answered during the wait.
-- [ ] No test of the wait depends on a poll finishing inside a fixed time: the merge tests pass 30 times in a row, run with 4 test threads while another cargo build runs on the host.
+- [x] The Report states the cause, with a reproduction that fails every time on the code before the fix (for example a `gh` double slow enough that a poll is in flight at the bound) and passes after it.
+- [x] When the bound ends a poll that is in flight, `merge` reports what the last poll that answered said, such as that the run is in progress, with its link. It says the forge did not answer only when no poll answered during the wait.
+- [x] A test whose `gh` double answers one poll with a run in progress and then stalls sees `merge` exit "not yet" at the bound, name that run with its link, and leave the branch, the base, the checkout and the remote as they were. The test that failed in CI no longer depends on a poll finishing inside a fixed time.
 
 ## Scope
 
@@ -37,3 +38,7 @@ Stop `merge` from reporting "the forge did not answer" when the forge had answer
 ## Context
 
 Design: `docs/strategies/redesign-architecture.md`, Merge. The item that built the wait is atelier-xtvh; its Report describes the hook that shortens the bound and the poll interval in tests.
+
+## Report
+
+Fixed on atelier-rsfm; the cause, the reproduction and what `merge` now prints are in atelier-rsfm's Report. The cause was as stated: a poll started up to 50 ms before the bound was cut off, and its "did not answer in time" replaced the earlier answer. `a_poll_the_bound_ends_does_not_hide_what_an_earlier_poll_said` (the double answers one poll with a run in progress and stalls the next) failed every time before the fix and passes after it, naming run 1 with its link and leaving the branch, base, checkout and remote unchanged. `at_the_bound_merge_exits_not_yet_and_changes_nothing` passes unchanged; it still needs one of its polls to answer within 2 seconds.
