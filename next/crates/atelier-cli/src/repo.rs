@@ -3,11 +3,12 @@
 
 use crate::git;
 use anyhow::{Context, Result};
+use atelier_app::acts::{approval, Checkout, SinceApproval};
 use atelier_app::{identity, Branch, Located};
-use atelier_core::{Status, Thread};
-use atelier_records::{validate_id, CommitReader, ItemDir, Store};
+use atelier_core::{Config, Status, Thread};
+use atelier_records::{parse_config, validate_id, CommitReader, ItemDir, Store};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct Repo {
     pub root: PathBuf,
@@ -107,6 +108,50 @@ impl Repo {
             .iter()
             .map(|id| Ok((id.clone(), self.locate(id)?.status())))
             .collect()
+    }
+
+    /// The item `id` as `commit` holds it.
+    pub fn item_at(&mut self, commit: &str, id: &str) -> Result<Option<ItemDir>> {
+        Ok(self.reader.item(commit, id)?)
+    }
+
+    /// What `merge` reads from this checkout, on the branch of `record`,
+    /// whose HEAD is the commit `head`.
+    pub fn checkout(&mut self, record: &ItemDir, head: &str) -> Result<Checkout> {
+        let approved = approval(record).filter(|_| record.item.status == Status::Approved);
+        let since_approval = match approved {
+            None => None,
+            Some(review) => {
+                let commit = &review.review.commit;
+                Some(SinceApproval {
+                    changed: git::changed(&self.root, commit, head)?,
+                    reviewed: self.reader.item(commit, &record.item.id)?,
+                    head: self.reader.item(head, &record.item.id)?,
+                })
+            }
+        };
+        Ok(Checkout {
+            uncommitted: self.uncommitted(&record.item.id)?,
+            since_approval,
+        })
+    }
+
+    /// What the checkout holds that no commit does and `merge` would leave
+    /// behind: changes to tracked files, and new files in the item's
+    /// directory, such as a review file.
+    pub fn uncommitted(&self, id: &str) -> Result<Vec<String>> {
+        let mut paths = git::uncommitted(&self.root)?;
+        paths.extend(git::untracked(&self.root, &item_dir(id))?);
+        Ok(paths)
+    }
+
+    /// `config.toml` as the base's tip holds it, which `merge` reads, so a
+    /// work branch cannot weaken its own checks.
+    pub fn base_config(&mut self) -> Result<Config> {
+        let path = ".atelier/config.toml";
+        let text = self.reader.text(&self.base_tip, path)?;
+        let shown = format!("{}:{path}", self.base);
+        Ok(parse_config(Path::new(&shown), &text)?)
     }
 
     fn checkout_item(&self, id: &str) -> Result<Option<ItemDir>> {

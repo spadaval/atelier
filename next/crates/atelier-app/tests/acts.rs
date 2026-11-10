@@ -87,6 +87,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
         branch: true,
         blockers: &[],
         caller,
+        checkout: None,
     }
 }
 
@@ -139,10 +140,14 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
             } else {
                 ""
             };
-            let item = with_reviews(
-                record(status, &["t1"], DONE),
-                &[review("1-aaaa", &["r1"], "null", findings)],
-            );
+            // A merge needs a review that approves, and a trivial merge
+            // an item nobody reviewed.
+            let reviews = match act {
+                Act::MergeTrivial => vec![],
+                Act::Merge => vec![review("1-aaaa", &["r1"], "approve", "")],
+                _ => vec![review("1-aaaa", &["r1"], "null", findings)],
+            };
+            let item = with_reviews(record(status, &["t1"], DONE), &reviews);
             let reviewer = matches!(act, Act::Review | Act::VerdictChanges | Act::VerdictApprove);
             let caller = thread(if reviewer { "r1" } else { "t1" });
             let facts = Facts {
@@ -150,6 +155,7 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
                 branch: act != Act::Start,
                 blockers: &[],
                 caller: &caller,
+                checkout: None,
             };
             match check(act, &facts) {
                 Ok(set) => {
@@ -206,6 +212,7 @@ fn status_lists_the_conditions_the_command_reports() {
                     branch,
                     blockers,
                     caller: &caller,
+                    checkout: None,
                 };
                 let shown = entry(&facts).unwrap();
                 assert_eq!(shown.next, next(&facts).unwrap());
@@ -252,6 +259,7 @@ fn the_next_act_follows_the_status_and_who_is_asking() {
             branch: true,
             blockers: &[],
             caller: &caller,
+            checkout: None,
         };
         assert_eq!(next(&facts).unwrap(), expected, "{status:?} for {caller}");
     }
@@ -277,6 +285,7 @@ fn only_the_holder_submits() {
             branch: true,
             blockers: &[],
             caller: &caller,
+            checkout: None,
         };
         match check(Act::Submit, &facts) {
             Err(Refusal::NotHolder {
@@ -295,6 +304,7 @@ fn only_the_holder_submits() {
         branch: true,
         blockers: &[],
         caller: &caller,
+        checkout: None,
     };
     assert!(matches!(
         check(Act::Submit, &facts),
@@ -324,6 +334,7 @@ fn submit_needs_each_open_finding_answered_and_each_question_decided() {
             branch: true,
             blockers: &[],
             caller: &caller,
+            checkout: None,
         };
         match check(Act::Submit, &facts) {
             Ok(_) => Vec::new(),

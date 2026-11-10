@@ -40,6 +40,16 @@ pub fn run(repo: &Path, args: &[&str]) -> Result<String> {
 }
 
 fn run_with(repo: &Path, args: &[&str], input: Option<&str>) -> Result<String> {
+    Ok(listing_with(repo, args, input)?.trim().to_string())
+}
+
+/// The output of a Git command that must succeed, untrimmed, as a list
+/// separated by NULs needs: a leading space can be part of its first entry.
+fn listing(repo: &Path, args: &[&str]) -> Result<String> {
+    listing_with(repo, args, None)
+}
+
+fn listing_with(repo: &Path, args: &[&str], input: Option<&str>) -> Result<String> {
     let output = output(repo, args, input)?;
     if !output.status.success() {
         bail!(
@@ -48,7 +58,7 @@ fn run_with(repo: &Path, args: &[&str], input: Option<&str>) -> Result<String> {
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
-    Ok(String::from_utf8(output.stdout)?.trim().to_string())
+    Ok(String::from_utf8(output.stdout)?)
 }
 
 /// The top of the checkout the command runs in.
@@ -126,12 +136,13 @@ pub fn is_ancestor(repo: &Path, commit: &str, of: &str) -> Result<bool> {
     }
 }
 
-/// Writes a commit on top of `parent` that changes only the file at
-/// `path` to `text`, and returns it. No branch, index or working tree
-/// changes: the commit is reachable from nothing until a branch names it.
+/// Writes a commit of the tree `tree` names, with the file at `path` set
+/// to `text`, on `parents`, and returns it. No branch, index or working
+/// tree changes: the commit is reachable from nothing until a ref names it.
 pub fn commit_file(
     repo: &Path,
-    parent: &str,
+    tree: &str,
+    parents: &[&str],
     path: &str,
     text: &str,
     message: &str,
@@ -162,7 +173,7 @@ pub fn commit_file(
             }
             Ok(String::from_utf8(output.stdout)?.trim().to_string())
         };
-        with_index(&["read-tree", parent])?;
+        with_index(&["read-tree", tree])?;
         with_index(&[
             "update-index",
             "--add",
@@ -170,7 +181,11 @@ pub fn commit_file(
             &format!("100644,{blob},{path}"),
         ])?;
         let tree = with_index(&["write-tree"])?;
-        run(repo, &["commit-tree", &tree, "-p", parent, "-m", message])
+        let mut args = vec!["commit-tree", &tree, "-m", message];
+        for parent in parents {
+            args.extend(["-p", parent]);
+        }
+        run(repo, &args)
     })();
     let _ = std::fs::remove_file(&index);
     result
@@ -222,4 +237,101 @@ pub fn commit_paths(repo: &Path, paths: &[&str], message: &str) -> Result<()> {
         let _ = run_with(repo, &["update-index", "-z", "--index-info"], Some(&staged));
     }
     committed.map(drop)
+}
+
+/// The commit the checkout's HEAD points at.
+pub fn head(repo: &Path) -> Result<String> {
+    run(repo, &["rev-parse", "--verify", "HEAD^{commit}"])
+}
+
+/// The Git directory every worktree of the clone shares.
+pub fn common_dir(repo: &Path) -> Result<PathBuf> {
+    let dir = run(
+        repo,
+        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    )?;
+    Ok(PathBuf::from(dir))
+}
+
+fn names(listed: &str) -> Vec<String> {
+    listed
+        .split('\0')
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The tracked files of the checkout whose changes are not committed,
+/// staged or not. An untracked file is no commit's, so it is not listed.
+pub fn uncommitted(repo: &Path) -> Result<Vec<String>> {
+    let listed = listing(
+        repo,
+        &[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--no-renames",
+            "--untracked-files=no",
+        ],
+    )?;
+    // Each entry is two status letters, a space and the path.
+    Ok(names(&listed)
+        .into_iter()
+        .filter_map(|entry| entry.get(3..).map(str::to_string))
+        .collect())
+}
+
+/// The files under `dir` that Git does not track, ignored or not.
+pub fn untracked(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    let listed = listing(repo, &["ls-files", "--others", "-z", "--", dir])?;
+    Ok(names(&listed))
+}
+
+/// The paths that differ between the commits `from` and `to`.
+pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
+    let listed = listing(
+        repo,
+        &["diff", "--name-only", "-z", "--no-renames", from, to, "--"],
+    )?;
+    Ok(names(&listed))
+}
+
+/// Git's merge of the commit `theirs` into `ours`, made without a
+/// checkout: the merged tree, or the paths that conflict.
+pub fn merge_tree(repo: &Path, ours: &str, theirs: &str) -> Result<Result<String, Vec<String>>> {
+    let args = [
+        "merge-tree",
+        "--write-tree",
+        "--name-only",
+        "--no-messages",
+        "-z",
+        ours,
+        theirs,
+    ];
+    let output = output(repo, &args, None)?;
+    let listed = String::from_utf8(output.stdout)?;
+    let mut fields = names(&listed).into_iter();
+    match (output.status.code(), fields.next()) {
+        (Some(0), Some(tree)) => Ok(Ok(tree)),
+        (Some(1), Some(_)) => Ok(Err(fields.collect())),
+        _ => bail!(
+            "git merge-tree failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+    }
+}
+
+/// The checkout that has the local branch `branch` checked out, if one has.
+pub fn checkout_of(repo: &Path, branch: &str) -> Result<Option<PathBuf>> {
+    let listed = listing(repo, &["worktree", "list", "--porcelain", "-z"])?;
+    let wanted = format!("branch refs/heads/{branch}");
+    let mut path = None;
+    for line in listed.split('\0') {
+        if let Some(found) = line.strip_prefix("worktree ") {
+            path = Some(PathBuf::from(found));
+        } else if line == wanted {
+            return Ok(path);
+        }
+    }
+    Ok(None)
 }

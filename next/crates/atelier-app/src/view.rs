@@ -107,6 +107,7 @@ pub fn overview(items: &[Located], caller: &Thread) -> Result<Overview, Problem>
             branch: located.branch.is_some(),
             blockers: &blockers,
             caller,
+            checkout: None,
         };
         let entry = entry(&facts)?;
         if entry.status == Status::Ready {

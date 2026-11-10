@@ -1,9 +1,12 @@
 //! Everything `status` and the commands print. The wording lives here, in
 //! one place, so it is cheap to change.
 
+use crate::forge::{CiRun, ForgeError, PullRequest};
+use crate::merge::Moved;
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
-use atelier_core::{Priority, Response, Status, Thread, Verdict};
+use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
+use std::path::Path;
 
 fn status_name(status: Status) -> &'static str {
     match status {
@@ -69,6 +72,19 @@ fn condition(id: &str, condition: &Condition) -> String {
         Condition::OpenFinding { finding, title } => {
             format!("No fix-now finding is open; {finding} is: {title}")
         }
+        Condition::NoApproval => "A review of the latest round approves it (none does)".into(),
+        Condition::Stale { round, commit, changed } => format!(
+            "The approval still covers the head: since {}, which round {round} reviewed, nothing changed outside this item's directory, nor its Goal, Done when or Scope (changed: {})",
+            short(commit),
+            some(changed)
+        ),
+        Condition::Uncommitted(paths) => format!(
+            "Every change to a tracked file or to this item's directory is committed (these are not: {})",
+            some(paths)
+        ),
+        Condition::Reviewed => {
+            "Nobody has reviewed it (it has a review file, so it merges once approved, with `atelier merge`)".into()
+        }
     };
     format!("  [ ] {text}")
 }
@@ -113,6 +129,19 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
         {
             text += "A finding that stands needs `atelier verdict changes`. A carried one closes when your file says `Now: fixed` or `Now: withdrawn` for it.\n";
         }
+        if unmet.iter().any(|c| matches!(c, Condition::Uncommitted(_))) {
+            text += "Commit them, or set them aside with `git stash`.\n";
+        }
+        if matches!(act, Act::Merge | Act::MergeTrivial)
+            && unmet.iter().any(|c| matches!(c, Condition::Unanswered(_)))
+        {
+            text += "A question is answered under its heading in `## Decisions`, as `Answer by <thread>: <answer>`, by a thread that never implemented the item.\n";
+        }
+        // A stale approval is answered by a fresh review, not by merging.
+        if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
+            text += "What changed needs a fresh review, so send it back to review.\n";
+            return text + &format!("Then: {}\n", command(Act::Submit, id));
+        }
     }
     let or = match act {
         Act::VerdictApprove => {
@@ -130,8 +159,9 @@ fn holder(entry: &Entry) -> String {
     }
 }
 
-/// `status` on an item's branch.
-pub fn item(caller: &Thread, entry: &Entry) -> String {
+/// `status` on an item's branch. `config` is the base's, whose merge
+/// checks and forge `merge` goes through.
+pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
         format!(
@@ -150,12 +180,46 @@ pub fn item(caller: &Thread, entry: &Entry) -> String {
             holder(entry)
         )
     };
+    let mut next = next(entry);
+    // Before `merge`, what it will run and wait for; a stale approval is
+    // sent to `submit` instead.
+    let stale = entry
+        .unmet
+        .iter()
+        .any(|c| matches!(c, Condition::Stale { .. }));
+    if entry.next == Some(Act::Merge) && !stale {
+        let then = next.rfind("Then: ").expect("it ends with a Then line");
+        next.insert_str(then, &gates(config));
+    }
     format!(
-        "{who}Title: {}\nStatus: {}\n{}",
+        "{who}Title: {}\nStatus: {}\n{next}",
         entry.title,
         status_name(entry.status),
-        next(entry)
     )
+}
+
+/// What `merge` runs and waits for, from the base's config.
+fn gates(config: &Config) -> String {
+    let mut text = String::new();
+    if !config.merge_checks.is_empty() {
+        text += "`atelier merge` runs these merge checks on the tree merging makes:\n";
+        for check in &config.merge_checks {
+            text += &format!("  {}\n", check.run);
+        }
+    }
+    if let Some(forge) = &config.forge {
+        text += &format!(
+            "It pushes the branch to {} and opens its pull request",
+            forge.remote
+        );
+        text += &match &forge.ci_workflow {
+            Some(workflow) => {
+                format!(", and merges once {workflow} passes on the branch's head.\n")
+            }
+            None => ", then merges and pushes the base.\n".into(),
+        };
+    }
+    text
 }
 
 /// `status` away from an item's branch.
@@ -493,4 +557,176 @@ pub fn verdict_recorded(
         "Recorded your verdict on {id}, round {round}: {}. Committed {path} with it.\n{id} is back with its implementer, {implementer}, {to}. Your review is done: say so to whoever started you, and stop.\n",
         verdict_name(verdict)
     )
+}
+
+fn short(commit: &str) -> &str {
+    commit.get(..7).unwrap_or(commit)
+}
+
+/// The first five of `names`, and how many more.
+fn some(names: &[String]) -> String {
+    let mut text = names.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+    if names.len() > 5 {
+        text += &format!(" and {} more", names.len() - 5);
+    }
+    text
+}
+
+pub fn no_reason() -> String {
+    "`atelier merge --trivial` needs a reason: `atelier merge --trivial \"<why the change is evidently correct>\"`. Nothing changed.\n".into()
+}
+
+pub fn waiting() -> String {
+    "Another `atelier merge` is running in this clone; this one waits for it to finish.\n".into()
+}
+
+pub fn base_dirty(base: &str, path: &Path, dirty: &[String]) -> String {
+    format!(
+        "`atelier merge` refused: {base} is checked out at {}, where tracked files have uncommitted changes: {}. Nothing changed.\nMerging moves that checkout to the merge commit. Commit them or set them aside with `git stash` there, then run `atelier merge` again.\n",
+        path.display(),
+        some(dirty)
+    )
+}
+
+pub fn conflicts(id: &str, base: &str, paths: &[String]) -> String {
+    format!(
+        "`atelier merge` refused: {id} does not merge cleanly into {base}; these conflict: {}. Nothing changed.\nMerge {base} in with `git merge {base}` on branch {id}, resolve the conflicts and commit. `atelier status` then says what comes next.\n",
+        some(paths)
+    )
+}
+
+/// The merge commit's message. Its last line is the trailer the pre-push
+/// hook knows an Atelier merge by.
+pub fn merge_message(id: &str, title: &str, base: &str, config: &Config) -> String {
+    let mut text =
+        format!("Merge {id}: {title}\n\nMerges branch {id} into {base} and marks {id} done.\n");
+    if !config.merge_checks.is_empty() {
+        text += "These merge checks passed on this tree:\n";
+        for check in &config.merge_checks {
+            text += &format!("- {}\n", check.run);
+        }
+    }
+    text + &format!("\nAtelier-Merge: {id}\n")
+}
+
+pub fn check_failed(id: &str, base: &str, run: &str, code: Option<i32>, tail: &str) -> String {
+    let code = code.map_or("killed by a signal".to_string(), |code| {
+        format!("exit {code}")
+    });
+    let mut text = format!(
+        "`atelier merge` refused: the merge check `{run}` failed ({code}) on {id} merged into {base}. Nothing changed.\nThe end of its output:\n"
+    );
+    for line in tail.lines() {
+        text += &format!("  {line}\n");
+    }
+    text + &format!(
+        "Fix it on branch {id} and commit; if {base} broke it, bring {base} in first with `git merge {base}`. `atelier status` then says what comes next.\n"
+    )
+}
+
+pub fn forge_failed(error: &ForgeError, pushed: bool) -> String {
+    let (reason, next) = match error {
+        ForgeError::GhMissing => (
+            "gh, the GitHub CLI, is not on PATH".to_string(),
+            "Install it (https://cli.github.com) and run `gh auth login`".to_string(),
+        ),
+        ForgeError::SignedOut { host } => (
+            format!("gh is not signed in to {host}"),
+            "Run `gh auth login`".to_string(),
+        ),
+        ForgeError::Unreachable(message) => (
+            format!("gh failed: {message}"),
+            "Fix what it says (`gh auth status` shows the sign-in)".to_string(),
+        ),
+    };
+    let pushed = if pushed {
+        " The branch was pushed."
+    } else {
+        ""
+    };
+    format!(
+        "`atelier merge` refused: {reason}. Nothing was merged.{pushed}\n{next}, then run `atelier merge` again.\n"
+    )
+}
+
+pub fn branch_push_failed(id: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "`atelier merge` refused: pushing branch {id} to {remote} failed: {error:#}. Nothing was merged.\nIf {remote} has commits on {id} that this branch lacks, bring them in with `git pull {remote} {id}`; otherwise fix what Git says. Then run `atelier merge` again.\n"
+    )
+}
+
+pub fn pull_request(id: &str, remote: &str, pull: &PullRequest) -> String {
+    format!(
+        "Pushed branch {id} to {remote}. Pull request #{}: {}\n",
+        pull.number, pull.url
+    )
+}
+
+/// The title and body of the pull request `merge` opens.
+pub fn pull_request_text(id: &str, title: &str, base: &str) -> (String, String) {
+    (
+        format!("{id}: {title}"),
+        format!(
+            "Atelier item {id}. Its review is recorded in `.atelier/items/{id}/reviews/` on the branch, and `atelier merge` merges it into {base}."
+        ),
+    )
+}
+
+pub fn ci_pending(workflow: &str, head: &str, newest: Option<&CiRun>) -> String {
+    let state = match newest {
+        Some(run) => format!("it is {} ({})", run.status.replace('_', " "), run.url),
+        None => "no run of it has started".into(),
+    };
+    format!(
+        "CI has not finished on {}, the branch's head: {state}. Nothing else changed.\nRun `atelier merge` again once {workflow} finishes.\n",
+        short(head)
+    )
+}
+
+pub fn ci_failed(workflow: &str, head: &str, run: &CiRun) -> String {
+    let conclusion = run.conclusion.as_deref().unwrap_or("without a conclusion");
+    format!(
+        "`atelier merge` refused: {workflow} finished {conclusion} on {}, the branch's head ({}). Nothing was merged.\nIf it failed for a reason outside the change, rerun it with `gh run rerun {id}` and run `atelier merge` again once it passes. Otherwise read the log with `gh run view {id} --log-failed`, fix the change on the branch and commit; `atelier status` then says what comes next.\n",
+        short(head),
+        run.url,
+        id = run.id
+    )
+}
+
+pub fn moved(moved: &Moved, id: &str, base: &str) -> String {
+    let what = match moved {
+        Moved::Branch => format!("branch {id}"),
+        Moved::Base => format!("the base branch {base}"),
+        Moved::Checkout(path) => format!("the checkout at {}", path.display()),
+    };
+    format!(
+        "`atelier merge` wrote nothing: {what} changed while its checks ran, so they do not cover what would merge now.\nRun `atelier merge` again.\n"
+    )
+}
+
+pub fn not_merged(base: &str) -> String {
+    format!(
+        "Moving {base} to the merge commit failed, so {base} is as it was. Run `atelier merge` again once the cause below is fixed"
+    )
+}
+
+pub fn merged(id: &str, base: &str, commit: &str) -> String {
+    format!(
+        "Merged {id} into {base} with merge commit {}, which marks it done.\n",
+        short(commit)
+    )
+}
+
+pub fn base_pushed(base: &str, remote: &str) -> String {
+    format!("Pushed {base} to {remote}.\n")
+}
+
+pub fn base_push_failed(base: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Pushing {base} to {remote} failed: {error:#}. The merge stays on the local {base}.\nIf {remote}'s {base} has commits the local one lacks, bring them into the local {base} first. Then run `atelier merge` again on this branch to push it.\n"
+    )
+}
+
+pub fn already_merged(id: &str, base: &str) -> String {
+    format!("{id} is already merged into {base}; nothing is left to do on it.\n")
 }
