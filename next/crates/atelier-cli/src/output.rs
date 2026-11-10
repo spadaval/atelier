@@ -6,7 +6,7 @@ use crate::merge::Moved;
 use crate::setup::{Harness, Step};
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
-use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
+use atelier_core::{Config, Priority, Response, Settlement, Status, Thread, Verdict};
 use atelier_records::{Problem, ReviewFile};
 use std::path::Path;
 use std::time::Duration;
@@ -60,6 +60,7 @@ fn goal(act: Act, status: Status) -> &'static str {
         Act::Close | Act::CloseMission => "close it",
         Act::PlanVerdictChanges | Act::PlanVerdictApprove => "record your verdict",
         Act::Lead => "lead it",
+        Act::Settle => "settle it",
     }
 }
 
@@ -114,6 +115,19 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
             format!("{item} is done or dropped (it is {})", status_name(*status))
         }
         Condition::NoResult => "Result: written under `## Result`".into(),
+        Condition::NoFinding(finding) => {
+            format!("A review of {id} has a finding {finding} (none does)")
+        }
+        Condition::NotDeferred(finding) => format!(
+            "Finding {id}/{finding} is deferred, by its recommendation or by a decision (it is not)"
+        ),
+        Condition::Settled {
+            finding,
+            settlement,
+        } => format!(
+            "Finding {id}/{finding} is not settled yet (it was {})",
+            settled(settlement)
+        ),
     };
     format!("  [ ] {text}")
 }
@@ -539,16 +553,26 @@ fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
 }
 
 /// What a planning command prints once it has written `paths`, which are
-/// in the checkout `at` names, as for [`commit_line`].
-pub fn planned(said: &str, at: Option<&Path>, paths: &[String], message: &str) -> String {
+/// in the checkout `at` names, as for [`commit_line`]. `item` is the item
+/// whose branch it ran on, when it settled a finding there.
+pub fn planned(
+    said: &str,
+    item: Option<&str>,
+    at: Option<&Path>,
+    paths: &[String],
+    message: &str,
+) -> String {
     let mut text = format!("{said}Wrote, and did not commit:\n");
     for path in paths {
         text += &format!("  {path}\n");
     }
-    text + &format!(
-        "Planning counts once it is committed on the base.\nThen: {}\n",
-        commit_line(at, paths, message)
-    )
+    text += &match item {
+        None => "Planning counts once it is committed on the base.\n".into(),
+        Some(id) => format!(
+            "Once committed, it reaches the base when {id} merges. It is outside {id}'s directory, so a review of {id} must see it: an approval from before it is stale, and `atelier merge` will say to run `atelier submit`.\n"
+        ),
+    };
+    text + &format!("Then: {}\n", commit_line(at, paths, message))
 }
 
 pub fn created_item(id: &str) -> String {
@@ -563,23 +587,107 @@ pub fn created_mission(id: &str) -> String {
     )
 }
 
+/// Where to run a command that runs on the base branch `base`, which
+/// `checkout`, if any, has checked out.
+fn on_base(base: &str, checkout: Option<&Path>) -> String {
+    match checkout {
+        Some(path) => format!(
+            "Run it in {}, which has {base} checked out.",
+            path.display()
+        ),
+        None => format!("Run it in a checkout of {base}, as after `git switch {base}`."),
+    }
+}
+
 pub fn off_base(
     command: &str,
     base: &str,
     branch: Option<&str>,
     checkout: Option<&Path>,
 ) -> String {
-    let there = match checkout {
-        Some(path) => format!(
-            "Run it in {}, which has {base} checked out.",
-            path.display()
+    format!(
+        "`atelier {command}` writes planning, which happens on the base branch {base}, and this checkout is on {}. Nothing changed.\n{}\n",
+        place(branch),
+        on_base(base, checkout)
+    )
+}
+
+/// `new --from` or `drop` on a finding, run on a branch that is not the
+/// base's nor that of an item the caller implements.
+pub fn settle_elsewhere(
+    command: &str,
+    base: &str,
+    branch: Option<&str>,
+    checkout: Option<&Path>,
+) -> String {
+    format!(
+        "`atelier {command}` settles a finding on the base branch {base}, or on the branch of an item you implement, and this checkout is on {}. Nothing changed.\n{}\n",
+        place(branch),
+        on_base(base, checkout)
+    )
+}
+
+/// `name`, given to `new --from` or `drop`, is no finding's name.
+pub fn not_a_finding(command: &str, name: &str) -> String {
+    format!(
+        "`atelier {command} {name}` refused; nothing changed.\n`{name}` is not a finding's name, <item>/<review>.<number>, as `atelier list --deferred` prints it.\n"
+    )
+}
+
+/// `new --from` or `drop` on finding `name` of item `id`, refused for its
+/// item's status or for the finding.
+pub fn settle_refused(command: &str, name: &str, id: &str, refusal: &Refusal) -> String {
+    let why = match refusal {
+        Refusal::From { status, .. } => format!(
+            "  [ ] {id} is done (it is {}; only a done item's findings are settled)",
+            status_name(*status)
         ),
-        None => format!("Run it in a checkout of {base}, as after `git switch {base}`."),
+        Refusal::Unmet(unmet) => {
+            let lines: Vec<String> = unmet.iter().map(|c| condition(id, c)).collect();
+            lines.join("\n")
+        }
+        Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
+            unreachable!("settling a finding needs no role, and a record problem is an error")
+        }
     };
     format!(
-        "`atelier {command}` writes planning, which happens on the base branch {base}, and this checkout is on {}. Nothing changed.\n{there}\n",
-        place(branch)
+        "`atelier {command} {name}` refused; nothing changed.\n{why}\n`atelier list --deferred` lists the deferred findings nobody has settled.\n"
     )
+}
+
+/// How a finding was settled, after "it was".
+pub(crate) fn settled(settlement: &Settlement) -> String {
+    match settlement {
+        Settlement::Taken { item, by } => format!("taken into {item} by {by}"),
+        Settlement::Dropped { by, reason } => format!("dropped by {by}: {reason}"),
+    }
+}
+
+pub fn finding_taken(name: &str, id: &str) -> String {
+    format!(
+        "Created draft item {id} from finding {name}: its Goal quotes the finding, and its Done when and Scope are empty to write.\nMarked finding {name} taken into {id}.\nA planner makes {id} ready with: atelier ready {id} --by <name>\n"
+    )
+}
+
+/// A planning command's write failed. `created` says it had written a new
+/// item, which it removes, and `left` names the directories of those it
+/// could not remove.
+pub fn write_failed(command: &str, created: bool, left: &[String]) -> String {
+    let failed = format!("`atelier {command}` could not write its records");
+    match (created, left) {
+        (false, _) => failed,
+        (true, []) => {
+            format!("{failed}, so it removed the new item it had written; nothing changed")
+        }
+        (true, left) => format!(
+            "{failed}, and could not remove the new item it had written; remove {} by hand",
+            left.join(" and ")
+        ),
+    }
+}
+
+pub fn finding_dropped(name: &str, reason: &str) -> String {
+    format!("Dropped finding {name}: {reason}\n")
 }
 
 /// The problems a planning command found in what it would write, with

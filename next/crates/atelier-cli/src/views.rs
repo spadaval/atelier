@@ -7,8 +7,9 @@ use crate::commands::{facts, Outcome};
 use crate::repo::{mission_path, Repo};
 use crate::{plan, view_output};
 use anyhow::{anyhow, Result};
-use atelier_app::acts::{check_mission, Act, MissionFacts, Refusal};
+use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
 use atelier_app::{entries, entry, in_progress, items_of, list as groups, Filter};
+use atelier_core::Status;
 use atelier_records::validate_id;
 
 pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
@@ -38,11 +39,24 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
     };
     let links = repo.links(record)?;
     let entry = entry(&facts(repo, &located, &links, None))?;
+    // A settlement is written in the checkout it is run in, on the base or
+    // on an implementer's branch, so one this checkout holds is shown too.
+    let mut findings = record.findings()?;
+    if let Some(here) = repo
+        .checkout_item(id)?
+        .filter(|_| record.item.status == Status::Done)
+    {
+        for settled in here.findings()?.into_iter().filter(|f| f.is_settled()) {
+            if let Some(finding) = findings.iter_mut().find(|f| f.name == settled.name) {
+                finding.settlement = settled.settlement;
+            }
+        }
+    }
     Ok(Outcome::Done(view_output::item(
         record,
         &entry,
         links.mission.as_ref(),
-        &record.findings()?,
+        &findings,
         &record.open_findings()?,
     )))
 }
@@ -53,6 +67,18 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
     let entries = entries(&items, &missions, &repo.caller)?;
     let groups = groups(&entries, &missions, &repo.caller, filter);
     Ok(Outcome::Done(view_output::list(&groups, filter)))
+}
+
+/// `list --deferred`: the deferred findings of done items that nobody has
+/// settled. It reads the items of this checkout, committed or not, as
+/// `new --from` and `drop` do, so it lists what they would settle here.
+pub fn deferred(repo: &mut Repo) -> Result<Outcome> {
+    let mut found = Vec::new();
+    for dir in repo.store().items()? {
+        let unsettled = unsettled(&dir)?.into_iter();
+        found.extend(unsettled.map(|finding| (dir.item.id.clone(), finding)));
+    }
+    Ok(Outcome::Done(view_output::deferred(&found)))
 }
 
 /// Makes the caller the lead of a ready mission in the checkout of the
