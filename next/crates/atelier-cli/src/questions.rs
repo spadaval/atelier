@@ -4,7 +4,7 @@
 //! `submit` commits it with the item.
 
 use crate::commands::{facts, refusal, refused, Outcome};
-use crate::repo::{item_dir, item_path, Links, Repo};
+use crate::repo::{git_at, item_dir, item_path, Links, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, bail, Result};
 use atelier_app::acts::{check, question, unmet, Act, Facts, Refusal};
@@ -62,6 +62,7 @@ pub fn escalate(repo: &mut Repo, question: &str, finding: Option<&str>) -> Resul
     }
     repo.store().write_item(&dir.item)?;
     let decider = decider(
+        repo,
         &Facts {
             item: &dir,
             ..facts
@@ -99,7 +100,7 @@ pub fn decide(
     match check(Act::Decide, &facts) {
         Ok(_) => {}
         Err(Refusal::Unmet(unmet)) => {
-            let handoff = decider(&facts, &links)?;
+            let handoff = decider(repo, &facts, &links)?;
             let refused = output::not_decider(id, &repo.caller, &unmet, handoff.as_deref());
             return Ok(Outcome::Refused(refused));
         }
@@ -147,8 +148,10 @@ pub fn decide(
 
 /// What tells the implementer of `facts`' item who answers the oldest
 /// question waiting on it, if one waits: the item's mission's lead, when
-/// the mission is ready and the lead may decide it, else a new thread.
-pub(crate) fn decider(facts: &Facts, links: &Links) -> Result<Option<String>> {
+/// the mission is ready and the lead may decide it, else a new thread. The
+/// lead reads the item from its branch's last commit, so it is told how to
+/// commit a question it cannot see yet.
+pub(crate) fn decider(repo: &Repo, facts: &Facts, links: &Links) -> Result<Option<String>> {
     let Some((_, asked)) = question(facts.item)? else {
         return Ok(None);
     };
@@ -164,9 +167,19 @@ pub(crate) fn decider(facts: &Facts, links: &Links) -> Result<Option<String>> {
             lead = Some((mission.as_str(), thread));
         }
     }
+    let path = item_path(id);
+    let commit = match lead.is_some() && repo.uncommitted(id)?.contains(&path) {
+        true => Some(output::commit_line(
+            git_at(&repo.root),
+            &[path],
+            &format!("Ask about {id}"),
+        )),
+        false => None,
+    };
     let review = (asked.finding.as_ref())
         .map(|finding| format!("{}/reviews/{}.md", item_dir(id), finding.review));
-    Ok(Some(output::decider(id, &asked, review.as_deref(), lead)))
+    let said = output::decider(id, &asked, review.as_deref(), lead, commit.as_deref());
+    Ok(Some(said))
 }
 
 /// `text` trimmed, when it is one line and not empty: a question is a

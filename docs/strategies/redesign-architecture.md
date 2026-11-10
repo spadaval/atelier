@@ -478,7 +478,9 @@ first. That line is orientation, not a condition of `submit`. The
 implementer's `status` lists each unanswered question as a condition of
 `submit` or `merge`, and says who decides the oldest: the lead of the
 item's mission, when the mission is ready and its lead may decide it, else
-a new thread, with the handoff `escalate` printed. An open finding whose
+a new thread, with the handoff `escalate` printed. The lead reads the item
+from its branch's last commit, so while the question is not committed the
+lead's handoff also gives the Git command that commits it. An open finding whose
 rebuttal a reviewer kept says that a rebuttal has had its one try, so the
 exits left are a fix or `escalate`. A lead's `status` lists, under each
 mission it leads, its items' unanswered questions with the `decide` that

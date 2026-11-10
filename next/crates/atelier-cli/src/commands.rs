@@ -26,7 +26,7 @@ pub fn status(repo: &mut Repo) -> Result<String> {
         let facts = facts(repo, &located, &links, Some(&checkout));
         let mut entry = entry(&facts)?;
         annotate(repo, &mut entry, record)?;
-        let decider = crate::questions::decider(&facts, &links)?;
+        let decider = crate::questions::decider(repo, &facts, &links)?;
         let config = repo.base_config()?;
         let dropped = record.dropped();
         let said = output::item(&repo.caller, &entry, &config, dropped, decider.as_deref());

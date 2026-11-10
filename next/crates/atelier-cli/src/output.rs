@@ -559,7 +559,7 @@ fn quoted(word: &str) -> String {
 /// The Git command that commits `paths`, and only them, with `message`.
 /// `at` is the checkout they are in, which the command names with `-C`
 /// when the caller is not at its root (see [`crate::repo::git_at`]).
-fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
+pub(crate) fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String {
     let git = match at {
         Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
         None => "git".into(),
@@ -1215,16 +1215,21 @@ pub fn verdict_recorded(
 /// Who answers `question`, the oldest waiting on item `id`: `lead`, a
 /// mission and its lead, when it may decide it, else a new thread, which
 /// reads the question and, when it is about a finding, the `review` file
-/// that holds the finding.
+/// that holds the finding. `commit` commits the question, when the lead
+/// cannot see it yet because it is not committed.
 pub fn decider(
     id: &str,
     question: &Decision,
     review: Option<&str>,
     lead: Option<(&str, &Thread)>,
+    commit: Option<&str>,
 ) -> String {
     if let Some((mission, lead)) = lead {
+        let commit = commit.map_or(String::new(), |line| {
+            format!("{lead}'s `atelier status` reads this branch's last commit, so commit the question first: {line}\n")
+        });
         return format!(
-            "Thread {lead}, the lead of mission {mission}, decides it: {lead}'s `atelier status` lists the question. Tell whoever started you that it waits, and run `atelier status` once it is answered.\n"
+            "Thread {lead}, the lead of mission {mission}, decides it: {lead}'s `atelier status` lists the question.\n{commit}Tell whoever started you that it waits, and run `atelier status` once it is answered.\n"
         );
     }
     let task = match (&question.finding, review) {

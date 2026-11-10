@@ -461,24 +461,35 @@ fn a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_
     let root = scratch.root();
     let run = escalate(&root, None);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    assert!(
-        run.stdout.ends_with(
-            "Thread lead1, the lead of mission demo-m1ss, decides it: lead1's `atelier status` \
-             lists the question. Tell whoever started you that it waits, and run `atelier \
-             status` once it is answered.\n"
-        ),
-        "{}",
-        run.stdout
+    let path = item_path(ID);
+    let commit = format!("git add -- {path} && git commit -m \"Ask about {ID}\" -- {path}");
+    let handoff = format!(
+        "Thread lead1, the lead of mission demo-m1ss, decides it: lead1's `atelier status` lists \
+         the question.\nlead1's `atelier status` reads this branch's last commit, so commit the \
+         question first: {commit}\nTell whoever started you that it waits, and run `atelier \
+         status` once it is answered.\n"
     );
+    assert!(run.stdout.ends_with(&handoff), "{}", run.stdout);
+    assert!(atelier(&root, "t1", &["status"]).stdout.contains(&handoff));
     let asked = asked();
     let waiting = format!(
         "  {ID}: {asked}\n    Answer it in the checkout on branch {ID}: atelier decide {ID} \
          \"<answer>\"\n"
     );
-    // The lead's status and `show` read the item from its branch's tip.
-    git(&root, &["commit", "-qam", "Ask"]);
+    // The lead's status and `show` read the item from its branch's tip:
+    // the question shows there once the command printed commits it.
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(!status.contains("Questions waiting"), "{status}");
+    let committed = identity(std::process::Command::new("sh").current_dir(&root))
+        .args(["-c", &commit])
+        .output()
+        .unwrap();
+    assert!(committed.status.success(), "{committed:?}");
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(!status.contains("commit the question first"), "{status}");
     let status = atelier(&base, "lead1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
