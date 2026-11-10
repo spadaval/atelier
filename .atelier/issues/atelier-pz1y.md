@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add `check` and the three Git hook rules"
-updated_at: "2026-11-10T22:05:56.194959770+00:00"
+updated_at: "2026-11-10T22:50:45.934977582+00:00"
 ---
 
 ## Goal
@@ -55,6 +55,10 @@ Move Atelier's rules about Git actions to where Git acts. `check` validates ever
 Design: `docs/strategies/redesign-architecture.md`, "Hooks and the bypass", "Where records are read and written" (the pre-push rule) and Testing. Behaviour: `docs/strategies/redesign-product.md`, "Hooks and the bypass" and Principles 6 and 9. The specification names the parser's inputs exactly so that a mission's documents and an item's artifacts are never parsed (planning finding atelier-1l4r). `atelier merge` already writes the `Atelier-Merge: <id>` trailer as the last line of its merge commit's message.
 
 This is the first of step D's three items in `docs/strategies/redesign-2-core.md`.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by sol-pz1y-r4 (atelier-6es7) at 9a5e7e94 after 4 rounds; 6 fix_now findings fixed (d7lx, tv18, z02d, dnlm, 1ymx, vjqf). Not merged; the orchestrator merges. See ## Report.
 
 ## Report
 
