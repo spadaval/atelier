@@ -1026,3 +1026,27 @@ fn an_untracked_file_in_the_items_directory_stops_the_merge() {
     refused(merge(&root, "t1", &["--trivial", "a typo"]));
     assert_eq!(field(&root, "main", "status"), "ready");
 }
+
+#[test]
+fn an_ignored_file_in_the_base_checkout_is_not_overwritten() {
+    let scratch = approved();
+    let root = scratch.root();
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    let tip = head(&root, "main");
+    // The base's checkout holds an ignored hello.txt, which the branch adds.
+    let exclude = git(&root, &["rev-parse", "--git-common-dir"]);
+    fs::write(root.join(exclude).join("info/exclude"), "hello.txt\n").unwrap();
+    fs::write(base.join("hello.txt"), "local\n").unwrap();
+    let run = merge(&root, "t1", &[]);
+    assert_eq!(run.code, 2, "{}", run.stdout);
+    assert!(
+        run.stderr
+            .starts_with("atelier: Moving main to the merge commit failed, so main is as it was."),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(read(&base, "hello.txt"), "local\n");
+    assert_eq!(head(&root, "main"), tip);
+    assert_eq!(head(&base, "HEAD"), tip);
+}

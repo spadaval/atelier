@@ -189,6 +189,8 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
                 "core.hooksPath=/dev/null",
                 "merge",
                 "--ff-only",
+                // A local file Git ignores is still someone's work.
+                "--no-overwrite-ignore",
                 "--quiet",
                 &commit,
             ],
