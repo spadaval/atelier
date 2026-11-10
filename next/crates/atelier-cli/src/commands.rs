@@ -2,7 +2,7 @@
 
 use crate::forge::Github;
 use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
-use crate::{git, merge, output, plan};
+use crate::{git, merge, output, plan, setup};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{approval, check, row, Act, Checkout, Facts, Refusal, STARTED};
 use atelier_app::{entry, overview, Entry, Located};
@@ -18,6 +18,15 @@ pub enum Outcome {
 }
 
 pub fn status(repo: &mut Repo) -> Result<String> {
+    let hooks = match setup::installed(&repo.root)? {
+        true => String::new(),
+        false => output::no_hooks(),
+    };
+    Ok(hooks + &orientation(repo)?)
+}
+
+/// What `status` says to the caller about where it stands.
+fn orientation(repo: &mut Repo) -> Result<String> {
     if let Some(located) = repo.current()? {
         let record = located.record().expect("the current item has a record");
         let links = repo.links(record)?;

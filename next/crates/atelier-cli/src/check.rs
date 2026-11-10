@@ -5,16 +5,18 @@
 
 use crate::commands::{self, Outcome};
 use crate::repo::{self, Repo};
-use crate::{git, output};
+use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
 use atelier_app::acts::TABLE;
 use atelier_core::Status;
 use atelier_records::{
     is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store, CONFIG,
 };
-use std::io::{ErrorKind, Read};
+use clap::ValueEnum;
+use std::io::{ErrorKind, Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 #[derive(Clone, Copy, clap::ValueEnum)]
 pub enum Hook {
@@ -65,22 +67,83 @@ pub fn check() -> Result<Outcome> {
 }
 
 /// `atelier check --hook <hook>`, which the hook's script runs with the
-/// arguments Git gave it.
+/// arguments and input Git gave it. Once its own rule passes, the clone's
+/// own hook, which `setup` kept as `<hook>.local`, runs with the same.
 pub fn hook(hook: Hook, args: &[String]) -> Result<Outcome> {
-    match hook {
-        Hook::PreCommit => pre_commit(&git::root()?),
+    let name = hook.to_possible_value().expect("hooks are named");
+    let name = name.get_name();
+    let (outcome, input) = match hook {
+        Hook::PreCommit => (pre_commit(&git::root()?)?, None),
         Hook::PrePush => {
             let mut input = String::new();
             std::io::stdin().read_to_string(&mut input)?;
-            pre_push(&git::root()?, &input)
+            (pre_push(&git::root()?, &input)?, Some(input))
         }
         // Nothing this hook runs or finds may fail the checkout, so it
         // ends in success whatever happens, a panic included.
         Hook::PostCheckout => {
             let said = catch_unwind(AssertUnwindSafe(|| post_checkout(args)));
-            Ok(Outcome::Done(said.unwrap_or_default()))
+            print!("{}", said.unwrap_or_default());
+            let _ = std::io::stdout().flush();
+            let failed = match catch_unwind(AssertUnwindSafe(|| kept(name, args, None))) {
+                Ok(Ok(failed)) => failed,
+                Ok(Err(error)) => Some(format!("{error:#}")),
+                Err(_) => Some("it could not be run".into()),
+            };
+            let said = failed.map(|why| output::kept_failed(name, &why));
+            return Ok(Outcome::Done(said.unwrap_or_default()));
+        }
+    };
+    if !matches!(outcome, Outcome::Done(_)) {
+        return Ok(outcome);
+    }
+    Ok(match kept(name, args, input.as_deref())? {
+        None => outcome,
+        Some(why) => Outcome::Refused(output::kept_refused(name, &why)),
+    })
+}
+
+/// Runs the clone's own hook `name`, kept as `<name>.local`, with Git's
+/// arguments and input, and says how it failed, if it did. One that is
+/// absent or not executable is not run, as Git would not run it.
+fn kept(name: &str, args: &[String], input: Option<&str>) -> Result<Option<String>> {
+    let path = git::hooks_dir(&git::root()?)?.join(format!("{name}.local"));
+    if !setup::runs(&path) {
+        return Ok(None);
+    }
+    let spawn = |command: &mut Command| {
+        let stdin = match input {
+            Some(_) => Stdio::piped(),
+            None => Stdio::inherit(),
+        };
+        command.args(args).stdin(stdin).spawn()
+    };
+    // Git runs a script with no `#!` line through the shell, as when exec
+    // fails with ENOEXEC, so the kept hook is run the same way.
+    const ENOEXEC: i32 = 8;
+    let spawned = match spawn(&mut Command::new(&path)) {
+        Err(error) if error.raw_os_error() == Some(ENOEXEC) => {
+            spawn(Command::new("/bin/sh").arg(&path))
+        }
+        spawned => spawned,
+    };
+    let mut child = match spawned {
+        Ok(child) => child,
+        Err(error) => return Ok(Some(format!("it could not start: {error}"))),
+    };
+    if let (Some(input), Some(mut stdin)) = (input, child.stdin.take()) {
+        // A hook that does not read its input closes the pipe early.
+        match stdin.write_all(input.as_bytes()) {
+            Err(error) if error.kind() != ErrorKind::BrokenPipe => return Err(error.into()),
+            _ => {}
         }
     }
+    let status = child.wait()?;
+    Ok(match (status.success(), status.code()) {
+        (true, _) => None,
+        (false, Some(code)) => Some(format!("it exited with {code}")),
+        (false, None) => Some(format!("it ended with {status}")),
+    })
 }
 
 /// Every staged record reads and validates, as staged, and each status a
