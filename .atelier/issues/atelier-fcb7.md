@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T05:07:03.585629075+00:00"
+updated_at: "2026-11-10T14:53:32.028397102+00:00"
 ---
 
 ## Outcome
@@ -31,3 +31,4 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
 
 - 2026-11-09 [note] Amended on Sumeet's direction (2026-11-09, in conversation), before any mission was made ready: Git hooks guard Git's actions and `land` goes; every rule can be skipped on purpose with ATELIER_SKIP and a reason; `merge` loses its flags and never waits, since the harness waits; `show` and `list` are spelled out so a lead or planner loses no view; his go-ahead stays `ready --by`. The command count is 17.
 - 2026-11-09 [note] Amended on Sumeet's direction (2026-11-09, in conversation), before any mission was made ready: the tool is rewritten in full, in a fresh Cargo workspace `next/` that depends on nothing under `crates/`. Pieces of the old code are copied only on purpose, named by the item that copies them. Mission 3's switch deletes `crates/` whole and moves `next/` into its place. A view of what changed since his go-ahead is the dashboard's to derive; the tool gives it each act with its commit and records readable at any commit.
+- 2026-11-10 [note] 2026-11-10: orchestration started, unattended, on Sumeet's go-ahead (atelier-a2uw). Step A runs in order: mal9, engh, 5cuc, syyj, then the fresh-agent runs in 67nn. Implementers are Claude Opus 5.5 and reviewers GPT-6.1 Sol. Each item has its own worktree under ~/.t3/worktrees/atelier/<id>.
