@@ -32,7 +32,10 @@ pub(crate) fn findings(
         let (number, title) = rest
             .split_once(": ")
             .and_then(|(number, title)| {
-                Some((number.parse::<u32>().ok().filter(|n| *n > 0)?, title))
+                // One spelling per number, as a finding's name has, so the
+                // name read is the one the heading is found by.
+                let n = number.parse::<u32>().ok();
+                Some((n.filter(|n| *n > 0 && n.to_string() == number)?, title))
             })
             .ok_or_else(|| problem("a finding heading is `## Finding <k>: <title>`".into()))?;
         let name = FindingName {
@@ -385,10 +388,20 @@ mod tests {
         };
         let settled = settle(body, 10, &dropped).unwrap();
         assert!(settled.ends_with("Recommendation: defer\nDropped by t9: gone"));
-        let read = findings(Path::new("r.md"), &"1-aaaa".parse().unwrap(), &settled).unwrap();
+        let review = "1-aaaa".parse().unwrap();
+        let read = findings(Path::new("r.md"), &review, &settled).unwrap();
         assert_eq!(read[1].settlement, Some(dropped));
         assert_eq!(read[0].settlement, None);
         assert_eq!(settle(body, 2, &taken), None);
+        // A heading whose number is spelt another way is not read as that
+        // finding, so no name is listed that settling cannot find.
+        for heading in ["## Finding 01: One", "## Finding +1: One"] {
+            let body = format!("{heading}\nRecommendation: defer\n");
+            assert!(
+                findings(Path::new("r.md"), &review, &body).is_err(),
+                "{heading}"
+            );
+        }
     }
 
     #[test]
