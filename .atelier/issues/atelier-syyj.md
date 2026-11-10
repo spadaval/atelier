@@ -154,6 +154,9 @@ A failing test that held a merge in its waiting check left the merge and its she
 
 ### Review fixes
 
+Six rounds by GPT-6.1 Sol (`atelier-ujuq` approved `fa724dcf` with no new findings), then a second opinion by GPT-6 Astra on the whole branch (`atelier-i8ix`, approved, no findings). Eight `fix_now` findings, all fixed:
+
+
 - Round 1, `atelier-uqsk`: `merge` read HEAD after checking the approval, so a commit made between the two was merged unreviewed. It now reads HEAD first and takes the approval's diff to that commit; `a_commit_made_after_merge_read_its_facts_is_not_merged` holds `merge` after its reads (debug-build hold `ATELIER_TEST_HOLD_AFTER_READ`, the same mechanism as `start`'s), commits, and checks nothing is written. It fails with the old order.
 - Round 1, `atelier-nioh`: `status` on an approved item now lists the base's merge checks and, with a forge, that `merge` pushes the branch, opens its pull request and waits for the CI workflow. It runs none of them. The plain and forge tests check the lines, and fail without them.
 - Round 2, `atelier-6844`: `merge` read the item's record from the checkout, so an uncommitted copy of the reviewed text could hide a committed change to its requirements. It now reads the record from the head it captured; `merge_judges_the_committed_item_not_the_checkouts` fails without that.
