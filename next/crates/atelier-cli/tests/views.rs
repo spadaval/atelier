@@ -247,7 +247,7 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
          Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n  \
          demo-b2bb (medium): Say goodbye\n    [ ] demo-a1aa is done (it is ready)\n\
          Held by other threads:\n  demo-d4dd (building, held by t1): Wave\n\
-         Missions in progress:\n  demo-m1ss (no lead): Greet everyone\n\
+         Missions in progress:\n  demo-m1ss (ready, in progress): Greet everyone\n\
          Waiting on a human (labelled needs-human):\n  \
          demo-f6ff (ready, medium, waits on a human): Choose a name\n\
          Then: atelier start demo-a1aa\n"
@@ -314,7 +314,7 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     );
     assert!(status.ends_with(&tail), "{status}");
     assert!(
-        status.contains("  demo-m1ss (led by lead1): Greet everyone\n"),
+        status.contains("  demo-m1ss (ready, in progress, led by lead1): Greet everyone\n"),
         "{status}"
     );
 

@@ -7,14 +7,10 @@ use atelier_app::{Entry, Filter, Group, Overview, LIFECYCLE};
 use atelier_core::{Decision, Finding, Mission, Ready, Status, Thread};
 use atelier_records::{ItemDir, MissionDir, ReviewFile};
 
-/// One item on one line: its ID, what holds or blocks it, and its title.
-/// `status` leaves out the status where a heading gives it.
-fn line(entry: &Entry, status: bool) -> String {
+/// Where an item stands: who holds it, what blocks it, and whether a
+/// thread could start it now.
+fn standing(entry: &Entry) -> Vec<String> {
     let mut facts = Vec::new();
-    if status {
-        facts.push(status_name(entry.status).to_string());
-    }
-    facts.push(priority_name(entry.priority).to_string());
     if STARTED.contains(&entry.status) {
         facts.push(holder(entry));
     }
@@ -24,23 +20,46 @@ fn line(entry: &Entry, status: bool) -> String {
             None => "no reviewer yet".into(),
         });
     }
-    let waiting = entry.waiting_on();
+    let waiting: Vec<String> = (entry.waiting_on().iter())
+        .map(|(id, s)| match s {
+            Some(status) => format!("{id}, which is {}", status_name(*status)),
+            None => format!("{id}, which is not found"),
+        })
+        .collect();
     if !waiting.is_empty() {
-        let names: Vec<String> = waiting
-            .iter()
-            .map(|(id, s)| match s {
-                Some(status) => format!("{id}, which is {}", status_name(*status)),
-                None => format!("{id}, which is not found"),
-            })
-            .collect();
-        facts.push(format!("blocked by {}", names.join(", and ")));
+        facts.push(format!("blocked by {}", waiting.join(", and ")));
     }
     if entry.needs_human() && PLANNED.contains(&entry.status) {
         facts.push("waits on a human".into());
     } else if entry.startable() {
         facts.push("can start now".into());
     }
+    facts
+}
+
+/// One item on one line: its ID, where it stands, and its title. `status`
+/// leaves out the status where a heading gives it.
+fn line(entry: &Entry, status: bool) -> String {
+    let mut facts = Vec::new();
+    if status {
+        facts.push(status_name(entry.status).to_string());
+    }
+    facts.push(priority_name(entry.priority).to_string());
+    facts.extend(standing(entry));
     format!("{} ({}): {}\n", entry.id, facts.join(", "), entry.title)
+}
+
+/// A mission's status, whether it is in progress, and its lead.
+fn mission_line(dir: &MissionDir, in_progress: bool) -> String {
+    let mission = &dir.mission;
+    let mut facts = vec![status_name(mission.status.status()).to_string()];
+    if in_progress {
+        facts.push("in progress".into());
+    }
+    if let Some(lead) = &mission.lead {
+        facts.push(format!("led by {lead}"));
+    }
+    format!("{} ({}): {}\n", mission.id, facts.join(", "), mission.title)
 }
 
 fn ready_line(ready: Option<&Ready>) -> String {
@@ -66,7 +85,8 @@ fn by_status(items: &[&Entry]) -> String {
         if at.is_empty() {
             continue;
         }
-        text += &format!("  {}:\n", capitalized(status_name(status)));
+        let name = status_name(status);
+        text += &format!("  {}{}:\n", name[..1].to_uppercase(), &name[1..]);
         for entry in at {
             text += &format!("    {}", line(entry, false));
             let other = entry
@@ -82,13 +102,6 @@ fn by_status(items: &[&Entry]) -> String {
         true => "  None yet.\n".into(),
         false => text,
     }
-}
-
-fn capitalized(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or(String::new(), |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
 }
 
 /// The handoff for each item of `items` a thread could start now, other
@@ -117,17 +130,8 @@ pub fn item(
     open: &[Finding],
 ) -> String {
     let item = &dir.item;
-    let mut held = String::new();
-    if STARTED.contains(&item.status) {
-        held = format!(", {}", holder(entry));
-    }
-    if item.status == Status::InReview {
-        held += match &entry.reviewer {
-            Some(reviewer) => format!("; review held by {reviewer}"),
-            None => "; no reviewer yet".into(),
-        }
-        .as_str();
-    }
+    let mut status = vec![status_name(item.status).to_string()];
+    status.extend(standing(entry));
     let mission = match mission {
         Some((id, Some(status))) => format!("{id} ({})", status_name(*status)),
         Some((id, None)) => format!("{id} (not in the base's last commit)"),
@@ -139,10 +143,10 @@ pub fn item(
         .map(|(id, s)| format!("{id} ({})", s.map_or("not found", status_name)))
         .collect();
     let mut text = format!(
-        "Item {}: {}\nStatus: {}{held}\nMission: {mission}\nLabels: {}\nPriority: {}\nBlocked by: {}\n{}",
+        "Item {}: {}\nStatus: {}\nMission: {mission}\nLabels: {}\nPriority: {}\nBlocked by: {}\n{}",
         item.id,
         item.title,
-        status_name(item.status),
+        status.join(", "),
         labels(&item.labels),
         priority_name(item.priority),
         labels(&blockers),
@@ -259,22 +263,7 @@ pub fn list(groups: &[Group], filter: &Filter) -> String {
     let mut text = String::new();
     for group in groups {
         text += &match (group.mission, &group.id) {
-            (Some(dir), _) => {
-                let mission = &dir.mission;
-                let mut facts = vec![status_name(mission.status.status()).to_string()];
-                if group.in_progress {
-                    facts.push("in progress".into());
-                }
-                if let Some(lead) = &mission.lead {
-                    facts.push(format!("led by {lead}"));
-                }
-                format!(
-                    "Mission {} ({}): {}\n",
-                    mission.id,
-                    facts.join(", "),
-                    mission.title
-                )
-            }
+            (Some(dir), _) => format!("Mission {}", mission_line(dir, group.in_progress)),
             (None, Some(id)) => format!("Mission {id} (not in the base's last commit):\n"),
             (None, None) => "In no mission:\n".into(),
         };
@@ -301,12 +290,7 @@ pub fn overview(overview: &Overview) -> String {
     if !overview.in_progress.is_empty() {
         text += "Missions in progress:\n";
         for dir in &overview.in_progress {
-            let lead = dir
-                .mission
-                .lead
-                .as_ref()
-                .map_or("no lead".to_string(), |t| format!("led by {t}"));
-            text += &format!("  {} ({lead}): {}\n", dir.mission.id, dir.mission.title);
+            text += &format!("  {}", mission_line(dir, true));
         }
     }
     if !overview.waiting.is_empty() {
