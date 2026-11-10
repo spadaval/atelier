@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Classify interventions, refusals and fix-now findings on seeded samples, with a second rater"
-updated_at: "2026-11-10T14:15:30.767281960+00:00"
+updated_at: "2026-11-10T15:04:24.348811277+00:00"
 ---
 
 ## Goal
@@ -46,6 +46,10 @@ Sampling and classification. Reads the baseline snapshot; never the live stores.
 ## Context
 
 Categories for review yield are the assessment's seven: a bug a user would hit; a bug in development, CI or experiment tooling; a missing or vacuous test; a wrong statement in docs or output; a wording or style nit; a tracker-record or process nit; overbuilt code. A refusal either stopped a real mistake or was friction. An intervention is a status question, unsticking a stall, or correcting direction. The snapshot is at `~/.local/share/atelier-baseline/2026-11/`. The assessment's own samples are in `/var/tmp/atelier-assessment/records/`, `/other-repos/` and `/transcripts/`; draw new seeded samples, and use those only to check the rubric.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved at e73a7dce by gpt-6.1-sol-3kr7-r3 (atelier-0jrr) after three Sol rounds. R3 (atelier-883n) fixed in d0eceeed; R1 and R2 (atelier-0l3c, atelier-28dp) disputed labels and are answered in classified.md's limits, recorded wont_fix by the reviewer. Final freeze.py verify passes. See the Report.
 
 ## Report
 
