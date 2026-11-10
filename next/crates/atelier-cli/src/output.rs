@@ -953,17 +953,19 @@ pub fn plan_verdict_recorded(
     )
 }
 
-pub fn no_review_held(branch: Option<&str>) -> String {
+/// `held` is the paths of the plan reviews without a verdict the caller
+/// holds in this checkout, when there is more than one.
+pub fn no_review_held(branch: Option<&str>, held: &[String]) -> String {
+    let text = "`atelier verdict` records the verdict of one review you hold: on an item's branch, or of a mission's plan in this checkout";
+    if !held.is_empty() {
+        return format!(
+            "{text}, and you hold more than one plan review without a verdict here: {}. Nothing changed.\nEach plan reviewer works in a detached worktree of its own (`git worktree add --detach <path>`); move all but one of these files to another, and run `atelier verdict` in each.\n",
+            some(held)
+        );
+    }
     format!(
-        "`atelier verdict` records the verdict of a review you hold: on an item's branch, or of a mission's plan in this checkout. This checkout is on {}, and holds no plan review of yours without a verdict. Nothing changed.\n`atelier status` lists what you hold; `atelier review <id>` opens a review.\n",
+        "{text}. This checkout is on {}, and holds no plan review of yours without a verdict. Nothing changed.\n`atelier status` lists what you hold; `atelier review <id>` opens a review.\n",
         place(branch)
-    )
-}
-
-pub fn plan_reviews_held(paths: &[String]) -> String {
-    format!(
-        "`atelier verdict` refused; nothing changed.\nYou hold more than one plan review without a verdict in this checkout: {}. Each plan reviewer works in a detached worktree of its own; move all but one of these files into one of those (`git worktree add --detach <path>`), and run `atelier verdict` in each.\n",
-        some(paths)
     )
 }
 

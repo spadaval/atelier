@@ -104,6 +104,16 @@ fn new_review(
     }
 }
 
+/// The sections of a mission's record, in order.
+const MISSION_SECTIONS: [&str; 6] = [
+    "Why",
+    "Outcome",
+    "Success criteria",
+    "Scope",
+    "Authority",
+    "Result",
+];
+
 /// `review` on a mission: opens the caller's review of its plan as this
 /// checkout holds it at HEAD, or takes over one with no verdict, and prints
 /// the plan's brief. It runs in any checkout, so two reviewers can each
@@ -142,17 +152,10 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         .filter(|dir| dir.item.mission.as_deref() == Some(id))
         .map(|dir| (item_path(&dir.item.id), dir.item.status, dir.item.title))
         .collect();
-    let sections = [
-        "Why",
-        "Outcome",
-        "Success criteria",
-        "Scope",
-        "Authority",
-        "Result",
-    ]
-    .into_iter()
-    .filter_map(|heading| Some((heading, mission.section(heading)?)))
-    .collect();
+    let sections = MISSION_SECTIONS
+        .into_iter()
+        .filter_map(|heading| Some((heading, mission.section(heading)?)))
+        .collect();
     let brief = output::plan_brief(&PlanBrief {
         id,
         title: &mission.mission.title,
@@ -185,21 +188,16 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
             held.push((mission, name));
         }
     }
-    let (mission, name) = match held.len() {
-        0 => {
-            return Ok(Outcome::Refused(output::no_review_held(
-                repo.branch.as_deref(),
-            )))
-        }
-        1 => held.remove(0),
-        _ => {
-            let paths: Vec<String> = held
-                .iter()
-                .map(|(m, name)| format!("{}/reviews/{name}.md", mission_dir(&m.mission.id)))
-                .collect();
-            return Ok(Outcome::Refused(output::plan_reviews_held(&paths)));
-        }
-    };
+    // A verdict records one review: none held, or several, is refused.
+    if held.len() != 1 {
+        let paths: Vec<String> = held
+            .iter()
+            .map(|(m, name)| format!("{}/reviews/{name}.md", mission_dir(&m.mission.id)))
+            .collect();
+        let branch = repo.branch.as_deref();
+        return Ok(Outcome::Refused(output::no_review_held(branch, &paths)));
+    }
+    let (mission, name) = held.remove(0);
     let id = mission.mission.id.clone();
     let file = mission
         .reviews
