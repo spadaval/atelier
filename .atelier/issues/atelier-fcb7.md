@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T18:43:02.478728317+00:00"
+updated_at: "2026-11-10T19:34:14.696563402+00:00"
 ---
 
 ## Outcome
@@ -44,3 +44,4 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
   Reason: CI is nearly all of the approval-to-merge wait (median 5.5 minutes on 25 items), and the implementer that runs merge is a delegated child that T3 neither lets watch a pull request nor wakes reliably. atelier-syyj was 2,400 lines into the build as specified, so it finishes unchanged and the reversal is one reviewed change on top.
   Rejected: Amend atelier-syyj mid-build
 - 2026-11-10 [note] 2026-11-10: atelier-5cuc (review and verdict; pull request 99, two rounds) and atelier-syyj (merge; pull request 102, six Sol rounds and an Astra second opinion) are merged, so the six work-loop commands exist in next/ at 4,798 non-test lines. atelier-xtvh's plan was approved on its third planning round. atelier-67nn (the fresh-agent runs) and atelier-xtvh now run side by side in their own worktrees.
+- 2026-11-10 [note] 2026-11-10: step A's evidence is in. In atelier-67nn's final round all six fresh-agent runs (three Claude Opus, three Codex) took a ready item to done, with at most one refused call (Codex: 0, 1, 0; Claude: 0, 0, 0), after two rounds of wording changes. A harness's native subagent runs as its parent's thread and is refused as reviewer; only a new thread can review. atelier-xtvh (submit starts CI, merge waits up to 9 minutes; pull request 103) is merged. Step B is planned as three items: atelier-yptz (mission records, new, set, ready, start --new), then atelier-jq24 (drop, close, plan reviews) beside atelier-jciw (show, list, lead, status on the base). The deferred finding atelier-3iyd (an unbounded forge call under the merge lock) is scheduled with step D, which touches merge again.
