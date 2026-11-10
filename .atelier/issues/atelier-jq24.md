@@ -290,7 +290,8 @@ The new binary driven by hand in a scratch repository (Git's commit lines left o
 
 ### Decisions
 
-- `drop` writes the base's record, the one in the base's checkout. An item only on its branch, as after `start --new`, has its branch's record written on the base as dropped, so it can be cancelled too; it keeps its `implementers`.
+- `drop` writes the base's record, the one in the base's checkout. An item only on its branch, as after `start --new`, gets its branch's front matter and its Goal, Done when and Scope written on the base, with the reason as its Report; its reviews, Responses and Decisions stay on the branch, so the base's record names no review the base lacks.
+- A take-over `start` is refused when the item's mission is dropped at the base's tip, as a plain `start` is.
 - `status` on the base lists the items dropped there while their branch still exists, with each reason; this is where "status from the base says it was dropped and why" lands. Other dropped items are not listed.
 - `review <mission>` runs anywhere except on an item's branch, where `verdict` would record the item's review instead; it reviews the checkout's HEAD. `verdict` on no item's branch finds the one plan review the caller holds without a verdict in that checkout, and refuses with each path when it holds several.
 - A plan verdict counts the file's own findings and the earlier rounds', not another file of the same round, which is the other blind reviewer's. On an item, where a round has one file, this is the same rule as before.
@@ -299,7 +300,17 @@ The new binary driven by hand in a scratch repository (Git's commit lines left o
 
 ### Surprises
 
-- Non-test Rust grew by 1,026 lines (6,318 to 7,344 by `scripts/count_non_test_rust.py`), about twice the expected 500. Much of it is wording in `output.rs` (about 270 lines) and the planning commands. I trimmed what repeated (the planner's facts, one refusal for plan reviews held) rather than golf further.
+- Non-test Rust grew by about 1,040 lines over the base it started from (6,318 to about 7,360 before the merge of `master`, by `scripts/count_non_test_rust.py`), about twice the expected 500. Much of it is wording in `output.rs` (about 270 lines) and the planning commands. I trimmed what repeated (the planner's facts, one refusal for plan reviews held) rather than golf further.
+
+### Review round 1
+
+Three fix-now findings, each fixed in its own commit with a test seen failing without the fix:
+
+- atelier-deu5: fixed in 259d8a36. A plan verdict judges openness only over its own file and earlier rounds, so a blind file of the same round that carries a finding no longer closes it for a file that left it out (`a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one`).
+- atelier-uxtd: fixed in a4e2d4ab. Taking over an item whose mission is dropped is refused (`taking_over_an_item_needs_its_mission_not_dropped`, and a started item in `a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped`).
+- atelier-i99x: fixed in ff0f6178. Dropping an item only on its branch writes its definition, not its Responses (`an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews`).
+
+Then `master` was merged in (05982979, then ba18b68e), bringing atelier-jciw. Both items read a mission's review files at a commit; I kept `CommitReader::mission`, which fills `MissionDir::reviews`, and removed jciw's `CommitReader::mission_reviews` and `Repo::mission_reviews`, so `show` reads `dir.reviews`. `lead` now calls `check_mission` with `MissionFacts`, and its row is in the table test's mission acts.
 
 ### Open items
 
