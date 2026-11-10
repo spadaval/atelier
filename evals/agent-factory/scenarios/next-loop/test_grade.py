@@ -35,7 +35,9 @@ class SlugifyTest(unittest.TestCase):
 
 
 @unittest.skipUnless(os.environ.get("NEXT_ATELIER"), "needs NEXT_ATELIER")
-class GradeTest(unittest.TestCase):
+class Fixture(unittest.TestCase):
+    """A fresh setup.sh work directory, and the binary driven in it."""
+
     def setUp(self):
         self.work = Path(tempfile.mkdtemp(prefix="next-loop-grade-"))
         subprocess.run(["bash", str(HERE / "setup.sh"), str(self.work)], check=True,
@@ -79,6 +81,8 @@ class GradeTest(unittest.TestCase):
                              text=True).stdout
         return json.loads(out)
 
+
+class GradeTest(Fixture):
     def test_done_with_an_independent_reviewer_passes(self):
         self.build()
         self.approve("rev")
@@ -132,54 +136,133 @@ class GradeTest(unittest.TestCase):
 
 
 class CountTest(unittest.TestCase):
-    def test_refused_and_errored_calls_in_both_formats(self):
+    def setUp(self):
         sys.path.insert(0, str(HERE))
         import grade
-        tmp = Path(tempfile.mkdtemp(prefix="next-loop-count-"))
-        try:
-            claude = tmp / "claude.jsonl"
-            events = []
-            for n, (cmd, result, err) in enumerate([
-                    ("atelier status", "You are thread x", False),
-                    ("atelier review slug-k3fa", "Exit code 1\nYou (thread x) have implemented", True),
-                    ("cat .atelier/items/slug-k3fa/item.md", "---", False),
-                    ("atelier verdict aprove", "Exit code 2\nerror: invalid value", True),
-                    ("python3 -m unittest", "Exit code 1\nFAILED", True),
-                    ('delegate "Run `atelier review slug-k3fa`"',
-                     "You (thread x) have implemented slug-k3fa. Nothing changed.", False)]):
-                events.append({"type": "assistant", "message": {"content": [
-                    {"type": "tool_use", "id": f"t{n}", "name": "Bash",
-                     "input": {"command": cmd}}]}})
-                events.append({"type": "user", "message": {"content": [
-                    {"type": "tool_result", "tool_use_id": f"t{n}", "content": result,
-                     "is_error": err}]}})
-            claude.write_text("\n".join(json.dumps(e) for e in events))
-            found, tools = grade.calls(claude, "main")
-            runs = [c for c in found if grade.ATELIER.search(c[1])]
-            self.assertEqual(tools, 6)
-            self.assertEqual([(c[1], c[2]) for c in runs],
-                             [("atelier status", 0), ("atelier review slug-k3fa", 1),
-                              ("atelier verdict aprove", 2),
-                              ('delegate "Run `atelier review slug-k3fa`"', 0)])
-            # A refusal hidden by a command substitution counts by its text.
-            self.assertEqual([(f["command"], f["refused"]) for f in grade.failures(runs)],
-                             [("atelier review slug-k3fa", True),
-                              ("atelier verdict aprove", False),
-                              ('delegate "Run `atelier review slug-k3fa`"', True)])
-            codex = tmp / "codex.jsonl"
-            codex.write_text("\n".join(json.dumps(e) for e in [
-                {"type": "thread.started", "thread_id": "x"},
-                {"type": "item.completed", "item": {"type": "agent_message", "text": "hi"}},
-                {"type": "item.completed", "item": {
-                    "type": "command_execution", "command": "/bin/bash -lc 'atelier submit'",
-                    "exit_code": 1, "aggregated_output": "refused"}},
-                {"type": "item.completed", "item": {"type": "file_change"}}]))
-            found, tools = grade.calls(codex, "main")
-            self.assertEqual(tools, 2)
-            self.assertEqual([(c[1], c[2]) for c in found if grade.ATELIER.search(c[1])],
-                             [("/bin/bash -lc 'atelier submit'", 1)])
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        self.grade = grade
+        self.tmp = Path(tempfile.mkdtemp(prefix="next-loop-count-"))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def claude(self, calls):
+        """A Claude Code transcript of Bash calls, each (command, output, is_error)."""
+        events = []
+        for n, (cmd, result, err) in enumerate(calls):
+            events.append({"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": f"t{n}", "name": "Bash", "input": {"command": cmd}}]}})
+            events.append({"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": f"t{n}", "content": result,
+                 "is_error": err}]}})
+        path = self.tmp / "claude.jsonl"
+        path.write_text("\n".join(json.dumps(e) for e in events))
+        return self.grade.calls(path, "main")
+
+    def counts(self, found):
+        return [(r["invocations"], r["help"], r["refused"], r["errored"])
+                for r in self.grade.tally(found)]
+
+    def test_each_invocation_and_each_refusal_counts(self):
+        submit = "`atelier submit` refused; nothing changed.\nTo submit it for review:\n"
+        found, tools = self.claude([
+            ("atelier status", "You are thread x", False),
+            ("atelier review slug-k3fa", "Exit code 1\nYou (thread x) have implemented "
+             "slug-k3fa, and an author does not review its own work. Nothing changed.", True),
+            ("cat .atelier/items/slug-k3fa/item.md; atelier --help", "---", False),
+            ("atelier verdict aprove", "Exit code 2\nerror: invalid value 'aprove' for "
+             "'<VERDICT>'\n\nFor more information, try '--help'.", True),
+            ("python3 -m unittest && atelier submit", "Exit code 1\nFAILED", True),
+            ("atelier submit; atelier submit; true", submit + submit, False),
+            ("atelier merge; atelier status", "Merged slug-k3fa", False),
+            ('delegate "Run atelier review slug-k3fa and follow what it prints."',
+             "Started thread t", False),
+            ('delegate "Run \\`atelier review slug-k3fa\\` and follow what it prints."',
+             "Started thread t", False),
+            ('delegate "Run `atelier review slug-k3fa` and follow what it prints."',
+             "You (thread x) have implemented slug-k3fa. Nothing changed.", False),
+            ("cat >> r.md <<'EOF'\nThen atelier verdict approve.\nEOF\n"
+             "atelier verdict approve", "Recorded your verdict", False)])
+        self.assertEqual(tools, 11)
+        self.assertEqual(self.counts(found), [
+            (1, 0, 0, 0), (1, 0, 1, 0), (1, 1, 0, 0), (1, 0, 0, 1),
+            # Failing tests are not a refused submit.
+            (1, 0, 0, 0),
+            # Refusals the enclosing shell hid.
+            (2, 0, 2, 0),
+            (2, 0, 0, 0),
+            # Task text runs nothing, unless a substitution runs it.
+            (1, 0, 1, 0),
+            # A heredoc body is text.
+            (1, 0, 0, 0)])
+
+    def test_a_codex_transcript_is_unwrapped(self):
+        path = self.tmp / "codex.jsonl"
+        path.write_text("\n".join(json.dumps(e) for e in [
+            {"type": "thread.started", "thread_id": "x"},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "hi"}},
+            {"type": "item.completed", "item": {
+                "type": "command_execution",
+                "command": "/bin/bash -lc \"git commit -qm 'Fix the atelier slug' && atelier submit\"",
+                "exit_code": 1, "aggregated_output": "`atelier submit` refused; nothing changed."}},
+            {"type": "item.completed", "item": {
+                "type": "command_execution",
+                "command": "/bin/bash -lc 'delegate \"Run atelier review slug-k3fa.\"'",
+                "exit_code": 0, "aggregated_output": "Started thread t"}},
+            {"type": "item.completed", "item": {"type": "file_change"}}]))
+        found, tools = self.grade.calls(path, "main")
+        self.assertEqual(tools, 3)
+        self.assertEqual(self.counts(found), [(1, 0, 1, 0)])
+
+
+class RefusalTextTest(Fixture):
+    """The grader's REFUSED and ERRORED patterns against what the binary
+    prints: every kind of refusal matches, and no success does."""
+
+    def run_atelier(self, thread, *args):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID")}
+        env.update(T3CODE_THREAD_ID=thread, PATH=f"{self.work / 'bin'}:{env['PATH']}")
+        done = subprocess.run(["atelier", *args], cwd=self.repo, env=env,
+                              capture_output=True, text=True)
+        return done.returncode, done.stdout + done.stderr
+
+    def test_refusals_match_and_successes_do_not(self):
+        sys.path.insert(0, str(HERE))
+        import grade
+        outcomes = [self.run_atelier("impl", "status"),
+                    self.run_atelier("impl", "start", "slug-k3fa"),
+                    self.run_atelier("impl", "submit"),          # unticked: refused
+                    self.run_atelier("other", "submit")]         # not the holder: refused
+        self.build_after_start()
+        outcomes += [self.run_atelier("impl", "submit"),
+                     self.run_atelier("impl", "status"),
+                     self.run_atelier("impl", "review", ID),     # the author: refused
+                     self.run_atelier("rev", "review", ID),
+                     self.run_atelier("rev", "status"),
+                     self.run_atelier("impl", "verdict", "approve"),  # another role: refused
+                     self.run_atelier("rev", "verdict", "aprove")]    # usage error
+        [review] = (self.repo / f".atelier/items/{ID}/reviews").glob("*.md")
+        review.write_text(review.read_text().replace("<!--", "Checked.\n<!--", 1))
+        outcomes += [self.run_atelier("rev", "verdict", "approve"),
+                     self.run_atelier("rev", "status"),
+                     self.run_atelier("rev", "review", ID),      # after its verdict: refused
+                     self.run_atelier("impl", "merge"),
+                     self.run_atelier("impl", "status"),
+                     self.run_atelier("impl", "start", "nope-0000")]  # no such item: refused
+        expected = [None, None, "refused", "refused", None, None, "refused", None, None,
+                    "refused", "errored", None, None, "refused", None, None, "refused"]
+        got = ["refused" if grade.REFUSED.search(out) else
+               "errored" if grade.ERRORED.search(out) else None for _, out in outcomes]
+        self.assertEqual(got, expected, "\n---\n".join(out for _, out in outcomes))
+        self.assertEqual([code for code, _ in outcomes],
+                         [{None: 0, "refused": 1, "errored": 2}[e] for e in expected])
+
+    def build_after_start(self):
+        (self.repo / "slug.py").write_text(FIXED)
+        (self.repo / "test_slug.py").write_text(TESTS)
+        item = self.repo / f".atelier/items/{ID}/item.md"
+        item.write_text(item.read_text().replace("- [ ]", "- [x]") + "\nDone.\n")
+        self.sh("git", "commit", "-qam", "Change")
 
 
 if __name__ == "__main__":

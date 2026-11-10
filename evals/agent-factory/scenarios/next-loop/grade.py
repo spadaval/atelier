@@ -6,14 +6,18 @@ item's implementers; the suite passes on main's tree, both Done when examples
 hold, and the tests fail against the original slug.py.
 
 Calls, read from the transcript and every delegated thread's transcript
-beside it (threads/): each shell call that runs `atelier`, refused (exit 1,
-or Atelier's refusal text in its output) or errored (exit 2 or any other
-failure but 3, merge's "not yet", or an `atelier: ` error line). The text
-counts because a pipeline or a command substitution can hide an exit
-status, as in `delegate "Run `atelier review x`"`; read the transcripts too.
+beside it (threads/): each `atelier` invocation a shell call runs, found in
+what the shell executes (Codex's `bash -lc` unwrapped, quoted text and
+heredoc bodies left out, command substitutions kept), so
+`delegate "Run atelier review x"` runs none and `atelier merge; atelier
+status` runs two. A call's refusals and errors are counted from Atelier's
+own refusal and error text in its output, at most one per invocation, since
+a shell, a pipeline or a command substitution can hide the exit status, as
+in `delegate "Run `atelier review x`"`. Read the transcripts too.
 """
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -22,8 +26,11 @@ from pathlib import Path
 ID = "slug-k3fa"
 ATELIER = re.compile(r"(?:^|[\s;&|()`'\"])(?:[^\s'\"]*/)?atelier(?=$|[\s;&|)`'\"])")
 HELP = re.compile(r"(?:^|[\s;&|()`'\"])(?:[^\s'\"]*/)?atelier\s+(?:\S+\s+)?(?:--help|-h|help)\b")
-REFUSED = re.compile(r"Nothing changed\.|Nothing was merged\.|`atelier merge` wrote nothing")
-ERRORED = re.compile(r"^atelier: |^error: .*\n+Usage: atelier", re.M)
+# Every refusal the binary prints ends its first sentence one of these ways
+# (test_grade.RefusalTextTest drives each against the real binary).
+REFUSED = re.compile(r"[Nn]othing changed\.|Nothing was merged\.|`atelier merge` wrote nothing|"
+                     r"(?:Implementers|Reviewers) run `")
+ERRORED = re.compile(r"^atelier: |^For more information, try '--help'|panicked at", re.M)
 EXAMPLES = 'assert slugify("Hello,  World!") == "hello-world"; ' \
            'assert slugify("  --Rust & Go--  ") == "rust-go"'
 
@@ -78,13 +85,60 @@ def calls(path, thread):
     return found, tools
 
 
-def failures(runs):
-    """The refused and errored calls among `runs`, each (thread, command,
-    exit code, output) that runs `atelier`."""
-    return [{"thread": t, "command": cmd[:200], "exit": code, "output": out[-600:],
-             "refused": code == 1 or (code == 0 and bool(REFUSED.search(out)))}
-            for t, cmd, code, out in runs
-            if code not in (0, 3) or REFUSED.search(out) or ERRORED.search(out)]
+def executed(command):
+    """The text of `command` that a shell runs as commands: a Codex
+    `/bin/bash -lc '<script>'` unwrapped, heredoc bodies and quoted text
+    dropped, and command substitutions inside double quotes kept."""
+    wrapped = re.match(r"/bin/(?:ba)?sh -lc (.*)\Z", command, re.S)
+    if wrapped:
+        try:
+            command = shlex.split(wrapped.group(1))[0]
+        except (ValueError, IndexError):
+            pass
+    lines, kept = command.split("\n"), []
+    while lines:
+        line = lines.pop(0)
+        kept.append(line)
+        for tag in re.findall(r"<<-?\s*['\"]?(\w+)", line):
+            while lines and lines.pop(0).strip() != tag:
+                pass
+    text, out, quote, i = "\n".join(kept), [], None, 0
+    while i < len(text):
+        c = text[i]
+        if quote == "'":
+            quote = None if c == "'" else quote
+        elif c == "\\":
+            i += 1
+        elif quote == '"' and c == '"':
+            quote = None
+        elif quote == '"' and (c == "`" or text.startswith("$(", i)):
+            end = text.find("`" if c == "`" else ")", i + 1)
+            end = len(text) if end < 0 else end
+            out.append(" " + text[i + (1 if c == "`" else 2):end] + " ")
+            i = end
+        elif quote is None and c in "'\"":
+            quote = c
+        elif quote is None:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def tally(shell):
+    """Each shell call of `shell` (thread, command, exit code, output) that
+    runs `atelier`, with its invocations, help lookups, refusals and errors."""
+    rows = []
+    for thread, command, code, out in shell:
+        runs = executed(command)
+        count = len(ATELIER.findall(runs))
+        if not count:
+            continue
+        refused = min(len(REFUSED.findall(out)), count)
+        rows.append({"thread": thread, "command": command[:200], "exit": code,
+                     "output": out[-600:], "invocations": count,
+                     "help": len(HELP.findall(runs)), "refused": refused,
+                     "errored": min(len(ERRORED.findall(out)), count - refused)})
+    return rows
 
 
 def main():
@@ -125,9 +179,9 @@ def main():
         found, count = calls(path, thread)
         shell += found
         tools += count
-    runs = [c for c in shell if ATELIER.search(c[1])]
-    failed = failures(runs)
-    refused = [f for f in failed if f["refused"]]
+    rows = tally(shell)
+    refused = sum(r["refused"] for r in rows)
+    errored = sum(r["errored"] for r in rows)
     checks = {
         "status_on_main": fields.get("status"),
         "implementers": implementers,
@@ -140,13 +194,13 @@ def main():
         "examples_hold_on_main": examples,
         "tests_fail_on_old_code": catches_old,
         "threads": len(transcripts),
-        "atelier_calls": len(runs),
-        "help_lookups": sum(1 for c in runs if HELP.search(c[1])),
-        "refused": len(refused),
-        "errored": len(failed) - len(refused),
+        "atelier_calls": sum(r["invocations"] for r in rows),
+        "help_lookups": sum(r["help"] for r in rows),
+        "refused": refused,
+        "errored": errored,
         "tool_calls": tools,
-        "within_limit": len(failed) <= 1,
-        "failed_calls": failed,
+        "within_limit": refused + errored <= 1,
+        "failed_calls": [r for r in rows if r["refused"] or r["errored"]],
     }
     problems = []
     if fields.get("status") != "done":
@@ -159,8 +213,8 @@ def main():
         problems.append("the change's tests do not pass on main, miss a Done when example, "
                         "or pass on the original code")
     notes = problems or ["done on main, approved by an independent thread, tests hold"]
-    notes.append(f"{len(refused)} refused and {len(failed) - len(refused)} errored "
-                 f"of {len(runs)} atelier calls (limit: one failed call)")
+    notes.append(f"{refused} refused and {errored} errored of "
+                 f"{checks['atelier_calls']} atelier calls (limit: one failed call)")
     print(json.dumps({"pass": not problems, "checks": checks, "notes": notes}))
 
 
