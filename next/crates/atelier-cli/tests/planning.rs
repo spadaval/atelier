@@ -926,12 +926,18 @@ fn drop_puts_its_reason_first_in_the_report_and_needs_a_reason_and_a_record_not_
 
 #[test]
 fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
-    let scratch = Scratch::new(&[(ID, "ready")]);
+    const STARTED: &str = "demo-st4r";
+    let scratch = Scratch::new(&[(ID, "ready"), (STARTED, "ready")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "ready");
     join_mission(&root, ID, MISSION);
+    join_mission(&root, STARTED, MISSION);
     commit_all(&root, "Plan");
     let item = read(&root, &item_path(ID));
+    // One of its items is started before the mission is dropped.
+    let work = scratch.worktree("work");
+    assert_eq!(atelier(&work, "t1", &["start", STARTED]).code, 0);
+    let branch = tip(&root, STARTED);
 
     let run = plan(
         &root,
@@ -946,15 +952,20 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
     );
     assert_eq!(read(&root, &item_path(ID)), item);
 
-    let run = atelier(&root, "t1", &["start", ID]);
-    assert_eq!(run.code, 1);
-    assert!(
-        run.stderr.contains(&format!(
-            "  [ ] Mission {MISSION} is ready (it was dropped, so none of its items starts)\n"
-        )),
-        "{}",
-        run.stderr
-    );
+    // Neither a ready item nor a started one is started, or taken over.
+    for id in [ID, STARTED] {
+        let run = atelier(&root, "t2", &["start", id]);
+        assert_eq!(run.code, 1, "{id}");
+        assert!(
+            run.stderr.contains(&format!(
+                "  [ ] Mission {MISSION} is ready (it was dropped, so none of its items starts)\n"
+            )),
+            "{}",
+            run.stderr
+        );
+    }
+    assert_eq!(tip(&root, STARTED), branch);
+    assert_eq!(git(&root, &["branch", "--show-current"]), "main");
     let run = atelier(&root, "p1", &["drop", MISSION, "--reason", "again"]);
     assert_eq!(run.code, 1);
     assert_eq!(

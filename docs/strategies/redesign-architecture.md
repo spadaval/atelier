@@ -298,7 +298,7 @@ will check.
 | `ready` (item) | Planner | `draft` | `ready` | none |
 | `ready` (mission) | Planner | `draft` | `ready` | none; changes no item |
 | `start` | Implementer | `ready` | `building` | blockers done; its mission, if any, is ready; no branch `<id>` exists; the base's record is not dropped |
-| `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists |
+| `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists; its mission, if any, is not dropped |
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |

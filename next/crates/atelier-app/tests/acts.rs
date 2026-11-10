@@ -471,6 +471,29 @@ fn start_needs_the_items_mission_ready_on_the_base() {
 }
 
 #[test]
+fn taking_over_an_item_needs_its_mission_not_dropped() {
+    let item = record(Status::Building, &["t1"], DONE);
+    let caller = thread("t2");
+    for status in [Status::Ready, Status::Done, Status::Dropped] {
+        let facts = Facts {
+            mission: Some(("demo-m1ss".to_string(), Some(status))),
+            ..facts(&item, &caller)
+        };
+        let checked = check(Act::TakeOver, &facts);
+        match status {
+            Status::Dropped => assert!(matches!(
+                checked,
+                Err(Refusal::Unmet(unmet)) if unmet == [Condition::MissionNotReady {
+                    id: "demo-m1ss".into(),
+                    status: Some(Status::Dropped),
+                }]
+            )),
+            _ => assert!(checked.is_ok(), "{status:?}: {checked:?}"),
+        }
+    }
+}
+
+#[test]
 fn status_lists_the_conditions_the_command_reports() {
     let blocked = [("demo-b10c".to_string(), Some(Status::Building))];
     let cases = [

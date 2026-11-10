@@ -638,6 +638,13 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             if !facts.branch {
                 unmet.push(Condition::NoBranch);
             }
+            // A dropped mission's items start no more, taken over or not.
+            if let Some((id, Some(Status::Dropped))) = &facts.mission {
+                unmet.push(Condition::MissionNotReady {
+                    id: id.clone(),
+                    status: Some(Status::Dropped),
+                });
+            }
         }
         Act::Submit => {
             for (ticked, text) in item.done_when() {
