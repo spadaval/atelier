@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: the review file, the verdicts and the reviewer's role brought up to date with what atelier-5cuc built"
+last_changed: "2026-11-10: Merge and The forge brought up to date with what atelier-syyj built"
 ---
 
 # Atelier redesign: architecture specification
@@ -294,7 +294,8 @@ will check.
 | `verdict` on a mission review | Reviewer | any | unchanged | as above, for the file |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
 | `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor in the `reviewers` of the review that raised the finding |
-| `merge` | Implementer | `approved`, or `building` with `--trivial` | `done` | the merge checks; the base's record is not dropped |
+| `merge` | Implementer | `approved` | `done` | a review of the latest round approves it and still covers the head; no unanswered question; no uncommitted change to a tracked file; the base's record is not dropped |
+| `merge --trivial` | Implementer | `building` | `done` | Done when ticked; Report written; no review file; no unanswered question; no uncommitted change to a tracked file |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
 | `drop` | Planner | any but `done` | `dropped` | a reason; written on the base, whatever the item's branch holds |
@@ -309,8 +310,7 @@ How the table is built:
 
 - A row joins the table with its command. The table holds the rows of
   `start`, `start` taking over, `submit`, `review`, both verdicts and
-  `merge` with and without `--trivial`; the conditions of `merge` arrive
-  with that command.
+  `merge` with and without `--trivial`.
 - A round of an item is the latest round of its reviews until one of them
   has a verdict, which ends it; then it is the next round, which has no file
   until `review` creates one. The round's file is the caller's when it holds
@@ -353,7 +353,11 @@ Two facts are checked live and never stored:
   and Scope are unchanged. So a Report, a response or a review file never
   makes an approval stale, while code, `config.toml`, a mission's documents,
   another item or the item's own requirements do. If it is stale, `status`
-  and `merge` say to run `submit`.
+  and `merge` say to run `submit`. `atelier-cli` gathers what this reads, as
+  `acts::Checkout`: the paths that differ between the reviewed commit and
+  the head, the item's record at the reviewed commit, and the checkout's
+  uncommitted tracked files; `acts::unmet` applies the rule. `status` gathers
+  it on the item's branch, so it lists what `merge` will check.
 - **The merge checks pass on the head.** The configured commands, and CI
   where the forge names a workflow.
 
@@ -468,21 +472,42 @@ post-checkout Git hook prints it on every branch switch.
 
 ## Merge
 
-1. Read `config.toml` from the base tip.
-2. Check the approval covers the head, or that `--trivial` was given on an
-   item with no review.
-3. Check no Decisions entry is unanswered.
-4. Build the merged tree in a temporary checkout and run each merge check.
-5. Where a forge is configured: push the branch and open its pull request,
-   if they are not there yet. Where it names a CI workflow: if that workflow
-   has not finished on the head, print the pull request and stop with an
-   exit status of its own, distinct from a refusal; if it finished and did
-   not pass, refuse.
-6. Make one merge commit on the base that sets the item `done`.
+`merge` runs in the checkout on the item's branch. In order:
+
+1. Take the merge lock, then read everything: the item, and `config.toml`
+   from the base tip.
+2. Check the act's conditions from the table: the approval covers the
+   head, or `--trivial "<why>"` was given on a building item with no
+   review file; no Decisions entry is unanswered; no tracked file has
+   uncommitted changes. Where the base is checked out, that checkout must
+   have none either, since merging moves it.
+3. Build the merged tree with `git merge-tree`; a conflict refuses, naming
+   the files. Write the merge commit object on it, base tip first and
+   branch tip second, with the item's record set `done` (and `trivial` set
+   to the reason). Nothing points at it yet.
+4. Check out that commit in a temporary worktree in the Git directory and
+   run each merge check there with `sh -c`. A failure refuses, printing the
+   command, its exit status and the last 20 lines of its output.
+5. Where a forge is configured: push the branch tip and open its pull
+   request, if they are not there yet. Where it names a CI workflow: if no
+   run of it on the head has finished, print the pull request and stop
+   with exit status 3; if the newest one finished and did not pass, refuse.
+6. Confirm the branch tip, the base tip and both checkouts are what steps
+   1 to 5 read; otherwise write nothing and say to run it again. Then move
+   the base to the merge commit: a fast-forward of the base's checkout
+   where one has it checked out, else `git update-ref` from the tip read.
 7. Where a forge is configured: push the base.
 
-`merge` never waits and has no flag but `--trivial`. Run again, it picks up
-where the facts now stand. Waiting is the harness's work.
+`merge` never waits for CI and has no flag but `--trivial`. Run again, it
+picks up where the facts now stand: on an item it already merged it only
+pushes the base where a forge is configured, which is what a run that
+stopped after step 6 left undone. Waiting is the harness's work. Its exit
+status is 0 when it merged or had nothing left to do, 1 for a refusal, 2
+for an error and 3 when CI has not finished.
+
+The merge commit's message ends with the trailer `Atelier-Merge: <id>`,
+which the pre-push hook knows an Atelier merge by. The branch is kept; it
+is merged, so the base's record is the item's record from then on.
 
 ## The log
 
@@ -567,14 +592,22 @@ command.
 
 One more thing is kept, because it is the kind a rewrite loses by accident.
 Today's merge protects itself against the world moving while its checks run.
-It takes the lock that serialises Atelier's writers. After the checks, and
-before it writes anything, it confirms that the branch tip and the base tip
-are the ones the checks ran on and that the checkout has not changed, and it
-refuses if any has. The new `merge` does the same, with the lock and that
-confirmation copied from `merge.rs`, `mutation_lock` and
-`committed_snapshot.rs`, and with tests that move the base, move the branch
-and run two merges at once. The parts of that code that guard against
-tampering with file modes and index flags are not carried over.
+The new `merge` holds an exclusive lock on `atelier-merge.lock` in the Git
+directory every worktree of the clone shares, for its whole run, so a second
+merge waits for the first and then reads the base it left. `merge` is the
+only command that takes it, since it is the only one that writes the base.
+After the checks, and before it writes anything, it confirms that the branch
+tip and the base tip are the ones the checks ran on and that neither the
+work checkout nor the base's checkout has changed, and it refuses if any
+has. The lock and that confirmation are copied from `merge.rs`,
+`mutation_lock` and `committed_snapshot.rs`, with tests that move the base,
+move the branch, change the checkout and run two merges at once. The parts
+of that code that guard against tampering with file modes and index flags
+are not carried over. A merge killed during its checks leaves its temporary
+worktree behind; the next merge, holding the lock, removes it.
+
+`forge.rs` and the merge code live in `atelier-cli`, which owns the Git and
+shell adapters; `atelier-app` runs neither.
 
 Nothing else from today's merge is carried over: not the gate code, the
 polling in `merge_wait.rs`, nor `merge_sync.rs`.

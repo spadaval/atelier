@@ -11,8 +11,10 @@ use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 /// A merge check that waits: it creates `$MERGE_MARK`, then waits until
-/// `$MERGE_RELEASE` exists.
-const WAIT: &str = "touch \"$MERGE_MARK\"; while [ ! -f \"$MERGE_RELEASE\" ]; do sleep 0.05; done";
+/// `$MERGE_RELEASE` exists, or the mark is gone with the scratch directory,
+/// so a check whose merge was killed does not outlive its test.
+const WAIT: &str = "touch \"$MERGE_MARK\"; \
+    while [ ! -f \"$MERGE_RELEASE\" ] && [ -f \"$MERGE_MARK\" ]; do sleep 0.05; done";
 
 /// A scratch repository whose base config has `config` added, and whose
 /// item t1 started, changed with `change` and submitted.
@@ -75,9 +77,10 @@ fn run(output: std::process::Output) -> Run {
     }
 }
 
-/// A merge stopped inside its waiting check until released.
+/// A merge stopped inside its waiting check until released. Dropped, as
+/// when a test fails, it is released, so no process outlives the test.
 struct Waiting {
-    child: Child,
+    child: Option<Child>,
     release: PathBuf,
 }
 
@@ -92,17 +95,37 @@ impl Waiting {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
+        let waiting = Waiting {
+            child: Some(child),
+            release,
+        };
         let since = Instant::now();
         while !mark.exists() {
             assert!(since.elapsed() < Duration::from_secs(60), "never checked");
             std::thread::sleep(Duration::from_millis(20));
         }
-        Waiting { child, release }
+        waiting
     }
 
-    fn finish(self) -> Run {
+    fn finish(mut self) -> Run {
         fs::write(&self.release, "").unwrap();
-        run(self.child.wait_with_output().unwrap())
+        run(self.child.take().unwrap().wait_with_output().unwrap())
+    }
+
+    /// Kills the merge, leaving its check to end on its release.
+    fn kill(&mut self) {
+        let mut child = self.child.take().unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+}
+
+impl Drop for Waiting {
+    fn drop(&mut self) {
+        let _ = fs::write(&self.release, "");
+        if let Some(mut child) = self.child.take() {
+            let _ = child.wait();
+        }
     }
 }
 
@@ -519,8 +542,7 @@ fn a_merge_killed_during_its_checks_leaves_nothing_the_next_run_trips_on() {
     let (scratch, mut waiting) = held();
     let root = scratch.root();
     let before = state(&root);
-    waiting.child.kill().unwrap();
-    waiting.child.wait().unwrap();
+    waiting.kill();
     assert_eq!(state(&root), before);
     // Its merged checkout is left behind, and the next run removes it.
     assert_eq!(git(&root, &["worktree", "list"]).lines().count(), 2);
