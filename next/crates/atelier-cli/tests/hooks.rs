@@ -647,6 +647,13 @@ fn a_first_push_of_a_base_judges_its_whole_line() {
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(run.stderr.contains("Plan: changes .atelier/config.toml"));
+    // With no commit of the remote's to name, the way out names none.
+    assert!(
+        run.stderr
+            .contains("Then moving main back to the remote's commit takes them off main,"),
+        "{}",
+        run.stderr
+    );
 }
 
 #[test]

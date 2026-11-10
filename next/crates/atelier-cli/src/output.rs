@@ -709,9 +709,17 @@ pub fn push_refused(
     code: &[(String, String, Vec<String>)],
     done: &[(String, String, String)],
 ) -> String {
-    let old = old.map_or("<the remote's commit>".to_string(), |old| {
-        short(old).to_string()
-    });
+    // With no commit of the remote's to name, the commands are described.
+    let (back, drop) = match old.map(short) {
+        Some(old) => (
+            format!("git branch -f {base} {old}"),
+            format!("git rebase -i {old}"),
+        ),
+        None => (
+            format!("moving {base} back to the remote's commit"),
+            "git rebase -i".to_string(),
+        ),
+    };
     let mut text = "Atelier's pre-push hook refused this push; nothing was pushed.\n".to_string()
         + &problems(unread, &[]);
     if !unread.is_empty() {
@@ -723,7 +731,7 @@ pub fn push_refused(
         );
         text += &commits(code, |paths| format!("changes {}", some(paths)));
         text += &format!(
-            "Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then git branch -f {base} {old} takes them off {base}, and atelier merge brings them in once the item is approved.\n"
+            "Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then {back} takes them off {base}, and atelier merge brings them in once the item is approved.\n"
         );
     }
     if !done.is_empty() {
@@ -734,7 +742,7 @@ pub fn push_refused(
             format!("sets {id} done while branch {id} exists")
         });
         text += &format!(
-            "Take each such commit off {base}: git reset --keep HEAD^ when it is the last, else git rebase -i {old} and drop it. Then run atelier merge on the item's branch.\n"
+            "Take each such commit off {base}: git reset --keep HEAD^ when it is the last, else {drop} and drop it. Then run atelier merge on the item's branch.\n"
         );
     }
     text
