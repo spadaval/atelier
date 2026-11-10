@@ -56,6 +56,7 @@ All four Done when lines hold in `docs/architecture/quality/scorecard-baseline/d
 - "Traced" means the introducing merge was found, including pull requests merged before adoption. Only 16 of the 30 trace to an item; read as "traced to an item", the sample would fall short of 20. The orchestrator may want to confirm this reading.
 - A bug filed at or before its cause's merge is "before merge" and is not a defect after merge.
 - When a later change meets older code, the later change is the cause.
+- A defect in a test, such as one that fails intermittently on the base, counts like any other (row 24); step 2 skips test files by path, and tests inside a source file are blamed with it (review finding atelier-k10m).
 
 ### Surprises
 
