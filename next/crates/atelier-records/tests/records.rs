@@ -1,6 +1,5 @@
 use atelier_core::{
-    ForgeProvider, MergeStrategy, Now, Outcome, Recommendation, Response, Settlement, Status,
-    Thread, Verdict,
+    ForgeProvider, Now, Outcome, Recommendation, Response, Settlement, Status, Thread, Verdict,
 };
 use atelier_records::{
     parse_config, parse_item, parse_review, render_config, render_item, render_review, validate,
@@ -138,7 +137,6 @@ Dropped by t3-gardener: the code it names is gone
 const CONFIG: &str = r#"schema_version = 3
 slug = "atelier"
 base_branch = "master"
-merge_strategy = "merge_commit"
 
 [[merge_check]]
 run = "cargo fmt -- --check"
@@ -821,7 +819,6 @@ fn config_reads_its_fields() {
     let config = parse_config(Path::new("config.toml"), CONFIG).unwrap();
     assert_eq!(config.slug, "atelier");
     assert_eq!(config.base_branch, "master");
-    assert_eq!(config.merge_strategy, MergeStrategy::MergeCommit);
     let checks: Vec<&str> = config.merge_checks.iter().map(|c| c.run.as_str()).collect();
     assert_eq!(checks, ["cargo fmt -- --check", "cargo nextest run"]);
     let forge = config.forge.unwrap();
@@ -834,7 +831,7 @@ fn config_reads_its_fields() {
     assert_eq!(config.forge.as_ref().unwrap().ci_workflow, None);
     assert_eq!(render_config(&config), no_ci);
 
-    let minimal = "schema_version = 3\nslug = \"x\"\nbase_branch = \"main\"\nmerge_strategy = \"merge_commit\"\n";
+    let minimal = "schema_version = 3\nslug = \"x\"\nbase_branch = \"main\"\n";
     let config = parse_config(Path::new("config.toml"), minimal).unwrap();
     assert!(config.merge_checks.is_empty() && config.forge.is_none());
     assert_eq!(render_config(&config), minimal);
@@ -869,7 +866,11 @@ fn config_refuses_what_it_does_not_know() {
             "run = \"cargo nextest run\"\nshell = \"sh\"\n",
             "unknown field `shell`",
         ),
-        ("\"merge_commit\"", "\"squash\"", "unknown variant `squash`"),
+        (
+            "base_branch = \"master\"\n",
+            "base_branch = \"master\"\nmerge_strategy = \"merge_commit\"\n",
+            "unknown field `merge_strategy`",
+        ),
         ("\"github\"", "\"forgejo\"", "unknown variant `forgejo`"),
         (
             "schema_version = 3",

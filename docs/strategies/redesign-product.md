@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: a full rewrite; the view of what changed from the plan is the dashboard's"
+last_changed: "2026-11-10: the merge strategy cut from config.toml, which has one way to merge (atelier-mal9)"
 ---
 
 # Atelier redesign: product specification
@@ -397,7 +397,7 @@ included, and leaves no trace, so agents are told to use `ATELIER_SKIP`.
 ## Configuration
 
 `.atelier/config.toml` holds the project slug, the base branch, the merge
-strategy, the merge checks and the forge. `merge` reads it from the base
+checks and the forge. `merge` reads it from the base
 branch, so a work branch cannot weaken its own checks, and a change to it
 counts as code: it is reviewed and merged like any other. There is no
 workflow file and no per-project lifecycle. A named option is added when a

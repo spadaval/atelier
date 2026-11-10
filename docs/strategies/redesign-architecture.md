@@ -230,7 +230,6 @@ recording.
 schema_version = 3
 slug = "atelier"
 base_branch = "master"
-merge_strategy = "merge_commit"
 
 [[merge_check]]
 run = "cargo fmt -- --check"
@@ -242,9 +241,9 @@ ci_workflow = "ci.yml"   # optional; without it nothing waits for CI
 ```
 
 `merge` reads this file from the base branch's tip. `slug` is lowercase
-letters, digits and single inner hyphens. `merge_strategy` has one value,
-`merge_commit`; `provider` has one, `github`. `merge_check` and `forge` may
-be left out. An unknown key is refused with its name.
+letters, digits and single inner hyphens. `merge` always makes a merge
+commit, so there is no merge strategy to set. `provider` has one value,
+`github`. `merge_check` and `forge` may be left out. An unknown key is refused with its name.
 
 ### IDs
 

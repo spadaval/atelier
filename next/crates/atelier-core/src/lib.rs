@@ -4,7 +4,7 @@ mod config;
 mod item;
 mod review;
 
-pub use config::{Config, Forge, ForgeProvider, MergeCheck, MergeStrategy};
+pub use config::{Config, Forge, ForgeProvider, MergeCheck};
 pub use item::{Answer, Decision, Item, ItemSchema, Priority, Ready, Response, Status};
 pub use review::{
     is_open, Finding, FindingName, Now, Outcome, Recommendation, Review, ReviewName, ReviewSchema,

@@ -9,18 +9,10 @@ pub struct Config {
     /// The prefix of every item and mission ID.
     pub slug: String,
     pub base_branch: String,
-    pub merge_strategy: MergeStrategy,
     /// Commands `merge` runs on the merged tree, in order.
     #[serde(rename = "merge_check", default, skip_serializing_if = "Vec::is_empty")]
     pub merge_checks: Vec<MergeCheck>,
     pub forge: Option<Forge>,
-}
-
-/// `merge` makes one merge commit, which also sets the item done.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MergeStrategy {
-    MergeCommit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
