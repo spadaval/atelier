@@ -84,7 +84,7 @@ status: approved
 
 # Why
 
-Widgets are square. See [the architecture](architecture.md) and [the shape](#shape).
+Widgets are square. See [the architecture](architecture.md "the design") and [the shape](#shape).
 
 ## Detail
 
@@ -100,9 +100,10 @@ Nobody complains.
 
 # Shape
 
-Mocks are in [mocks](mocks/a.md "a mock") and [the mock][m].
+Mocks are in [mocks](<mocks/a.md> "a mock"), [the mock][m] and [n][].
 
 [m]: mocks/a.md#a-mock
+[n]: <mocks/a.md>
 
 # Scope
 
@@ -152,6 +153,7 @@ FILES = {
     ".github/workflows/ci.yml": "name: ci\n",
     "docs/strategies/plan.md": STRATEGY,
     "docs/strategies/architecture.md": "The plan is [here](plan.md) and in docs/strategies/plan.md.\n",
+    "docs/other.md": "See [the plan](<strategies/plan.md>).\n",
     "docs/strategies/mocks/a.md": "# A mock\n",
     "README.md": "Demo.\n",
     ".gitignore": "/.atelier/runtime/\n",
@@ -380,7 +382,7 @@ Shapes vary.
         self.assertEqual(self.body(mission + "mission.md"), """
 ## Why
 
-Widgets are square. See [the architecture](../../../docs/strategies/architecture.md) and [the shape](design.md#shape).
+Widgets are square. See [the architecture](../../../docs/strategies/architecture.md "the design") and [the shape](design.md#shape).
 
 ### Detail
 
@@ -408,9 +410,10 @@ status: approved
 
 # Shape
 
-Mocks are in [mocks](../../../docs/strategies/mocks/a.md "a mock") and [the mock][m].
+Mocks are in [mocks](<../../../docs/strategies/mocks/a.md> "a mock"), [the mock][m] and [n][].
 
 [m]: ../../../docs/strategies/mocks/a.md#a-mock
+[n]: <../../../docs/strategies/mocks/a.md>
 
 # Risks and Unknowns
 
@@ -438,13 +441,14 @@ Corners.
         for path in (self.repo / ".atelier").rglob("*.md"):
             rel = str(path.relative_to(self.repo))
             text = path.read_text()
-            inline = re.findall(r"\]\(([^)\s]+)(?: \"[^\"]*\")?\)", text)
-            for target in inline + re.findall(r"^\[[^\]]+\]: (\S+)$", text, re.M):
+            inline = re.findall(r"\]\(<?([^)\s>]+)>?(?: \"[^\"]*\")?\)", text)
+            for target in inline + re.findall(r"^\[[^\]]+\]: <?([^\s>]+)>?$", text, re.M):
                 links += 1
                 self.assertTrue(resolves(self.repo, rel, target), f"{rel}: {target}")
-        self.assertEqual(links, 5)
+        self.assertEqual(links, 6)
         self.assertEqual(self.read("docs/strategies/architecture.md"), FILES["docs/strategies/architecture.md"])
         self.assertIn("Tracked files that still name a moved file's old path, left unchanged:\n"
+                      "  docs/other.md: docs/strategies/plan.md\n"
                       "  docs/strategies/architecture.md: docs/strategies/plan.md\n", out)
 
     def test_config_comes_from_the_workflow(self):

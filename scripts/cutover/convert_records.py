@@ -29,8 +29,15 @@ PRIORITY = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
 MISSION_SECTIONS = ("Why", "Outcome", "Success criteria", "Scope", "Authority")
 UNSPECIFIED = "Not specified in the old record; written at the conversion to the new layout."
 DECISION_DONE_WHEN = "- [ ] The question is answered and the answer is written in this item's Report."
-# A link's destination: inline, with or without a title, or in a reference definition.
-LINK = re.compile(r"(\]\(\s*)([^)\s]+)(?=[\s)])|^( {0,3}\[[^\]]+\]:[ \t]*)(\S+)", re.M)
+# A link's destination, inline or in a reference definition, bare or in <...>; each
+# alternative is (what comes before it, the destination).
+LINK = re.compile(r"(\]\(\s*<)([^>\n]+)(?=>)|(\]\(\s*)([^)\s<]+)(?=[\s)])"
+                  r"|^( {0,3}\[[^\]]+\]:[ \t]*<)([^>\n]+)(?=>)|^( {0,3}\[[^\]]+\]:[ \t]*)([^\s<]+)", re.M)
+
+
+def destination(m):
+    """(what comes before a LINK match's destination, the destination)."""
+    return next((m.group(i), m.group(i + 1)) for i in (1, 3, 5, 7) if m.group(i) is not None)
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)")
 
 
@@ -347,7 +354,7 @@ class Links:
 
     def rewrite(self, text, old_file, new_file, own=None):
         def link(m):
-            prefix, target = m.group(1) or m.group(3), m.group(2) or m.group(4)
+            prefix, target = destination(m)
             path, hash_, fragment = target.partition("#")
             if not path:
                 if own and fragment in own[1] and own[1][fragment] != own[0]:
@@ -383,7 +390,7 @@ def files_naming(root, moved):
     for old in sorted(moved):
         names = set(grep("-e", old, "--", "."))
         for f in grep("-e", posixpath.basename(old), "--", "*.md"):
-            targets = [(m.group(2) or m.group(4)).partition("#")[0] for m in LINK.finditer(read(root, f))]
+            targets = [destination(m)[1].partition("#")[0] for m in LINK.finditer(read(root, f))]
             if any(posixpath.normpath(posixpath.join(posixpath.dirname(f), t)) == old for t in targets):
                 names.add(f)
         for f in names:
