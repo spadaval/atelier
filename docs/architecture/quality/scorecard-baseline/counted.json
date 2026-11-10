@@ -41,9 +41,9 @@
  "repositories": {
   "astromech": {
    "calls_before_first_edit": {
-    "implementer_threads": 193,
-    "median_shell_commands": 18.0,
-    "median_tool_calls": 19.0
+    "implementer_threads": 134,
+    "median_shell_commands": 16.5,
+    "median_tool_calls": 18.0
    },
    "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
    "confusion": {
@@ -313,7 +313,7 @@
   },
   "atelier": {
    "calls_before_first_edit": {
-    "implementer_threads": 123,
+    "implementer_threads": 81,
     "median_shell_commands": 19.0,
     "median_tool_calls": 20.0
    },
@@ -535,8 +535,8 @@
   "cosplay-studio": {
    "calls_before_first_edit": {
     "implementer_threads": 4,
-    "median_shell_commands": 19.5,
-    "median_tool_calls": 21.5
+    "median_shell_commands": 17.5,
+    "median_tool_calls": 21.0
    },
    "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
    "confusion": {
@@ -620,9 +620,9 @@
   },
   "demiurge": {
    "calls_before_first_edit": {
-    "implementer_threads": 58,
+    "implementer_threads": 49,
     "median_shell_commands": 10.0,
-    "median_tool_calls": 11.0
+    "median_tool_calls": 10.0
    },
    "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
    "confusion": {
@@ -730,8 +730,8 @@
   "life-on-rails": {
    "calls_before_first_edit": {
     "implementer_threads": 31,
-    "median_shell_commands": 25.0,
-    "median_tool_calls": 26.0
+    "median_shell_commands": 16.0,
+    "median_tool_calls": 17.0
    },
    "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
    "confusion": {

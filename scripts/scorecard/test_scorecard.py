@@ -120,9 +120,10 @@ def build_db(path, record_commit):
         item("t8", 2, "dynamic_tool", t0, toolName="Read"),
         item("t8", 3, "command_execution", t0, input="git commit -m Record", output=f"[main {record_commit[:7]}] Record"),
         item("t8", 4, "command_execution", t0, input="git status", output=""),
-        item("t8", 5, "command_execution", t0, input="echo hi > src/f.ts", output=""),
+        item("t8", 5, "command_execution", t0, input="python3 -c \"p = 'src/f.ts'; open(p, 'w').write('x')\"", output=""),
         item("t9", 0, "user_message", t0, text="Act as the implementation sub-agent for demo-ffff"),
-        item("t9", 1, "command_execution", t0, input="sed -i 's/a/b/' src/b.ts", output=""),  # writes first
+        item("t9", 1, "command_execution", t0, output="",  # writes first
+             input="python3 - <<'EOF'\nfrom pathlib import Path\np = Path('src/b.ts')\np.write_text('x')\nEOF"),
         item("t9", 2, "command_execution", t0, input="cargo test", output=""),
         item("t9", 3, "file_change", t0, fileName="/w/demo/src/c.ts"),
     ]
@@ -214,7 +215,7 @@ class Measures(Fixture):
 
     def test_calls_before_first_edit(self):
         # t1: start, cat, Read and the record edit come first (4, 2 shell); t8 writes by shell after 4 calls (3 shell);
-        # t9 writes by `sed -i` first (0)
+        # t9 writes through a Path variable first (0)
         self.assertEqual(self.result["calls_before_first_edit"],
                          {"implementer_threads": 3, "median_tool_calls": 4.0, "median_shell_commands": 2.0})
 
@@ -313,12 +314,17 @@ class Commands(unittest.TestCase):
         self.assertEqual(commands.shell_writes("sed -i 's/a/b/' src/lib.rs && perl -pi -e s/x/y/ a.rs"), ["src/lib.rs", "a.rs"])
         self.assertEqual(commands.shell_writes("cargo test 2>&1 | tee /tmp/x.log > out/r.md"), ["out/r.md", "/tmp/x.log"])
         self.assertEqual(commands.shell_writes("python3 - <<'EOF'\nopen('src/a.py', 'w')\nEOF"), ["src/a.py"])
+        self.assertEqual(commands.shell_writes("python3 - <<'EOF'\nq = Path('src/c.ts')\nwith q.open('w') as f: pass\n"
+                                               "Path('docs/a.md').write_text(x)\nopen(other, 'w')\nEOF"), ["src/c.ts", "docs/a.md"])
         self.assertEqual(commands.shell_writes("apply_patch <<'EOF'\n*** Update File: src/b.rs\nEOF"), ["src/b.rs"])
         self.assertFalse(commands.writes_product("cargo test > /dev/null 2>&1; echo x > .atelier/issues/a.md"))
         for not_a_product_write in ("cargo test > out.txt", 'cp a "$f"', "cp a.rs target/debug/b.rs 2>/dev/null",
                                     "echo x > ~/scratch/a.py", "tee /home/u/tmp-review/a.rs < x"):
             self.assertFalse(commands.writes_product(not_a_product_write), not_a_product_write)
         self.assertTrue(commands.writes_product("cp /tmp/new.rs crates/x/src/lib.rs"))
+        self.assertEqual(commands.shell_writes("cd /tmp/x && echo a > src.rs; cd /w/repo && echo b > src/a.rs"),
+                         ["/tmp/x/src.rs", "/w/repo/src/a.rs"])
+        self.assertFalse(commands.writes_product("cd ~/.cache/t && python3 -c \"open('src/a.rs', 'w')\""))
 
     def test_help_and_refusal(self):
         self.assertTrue(commands.is_help("atelier review finding --help"))

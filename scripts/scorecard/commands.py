@@ -18,7 +18,11 @@ HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)(\w+)\1[^\n]*\n.*?(?:\n[ \t]*\2[ \t]*(?
 RECORDS_PATH = re.compile(r"(?<![\w-])\.atelier(?:/|(?=[\s\"'`;)|&]|$))")
 COMMIT_LINE = re.compile(r"^\[[^\]\s]+(?: \(root-commit\))? ([0-9a-f]{7,40})\]", re.M)
 PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (\S+)", re.M)
-PYTHON_WRITE = re.compile(r"""open\(\s*["']([^"']+)["']\s*,\s*["'][wax]|Path\(\s*["']([^"']+)["']\s*\)\.write_(?:text|bytes)""")
+# Python writes: open(<path>, "w"), Path(<path>).write_text(), <path>.open("w"), where <path> is a literal
+# or a name bound to one (`p = Path("src/a.rs")`, `p = "src/a.rs"`).
+PYTHON_BIND = re.compile(r"""\b(\w+)\s*=\s*(?:(?:pathlib\.)?Path\(\s*)?["']([^"'\n]+)["']""")
+_TARGET = r"""(?:(?:pathlib\.)?Path\(\s*)?(?:["']([^"'\n]+)["']|\b(\w+))\s*\)?"""
+PYTHON_WRITE = re.compile(r"\bopen\(\s*" + _TARGET + r"""\s*,\s*["'][wax]|""" + _TARGET + r"""\.(?:write_(?:text|bytes)\(|open\(\s*["'][wax])""")
 # atelier's own refusal and error formats; a harness's "Error: Exit code N" is not one.
 REFUSAL = re.compile(
     r"^(?:[a-z][\w-]*: refused\b|Error: (?!Exit code \d)|error: (?:unexpected argument|unrecognized subcommand"
@@ -138,10 +142,19 @@ def is_product_edit(path):
 
 
 def shell_writes(command):
-    """Files a shell command writes: redirections, `tee`, `sed -i`, `perl -i`, `cp`/`mv` targets, patches and Python `open(..., 'w')`."""
-    targets = []
+    """Files a shell command writes: redirections, `tee`, `sed -i`, `perl -i`, `cp`/`mv` targets, patches and Python `open(..., 'w')`.
+
+    A relative path is taken from the directory the command last changed to with `cd`, if any.
+    """
+    targets, cwd = [], ""
+
+    def add(paths):
+        targets.extend(p if p.startswith(("/", "~")) or not cwd else f"{cwd.rstrip('/')}/{p}" for p in paths)
+
     for simple in simple_commands(command):
-        targets += simple.writes
+        if simple.words[:1] == ["cd"] and len(simple.words) > 1:
+            cwd = simple.words[1] if simple.words[1].startswith(("/", "~")) or not cwd else f"{cwd}/{simple.words[1]}"
+        add(simple.writes)
         name, args = (simple.words[0].rsplit("/", 1)[-1], simple.words[1:]) if simple.words else ("", [])
         positional = [a for a in args if not a.startswith("-")]
         if name in ("sed", "perl") and any(re.match(r"^-\w*i|^--in-place", a) for a in args):
@@ -154,13 +167,17 @@ def shell_writes(command):
                     script_option = script_option or skip
                 else:
                     files.append(arg)
-            targets += files if script_option else files[1:]
+            add(files if script_option else files[1:])
         elif name == "tee":
-            targets += positional
+            add(positional)
         elif name in ("cp", "mv") and len(positional) >= 2:
-            targets.append(positional[-1])
-    targets += PATCH_FILE.findall(command or "")
-    targets += [a or b for a, b in PYTHON_WRITE.findall(command or "")]
+            add(positional[-1:])
+    add(PATCH_FILE.findall(command or ""))
+    binds = [(m.start(), m.group(1), m.group(2)) for m in PYTHON_BIND.finditer(command or "")]
+    for match in PYTHON_WRITE.finditer(command or ""):
+        literal, name = match.group(1) or match.group(3), match.group(2) or match.group(4)
+        bound = [path for at, var, path in binds if var == name and at < match.start()]
+        add([literal] if literal else bound[-1:])
     return targets
 
 
