@@ -10,6 +10,12 @@ created_at: 2026-11-10T01:06:31.055235814Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: fix_now
+    identity: planner (claude-fable-5-2)
+    commit: 8939850649881a276db40c69d113fbe2b9cb2f26
+    recorded_at: 2026-11-10T01:15:01.198855554Z
+    reason: 'Fixed in 8c99ac97 although recommended defer: the fix was a sentence or a line.'
 ---
 
 medium redesign-architecture.md:257-262 and :327-329: deferred findings stay in review files, and the converter deletes done records, so every pre-cutover deferred finding disappears from list --deferred at conversion. Smallest fix: the converter spec states they are abandoned, and gardener step A reads git history only if the old pile is still wanted.
