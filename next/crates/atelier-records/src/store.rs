@@ -1,5 +1,7 @@
 use crate::{body, document, ids, Problem};
-use atelier_core::{Config, Decision, Finding, Item, Mission, Response, Review, ReviewName};
+use atelier_core::{
+    Config, Decision, Finding, Item, Mission, Response, Review, ReviewName, Settlement,
+};
 use serde::de::DeserializeOwned;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -258,13 +260,34 @@ fn findings(reviews: &[ReviewFile]) -> Result<Vec<Finding>, Problem> {
 }
 
 impl ReviewFile {
-    /// Writes the review back to its file.
+    /// Writes the review back to its file, whole or not at all: into a
+    /// file beside it, which then replaces it, so a write that fails part
+    /// way leaves the review as it was.
     pub fn write(&self) -> io::Result<()> {
-        fs::write(&self.path, render_review(&self.review))
+        let name = self.path.file_name().unwrap_or_default().to_string_lossy();
+        let partial = self.path.with_file_name(format!(".{name}.partial"));
+        let written = fs::write(&partial, render_review(&self.review))
+            .and_then(|()| fs::rename(&partial, &self.path));
+        if written.is_err() {
+            let _ = fs::remove_file(&partial);
+        }
+        written
     }
 
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
         body::findings(&self.path, &self.name, &self.review.body)
+    }
+
+    /// Records `settlement` in finding `number`, on the line after its
+    /// Recommendation; false when the review has no such finding.
+    pub fn settle(&mut self, number: u32, settlement: &Settlement) -> bool {
+        match body::settle(&self.review.body, number, settlement) {
+            Some(body) => {
+                self.review.body = body;
+                true
+            }
+            None => false,
+        }
     }
 
     /// The text under the heading of finding `number`, as the reviewer

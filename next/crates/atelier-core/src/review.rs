@@ -149,16 +149,30 @@ pub enum Settlement {
 }
 
 impl Finding {
-    /// Deferred by its reviewer, or by a decision.
-    pub fn is_deferred(&self) -> bool {
-        self.recommendation == Recommendation::Defer || self.decided == Some(Outcome::Defer)
-    }
-
     /// A deferred finding is settled once it is taken into an item or
     /// dropped.
     pub fn is_settled(&self) -> bool {
         self.settlement.is_some()
     }
+}
+
+/// Whether `finding` is deferred, given every finding of its item's reviews
+/// and the item's decisions: its recommendation is defer, or a decision
+/// deferred it, by the `Decided: defer` line a later round carries or by a
+/// Decisions entry naming it. A finding a later round carries is not: the
+/// carrying finding is the one that stands, and the one to settle.
+pub fn is_deferred(finding: &Finding, findings: &[Finding], decisions: &[Decision]) -> bool {
+    let decided = decisions.iter().any(|decision| {
+        decision.finding.as_ref() == Some(&finding.name) && decision.outcome == Some(Outcome::Defer)
+    });
+    let carried_later = findings.iter().any(|later| {
+        later.was.as_ref() == Some(&finding.name)
+            && later.name.review.round > finding.name.review.round
+    });
+    (finding.recommendation == Recommendation::Defer
+        || finding.decided == Some(Outcome::Defer)
+        || decided)
+        && !carried_later
 }
 
 /// Whether `finding` is an open fix-now finding, given every finding of its
@@ -302,15 +316,53 @@ mod tests {
         assert!(open(&findings, &[]).is_empty());
     }
 
+    fn deferred(findings: &[Finding], decisions: &[Decision]) -> Vec<String> {
+        findings
+            .iter()
+            .filter(|f| is_deferred(f, findings, decisions))
+            .map(|f| f.name.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn a_finding_is_deferred_by_its_reviewer_or_a_decision_until_a_later_round_carries_it() {
+        let findings = [
+            finding("1-aaaa.1", Recommendation::Defer),
+            finding("1-aaaa.2", Recommendation::FixNow),
+            finding("1-aaaa.3", Recommendation::NoAction),
+            finding("1-aaaa.4", Recommendation::FixNow),
+        ];
+        assert_eq!(deferred(&findings, &[]), ["1-aaaa.1"]);
+        // A decision naming a finding defers it only with that outcome.
+        let decisions = [
+            decision("1-aaaa.2", Some(Outcome::Defer)),
+            decision("1-aaaa.4", Some(Outcome::NoAction)),
+        ];
+        assert_eq!(deferred(&findings, &decisions), ["1-aaaa.1", "1-aaaa.2"]);
+        assert_eq!(
+            deferred(&findings, &[decision("1-aaaa.2", None)]),
+            ["1-aaaa.1"]
+        );
+        // Carried by a later round with `Decided: defer`, the carrier is the
+        // deferred one, listed once; carried as fixed, neither is.
+        let decided = Finding {
+            now: None,
+            decided: Some(Outcome::Defer),
+            ..carrying("2-bbbb.1", "1-aaaa.2", Now::Kept)
+        };
+        let carried = [findings[1].clone(), decided];
+        assert_eq!(deferred(&carried, &decisions), ["2-bbbb.1"]);
+        let fixed = [
+            findings[1].clone(),
+            carrying("2-bbbb.1", "1-aaaa.2", Now::Fixed),
+        ];
+        assert!(deferred(&fixed, &decisions).is_empty());
+    }
+
     #[test]
     fn a_deferred_finding_is_unsettled_until_taken_or_dropped() {
         let deferred = finding("1-aaaa.1", Recommendation::Defer);
-        assert!(deferred.is_deferred() && !deferred.is_settled());
-        let decided = Finding {
-            decided: Some(Outcome::Defer),
-            ..finding("2-bbbb.1", Recommendation::FixNow)
-        };
-        assert!(decided.is_deferred());
+        assert!(!deferred.is_settled());
         let taken = Settlement::Taken {
             item: "atelier-x1y2".into(),
             by: Thread("t1".into()),

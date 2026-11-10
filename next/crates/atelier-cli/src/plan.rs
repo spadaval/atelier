@@ -5,18 +5,20 @@
 //! ends with the Git command that commits what it wrote.
 
 use crate::commands::{refused as refused_act, Outcome};
-use crate::repo::{git_at, item_path, mission_dir, mission_path, Repo};
+use crate::repo::{git_at, item_dir, item_path, mission_dir, mission_path, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{
-    check, check_mission, Act, Facts, MissionFacts, Refusal, PLANNED, STARTED,
+    check, check_mission, check_settle, Act, Condition, Facts, MissionFacts, Refusal, PLANNED,
+    STARTED,
 };
 use atelier_app::Located;
 use atelier_core::{
-    Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority, Ready, SchemaVersion,
-    Status, Threads,
+    Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority, Ready,
+    SchemaVersion, Settlement, Status, Threads,
 };
-use atelier_records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem};
+use atelier_records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
+use std::path::PathBuf;
 
 const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
@@ -43,8 +45,18 @@ pub fn draft_item(id: &str, title: &str, mission: Option<String>) -> Item {
     }
 }
 
-pub fn new(repo: &mut Repo, title: &str, into: Option<String>, mission: bool) -> Result<Outcome> {
-    if let Some(refused) = off_base(repo, "new")? {
+pub fn new(
+    repo: &mut Repo,
+    title: &str,
+    into: Option<String>,
+    mission: bool,
+    from: Option<&str>,
+) -> Result<Outcome> {
+    let refused = match from {
+        Some(_) => off_settling(repo, "new --from")?,
+        None => off_base(repo, "new")?,
+    };
+    if let Some(refused) = refused {
         return Ok(refused);
     }
     let id = repo.new_id()?;
@@ -69,6 +81,10 @@ pub fn new(repo: &mut Repo, title: &str, into: Option<String>, mission: bool) ->
         if !repo.root.join(mission_path(mission)).exists() {
             return Ok(Outcome::Refused(output::no_mission(mission)));
         }
+    }
+    if let Some(name) = from {
+        let take = Settle::Take { id, title, into };
+        return settle(repo, "new --from", name, take);
     }
     let item = draft_item(&id, title, into);
     let said = output::created_item(&id);
@@ -339,7 +355,12 @@ fn is_mission(repo: &Repo, id: &str) -> bool {
 /// whatever an item's branch holds, with the reason as the first line of
 /// its Report or Result.
 pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> {
-    if let Some(refused) = off_base(repo, "drop")? {
+    let finding = id.contains('/');
+    let refused = match finding {
+        true => off_settling(repo, "drop")?,
+        false => off_base(repo, "drop")?,
+    };
+    if let Some(refused) = refused {
         return Ok(refused);
     }
     let Some(reason) = reason
@@ -348,6 +369,9 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
     else {
         return Ok(Outcome::Refused(output::no_drop_reason(id)));
     };
+    if finding {
+        return settle(repo, "drop", id, Settle::Drop(reason));
+    }
     let line = format!("Dropped: {reason}");
     if is_mission(repo, id) {
         let dir = repo.store().mission(id)?;
@@ -479,6 +503,129 @@ pub(crate) fn off_base(repo: &Repo, command: &str) -> Result<Option<Outcome>> {
     ))))
 }
 
+/// How `new --from` or `drop` settles a deferred finding.
+enum Settle<'a> {
+    /// Into a new draft item with this ID and title, in this mission if
+    /// any.
+    Take {
+        id: String,
+        title: &'a str,
+        into: Option<String>,
+    },
+    /// With this reason.
+    Drop(&'a str),
+}
+
+/// Refuses settling a finding anywhere but on the base branch, as
+/// planning, or on the branch of a started item the caller implements,
+/// whose merge then carries it to the base.
+fn off_settling(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
+    if repo.branch.as_deref() == Some(repo.base.as_str()) {
+        return Ok(None);
+    }
+    let current = repo.current()?;
+    let held = current.as_ref().and_then(Located::record).is_some_and(|r| {
+        STARTED.contains(&r.item.status) && r.item.implementers.holder() == Some(&repo.caller)
+    });
+    if held {
+        return Ok(None);
+    }
+    let checkout = git::checkout_of(&repo.root, &repo.base)?;
+    Ok(Some(Outcome::Refused(output::settle_elsewhere(
+        command,
+        &repo.base,
+        repo.branch.as_deref(),
+        checkout.as_deref(),
+    ))))
+}
+
+/// Settles the deferred finding `name`, `<item>/<finding>`, in this
+/// checkout: writes its `Taken:` or `Dropped by` line, and for `Take` the
+/// new item, both or neither.
+fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Outcome> {
+    let parsed = name.split_once('/').and_then(|(id, finding)| {
+        validate_id(id).ok()?;
+        Some((id, finding.parse::<FindingName>().ok()?))
+    });
+    let Some((id, finding)) = parsed else {
+        return Ok(Outcome::Refused(output::not_a_finding(command, name)));
+    };
+    let refused = |refusal| {
+        Ok(Outcome::Refused(output::settle_refused(
+            command, name, id, &refusal,
+        )))
+    };
+    let located = repo.locate_planned(id)?;
+    let Some(record) = located.record() else {
+        return refused(Refusal::Unmet(vec![Condition::NoFinding(finding)]));
+    };
+    let facts = planned_facts(repo, &located, record);
+    let found = match check_settle(&facts, &finding) {
+        Ok(found) => found,
+        Err(Refusal::Record(problem)) => return Err(problem.into()),
+        Err(refusal) => return refused(refusal),
+    };
+    let mut review = (record.reviews.iter())
+        .find(|r| r.name == finding.review)
+        .expect("a finding is in one of its item's reviews")
+        .clone();
+    let by = repo.caller.clone();
+    let (items, settlement, said, message) = match how {
+        Settle::Drop(reason) => {
+            let settlement = Settlement::Dropped {
+                by,
+                reason: reason.to_string(),
+            };
+            let said = output::finding_dropped(name, reason);
+            (Vec::new(), settlement, said, format!("Drop finding {name}"))
+        }
+        Settle::Take {
+            id: new,
+            title,
+            into,
+        } => {
+            let mut item = draft_item(&new, title, into);
+            item.body = taken_body(name, &review, &found);
+            let said = output::finding_taken(name, &new);
+            let message = format!("Take finding {name} into {new}");
+            let settlement = Settlement::Taken { item: new, by };
+            (vec![item], settlement, said, message)
+        }
+    };
+    assert!(review.settle(finding.number, &settlement));
+    let command = format!("{command} {name}");
+    save_with(
+        repo,
+        &command,
+        items,
+        Vec::new(),
+        vec![review],
+        &said,
+        &message,
+    )
+}
+
+/// The body of an item taken from finding `name`: its Goal names the
+/// finding and its review file and quotes the finding as written.
+fn taken_body(name: &str, review: &ReviewFile, finding: &Finding) -> String {
+    let number = finding.name.number;
+    let text = review.finding_text(number).unwrap_or_default().trim_end();
+    let heading = format!("Finding {number}: {}\n{text}", finding.title);
+    let quoted: String = (heading.lines())
+        .map(|line| match line.is_empty() {
+            true => ">\n".to_string(),
+            false => format!("> {line}\n"),
+        })
+        .collect();
+    let id = name.split('/').next().unwrap_or_default();
+    let from = format!(
+        "Taken from deferred finding {name}, in {}/reviews/{}.md:",
+        item_dir(id),
+        review.name
+    );
+    ITEM_BODY.replacen("## Goal\n", &format!("## Goal\n\n{from}\n\n{quoted}"), 1)
+}
+
 /// Writes `items` and `missions` into the checkout, once each validates
 /// against every record of the checkout, and says what it wrote and how to
 /// commit it; or, when one has a problem, writes nothing and says why.
@@ -488,6 +635,21 @@ pub(crate) fn save(
     command: &str,
     items: Vec<Item>,
     missions: Vec<Mission>,
+    said: &str,
+    message: &str,
+) -> Result<Outcome> {
+    save_with(repo, command, items, missions, Vec::new(), said, message)
+}
+
+/// [`save`], with `reviews` written too. A new item it creates is removed
+/// again when a later write fails, so a finding is never left untaken
+/// beside the item that took it.
+fn save_with(
+    repo: &Repo,
+    command: &str,
+    items: Vec<Item>,
+    missions: Vec<Mission>,
+    reviews: Vec<ReviewFile>,
     said: &str,
     message: &str,
 ) -> Result<Outcome> {
@@ -522,6 +684,14 @@ pub(crate) fn save(
             }),
         }
     }
+    for review in &reviews {
+        let shown = review.path.strip_prefix(&repo.root).unwrap_or(&review.path);
+        written.push((review.path.clone(), shown.display().to_string()));
+        let found = all_items.iter_mut().flat_map(|dir| dir.reviews.iter_mut());
+        if let Some(file) = found.into_iter().find(|file| file.path == review.path) {
+            *file = review.clone();
+        }
+    }
     let problems: Vec<Problem> = validate(&all_items, &all_missions)
         .into_iter()
         .filter(|problem| written.iter().any(|(path, _)| *path == problem.file))
@@ -531,13 +701,36 @@ pub(crate) fn save(
             command, &repo.root, &problems,
         )));
     }
-    for item in &items {
-        store.write_item(item)?;
-    }
-    for mission in &missions {
-        store.write_mission(mission)?;
+    let created: Vec<PathBuf> = (items.iter())
+        .map(|item| repo.root.join(item_dir(&item.id)))
+        .filter(|dir| !dir.exists())
+        .collect();
+    let writes = || -> std::io::Result<()> {
+        for item in &items {
+            store.write_item(item)?;
+        }
+        for mission in &missions {
+            store.write_mission(mission)?;
+        }
+        reviews.iter().try_for_each(ReviewFile::write)
+    };
+    if let Err(error) = writes() {
+        let left: Vec<String> = (created.iter())
+            .filter(|dir| std::fs::remove_dir_all(dir).is_err())
+            .map(|dir| {
+                dir.strip_prefix(&repo.root)
+                    .unwrap_or(dir)
+                    .display()
+                    .to_string()
+            })
+            .collect();
+        let said = output::write_failed(command, !created.is_empty(), &left);
+        return Err(anyhow!(error).context(said));
     }
     let paths: Vec<String> = written.into_iter().map(|(_, shown)| shown).collect();
     let at = git_at(&repo.root);
-    Ok(Outcome::Done(output::planned(said, at, &paths, message)))
+    let item = repo.branch.as_deref().filter(|branch| *branch != repo.base);
+    Ok(Outcome::Done(output::planned(
+        said, item, at, &paths, message,
+    )))
 }
