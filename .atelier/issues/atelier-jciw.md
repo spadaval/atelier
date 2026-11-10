@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add `show`, `list` and `lead`, and missions in `status`, so none of today's nine work views is lost"
-updated_at: "2026-11-10T20:41:28.634319437+00:00"
+updated_at: "2026-11-10T20:46:13.469971514+00:00"
 ---
 
 ## Goal
@@ -50,6 +50,22 @@ Give a lead, a planner and Sumeet's agents every view of the work they have toda
 Design: `docs/strategies/redesign-architecture.md`, Status, Threads and roles and "Where records are read and written". Behaviour: `docs/strategies/redesign-product.md`, Commands (Anyone, Decider and lead), Handoff lines and "What `status` prints". The mapping line answers planning finding atelier-50br, which found that "no view lost" was promised more broadly than the listed flags delivered. Step A's fresh-agent runs (atelier-67nn, `evals/agent-factory/results/2026-11-10-next-loop.md`) set the wording conventions `lead`'s handoff lines follow: the child must be another thread, and a task an agent may paste into a shell has no backticks.
 
 This is the third of step B's three items in `docs/strategies/redesign-2-core.md`.
+
+## Notes
+
+- 2026-11-10 [decision] Expected size: about 650 non-test lines of Rust, about 600 of tests and about 50 changed lines of the two specifications; escalate past about twice that
+  Reason: The orchestrator's brief gives this estimate
+- 2026-11-10 [decision] Items labelled needs-human that nobody has started are listed in status under 'Waiting on a human', not under 'Ready to start', and lead hands none of them to a thread; list --ready keeps them, marked 'waits on a human'
+  Reason: The product specification makes such an item a question for the human, which an agent closes with his answer, so pointing an agent at it with a Then line would start the wrong work; list --ready keeps the Done when line's literal rule (ready, blockers done, mission ready), and its flags narrow together, so --ready --needs-human still finds them
+  Rejected: Offer them as ready like any other item
+- 2026-11-10 [decision] The output says 'Waiting on a human', not the owner's name
+  Reason: The product specification's 'waits on Sumeet' names the one user it serves; the binary's text and its tests name no person
+- 2026-11-10 [decision] lead reads its items and the missions as status does, from the base's last commit and each started item's branch, and reads and writes only its own mission in the checkout of the base
+  Reason: What lead says can start now must be what start will start, and start reads the base's last commit; an item made ready and not yet committed would otherwise be handed to a thread that start refuses. The architecture specification lists lead among the commands that read this way.
+  Rejected: Read every record from the checkout, as new, set and ready do
+- 2026-11-10 [decision] list shows an item once, under its sorted set of labels; --done means done or dropped; --mine keeps a mission the caller leads with its items; a mission with no item kept is shown unless --ready, --blocked or --needs-human is given
+  Reason: Listing an item under each of its labels, as today's views do, repeats it and miscounts; dropped work is finished as much as done work; a lead's own work is its mission's items; a mission heading alone answers 'what missions are there' (today's work missions) but says nothing to an item-only question
+- 2026-11-10 [handoff] Approved in round 1 by gpt-6.1-sol (atelier-u4m5 @0b8840e9), no findings. Outcome, proof and open items are in the Report.
 
 ## Report
 
@@ -288,18 +304,3 @@ The new binary driven by hand in a scratch repository (`next/target/debug/atelie
       demo-d4dd (building, medium, held by t1): Wave
   (exit 0)
 ```
-
-## Notes
-
-- 2026-11-10 [decision] Expected size: about 650 non-test lines of Rust, about 600 of tests and about 50 changed lines of the two specifications; escalate past about twice that
-  Reason: The orchestrator's brief gives this estimate
-- 2026-11-10 [decision] Items labelled needs-human that nobody has started are listed in status under 'Waiting on a human', not under 'Ready to start', and lead hands none of them to a thread; list --ready keeps them, marked 'waits on a human'
-  Reason: The product specification makes such an item a question for the human, which an agent closes with his answer, so pointing an agent at it with a Then line would start the wrong work; list --ready keeps the Done when line's literal rule (ready, blockers done, mission ready), and its flags narrow together, so --ready --needs-human still finds them
-  Rejected: Offer them as ready like any other item
-- 2026-11-10 [decision] The output says 'Waiting on a human', not the owner's name
-  Reason: The product specification's 'waits on Sumeet' names the one user it serves; the binary's text and its tests name no person
-- 2026-11-10 [decision] lead reads its items and the missions as status does, from the base's last commit and each started item's branch, and reads and writes only its own mission in the checkout of the base
-  Reason: What lead says can start now must be what start will start, and start reads the base's last commit; an item made ready and not yet committed would otherwise be handed to a thread that start refuses. The architecture specification lists lead among the commands that read this way.
-  Rejected: Read every record from the checkout, as new, set and ready do
-- 2026-11-10 [decision] list shows an item once, under its sorted set of labels; --done means done or dropped; --mine keeps a mission the caller leads with its items; a mission with no item kept is shown unless --ready, --blocked or --needs-human is given
-  Reason: Listing an item under each of its labels, as today's views do, repeats it and miscounts; dropped work is finished as much as done work; a lead's own work is its mission's items; a mission heading alone answers 'what missions are there' (today's work missions) but says nothing to an item-only question
