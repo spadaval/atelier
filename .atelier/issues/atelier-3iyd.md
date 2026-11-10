@@ -27,5 +27,9 @@ Medium: next/crates/atelier-cli/src/merge.rs:101 R1: CI revalidation under the m
 
 ## Done when
 
-- [ ] The CI check `merge` makes under its lock has a time limit, as its polls before the lock have. A test whose `gh` double answers the first poll and then stalls on the check under the lock sees `merge` exit "not yet" within the test's bound, with the lock released, nothing written and the stalled process ended.
-- [ ] The limit is a constant. `merge` gains no flag and `config.toml` no option.
+- [x] The CI check `merge` makes under its lock has a time limit, as its polls before the lock have. A test whose `gh` double answers the first poll and then stalls on the check under the lock sees `merge` exit "not yet" within the test's bound, with the lock released, nothing written and the stalled process ended.
+- [x] The limit is a constant. `merge` gains no flag and `config.toml` no option.
+
+## Report
+
+Fixed on atelier-rsfm. The question under the lock is ended after `LOCKED` (60 seconds, never more than the wait), and `merge` exits 3 with the lock released. `a_look_at_ci_under_the_lock_that_stalls_is_ended_within_the_bound` (the wait's poll sees CI pass, the question under the lock stalls) failed before the fix, with `merge` still running after 10 seconds, and passes after it: exit 3 in about 2.5 seconds with a 2-second bound, the stalled `gh` gone, nothing written, and a second `merge` merging once the forge answers. No flag or config option was added.
