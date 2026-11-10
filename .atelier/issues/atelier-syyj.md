@@ -143,7 +143,7 @@ The pull request was opened once (one POST in the double's log), and the remote'
 ### Decisions
 
 - The lock is taken first and held for the whole merge, not only around the writes as today's merge does. A second merge then waits and reads the base the first left, so two approved items merge one after the other instead of the second being refused. The cost is that a merge waits for another's checks; it prints that it is waiting.
-- A clean checkout of tracked files is a condition of `merge` in the act table, so `status` lists it. The item's record on its branch is read from the checkout, and merging takes the committed one, so the two must agree.
+- A clean checkout of tracked files is a condition of `merge` in the act table, so `status` lists it. `merge` judges the item as the head commit holds it, and moving the base would otherwise carry or strand uncommitted work.
 - An approved item with no approving review in its latest round is refused (`NoApproval`), so a hand-edited status cannot merge.
 - The branch is kept after the merge. It is merged, so the base's record is the item's from then on, and deleting it is not in the item.
 - Exit status 3 means "not yet". A refusal is 1 and an error 2, as before.
@@ -156,3 +156,4 @@ A failing test that held a merge in its waiting check left the merge and its she
 
 - Round 1, `atelier-uqsk`: `merge` read HEAD after checking the approval, so a commit made between the two was merged unreviewed. It now reads HEAD first and takes the approval's diff to that commit; `a_commit_made_after_merge_read_its_facts_is_not_merged` holds `merge` after its reads (debug-build hold `ATELIER_TEST_HOLD_AFTER_READ`, the same mechanism as `start`'s), commits, and checks nothing is written. It fails with the old order.
 - Round 1, `atelier-nioh`: `status` on an approved item now lists the base's merge checks and, with a forge, that `merge` pushes the branch, opens its pull request and waits for the CI workflow. It runs none of them. The plain and forge tests check the lines, and fail without them.
+- Round 2, `atelier-6844`: `merge` read the item's record from the checkout, so an uncommitted copy of the reviewed text could hide a committed change to its requirements. It now reads the record from the head it captured; `merge_judges_the_committed_item_not_the_checkouts` fails without that.
