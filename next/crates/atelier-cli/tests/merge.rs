@@ -160,11 +160,13 @@ fn an_approved_item_merges_in_one_commit_that_marks_it_done() {
     let (tip, branch) = (head(&root, "main"), head(&root, ID));
 
     // Status shows what merge will run.
+    // And since when it is approved: the time of the verdict's commit.
     let status = atelier(&root, "t1", &["status"]);
+    let approved_at = git(&root, &["log", "-1", "--format=%cI", ID]);
     assert!(
-        status.stdout.ends_with(
-            "Status: approved\n`atelier merge` runs these merge checks on the tree merging makes:\n  test -f hello.txt\nThen: atelier merge\n"
-        ),
+        status.stdout.ends_with(&format!(
+            "Status: approved since {approved_at}\n`atelier merge` runs these merge checks on the tree merging makes:\n  test -f hello.txt\nThen: atelier merge\n"
+        )),
         "{}",
         status.stdout
     );
@@ -249,10 +251,11 @@ fn stale_after(change: impl Fn(&Path), said: &str) {
     );
     assert_eq!(state(&root), before);
     let status = atelier(&root, "t1", &["status"]).stdout;
-    assert!(
-        status.ends_with(&format!("Status: approved\n{needs}")),
-        "{status}"
-    );
+    let since = status
+        .split("Status: approved since ")
+        .nth(1)
+        .unwrap_or_default();
+    assert!(since.ends_with(&format!("\n{needs}")), "{status}");
     // The way out it names works.
     assert_eq!(atelier(&root, "t1", &["submit"]).code, 0);
 }

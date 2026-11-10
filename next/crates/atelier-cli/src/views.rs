@@ -3,7 +3,7 @@
 //! branch. `lead` writes planning, so it reads and writes its mission in the
 //! checkout of the base.
 
-use crate::commands::{facts, Outcome};
+use crate::commands::{annotate, annotate_all, facts, Outcome};
 use crate::repo::{mission_path, Repo};
 use crate::{plan, view_output};
 use anyhow::{anyhow, Result};
@@ -16,7 +16,11 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let missions = repo.missions()?;
     if let Some(dir) = missions.iter().find(|dir| dir.mission.id == id) {
         let items = repo.everything()?;
-        let entries = entries(&items, &missions, &repo.caller)?;
+        let mut entries = entries(&items, &missions, &repo.caller)?;
+        let of_mission = entries
+            .iter_mut()
+            .filter(|e| e.mission.as_deref() == Some(id));
+        annotate_all(repo, of_mission, &items)?;
         let mut questions = Vec::new();
         for record in items.iter().filter_map(|located| located.record()) {
             if record.item.mission.as_deref() == Some(id) {
@@ -37,7 +41,8 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(Outcome::Refused(view_output::unknown(id, &repo.base)));
     };
     let links = repo.links(record)?;
-    let entry = entry(&facts(repo, &located, &links, None))?;
+    let mut entry = entry(&facts(repo, &located, &links, None))?;
+    annotate(repo, &mut entry, record)?;
     Ok(Outcome::Done(view_output::item(
         record,
         &entry,

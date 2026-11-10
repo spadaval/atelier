@@ -29,6 +29,9 @@ fn standing(entry: &Entry) -> Vec<String> {
     if !waiting.is_empty() {
         facts.push(format!("blocked by {}", waiting.join(", and ")));
     }
+    if let Some(time) = &entry.approved {
+        facts.push(format!("approved since {time}"));
+    }
     if entry.needs_human() && PLANNED.contains(&entry.status) {
         facts.push("waits on a human".into());
     } else if entry.startable() {
@@ -102,6 +105,13 @@ fn by_status(items: &[&Entry]) -> String {
         true => "  None yet.\n".into(),
         false => text,
     }
+}
+
+/// A question waiting on item `id`, with the command that answers it.
+fn waiting(id: &str, question: &str) -> String {
+    format!(
+        "  {id}: {question}\n    Answer it in the checkout on branch {id}: atelier decide {id} \"<answer>\"\n"
+    )
 }
 
 /// The handoff for each item of `items` a thread could start now, other
@@ -229,7 +239,7 @@ pub fn mission(
     }
     for (id, decision) in questions {
         text += &match &decision.answer {
-            None => format!("  {id}: {} (unanswered)\n", decision.question),
+            None => waiting(id, &decision.question),
             Some(answer) => format!(
                 "  {id}: {} Answer by {}: {}\n",
                 decision.question, answer.by, answer.text
@@ -309,12 +319,20 @@ pub fn led(led: &[(MissionDir, Vec<Entry>)]) -> String {
     for (dir, items) in led {
         let items: Vec<&Entry> = items.iter().collect();
         text += &format!(
-            "You lead mission {}: {}\n{}{}",
+            "You lead mission {}: {}\n{}",
             dir.mission.id,
             dir.mission.title,
             by_status(&items),
-            start_threads(&items)
         );
+        if items.iter().any(|e| !e.questions.is_empty()) {
+            text += "Questions waiting on a decider, oldest first on each item:\n";
+            for entry in &items {
+                for question in &entry.questions {
+                    text += &waiting(&entry.id, question);
+                }
+            }
+        }
+        text += &start_threads(&items);
     }
     text
 }

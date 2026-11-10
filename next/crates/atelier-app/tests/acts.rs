@@ -112,7 +112,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 12] = [
+const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
     (Act::Ready, &[Status::Draft], Some(Status::Ready)),
     (Act::Start, &[Status::Ready], Some(Status::Building)),
     // Created by the act, so it runs from no status at all.
@@ -142,6 +142,21 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 12] = [
         Act::VerdictApprove,
         &[Status::InReview],
         Some(Status::Approved),
+    ),
+    (
+        Act::Escalate,
+        &[Status::Building, Status::ChangesRequested, Status::Approved],
+        None,
+    ),
+    (
+        Act::Decide,
+        &[
+            Status::Building,
+            Status::InReview,
+            Status::ChangesRequested,
+            Status::Approved,
+        ],
+        None,
     ),
     (Act::Merge, &[Status::Approved], Some(Status::Done)),
     (Act::MergeTrivial, &[Status::Building], Some(Status::Done)),
@@ -211,12 +226,19 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
                 Act::Merge => vec![review("1-aaaa", &["r1"], "approve", "")],
                 _ => vec![review("1-aaaa", &["r1"], "null", findings)],
             };
-            let item = with_reviews(record(status, &["t1"], DONE), &reviews);
+            // A decider has a question to answer.
+            let body = match act {
+                Act::Decide => format!("{DONE}\n## Decisions\n\n### 2026-11-10: Q?\n"),
+                _ => DONE.to_string(),
+            };
+            let item = with_reviews(record(status, &["t1"], &body), &reviews);
             let reviewer = matches!(act, Act::Review | Act::VerdictChanges | Act::VerdictApprove);
             // A planner holds nothing; the item's holder readying it is
-            // refused by its status too, never by its role.
+            // refused by its status too, never by its role. A decider is
+            // neither the item's implementer nor a reviewer.
             let caller = thread(match act {
                 _ if reviewer => "r1",
+                Act::Decide => "d1",
                 Act::Ready if status == Status::Draft => "p1",
                 _ => "t1",
             });
@@ -674,6 +696,7 @@ fn submit_needs_each_open_finding_answered_and_each_question_decided() {
     let open = |number: u32, title: &str| Condition::NoResponse {
         finding: format!("1-aaaa.{number}").parse().unwrap(),
         title: title.into(),
+        rebutted: false,
     };
     assert_eq!(conditions(DONE), [open(1, "Wrong"), open(2, "Also wrong")]);
 

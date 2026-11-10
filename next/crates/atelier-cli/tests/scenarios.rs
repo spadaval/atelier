@@ -833,10 +833,18 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
         .contains(&format!("{second}.1 is: No period")));
     assert_eq!(atelier(&root, "t3", &["verdict", "changes"]).code, 0);
 
-    // The open finding now goes by its round-2 name.
+    // The open finding now goes by its round-2 name, and its rebuttal has
+    // had its one try: a fix or `escalate` is left.
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains(&format!("  [ ] Finding {second}.1 (fix now): No period\n")),
+        status.contains(&format!(
+            "  [ ] Finding {second}.1 (fix now): No period (its rebuttal was kept, and a rebuttal \
+             gets one try: fix it, or escalate it)\n"
+        )),
+        "{status}"
+    );
+    assert!(
+        status.contains("escalate it: atelier escalate --finding <finding> \"<question>\"\n"),
         "{status}"
     );
     assert!(!status.contains(&format!("{first}.1")), "{status}");
@@ -866,7 +874,7 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     );
     assert!(atelier(&root, "t1", &["status"])
         .stdout
-        .contains("Status: approved\n"));
+        .contains("Status: approved since "));
 
     // The approval goes stale and the item is submitted again: round 4
     // opens, with nothing left to carry.
@@ -961,7 +969,7 @@ fn a_reviewer_that_runs_an_implementers_command_is_told_its_role() {
     assert_eq!(
         run.stderr,
         format!(
-            "You are the implementer of {ID}. Implementers run `start`, `submit` and `merge`.\n"
+            "You are the implementer of {ID}. Implementers run `start`, `submit`, `escalate` and `merge`.\n"
         )
     );
 }

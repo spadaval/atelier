@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 pub struct Links {
     pub blockers: Vec<(String, Option<Status>)>,
     pub mission: Option<(String, Option<Status>)>,
+    /// The mission's lead, who decides the item's questions when it may.
+    pub lead: Option<Thread>,
 }
 
 pub struct Repo {
@@ -167,14 +169,19 @@ impl Repo {
             .iter()
             .map(|id| Ok((id.clone(), self.locate(id)?.status())))
             .collect::<Result<_>>()?;
-        let mission = match &item.item.mission {
-            None => None,
+        let (mission, lead) = match &item.item.mission {
+            None => (None, None),
             Some(id) => {
                 let found = self.reader.mission(&self.base_tip, id)?;
-                mission_of(item, found.as_slice())
+                let lead = found.as_ref().and_then(|dir| dir.mission.lead.clone());
+                (mission_of(item, found.as_slice()), lead)
             }
         };
-        Ok(Links { blockers, mission })
+        Ok(Links {
+            blockers,
+            mission,
+            lead,
+        })
     }
 
     /// The item `id` as `commit` holds it.

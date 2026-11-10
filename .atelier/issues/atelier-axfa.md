@@ -4,6 +4,9 @@ id: "atelier-axfa"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-axfa
 priority: "P1"
 relationships:
   blocks: []
@@ -24,9 +27,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `escalate` and `decide`, and carry a decision through the review loop"
-updated_at: "2026-11-10T21:30:49.465874229+00:00"
+updated_at: "2026-11-10T22:05:50.906814334+00:00"
 ---
 
 ## Goal

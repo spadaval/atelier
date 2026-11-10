@@ -10,7 +10,7 @@ mod store;
 mod validate;
 
 pub use at_commit::{CommitReader, ReadError};
-pub use body::put_first;
+pub use body::{answer, ask, put_first};
 pub use ids::{allocate_id, validate_id};
 pub use store::{
     create_review, parse_config, parse_item, parse_mission, parse_review, render_config,

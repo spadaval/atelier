@@ -4,10 +4,10 @@ use crate::forge::Github;
 use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
 use crate::{git, merge, output, plan};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, row, Act, Checkout, Facts, Refusal, STARTED};
-use atelier_app::{entry, overview, Located};
+use atelier_app::acts::{approval, check, row, Act, Checkout, Facts, Refusal, STARTED};
+use atelier_app::{entry, overview, Entry, Located};
 use atelier_core::{Forge, Item, MissionStatus, Status};
-use atelier_records::{render_item, validate_id, Store};
+use atelier_records::{render_item, validate_id, ItemDir, Store};
 
 pub enum Outcome {
     Done(String),
@@ -23,14 +23,21 @@ pub fn status(repo: &mut Repo) -> Result<String> {
         let links = repo.links(record)?;
         let head = git::head(&repo.root)?;
         let checkout = repo.checkout(record, &head)?;
-        let entry = entry(&facts(repo, &located, &links, Some(&checkout)))?;
+        let facts = facts(repo, &located, &links, Some(&checkout));
+        let mut entry = entry(&facts)?;
+        annotate(repo, &mut entry, record)?;
+        let decider = crate::questions::decider(&facts, &links)?;
         let config = repo.base_config()?;
         let dropped = record.dropped();
-        return Ok(output::item(&repo.caller, &entry, &config, dropped));
+        let said = output::item(&repo.caller, &entry, &config, dropped, decider.as_deref());
+        return Ok(said);
     }
     let items = repo.everything()?;
     let missions = repo.missions()?;
-    let overview = overview(&items, &missions, &repo.caller)?;
+    let mut overview = overview(&items, &missions, &repo.caller)?;
+    for (_, entries) in &mut overview.led {
+        annotate_all(repo, entries, &items)?;
+    }
     // An item dropped on the base while its branch is there.
     let dropped: Vec<(String, Option<String>)> = items
         .iter()
@@ -270,6 +277,38 @@ pub(crate) fn write_and_commit(
         put_back();
         error.context(output::not_committed())
     })
+}
+
+/// Adds to `entry`, which `record` gives, what views show besides the act
+/// table: when it was approved, read from Git, and its unanswered questions.
+pub(crate) fn annotate(repo: &Repo, entry: &mut Entry, record: &ItemDir) -> Result<()> {
+    let id = &record.item.id;
+    let approved = approval(record).filter(|_| record.item.status == Status::Approved);
+    if let (Some(review), Some(tip)) = (approved, git::branch_tip(&repo.root, id)?) {
+        let path = format!("{}/reviews/{}.md", item_dir(id), review.name);
+        entry.approved = git::approved_at(&repo.root, &tip, &path)?;
+    }
+    let decisions = record.decisions()?.into_iter();
+    entry.questions = decisions
+        .filter(|d| d.answer.is_none())
+        .map(|d| d.question)
+        .collect();
+    Ok(())
+}
+
+/// [`annotate`] for each of `entries`, found among `items`.
+pub(crate) fn annotate_all<'a>(
+    repo: &Repo,
+    entries: impl IntoIterator<Item = &'a mut Entry>,
+    items: &[Located],
+) -> Result<()> {
+    for entry in entries {
+        let found = items.iter().find(|located| located.id == entry.id);
+        if let Some(record) = found.and_then(Located::record) {
+            annotate(repo, entry, record)?;
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn facts<'a>(

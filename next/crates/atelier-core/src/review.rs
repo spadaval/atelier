@@ -141,6 +141,16 @@ pub enum Outcome {
     NoAction,
 }
 
+impl fmt::Display for Outcome {
+    /// As a record writes it, after `Outcome: ` or `Decided: `.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Outcome::Defer => "defer",
+            Outcome::NoAction => "no action",
+        })
+    }
+}
+
 /// How a deferred finding was settled: taken into an item, or dropped.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Settlement {

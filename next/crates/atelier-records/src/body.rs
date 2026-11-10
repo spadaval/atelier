@@ -166,6 +166,58 @@ fn decision(question: &str, content: &str) -> Result<Decision, String> {
     })
 }
 
+/// `body` with a new, unanswered question at the end of its
+/// `## Decisions`, about `finding` when one is given, adding the section at
+/// the end of the body when it has none. `question` is the entry's heading,
+/// `<date>: <question>`.
+pub fn ask(body: &str, question: &str, finding: Option<&FindingName>) -> String {
+    let mut entry = format!("### {question}");
+    if let Some(finding) = finding {
+        entry += &format!("\n\nFinding: {finding}");
+    }
+    match section(body, 2, "Decisions") {
+        Some(content) if content.trim().is_empty() => add_after(body, content, &entry),
+        Some(content) => add_after(body, content, &format!("\n{entry}")),
+        None => {
+            let sep = if body.is_empty() || body.ends_with('\n') {
+                ""
+            } else {
+                "\n"
+            };
+            format!("{body}{sep}\n## Decisions\n\n{entry}\n")
+        }
+    }
+}
+
+/// `body` with `Answer by <by>: <text>`, and `Outcome: <outcome>` when one
+/// is given, under the entry of `## Decisions` at `index`, which
+/// [`decisions`] reads in the same order. `None` when there is no such
+/// entry.
+pub fn answer(
+    body: &str,
+    index: usize,
+    by: &Thread,
+    text: &str,
+    outcome: Option<Outcome>,
+) -> Option<String> {
+    let entries = section(body, 2, "Decisions")?;
+    let (_, content) = *sections(entries, 3).get(index)?;
+    let mut lines = format!("Answer by {by}: {text}");
+    if let Some(outcome) = outcome {
+        lines += &format!("\nOutcome: {outcome}");
+    }
+    Some(add_after(body, content, &lines))
+}
+
+/// `body` with `lines` on the line after the last line of `content`, a
+/// section of `body`, that is not blank.
+fn add_after(body: &str, content: &str, lines: &str) -> String {
+    let start = content.as_ptr() as usize - body.as_ptr() as usize;
+    let (head, tail) = body.split_at(start + content.trim_end().len());
+    let end = if tail.starts_with('\n') { "" } else { "\n" };
+    format!("{head}\n{lines}{end}{tail}")
+}
+
 /// The lines of an item's `### Responses`, under `## Report`.
 pub(crate) fn responses(file: &Path, body: &str) -> Result<Vec<Response>, Problem> {
     let Some(lines) = section(body, 2, "Report").and_then(|report| section(report, 3, "Responses"))
@@ -342,6 +394,55 @@ mod tests {
             "## Report\n### Validation\n```\n# a shell comment\n```\n"
         ));
         assert!(report_written("## Report\n#hashtag is text\n"));
+    }
+
+    #[test]
+    fn a_question_asked_and_answered_reads_back_in_order() {
+        let path = Path::new("item.md");
+        let finding: FindingName = "1-aaaa.1".parse().unwrap();
+        let by = Thread("d1".into());
+        // With no Decisions section, with an empty one before the Report,
+        // and after an answered entry.
+        for body in [
+            "## Goal\ng",
+            "## Goal\ng\n\n## Decisions\n\n## Report\nr\n",
+            "## Decisions\n\n### 2026-11-09: Old?\n\nAnswer by d0: Yes.\n",
+        ] {
+            let asked = ask(body, "2026-11-10: Why?", Some(&finding));
+            let asked = ask(&asked, "2026-11-10: And?", None);
+            let before = decisions(path, body).unwrap().len();
+            let read = decisions(path, &asked).unwrap();
+            assert_eq!(read.len(), before + 2, "{asked}");
+            assert_eq!(read[before].question, "2026-11-10: Why?");
+            assert_eq!(read[before].finding.as_ref(), Some(&finding));
+            assert!(read[before..].iter().all(|d| d.answer.is_none()));
+            assert_eq!(read[before + 1].finding, None);
+            assert!(asked.contains("## Report\nr\n") == body.contains("## Report"));
+
+            let answered = answer(&asked, before, &by, "Not now.", Some(Outcome::Defer)).unwrap();
+            let answered = answer(&answered, before + 1, &by, "Yes.", None).unwrap();
+            let read = decisions(path, &answered).unwrap();
+            assert_eq!(read[before].answer.as_ref().unwrap().text, "Not now.");
+            assert_eq!(read[before].outcome, Some(Outcome::Defer));
+            assert_eq!(read[before + 1].answer.as_ref().unwrap().by, by);
+            assert_eq!(read[before + 1].outcome, None);
+            assert_eq!(answer(&answered, before + 2, &by, "x", None), None);
+        }
+        assert_eq!(
+            ask("## Goal\ng\n", "2026-11-10: Why?", None),
+            "## Goal\ng\n\n## Decisions\n\n### 2026-11-10: Why?\n"
+        );
+        assert_eq!(
+            answer(
+                "## Decisions\n\n### Q\n\nFinding: 1-aaaa.1\n\n### R\n",
+                0,
+                &by,
+                "No.",
+                Some(Outcome::NoAction)
+            )
+            .unwrap(),
+            "## Decisions\n\n### Q\n\nFinding: 1-aaaa.1\nAnswer by d1: No.\nOutcome: no action\n\n### R\n"
+        );
     }
 
     #[test]
