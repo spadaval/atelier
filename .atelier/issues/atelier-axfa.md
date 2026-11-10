@@ -73,6 +73,8 @@ Every Done when line holds, in `next/`. `escalate "<question>" [--finding <name>
 
 Each new test was seen to fail for its reason: two batches of deliberate breaks (the finding chain cut to one review, the `Decided:` guard removed, the Response rule reverted, the rebuttal flag forced off, `escalate`'s open check removed, decided findings not carried, the lead ignored, the branch check removed, no approval time) each failed the tests above and no others.
 
+Review round 1's finding atelier-rop0 (fix now: a question `escalate` wrote was invisible to the mission's lead until committed) is fixed in 3ca83c17: while the question is uncommitted, the lead handoff gives the Git command that commits it, and `decisions::a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_is_approved` now checks the lead does not see it before that command runs and does after, with no commit of the test's own. The full suite passes again (179 tests), with clippy and fmt clean.
+
 ### Decisions
 
 - Who may decide counts the reviewers of every review in the finding's `Was:` chain, not only the review that raised the open name: a finding carried as kept is the same problem, and the product specification says a reviewer never decides its review's findings. The architecture specification's `decide` row now says so.
