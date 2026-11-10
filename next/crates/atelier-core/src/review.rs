@@ -14,7 +14,9 @@ pub struct Review {
     /// The commit reviewed.
     pub commit: String,
     pub reviewers: Threads,
-    pub model: String,
+    /// The reviewer's model, as given to `verdict --model`; `None` when
+    /// nobody said.
+    pub model: Option<String>,
     pub verdict: Option<Verdict>,
     pub created_at: Time,
     #[serde(skip)]

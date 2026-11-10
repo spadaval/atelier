@@ -1,11 +1,11 @@
-//! `status`, `start` and `submit`.
+//! `status`, `start` and `submit`, and what the commands share.
 
 use crate::repo::{item_dir, item_path, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, Act, Facts, Refusal, STARTED};
 use atelier_app::{entry, overview, Located};
-use atelier_core::{Item, Status};
+use atelier_core::Status;
 use atelier_records::{render_item, validate_id};
 
 pub enum Outcome {
@@ -83,7 +83,9 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
                 Some(thread) => format!("Take over {id} from {thread}"),
                 None => format!("Take over {id}"),
             };
-            write_and_commit(repo, &dir.item, &item_path(id), &message)?;
+            let path = item_path(id);
+            let file = [(path.clone(), render_item(&dir.item))];
+            write_and_commit(repo, &file, &[&path], &message)?;
             output::taken_over(id, before.as_ref())
         }
     };
@@ -94,6 +96,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
 pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let Some(located) = repo.current()? else {
         return Ok(Outcome::Refused(output::not_on_item(
+            "submit",
             repo.branch.as_deref(),
         )));
     };
@@ -106,23 +109,43 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let mut item = record.item.clone();
     item.status = Status::InReview;
     let message = format!("Submit {} for review", item.id);
-    write_and_commit(repo, &item, &item_dir(&item.id), &message)?;
+    let file = [(item_path(&item.id), render_item(&item))];
+    write_and_commit(repo, &file, &[&item_dir(&item.id)], &message)?;
     Ok(Outcome::Done(output::submitted(&item.id)))
 }
 
-/// Writes `item` into the checkout and commits `path`. When the commit
-/// fails, the item's file is put back as it was, so the act can be run again.
-fn write_and_commit(repo: &Repo, item: &Item, path: &str, message: &str) -> Result<()> {
-    let file = repo.root.join(item_path(&item.id));
-    let before = std::fs::read(&file)?;
-    repo.store().write_item(item)?;
-    git::commit_path(&repo.root, path, message).map_err(|error| {
-        let _ = std::fs::write(&file, &before);
+/// Writes each of `files`, a path in the checkout and its text, and
+/// commits `paths`. When the commit fails, each file is put back as it was,
+/// so the act can be run again.
+pub(crate) fn write_and_commit(
+    repo: &Repo,
+    files: &[(String, String)],
+    paths: &[&str],
+    message: &str,
+) -> Result<()> {
+    let before = files
+        .iter()
+        .map(|(path, _)| std::fs::read(repo.root.join(path)))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let put_back = || {
+        for ((path, _), text) in files.iter().zip(&before) {
+            let _ = std::fs::write(repo.root.join(path), text);
+        }
+    };
+    let written = files
+        .iter()
+        .try_for_each(|(path, text)| std::fs::write(repo.root.join(path), text));
+    if let Err(error) = written {
+        put_back();
+        return Err(error.into());
+    }
+    git::commit_paths(&repo.root, paths, message).map_err(|error| {
+        put_back();
         error.context(output::not_committed())
     })
 }
 
-fn facts<'a>(
+pub(crate) fn facts<'a>(
     repo: &'a Repo,
     located: &'a Located,
     blockers: &'a [(String, Option<Status>)],
@@ -136,7 +159,7 @@ fn facts<'a>(
 }
 
 /// What the caller is told when `act` is refused, or `None` when it may run.
-fn refusal(act: Act, facts: &Facts) -> Result<Option<String>> {
+pub(crate) fn refusal(act: Act, facts: &Facts) -> Result<Option<String>> {
     match check(act, facts) {
         Ok(_) => Ok(None),
         Err(Refusal::Record(problem)) => Err(problem.into()),

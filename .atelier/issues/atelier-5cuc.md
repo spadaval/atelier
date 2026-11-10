@@ -4,6 +4,9 @@ id: "atelier-5cuc"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-5cuc
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `review` and `verdict`, with the brief and one file per review"
-updated_at: "2026-11-10T04:45:24.285329017+00:00"
+updated_at: "2026-11-10T16:39:49.321367337+00:00"
 ---
 
 ## Goal
@@ -35,7 +38,7 @@ Build the reviewer's side of the loop: one command that gives a reviewer everyth
 - [ ] After `changes_requested`, the implementer's `status` lists each open fix-now finding by number and title. `submit` changes nothing until the Report's Responses has a line for each one, as fixed in a commit or as rebutted.
 - [ ] Scenario test, second round: after that `submit`, `review <id>` by a thread creates `reviews/2-<suffix>.md`, which carries each open finding of round 1 by its name, such as `1-x7qd.1`, with the author's response under `Was:`. The reviewer sets `Now:` to fixed, withdrawn or kept, and a kept fix-now finding counts as open for the verdict. The same holds after an approval went stale and the item was submitted again.
 - [ ] Scenario test, reviewer taken over: with round 1's file created by `t2` and no verdict, `review <id>` by `t3` appends `t3` to the file's `reviewers` so that it holds the review, keeps what the file holds, and says `t2` held it.
-- [ ] A thread bound as reviewer that runs `submit` or `merge` gets one line naming its role and its two commands, a non-zero exit, and no change.
+- [ ] A thread bound as reviewer that runs `submit` gets one line naming its role and its two commands, a non-zero exit, and no change.
 - [ ] The Records section of `docs/strategies/redesign-architecture.md` matches the review file as built.
 
 ## Scope
@@ -45,3 +48,11 @@ Reviews of items. Plan reviews of missions belong to step B, and findings settle
 ## Context
 
 Behaviour: `docs/strategies/redesign-product.md`, Commands (Reviewer), Review, and "When a thread dies". The reviewer works in the implementer's checkout, where T3 starts a delegated child by default.
+
+## Notes
+
+- 2026-11-10 [decision] The orchestrator narrowed the Done when line on a reviewer's wrong command from `submit` or `merge` to `submit` only
+  Reason: `merge` does not exist until atelier-syyj; the orchestrator will tell that item's implementer to cover a reviewer who runs `merge`.
+  Rejected: Build a stub merge here to test the reviewer's refusal
+- 2026-11-10 [decision] Expected size: about 900 non-test lines of Rust, scenario and unit tests about as large again, and about 40 changed lines of the architecture specification
+  Reason: The orchestrator's brief gives this size; past about twice it, the implementer escalates.

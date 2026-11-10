@@ -1,7 +1,7 @@
 //! Where an item's record is read from, and what `status` shows.
 
 use crate::acts::{next, unmet, Act, Condition, Facts, STARTED};
-use atelier_core::{Priority, Status, Thread};
+use atelier_core::{Priority, ReviewName, Status, Thread};
 use atelier_records::{ItemDir, Problem};
 use std::collections::HashMap;
 
@@ -47,6 +47,8 @@ pub struct Entry {
     pub status: Status,
     pub holder: Option<Thread>,
     pub holds: bool,
+    /// This round's review, when the caller holds it.
+    pub review: Option<ReviewName>,
     /// The act the caller would run next, and its conditions that do not
     /// hold.
     pub next: Option<Act>,
@@ -54,7 +56,7 @@ pub struct Entry {
 }
 
 pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
-    let next = next(facts);
+    let next = next(facts)?;
     let unmet = match next {
         Some(act) => unmet(act, facts)?,
         None => Vec::new(),
@@ -67,6 +69,7 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         status: item.status,
         holder: facts.holder().cloned(),
         holds: facts.holds(),
+        review: facts.reviewing().map(|file| file.name.clone()),
         next,
         unmet,
     })

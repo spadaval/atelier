@@ -83,6 +83,7 @@ dependencies = [
  "atelier-app",
  "atelier-core",
  "atelier-records",
+ "chrono",
  "clap",
  "tempfile",
 ]
