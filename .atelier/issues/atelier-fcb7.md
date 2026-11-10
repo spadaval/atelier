@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T14:54:25.332956483+00:00"
+updated_at: "2026-11-10T15:44:54.427583649+00:00"
 ---
 
 ## Outcome
@@ -35,3 +35,7 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
 - 2026-11-10 [decision] The Authority's ban on new dependencies is read as: the new workspace may use the crates the old workspace already depends on (the root Cargo.toml's workspace dependencies and the test crates in Cargo.lock); any other crate is escalated to the orchestrator
   Reason: The specifications name no crate at all, so a literal reading would forbid serde and clap. They do say the new workspace has the crates the old one has, and they name YAML front matter and config.toml, which the old dependency set already parses.
   Rejected: Treat every crate as needing Sumeet's approval
+- 2026-11-10 [decision] Cut merge_strategy from config.toml: all five repositories set merge_commit and the field has one legal value. atelier-mal9 removes it from the config type and both specifications
+  Reason: The Authority lets the orchestrator cut what proves unnecessary, and the product specification adds a named option only when a second real project needs one.
+  Rejected: Keep a field that every reader ignores
+- 2026-11-10 [note] 2026-11-10: atelier-mal9 escalated after three review rounds, each with one or two fix-now findings, all fixed. Three of the four came from the hand-written check for fenced code blocks. Answered: a fourth round on the fix as it stands, no refusal for an unclosed fence and no Markdown parser dependency.
