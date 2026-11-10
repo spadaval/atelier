@@ -10,7 +10,9 @@
 //! binary keeps Rust's default of ignoring SIGPIPE, so such a write fails
 //! with an error. The loader on top of it is new.
 
-use crate::{parse_item, parse_mission, store::review_file, ItemDir, MissionDir, Problem};
+use crate::{
+    parse_item, parse_mission, store::review_file, ItemDir, MissionDir, Problem, ReviewFile,
+};
 use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -92,22 +94,39 @@ impl CommitReader {
             Err(ReadError::Missing { .. }) => return Ok(None),
             text => text?,
         };
-        let shown = |path: &str| PathBuf::from(format!("{commit}:{path}"));
-        let item = parse_item(&shown(&path), &text).map_err(ReadError::Record)?;
+        let path = shown(commit, &path);
+        let item = parse_item(&path, &text).map_err(ReadError::Record)?;
+        let reviews = self.reviews(commit, &dir)?;
+        Ok(Some(ItemDir {
+            path,
+            item,
+            reviews,
+        }))
+    }
+
+    /// The plan reviews of mission `id` as `commit` holds them, oldest
+    /// round first; none when it has no `reviews/` directory.
+    pub fn mission_reviews(
+        &mut self,
+        commit: &str,
+        id: &str,
+    ) -> Result<Vec<ReviewFile>, ReadError> {
+        self.reviews(commit, &format!("{MISSIONS}/{id}"))
+    }
+
+    /// The review files under `<dir>/reviews/` in `commit`, by name.
+    fn reviews(&mut self, commit: &str, dir: &str) -> Result<Vec<ReviewFile>, ReadError> {
         let mut reviews = Vec::new();
         for name in self.names(commit, &format!("{dir}/reviews"))? {
             if let Some(stem) = name.strip_suffix(".md") {
                 let path = format!("{dir}/reviews/{name}");
                 let text = self.text(commit, &path)?;
-                reviews.push(review_file(shown(&path), stem, &text).map_err(ReadError::Record)?);
+                let file = review_file(shown(commit, &path), stem, &text);
+                reviews.push(file.map_err(ReadError::Record)?);
             }
         }
         reviews.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(Some(ItemDir {
-            path: shown(&path),
-            item,
-            reviews,
-        }))
+        Ok(reviews)
     }
 
     /// The mission `id` as `commit` holds it, or `None` when the commit has
@@ -118,7 +137,7 @@ impl CommitReader {
             Err(ReadError::Missing { .. }) => return Ok(None),
             text => text?,
         };
-        let path = PathBuf::from(format!("{commit}:{path}"));
+        let path = shown(commit, &path);
         let mission = parse_mission(&path, &text).map_err(ReadError::Record)?;
         Ok(Some(MissionDir { path, mission }))
     }
@@ -164,7 +183,7 @@ impl CommitReader {
         let data = self.object(&entry.oid, "blob")?.data;
         String::from_utf8(data).map_err(|_| {
             ReadError::Record(Problem::new(
-                &PathBuf::from(format!("{commit}:{path}")),
+                &shown(commit, path),
                 "",
                 "the file is not UTF-8",
             ))
@@ -332,6 +351,11 @@ impl Drop for Batch {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// How a file read at a commit is named in a problem: `<commit>:<path>`.
+fn shown(commit: &str, path: &str) -> PathBuf {
+    PathBuf::from(format!("{commit}:{path}"))
 }
 
 fn name(bytes: Vec<u8>) -> Result<String, ReadError> {

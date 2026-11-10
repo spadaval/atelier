@@ -1,7 +1,8 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::acts::{mission_of, next, unmet, Act, Condition, Facts, STARTED};
-use atelier_core::{Priority, ReviewName, Status, Thread, Verdict};
+use crate::acts::{mission_of, next, unmet, Act, Condition, Facts, PLANNED, STARTED};
+use crate::work::{in_progress, items_of};
+use atelier_core::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use atelier_records::{ItemDir, MissionDir, Problem};
 use std::collections::HashMap;
 
@@ -45,6 +46,11 @@ pub struct Entry {
     pub title: String,
     pub priority: Priority,
     pub status: Status,
+    pub mission: Option<String>,
+    pub labels: Vec<String>,
+    /// Each item it is blocked by, with its status; `None` when no such
+    /// item is found.
+    pub blockers: Vec<(String, Option<Status>)>,
     pub holder: Option<Thread>,
     pub holds: bool,
     /// The caller holds it building, and its Goal or its Done when lines
@@ -82,6 +88,9 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         title: item.title.clone(),
         priority: item.priority,
         status: item.status,
+        mission: item.mission.clone(),
+        labels: item.labels.clone(),
+        blockers: facts.blockers.to_vec(),
         holder: facts.holder().cloned(),
         holds: facts.holds(),
         undefined,
@@ -109,27 +118,35 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
 }
 
 /// `status` away from an item's branch: what the caller holds, what is
-/// ready, and what other threads hold.
+/// ready, what other threads hold, and the missions.
 #[derive(Debug, Default)]
 pub struct Overview {
     pub held: Vec<Entry>,
+    /// Ready items, except those waiting on a human.
     pub ready: Vec<Entry>,
     pub started: Vec<Entry>,
+    /// Items labelled needs-human that nobody has started.
+    pub waiting: Vec<Entry>,
+    /// Ready missions with a started item.
+    pub in_progress: Vec<MissionDir>,
+    /// The missions the caller leads, each with its items, as
+    /// [`items_of`] orders them.
+    pub led: Vec<(MissionDir, Vec<Entry>)>,
 }
 
-/// The overview of `items`, which are every item found on the base and on
-/// branches; a blocker is looked up among them, and a mission among
-/// `missions`, the base's.
-pub fn overview(
+/// What `status` shows the caller of each of `items`, which are every item
+/// found on the base and on branches; a blocker is looked up among them,
+/// and a mission among `missions`.
+pub fn entries(
     items: &[Located],
     missions: &[MissionDir],
     caller: &Thread,
-) -> Result<Overview, Problem> {
+) -> Result<Vec<Entry>, Problem> {
     let statuses: HashMap<&str, Status> = items
         .iter()
         .filter_map(|located| Some((located.id.as_str(), located.status()?)))
         .collect();
-    let mut overview = Overview::default();
+    let mut entries = Vec::new();
     for located in items {
         let Some(record) = located.record() else {
             continue;
@@ -148,8 +165,35 @@ pub fn overview(
             caller,
             checkout: None,
         };
-        let entry = entry(&facts)?;
-        if entry.status == Status::Ready {
+        entries.push(entry(&facts)?);
+    }
+    Ok(entries)
+}
+
+/// The overview of `items` and `missions`, as for [`entries`].
+pub fn overview(
+    items: &[Located],
+    missions: &[MissionDir],
+    caller: &Thread,
+) -> Result<Overview, Problem> {
+    let entries = entries(items, missions, caller)?;
+    let mut overview = Overview::default();
+    for mission in missions {
+        if in_progress(mission, &entries) {
+            overview.in_progress.push(mission.clone());
+        }
+        let ready = mission.mission.status == MissionStatus::Ready;
+        if ready && mission.mission.lead.as_ref() == Some(caller) {
+            let items = items_of(&mission.mission.id, &entries);
+            overview
+                .led
+                .push((mission.clone(), items.into_iter().cloned().collect()));
+        }
+    }
+    for entry in entries {
+        if entry.needs_human() && PLANNED.contains(&entry.status) {
+            overview.waiting.push(entry);
+        } else if entry.status == Status::Ready {
             overview.ready.push(entry);
         } else if STARTED.contains(&entry.status) {
             if entry.holds {

@@ -133,8 +133,8 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 10] = [
 
 #[test]
 fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
-    // Each item's act, and the mission's `ready`.
-    assert_eq!(TABLE.len(), SPECIFIED.len() + 1);
+    // Each item's act, and the mission's `ready` and `lead`.
+    assert_eq!(TABLE.len(), SPECIFIED.len() + 2);
     for (act, from, to) in SPECIFIED {
         for status in ALL {
             // Every condition holds: the caller holds the item, except a
@@ -206,6 +206,23 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
     assert_eq!(
         (ready.role, ready.from, ready.to),
         (Role::Planner, &[Status::Draft][..], Some(Status::Ready))
+    );
+    // `lead`, from each of a mission's statuses: only a ready mission, and
+    // its status stays.
+    for status in MissionStatus::ALL {
+        match check_mission(Act::Lead, status) {
+            Ok(set) => assert_eq!((status, set), (MissionStatus::Ready, None)),
+            Err(Refusal::From { act, status: at }) => {
+                assert_ne!(status, MissionStatus::Ready);
+                assert_eq!((act, at), (Act::Lead, status.status()));
+            }
+            Err(other) => panic!("lead from {status:?}: {other:?}"),
+        }
+    }
+    let lead = row(Act::Lead);
+    assert_eq!(
+        (lead.role, lead.binds, lead.from, lead.to),
+        (Role::Lead, true, &[Status::Ready][..], None)
     );
 }
 

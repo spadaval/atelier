@@ -229,6 +229,13 @@ impl ItemDir {
     }
 }
 
+impl MissionDir {
+    /// The content under the mission's `## <heading>`, if it has one.
+    pub fn section(&self, heading: &str) -> Option<&str> {
+        body::section(&self.mission.body, 2, heading)
+    }
+}
+
 impl ReviewFile {
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
         body::findings(&self.path, &self.name, &self.review.body)

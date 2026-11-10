@@ -22,6 +22,8 @@ pub enum Act {
     VerdictApprove,
     Merge,
     MergeTrivial,
+    /// `lead` on a mission.
+    Lead,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +31,7 @@ pub enum Role {
     Planner,
     Implementer,
     Reviewer,
+    Lead,
 }
 
 pub struct Row {
@@ -58,7 +61,7 @@ pub const STARTED: &[Status] = &[
 /// still change with `set`.
 pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 
-pub const TABLE: [Row; 11] = [
+pub const TABLE: [Row; 12] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -146,6 +149,14 @@ pub const TABLE: [Row; 11] = [
         binds: false,
         from: &[Status::Building],
         to: Some(Status::Done),
+    },
+    Row {
+        act: Act::Lead,
+        command: "lead",
+        role: Role::Lead,
+        binds: true,
+        from: &[Status::Ready],
+        to: None,
     },
 ];
 
@@ -386,7 +397,8 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     }
     if !row.binds {
         let (holds, holder) = match row.role {
-            Role::Planner => (true, None),
+            // A mission's role binds, so its acts never come here.
+            Role::Planner | Role::Lead => (true, None),
             Role::Implementer => (facts.holds(), facts.holder()),
             Role::Reviewer => (
                 facts.reviewing().is_some(),
@@ -428,7 +440,7 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match act {
-        Act::Ready | Act::ReadyMission | Act::StartNew => {}
+        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Lead => {}
         Act::Start => {
             for (id, status) in facts.blockers {
                 if *status != Some(Status::Done) {

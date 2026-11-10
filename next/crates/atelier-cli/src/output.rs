@@ -10,7 +10,7 @@ use atelier_records::Problem;
 use std::path::Path;
 use std::time::Duration;
 
-fn status_name(status: Status) -> &'static str {
+pub(crate) fn status_name(status: Status) -> &'static str {
     match status {
         Status::Draft => "draft",
         Status::Ready => "ready",
@@ -23,7 +23,7 @@ fn status_name(status: Status) -> &'static str {
     }
 }
 
-fn priority_name(priority: Priority) -> &'static str {
+pub(crate) fn priority_name(priority: Priority) -> &'static str {
     match priority {
         Priority::Critical => "critical",
         Priority::High => "high",
@@ -52,10 +52,11 @@ fn goal(act: Act, status: Status) -> &'static str {
         Act::Review => "review it",
         Act::VerdictChanges | Act::VerdictApprove => "record your verdict",
         Act::Merge | Act::MergeTrivial => "merge it",
+        Act::Lead => "lead it",
     }
 }
 
-fn condition(id: &str, condition: &Condition) -> String {
+pub(crate) fn condition(id: &str, condition: &Condition) -> String {
     let text = match condition {
         Condition::Blocked {
             id: blocker,
@@ -126,13 +127,32 @@ fn next(entry: &Entry) -> String {
     needs(act, entry.status, id, &entry.unmet)
 }
 
-/// How an implementer gets its item reviewed. The task line has no
-/// backticks: pasted into a double-quoted shell argument, they would run
-/// `atelier review` as the implementer.
+/// How an implementer gets its item reviewed.
 fn start_reviewer(id: &str) -> String {
-    format!(
-        "A reviewer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:\n  Run atelier review {id} and follow what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
+    let task = format!("Run atelier review {id} and follow what it prints.");
+    handoff(
+        "A reviewer",
+        &[task],
+        "Then wait for its verdict, and run `atelier status`.",
     )
+}
+
+/// The line that has `who` started as another thread with each of
+/// `tasks`, then says what to do meanwhile. A task has no backticks:
+/// pasted into a double-quoted shell argument, they would run the command
+/// as the caller.
+pub(crate) fn handoff(who: &str, tasks: &[String], then: &str) -> String {
+    let (start, give) = match tasks.len() {
+        1 => ("one", "this task"),
+        _ => ("one for each task", "its task"),
+    };
+    let mut text = format!(
+        "{who} must be another thread: not you, and not a subagent of yours, which runs as your thread. Start {start} with your harness's tool for a new agent thread, and give it {give}:\n"
+    );
+    for task in tasks {
+        text += &format!("  {task}\n");
+    }
+    text + then + "\n"
 }
 
 /// The conditions of `act` that do not hold, then its command.
@@ -192,7 +212,7 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
     text + &format!("Then: {}{or}\n", command(act, id))
 }
 
-fn holder(entry: &Entry) -> String {
+pub(crate) fn holder(entry: &Entry) -> String {
     match &entry.holder {
         Some(thread) => format!("held by {thread}"),
         None => "held by nobody".into(),
@@ -335,12 +355,19 @@ pub fn overview(
             );
         }
     }
+    text += &crate::view_output::overview(overview);
     if !planning.is_empty() {
         text += &format!(
             "Planning not committed yet, which `atelier start` does not read until it is: {}\nCommit it with: {}\n",
             some(planning),
             commit_line(at, planning, "Plan")
         );
+    }
+    text += &crate::view_output::led(&overview.led);
+    // A lead holding nothing hands its mission's items to other threads,
+    // and is not pointed at one itself.
+    if overview.held.is_empty() && !overview.led.is_empty() {
+        return text;
     }
     let startable = overview.ready.iter().find(|entry| entry.unmet.is_empty());
     match (overview.held.first(), startable) {
@@ -373,7 +400,9 @@ pub fn refusal(
         Refusal::Role(Role::Implementer) => format!(
             "You are the implementer of {id}. Implementers run `start`, `submit` and `merge`.\n"
         ),
-        Refusal::Role(Role::Planner) => unreachable!("no thread holds the planner's role"),
+        Refusal::Role(Role::Planner | Role::Lead) => {
+            unreachable!("no thread holds a planner's or a lead's role on an item")
+        }
         Refusal::From { act, status } => {
             let from: Vec<&str> = row(*act).from.iter().map(|s| status_name(*s)).collect();
             format!(
