@@ -483,6 +483,26 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
 }
 
 #[test]
+fn a_push_from_a_checkout_whose_config_does_not_read_is_refused_with_the_way_out() {
+    let scratch = pushed(&[(ID, "ready")]);
+    let root = scratch.root();
+    append(&root, ".atelier/config.toml", "base = 1\n");
+    let run = git_as(&root, &["push", "-q", "origin", "main"]);
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.starts_with(
+            "Atelier's pre-push hook refused this push; nothing was pushed.\n\
+             These do not read as records. That is not a rule, and it cannot be skipped:\n  \
+             .atelier/config.toml: line 4: unknown field `base`"
+        ) && run
+            .stderr
+            .contains("Fix it in this checkout, then push again.\n"),
+        "{}",
+        run.stderr
+    );
+}
+
+#[test]
 fn planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_base() {
     let scratch = pushed(&[(ID, "draft")]);
     let root = scratch.root();

@@ -740,6 +740,15 @@ pub fn push_refused(
     text
 }
 
+/// The pre-push hook's refusal when the checkout's `config.toml`, which
+/// names the base it guards, does not read.
+pub fn push_no_config(problem: &Problem) -> String {
+    format!(
+        "Atelier's pre-push hook refused this push; nothing was pushed.\n{}Fix it in this checkout, then push again.\n",
+        problems(std::slice::from_ref(problem), &[])
+    )
+}
+
 /// What the post-checkout hook prints when `status` fails. The checkout
 /// itself went ahead.
 pub fn no_status(error: &anyhow::Error) -> String {

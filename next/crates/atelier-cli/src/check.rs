@@ -139,7 +139,13 @@ fn pre_commit(root: &Path) -> Result<Outcome> {
 /// none but a merge sets an item done while its branch exists. `input` is
 /// what Git gives the hook: a line per ref pushed.
 fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
-    let base = Store::new(root.join(".atelier")).config()?.base_branch;
+    let base = match Store::new(root.join(".atelier")).config() {
+        Ok(config) => config.base_branch,
+        Err(mut problem) => {
+            problem.file = PathBuf::from(CONFIG);
+            return Ok(Outcome::Refused(output::push_no_config(&problem)));
+        }
+    };
     let target = format!("refs/heads/{base}");
     let mut reader = CommitReader::new(root);
     let mut old = None;
