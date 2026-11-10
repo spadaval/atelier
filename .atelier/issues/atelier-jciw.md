@@ -4,6 +4,9 @@ id: "atelier-jciw"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-jciw
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `show`, `list` and `lead`, and missions in `status`, so none of today's nine work views is lost"
-updated_at: "2026-11-10T19:33:55.713718555+00:00"
+updated_at: "2026-11-10T20:24:48.373440144+00:00"
 ---
 
 ## Goal
