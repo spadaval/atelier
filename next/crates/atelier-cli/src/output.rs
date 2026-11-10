@@ -3,6 +3,7 @@
 
 use crate::forge::{CiRun, ForgeError, PullRequest};
 use crate::merge::Moved;
+use crate::setup::{Harness, Step};
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
 use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
@@ -761,6 +762,111 @@ pub fn push_no_config(problem: &Problem) -> String {
 /// itself went ahead.
 pub fn no_status(error: &anyhow::Error) -> String {
     format!("Switched; `atelier status` cannot say more here: {error:#}\n")
+}
+
+/// The pre-commit or pre-push hook's refusal when the clone's own hook,
+/// kept as `<name>.local`, failed after Atelier's rule passed.
+pub fn kept_refused(name: &str, why: &str) -> String {
+    let what = match name {
+        "pre-push" => "pushed",
+        _ => "committed",
+    };
+    format!(
+        "This clone's own {name} hook, which atelier setup kept as {name}.local in its hooks directory, refused: {why}. Nothing was {what}.\nIts output above says why; do what it asks, then run the Git command again.\n"
+    )
+}
+
+/// What the post-checkout hook prints when the clone's own hook failed.
+/// The checkout itself went ahead.
+pub fn kept_failed(name: &str, why: &str) -> String {
+    format!("Switched; this clone's own {name} hook, kept as {name}.local, failed: {why}.\n")
+}
+
+/// The line `status` gives a clone that has none of Atelier's Git hooks.
+pub fn no_hooks() -> String {
+    "This clone has none of Atelier's Git hooks, so nothing checks its commits and pushes. Install them with: atelier setup\n".into()
+}
+
+/// `setup` refused because Git runs the clone's hooks from `dir`, which
+/// `core.hooksPath` sets, outside the Git directory its worktrees share,
+/// whose hooks directory is `shared`.
+pub fn hooks_elsewhere(dir: &Path, shared: &Path) -> String {
+    let shared = quoted(&shared.display().to_string());
+    format!(
+        "`atelier setup` refused; nothing changed.\nGit runs this clone's hooks from {}, as core.hooksPath says, and setup installs hooks only in the Git directory every worktree of the clone shares.\nCopy any hook this clone needs from there into {shared}, then run: git config core.hooksPath {shared} && atelier setup\n",
+        dir.display()
+    )
+}
+
+/// `setup` refused because each hook of `names` in `dir` is not Atelier's
+/// and `<name>.local`, where it would be kept, is taken.
+pub fn hooks_taken(dir: &Path, names: &[&str]) -> String {
+    let mut text = format!(
+        "`atelier setup` refused; nothing changed.\nsetup keeps a hook of this clone's own by moving it to <name>.local, and in {} that name is taken:\n",
+        dir.display()
+    );
+    for name in names {
+        text += &format!("  {name}, and {name}.local\n");
+    }
+    text + "For each, put what both files do into <name>.local and remove <name>, then run: atelier setup\n"
+}
+
+/// What `setup` did to each hook in `dir`.
+pub fn hooks_set(dir: &Path, steps: &[(&str, Step)]) -> String {
+    if steps.iter().all(|(_, step)| *step == Step::Unchanged) {
+        return format!(
+            "Atelier's Git hooks are in {} already; nothing changed.\n",
+            dir.display()
+        );
+    }
+    let mut text = format!(
+        "Installed Atelier's Git hooks in {}, which every worktree of this clone shares:\n",
+        dir.display()
+    );
+    for (name, step) in steps {
+        text += &match step {
+            Step::Unchanged => format!("  {name}: Atelier's already\n"),
+            Step::Written => format!("  {name}: written\n"),
+            Step::Kept { runs: true } => format!(
+                "  {name}: written; this clone's own {name} hook was moved to {name}.local, and runs after Atelier's rule passes\n"
+            ),
+            Step::Kept { runs: false } => format!(
+                "  {name}: written; this clone's own {name} hook, which is not executable and so did not run, was moved to {name}.local\n"
+            ),
+        };
+    }
+    text
+}
+
+fn harness_name(harness: Harness) -> &'static str {
+    match harness {
+        Harness::Claude => "claude",
+        Harness::Codex => "codex",
+    }
+}
+
+/// `setup claude` or `setup codex` refused, for `why`, to change `file`.
+pub fn harness_refused(harness: Harness, file: &str, why: &str) -> String {
+    format!(
+        "`atelier setup {0}` refused; nothing changed.\n{why}.\nFix {file}, then run: atelier setup {0}\n",
+        harness_name(harness)
+    )
+}
+
+/// What `setup claude` or `setup codex` did to `file`.
+pub fn harness_set(harness: Harness, file: &str, changed: bool) -> String {
+    let what = match harness {
+        Harness::Claude => {
+            "A Claude Code session started in this repository begins with atelier status, and each turn ends with atelier check."
+        }
+        Harness::Codex => {
+            "A Codex session started in this repository begins with atelier status, once Codex trusts the project and you have trusted the hook in its /hooks list."
+        }
+    };
+    match changed {
+        true => format!("Wrote Atelier's hooks into {file}, keeping every other hook there.\n{what}\nCommit {file} so that every clone has it.\n"),
+        false => format!("Atelier's hooks are in {file} already; nothing changed.\n{what}\n"),
+    }
 }
 
 pub fn no_mission(id: &str) -> String {

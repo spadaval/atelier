@@ -265,6 +265,16 @@ pub fn head(repo: &Path) -> Result<String> {
     run(repo, &["rev-parse", "--verify", "HEAD^{commit}"])
 }
 
+/// The directory Git runs the checkout's hooks from: the clone's shared
+/// `hooks`, or where `core.hooksPath` points.
+pub fn hooks_dir(repo: &Path) -> Result<PathBuf> {
+    let dir = run(
+        repo,
+        &["rev-parse", "--path-format=absolute", "--git-path", "hooks"],
+    )?;
+    Ok(PathBuf::from(dir))
+}
+
 /// The Git directory every worktree of the clone shares.
 pub fn common_dir(repo: &Path) -> Result<PathBuf> {
     let dir = run(

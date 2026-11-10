@@ -243,7 +243,8 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
     let root = scratch.root();
     assert_eq!(
         stdout(&root, "p1", &["status"]),
-        "You are thread p1, on the base branch main.\n\
+        NO_HOOKS.to_string()
+            + "You are thread p1, on the base branch main.\n\
          Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n  \
          demo-b2bb (medium): Say goodbye\n    [ ] demo-a1aa is done (it is ready)\n\
          Held by other threads:\n  demo-d4dd (building, held by t1): Wave\n\

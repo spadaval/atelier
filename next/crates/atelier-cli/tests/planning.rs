@@ -506,7 +506,7 @@ fn status_on_the_base_lists_planning_not_yet_committed() {
     assert_eq!(
         status,
         format!(
-            "You are thread p1, on the base branch main.\nPlanning not committed yet, which \
+            "{NO_HOOKS}You are thread p1, on the base branch main.\nPlanning not committed yet, which \
              `atelier start` does not read until it is: {}, {mission}\nCommit it with: git add \
              -- {paths} && git commit -m \"Plan\" -- {paths}\nNothing is ready to start.\n",
             item_path(ID)
@@ -736,7 +736,9 @@ fn a_start_new_stopped_before_its_branch_leaves_no_branch_and_no_item() {
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert_eq!(
         status,
-        "You are thread t1, on the base branch main.\nNothing is ready to start.\n"
+        format!(
+            "{NO_HOOKS}You are thread t1, on the base branch main.\nNothing is ready to start.\n"
+        )
     );
 }
 
@@ -1016,7 +1018,9 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
     let why = format!("It was dropped on the base: {reason}\nNothing is left to do on it.\n");
     let status = atelier(&work, "t1", &["status"]).stdout;
     assert!(
-        status.starts_with(&format!("You are thread t1, on the branch of {ID}.\n")),
+        status.starts_with(&format!(
+            "{NO_HOOKS}You are thread t1, on the branch of {ID}.\n"
+        )),
         "{status}"
     );
     assert!(

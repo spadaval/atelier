@@ -10,6 +10,10 @@ use tempfile::TempDir;
 
 pub const ID: &str = "demo-ab12";
 
+/// The line `status` begins with in a clone with none of Atelier's Git
+/// hooks, as every scratch repository is until `setup` runs in it.
+pub const NO_HOOKS: &str = "This clone has none of Atelier's Git hooks, so nothing checks its commits and pushes. Install them with: atelier setup\n";
+
 pub struct Scratch {
     pub dir: TempDir,
 }

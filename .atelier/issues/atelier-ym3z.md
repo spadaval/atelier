@@ -4,6 +4,9 @@ id: "atelier-ym3z"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-ym3z
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `setup` for the Git hooks, Claude Code and Codex, keeping a hook a clone already has"
-updated_at: "2026-11-10T21:30:48.574415359+00:00"
+updated_at: "2026-11-10T22:55:53.339126965+00:00"
 ---
 
 ## Goal
