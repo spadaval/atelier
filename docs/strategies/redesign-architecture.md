@@ -360,7 +360,7 @@ Two facts are checked live and never stored:
   it on the item's branch, so it lists what `merge` will check.
 - **The merge checks pass.** The configured commands on the merged tree,
   and CI on the head where the forge names a workflow. `merge` runs or reads
-  them; `status` does not.
+  them; `status` lists them, from the base's config, and runs none.
 
 ## Threads and roles
 
@@ -475,8 +475,9 @@ post-checkout Git hook prints it on every branch switch.
 
 `merge` runs in the checkout on the item's branch. In order:
 
-1. Take the merge lock, then read everything: the item, and `config.toml`
-   from the base tip.
+1. Take the merge lock, then read everything: first the head, which every
+   later step is checked against, then the item, and `config.toml` from the
+   base tip.
 2. Check the act's conditions from the table: the approval covers the
    head, or `--trivial "<why>"` was given on a building item with no
    review file; no Decisions entry is unanswered; no tracked file has

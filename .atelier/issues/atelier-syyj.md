@@ -152,6 +152,7 @@ The pull request was opened once (one POST in the double's log), and the remote'
 
 A failing test that held a merge in its waiting check left the merge and its shell running, which hung nextest. The held merge now releases itself when dropped, and the waiting check also ends when the scratch directory goes.
 
-### Open items
+### Review fixes
 
-- `status` does not list the configured merge checks or CI; they are seen when `merge` runs, so an approved item's `status` says only `Then: atelier merge` when nothing else is unmet.
+- Round 1, `atelier-uqsk`: `merge` read HEAD after checking the approval, so a commit made between the two was merged unreviewed. It now reads HEAD first and takes the approval's diff to that commit; `a_commit_made_after_merge_read_its_facts_is_not_merged` holds `merge` after its reads (debug-build hold `ATELIER_TEST_HOLD_AFTER_READ`, the same mechanism as `start`'s), commits, and checks nothing is written. It fails with the old order.
+- Round 1, `atelier-nioh`: `status` on an approved item now lists the base's merge checks and, with a forge, that `merge` pushes the branch, opens its pull request and waits for the CI workflow. It runs none of them. The plain and forge tests check the lines, and fail without them.
