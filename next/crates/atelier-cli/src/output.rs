@@ -1002,19 +1002,20 @@ pub fn waiting_for_ci(workflow: &str, pull: &PullRequest, wait: Duration) -> Str
     )
 }
 
+/// `pending` is the newest run that counts, if any, or why the forge did
+/// not answer.
 pub fn ci_pending(
     workflow: &str,
     head: &str,
-    newest: Option<&CiRun>,
-    error: Option<ForgeError>,
+    pending: &Result<Option<CiRun>, ForgeError>,
 ) -> String {
-    let state = match (newest, error) {
-        (_, Some(error)) => format!("the forge did not answer, as {}", forge_reason(&error).0),
-        (Some(run), None) => match &run.conclusion {
+    let state = match pending {
+        Err(error) => format!("the forge did not answer, as {}", forge_reason(error).0),
+        Ok(Some(run)) => match &run.conclusion {
             Some(conclusion) => format!("the latest was {conclusion} ({})", run.url),
             None => format!("it is {} ({})", run.status.replace('_', " "), run.url),
         },
-        (None, None) => "no run of it has started".into(),
+        Ok(None) => "no run of it has started".into(),
     };
     format!(
         "CI has not finished on {}, the branch's head: {state}. Nothing else changed.\nRun `atelier merge` again once {workflow} finishes.\n",
