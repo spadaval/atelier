@@ -4,6 +4,9 @@ id: "atelier-5fsj"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-5fsj
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Script the scorecard's counted measures, so the baseline can be rerun after the cutover"
-updated_at: "2026-11-10T01:14:39.069059786+00:00"
+updated_at: "2026-11-10T14:15:28.429508957+00:00"
 ---
 
 ## Goal
