@@ -167,6 +167,21 @@ sharper rule.
   planning review prevents.
 - **Claims are not verified.** Findings are labelled by what they claim, not
   by whether the claim held.
+- **Two known label faults, left as they are.** Labels and the rubric are
+  frozen once the second rater has run, because changing either would spoil
+  the agreement figures. Review found two faults:
+  - Entry 38 (atelier-l8sl) is labelled `tooling_bug`, but its CI trigger
+    did not exist yet at the reviewed commit. By the rubric's planning rule it
+    is `process_nit`. With it relabelled, review yield is 45 of 100, and
+    atelier's is 7 of 20. A reread of the other user-bug and tooling-bug
+    labels found no other finding about code that did not yet exist.
+  - The planning rule says a fault in a "decision record" is `process_nit`,
+    yet the rubric's `wrong_statement` example atelier-yzhp, and entries 8
+    and 67, are faults in ADRs. The rubric means tracker decision items, not
+    ADRs, but does not say so. Either reading leaves the product-defect count
+    unchanged. A later run should say that ADRs and other documents take
+    `wrong_statement`, and only tracker records and mission strategies take
+    `process_nit`.
 
 ## Recomputing
 
