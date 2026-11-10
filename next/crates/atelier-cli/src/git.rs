@@ -123,6 +123,27 @@ pub fn branches(repo: &Path) -> Result<Vec<(String, String)>> {
         .collect())
 }
 
+/// Whether this clone has the commit `commit`.
+pub fn has_commit(repo: &Path, commit: &str) -> Result<bool> {
+    let object = format!("{commit}^{{commit}}");
+    Ok(output(repo, &["cat-file", "-e", &object], None)?
+        .status
+        .success())
+}
+
+/// The commit the branch `branch` points at where `remote` pushes to, if
+/// that has the branch. `remote` is a remote's name or a URL.
+pub fn remote_tip(repo: &Path, remote: &str, branch: &str) -> Result<Option<String>> {
+    let url = run(repo, &["remote", "get-url", "--push", "--", remote])
+        .unwrap_or_else(|_| remote.to_string());
+    let reference = format!("refs/heads/{branch}");
+    let listed = run(repo, &["ls-remote", "--", &url, &reference])?;
+    Ok(listed.lines().find_map(|line| {
+        let (commit, name) = line.split_once('\t')?;
+        (name == reference).then(|| commit.to_string())
+    }))
+}
+
 /// Whether `commit` is in the history of `of`.
 pub fn is_ancestor(repo: &Path, commit: &str, of: &str) -> Result<bool> {
     let output = output(repo, &["merge-base", "--is-ancestor", commit, of], None)?;

@@ -4,6 +4,9 @@ id: "atelier-xtvh"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-xtvh
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Start CI at `submit` and have `merge` wait up to 9 minutes for it: CI is nearly all of the approval-to-merge wait"
-updated_at: "2026-11-10T17:36:30.562553857+00:00"
+updated_at: "2026-11-10T18:41:39.747175125+00:00"
 ---
 
 ## Goal
