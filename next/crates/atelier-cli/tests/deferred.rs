@@ -78,6 +78,17 @@ fn listed(root: &Path) -> Vec<String> {
         .collect()
 }
 
+/// `atelier check` finds every record of the checkout valid.
+fn checked(root: &Path) {
+    let run = atelier(root, "t9", &["check"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with("Every record is valid"),
+        "{}",
+        run.stdout
+    );
+}
+
 /// What the checkout holds that its last commit does not.
 fn changes(root: &Path) -> String {
     git(root, &["status", "--porcelain", "--untracked-files=all"])
@@ -150,6 +161,8 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
     );
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(listed(&root).is_empty());
+    // What they wrote is valid as `check` and the pre-commit hook judge it.
+    checked(&root);
 
     // `show` prints each settlement with its finding, before it is
     // committed too.
@@ -327,6 +340,7 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
         "Once committed, it reaches the base when demo-ab12 merges. It is outside demo-ab12's directory"
     ), "{}", run.stdout);
     assert_eq!(listed(&root), ["demo-d0ne/1-aaaa.1", "demo-d0ne/1-aaaa.4"]);
+    checked(&root);
     shell(&root, then(&run.stdout));
     assert_eq!(changes(&root), "");
     let run = atelier(&root, "t1", &["show", DONE]);
