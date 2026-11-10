@@ -3,11 +3,12 @@
 
 use crate::git;
 use anyhow::{Context, Result};
+use atelier_app::acts::{approval, Checkout, SinceApproval};
 use atelier_app::{identity, Branch, Located};
-use atelier_core::{Status, Thread};
-use atelier_records::{validate_id, CommitReader, ItemDir, Store};
+use atelier_core::{Config, Status, Thread};
+use atelier_records::{parse_config, validate_id, CommitReader, ItemDir, Store};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct Repo {
     pub root: PathBuf,
@@ -107,6 +108,34 @@ impl Repo {
             .iter()
             .map(|id| Ok((id.clone(), self.locate(id)?.status())))
             .collect()
+    }
+
+    /// What `merge` reads from this checkout, on the branch of `record`.
+    pub fn checkout(&mut self, record: &ItemDir) -> Result<Checkout> {
+        let approved = approval(record).filter(|_| record.item.status == Status::Approved);
+        let since_approval = match approved {
+            None => None,
+            Some(review) => {
+                let commit = &review.review.commit;
+                Some(SinceApproval {
+                    changed: git::changed(&self.root, commit, "HEAD")?,
+                    reviewed: self.reader.item(commit, &record.item.id)?,
+                })
+            }
+        };
+        Ok(Checkout {
+            uncommitted: git::uncommitted(&self.root)?,
+            since_approval,
+        })
+    }
+
+    /// `config.toml` as the base's tip holds it, which `merge` reads, so a
+    /// work branch cannot weaken its own checks.
+    pub fn base_config(&mut self) -> Result<Config> {
+        let path = ".atelier/config.toml";
+        let text = self.reader.text(&self.base_tip, path)?;
+        let shown = format!("{}:{path}", self.base);
+        Ok(parse_config(Path::new(&shown), &text)?)
     }
 
     fn checkout_item(&self, id: &str) -> Result<Option<ItemDir>> {

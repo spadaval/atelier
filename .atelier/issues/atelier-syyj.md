@@ -4,6 +4,9 @@ id: "atelier-syyj"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-syyj
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `merge` on the new records, with `--trivial` and no waiting"
-updated_at: "2026-11-10T04:55:19.288038344+00:00"
+updated_at: "2026-11-10T17:05:38.869913537+00:00"
 ---
 
 ## Goal

@@ -3,7 +3,7 @@
 use crate::repo::{item_dir, item_path, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, Act, Facts, Refusal, STARTED};
+use atelier_app::acts::{check, Act, Checkout, Facts, Refusal, STARTED};
 use atelier_app::{entry, overview, Located};
 use atelier_core::Status;
 use atelier_records::{render_item, validate_id};
@@ -11,13 +11,17 @@ use atelier_records::{render_item, validate_id};
 pub enum Outcome {
     Done(String),
     Refused(String),
+    /// Nothing is wrong and the act cannot finish yet, as when CI has not
+    /// finished; the same command run later goes on.
+    NotYet(String),
 }
 
 pub fn status(repo: &mut Repo) -> Result<String> {
     if let Some(located) = repo.current()? {
         let record = located.record().expect("the current item has a record");
         let blockers = repo.blockers(record)?;
-        let entry = entry(&facts(repo, &located, &blockers))?;
+        let checkout = repo.checkout(record)?;
+        let entry = entry(&facts(repo, &located, &blockers, Some(&checkout)))?;
         return Ok(output::item(&repo.caller, &entry));
     }
     let items = repo.everything()?;
@@ -37,7 +41,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(Outcome::Refused(output::no_item(id, &repo.base)));
     };
     let blockers = repo.blockers(record)?;
-    let facts = facts(repo, &located, &blockers);
+    let facts = facts(repo, &located, &blockers, None);
     // `start` takes over an item someone holds, and starts any other.
     let act = if STARTED.contains(&record.item.status) {
         Act::TakeOver
@@ -54,6 +58,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
         let commit = git::commit_file(
             &repo.root,
             &repo.base_tip,
+            &[&repo.base_tip],
             &item_path(id),
             &render_item(&item),
             &format!("Start {id}"),
@@ -102,7 +107,7 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     };
     let record = located.record().expect("the current item has a record");
     let blockers = repo.blockers(record)?;
-    let facts = facts(repo, &located, &blockers);
+    let facts = facts(repo, &located, &blockers, None);
     if let Some(refused) = refusal(Act::Submit, &facts)? {
         return Ok(Outcome::Refused(refused));
     }
@@ -149,12 +154,14 @@ pub(crate) fn facts<'a>(
     repo: &'a Repo,
     located: &'a Located,
     blockers: &'a [(String, Option<Status>)],
+    checkout: Option<&'a Checkout>,
 ) -> Facts<'a> {
     Facts {
         item: located.record().expect("a located item with a record"),
         branch: located.branch.is_some(),
         blockers,
         caller: &repo.caller,
+        checkout,
     }
 }
 

@@ -3,7 +3,7 @@
 //! an act with [`check`], and `status` lists what [`unmet`] gives for the
 //! act it names next, so the two cannot disagree.
 
-use atelier_core::{is_open, FindingName, Status, Thread};
+use atelier_core::{is_open, FindingName, Status, Thread, Verdict};
 use atelier_records::{validate, ItemDir, Problem, ReviewFile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,7 +129,41 @@ pub struct Facts<'a> {
     /// such item is found.
     pub blockers: &'a [(String, Option<Status>)],
     pub caller: &'a Thread,
+    /// The checkout on the item's branch, which `merge` reads. The CLI
+    /// gathers it where `merge` runs and `status` lists its conditions: on
+    /// that branch. Without it, the conditions it bears on are not listed.
+    pub checkout: Option<&'a Checkout>,
 }
+
+/// What `merge` reads from Git besides the item's record.
+#[derive(Debug, Clone, Default)]
+pub struct Checkout {
+    /// Tracked files whose changes are not committed.
+    pub uncommitted: Vec<String>,
+    /// On an approved item: what differs between the commit its approval
+    /// reviewed and the branch's head.
+    pub since_approval: Option<SinceApproval>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SinceApproval {
+    /// Every path that differs.
+    pub changed: Vec<String>,
+    /// The item's record at the reviewed commit, if it had one.
+    pub reviewed: Option<ItemDir>,
+}
+
+/// The review whose verdict approved the item: one of the latest round's
+/// with an approve verdict.
+pub fn approval(item: &ItemDir) -> Option<&ReviewFile> {
+    let latest = item.reviews.iter().map(|r| r.name.round).max()?;
+    item.reviews
+        .iter()
+        .find(|r| r.name.round == latest && r.review.verdict == Some(Verdict::Approve))
+}
+
+/// The sections of an item that a review approves along with the code.
+const REQUIREMENTS: [&str; 3] = ["Goal", "Done when", "Scope"];
 
 /// The round of review an item is in.
 pub struct Round<'a> {
@@ -228,6 +262,20 @@ pub enum Condition {
         finding: FindingName,
         title: String,
     },
+    /// No review of the latest round approves the item.
+    NoApproval,
+    /// The approval no longer covers the head: since the commit it
+    /// reviewed, these paths outside the item's directory, or these of its
+    /// requirement sections, changed.
+    Stale {
+        round: u32,
+        commit: String,
+        changed: Vec<String>,
+    },
+    /// Tracked files in the checkout have uncommitted changes.
+    Uncommitted(Vec<String>),
+    /// `merge --trivial` needs an item nobody reviewed.
+    Reviewed,
 }
 
 #[derive(Debug)]
@@ -292,8 +340,7 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     Ok(row.to)
 }
 
-/// The conditions of `act` that do not hold. The merge conditions arrive
-/// with that command.
+/// The conditions of `act` that do not hold.
 pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
@@ -373,9 +420,67 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 }));
             }
         }
-        Act::Merge | Act::MergeTrivial => {}
+        Act::Merge | Act::MergeTrivial => {
+            if act == Act::MergeTrivial {
+                for (ticked, text) in item.done_when() {
+                    if !ticked {
+                        unmet.push(Condition::Unticked(text));
+                    }
+                }
+                if !item.report_written() {
+                    unmet.push(Condition::NoReport);
+                }
+                if !item.reviews.is_empty() {
+                    unmet.push(Condition::Reviewed);
+                }
+            }
+            let checkout = facts.checkout;
+            if act == Act::Merge {
+                match approval(item) {
+                    None => unmet.push(Condition::NoApproval),
+                    Some(review) => {
+                        if let Some(since) = checkout.and_then(|c| c.since_approval.as_ref()) {
+                            unmet.extend(stale(item, review, since));
+                        }
+                    }
+                }
+            }
+            for decision in item.decisions()?.into_iter() {
+                if decision.answer.is_none() {
+                    unmet.push(Condition::Unanswered(decision.question));
+                }
+            }
+            if let Some(checkout) = checkout.filter(|c| !c.uncommitted.is_empty()) {
+                unmet.push(Condition::Uncommitted(checkout.uncommitted.clone()));
+            }
+        }
     }
     Ok(unmet)
+}
+
+/// Whether the approval still covers the head: since the commit it
+/// reviewed, nothing changed outside the item's own directory, and the
+/// item's requirements are as it read them. A Report, a response or a
+/// review file never makes it stale.
+fn stale(item: &ItemDir, review: &ReviewFile, since: &SinceApproval) -> Option<Condition> {
+    let own = format!(".atelier/items/{}/", item.item.id);
+    let mut changed: Vec<String> = since
+        .changed
+        .iter()
+        .filter(|path| !path.starts_with(&own))
+        .cloned()
+        .collect();
+    for heading in REQUIREMENTS {
+        let before = since.reviewed.as_ref().and_then(|r| r.section(heading));
+        if before != item.section(heading) {
+            changed.push(format!("this item's {heading}"));
+        }
+    }
+    (!changed.is_empty()).then(|| Condition::Stale {
+        round: review.name.round,
+        commit: review.review.commit.clone(),
+        changed,
+    })
 }
 
 /// The act the caller would run next on the item, if any: start a ready

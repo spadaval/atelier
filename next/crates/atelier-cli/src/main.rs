@@ -1,7 +1,9 @@
 //! The `atelier` command (docs/strategies/redesign-product.md, Commands).
 
 mod commands;
+mod forge;
 mod git;
+mod merge;
 mod output;
 mod repo;
 mod review;
@@ -39,6 +41,12 @@ enum Command {
         #[arg(long)]
         model: Option<String>,
     },
+    /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done.
+    Merge {
+        /// Merge an item nobody reviewed, whose correctness is evident from its diff, giving why.
+        #[arg(long, value_name = "WHY")]
+        trivial: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -63,6 +71,7 @@ fn main() -> ExitCode {
             };
             review::verdict(&mut repo, verdict, model)
         }
+        Command::Merge { trivial } => merge::merge(&repo.root, trivial),
     });
     // A closed stdout, as under `| head`, is no failure of the command.
     match result {
@@ -73,6 +82,10 @@ fn main() -> ExitCode {
         Ok(Outcome::Refused(text)) => {
             let _ = std::io::stderr().write_all(text.as_bytes());
             ExitCode::from(1)
+        }
+        Ok(Outcome::NotYet(text)) => {
+            let _ = std::io::stdout().write_all(text.as_bytes());
+            ExitCode::from(3)
         }
         Err(error) => {
             let _ = writeln!(std::io::stderr(), "atelier: {error:#}");
