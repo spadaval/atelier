@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add `merge` on the new records, with `--trivial` and no waiting"
-updated_at: "2026-11-10T17:05:38.869913537+00:00"
+updated_at: "2026-11-10T18:34:45.974663423+00:00"
 ---
 
 ## Goal
@@ -51,6 +51,10 @@ Finish the loop: an approved item reaches the base in one merge commit that mark
 ## Context
 
 Design: `docs/strategies/redesign-architecture.md`, Merge and Status. Behaviour: `docs/strategies/redesign-product.md`, Merge.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by GPT-6.1 Sol at fa724dcf (round 6, atelier-ujuq) and by GPT-6 Astra on the whole branch (atelier-i8ix); eight fix_now findings fixed. See the Report.
 
 ## Report
 
