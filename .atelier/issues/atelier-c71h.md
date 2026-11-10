@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Count defects after merge, and where each defect was caught, in the five repositories"
-updated_at: "2026-11-10T15:11:44.894575847+00:00"
+updated_at: "2026-11-10T15:49:25.708452013+00:00"
 ---
 
 ## Goal
@@ -53,6 +53,10 @@ Strategy: `docs/strategies/redesign-1-baseline.md`. Private repositories: report
 ## Unknowns
 
 - Which method applies is decided by the spike, so this item's size is not known until then.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by review-sol-c71h-r1 (atelier-u7bn) at 72231734 in round 1, no findings. Not merged: the orchestrator merges. See ## Report for outcome, deviations and open items.
 
 ## Report
 
