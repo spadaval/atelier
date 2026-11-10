@@ -105,7 +105,46 @@ life-on-rails' 20 and 9 of demiurge's.
 
 ## Agreement
 
-The second rater has not run yet.
+The second rater was Grok 4.6 (high reasoning), started by the first rater
+with only `rubric.md` and the unlabelled sample files, after the first
+rater's labels were committed. It labelled entries 1 to 30 of each sample
+(`<measure>.second.json`). Neither rater's labels were changed afterwards.
+
+| Measure | Same label | Agreement |
+| --- | --- | --- |
+| Interventions | 22 of 30 | 73% |
+| Gate precision | 25 of 30 | 83% |
+| Review yield | 29 of 30 | 97% |
+
+Every disagreement, as entry number, its identifier, then the first rater's
+label and the second's:
+
+- Interventions (message IDs in `interventions.json`): 2 (atelier-k8h8,
+  `d9254461`) other / correcting_direction; 9 (worldcrafter-z9qs, `9c55ef1c`)
+  unsticking / correcting_direction; 11 (worldcrafter-z9qs, `1bb38162`)
+  other / correcting_direction; 13 (lor-uj0r, `2d3d1be1`) other / approval;
+  14 (atelier-mmpv, `70f37e37`) other / correcting_direction; 15
+  (atelier-n4mj, `275df3bf`) other / status_question; 22 (worldcrafter-z9qs,
+  `e2e8a97e`) other / correcting_direction; 30 (atelier-k8h8, `8a5f14cb`)
+  other / status_question. The one multi-mission entry both labelled as an
+  intervention (5) was attributed to the same mission by both.
+- Gate precision (turn items in `refusals.json`): 4 (astromech) friction /
+  stopped_mistake; 11 (atelier) friction / stopped_mistake; 18
+  (life-on-rails) friction / stopped_mistake; 26 (astromech) stopped_mistake
+  / friction; 28 (atelier) friction / stopped_mistake.
+- Review yield: 3 (cosplay-studio-wo4m) wrong_statement / user_bug.
+
+In seven of the eight intervention disagreements the first rater said
+`other`, and in six of those the second saw an intervention: the raters split
+on whether a message in the thread above an orchestrator was about the
+mission at all. If the second rater's labels held across the sample, the
+intervention counts above would be higher. The rubric's first question is
+the unclear one; a later run should tie messages to missions more narrowly
+or give that question sharper tests. Four of the five refusal disagreements
+are the second rater finding a real problem where the first saw a state the
+agent expected or a change the policy exempts: the rubric's line between "a
+refusal on a real problem" and "a state the agent already knew" needs a
+sharper rule.
 
 ## Limits and where the rubric was hardest
 
