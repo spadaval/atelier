@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: the gardener is a role; `log` gives the history of acts; a bug names what caused it; a deferred finding can be settled"
+last_changed: "2026-11-09: amended at Sumeet's direction: a full rewrite; the view of what changed from the plan is the dashboard's"
 ---
 
 # Atelier redesign: product specification
@@ -13,8 +13,8 @@ conversation on 2026-11-09 after an assessment of the project
 | Mission | Strategy | What it delivers |
 | --- | --- | --- |
 | 1. Baseline | [redesign-1-baseline.md](redesign-1-baseline.md) | The scorecard measured before anything changes |
-| 2. Core loop | [redesign-2-core.md](redesign-2-core.md) | The new records and commands, built beside the old ones and rehearsed on real data |
-| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | The skill rewritten, the site converted, the old commands deleted, and every repository moved over |
+| 2. Core loop | [redesign-2-core.md](redesign-2-core.md) | The tool rewritten in a fresh workspace beside the old one, and rehearsed on real data |
+| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | The skill rewritten, the site rebuilt, the old workspace deleted, and every repository moved over |
 | 4. Gardener | [redesign-4-gardener.md](redesign-4-gardener.md) | A gardener that reads a scorecard and a readiness checklist |
 
 The technical design is in [redesign-architecture.md](redesign-architecture.md).
@@ -456,8 +456,10 @@ them, is the gardener's procedure in the skill.
 - A session database, and live thread status on the site.
 - Per-project lifecycles.
 - A command that computes the scorecard, and a scorecard page on the site.
-- A site view of what changed between a mission's go-ahead and its result.
-  Git history holds what such a view would need.
+- A view of what changed between a mission's go-ahead and its result. It is
+  a derived view and the dashboard's to build later. This work gives it the
+  data: every act with the commit it happened in, and records readable at
+  any commit.
 - Coordinating two clones of one repository. Atelier coordinates the threads
   working in one clone and its worktrees. Work on another host is visible
   only after a fetch, and nothing stops the same item being started on both.

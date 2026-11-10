@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: `caused_by` and settled deferred findings join the records; `log` is mission 4's"
+last_changed: "2026-11-09: amended at Sumeet's direction: the tool is rewritten in full, in a fresh workspace"
 ---
 
 # Why
@@ -15,9 +15,10 @@ reviews, each bound to a thread and a stored status.
 
 # Outcome
 
-A second binary on master, `atelier-next`, implements the product
-specification's records and commands. It is not installed anywhere, and the
-old binary beside it is untouched. A fresh agent, told only to run
+A new workspace on master, `next/`, holds the tool rewritten in full: a new
+`atelier` binary that implements the product specification's records and
+commands. It is not installed anywhere, and the old workspace beside it is
+untouched. A fresh agent, told only to run
 `atelier status`, takes a ready item to done with an independent reviewer. A
 converted scratch clone of each of the five repositories passes `check`, and
 one item completes in two of them.
@@ -35,11 +36,10 @@ one item completes in two of them.
 
 # Sizing
 
-- Complexity: high. It replaces the record layout and the whole command
-  layer.
+- Complexity: high. It writes the tool again, in full.
 - Value: high. Every later mission and the scorecard depend on it.
-- Risk: low. Nothing installed changes, and the old binary in the tree keeps
-  working throughout.
+- Risk: low. Nothing installed changes, and no file of the old workspace is
+  edited.
 
 It is worth its cost against the cheaper alternative, fixing fumbles one at a
 time: about 75 such fixes have merged since October, and the refusal rate in
@@ -49,17 +49,20 @@ and the records, which a skill cannot provide.
 
 # Shape
 
-- **The loop is rebuilt as one unit.** The record layout changes under every
-  command at once, so commands cannot be replaced one at a time. What stays
-  in place is the library code below the commands: Git and shell adapters,
-  the forge and CI code, the merged-tree checks, Markdown and YAML parsing,
-  ID generation and the site.
-- **New beside old.** New code goes into the existing crates as new modules
-  and is reached through a second binary target, `atelier-next`, in
-  `atelier-cli`. The old binary, its tests, the CI `check` step and
-  `scripts/smoke-repos.sh` keep working untouched. The switch to the new
-  binary, the site's conversion and the deletion of the old code belong to
-  mission 3. The tree is larger until then and smaller after.
+- **A full rewrite, in a fresh workspace.** The tool is written again in
+  `next/`, a Cargo workspace of its own that depends on nothing under
+  `crates/`. The record layout changes under every command at once, and what
+  could have stayed in place is bound to types that go away.
+- **Copy on purpose, write the rest.** A piece of old code is copied only
+  when its behaviour is wanted as it is, the item that copies it names it,
+  and it is reviewed as new code. The architecture specification lists the
+  pieces: the forge code, the Git adapters, the merged-tree checkout,
+  front-matter splitting, ID generation, the hook installer and the loader
+  that reads records at a commit.
+- **The old workspace is not edited.** Its binary, its tests, the CI `check`
+  step and `scripts/smoke-repos.sh` keep working. Deleting it, rebuilding
+  the site and switching belong to mission 3. The tree is larger until then
+  and much smaller after.
 - **The installed 0.4.0 tracks this mission's own work.** The repository's
   records stay in the old layout until mission 3 converts them.
 - **The specifications are the scope.** When qualities conflict: correctness
@@ -113,8 +116,8 @@ new binary on scratch clones of all five repositories.
   converter in the two specifications.
 - Out: `log`, which mission 4 builds, so this mission builds 17 of the 18
   commands; installing the binary; converting any real repository; the site;
-  switching the `atelier` binary or deleting the old code, which mission 3
-  does; coordinating two clones of one repository; the
+  editing or deleting anything under `crates/`, which mission 3 does whole;
+  coordinating two clones of one repository; the
   Agent Factory skill; the gardener and scorecard; a session database; live
   thread status; any command, record kind, status or config option the
   specifications do not name.
@@ -147,5 +150,13 @@ to Sumeet.
   not a stored index.
 - **The Codex session-start hook event** is not yet known. Step D finds it.
   If none fits, `AGENTS.md` tells Codex to run `atelier status` first.
-- **Tree size rises during the mission.** Both command layers exist until
-  mission 3's switch. The report gives the line count at the mission's end.
+- **Tree size rises during the mission.** Both workspaces exist until mission
+  3's switch. The report gives the new workspace's line count at the
+  mission's end, against the old one's 48,988.
+- **A third rebuild.** The architecture specification says why this one is
+  full and what makes it safe: fixed specifications, the old tool tracking
+  the work throughout, a rehearsal on every repository, and a baseline to
+  judge it against.
+- **Something the old code handled is forgotten.** The copied pieces carry
+  their contract tests. For the rest, the scenario tests and the rehearsal
+  on five real repositories are where a missing case shows.

@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Add `merge` on the new records, with `--trivial` and no waiting"
-updated_at: "2026-11-10T02:49:54.678225834+00:00"
+updated_at: "2026-11-10T04:45:24.560670947+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Finish the loop: an approved item reaches the base in one merge commit that mark
 
 ## Done when
 
-- [ ] Scenario test, no forge: on an approved item, `atelier-next merge` makes one merge commit on the base in which the item's status is `done`.
+- [ ] Scenario test, no forge: on an approved item, the new binary's `atelier merge` makes one merge commit on the base in which the item's status is `done`.
 - [ ] Staleness, each as its own test: after the reviewed commit, a change to a source file, to `.atelier/config.toml`, to another item's directory, or to this item's Goal, Done when or Scope makes `merge` change nothing and say what changed since round 1 and to run `submit`; `status` says the same. A change to this item's Report, or a new review file, does not block the merge.
 - [ ] A configured merge check that fails on the merged tree stops the merge and prints its command and the end of its output. The config is read from the base's tip: a test removes the check from `config.toml` on the work branch, and it still runs.
 - [ ] An unanswered entry in the item's Decisions section stops the merge and is named.
@@ -42,7 +42,7 @@ Finish the loop: an approved item reaches the base in one merge commit that mark
 
 ## Scope
 
-`atelier-app/src/forge.rs` is kept with one change: it takes the new config's forge section, whose CI workflow is optional, where today it takes `workflow_policy::ForgeConfig` with a required workflow name; its own contract tests still pass. The merged-tree checkout, the merge commit and the push are extracted from `merge.rs` and `merge_push.rs` onto the config and item types, as copies in the new modules; the old files stay for the old binary. Their contract tests are rewritten against the new command. Nothing else of today's merge is carried over: not `gate_report`, `review_gate`, the light path or base exemptions. The Git hooks and `ATELIER_SKIP` belong to step D; this item's checks need not honour the skip yet. Today's `merge_wait.rs` and `merge_sync.rs` are not carried over.
+`crates/atelier-app/src/forge.rs` is copied into the new workspace with one change: it takes the new config's forge section, whose CI workflow is optional, where today it takes `workflow_policy::ForgeConfig` with a required workflow name; its contract tests are copied with it and pass. The merged-tree checkout, the merge commit and the push are extracted from `merge.rs` and `merge_push.rs` onto the config and item types, as copies in the new workspace, trimmed to what the new command calls. No file under `crates/` is changed. Their contract tests are rewritten against the new command. Nothing else of today's merge is carried over: not `gate_report`, `review_gate`, the light path or base exemptions. The Git hooks and `ATELIER_SKIP` belong to step D; this item's checks need not honour the skip yet. Today's `merge_wait.rs` and `merge_sync.rs` are not carried over.
 
 ## Context
 

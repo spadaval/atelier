@@ -15,13 +15,13 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "draft"
-title: "Rebuild the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T02:41:18.683598220+00:00"
+title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
+updated_at: "2026-11-10T04:45:26.197552238+00:00"
 ---
 
 ## Outcome
 
-A second binary on master, `atelier-next`, implements the product specification's records and commands. It is installed nowhere, and the old binary beside it is untouched. A fresh agent told only to run `atelier status` takes a ready item to done with an independent reviewer. A converted scratch clone of each of the five repositories passes `check`, and one item completes in two of them.
+A new workspace on master, `next/`, holds the tool rewritten in full: a new `atelier` binary that implements the product specification's records and commands. It is installed nowhere, and the old workspace beside it is untouched. A fresh agent told only to run `atelier status` takes a ready item to done with an independent reviewer. A converted scratch clone of each of the five repositories passes `check`, and one item completes in two of them.
 
 ## Background
 
@@ -30,3 +30,4 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
 ## Notes
 
 - 2026-11-09 [note] Amended on Sumeet's direction (2026-11-09, in conversation), before any mission was made ready: Git hooks guard Git's actions and `land` goes; every rule can be skipped on purpose with ATELIER_SKIP and a reason; `merge` loses its flags and never waits, since the harness waits; `show` and `list` are spelled out so a lead or planner loses no view; his go-ahead stays `ready --by`. The command count is 17.
+- 2026-11-09 [note] Amended on Sumeet's direction (2026-11-09, in conversation), before any mission was made ready: the tool is rewritten in full, in a fresh Cargo workspace `next/` that depends on nothing under `crates/`. Pieces of the old code are copied only on purpose, named by the item that copies them. Mission 3's switch deletes `crates/` whole and moves `next/` into its place. A view of what changed since his go-ahead is the dashboard's to derive; the tool gives it each act with its commit and records readable at any commit.

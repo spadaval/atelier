@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: `log`, `caused_by`, settled deferred findings, the gardener as a role"
+last_changed: "2026-11-09: amended at Sumeet's direction: a full rewrite in a fresh workspace; the view of what changed from the plan is the dashboard's, and the tool supplies its data"
 ---
 
 # Atelier redesign: architecture specification
@@ -13,52 +13,86 @@ replaces the ADRs.
 
 ## The rule for this work
 
-The aim is better code, not more code. The new command layer is built beside
-the old one. One reviewed change then switches the binary to it and deletes
-the old one, and the cutover converts the records. No compatibility layer is
-built: no binary reads both record layouts. Library
-code below the commands is adapted to the new types where it is kept.
+The aim is better code, not more code. The tool is rewritten in full, in a
+fresh workspace beside the old one. Nothing new depends on anything old. One
+reviewed change then deletes the old workspace and puts the new one in its
+place, and the cutover converts the records. No compatibility layer is
+built: no binary reads both record layouts.
+
+A piece of the old code is copied across only when its behaviour is wanted
+as it is. The item that copies it names it, trims what the new tool does not
+call, and it is reviewed as new code. Everything else is written new.
+
 Non-test Rust is reported at the end of each mission as an indication. It is
 not a limit, and no item is shaped to hit a number.
 
+## Why a full rewrite, and what makes it safe
+
+This is the tool's third rebuild, and 31% of the Rust ever written here
+survives, so the choice needs its reasons stated.
+
+- The record layout changes under every command at once, so the command
+  layer cannot be replaced piece by piece.
+- What would have stayed in place is small, and it is bound to types that go
+  away: the forge code takes the workflow policy's config, and the merge
+  code takes the workflow policy and the record index.
+- A fresh workspace cannot grow a dependency on the old one by accident, and
+  the switch becomes deleting one directory.
+
+What is different from the earlier rebuilds: the scope is two reviewed
+specifications, fixed before any code; the old tool keeps tracking the work
+until the new one is rehearsed on every repository; the scorecard has a
+baseline to judge the result against; and the list of what was tried and
+removed is in this document.
+
 ## Where the code is today
 
-48,988 non-test lines of Rust in six crates, and 59,627 lines of tests, of
-which 50,438 are CLI integration tests.
+48,988 non-test lines of Rust in six crates under `crates/`, and 59,627
+lines of tests, of which 50,438 are CLI integration tests. None of it is
+edited by this work. It is deleted whole at the switch.
 
-| Area | Lines today | What happens to it |
+| Area | Lines today | In the new workspace |
 | --- | --- | --- |
-| Record parsing, validation and index | 7,930 | Reshaped: three record kinds in directories, one schema version |
-| Merge, gates, freshness, light path | 6,190 | The merged-tree checkout, the merge commit and the push are extracted onto the new types; the gate code (`gate_report`, `review_gate`, the light path, base exemptions) is deleted, not moved |
-| Issue and work views and output | 5,304 | Replaced by `status`, `show` and `list` |
-| Missions, brief, debrief, criteria | 4,753 | Kept only as far as the site's pages need |
-| Review and findings | 4,669 | Replaced by `review` and `verdict` over one file per review |
-| Site, Rust and web | 4,926 | Kept; converted to the new records |
-| Workflow policy | 3,418 | Deleted; a short config section replaces it |
-| Status, land and hooks | 2,438 | Reshaped around thread and status; `land` goes, and its base rule moves to a Git hook |
-| Prune and history | 2,410 | Deleted |
-| Evidence | 1,931 | Deleted |
-| Bundle | 1,665 | Deleted |
-| Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | Kept, with its config type replaced: it takes `workflow_policy::ForgeConfig` today, with a required workflow name |
-| Migrate | 883 | Deleted |
-| Setup | 821 | Kept; gains Codex hooks |
+| Record parsing, validation and index | 7,930 | Written new. Front-matter splitting and ID generation are copied. |
+| Merge, gates, freshness, light path | 6,190 | Written new. The merged-tree checkout, the merge commit and the push are copied from `merge.rs` and `merge_push.rs` and put on the new types. |
+| Issue and work views and output | 5,304 | Written new, as `status`, `show` and `list` |
+| Missions, brief, debrief, criteria | 4,753 | Only what the site's pages need, at the site step |
+| Review and findings | 4,669 | Written new, as `review` and `verdict` over one file per review |
+| Site, Rust and web | 4,926 | Copied at the site step, with its loader written new |
+| Workflow policy | 3,418 | Not carried over; a short config section replaces it |
+| Status, land and hooks | 2,438 | Written new. The harness hook installer is copied. |
+| Prune and history | 2,410 | Not carried over. The loader that reads records at a commit, 116 lines, is copied. |
+| Evidence | 1,931 | Not carried over |
+| Bundle | 1,665 | Not carried over |
+| Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | `forge.rs`, 382 lines, is copied with its contract tests, and takes the new config |
+| Git and shell adapters (`commands/git.rs`) | 1,437 | The calls the new commands use are copied |
+| Migrate | 883 | Not carried over |
+| Setup | 821 | The installer is copied; it gains Git hooks and Codex hooks |
 
-Tests go with the code they test. An integration test for a deleted command
-is deleted, not ported. Tests of extracted code are rewritten against the new
-types.
+No old test is ported, except the contract tests that come with a copied
+piece. The new workspace has its own.
 
-## Crates
+## Workspace and crates
+
+The new tool lives in `next/`, a Cargo workspace of its own with its own
+lock file, built to `next/target/`. It has the crates the old one has, less
+`atelier-workflow`, under the same names:
 
 | Crate | Owns |
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
-| `atelier-records` | Reading and writing the three record kinds and `config.toml`; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the log, the site's views |
+| `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the history of acts, the site's views |
 | `atelier-site` | `atelier serve` |
 | `atelier-cli` | Arguments, dispatch, Git and shell adapters, output |
 
-`atelier-workflow` is deleted at the cutover. The dependency direction stays
-`cli` to `site` to `app` to `records` to `core`.
+The dependency direction is `cli` to `site` to `app` to `records` to `core`.
+No file under `next/` names a path under `crates/`, and CI fails if one does.
+`scripts/ci-jobs.sh` runs the new workspace's build and tests when a path
+under `next/` changes, and the old ones when a path under `crates/` does.
+
+The new binary is `next/target/debug/atelier`. It is called "the new binary"
+below, and it is installed nowhere until the cutover.
 
 ## Records
 
@@ -271,6 +305,9 @@ post-checkout Git hook prints it on every branch switch.
   What a merge brings in on its second parent is not examined. A commit
   that is not such a merge may not set `done` on an item whose branch
   exists.
+- Records can be read at any commit, without a checkout. The site reads
+  this way, and so does anything that compares a record now with the same
+  record at the commit of an earlier act.
 - A plan reviewer works in its own detached worktree so two reviewers stay
   blind to each other. Review files have distinct names, so the planner
   cherry-picks both onto the base without a conflict.
@@ -297,7 +334,9 @@ where the facts now stand. Waiting is the harness's work.
 
 `atelier log` prints the history of acts. Nothing stores it. It is derived
 from Git history, by finding the commits where a record changed in one of
-the ways below. Each is one line.
+the ways below. Each is one line, and each carries the commit it was found
+in. `atelier-app` returns the same history as data, which is how the site
+reads it.
 
 | Line | Found where | Thread shown |
 | --- | --- | --- |
@@ -362,29 +401,36 @@ reports a clone with no hooks.
 
 ## The forge
 
-`atelier-app/src/forge.rs` is kept, with one change to its interface: it
-takes the forge section of the new config, whose CI workflow is optional,
-where today it takes `workflow_policy::ForgeConfig` with a required workflow
-name. Its behaviour and its contract tests stay. The merged-tree checkout,
-the merge commit and the push live today in `atelier-cli`'s `merge.rs` and
-`merge_push.rs`, bound to `WorkflowPolicy` and `RecordIndex`. They are
-extracted onto the config and item types, and their contract tests are
-rewritten against the new command. Nothing else from today's merge is kept:
-not the polling in `merge_wait.rs`, nor `merge_sync.rs`.
+`crates/atelier-app/src/forge.rs` is copied into the new workspace with one
+change to its interface: it takes the forge section of the new config, whose
+CI workflow is optional, where today it takes `workflow_policy::ForgeConfig`
+with a required workflow name. Its behaviour stays, and its contract tests
+come with it. The merged-tree checkout, the merge commit and the push live
+today in `atelier-cli`'s `merge.rs` and `merge_push.rs`, bound to
+`WorkflowPolicy` and `RecordIndex`. They are copied and put on the config
+and item types, and their contract tests are rewritten against the new
+command. Nothing else from today's merge is carried over: not the gate code,
+the polling in `merge_wait.rs`, nor `merge_sync.rs`.
 
 ## Site
 
-The site is converted to the new records in mission 3, just before the old
-commands are deleted: its loader reads the three record kinds, its responses
-drop what the new model does not have, and its fixtures are regenerated in
-the new layout. The new reader is served by `atelier-next serve`, the web
-tests move to it, and `serve` is removed from the old binary in the tree. The
-web typecheck, unit and Playwright jobs must pass in the change that does it.
-How much of the brief and debrief view code survives is settled when that
-step is planned, by reading the site's code.
+The site is rebuilt on the new records in mission 3, in the new workspace:
+the site crate and its web app are copied across, the loader is written to
+read the three record kinds, the responses drop what the new model does not
+have, and the fixtures are generated in the new layout. The new binary's
+`serve` serves it, and the web typecheck, unit and Playwright jobs run
+against it. How much of the brief and debrief view code is copied is settled
+when that step is planned, by reading the site's code.
 
-The installed binary keeps serving the old-layout repositories until the
-cutover, because nothing rebuilds it.
+The old workspace's site is not touched, and the installed binary keeps
+serving the old-layout repositories until the cutover.
+
+The site can derive more than this work builds. A view of what changed
+between a mission's go-ahead and its result is the dashboard's to compute,
+and the tool gives it what that needs: every act with the commit it happened
+in, and records readable at any commit. So the site can load a mission's
+directory and items as they stood at the commit of its `ready` act and
+compare them with how they stand now.
 
 ## Transition
 
@@ -395,9 +441,8 @@ items under the old tool. The fourth is a runbook.
 
 **1. Build beside (mission 2).** The installed binary tracks all work,
 including the redesign's own, and the repository's records stay in the old
-layout. New commands live in new modules of the existing crates and are
-reached through a second binary target, `atelier-next`. The old binary, its
-tests, CI's `atelier check` step and `scripts/smoke-repos.sh` are untouched.
+layout. The new tool is written in `next/`. The old workspace, its tests,
+CI's `atelier check` step and `scripts/smoke-repos.sh` are untouched.
 
 **2. Rehearse (mission 2).** `scripts/cutover/convert_records.py` reads a
 repository's old `.atelier/` directly and writes the whole new one: missions
@@ -408,7 +453,7 @@ them; deferred findings on them are not carried over, and the backlog sort is
 where any worth keeping become items. Run twice on the same input it writes
 the same bytes, and `--verify` checks a converted tree against a fresh run.
 The rehearsal converts a scratch clone of each of the five repositories and
-runs `atelier-next check` and `status` on each. It runs one full item in the
+runs the new binary's `check` and `status` on each. It runs one full item in the
 atelier clone and in one product clone; a full item runs the repository's
 merge checks, and some of those are too heavy to run for all five here.
 
@@ -419,24 +464,25 @@ old tool:
   one. The live skill is a checkout that follows master, and the installed
   binary tells every session to move it forward when it falls behind, so the
   new text must not sit at the live path before the cutover.
-- The fallback release is fixed before anything in the tree changes the old
-  binary. It is the binary CI and the rollback use, so it must check this
-  repository's records and serve the site as the installed binary does. The
-  installed binary is six commits past 0.4.0, and those commits changed only
-  the wording of the review brief, so the 0.4.0 release is tried first. A
-  0.4.1 is cut only if 0.4.0 fails that test.
-- The site is converted, as above.
-- The switch: the `atelier` binary target points at the new command layer,
-  and the old command layer, its integration tests and
-  `scripts/smoke-repos.sh` are deleted. CI's `check` step runs the fallback
-  release while the repository holds `.atelier/issues/` and the tree's
-  binary once it does not. `AGENTS.md` says the installed binary stays the
-  tracker and nobody installs from the tree. Added under `scripts/cutover/`,
-  so that they are reviewed here: the runbook, the new `AGENTS.md` text for
-  each repository, and a replacement for each workflow that runs Atelier in
-  a repository's CI, installing it from this change's commit. Astromech's
-  workflow installs Atelier from a commit today and runs `doctor` and
-  `land`, which will not exist.
+- The fallback release is fixed. It is the binary CI and the rollback use,
+  so it must check this repository's records and serve the site as the
+  installed binary does. The installed binary is six commits past 0.4.0,
+  and those commits changed only the wording of the review brief, so the
+  0.4.0 release is tried first. A 0.4.1 is cut only if 0.4.0 fails that
+  test.
+- The site is rebuilt, as above.
+- The switch: `crates/`, the old workspace with all its tests, and
+  `scripts/smoke-repos.sh` are deleted, and the contents of `next/` move to
+  the repository root, so the root workspace, the release build and
+  `cargo install --path crates/atelier-cli` are all the new tool. CI's
+  `check` step runs the fallback release while the repository holds
+  `.atelier/issues/` and the tree's binary once it does not. `AGENTS.md`
+  says the installed binary stays the tracker and nobody installs from the
+  tree. Added under `scripts/cutover/`, so that they are reviewed here: the
+  runbook, the new `AGENTS.md` text for each repository, and a replacement
+  for each workflow that runs Atelier in a repository's CI, installing it
+  from this change's commit. Astromech's workflow installs Atelier from a
+  commit today and runs `doctor` and `land`, which will not exist.
 
 After the switch merges, the tree's binary cannot read this repository's
 records, and only the installed binary tracks work. The cutover follows at
@@ -498,11 +544,9 @@ hooks not yet; step 3; step 4; and a second repository's conversion in step 5
 that is committed and not pushed. One of the scratch clones has a hook of
 its own beforehand, and the rehearsal checks it is back afterwards.
 
-**After the cutover**, the first items under the new tool delete the library
-code nothing reaches any more: the workflow crate, the old record types, the
-gate code, evidence, bundle, migrate and prune, and the fallback branch of
-CI's `check` step.
-`scripts/cutover/` is deleted after the work host converts.
+**After the cutover**, the fallback branch of CI's `check` step is removed.
+Nothing else is left to clean up, since the old workspace went whole at the
+switch. `scripts/cutover/` is deleted after the work host converts.
 
 **The work host** converts later by the same runbook, run by Sumeet. Until it
 does, it must not fetch a repository that has been converted.
@@ -574,6 +618,8 @@ Sumeet made each of these in conversation on 2026-11-09.
 | Proof is the configured merge checks plus manual validation with artifacts | Work has no CI; routine receipts were busywork |
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
+| The tool is rewritten in full, in a fresh workspace | A gradual rewrite has no benefit once the record layout changes under every command |
+| A view of what changed since his go-ahead is the dashboard's to derive | It is a derived view; this work supplies the acts with their commits and records readable at any commit |
 | Hooks guard, commands act | A rule in a command applies only when the agent remembers the command |
 | The tool gives facts and the skill does the arithmetic: `log` and `list`, and no scorecard command | A fixed report in the binary would change every time the measures do, as the debrief did |
 | The gardener is a role, and its needs shape the records now | A bug's cause and a deferred finding's settlement are cheap in the first format and costly to add later |
@@ -581,13 +627,9 @@ Sumeet made each of these in conversation on 2026-11-09.
 | `merge` never waits | Waiting belongs to the harness, which already wakes a thread when a pull request's checks finish |
 | His go-ahead stays `ready --by` | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
 
-Five points in this design go beyond what he confirmed, and his approval
+Three points in this design go beyond what he confirmed, and his approval
 should weigh them:
 
-- **The loop is rebuilt as one unit beside the old one.** He agreed to
-  replace commands one at a time, each deleting its predecessor. The record
-  layout changes under every command at once, so a new `start` and an old
-  `review` could not work on the same item.
 - **One cutover per host.** He agreed to convert repositories one at a time
   with the binary reading both layouts. The skill is installed once per host,
   so the process would change for every repository at once anyway, and
@@ -600,10 +642,6 @@ should weigh them:
   becomes a draft item at merge. This design leaves it in its review file
   and lists it with `list --deferred`, because the backlog already holds four
   piles of such items that nobody reads.
-- **No view of what changed from the plan.** He was told the result would
-  show items added, dropped or redefined since his go-ahead. Both planning
-  reviewers advised cutting it from this work, and Git history keeps what a
-  later view would need.
 
 ## Open questions
 

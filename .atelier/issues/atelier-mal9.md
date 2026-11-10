@@ -17,12 +17,12 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T04:08:38.978007568+00:00"
+updated_at: "2026-11-10T04:45:23.715441526+00:00"
 ---
 
 ## Goal
 
-Build the record store the new commands stand on: `items/<id>/item.md`, `reviews/<round>-<suffix>.md` and `config.toml` at schema version 3, as the architecture specification's Records section defines them, in new modules of `atelier-core` and `atelier-records`.
+Build the record store the new commands stand on: `items/<id>/item.md`, `reviews/<round>-<suffix>.md` and `config.toml` at schema version 3, as the architecture specification's Records section defines them. This is the first code of the full rewrite, so it also creates the new workspace, `next/`, with the crates `atelier-core` and `atelier-records`.
 
 ## Done when
 
@@ -35,13 +35,14 @@ Build the record store the new commands stand on: `items/<id>/item.md`, `reviews
 - [ ] Unit tests cover when a fix-now finding is open: it stays open until a later round marks it fixed or withdrawn, or a Decisions entry naming it has an outcome.
 - [ ] Creating a review for round 2 writes `reviews/2-<suffix>.md` with four random characters, and two reviews created for the same round have different names.
 - [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks, and a forge with and without `ci_workflow`; an unknown key is an error that names it.
-- [ ] The old binary's tests pass unchanged.
+- [ ] `next/` is a Cargo workspace of its own with its own lock file. No file under it names a path under `crates/`, and a CI step fails if one does.
+- [ ] `scripts/ci-jobs.sh` runs the new workspace's build and tests when a path under `next/` changes and the old workspace's when a path under `crates/` does, and `scripts/ci-jobs.test.sh` covers both. No file under `crates/` is changed.
 - [ ] The Records section of `docs/strategies/redesign-architecture.md` matches what was built; the Report lists each difference corrected there.
 
 ## Scope
 
-Item, review and config records. Mission records, and checking that an item's `mission` names one, belong to step B. No CLI. The new modules reuse the existing front-matter splitting and ID generation and do not depend on `atelier-workflow` or on the old issue and review record types; the old code is not changed.
+Item, review and config records. Mission records, and checking that an item's `mission` names one, belong to step B. No CLI. Front-matter splitting and ID generation are copied from `crates/atelier-records/src/lib.rs`, trimmed to what the new records use, and reviewed as new code. Nothing else is copied; the rest is written new.
 
 ## Context
 
-Design: `docs/strategies/redesign-architecture.md`, Records and Crates. The existing parser is `crates/atelier-records/src/lib.rs`. This is the first item of step A in `docs/strategies/redesign-2-core.md`.
+Design: `docs/strategies/redesign-architecture.md`, Records and Crates. The old parser, to copy those two pieces from, is `crates/atelier-records/src/lib.rs`. The rule for copying is in the architecture specification's section "The rule for this work". This is the first item of step A in `docs/strategies/redesign-2-core.md`.
