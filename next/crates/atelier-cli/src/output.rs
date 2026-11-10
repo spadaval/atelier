@@ -1304,7 +1304,7 @@ pub fn not_one_line(act: Act, id: &str, what: &str) -> String {
 pub fn not_open(id: &str, named: &str, known: bool, open: &[Finding]) -> String {
     let mut text = "`atelier escalate` refused; nothing changed.\n".to_string();
     text += &match known {
-        true => format!("Finding {named} of {id} is not open: a later round closed or carries it, or a decision settled it.\n"),
+        true => format!("Finding {named} of {id} is not an open fix-now finding.\n"),
         false => format!("No review of {id} has a finding {named}.\n"),
     };
     if open.is_empty() {

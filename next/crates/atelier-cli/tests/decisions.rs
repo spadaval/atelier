@@ -276,9 +276,32 @@ fn a_question_about_no_finding_once_answered_lets_submit_pass() {
     );
     assert_eq!(read(&root, &item_path(ID)), before);
 
+    // Two wait: the oldest is answered first, and the decider is told of
+    // the next.
+    assert_eq!(
+        atelier(&root, "t1", &["escalate", "And how loudly?"]).code,
+        0
+    );
+    let first = atelier(&root, "d1", &["decide", ID, "Yes."]);
+    assert_eq!(first.code, 0, "{}", first.stderr);
+    assert!(
+        first.stdout.ends_with(&format!(
+            "Another question waits on {ID}:\n  {}: And how loudly?\nThen: atelier decide {ID} \
+             \"<answer>\"\n",
+            &asked()[..10]
+        )),
+        "{}",
+        first.stdout
+    );
+    assert!(read(&root, &item_path(ID)).contains(&format!("{}\n\nAnswer by d1: Yes.\n", asked())));
     let decided = atelier(&root, "d1", &["decide", ID, "Yes, say it loudly."]);
     assert_eq!(decided.code, 0, "{}", decided.stderr);
     assert!(!decided.stdout.contains("settled"), "{}", decided.stdout);
+    assert!(
+        decided.stdout.contains("No other question waits."),
+        "{}",
+        decided.stdout
+    );
     let submit = atelier(&root, "t1", &["submit"]);
     assert_eq!(submit.code, 0, "{}", submit.stderr);
     let committed = git(&root, &["show", &format!("HEAD:{}", item_path(ID))]);
@@ -371,9 +394,8 @@ fn escalate_is_its_implementers_on_its_branch_and_writes_nothing_when_refused() 
     assert_eq!(
         run.stderr,
         format!(
-            "`atelier escalate` refused; nothing changed.\nFinding {finding} of {ID} is not \
-             open: a later round closed or carries it, or a decision settled it.\nIts open \
-             fix-now findings: {open}\n"
+            "`atelier escalate` refused; nothing changed.\nFinding {finding} of {ID} is not an \
+             open fix-now finding.\nIts open fix-now findings: {open}\n"
         )
     );
     assert_eq!(read(&root, &item_path(ID)), before);
