@@ -173,3 +173,8 @@ sharper rule.
 `python3 scripts/scorecard/draw_samples.py --out <directory>` redraws the
 three samples; `cmp` against `samples/` shows they match. The tables above
 come from joining each `<measure>.labels.json` with its sample file by `n`.
+The agreement, from `samples/`:
+
+```sh
+python3 -c 'import json; [print(m, sum(a["label"] == b["label"] for a, b in zip(json.load(open(m + ".labels.json"))["labels"], json.load(open(m + ".second.json"))["labels"])), "of 30") for m in ("interventions", "refusals", "findings")]'
+```
