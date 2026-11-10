@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Measure defects after merge and what process costs, before the redesign changes either"
-updated_at: "2026-11-10T14:16:23.996269943+00:00"
+updated_at: "2026-11-10T15:03:22.705557389+00:00"
 ---
 
 ## Outcome
@@ -31,3 +31,5 @@ One of four missions that redesign Atelier, in order: baseline, core loop, cutov
 
 - 2026-11-10 [note] 2026-11-10: Orchestration started on Sumeet's go-ahead (review atelier-b2t8). atelier-scx2 (freeze the inputs) goes first and alone; z5bp, 5fsj and 3kr7 follow in parallel once it merges. Implementers are Opus 5.5, reviewers GPT-6.1 Sol.
 - 2026-11-10 [note] 2026-11-10: atelier-scx2 merged (pull request #92, merge 649aafc8, one review round by Sol, no findings). The inputs are frozen at cutoff 2026-11-10T05:14:58Z in ~/.local/share/atelier-baseline/2026-11/: T3's database (4.13 GB, integrity_check ok), 4,053 Claude transcript files from 31 directories, and 143 Codex sessions. Codex kept only 2026-11-08 to 2026-11-10, so Codex token coverage will be three days, not the window. A wake-up from the implementer was lost for about nine hours; from here children are waited on inside the turn. atelier-z5bp, atelier-5fsj and atelier-3kr7 start now, in parallel.
+- 2026-11-10 [decision] 2026-11-10: Defects after merge are counted by tracing, not by the fallback. The spike atelier-z5bp (merged, pull request #94, four review rounds) traced 27 of 30 seeded astromech bug fixes to the merge that introduced the defect: 11 found after that merge, 5 before it, 11 in code from before astromech adopted Atelier, 3 not traceable. Only 16 of the 30 trace to an item, so the choice rests on counting the 11 pre-adoption traces toward the threshold of 20; they count. The scorecard row itself counts only the 'after merge' outcome, against the causing item; pre-adoption and untraceable fixes are reported beside it. The rule finds 52 bug fixes in astromech and about 77 in atelier, with few or none in the other three, so atelier-c71h traces the full list, not a sample.
+  Reason: The strategy's test is whether blame and a read of both changes can find the merge that introduced a defect, and the item's Done when says 'the merge that introduced the defect'. A cause older than the tracker has no item because none existed, not because tracing failed, and that share falls as old code is rewritten.
