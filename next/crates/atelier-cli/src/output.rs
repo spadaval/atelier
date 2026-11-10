@@ -159,8 +159,9 @@ fn holder(entry: &Entry) -> String {
     }
 }
 
-/// `status` on an item's branch.
-pub fn item(caller: &Thread, entry: &Entry) -> String {
+/// `status` on an item's branch. `config` is the base's, whose merge
+/// checks and forge `merge` goes through.
+pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
         format!(
@@ -179,12 +180,46 @@ pub fn item(caller: &Thread, entry: &Entry) -> String {
             holder(entry)
         )
     };
+    let mut next = next(entry);
+    // Before `merge`, what it will run and wait for; a stale approval is
+    // sent to `submit` instead.
+    let stale = entry
+        .unmet
+        .iter()
+        .any(|c| matches!(c, Condition::Stale { .. }));
+    if entry.next == Some(Act::Merge) && !stale {
+        let then = next.rfind("Then: ").expect("it ends with a Then line");
+        next.insert_str(then, &gates(config));
+    }
     format!(
-        "{who}Title: {}\nStatus: {}\n{}",
+        "{who}Title: {}\nStatus: {}\n{next}",
         entry.title,
         status_name(entry.status),
-        next(entry)
     )
+}
+
+/// What `merge` runs and waits for, from the base's config.
+fn gates(config: &Config) -> String {
+    let mut text = String::new();
+    if !config.merge_checks.is_empty() {
+        text += "`atelier merge` runs these merge checks on the tree merging makes:\n";
+        for check in &config.merge_checks {
+            text += &format!("  {}\n", check.run);
+        }
+    }
+    if let Some(forge) = &config.forge {
+        text += &format!(
+            "It pushes the branch to {} and opens its pull request",
+            forge.remote
+        );
+        text += &match &forge.ci_workflow {
+            Some(workflow) => {
+                format!(", and merges once {workflow} passes on the branch's head.\n")
+            }
+            None => ", then merges and pushes the base.\n".into(),
+        };
+    }
+    text
 }
 
 /// `status` away from an item's branch.

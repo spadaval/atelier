@@ -153,11 +153,12 @@ fn an_approved_item_merges_in_one_commit_that_marks_it_done() {
     git(&base, &["switch", "-q", "main"]);
     let (tip, branch) = (head(&root, "main"), head(&root, ID));
 
+    // Status shows what merge will run.
     let status = atelier(&root, "t1", &["status"]);
     assert!(
-        status
-            .stdout
-            .ends_with("Status: approved\nThen: atelier merge\n"),
+        status.stdout.ends_with(
+            "Status: approved\n`atelier merge` runs these merge checks on the tree merging makes:\n  test -f hello.txt\nThen: atelier merge\n"
+        ),
         "{}",
         status.stdout
     );
@@ -815,6 +816,13 @@ fn with_a_ci_workflow_merge_stops_until_ci_passes_on_the_head() {
     let root = forge.scratch.root();
     let (base, branch) = (head(&root, "main"), head(&root, ID));
     let before = state(&root);
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.ends_with(
+            "It pushes the branch to origin and opens its pull request, and merges once ci.yml passes on the branch's head.\nThen: atelier merge\n"
+        ),
+        "{status}"
+    );
 
     // The first run pushes the branch and opens its pull request, and CI
     // has not started.

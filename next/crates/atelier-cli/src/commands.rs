@@ -23,7 +23,8 @@ pub fn status(repo: &mut Repo) -> Result<String> {
         let head = git::head(&repo.root)?;
         let checkout = repo.checkout(record, &head)?;
         let entry = entry(&facts(repo, &located, &blockers, Some(&checkout)))?;
-        return Ok(output::item(&repo.caller, &entry));
+        let config = repo.base_config()?;
+        return Ok(output::item(&repo.caller, &entry, &config));
     }
     let items = repo.everything()?;
     let overview = overview(&items, &repo.caller)?;
