@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: Merge and The forge brought up to date with what atelier-syyj built"
+last_changed: "2026-11-10: a former reviewer is offered nothing, and what a harness's subagent is to Atelier (atelier-67nn)"
 ---
 
 # Atelier redesign: architecture specification
@@ -330,7 +330,9 @@ How the table is built:
   from approved, and nothing while it is in review; as the round's
   reviewer, `verdict changes` while its file holds an open fix-now finding,
   else `verdict approve`; as anyone else, `review` when it is in review and
-  they never implemented it, else the take-over. `status` prints that act's
+  they never implemented it, else nothing when they reviewed it before
+  (their review is done, and taking the item would put them on both sides),
+  else the take-over. `status` prints that act's
   unmet conditions from `acts::unmet`, the function `check` calls, and ends
   with its command.
 - `start` takes the take-over row when the item's status is a started one,
@@ -369,6 +371,18 @@ session ID (`CLAUDE_CODE_SESSION_ID`, `CODEX_SESSION_ID`,
 `GROK_SESSION_ID`), else `human`. A variable set to an empty value counts as
 unset.
 
+A harness's own subagent is not a new thread. Observed on 2026-11-10
+(atelier-67nn): a Claude Code subagent started with its `Agent` tool runs with
+its parent's `CLAUDE_CODE_SESSION_ID`, and under T3 Code with its parent's
+`T3CODE_THREAD_ID`; a Codex 0.167 `spawn_agent` child shares its parent's
+`CODEX_SESSION_ID` and has its own `CODEX_THREAD_ID`, which Atelier does not
+read; it inherits its parent's environment, so under T3 Code it would carry
+the parent's `T3CODE_THREAD_ID` too (inferred, not run there). Atelier sees
+such a subagent as its parent, and refuses it as the reviewer of its
+parent's item. Only a thread the harness starts as a thread, such as T3
+Code's `delegate_task`, has an identity of its own. `submit`'s handoff and the
+refusal of an author's `review` say so.
+
 Entry commands store the identity in the record: `start` appends it to the
 item's `implementers`, `review` to the review file's `reviewers`, and `lead`
 sets the mission's `lead`. `decide` stores it with the answer. The last entry
@@ -379,11 +393,14 @@ There is no local state file. A command works out who is calling by looking
 for the caller's identity in the records it can see: the item of the current
 branch, an open review of that item, and missions on the base. A thread may
 hold several things, and `status` lists each. Built so far: on a branch named
-for an item, `status` speaks to the item's holder as its implementer and to
-anyone else as a visitor, naming the holder; anywhere else it lists the
+for an item, `status` speaks to the item's holder as its implementer, to a
+thread that reviewed an earlier round as done with it, and to anyone else as
+a visitor, naming the holder; anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
 ready items, and the started items others hold. On the item's branch it
-speaks to the round's reviewer as reviewer, naming its file. Missions join
+speaks to the round's reviewer as reviewer, naming its file, and tells the
+implementer of an item in review which thread holds the round's review, or
+that none does yet. Missions join
 with their commands.
 
 Harness hooks give orientation at session start: `atelier setup claude`

@@ -114,10 +114,12 @@ fn next(entry: &Entry) -> String {
     needs(act, entry.status, id, &entry.unmet)
 }
 
-/// How an implementer gets its item reviewed.
+/// How an implementer gets its item reviewed. The task line has no
+/// backticks: pasted into a double-quoted shell argument, they would run
+/// `atelier review` as the implementer.
 fn start_reviewer(id: &str) -> String {
     format!(
-        "A reviewer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:\n  Run `atelier review {id}` and follow what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
+        "A reviewer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:\n  Run atelier review {id} and follow what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
     )
 }
 

@@ -144,7 +144,9 @@ class CountTest(unittest.TestCase):
                     ("atelier review slug-k3fa", "Exit code 1\nYou (thread x) have implemented", True),
                     ("cat .atelier/items/slug-k3fa/item.md", "---", False),
                     ("atelier verdict aprove", "Exit code 2\nerror: invalid value", True),
-                    ("python3 -m unittest", "Exit code 1\nFAILED", True)]):
+                    ("python3 -m unittest", "Exit code 1\nFAILED", True),
+                    ('delegate "Run `atelier review slug-k3fa`"',
+                     "You (thread x) have implemented slug-k3fa. Nothing changed.", False)]):
                 events.append({"type": "assistant", "message": {"content": [
                     {"type": "tool_use", "id": f"t{n}", "name": "Bash",
                      "input": {"command": cmd}}]}})
@@ -154,10 +156,16 @@ class CountTest(unittest.TestCase):
             claude.write_text("\n".join(json.dumps(e) for e in events))
             found, tools = grade.calls(claude, "main")
             runs = [c for c in found if grade.ATELIER.search(c[1])]
-            self.assertEqual(tools, 5)
+            self.assertEqual(tools, 6)
             self.assertEqual([(c[1], c[2]) for c in runs],
                              [("atelier status", 0), ("atelier review slug-k3fa", 1),
-                              ("atelier verdict aprove", 2)])
+                              ("atelier verdict aprove", 2),
+                              ('delegate "Run `atelier review slug-k3fa`"', 0)])
+            # A refusal hidden by a command substitution counts by its text.
+            self.assertEqual([(f["command"], f["refused"]) for f in grade.failures(runs)],
+                             [("atelier review slug-k3fa", True),
+                              ("atelier verdict aprove", False),
+                              ('delegate "Run `atelier review slug-k3fa`"', True)])
             codex = tmp / "codex.jsonl"
             codex.write_text("\n".join(json.dumps(e) for e in [
                 {"type": "thread.started", "thread_id": "x"},

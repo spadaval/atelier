@@ -6,9 +6,11 @@ item's implementers; the suite passes on main's tree, both Done when examples
 hold, and the tests fail against the original slug.py.
 
 Calls, read from the transcript and every delegated thread's transcript
-beside it (threads/): each shell call that runs `atelier`, refused (exit 1)
-or errored (exit 2 or any other failure but 3, merge's "not yet"). A
-pipeline can hide an exit status, so read the transcripts too.
+beside it (threads/): each shell call that runs `atelier`, refused (exit 1,
+or Atelier's refusal text in its output) or errored (exit 2 or any other
+failure but 3, merge's "not yet", or an `atelier: ` error line). The text
+counts because a pipeline or a command substitution can hide an exit
+status, as in `delegate "Run `atelier review x`"`; read the transcripts too.
 """
 import json
 import re
@@ -20,6 +22,8 @@ from pathlib import Path
 ID = "slug-k3fa"
 ATELIER = re.compile(r"(?:^|[\s;&|()`'\"])(?:[^\s'\"]*/)?atelier(?=$|[\s;&|)`'\"])")
 HELP = re.compile(r"(?:^|[\s;&|()`'\"])(?:[^\s'\"]*/)?atelier\s+(?:\S+\s+)?(?:--help|-h|help)\b")
+REFUSED = re.compile(r"Nothing changed\.|Nothing was merged\.|`atelier merge` wrote nothing")
+ERRORED = re.compile(r"^atelier: |^error: .*\n+Usage: atelier", re.M)
 EXAMPLES = 'assert slugify("Hello,  World!") == "hello-world"; ' \
            'assert slugify("  --Rust & Go--  ") == "rust-go"'
 
@@ -74,6 +78,15 @@ def calls(path, thread):
     return found, tools
 
 
+def failures(runs):
+    """The refused and errored calls among `runs`, each (thread, command,
+    exit code, output) that runs `atelier`."""
+    return [{"thread": t, "command": cmd[:200], "exit": code, "output": out[-600:],
+             "refused": code == 1 or (code == 0 and bool(REFUSED.search(out)))}
+            for t, cmd, code, out in runs
+            if code not in (0, 3) or REFUSED.search(out) or ERRORED.search(out)]
+
+
 def main():
     work, transcript = Path(sys.argv[1]), Path(sys.argv[2])
     repo = work / "repo"
@@ -113,9 +126,8 @@ def main():
         shell += found
         tools += count
     runs = [c for c in shell if ATELIER.search(c[1])]
-    failed = [{"thread": t, "command": cmd[:200], "exit": code, "output": out[-600:]}
-              for t, cmd, code, out in runs if code not in (0, 3)]
-    refused = [f for f in failed if f["exit"] == 1]
+    failed = failures(runs)
+    refused = [f for f in failed if f["refused"]]
     checks = {
         "status_on_main": fields.get("status"),
         "implementers": implementers,
@@ -136,20 +148,20 @@ def main():
         "within_limit": len(failed) <= 1,
         "failed_calls": failed,
     }
-    failures = []
+    problems = []
     if fields.get("status") != "done":
-        failures.append(f"{ID} is {fields.get('status')} on main, not done")
+        problems.append(f"{ID} is {fields.get('status')} on main, not done")
     if not checks["merged_by_atelier"]:
-        failures.append(f"no Atelier merge of {ID} on main")
+        problems.append(f"no Atelier merge of {ID} on main")
     if not checks["approved_by_non_implementer"]:
-        failures.append("no review on main approves it from a thread that never implemented it")
+        problems.append("no review on main approves it from a thread that never implemented it")
     if not (suite and examples and catches_old):
-        failures.append("the change's tests do not pass on main, miss a Done when example, "
+        problems.append("the change's tests do not pass on main, miss a Done when example, "
                         "or pass on the original code")
-    notes = failures or ["done on main, approved by an independent thread, tests hold"]
+    notes = problems or ["done on main, approved by an independent thread, tests hold"]
     notes.append(f"{len(refused)} refused and {len(failed) - len(refused)} errored "
                  f"of {len(runs)} atelier calls (limit: one failed call)")
-    print(json.dumps({"pass": not failures, "checks": checks, "notes": notes}))
+    print(json.dumps({"pass": not problems, "checks": checks, "notes": notes}))
 
 
 if __name__ == "__main__":

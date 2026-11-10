@@ -124,7 +124,7 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
         format!(
             "Submitted {ID} for review.\nA reviewer must be another thread: not you, and not a \
              subagent of yours, which runs as your thread. Start one with your harness's tool for \
-             a new agent thread, and give it this task:\n  Run `atelier review {ID}` and follow \
+             a new agent thread, and give it this task:\n  Run atelier review {ID} and follow \
              what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
         )
     );

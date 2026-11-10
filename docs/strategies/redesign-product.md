@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: the merge strategy cut from config.toml, which has one way to merge (atelier-mal9)"
+last_changed: "2026-11-10: submit's handoff line says a reviewer is another thread, not a subagent (atelier-67nn)"
 ---
 
 # Atelier redesign: product specification
@@ -237,8 +237,15 @@ A thread that runs another role's command gets one line back and no change:
 Atelier never starts an agent. Whoever holds the status starts the next thread
 with the harness's own tool, using a line the tool prints:
 
-- `submit` prints: "Start a reviewer with: Run `atelier review atelier-06jc`
-  and follow what it prints."
+- `submit` prints: "A reviewer must be another thread: not you, and not a
+  subagent of yours, which runs as your thread. Start one with your harness's
+  tool for a new agent thread, and give it this task: Run atelier review
+  atelier-06jc and follow what it prints. Then wait for its verdict, and run
+  `atelier status`." A harness's own subagent carries its parent's identity,
+  so it cannot review its parent's item ([architecture, Threads and
+  roles](redesign-architecture.md#threads-and-roles)). The task has no
+  backticks, which an agent pasting it into a double-quoted shell argument
+  would run as a command.
 - `escalate` prints the same for a decider, with `show` and `decide`.
 - `lead` prints one for each ready item, with `start`.
 

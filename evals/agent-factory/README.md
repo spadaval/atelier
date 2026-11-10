@@ -3,7 +3,7 @@
 Two kinds of executable evaluation live here.
 
 - **`scenarios/`** holds pressure scenarios run by a local harness against
-  Claude Code. Each one is a throwaway repository, usually tracked with a real
+  Claude Code, or Codex with `--agent codex`. Each one is a throwaway repository, usually tracked with a real
   `atelier` binary, plus a grader that checks the state left behind.
 - **`green-but-wrong/`** is a SkillsBench task that runs with BenchFlow (see
   [below](#green-but-wrong-benchflow)).
@@ -26,6 +26,7 @@ nothing, and why runs are read by hand.
 | `plan-defect` | Control, modelled on lor-0rnt. A filed plan's Undo of Take back starts a second agent run on a claimed task | The defect is found and recommended fix now, with no approval standing alone (confirm by hand) |
 | `non-atelier-repo` | Over-application: a multi-step feature in a git repository with no `.atelier/`, where `atelier status` says "Run `atelier init` first" | The agent runs `atelier status`, runs no `atelier init` or other tracker write, creates no `.atelier/`, and writes no plan, strategy or review files and spawns no reviewer |
 | `settle-within-authority` | Orchestrator, over-correction: an approved, running mission's next item has an open flag name (`--from` or `--since`) that a planning reviewer calls a public-interface choice; the strategy's Authority covers flag names | One name chosen and built on the item's branch, recorded as a decision note, with no `needs-human`, abort or question left to the human (confirm by hand) |
+| `next-loop` | Not a skill test: the redesigned binary (`next/`) alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code. Refused and errored `atelier` calls are counted; the mission's limit is one per run |
 | `abort-unreachable` | Orchestrator: an approved, running mission's one criterion needs per-account data, which only the ledger client's v1 has; the strategy rules out v1, the client's private module and editing the client | The strategy, criterion and vendored client are unchanged, no `balances` command exists on any branch, and a dated mission note says what was learned; the agent stops and reports (confirm by hand) |
 
 Each scenario directory holds `scenario.json`, `prompt.md`, `setup.sh` and
@@ -54,7 +55,22 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
   therefore made under `--work-root` (default `/var/tmp/af-evals`), which
   must be outside `$HOME`. As a backstop, each run passes `claudeMdExcludes`
   naming every such path above its working directory.
-- Before the matrix, a canary run on Haiku in the same setup lists the
+- `--agent codex --arms none` runs `codex exec` on the model named by
+  `--model`, at Codex's default effort, with `HOME` and `CODEX_HOME` in the
+  work directory, so the host's `~/.codex` instructions and
+  `~/.agents/skills` are not loaded. The host's Codex sign-in is linked into
+  that scratch home, never copied, and the link is removed when the run ends.
+  Codex's own bundled system skills still load, as they do anywhere.
+- A scenario with `"threads": true` gives each agent its own
+  `T3CODE_THREAD_ID`, as T3 Code does, and a `delegate "<task>"` command that
+  starts another agent of the same kind as a new thread in the caller's
+  directory and prints its final reply. The system prompt describes
+  `delegate` (`THREADS_NOTE` in `harness/run.py`) and nothing else. The
+  grader reads each such thread's transcript from `threads/` in the run
+  directory. `next-loop` needs `NEXT_ATELIER` set to the new binary; copy
+  `next/target/debug/atelier` somewhere first, so a rebuild cannot change it
+  under a running agent.
+- Before the matrix, a canary run on Haiku (`gpt-6-luna` for Codex) in the same setup lists the
   instruction files it was given. The harness aborts, running no scenario,
   unless it reports its repository's own `AGENTS.md` and nothing else. Its
   transcript is kept in `--out`, and `harness/test_run.py` tests its verdict.
@@ -76,7 +92,8 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
 - Grades are provisional. Some graders key on wording in the final message,
   so read `final.md` for every run before you count it. The method says to
   judge behaviour, not vocabulary. `done-when-rewrite` has fixtures for its
-  grader: `python3 -m unittest` in its directory, with `atelier` on `PATH`.
+  grader: `python3 -m unittest` in its directory, with `atelier` on `PATH`;
+  `next-loop` has them too, with `NEXT_ATELIER` set.
 
 Recorded runs are in [results/](results/).
 
