@@ -100,7 +100,9 @@ Nobody complains.
 
 # Shape
 
-Mocks are in [mocks](mocks/a.md).
+Mocks are in [mocks](mocks/a.md "a mock") and [the mock][m].
+
+[m]: mocks/a.md#a-mock
 
 # Scope
 
@@ -189,8 +191,14 @@ OPEN_ITEMS = {"demo-a1ta", "demo-b2bu", "demo-c3fe", "demo-e4sp", "demo-f5le", "
 
 
 def resolves(root, file, target):
-    path = target.partition("#")[0]
-    return (root / posixpath.normpath(posixpath.join(posixpath.dirname(file), path))).exists()
+    """Whether a relative link's file exists and, when it names a fragment
+    of a Markdown file, that file has a heading of that slug."""
+    path, _, fragment = target.partition("#")
+    found = root / posixpath.normpath(posixpath.join(posixpath.dirname(file), path))
+    if not found.exists():
+        return False
+    headings = re.findall(r"^#+ (.*)$", found.read_text(), re.M) if found.is_file() else []
+    return not fragment or fragment in {convert_records.slug(h) for h in headings}
 
 
 class Converted(unittest.TestCase):
@@ -399,7 +407,9 @@ status: approved
 
 # Shape
 
-Mocks are in [mocks](../../../docs/strategies/mocks/a.md).
+Mocks are in [mocks](../../../docs/strategies/mocks/a.md "a mock") and [the mock][m].
+
+[m]: ../../../docs/strategies/mocks/a.md#a-mock
 
 # Risks and Unknowns
 
@@ -426,10 +436,12 @@ Corners.
         links = 0
         for path in (self.repo / ".atelier").rglob("*.md"):
             rel = str(path.relative_to(self.repo))
-            for target in re.findall(r"\]\(([^)\s]+)\)", path.read_text()):
+            text = path.read_text()
+            inline = re.findall(r"\]\(([^)\s]+)(?: \"[^\"]*\")?\)", text)
+            for target in inline + re.findall(r"^\[[^\]]+\]: (\S+)$", text, re.M):
                 links += 1
                 self.assertTrue(resolves(self.repo, rel, target), f"{rel}: {target}")
-        self.assertEqual(links, 4)
+        self.assertEqual(links, 5)
         self.assertEqual(self.read("docs/strategies/architecture.md"), FILES["docs/strategies/architecture.md"])
         self.assertIn("Tracked files that still name a moved file's old path, left unchanged:\n"
                       "  docs/strategies/architecture.md: docs/strategies/plan.md\n", out)
