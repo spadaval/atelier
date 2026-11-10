@@ -42,7 +42,7 @@ Write the script that moves a repository from today's records to the new ones, s
 - [x] The script's output says what it did in counts: records converted by kind, records left behind by kind and status, and each thing it could not place, by ID. It exits non-zero and writes nothing when it meets an old record it cannot read.
 - [x] Run twice on the same old commit it writes the same bytes: no clock, no random value and no ordering that depends on the file system. `--verify`, run in a converted tree with the old commit named, converts that commit afresh and exits non-zero, listing the differences, unless the tree's `.atelier/` and moved files match byte for byte.
 - [x] Tests run the script on a small old-layout repository built by the test, with a record of each kind and status above, and check each line of this list; they run with the repository's other Python tests in CI, or the Report says how they are run.
-- [ ] On a scratch clone of each of the five repositories (atelier, astromech, demiurge, life-on-rails, cosplay-studio), the script converts, `--verify` passes, and the new binary built from `master` runs `status` and `list` on the converted tree with exit 0 and its `check` finds no problem, which shows every record is valid in the new format. `check` is atelier-pz1y's and is the only part of this item that waits on another: do everything else first, and take `master` in once it is there. The Report gives, for each repository, the counts the script printed and the time `status` and `list` took, and nothing of any record's content.
+- [x] On a scratch clone of each of the five repositories (atelier, astromech, demiurge, life-on-rails, cosplay-studio), the script converts, `--verify` passes, and the new binary built from `master` runs `status` and `list` on the converted tree with exit 0 and its `check` finds no problem, which shows every record is valid in the new format. `check` is atelier-pz1y's and is the only part of this item that waits on another: do everything else first, and take `master` in once it is there. The Report gives, for each repository, the counts the script printed and the time `status` and `list` took, and nothing of any record's content.
 
 ## Scope
 
@@ -62,17 +62,17 @@ This is the first of step E's two items in `docs/strategies/redesign-2-core.md`.
 
 ## Report
 
-Ten of the eleven Done when lines hold; the last one waits only on `check` (atelier-pz1y, still `todo`). `scripts/cutover/convert_records.py` (standard library only) converts each of the five repositories' scratch clones, `--verify` passes on each, a second run from the same old commit gives the same bytes, and the new binary's `status` and `list` exit 0 on each. Every record it wrote (539 in all) reads back byte for byte through the new binary's writer (`atelier set` with an unchanged value on each, then `git diff` empty). `scripts/cutover/test_convert_records.py` has 14 tests, one or more per Done when line, on an invented old-layout repository; each of 28 deliberate breakages of the script (statuses, labels, mission choice, blockers, decisions, section demotion, link rewriting, config, determinism, `--verify`, unreadable records) failed the test for that rule. The tests are not in CI, as `scripts/scorecard/`'s are not: run them with `TMPDIR=<a directory outside any Git repository> python3 -m unittest discover scripts/cutover`. One test also runs `next/target/debug/atelier status` and `list` on the converted fixture, and skips when that binary is not built.
+All eleven Done when lines hold. `scripts/cutover/convert_records.py` (standard library only) converts a scratch clone of each of the five repositories. On each, `--verify` passes, a second run from the same old commit gives the same bytes, and the new binary built from this branch after merging `master` at 3d58a88b (atelier-pz1y's `check`) runs `check` ("Every record is valid"), `status` and `list` with exit 0. Every record the script wrote (539 in all) reads back byte for byte through the new binary's writer: `atelier set` with an unchanged value on each left `git diff` empty. `--verify` exits 1 and names the file when one byte of a converted item changes. `scripts/cutover/test_convert_records.py` has 14 tests, one or more per Done when line, on an invented old-layout repository. Each of 31 deliberate breakages of the script failed the test for its rule: statuses, labels, mission choice and the nearest-ancestor rule, blockers, decisions, section demotion, link rewriting, config, determinism, `--verify` and unreadable records. The tests are not in CI, and neither are `scripts/scorecard/`'s. Run them with `TMPDIR=<a directory outside any Git repository> python3 -m unittest discover scripts/cutover`. One test also runs `next/target/debug/atelier status` and `list` on the converted fixture, and skips when that binary is not built.
 
-| Repository | Missions | Items (ready) | From decisions | Closed left | Reviews / evidence files left | Strategies moved | Convert | `status` | `list` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| atelier | 9 | 172 (32) | 2 | 374 | 1397 / 819 | 6 | 0.28 s | 0.26 s | 0.24 s |
-| astromech | 4 | 240 (85) | 2 | 403 | 2855 / 801 | 3 | 0.22 s | 0.43 s | 0.39 s |
-| demiurge | 1 | 19 (2) | 2 | 135 | 410 / 105 | 1 | 0.08 s | 0.04 s | 0.03 s |
-| life-on-rails | 3 | 47 (23) | 2 | 56 | 224 / 173 | 3 | 0.10 s | 0.07 s | 0.05 s |
-| cosplay-studio | 7 | 37 (30) | 1 | 54 | 304 / 126 | 1 | 0.07 s | 0.05 s | 0.05 s |
+| Repository | Missions | Items (ready) | From decisions | Closed left | Reviews / evidence files left | Strategies moved | Convert | `check` | `status` | `list` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| atelier | 9 | 172 (32) | 2 | 374 | 1397 / 819 | 6 | 0.20 s | 0.05 s | 0.26 s | 0.25 s |
+| astromech | 4 | 240 (85) | 2 | 403 | 2855 / 801 | 3 | 0.28 s | 0.07 s | 0.42 s | 0.39 s |
+| demiurge | 1 | 19 (2) | 2 | 135 | 410 / 105 | 1 | 0.09 s | 0.03 s | 0.04 s | 0.03 s |
+| life-on-rails | 3 | 47 (23) | 2 | 56 | 224 / 173 | 3 | 0.11 s | 0.03 s | 0.07 s | 0.06 s |
+| cosplay-studio | 7 | 37 (30) | 1 | 54 | 304 / 126 | 1 | 0.08 s | 0.03 s | 0.05 s | 0.05 s |
 
-Other counts the script printed, in the same order: blocked_by entries dropped because the blocker is closed: 16, 104, 3, 8, 8. Records made ready from `in_progress`: 0, 1, 0, 0, 0. Records given a Links section: 72, 83, 9, 19, 34. Items in a mission only through a parent: 0, 12, 0, 0, 23. Tracked files that still name a moved strategy's old path: 3, 1, 4, 0, 3. The `status` and `list` runs used the binary already built in this worktree's `next/target`, not one built from `master`; the `check` step rebuilds from `master`.
+Other counts the script printed, in the same order: blocked_by entries dropped because the blocker is closed: 16, 104, 3, 8, 8. Records made ready from `in_progress`: 0, 1, 0, 0, 0. Records given a Links section: 72, 83, 9, 19, 34. Items given their nearest ancestor's mission: 0, 12, 0, 0, 23. Tracked files that still name a moved strategy's old path: 3, 1, 4, 0, 3.
 
 ### Decisions
 
@@ -88,13 +88,11 @@ Other counts the script printed, in the same order: blocked_by entries dropped b
 ### Surprises
 
 - Old missions also hold `advances` entries naming their items, and old times carry trailing zeros (`.379046000`) that chrono drops; both were found by the round trip and the surveys, and both are handled.
-- In two repositories, open items belong to a mission in the old tool only because their parent advances it (12 in astromech, 23 in cosplay-studio). The Done when gives an item only "the mission it advances", so these get no `mission`; their parent is in their Links section, and the script lists each with the mission it was in.
+- In two repositories, open items belong to a mission in the old tool only because their parent advances it (12 in astromech, 23 in cosplay-studio). The orchestrator reworded the Done when line so that such an item takes its nearest ancestor's mission (decision note on this item). The script walks up the first parent by ID, through closed ancestors too, and lists each such item with the ancestor it took the mission from. The parent stays in the item's Links section.
 - One repository has records whose ID prefix is not its configured slug. The new validator accepts any slug-shaped prefix, so they convert under their IDs.
 
 ### Open items
 
-- The `check` step waits on atelier-pz1y: once it merges, take `master` in with `atelier merge --sync`, build the new binary, and run `check`, `status` and `list` on each converted clone.
-- Whether items in a mission only through their parent should take that mission is for the orchestrator; the script's output names each.
 - The tracked files that still name a moved strategy's old path (11 in all, listed by the script) are the cutover runbook's to update or leave.
 - A strategy that was alone in its directory leaves that directory empty on disk (life-on-rails); Git does not track empty directories.
 - For the rehearsal and the cutover: run the script from inside the repository, on a clean checkout of the base, with Python 3.11 or later and `git` on the PATH; commit its output, then run `--verify <the base commit before the conversion>`. It makes no commit and does not touch remotes.
