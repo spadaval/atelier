@@ -90,7 +90,7 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 | `threads.py` | T3's database | `threads()`: each thread's repository, title, branch, first message, role and transcript keys; `calls()`: its shell commands with output, edits and other tool calls; `tie()`: the item it worked on |
 | `transcripts.py` | the transcripts | `index()`: transcript files by thread key; `requests()`: each model response's tokens, list price and shell commands; `PRICES` |
 | `records.py` | `.atelier/issues/` and history at the manifest commit | `items()`, `merged()`, `id_pattern()` |
-| `gitreader.py` | history up to the manifest commit | `rework()`, `record_only()`, `line_count()` |
+| `gitreader.py` | history up to the manifest commit | `commits()`, `rework()`, `record_only()`, `line_count()` |
 | `commands.py` | a command, its output or an edited path | `simple_commands()`, `atelier_calls()`, `is_process()`, `is_help()`, `refused()`, `shell_writes()`, `is_product_edit()` |
 | `counted.py` | the readers | the seven measures, `counted.json` and `counted.md` |
 | `test_scorecard.py` | a small database, transcripts and Git repository it builds | each measure's arithmetic |
@@ -115,7 +115,7 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
   the manifest commit's history that changes only `.atelier/`. A quiet commit (`-q`) prints no
   hash, so a bare one of records staged earlier is not recognised. The token form gives each model
   response's list-price cost to its tool calls in equal parts and sums the parts that went to
-  process commands, judging a call T3 recorded as T3's copy of it, with its output, judges it.
+  process commands. A call T3 recorded is judged from T3's copy, which includes its output.
 - **Confusion**: over every thread of the repository, shell commands in the window that call
   atelier, and of those, the ones whose output has one of atelier's refusal or error lines
   (`<command>: refused`, `Error: `, clap's `error: unexpected argument` and kin) or that ask for
