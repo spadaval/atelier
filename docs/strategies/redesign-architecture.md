@@ -734,7 +734,8 @@ binary (`atelier-cli`'s `check.rs`).
 | pre-push | The base rule above, for each new commit when the push updates the base. |
 | post-checkout | None. On a branch switch it prints what `status` prints. |
 
-`atelier check` reads every record in the checkout one file at a time
+`atelier check` reads every record in the checkout, tracked or not and
+ignored or not, as the commands do, one file at a time
 (`atelier-records`' `load`), so one that does not parse leaves the rest
 read and validated. It prints each problem with its file and field, exits 1
 when it found one, and lists the record changes not committed yet, those
@@ -763,7 +764,8 @@ stopping at it.
 A refusal is printed on stderr with exit 1, inside the Git command's own
 output. It names each rule broken, each file or commit (its short ID and
 subject) that breaks it, and the way out. A record that does not parse is
-listed apart, as no rule and not to be skipped.
+listed apart, as no rule and not to be skipped; in a push, the way out is
+to rewrite the commit that broke it, since every new commit is read.
 
 `ATELIER_SKIP`, when set to a non-empty reason, lets any rule of a hook or a
 command pass. The tool prints the rule and the reason. Where Atelier makes
