@@ -239,8 +239,10 @@ fallback applies. The before-adoption share falls as old code is rewritten,
 so the other repositories, and astromech later, will trace more to items.
 
 Blame alone named the cause in 21 of the 27. The other six needed `-S` or a
-reading of the fix message. A trace took about 5 minutes when blame was
-enough and 10 to 15 when it was not.
+reading of the fix message. Once the rule was settled, an agent traced all
+30 in about ten minutes of wall-clock time: two or three commands a row when
+blame was enough, six to ten when it was not. Settling the rule took longer
+than applying it.
 
 The full count in astromech's window is 52 bug fixes. 5 more bug items were
 still open at the manifest commit and 1 was superseded.
