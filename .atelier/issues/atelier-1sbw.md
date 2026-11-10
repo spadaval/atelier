@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Write the converter from today's records to the new layout, with a `--verify` mode"
-updated_at: "2026-11-10T22:56:25.330037055+00:00"
+updated_at: "2026-11-10T23:37:12.203059536+00:00"
 ---
 
 ## Goal
@@ -59,6 +59,7 @@ This is the first of step E's two items in `docs/strategies/redesign-2-core.md`.
 - 2026-11-10 [decision] The orchestrator reworded the Done when line on the mission an item takes: an item that advances no mission itself takes the mission of its nearest ancestor that advances one. Its parent still appears in its Links section.
   Reason: Without it, a mission's lead would not see those items and close on the mission would not wait for them; 35 open items (12 in astromech, 23 in cosplay-studio) are in a mission only through their parent.
   Rejected: Leave such items with no mission and only name the parent in their Links section
+- 2026-11-10 [blocker] Escalated to the orchestrator after review round 4: each round finds new Markdown link syntax the script does not rewrite (8 cases in rounds 1 to 4; round 4: atelier-lbfe, atelier-4ril, atelier-rc3i). None of the round 4 forms occurs in the five repositories, and on each clone every relative link that resolved before the conversion resolves after it. The Done when line on links has no bound, so a fifth round may find more.
 
 ## Report
 
