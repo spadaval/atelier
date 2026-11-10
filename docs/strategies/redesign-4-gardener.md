@@ -32,11 +32,12 @@ five repositories.
 - one-page: a gardener run in each of the five repositories produces a report
   of one page that holds the scorecard, the worst spots under each of the
   three codebase properties, and at most three proposals.
-- from-log: every scorecard number that needs no T3 data is computed from
-  the output of `atelier log` and `atelier list` by the steps the gardener's
-  procedure gives. The scripts that remain read only T3's events and the
-  transcripts, and tie a thread to an item by the thread IDs in the log, with
-  no matching on thread titles.
+- from-log: the scorecard's numbers about what happened to items, which are
+  time in each status, rounds, roles taken over, escalations and skips at
+  merge, are computed from the output of `atelier log` by the steps the
+  gardener's procedure gives, and no script walks record history itself.
+  The scripts that remain tie a thread to an item by the thread IDs in the
+  log, with no matching on thread titles.
 
 # Sizing
 
@@ -52,8 +53,11 @@ mission 1 and never again, and the redesign's effect stays an impression.
 # Shape
 
 - **The tool gives facts and the skill does the arithmetic.** `log` says what
-  happened and `list` how things stand. The binary computes no measure and
-  knows no threshold, so nothing in it changes when the measures do.
+  happened to each item and `list` how things stand. The binary computes no
+  measure and knows no threshold, so nothing in it changes when the measures
+  do. Rework and line counts still come from Git, tool calls and tokens from
+  T3's events and the transcripts, and whether a finding was a product
+  defect from a rater.
 - **Numbers first, transcripts second.** The run is cheap because it starts
   from two commands' output.
 - **Two layers.** The checklist is static and covers preconditions: can an
@@ -75,9 +79,9 @@ Four steps, all in the backlog until the cutover has happened.
 
 | Step | Does |
 | --- | --- |
-| A. The log | Build `atelier log` as the [architecture specification](redesign-architecture.md#the-log) describes. Cut `scripts/scorecard/` down to the measures that need T3's events and the transcripts, tied to items by the log's thread IDs. |
+| A. The log | Build `atelier log` as the [architecture specification](redesign-architecture.md#the-log) describes. Remove from `scripts/scorecard/` what `log` now supplies, and tie the remaining scripts to items by the log's thread IDs. |
 | B. Readiness checklist | A short default list in the skill, mapped to the three properties, each line with the command or observation that tests it. A repository may add lines. Drawn from Factory's agent-readiness pillars, without the team-shaped criteria. |
-| C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report, with the steps that turn `log` and `list` output into each number. Fold `audit.md` into it. The gardener settles deferred findings with `new --from` and `drop`. |
+| C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report, with the steps that turn `log` output into its numbers. Fold `audit.md` into it. The gardener settles deferred findings with `new --from` and `drop`, on its run's branch, so its choices are reviewed with the run. |
 | D. First runs | One run in each of the five repositories. |
 
 The three properties and what the report shows for each:
@@ -120,7 +124,8 @@ product specification.
 - **Too little data.** See Derisking.
 - **The checklist grows.** Each line names the number that would show its
   failure, and a line with no such number is cut.
-- **The history walk is slow in a large repository.** Astromech has the most
-  records. The debrief's walk went from 7.8 s to 1.04 s when it became one
-  `git log` over the records, and `log` makes the same single walk.
+- **The history walk.** `log` has to follow both sides of each merge, which
+  today's debrief reader does not, and astromech has the most records. The
+  debrief's walk went from 7.8 s to 1.04 s when it became one `git log` over
+  the records; step A's planning settles how `log` stays a single walk.
 - **Where a repository's own checklist lines live** is settled in step B.

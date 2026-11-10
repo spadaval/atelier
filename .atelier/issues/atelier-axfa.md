@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add `escalate` and `decide`, rebuttals in the brief, and settling deferred findings"
-updated_at: "2026-11-10T03:58:04.771654927+00:00"
+updated_at: "2026-11-10T04:08:39.349558131+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Give a disagreement between implementer and reviewer its three exits in the tool
 
 ## Done when
 
-- [ ] Provisional: scenario tests cover a rebuttal the next reviewer withdraws; one it keeps; an escalation tied to a finding that a decider settles with `--defer`, after which `submit` passes, the next review shows the finding as decided and `verdict approve` is allowed; and `decide` refused for the implementer and for the reviewer who raised the finding. `list --deferred` shows the deferred findings not yet settled, across done items; `new --from <finding>` makes an item from one and writes `Taken:` into it, `drop <finding> --reason` writes `Dropped:`, and neither then appears in the list.
+- [ ] Provisional: scenario tests cover a rebuttal the next reviewer withdraws; one it keeps; an escalation tied to a finding that a decider settles with `--defer`, after which `submit` passes, the next review shows the finding as decided and `verdict approve` is allowed; and `decide` refused for the implementer and for the reviewer who raised the finding. `list --deferred` shows the deferred findings not yet settled, across done items; `new --from <finding>` makes an item from one and writes `Taken:` into it with the thread, `drop <finding> --reason` writes `Dropped:`, and neither then appears in the list. Both are refused on a finding already settled and on a finding of an item that is not done, and both write in the checkout they run in, on the base or on an implementer's branch.
 
 ## Context
 

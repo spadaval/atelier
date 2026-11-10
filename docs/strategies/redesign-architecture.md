@@ -79,7 +79,7 @@ blocked_by: []
 implementers: [<thread>]  # start appends; the last entry holds the item
 ready: {by: sumeet, at: <time>}
 trivial: null           # or the reason given to merge --trivial
-caused_by: null         # on a bug: the item that introduced the defect
+caused_by: null         # on a bug: the item, or the commit, that introduced the defect
 created_at: <time>
 ```
 
@@ -134,10 +134,20 @@ tool writes from the Decisions entry and the reviewer cannot change.
 A fix-now finding is open until a later review marks it fixed or withdrawn,
 or a decision settles it.
 
-A deferred finding is unsettled until its text gains `Taken: <item>`, written
-by `new --from`, or `Dropped: <reason>`, written by `drop`. Both are written
-on the base, into the review file of an item that may be done. They are the
-only writes to a review after its verdict.
+A deferred finding is unsettled until its text gains
+`Taken: <item> by <thread>`, written by `new --from`, or
+`Dropped by <thread>: <reason>`, written by `drop`. Only a finding of a done
+item can be settled, and a settled one is refused. The line is written in
+the checkout the command runs in, like any record write: on the base, or on
+the branch of a gardener's run, where the staleness rule counts it as a
+change outside the run's own item, so it is reviewed and reaches the base in
+the run's merge. Two branches that settle one finding differently conflict
+when the second merges, and Git reports it. These are the only writes to a
+review after its verdict, and the only writes to a done item.
+
+`caused_by` is checked for form only. The item that caused a bug may have
+left the tree at the cutover, and then its ID or the commit is still worth
+recording.
 
 ### `config.toml`
 
@@ -188,7 +198,7 @@ table, so what `status` says a thing needs is what the command will check.
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
 | `drop` | Planner | any but `done` | `dropped` | a reason; written on the base, whatever the item's branch holds |
-| `new --from`, `drop` on a finding | Planner or gardener | a deferred finding not yet settled | unchanged | the finding's review has a verdict |
+| `new --from`, `drop` on a finding | Planner on the base, or an implementer on its branch | a deferred finding not yet settled | unchanged | the finding's item is done |
 | `lead` | Lead | a `ready` mission | unchanged | none |
 
 Each act writes the status in the commit the act already makes: `submit`
@@ -285,18 +295,40 @@ where the facts now stand. Waiting is the harness's work.
 
 ## The log
 
-`atelier log` prints the history of acts. Nothing stores it. One walk of Git
-history over `.atelier/` finds each commit where a record's status, its
-holder or a finding's settlement changed, and each is one act: the commit's
-time, the item or mission, the act the change implies, the thread from the
-record's own fields at that commit, and the statuses before and after. A
-skip appears where the commit carries its trailer. The walk covers the base
-and the branches of started items, and is the one walk the site's history
-views make today.
+`atelier log` prints the history of acts. Nothing stores it. It is derived
+from Git history, by finding the commits where a record changed in one of
+the ways below. Each is one line.
 
-`log` adds nothing up. Time in a status, rounds per item, roles taken over
-and skips by rule are all counts over its lines, and the gardener's
-procedure, not the binary, says which to take.
+| Line | Found where | Thread shown |
+| --- | --- | --- |
+| start, take-over | An item's `implementers` gains an entry | That entry |
+| submit | An item's status becomes `in_review` | The item's holder |
+| review, take-over | A review file appears, or its `reviewers` gains an entry | That entry |
+| verdict | A review's verdict is set, on an item or a mission | The review's holder |
+| escalate | A Decisions entry appears | The item's holder |
+| decide | A Decisions entry gains its answer | The thread stored with the answer |
+| merge | An item's status becomes `done` in an Atelier merge | The item's holder; a skip, from the commit's trailer |
+| settle | A finding gains `Taken` or `Dropped` | The thread in that line |
+| lead | A mission's `lead` is set or changes | That entry |
+| ready | A status becomes `ready` | None; the name given with `--by` |
+| drop, close | A status becomes `dropped`, or `done` outside a merge | None |
+
+What `log` does not show: `new`, `set` and edits to a record's text, which
+Git's own log has; the executing thread of `ready`, `drop` and `close`,
+which no record holds; and a skip in a Git hook, which leaves nothing in
+Git. Acts committed together appear as separate lines with one time. An act
+undone before it was committed does not appear.
+
+The walk covers the base's history, the second-parent side of each Atelier
+merge, and the tips of started items' branches, so an item's acts stay
+visible after its branch is merged and deleted. Today's history reader for
+the debrief follows first parents only and would lose them; how to walk
+both sides without reading each record's history separately is settled when
+the command is planned.
+
+`log` adds nothing up. Time in a status, rounds per item, roles taken over,
+escalations and skips at merge are counts over its lines, and the
+gardener's procedure, not the binary, says which to take.
 
 ## Hooks and the bypass
 
@@ -477,8 +509,11 @@ does, it must not fetch a repository that has been converted.
   base, then refused at merge.
 - Unit tests on the act table: every act from every status.
 - `log` on the plain-path scenario prints its acts in order with the right
-  threads; on the take-over scenario it shows both holders; `new --from` on a
-  deferred finding writes `Taken:`, and `list --deferred` no longer shows it.
+  threads, and still does after the item's branch is merged and deleted; on
+  the take-over scenario it shows both holders.
+- `new --from` on a deferred finding of a done item writes `Taken:` with the
+  thread, and `list --deferred` no longer shows it; settling it again is
+  refused; settling a finding of an item that is not done is refused.
 - Hook scenarios in a scratch repository: a commit of an invalid record
   refused; a commit of a status change the act table does not allow refused;
   a push of the base holding a plain commit that touches code refused, and

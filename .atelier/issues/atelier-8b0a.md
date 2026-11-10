@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add `atelier log`, the history of acts, and cut the scorecard scripts down to what needs T3's data"
-updated_at: "2026-11-10T03:58:05.047106672+00:00"
+updated_at: "2026-11-10T04:08:39.623699804+00:00"
 ---
 
 ## Goal
@@ -38,4 +38,5 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 ## Unknowns
 
 - Which measures still need T3's events and the transcripts; expected: tool calls, tokens and interventions.
-- How long the history walk takes in astromech, which has the most records.
+- How `log` walks the base, the second-parent side of each merge and started items' branches in one pass. Today's debrief reader follows first parents only (planning findings atelier-mi8y and atelier-1ryt).
+- How long that walk takes in astromech, which has the most records.
