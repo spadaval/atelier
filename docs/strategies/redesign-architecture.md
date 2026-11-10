@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
+last_changed: "2026-11-10: drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
 ---
 
 # Atelier redesign: architecture specification
@@ -148,6 +148,14 @@ they apply. Responses holds one line per open fix-now finding, optionally
 as a list item: `2-m2bn.1: fixed in <commit>` or
 `2-m2bn.1: rebutted: <fact>`.
 
+The front matter has no field for why an item ended without a merge, so
+the body holds it. `drop` writes `Dropped: <reason>`, the reason on one
+line, as the first line under `## Report`, before any other text or
+subsection, adding the section at the end when the item has none.
+`atelier-records` reads it back (`ItemDir::dropped`): the section's first
+line that is not blank, when it starts `Dropped: `. `close` writes an
+item's result first under `## Report` the same way.
+
 A Decisions entry is a `### <date>: <question>` heading under Decisions.
 Its lines may name a finding (`Finding: 2-m2bn.1`); once answered it has
 `Answer by <thread>: <answer>`, and then, for a finding, `Outcome: defer` or
@@ -170,8 +178,11 @@ created_at: <time>
 
 The mission lives in a directory named for its `id`. Sections are `##`
 headings: Why, Outcome, Success criteria (optional), Scope, Authority,
-Result; Outcome is required. Any other file in the directory is a planning
-document with no required shape, and is not read.
+Result; Outcome is required. `drop` writes `Dropped: <reason>` first under
+`## Result`, as on an item, and `MissionDir::dropped` reads it. Its plan
+reviews are review files under `reviews/`, read and validated as an item's
+are. Any other file in the directory is a planning document with no
+required shape, and is not read.
 
 ### `reviews/<round>-<suffix>.md`, under an item or a mission
 
@@ -188,7 +199,7 @@ created_at: <time>
 
 The suffix is four random base-36 characters, and the front matter's
 `round` is the file name's. Creating a review picks a suffix no file of the
-item has, so blind reviews of one round never share a name. Sections:
+item or mission has, so blind reviews of one round never share a name. Sections:
 Summary, then `## Finding <k>: <title>`, numbered without repeats, whose
 first line is `Recommendation: fix now | defer | no action`. A finding's
 name is its review's file stem and its number, as in `2-m2bn.1`. A finding
@@ -201,8 +212,8 @@ entry's `Finding:`, must be a finding of the item's reviews. Other lines
 of a finding are the reviewer's text, and an HTML comment is text.
 
 `review` writes the file's front matter: the round, the commit at the tip
-of the item's branch, the caller as reviewer, `model: null` and
-`verdict: null`. Its body is the template: a `## Summary` heading over a
+of the item's branch (for a plan review, the checkout's HEAD), the caller
+as reviewer, `model: null` and `verdict: null`. Its body is the template: a `## Summary` heading over a
 comment saying what to write, then one finding for each fix-now finding
 the earlier rounds leave open, numbered from 1, under that finding's
 latest name:
@@ -217,7 +228,8 @@ Now: kept
 ```
 
 `Response:` is the author's line for that finding in Responses, or `none
-in the Report`. A carried finding starts kept, so it stays open until its
+in the Report`. A plan review's carried finding has no `Response:` line,
+since a mission has no Report. A carried finding starts kept, so it stays open until its
 reviewer closes it. Nobody edits the front matter: `verdict` sets the
 verdict, and the model when given `--model`.
 
@@ -286,20 +298,21 @@ will check.
 | `ready` (item) | Planner | `draft` | `ready` | none |
 | `ready` (mission) | Planner | `draft` | `ready` | none; changes no item |
 | `start` | Implementer | `ready` | `building` | blockers done; its mission, if any, is ready; no branch `<id>` exists; the base's record is not dropped |
-| `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists |
+| `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists; its mission, if any, is not dropped |
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
 | `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding |
 | `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry |
-| `verdict` on a mission review | Reviewer | any | unchanged | as above, for the file |
+| `verdict changes` on a plan review | Reviewer | any | unchanged | the file validates; it has an open fix-now finding |
+| `verdict approve` on a plan review | Reviewer | any | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
 | `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor in the `reviewers` of the review that raised the finding |
 | `merge` | Implementer | `approved` | `done` | a review of the latest round approves it and still covers the head; no unanswered question; nothing uncommitted in tracked files or the item's directory; the base's record is not dropped |
 | `merge --trivial` | Implementer | `building` | `done` | Done when ticked; Report written; no review file; no unanswered question; nothing uncommitted in tracked files or the item's directory |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
-| `drop` | Planner | any but `done` | `dropped` | a reason; written on the base, whatever the item's branch holds |
+| `drop` | Planner | `draft`, `ready`, and an item's started statuses | `dropped` | a reason, on one line; written on the base, whatever the item's branch holds |
 | `new --from`, `drop` on a finding | Planner on the base, or an implementer on its branch | a deferred finding not yet settled | unchanged | the finding's item is done |
 | `lead` | Lead | a `ready` mission | unchanged | none |
 
@@ -311,10 +324,24 @@ How the table is built:
 
 - A row joins the table with its command. The table holds the rows of
   `ready` on an item and on a mission, `start`, `start --new`, `start`
-  taking over, `submit`, `review`, both verdicts, `merge` with and
-  without `--trivial`, and `lead`. A mission's row is checked with
-  `acts::check_mission`, from the mission's status; `start --new` runs from no status, since it
-  creates its item, and takes the status it sets from its row.
+  taking over, `submit`, `review`, both verdicts and `merge` with and
+  without `--trivial`, `lead`, `drop` (one row, for an item and a
+  mission), `close` on an item and on a mission, and both verdicts on a
+  plan review. A mission's row is checked with `acts::check_mission`, from
+  the mission's status and, for `close`, the status of each item that names
+  it, each found as `Located::record` finds it, and its Result; for a
+  verdict, from the caller's plan review. `start --new` runs from no
+  status, since it creates its item, and takes the status it sets from its
+  row. `close` on an item and on a mission needs no role, like a planner's
+  act.
+- A round of a plan review is over once every file of it has a verdict,
+  since its reviewers work blind in checkouts of their own
+  (`acts::plan_round`). Until then it is the latest round, and the round's
+  file is the caller's of those with no verdict, else the first by name,
+  which `review` takes over. Once it is over, `review` opens the next
+  round, whose file carries the open fix-now findings of the rounds before,
+  as an item's does. A plan verdict counts the file's own findings and the
+  earlier rounds'; another file of the same round is another reviewer's.
 - A round of an item is the latest round of its reviews until one of them
   has a verdict, which ends it; then it is the next round, which has no file
   until `review` creates one. The round's file is the caller's when it holds
@@ -413,12 +440,14 @@ ready items, and the started items others hold; on the base branch it also
 lists the record changes the checkout has not committed. Away from an
 item's branch it also lists the missions in progress and, apart from the
 ready items, the items labelled `needs-human` that nobody has started, as
-waiting on a human. A thread that is the `lead` of a ready mission at the
-base's tip is told so, with each of the mission's items by status, what
-holds or blocks each, and the handoff line that starts a thread for each
-item that can start now; holding nothing else, it is pointed at no item
-itself. On the item's
-branch it speaks to the round's reviewer as reviewer, naming its file, tells
+waiting on a human, and the items dropped on the base while their branch
+is there, each with its reason. A thread that is the `lead` of a ready
+mission at the base's tip is told so, with each of the mission's items by
+status, what holds or blocks each, and the handoff line that starts a
+thread for each item that can start now; holding nothing else, it is
+pointed at no item itself. On the item's branch it says a dropped item
+was dropped and why, as does the refusal of any act on it, and it
+speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
 or that none does yet, and tells the implementer of a building item whose
 Goal or Done when lines are empty, as after `start --new`, to write them
@@ -449,9 +478,9 @@ post-checkout Git hook prints it on every branch switch.
   it is refused while the item or its mission is `ready` in the base's
   checkout and not at the tip, it says the change is not committed yet and
   prints the Git command that commits the checkout's planning.
-- **Planning is read and written in the checkout of the base.** `new`, `set`
-  and `ready` run only on the base branch, and are refused elsewhere, naming
-  the checkout that has the base. They read the checkout's records, with an
+- **Planning is read and written in the checkout of the base.** `new`,
+  `set`, `ready`, `drop` and `close` run only on the base branch, and are
+  refused elsewhere, naming the checkout that has the base. They read the checkout's records, with an
   item's branch found as above, so uncommitted planning counts and a started
   item is still seen as started. Each validates the records it writes against
   every record of the checkout and writes nothing when one of them has a
@@ -461,6 +490,24 @@ post-checkout Git hook prints it on every branch switch.
   that no item or mission has in the checkout, at the base's tip, or as a
   local branch, and writes a draft with its section headings and nothing
   under them; an item's priority starts as `medium`.
+- **`drop` and `close`.** `drop` writes the base's record, the one in the
+  base's checkout, whatever the item's branch holds. An item that is only
+  on its branch, as after `start --new`, gets its branch's front matter
+  and its Goal, Done when and Scope written there, under which its Report
+  holds the reason; its reviews, the rest of its Report and its Decisions
+  stay on the branch, so nothing on the base names a review it lacks. Once that is committed, every command reads it first, so a
+  started item's `submit`, `merge` and take-over are refused with its
+  reason. Dropping a mission changes no item; `start` on one of its items
+  is refused, saying the mission was dropped. `close` on an item with a
+  branch is refused, naming `merge` as the way it ends. `close` on a
+  mission counts its items as the planning commands find them: in the
+  base's checkout, or on their branches.
+- **`ready` on a mission says what review it had.** It prints whether the
+  plan has a review, each review of the latest round with its verdict, and
+  the paths of the plan (the mission's directory less its reviews, and the
+  directories of the items in the mission now or at the commit reviewed)
+  that differ in the checkout from each commit reviewed. It never refuses
+  for any of that.
 - **`set`'s flags.** `set <id>` takes `--title`, `--priority`,
   `--labels a,b`, `--mission <id>`, `--blocked-by a,b` and
   `--caused-by <item or commit>`, at least one. A list flag replaces the
@@ -549,9 +596,16 @@ post-checkout Git hook prints it on every branch switch.
   not a regular file and a failing Git apart. The site reads this way, and
   so does anything that compares a record now with the same record at the
   commit of an earlier act.
-- A plan reviewer works in its own detached worktree so two reviewers stay
-  blind to each other. Review files have distinct names, so the planner
-  cherry-picks both onto the base without a conflict.
+- **A plan review is written where its reviewer works.** `review <mission>`
+  runs in any checkout not on an item's branch, where `verdict` would be
+  the item's, and reviews the plan as that checkout's HEAD holds it. It creates the round's file under `missions/<id>/reviews/`, or
+  appends the caller to its `reviewers`, and commits nothing. `verdict`
+  in a checkout on no item's branch records the verdict of the one plan
+  review there that the caller holds without a verdict, and commits that
+  file alone, changing no status. A plan reviewer works in its own
+  detached worktree so two reviewers stay blind to each other. Review
+  files have distinct names, so the planner cherry-picks both commits onto
+  the base without a conflict.
 
 ## Merge
 

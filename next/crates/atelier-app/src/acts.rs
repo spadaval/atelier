@@ -3,7 +3,9 @@
 //! an act with [`check`], and `status` lists what [`unmet`] gives for the
 //! act it names next, so the two cannot disagree.
 
-use atelier_core::{is_open, FindingName, MissionStatus, Status, Thread, Verdict};
+use atelier_core::{
+    is_open, Decision, Finding, FindingName, MissionStatus, Status, Thread, Verdict,
+};
 use atelier_records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +24,16 @@ pub enum Act {
     VerdictApprove,
     Merge,
     MergeTrivial,
+    /// `drop` on an item or a mission.
+    Drop,
+    /// `close` on an item, which ends it on the base with a result.
+    Close,
+    /// `close` on a mission.
+    CloseMission,
+    /// `verdict changes` on a plan review.
+    PlanVerdictChanges,
+    /// `verdict approve` on a plan review.
+    PlanVerdictApprove,
     /// `lead` on a mission.
     Lead,
 }
@@ -61,7 +73,10 @@ pub const STARTED: &[Status] = &[
 /// still change with `set`.
 pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 
-pub const TABLE: [Row; 12] = [
+/// Every status a mission can have.
+const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
+
+pub const TABLE: [Row; 17] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -151,6 +166,55 @@ pub const TABLE: [Row; 12] = [
         to: Some(Status::Done),
     },
     Row {
+        act: Act::Drop,
+        command: "drop",
+        role: Role::Planner,
+        binds: false,
+        from: &[
+            Status::Draft,
+            Status::Ready,
+            Status::Building,
+            Status::InReview,
+            Status::ChangesRequested,
+            Status::Approved,
+        ],
+        to: Some(Status::Dropped),
+    },
+    // Anyone may close an item; like a planner's act, it needs no role.
+    Row {
+        act: Act::Close,
+        command: "close",
+        role: Role::Planner,
+        binds: false,
+        from: PLANNED,
+        to: Some(Status::Done),
+    },
+    // Its lead or a planner; no role is checked.
+    Row {
+        act: Act::CloseMission,
+        command: "close",
+        role: Role::Planner,
+        binds: false,
+        from: &[Status::Ready],
+        to: Some(Status::Done),
+    },
+    Row {
+        act: Act::PlanVerdictChanges,
+        command: "verdict changes",
+        role: Role::Reviewer,
+        binds: false,
+        from: MISSION,
+        to: None,
+    },
+    Row {
+        act: Act::PlanVerdictApprove,
+        command: "verdict approve",
+        role: Role::Reviewer,
+        binds: false,
+        from: MISSION,
+        to: None,
+    },
+    Row {
         act: Act::Lead,
         command: "lead",
         role: Role::Lead,
@@ -208,6 +272,50 @@ pub struct SinceApproval {
     pub head: Option<ItemDir>,
 }
 
+/// What a mission's act is checked against.
+pub struct MissionFacts<'a> {
+    pub mission: &'a MissionDir,
+    /// The items that name the mission, each with its status as
+    /// [`crate::Located::record`] finds it; what `close` waits for.
+    pub items: &'a [(String, Status)],
+    /// The plan review a verdict is recorded in: the caller's.
+    pub review: Option<&'a ReviewFile>,
+}
+
+/// The round of a mission's plan reviews, and the caller's file in it. A
+/// round is over once every file of it has a verdict, since its reviewers
+/// work blind in checkouts of their own; until then it is the latest round,
+/// and its file is the caller's of those with no verdict, else the first by
+/// name, which the caller takes over. Once it is over, the round is the
+/// next, which has no file until `review` creates one.
+pub fn plan_round<'a>(mission: &'a MissionDir, caller: &Thread) -> Round<'a> {
+    let latest = mission
+        .reviews
+        .iter()
+        .map(|r| r.name.round)
+        .max()
+        .unwrap_or(0);
+    let open: Vec<&ReviewFile> = mission
+        .reviews
+        .iter()
+        .filter(|r| r.name.round == latest && r.review.verdict.is_none())
+        .collect();
+    let mine = open
+        .iter()
+        .find(|r| r.review.reviewers.holder() == Some(caller))
+        .or(open.first());
+    match mine {
+        Some(file) => Round {
+            number: latest,
+            review: Some(file),
+        },
+        None => Round {
+            number: latest + 1,
+            review: None,
+        },
+    }
+}
+
 /// The mission `item` names, if any, with its status among `missions`.
 pub fn mission_of(item: &ItemDir, missions: &[MissionDir]) -> Option<(String, Option<Status>)> {
     let id = item.item.mission.clone()?;
@@ -228,7 +336,7 @@ pub fn approval(item: &ItemDir) -> Option<&ReviewFile> {
 /// The sections of an item that a review approves along with the code.
 const REQUIREMENTS: [&str; 3] = ["Goal", "Done when", "Scope"];
 
-/// The round of review an item is in.
+/// The round of review an item is in, or a mission's plan (see [`plan_round`]).
 pub struct Round<'a> {
     pub number: u32,
     /// The round's review file: a review of the latest round, the
@@ -355,6 +463,13 @@ pub enum Condition {
     Uncommitted(Vec<String>),
     /// `merge --trivial` needs an item nobody reviewed.
     Reviewed,
+    /// `close` on a mission needs each of its items done or dropped.
+    ItemOpen {
+        id: String,
+        status: Status,
+    },
+    /// `close` on a mission needs its Result written.
+    NoResult,
 }
 
 #[derive(Debug)]
@@ -422,17 +537,84 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     Ok(row.to)
 }
 
-/// The status `act`, a mission's, sets on a mission that is `status`, or
-/// why it is refused. Its rows have no conditions yet.
-pub fn check_mission(act: Act, status: MissionStatus) -> Result<Option<MissionStatus>, Refusal> {
+/// The status `act`, a mission's, sets on the mission, `None` for
+/// unchanged, or why it is refused.
+pub fn check_mission(act: Act, facts: &MissionFacts) -> Result<Option<MissionStatus>, Refusal> {
     let row = row(act);
-    if !row.from.contains(&status.status()) {
-        return Err(Refusal::From {
-            act,
-            status: status.status(),
-        });
+    let status = facts.mission.mission.status.status();
+    if !row.from.contains(&status) {
+        return Err(Refusal::From { act, status });
+    }
+    let unmet = unmet_mission(act, facts).map_err(Refusal::Record)?;
+    if !unmet.is_empty() {
+        return Err(Refusal::Unmet(unmet));
     }
     Ok(row.to.and_then(MissionStatus::of))
+}
+
+/// The conditions of `act`, a mission's, that do not hold.
+pub fn unmet_mission(act: Act, facts: &MissionFacts) -> Result<Vec<Condition>, Problem> {
+    let mission = facts.mission;
+    let mut unmet = Vec::new();
+    match act {
+        Act::CloseMission => {
+            for (id, status) in facts.items {
+                if !matches!(status, Status::Done | Status::Dropped) {
+                    unmet.push(Condition::ItemOpen {
+                        id: id.clone(),
+                        status: *status,
+                    });
+                }
+            }
+            if !mission.result_written() {
+                unmet.push(Condition::NoResult);
+            }
+        }
+        Act::PlanVerdictChanges | Act::PlanVerdictApprove => {
+            let Some(file) = facts.review else {
+                return Ok(unmet);
+            };
+            let problems = validate(&[], std::slice::from_ref(mission));
+            if let Some(problem) = problems.into_iter().find(|p| p.file == file.path) {
+                return Err(problem);
+            }
+            unmet = verdict(act, file, &mission.findings()?, &[]);
+        }
+        _ => {}
+    }
+    Ok(unmet)
+}
+
+/// What a verdict in `file` needs, given every finding and decision of its
+/// item or mission: `changes` an open fix-now finding of the file's own,
+/// and `approve` none open among the file's and those of earlier rounds,
+/// so also none the file should carry and does not. Another file of the
+/// same round is another reviewer's, working blind, so what it carries
+/// does not close a finding for this one.
+fn verdict(
+    act: Act,
+    file: &ReviewFile,
+    findings: &[Finding],
+    decisions: &[Decision],
+) -> Vec<Condition> {
+    let seen: Vec<Finding> = findings
+        .iter()
+        .filter(|f| f.name.review == file.name || f.name.review.round < file.name.round)
+        .cloned()
+        .collect();
+    let mut open = seen.iter().filter(|f| is_open(f, &seen, decisions));
+    if matches!(act, Act::VerdictChanges | Act::PlanVerdictChanges) {
+        match open.any(|f| f.name.review == file.name) {
+            true => Vec::new(),
+            false => vec![Condition::NoOpenFinding],
+        }
+    } else {
+        let open = open.map(|f| Condition::OpenFinding {
+            finding: f.name.clone(),
+            title: f.title.clone(),
+        });
+        open.collect()
+    }
 }
 
 /// The conditions of `act` that do not hold.
@@ -440,7 +622,9 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match act {
-        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Lead => {}
+        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead => {}
+        // A mission's act is checked with `unmet_mission`.
+        Act::CloseMission | Act::PlanVerdictChanges | Act::PlanVerdictApprove => {}
         Act::Start => {
             for (id, status) in facts.blockers {
                 if *status != Some(Status::Done) {
@@ -465,6 +649,13 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
         Act::TakeOver => {
             if !facts.branch {
                 unmet.push(Condition::NoBranch);
+            }
+            // A dropped mission's items start no more, taken over or not.
+            if let Some((id, Some(Status::Dropped))) = &facts.mission {
+                unmet.push(Condition::MissionNotReady {
+                    id: id.clone(),
+                    status: Some(Status::Dropped),
+                });
             }
         }
         Act::Submit => {
@@ -507,21 +698,11 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             if let Some(problem) = problems.into_iter().find(|p| p.file == file.path) {
                 return Err(problem);
             }
-            let findings = item.findings()?;
-            let decisions = item.decisions()?;
-            let open = findings
-                .iter()
-                .filter(|f| is_open(f, &findings, &decisions));
-            if act == Act::VerdictChanges {
-                if !open.clone().any(|f| f.name.review == file.name) {
-                    unmet.push(Condition::NoOpenFinding);
-                }
-            } else {
-                // One the file should carry and does not stays open too.
-                unmet.extend(open.map(|f| Condition::OpenFinding {
-                    finding: f.name.clone(),
-                    title: f.title.clone(),
-                }));
+            unmet = verdict(act, file, &item.findings()?, &item.decisions()?);
+        }
+        Act::Close => {
+            if facts.branch {
+                unmet.push(Condition::BranchExists);
             }
         }
         Act::Merge | Act::MergeTrivial => {

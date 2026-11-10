@@ -1,6 +1,6 @@
 use crate::body::section;
-use crate::{ids, ItemDir, MissionDir, Problem};
-use atelier_core::{is_open, Finding, FindingName, Verdict};
+use crate::{ids, ItemDir, MissionDir, Problem, ReviewFile};
+use atelier_core::{is_open, Decision, Finding, FindingName, ReviewName, Verdict};
 use std::path::Path;
 
 /// What is wrong with `items` and `missions`, which are every item and
@@ -16,6 +16,7 @@ pub fn validate(items: &[ItemDir], missions: &[MissionDir]) -> Vec<Problem> {
             let message = "the mission has no `## Outcome` section";
             problems.push(Problem::new(&dir.path, "Outcome", message));
         }
+        let _ = reviews(&dir.reviews, &[], &mut problems);
     }
     for dir in items {
         validate_item(dir, items, missions, &mut problems);
@@ -72,11 +73,47 @@ fn validate_item(
         }
     }
 
+    let decisions = dir.decisions().unwrap_or_else(|p| {
+        problems.push(p);
+        Vec::new()
+    });
+    let responses = dir.responses().unwrap_or_else(|p| {
+        problems.push(p);
+        Vec::new()
+    });
+    let named = reviews(&dir.reviews, &decisions, problems);
+    let mut problem =
+        |field: &str, message: String| problems.push(Problem::new(&dir.path, field, message));
+    for decision in &decisions {
+        if let Some(name) = decision.finding.as_ref().filter(|name| !named(name)) {
+            let field = format!("Decisions: {}", decision.question);
+            let message = format!("`Finding: {name}` names no finding of this item's reviews");
+            problem(&field, message);
+        }
+    }
+    for response in &responses {
+        if !named(response.finding()) {
+            let message = format!(
+                "`{}` names no finding of this item's reviews",
+                response.finding()
+            );
+            problem("Responses", message);
+        }
+    }
+}
+
+/// What is wrong with the reviews of one item or mission, given its
+/// decisions. Returns whether a finding name is one of theirs, counting
+/// every name in a review whose findings do not read, which is reported
+/// once.
+fn reviews<'a>(
+    reviews: &'a [ReviewFile],
+    decisions: &[Decision],
+    problems: &mut Vec<Problem>,
+) -> impl Fn(&FindingName) -> bool + 'a {
     let mut findings: Vec<Finding> = Vec::new();
-    // A review whose findings do not read is reported once; names that
-    // point into it are not reported again.
-    let mut unread = Vec::new();
-    for review in &dir.reviews {
+    let mut unread: Vec<&ReviewName> = Vec::new();
+    for review in reviews {
         if review.review.round != review.name.round {
             let message = format!("round {} is not the file name's round", review.review.round);
             problems.push(Problem::new(&review.path, "round", message));
@@ -89,21 +126,11 @@ fn validate_item(
             }
         }
     }
-    let decisions = dir.decisions().unwrap_or_else(|p| {
-        problems.push(p);
-        Vec::new()
-    });
-    let responses = dir.responses().unwrap_or_else(|p| {
-        problems.push(p);
-        Vec::new()
-    });
     let named = |name: &FindingName| {
         findings.iter().any(|f| f.name == *name) || unread.contains(&&name.review)
     };
-
-    for review in &dir.reviews {
-        let own = findings.iter().filter(|f| f.name.review == review.name);
-        for finding in own {
+    for review in reviews {
+        for finding in findings.iter().filter(|f| f.name.review == review.name) {
             let field = format!("## Finding {}: {}", finding.name.number, finding.title);
             if let Some(was) = &finding.was {
                 if !named(was) || was.review.round >= review.name.round {
@@ -112,31 +139,15 @@ fn validate_item(
                 }
             }
             if review.review.verdict == Some(Verdict::Approve)
-                && is_open(finding, &findings, &decisions)
+                && is_open(finding, &findings, decisions)
             {
                 let message = format!("approve, while fix-now finding {} is open", finding.name);
                 problems.push(Problem::new(&review.path, "verdict", message));
             }
         }
     }
-    for decision in &decisions {
-        if let Some(name) = decision.finding.as_ref().filter(|name| !named(name)) {
-            let field = format!("Decisions: {}", decision.question);
-            problems.push(Problem::new(
-                &dir.path,
-                field,
-                format!("`Finding: {name}` names no finding of this item's reviews"),
-            ));
-        }
-    }
-    for response in &responses {
-        if !named(response.finding()) {
-            let message = format!(
-                "`{}` names no finding of this item's reviews",
-                response.finding()
-            );
-            problems.push(Problem::new(&dir.path, "Responses", message));
-        }
+    move |name: &FindingName| {
+        findings.iter().any(|f| f.name == *name) || unread.contains(&&name.review)
     }
 }
 

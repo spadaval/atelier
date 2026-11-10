@@ -2,6 +2,7 @@ use atelier_core::{
     ForgeProvider, MissionStatus, Now, Outcome, Recommendation, Response, Settlement, Status,
     Thread, Verdict,
 };
+use atelier_records::create_review;
 use atelier_records::{
     parse_config, parse_item, parse_mission, parse_review, render_config, render_item,
     render_mission, render_review, validate, ItemDir, Problem, Store,
@@ -308,25 +309,23 @@ fn the_store_writes_records_where_it_reads_them() {
     assert_eq!(store.item("atelier-06jc").unwrap().item, item);
 
     let review = parse_review(Path::new("x"), REVIEW_2).unwrap();
-    let name = store.create_review("atelier-06jc", &review).unwrap();
-    let mut approved = review.clone();
-    approved.verdict = Some(Verdict::Approve);
-    store
-        .write_review("atelier-06jc", &name, &approved)
-        .unwrap();
+    let name = create_review(&dir.path().join("items/atelier-06jc"), &review).unwrap();
+    let mut file = store.item("atelier-06jc").unwrap().reviews.remove(0);
+    file.review.verdict = Some(Verdict::Approve);
+    file.write().unwrap();
     let read = store.item("atelier-06jc").unwrap();
     assert_eq!(read.reviews.len(), 1);
     assert_eq!(read.reviews[0].name, name);
-    assert_eq!(read.reviews[0].review, approved);
+    assert_eq!(read.reviews[0].review, file.review);
 }
 
 #[test]
 fn creating_reviews_of_a_round_gives_each_its_own_name() {
     let dir = atelier(&[]);
-    let store = Store::new(dir.path());
     let review = parse_review(Path::new("x"), REVIEW_2).unwrap();
-    let first = store.create_review("atelier-06jc", &review).unwrap();
-    let second = store.create_review("atelier-06jc", &review).unwrap();
+    let item = dir.path().join("items/atelier-06jc");
+    let first = create_review(&item, &review).unwrap();
+    let second = create_review(&item, &review).unwrap();
     assert_ne!(first, second);
     for name in [&first, &second] {
         assert_eq!(name.round, 2);
@@ -558,6 +557,88 @@ fn an_approve_verdict_is_refused_while_its_file_holds_an_open_fix_now_finding() 
         file,
         "verdict",
         "fix-now finding 1-k3fa.1 is open",
+    );
+}
+
+#[test]
+fn a_missions_plan_reviews_are_read_with_it_and_checked_as_an_items_are() {
+    const PLAN: &str = "missions/atelier-icv4/reviews/1-p1an.md";
+    const OTHER: &str = "missions/atelier-icv4/reviews/1-b1nd.md";
+    let review = REVIEW_1.replace("Taken: atelier-n3w1 by t3-gardener\n", "");
+    let blind = review.replace("verdict: changes", "verdict: approve");
+    let blind = blind.replace("Recommendation: fix now", "Recommendation: defer");
+    let mut files = example();
+    files.push((PLAN, review.clone()));
+    files.push((OTHER, blind));
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let dir = atelier(&files);
+    let store = Store::new(dir.path());
+    let mission = store.mission("atelier-icv4").unwrap();
+    let names: Vec<String> = mission.reviews.iter().map(|r| r.name.to_string()).collect();
+    assert_eq!(names, ["1-b1nd", "1-p1an"]);
+    assert_eq!(mission.findings().unwrap().len(), 4);
+    // Two blind reviews of one round are both valid, one approving while
+    // the other's fix-now finding is open.
+    assert_eq!(
+        validate(&store.items().unwrap(), std::slice::from_ref(&mission)),
+        []
+    );
+
+    // Its own open finding refuses an approve; a round must match the
+    // file's name; a `Was:` must name an earlier round's finding.
+    let cases = [
+        (
+            "verdict: changes",
+            "verdict: approve",
+            "verdict",
+            "1-p1an.1 is open",
+        ),
+        ("round: 1", "round: 2", "round", "not the file name's round"),
+        (
+            "Recommendation: fix now\n",
+            "Recommendation: fix now\nWas: 1-b1nd.1\nNow: kept\n",
+            "## Finding 1: The brief omits Scope",
+            "names no finding of an earlier round",
+        ),
+    ];
+    for (old, new, field, words) in cases {
+        let path = dir.path().join(PLAN);
+        fs::write(&path, review.replacen(old, new, 1)).unwrap();
+        let mission = store.mission("atelier-icv4").unwrap();
+        assert_one_problem(&validate(&[], &[mission]), PLAN, field, words);
+    }
+}
+
+#[test]
+fn a_dropped_record_gives_the_reason_on_the_first_line_of_its_report_or_result() {
+    let dropped = atelier_records::put_first(
+        &ITEM.replace("status: changes_requested", "status: dropped"),
+        "Report",
+        "Dropped: superseded",
+    );
+    let dir = atelier(&[
+        ("items/atelier-06jc/item.md", &dropped),
+        (
+            "missions/atelier-icv4/mission.md",
+            &atelier_records::put_first(MISSION, "Result", "Dropped: no time"),
+        ),
+    ]);
+    let store = Store::new(dir.path());
+    let item = store.item("atelier-06jc").unwrap();
+    assert_eq!(item.dropped(), Some("superseded"));
+    // The Report keeps its text and its Responses, which still read.
+    assert!(item
+        .section("Report")
+        .unwrap()
+        .contains("It prints them.\n\n### Responses"));
+    assert_eq!(item.responses().unwrap().len(), 2);
+    assert_eq!(
+        store.mission("atelier-icv4").unwrap().dropped(),
+        Some("no time")
+    );
+    assert_eq!(
+        load(&[("items/atelier-06jc/item.md", ITEM)], "atelier-06jc").dropped(),
+        None
     );
 }
 

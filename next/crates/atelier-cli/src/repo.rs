@@ -7,7 +7,7 @@ use atelier_app::acts::{approval, mission_of, Checkout, SinceApproval};
 use atelier_app::{identity, Branch, Located};
 use atelier_core::{Config, Status, Thread};
 use atelier_records::{
-    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, ReviewFile, Store,
+    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, Store,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -127,6 +127,15 @@ impl Repo {
             .collect()
     }
 
+    /// Every item in this checkout and on a local branch named for one, as
+    /// a planning command finds them (see [`Repo::locate_planned`]).
+    pub fn planned(&mut self) -> Result<Vec<Located>> {
+        let mut ids: BTreeSet<String> = self.store().ids("items")?.into_iter().collect();
+        let branches = git::branches(&self.root)?.into_iter().map(|(name, _)| name);
+        ids.extend(branches.filter(|name| validate_id(name).is_ok()));
+        ids.iter().map(|id| self.locate_planned(id)).collect()
+    }
+
     /// Every mission at the base's tip.
     pub fn missions(&mut self) -> Result<Vec<MissionDir>> {
         let ids = self.reader.mission_ids(&self.base_tip)?;
@@ -166,11 +175,6 @@ impl Repo {
             }
         };
         Ok(Links { blockers, mission })
-    }
-
-    /// The plan reviews of mission `id` at the base's tip.
-    pub fn mission_reviews(&mut self, id: &str) -> Result<Vec<ReviewFile>> {
-        Ok(self.reader.mission_reviews(&self.base_tip, id)?)
     }
 
     /// The item `id` as `commit` holds it.
@@ -260,6 +264,10 @@ pub fn item_dir(id: &str) -> String {
 
 pub fn item_path(id: &str) -> String {
     format!(".atelier/items/{id}/item.md")
+}
+
+pub fn mission_dir(id: &str) -> String {
+    format!(".atelier/missions/{id}")
 }
 
 pub fn mission_path(id: &str) -> String {

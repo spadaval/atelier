@@ -104,17 +104,8 @@ impl CommitReader {
         }))
     }
 
-    /// The plan reviews of mission `id` as `commit` holds them, oldest
-    /// round first; none when it has no `reviews/` directory.
-    pub fn mission_reviews(
-        &mut self,
-        commit: &str,
-        id: &str,
-    ) -> Result<Vec<ReviewFile>, ReadError> {
-        self.reviews(commit, &format!("{MISSIONS}/{id}"))
-    }
-
-    /// The review files under `<dir>/reviews/` in `commit`, by name.
+    /// The reviews in `reviews/` of the record directory `dir` in `commit`,
+    /// oldest round first.
     fn reviews(&mut self, commit: &str, dir: &str) -> Result<Vec<ReviewFile>, ReadError> {
         let mut reviews = Vec::new();
         for name in self.names(commit, &format!("{dir}/reviews"))? {
@@ -132,14 +123,20 @@ impl CommitReader {
     /// The mission `id` as `commit` holds it, or `None` when the commit has
     /// no `mission.md` for it.
     pub fn mission(&mut self, commit: &str, id: &str) -> Result<Option<MissionDir>, ReadError> {
-        let path = format!("{MISSIONS}/{id}/mission.md");
+        let dir = format!("{MISSIONS}/{id}");
+        let path = format!("{dir}/mission.md");
         let text = match self.text(commit, &path) {
             Err(ReadError::Missing { .. }) => return Ok(None),
             text => text?,
         };
         let path = shown(commit, &path);
         let mission = parse_mission(&path, &text).map_err(ReadError::Record)?;
-        Ok(Some(MissionDir { path, mission }))
+        let reviews = self.reviews(commit, &dir)?;
+        Ok(Some(MissionDir {
+            path,
+            mission,
+            reviews,
+        }))
     }
 
     /// The names of the directories under `.atelier/items/` in `commit`.

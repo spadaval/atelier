@@ -6,7 +6,7 @@ use crate::merge::Moved;
 use atelier_app::acts::{row, Act, Condition, Refusal, Role};
 use atelier_app::{Carried, Entry, Overview};
 use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
-use atelier_records::Problem;
+use atelier_records::{Problem, ReviewFile};
 use std::path::Path;
 use std::time::Duration;
 
@@ -38,6 +38,9 @@ fn command(act: Act, id: &str) -> String {
         Act::Ready | Act::ReadyMission => format!("atelier ready {id} --by <name>"),
         Act::StartNew => "atelier start --new \"<title>\"".into(),
         Act::MergeTrivial => "atelier merge --trivial \"<why>\"".into(),
+        Act::Drop => format!("atelier drop {id} --reason \"<why>\""),
+        Act::Close => format!("atelier close {id} \"<result>\""),
+        Act::CloseMission => format!("atelier close {id}"),
         _ => format!("atelier {}", row(act).command),
     }
 }
@@ -52,6 +55,9 @@ fn goal(act: Act, status: Status) -> &'static str {
         Act::Review => "review it",
         Act::VerdictChanges | Act::VerdictApprove => "record your verdict",
         Act::Merge | Act::MergeTrivial => "merge it",
+        Act::Drop => "drop it",
+        Act::Close | Act::CloseMission => "close it",
+        Act::PlanVerdictChanges | Act::PlanVerdictApprove => "record your verdict",
         Act::Lead => "lead it",
     }
 }
@@ -65,10 +71,15 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
         Condition::Blocked { id: blocker, status: None } => {
             format!("{blocker} is done (no item {blocker} is found)")
         }
-        Condition::MissionNotReady { id: mission, status: Some(status) } => format!(
-            "Mission {mission} is ready (it is {}; a planner makes it ready with: atelier ready {mission} --by <name>)",
-            status_name(*status)
+        Condition::MissionNotReady { id: mission, status: Some(Status::Draft) } => format!(
+            "Mission {mission} is ready (it is draft; a planner makes it ready with: atelier ready {mission} --by <name>)"
         ),
+        Condition::MissionNotReady { id: mission, status: Some(Status::Dropped) } => format!(
+            "Mission {mission} is ready (it was dropped, so none of its items starts)"
+        ),
+        Condition::MissionNotReady { id: mission, status: Some(status) } => {
+            format!("Mission {mission} is ready (it is {})", status_name(*status))
+        }
         Condition::MissionNotReady { id: mission, status: None } => format!(
             "Mission {mission} is ready (no mission {mission} is in the base's last commit)"
         ),
@@ -98,13 +109,18 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
         Condition::Reviewed => {
             "Nobody has reviewed it (it has a review file, so it merges once approved, with `atelier merge`)".into()
         }
+        Condition::ItemOpen { id: item, status } => {
+            format!("{item} is done or dropped (it is {})", status_name(*status))
+        }
+        Condition::NoResult => "Result: written under `## Result`".into(),
     };
     format!("  [ ] {text}")
 }
 
 /// What an entry needs and the command that follows, or what to do when no
-/// command of the caller's follows.
-fn next(entry: &Entry) -> String {
+/// command of the caller's follows. `dropped` is why the item was dropped,
+/// from its record.
+fn next(entry: &Entry, dropped: Option<&str>) -> String {
     let id = &entry.id;
     let Some(act) = entry.next else {
         if entry.reviewed.is_some() && !entry.holds {
@@ -120,7 +136,10 @@ fn next(entry: &Entry) -> String {
             Status::Draft => format!(
                 "It is a draft. A planner makes it ready with: atelier ready {id} --by <name>\n"
             ),
-            Status::Dropped => "It was dropped on the base; nothing is left to do on it.\n".into(),
+            Status::Dropped => match dropped {
+                Some(why) => format!("It was dropped on the base: {why}\nNothing is left to do on it.\n"),
+                None => "It was dropped on the base; nothing is left to do on it.\n".into(),
+            },
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
@@ -191,7 +210,7 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
         }
     }
     let or = match act {
-        Act::VerdictApprove => {
+        Act::VerdictApprove | Act::PlanVerdictApprove => {
             " (or `atelier verdict changes`, once your file holds a fix-now finding)"
         }
         _ => "",
@@ -220,8 +239,9 @@ pub(crate) fn holder(entry: &Entry) -> String {
 }
 
 /// `status` on an item's branch. `config` is the base's, whose merge
-/// checks and forge `merge` goes through.
-pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
+/// checks and forge `merge` goes through, and `dropped` why the item was
+/// dropped.
+pub fn item(caller: &Thread, entry: &Entry, config: &Config, dropped: Option<&str>) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
         format!(
@@ -240,13 +260,16 @@ pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
             "You reviewed {id} (thread {caller}): review {name}, {verdict}. It is {}.\n",
             holder(entry)
         )
+    } else if entry.status == Status::Dropped {
+        // The base's record is the item's, and names no holder.
+        format!("You are thread {caller}, on the branch of {id}.\n")
     } else {
         format!(
             "You are thread {caller}, on the branch of {id}, which is {}.\n",
             holder(entry)
         )
     };
-    let mut next = next(entry);
+    let mut next = next(entry, dropped);
     // Before `merge`, what it will run and wait for; a stale approval is
     // sent to `submit` instead.
     let stale = entry
@@ -301,14 +324,16 @@ fn gates(config: &Config) -> String {
     text
 }
 
-/// `status` away from an item's branch. `planning` is the record changes
-/// the base's checkout has not committed, and `at` that checkout, as for
-/// [`commit_line`].
+/// `status` away from an item's branch. `dropped` is each item dropped on
+/// the base while its branch is there, with why. `planning` is the record
+/// changes the base's checkout has not committed, and `at` that checkout,
+/// as for [`commit_line`].
 pub fn overview(
     caller: &Thread,
     branch: Option<&str>,
     base: &str,
     overview: &Overview,
+    dropped: &[(String, Option<String>)],
     planning: &[String],
     at: Option<&Path>,
 ) -> String {
@@ -355,6 +380,12 @@ pub fn overview(
             );
         }
     }
+    if !dropped.is_empty() {
+        text += "Dropped on the base while started; nothing is left to do on them:\n";
+        for (id, why) in dropped {
+            text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
+        }
+    }
     text += &crate::view_output::overview(overview);
     if !planning.is_empty() {
         text += &format!(
@@ -384,13 +415,15 @@ pub fn overview(
 }
 
 /// `entry` is what `status` shows the caller, which a refusal of the
-/// item's status or of the act's conditions ends with.
+/// item's status or of the act's conditions ends with, and `dropped` why
+/// the item was dropped.
 pub fn refusal(
     act: Act,
     refusal: &Refusal,
     caller: &Thread,
     id: &str,
     entry: Option<&Entry>,
+    dropped: Option<&str>,
 ) -> String {
     let shown = || entry.expect("a refusal that says what comes next has the entry");
     match refusal {
@@ -410,7 +443,7 @@ pub fn refusal(
                 status_name(*status),
                 row(*act).command,
                 from.join(", "),
-                next(shown())
+                next(shown(), dropped)
             )
         }
         Refusal::NotHolder {
@@ -714,6 +747,7 @@ pub fn review_elsewhere(id: &str, branch: Option<&str>) -> String {
     )
 }
 
+/// `id` is the item, or the mission whose plan is reviewed.
 pub fn review_taken_over(id: &str, round: u32, before: Option<&Thread>) -> String {
     match before {
         Some(thread) => format!(
@@ -739,17 +773,21 @@ fn response(response: Option<&Response>) -> String {
 }
 
 /// The body of a new review file: a Summary to write, then each finding
-/// it carries, kept until the reviewer says otherwise.
-pub fn template(carried: &[Carried]) -> String {
+/// it carries, kept until the reviewer says otherwise. An item's carried
+/// finding shows the author's response; a plan has no Responses.
+pub fn template(carried: &[Carried], item: bool) -> String {
     let mut text =
         "\n## Summary\n\n<!-- What you checked and how, and what you could not check. -->\n"
             .to_string();
     for (number, carried) in (1..).zip(carried) {
+        let response = match item {
+            true => format!("Response: {}\n", response(carried.response.as_ref())),
+            false => String::new(),
+        };
         text += &format!(
-            "\n## Finding {number}: {}\nRecommendation: fix now\nWas: {}\nResponse: {}\nNow: kept\n<!-- Set Now: to fixed, withdrawn or kept. -->\n",
+            "\n## Finding {number}: {}\nRecommendation: fix now\nWas: {}\n{response}Now: kept\n<!-- Set Now: to fixed, withdrawn or kept. -->\n",
             carried.finding.title,
             carried.finding.name,
-            response(carried.response.as_ref()),
         );
     }
     text
@@ -799,45 +837,293 @@ pub fn brief(brief: &Brief) -> String {
             brief.commit
         );
     }
-    if !brief.carried.is_empty() {
-        text += "\nOpen findings from earlier rounds:\n";
-        if brief.path.is_some() {
-            text += "Your review file carries each as a finding of its own, with the author's response. Judge the response, then set the finding's `Now:` line to `fixed`, to `withdrawn` (the rebuttal holds, or the finding was wrong), or leave it `kept` (it still stands, and stays a fix-now finding).\n";
-        }
-        for (number, carried) in (1..).zip(brief.carried) {
-            text += &format!(
-                "\n{}, carried as Finding {number}: {}\n",
-                carried.finding.name, carried.finding.title
-            );
-            for (name, written) in &carried.texts {
-                text += &format!("  As {name}:\n");
-                for line in written.trim().lines() {
-                    text += &format!("    {line}\n");
-                }
+    text += &carried_findings(brief.carried, brief.path.is_some(), true);
+    let Some(path) = brief.path else {
+        return text;
+    };
+    text + &review_file(
+        path,
+        brief.carried.len() + 1,
+        "the change merges",
+        "commits it with the item's new status",
+    ) + "Your review is then done.\n"
+}
+
+/// The open findings of earlier rounds that a review carries, with the
+/// author's response on an item's; how to judge each for a reviewer.
+fn carried_findings(carried: &[Carried], reviewer: bool, item: bool) -> String {
+    if carried.is_empty() {
+        return String::new();
+    }
+    let mut text = "\nOpen findings from earlier rounds:\n".to_string();
+    if reviewer {
+        let with = if item {
+            ", with the author's response"
+        } else {
+            ""
+        };
+        text += &format!("Your review file carries each as a finding of its own{with}. Judge it, then set the finding's `Now:` line to `fixed`, to `withdrawn` (the rebuttal holds, or the finding was wrong), or leave it `kept` (it still stands, and stays a fix-now finding).\n");
+    }
+    for (number, carried) in (1..).zip(carried) {
+        text += &format!(
+            "\n{}, carried as Finding {number}: {}\n",
+            carried.finding.name, carried.finding.title
+        );
+        for (name, written) in &carried.texts {
+            text += &format!("  As {name}:\n");
+            for line in written.trim().lines() {
+                text += &format!("    {line}\n");
             }
+        }
+        if item {
             text += &format!(
                 "  The author's response: {}\n",
                 response(carried.response.as_ref())
             );
         }
     }
-    let Some(path) = brief.path else {
-        return text;
-    };
-    let next = brief.carried.len() + 1;
-    text += &format!(
+    text
+}
+
+/// How a reviewer writes its file at `path`, whose findings number on from
+/// `next`, and records its verdict, which `commits` it. `before` is what a
+/// fix-now finding must be fixed before.
+fn review_file(path: &str, next: usize, before: &str, commits: &str) -> String {
+    format!(
         "\nYour review file: {path}\n\
          Write your review there, and change no other file. Leave its front matter, between the `---` lines, as it is.\n\
          Under `## Summary`, say what you checked and how, and what you could not check. Then add a section for each problem, numbered on from {next}:\n\n\
          ## Finding {next}: <a one-line title>\n\
          Recommendation: fix now\n\
          <What is wrong, where (file and line), and how you know.>\n\n\
-         The Recommendation is `fix now` (it must be fixed before the change merges), `defer` (real, but for later work) or `no action` (a note; nothing to do).\n\n\
-         When the file is written, record your verdict. It checks the file, then commits it with the item's new status:\n\
+         The Recommendation is `fix now` (it must be fixed before {before}), `defer` (real, but for later work) or `no action` (a note; nothing to do).\n\n\
+         When the file is written, record your verdict. It checks the file, then {commits}:\n\
          \x20 atelier verdict changes --model <your model>   if the file holds an open fix-now finding\n\
          \x20 atelier verdict approve --model <your model>   if it holds none\n\
-         Give the name of the model you run on, such as gpt-6.1-sol, or leave out `--model` if you do not know it. Your review is then done.\n"
+         Give the name of the model you run on, such as gpt-6.1-sol, or leave out `--model` if you do not know it. "
+    )
+}
+
+/// What `review` prints for a mission's plan: the mission, its documents
+/// and items, what earlier rounds left open, and the reviewer's file.
+pub struct PlanBrief<'a> {
+    pub id: &'a str,
+    pub title: &'a str,
+    pub caller: &'a Thread,
+    pub round: u32,
+    /// The sections of `mission.md` it has.
+    pub sections: Vec<(&'a str, &'a str)>,
+    /// The commit the plan is reviewed at.
+    pub commit: &'a str,
+    /// The paths of the mission's other documents.
+    pub documents: Vec<String>,
+    /// Each item of the mission: its path, status and title.
+    pub items: Vec<(String, Status, String)>,
+    pub carried: &'a [Carried],
+    pub path: &'a str,
+    pub base: &'a str,
+}
+
+pub fn plan_brief(brief: &PlanBrief) -> String {
+    let PlanBrief { id, round, .. } = *brief;
+    let mut text = format!(
+        "You are a reviewer of the plan of mission {id} (thread {}), round {round}.\n\
+         Review the plan as commit {} holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find. Another reviewer may review the same plan blind, in a checkout of its own.\n\n\
+         Mission {id}: {}\n",
+        brief.caller,
+        short(brief.commit),
+        brief.title
     );
+    for (heading, content) in &brief.sections {
+        text += &format!("\n## {heading}\n{}\n", content.trim_end());
+    }
+    text += "\nIts other documents:\n";
+    for path in &brief.documents {
+        text += &format!("  {path}\n");
+    }
+    if brief.documents.is_empty() {
+        text += "  (none)\n";
+    }
+    text += "Its items:\n";
+    for (path, status, title) in &brief.items {
+        text += &format!("  {path} ({}): {title}\n", status_name(*status));
+    }
+    if brief.items.is_empty() {
+        text += "  (none)\n";
+    }
+    text += &carried_findings(brief.carried, true, false);
+    text + &review_file(
+        brief.path,
+        brief.carried.len() + 1,
+        "the mission starts",
+        "commits it alone, changing no status",
+    ) + &format!(
+        "Then tell whoever started you the commit it prints, which the planner cherry-picks onto {}. Your review is then done.\n",
+        brief.base
+    )
+}
+
+pub fn plan_review_on_item(id: &str, branch: Option<&str>, base: &str) -> String {
+    format!(
+        "`atelier review {id}` reviews a mission's plan, and this checkout is on {}, an item's branch. Nothing changed.\nReview it in a detached worktree of {base}: git worktree add --detach <path> {base}\nThen: atelier review {id}\n",
+        place(branch)
+    )
+}
+
+pub fn plan_verdict_recorded(
+    id: &str,
+    round: u32,
+    verdict: Verdict,
+    path: &str,
+    commit: &str,
+    base: &str,
+    on_base: bool,
+) -> String {
+    let then = match on_base {
+        true => format!("It is on {base}."),
+        false => format!("The planner puts it on {base} with: git cherry-pick {commit}"),
+    };
+    format!(
+        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Committed {path} alone, in commit {commit}.\n{then}\nYour review is done: tell whoever started you that commit, and stop.\n",
+        verdict_name(verdict)
+    )
+}
+
+/// `held` is the paths of the plan reviews without a verdict the caller
+/// holds in this checkout, when there is more than one.
+pub fn no_review_held(branch: Option<&str>, held: &[String]) -> String {
+    let text = "`atelier verdict` records the verdict of one review you hold: on an item's branch, or of a mission's plan in this checkout";
+    if !held.is_empty() {
+        return format!(
+            "{text}, and you hold more than one plan review without a verdict here: {}. Nothing changed.\nEach plan reviewer works in a detached worktree of its own (`git worktree add --detach <path>`); move all but one of these files to another, and run `atelier verdict` in each.\n",
+            some(held)
+        );
+    }
+    format!(
+        "{text}. This checkout is on {}, and holds no plan review of yours without a verdict. Nothing changed.\n`atelier status` lists what you hold; `atelier review <id>` opens a review.\n",
+        place(branch)
+    )
+}
+
+/// A mission's act refused for `refusal`.
+pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
+    match refusal {
+        Refusal::From { status, .. } => {
+            let from: Vec<&str> = row(act)
+                .from
+                .iter()
+                .filter(|s| atelier_core::MissionStatus::of(**s).is_some())
+                .map(|s| status_name(*s))
+                .collect();
+            let then = match status {
+                Status::Draft => {
+                    format!("A planner makes it ready with: atelier ready {id} --by <name>\n")
+                }
+                _ => "Nothing is left to do on it.\n".into(),
+            };
+            format!(
+                "Mission {id} is {}, and `atelier {}` runs on a mission that is {}. Nothing changed.\n{then}",
+                status_name(*status),
+                row(act).command,
+                from.join(", ")
+            )
+        }
+        Refusal::Unmet(unmet) => format!(
+            "`{}` refused; nothing changed.\n{}",
+            command(act, id),
+            needs(act, Status::Ready, id, unmet)
+        ),
+        Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
+            unreachable!("a mission's act is refused only for its status or conditions")
+        }
+    }
+}
+
+pub fn no_drop_reason(id: &str) -> String {
+    format!(
+        "`atelier drop` needs a reason, on one line. Nothing changed.\nThen: atelier drop {id} --reason \"<why it will not be done>\"\n"
+    )
+}
+
+pub fn no_result(id: &str) -> String {
+    format!(
+        "`atelier close {id}` needs the item's result, the text its Report gets. Nothing changed.\nThen: atelier close {id} \"<what came of it>\"\n"
+    )
+}
+
+pub fn close_mission_text(id: &str) -> String {
+    format!(
+        "`atelier close {id}` refused; nothing changed.\n{id} is a mission, whose result is written in {} under `## Result`. Write it there.\nThen: atelier close {id}\n",
+        crate::repo::mission_path(id)
+    )
+}
+
+pub fn close_started(id: &str) -> String {
+    format!(
+        "`atelier close {id}` refused; nothing changed.\nBranch {id} exists, so {id} was started, and a started item ends when `atelier merge` merges it from that branch. If it will not be done, drop it instead.\nThen: atelier drop {id} --reason \"<why>\"\n"
+    )
+}
+
+pub fn unknown_refused(command: &str, id: &str) -> String {
+    format!(
+        "`atelier {command} {id}` refused; nothing changed.\n{}",
+        unknown(id)
+    )
+}
+
+/// `kind` is "item" or "mission". `started` says the item had a branch.
+pub fn dropped(id: &str, kind: &str, reason: &str, started: bool) -> String {
+    let mut text = format!("Dropped {kind} {id}: {reason}\n");
+    if started {
+        text += &format!("Its branch {id} is left as it is. Every command reads the base's record first, so once this is committed nobody can submit, merge or take it over.\n");
+    }
+    text
+}
+
+pub fn closed(id: &str, kind: &str) -> String {
+    format!("Closed {kind} {id}: it is done.\n")
+}
+
+pub fn no_plan_review(id: &str) -> String {
+    format!("Mission {id}'s plan has no review.\n")
+}
+
+/// What `ready` says of a mission's plan reviews: `latest` are those of
+/// round `round`, and `changed` what changed in the plan since each commit
+/// they reviewed, `None` where this clone lacks the commit.
+pub fn plan_reviews(
+    id: &str,
+    round: u32,
+    latest: &[&ReviewFile],
+    changed: &[(&str, Option<Vec<String>>)],
+) -> String {
+    let mut text = format!("Mission {id}'s plan reviews, round {round}:\n");
+    for file in latest {
+        let verdict = file.review.verdict.map_or("no verdict yet", verdict_name);
+        let by = file
+            .review
+            .reviewers
+            .holder()
+            .map_or("nobody".into(), |t| t.to_string());
+        text += &format!(
+            "  {} by {by}: {verdict}, of commit {}\n",
+            file.name,
+            short(&file.review.commit)
+        );
+    }
+    for (commit, paths) in changed {
+        text += &match paths {
+            None => format!(
+                "Commit {} is not in this clone, so what changed since is not known.\n",
+                short(commit)
+            ),
+            Some(paths) if paths.is_empty() => format!(
+                "Since {}, nothing in the mission's directory or its items changed.\n",
+                short(commit)
+            ),
+            Some(paths) => format!("Since {}, these changed: {}\n", short(commit), some(paths)),
+        };
+    }
     text
 }
 

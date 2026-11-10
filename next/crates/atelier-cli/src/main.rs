@@ -99,6 +99,19 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
+    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it.
+    Drop {
+        id: String,
+        /// Why it will not be done, on one line.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; on the base and without committing it.
+    Close {
+        id: String,
+        /// The item's result, written into its Report. A mission's is written in its file.
+        result: Option<String>,
+    },
     /// Start a ready item on a new branch named for it, or take over a started one.
     #[command(group(ArgGroup::new("what").required(true).args(["id", "new"])))]
     Start {
@@ -109,7 +122,7 @@ enum Command {
     },
     /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
     Submit,
-    /// Open this round's review file of an item in review, or take it over, and print the brief.
+    /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief.
     Review { id: String },
     /// Record your verdict in your review file and commit it.
     Verdict {
@@ -200,6 +213,8 @@ fn main() -> ExitCode {
             plan::set(&mut repo, &id, fields)
         }
         Command::Ready { ids, by } => plan::ready(&mut repo, &ids, &by),
+        Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
+        Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
         Command::Start { id: Some(id), .. } => commands::start(&mut repo, &id),
         Command::Start {
             new: Some(title), ..

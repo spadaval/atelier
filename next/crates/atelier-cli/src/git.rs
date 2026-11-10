@@ -308,6 +308,31 @@ pub fn untracked(repo: &Path, dir: &str) -> Result<Vec<String>> {
     Ok(names(&listed))
 }
 
+/// The files under `dir` that are tracked, or untracked and not ignored.
+pub fn files(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    let args = [
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+    ];
+    let listed = listing(repo, &[&args[..], &["--", dir]].concat())?;
+    Ok(names(&listed))
+}
+
+/// The paths under `dirs` whose files in the checkout differ from the
+/// commit `from`, committed or not, and the files there Git does not track.
+pub fn changed_since(repo: &Path, from: &str, dirs: &[&str]) -> Result<Vec<String>> {
+    let args = ["diff", "--name-only", "-z", "--no-renames", from, "--"];
+    let mut paths = names(&listing(repo, &[&args[..], dirs].concat())?);
+    for dir in dirs {
+        paths.extend(untracked(repo, dir)?);
+    }
+    paths.sort();
+    Ok(paths)
+}
+
 /// The paths that differ between the commits `from` and `to`.
 pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     let listed = listing(

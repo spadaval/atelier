@@ -335,9 +335,14 @@ fn a_done_or_dropped_record_on_the_base_wins_over_the_branch() {
         let take = atelier(&base, "t2", &["start", ID]);
         assert_eq!(take.code, 1);
         assert_eq!(field(&root, ID, "implementers"), "t1");
-        // Nobody is offered the item.
+        // Nobody is offered the item; a dropped one is named as dropped.
         let listed = atelier(&base, "t3", &["status"]).stdout;
-        assert!(!listed.contains(ID), "{listed}");
+        assert!(!listed.contains(&format!("start {ID}")), "{listed}");
+        assert!(!listed.contains(&format!("  {ID} (")), "{listed}");
+        let named = listed.contains(&format!(
+            "while started; nothing is left to do on them:\n  {ID}: "
+        ));
+        assert_eq!(named, terminal == "dropped", "{listed}");
     }
 }
 
