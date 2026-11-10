@@ -976,6 +976,13 @@ impl Forge {
     }
 }
 
+/// What `merge` says before its first look at CI, with a bound of `wait`.
+fn waiting_for(wait: &str) -> String {
+    format!(
+        "Waiting up to {wait} for ci.yml to finish on pull request #7. Nothing is written while it waits, so this may be interrupted and `atelier merge` run again.\n"
+    )
+}
+
 fn merged_and_pushed(root: &Path) -> String {
     format!(
         "Merged {ID} into main with merge commit {}, which marks it done.\nPushed main to origin.\n",
@@ -1118,9 +1125,18 @@ fn a_run_that_passed_on_the_submit_commit_counts_after_the_approval() {
         ),
         "{status}"
     );
+    let since = Instant::now();
     let run = forge.merge();
+    assert!(since.elapsed() < Duration::from_secs(10));
     assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(run.stdout, format!("{PULL}{}", merged_and_pushed(&root)));
+    assert_eq!(
+        run.stdout,
+        format!(
+            "{PULL}{}{}",
+            waiting_for("20 seconds"),
+            merged_and_pushed(&root)
+        )
+    );
     assert_eq!(forge.polls(ID), 2, "one before the lock, one under it");
     // The branch was not pushed again.
     assert_eq!(forge.remote(ID), Some(submitted));
@@ -1175,7 +1191,7 @@ fn when_the_latest_finished_run_failed_and_none_is_running_merge_refuses() {
     );
     let run = forge.merge();
     assert_eq!(run.code, 1, "{}", run.stdout);
-    assert_eq!(run.stdout, PULL);
+    assert_eq!(run.stdout, format!("{PULL}{}", waiting_for("20 seconds")));
     assert!(
         run.stderr.starts_with(&format!(
             "`atelier merge` refused: CI failed: ci.yml finished failure on {} (https://github.com/owner/repo/actions/runs/2). Nothing was merged.\n",
@@ -1207,7 +1223,8 @@ fn merge_waits_while_a_newer_run_is_going_and_merges_as_soon_as_it_passes() {
     assert_eq!(
         run.stdout,
         format!(
-            "{PULL}Waiting up to 20 seconds for ci.yml to finish on pull request #7. Nothing is written while it waits, so this may be interrupted and `atelier merge` run again.\n{}",
+            "{PULL}{}{}",
+            waiting_for("20 seconds"),
             merged_and_pushed(&root)
         )
     );
@@ -1257,8 +1274,8 @@ fn at_the_bound_merge_exits_not_yet_and_changes_nothing() {
     assert_eq!(
         run.stdout,
         format!(
-            "{PULL}Waiting up to 2 seconds for ci.yml to finish on pull request #7. Nothing is written while it waits, so this may be interrupted and `atelier merge` run again.\n\
-             CI has not finished on {}, the branch's head: it is in progress (https://github.com/owner/repo/actions/runs/2). Nothing else changed.\nRun `atelier merge` again once ci.yml finishes.\n",
+            "{PULL}{}CI has not finished on {}, the branch's head: it is in progress (https://github.com/owner/repo/actions/runs/2). Nothing else changed.\nRun `atelier merge` again once ci.yml finishes.\n",
+            waiting_for("2 seconds"),
             &approved[..7]
         )
     );
@@ -1308,16 +1325,34 @@ fn a_gh_that_never_answers_is_ended_at_the_bound() {
     let root = forge.scratch.root();
     let before = state(&root);
     forge.flag("stall", true);
+    // Its output goes to a file, read while the first poll is stalled.
+    let said = forge.scratch.dir.path().join("said");
     let since = Instant::now();
-    let run = forge.merge_waiting(1500);
-    assert!(since.elapsed() < Duration::from_secs(10));
-    assert_eq!(run.code, 3, "{}", run.stderr);
-    assert!(
-        run.stdout.contains("the forge did not answer, as gh failed: gh api repos/owner/repo/actions/workflows/ci.yml/runs did not answer in time."),
-        "{}",
-        run.stdout
+    let mut child = forge
+        .command(&root, "t1", &["merge"])
+        .env("ATELIER_TEST_CI_WAIT", "3000,50")
+        .stdout(fs::File::create(&said).unwrap())
+        .spawn()
+        .unwrap();
+    let stalled = forge.gh.join("stalled");
+    while !stalled.exists() {
+        assert!(since.elapsed() < Duration::from_secs(10), "never stalled");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        fs::read_to_string(&said).unwrap(),
+        format!("{PULL}{}", waiting_for("3 seconds")),
+        "the notice is out while the poll is stalled"
     );
-    let stalled = fs::read_to_string(forge.gh.join("stalled")).unwrap();
+    let code = child.wait().unwrap().code();
+    assert!(since.elapsed() < Duration::from_secs(10));
+    assert_eq!(code, Some(3));
+    let said = fs::read_to_string(&said).unwrap();
+    assert!(
+        said.contains("the forge did not answer, as gh failed: gh api repos/owner/repo/actions/workflows/ci.yml/runs did not answer in time."),
+        "{said}"
+    );
+    let stalled = fs::read_to_string(&stalled).unwrap();
     let proc = PathBuf::from(format!("/proc/{}", stalled.trim()));
     assert!(!proc.exists(), "the stalled gh is still running");
     assert_eq!(state(&root), before);

@@ -298,7 +298,8 @@ fn before_lock(trivial: bool) -> Result<Option<Outcome>> {
     let (wait, poll) = wait_times();
     let deadline = Instant::now() + wait;
     let github = github.until(deadline);
-    let mut waiting = false;
+    // Said before the first poll, which may itself take the whole bound.
+    say(&output::waiting_for_ci(workflow, &pull, wait));
     loop {
         let pending = match ci(&github, workflow, root, id, head, &mut known)? {
             Ci::Passed => return Ok(None),
@@ -312,10 +313,6 @@ fn before_lock(trivial: bool) -> Result<Option<Outcome>> {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
             return Ok(Some(Outcome::NotYet(pending)));
-        }
-        if !waiting {
-            say(&output::waiting_for_ci(workflow, &pull, wait));
-            waiting = true;
         }
         std::thread::sleep(poll.min(left));
         if left <= poll {
