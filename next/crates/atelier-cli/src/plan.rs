@@ -251,7 +251,7 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Outcome> {
 }
 
 /// Refuses a planning command run anywhere but on the base branch.
-fn off_base(repo: &Repo, command: &str) -> Result<Option<Outcome>> {
+pub(crate) fn off_base(repo: &Repo, command: &str) -> Result<Option<Outcome>> {
     if repo.branch.as_deref() == Some(repo.base.as_str()) {
         return Ok(None);
     }
@@ -268,7 +268,7 @@ fn off_base(repo: &Repo, command: &str) -> Result<Option<Outcome>> {
 /// against every record of the checkout, and says what it wrote and how to
 /// commit it; or, when one has a problem, writes nothing and says why.
 /// `said` opens the output, and `message` is the commit's.
-fn save(
+pub(crate) fn save(
     repo: &Repo,
     command: &str,
     items: Vec<Item>,

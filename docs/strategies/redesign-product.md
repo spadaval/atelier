@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: submit starts CI where a forge is configured, and merge waits for it up to 9 minutes (atelier-xtvh); submit's handoff line says a reviewer is another thread, not a subagent (atelier-67nn)"
+last_changed: "2026-11-10: list's flags, what replaces each of the nine work views, and lead's handoff (atelier-jciw)"
 ---
 
 # Atelier redesign: product specification
@@ -171,15 +171,27 @@ Eighteen commands, plus `init`, `setup` and `serve`.
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: ready items, missions in progress and what waits on Sumeet. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: ready items, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
 | `show <id>` | An item in full, with its reviews. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
-| `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`. |
+| `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. |
 | `log` | The history of acts, one line each: when, which item, the act, what changed, and the thread, where the record holds one. For one item, one mission, or everything `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
-`show` and `list` keep what today's `work mission`, `work missions`,
-`work ready`, `work blocked` and `work human` show. A lead or a planner loses
-no view; nine commands become two.
+A lead or a planner loses none of today's nine `work` views; they become
+`show`, `list` and `status`:
+
+| Today | Replaced by |
+| --- | --- |
+| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, questions, plan reviews |
+| `work missions` | `list`, which heads each open mission's items with its status, whether it is in progress, and its lead; `status` on the base lists the missions in progress |
+| `work missions --all` | `list --done` for finished missions and items; `list` heads the open ones, and lists items in no mission |
+| `work ready` | `list --ready`, and "Ready to start" in `status` on the base |
+| `work blocked` | `list --blocked`, which names each blocker that is not done |
+| `work human` | `list --needs-human`, and "Waiting on a human" in `status`; open decisions are the unanswered questions in `show <mission>` |
+| `work decisions <id>` | The questions in `show <mission>`, unanswered first; an item's Decisions section is in `show <item>`. Decision records and notes are gone |
+| `work active` | `status`, which lists what the caller holds and what other threads hold, read from their branches; `list` shows each started item with its holder |
+| `work all` | `list` |
+| `work parent <id>` | None: parents are gone, and a mission groups its items |
 
 ### Planner, on the base
 
@@ -247,7 +259,8 @@ with the harness's own tool, using a line the tool prints:
   backticks, which an agent pasting it into a double-quoted shell argument
   would run as a command.
 - `escalate` prints the same for a decider, with `show` and `decide`.
-- `lead` prints one for each ready item, with `start`.
+- `lead` prints one, with a `start` task for each item that can start now,
+  and the lead's `status` repeats it.
 
 ## Records
 

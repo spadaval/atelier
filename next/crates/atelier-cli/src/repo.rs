@@ -7,7 +7,7 @@ use atelier_app::acts::{approval, mission_of, Checkout, SinceApproval};
 use atelier_app::{identity, Branch, Located};
 use atelier_core::{Config, Status, Thread};
 use atelier_records::{
-    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, Store,
+    allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, ReviewFile, Store,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -166,6 +166,11 @@ impl Repo {
             }
         };
         Ok(Links { blockers, mission })
+    }
+
+    /// The plan reviews of mission `id` at the base's tip.
+    pub fn mission_reviews(&mut self, id: &str) -> Result<Vec<ReviewFile>> {
+        Ok(self.reader.mission_reviews(&self.base_tip, id)?)
     }
 
     /// The item `id` as `commit` holds it.
