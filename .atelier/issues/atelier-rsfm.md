@@ -28,7 +28,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Bound merge's CI check under the lock and fix its flaky wait test: follow-ups to atelier-xtvh"
-updated_at: "2026-11-10T21:26:37.722392468+00:00"
+updated_at: "2026-11-10T21:40:51.084373363+00:00"
 ---
 
 ## Goal
@@ -39,6 +39,10 @@ Collect the follow-ups deferred from review findings on atelier-xtvh, one per fi
 
 - [x] Each child's Done when lines hold.
 - [x] The Merge and forge sections of `docs/strategies/redesign-architecture.md` still match the code.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by gpt-6.1-sol at cb299fa8 (atelier-bdjc), round 1, no findings. Not merged; the orchestrator merges. See the Report.
 
 ## Report
 
