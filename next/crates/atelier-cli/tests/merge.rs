@@ -721,8 +721,9 @@ fn merge_takes_no_flag_but_trivial() {
 /// requests. A POST to the pull requests opens #7 and adds a line to
 /// `opened`. Every call is logged to `calls`. While `down` exists a runs
 /// lookup fails, and while `stall` exists it never answers, after writing
-/// its process ID to `stalled`; while `no-pulls` exists opening a pull
-/// request fails.
+/// its process ID to `stalled`; while `helper` exists it answers but leaves
+/// a process holding its output, whose ID it writes to `helped`; while
+/// `no-pulls` exists opening a pull request fails.
 const FAKE_GH: &str = r#"#!/bin/sh
 echo "$*" >> "$FAKE_GH/calls"
 if [ "$1" = auth ]; then exit 0; fi
@@ -741,6 +742,7 @@ case "$answer" in
   runs/*)
     if [ -f "$FAKE_GH/stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
     if [ -f "$FAKE_GH/down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [ -f "$FAKE_GH/helper" ]; then sleep 60 & echo $! >> "$FAKE_GH/helped"; fi
     ;;
 esac
 if [ "$answer" = pulls ] && [ "$method" = POST ]; then
@@ -1356,6 +1358,56 @@ fn a_gh_that_never_answers_is_ended_at_the_bound() {
     let proc = PathBuf::from(format!("/proc/{}", stalled.trim()));
     assert!(!proc.exists(), "the stalled gh is still running");
     assert_eq!(state(&root), before);
+}
+
+#[test]
+fn a_process_gh_leaves_holding_its_output_does_not_hold_up_the_bound() {
+    let forge = Forge::new(Some("ci.yml"));
+    let root = forge.scratch.root();
+    forge.ci(ID, &[(&head(&root, ID), "in_progress", None)]);
+    forge.flag("helper", true);
+    let since = Instant::now();
+    let run = forge.merge_waiting(1000);
+    let took = since.elapsed();
+    for pid in fs::read_to_string(forge.gh.join("helped")).unwrap().lines() {
+        let _ = Command::new("kill").arg(pid).status();
+    }
+    assert!(took < Duration::from_secs(10), "took {took:?}");
+    assert_eq!(run.code, 3, "{}", run.stderr);
+    assert!(run.stdout.contains("it is in progress"), "{}", run.stdout);
+}
+
+#[test]
+fn a_checkout_switched_to_another_item_during_the_wait_merges_neither() {
+    const OTHER: &str = "demo-cd34";
+    let forge = Forge::set_up(Some("ci.yml"), "", &[ID, OTHER]);
+    let root = forge.scratch.root();
+    for id in [OTHER, ID] {
+        forge.start(&root, id);
+        assert_eq!(forge.submit(&root, id).code, 0);
+        forge.approve(&root, id);
+    }
+    let (tip, base) = (head(&root, "main"), forge.remote("main"));
+    forge.ci(
+        OTHER,
+        &[(&head(&root, OTHER), "completed", Some("success"))],
+    );
+    let approved = head(&root, ID);
+    forge.ci(ID, &[(&approved, "in_progress", None)]);
+    let waiting = forge.waiting(&root, ID);
+    git(&root, &["switch", "-q", OTHER]);
+    forge.ci(ID, &[(&approved, "completed", Some("success"))]);
+    let run = run(waiting.wait_with_output().unwrap());
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert_eq!(
+        run.stderr,
+        format!(
+            "`atelier merge` wrote nothing: the checkout at {} changed while its checks ran, so they do not cover what would merge now.\nRun `atelier merge` again.\n",
+            root.display()
+        )
+    );
+    assert_eq!(head(&root, "main"), tip);
+    assert_eq!(forge.remote("main"), base);
 }
 
 #[test]

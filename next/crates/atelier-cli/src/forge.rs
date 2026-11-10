@@ -18,10 +18,10 @@
 use crate::git;
 use atelier_core::Forge;
 use serde_json::Value;
-use std::io::Read;
+use std::fs::File;
+use std::io::{Read, Seek};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 /// Why the forge could not answer.
@@ -229,13 +229,20 @@ impl Github {
     /// Runs `gh` and returns its standard output, telling a missing or
     /// signed-out `gh` from other failures.
     fn gh(&self, args: &[&str], what: &str) -> Result<Vec<u8>, ForgeError> {
+        let unreachable = |error: std::io::Error| ForgeError::Unreachable(error.to_string());
+        // Its output goes to files, not pipes, so a process it leaves
+        // behind holding them cannot keep this call past its deadline.
+        let (mut stdout, mut stderr) = (
+            tempfile::tempfile().map_err(unreachable)?,
+            tempfile::tempfile().map_err(unreachable)?,
+        );
         let mut child = match Command::new("gh")
             .args(args)
             .env("GH_PROMPT_DISABLED", "1")
             .env("NO_COLOR", "1")
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(stdout.try_clone().map_err(unreachable)?)
+            .stderr(stderr.try_clone().map_err(unreachable)?)
             .spawn()
         {
             Ok(child) => child,
@@ -244,11 +251,8 @@ impl Github {
             }
             Err(error) => return Err(ForgeError::Unreachable(error.to_string())),
         };
-        let stdout = read_all(child.stdout.take());
-        let stderr = read_all(child.stderr.take());
         let status = match wait(&mut child, self.deadline) {
             Ok(Some(status)) => status,
-            // The readers are left to end with the pipes.
             Ok(None) => {
                 return Err(ForgeError::Unreachable(format!(
                     "{what} did not answer in time"
@@ -256,8 +260,8 @@ impl Github {
             }
             Err(error) => return Err(ForgeError::Unreachable(error.to_string())),
         };
-        let stdout = stdout.join().unwrap_or_default();
-        let stderr = stderr.join().unwrap_or_default();
+        let stdout = read_all(&mut stdout).map_err(unreachable)?;
+        let stderr = read_all(&mut stderr).map_err(unreachable)?;
         if !status.success() {
             let stderr = String::from_utf8_lossy(&stderr);
             // gh exits 4 when it needs a sign-in; `gh auth status` exits 1
@@ -283,16 +287,12 @@ impl Github {
     }
 }
 
-/// Reads all of `pipe` on a thread of its own, so neither pipe of a child
-/// fills while the other is read.
-fn read_all(pipe: Option<impl Read + Send + 'static>) -> JoinHandle<Vec<u8>> {
-    std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        if let Some(mut pipe) = pipe {
-            let _ = pipe.read_to_end(&mut bytes);
-        }
-        bytes
-    })
+/// Everything written to `file`, from its start.
+fn read_all(file: &mut File) -> std::io::Result<Vec<u8>> {
+    file.rewind()?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Waits for `child` to exit, or until `deadline`, when it is killed and

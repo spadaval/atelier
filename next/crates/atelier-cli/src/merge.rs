@@ -50,13 +50,19 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     // Until CI passes nothing is locked and nothing in the clone written,
     // so a merge interrupted then leaves it as it was; everything read
     // before is read again under the lock.
-    if let Some(outcome) = before_lock(trivial.is_some())? {
-        return Ok(outcome);
-    }
+    let judged = match before_lock(trivial.is_some())? {
+        Ok(id) => id,
+        Err(outcome) => return Ok(outcome),
+    };
     // Everything is read under the lock, so a merge that waited for
     // another reads the base that one left.
     let _lock = lock(root)?;
     let repo = &mut Repo::open()?;
+    // The item it waited for is the one it merges.
+    if repo.branch.as_deref() != Some(&judged) {
+        let moved = Moved::Checkout(repo.root.clone());
+        return Ok(Outcome::Refused(output::moved(&moved, &judged, &repo.base)));
+    }
     let Judged {
         head,
         id,
@@ -251,28 +257,28 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
 
 /// What comes before the lock where a forge is configured: the branch
 /// pushed and its pull request opened, each only when missing, then the
-/// wait for CI. It prints as it goes, since the wait is long, and returns
-/// the outcome when `merge` stops here.
-fn before_lock(trivial: bool) -> Result<Option<Outcome>> {
+/// wait for CI. It prints as it goes, since the wait is long. It returns
+/// the item it judged, or the outcome when `merge` stops here.
+fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
     let repo = &mut Repo::open()?;
     let judged = match read(repo, trivial)? {
         Ok(judged) => judged,
-        Err(outcome) => return Ok(Some(outcome)),
+        Err(outcome) => return Ok(Err(outcome)),
     };
     let Some(forge) = judged.config.forge.as_ref().filter(|_| !judged.merged) else {
-        return Ok(None);
+        return Ok(Ok(judged.id));
     };
     let (root, base) = (&repo.root, &repo.base);
     let Judged { head, id, .. } = &judged;
     // CI does not run on a pull request that conflicts.
     if let Err(conflicts) = git::merge_tree(root, &repo.base_tip, head)? {
-        return Ok(Some(Outcome::Refused(output::conflicts(
+        return Ok(Err(Outcome::Refused(output::conflicts(
             id, base, &conflicts,
         ))));
     }
     let github = match Github::open(root, forge).and_then(|g| g.signed_in().map(|()| g)) {
         Ok(github) => github,
-        Err(error) => return Ok(Some(Outcome::Refused(output::forge_failed(&error, false)))),
+        Err(error) => return Ok(Err(Outcome::Refused(output::forge_failed(&error, false)))),
     };
     // A push would start CI again, and cancel a run in progress, so the
     // branch is pushed only when no run on the forge's copy would count.
@@ -282,18 +288,18 @@ fn before_lock(trivial: bool) -> Result<Option<Outcome>> {
         _ => {
             if let Err(error) = push(root, &forge.remote, head, id) {
                 let failed = output::branch_push_failed(id, &forge.remote, &error);
-                return Ok(Some(Outcome::Refused(failed)));
+                return Ok(Err(Outcome::Refused(failed)));
             }
             true
         }
     };
     let pull = match pull_request(&github, id, &judged.title, base) {
         Ok(pull) => pull,
-        Err(error) => return Ok(Some(Outcome::Refused(output::forge_failed(&error, pushed)))),
+        Err(error) => return Ok(Err(Outcome::Refused(output::forge_failed(&error, pushed)))),
     };
     say(&output::pull_request(id, &forge.remote, &pull, pushed));
     let Some(workflow) = &forge.ci_workflow else {
-        return Ok(None);
+        return Ok(Ok(judged.id.clone()));
     };
     let (wait, poll) = wait_times();
     let deadline = Instant::now() + wait;
@@ -302,21 +308,19 @@ fn before_lock(trivial: bool) -> Result<Option<Outcome>> {
     say(&output::waiting_for_ci(workflow, &pull, wait));
     loop {
         let pending = match ci(&github, workflow, root, id, head, &mut known)? {
-            Ci::Passed => return Ok(None),
-            Ci::Failed(run) => {
-                return Ok(Some(Outcome::Refused(output::ci_failed(workflow, &run))))
-            }
+            Ci::Passed => return Ok(Ok(judged.id.clone())),
+            Ci::Failed(run) => return Ok(Err(Outcome::Refused(output::ci_failed(workflow, &run)))),
             Ci::Pending { newest, error } => {
                 output::ci_pending(workflow, head, newest.as_ref(), error)
             }
         };
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
-            return Ok(Some(Outcome::NotYet(pending)));
+            return Ok(Err(Outcome::NotYet(pending)));
         }
         std::thread::sleep(poll.min(left));
         if left <= poll {
-            return Ok(Some(Outcome::NotYet(pending)));
+            return Ok(Err(Outcome::NotYet(pending)));
         }
     }
 }

@@ -497,7 +497,8 @@ post-checkout Git hook prints it on every branch switch.
    bound, stop with exit status 3. The wait holds no lock and writes
    nothing.
 3. Take the merge lock, then read everything again, as in step 1. Nothing
-   read before the lock is trusted.
+   read before the lock is trusted, and a checkout now on another branch
+   is refused, so `merge` merges only the item it waited for.
 4. Check the act's conditions from the table: the approval covers the
    head, or `--trivial "<why>"` was given on a building item with no
    review file; no Decisions entry is unanswered; no tracked file has
