@@ -717,8 +717,8 @@ fn settling_lines_in_another_form_are_refused() {
 fn field_lines_in_a_fenced_example_are_text() {
     let review = "items/atelier-06jc/reviews/1-k3fa.md";
     let item = "items/atelier-06jc/item.md";
-    let fenced_taken = "```text\nTaken: atelier-bbbb by example-thread\n```";
-    let fenced_entry = "```text\nFinding: 2-m2bn.1\nAnswer by example-thread: Example only\nOutcome: no action\n```";
+    let fenced_taken = "````text\n```\nTaken: atelier-bbbb by example-thread\n```\n````";
+    let fenced_entry = "~~~~\n~~~\nFinding: 2-m2bn.1\nAnswer by example-thread: Example only\nOutcome: no action\n~~~\n~~~~";
     let mut files = example();
     for (path, old, new) in [
         (review, "Taken: atelier-n3w1 by t3-gardener", fenced_taken),

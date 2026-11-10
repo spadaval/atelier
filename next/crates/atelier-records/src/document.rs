@@ -17,26 +17,38 @@ pub(crate) fn join(front_matter: &str, body: &str) -> String {
 /// The lines of a Markdown `text` that are not in a fenced code block, each
 /// with the offset it starts at and without its newline. The fence lines
 /// themselves are left out too, so an example in a fence is never read as a
-/// heading or a field.
+/// heading or a field. As in CommonMark, a fence closes only on a line of
+/// its own character, at least as long, with nothing after it.
 pub(crate) fn unfenced_lines(text: &str) -> Vec<(usize, &str)> {
     let mut lines = Vec::new();
-    let mut fence: Option<&str> = None;
+    let mut open: Option<(char, usize)> = None;
     let mut offset = 0;
     for line in text.split_inclusive('\n') {
         let start = offset;
         offset += line.len();
         let line = line.trim_end_matches('\n');
-        let marker = ["```", "~~~"]
-            .into_iter()
-            .find(|marker| line.trim_start().starts_with(marker));
-        match (fence, marker) {
-            (Some(open), _) if line.trim_start().starts_with(open) => fence = None,
+        match (open, fence(line)) {
+            (Some((c, len)), Some((close, close_len, rest)))
+                if close == c && close_len >= len && rest.trim().is_empty() =>
+            {
+                open = None
+            }
             (Some(_), _) => {}
-            (None, Some(open)) => fence = Some(open),
+            (None, Some((c, len, _))) => open = Some((c, len)),
             (None, None) => lines.push((start, line)),
         }
     }
     lines
+}
+
+/// A fence line's character, its length, and what follows it: three or
+/// more backticks or tildes, indented by at most three spaces.
+fn fence(line: &str) -> Option<(char, usize, &str)> {
+    let marks = line.trim_start_matches(' ');
+    let c = marks.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let rest = marks.trim_start_matches(c);
+    let len = marks.len() - rest.len();
+    (line.len() - marks.len() <= 3 && len >= 3).then_some((c, len, rest))
 }
 
 /// The sections of a Markdown `text` under headings of one `level`, as
@@ -105,8 +117,16 @@ mod tests {
 
     #[test]
     fn leaves_out_fenced_lines_and_their_fences() {
-        let text = "a\n```text\nTaken: x\n~~~\n```\nb\n~~~\n```\n~~~\nc";
-        let lines: Vec<&str> = unfenced_lines(text).into_iter().map(|(_, l)| l).collect();
-        assert_eq!(lines, ["a", "b", "c"]);
+        let lines =
+            |text| -> Vec<&str> { unfenced_lines(text).into_iter().map(|(_, l)| l).collect() };
+        assert_eq!(
+            lines("a\n```text\nTaken: x\n~~~\n```\nb\n~~~\n```\n~~~\nc"),
+            ["a", "b", "c"]
+        );
+        // Only a line of the same character, at least as long, closes.
+        assert_eq!(lines("````\n```\nTaken: x\n```\n````\nb"), ["b"]);
+        assert_eq!(lines("~~~~\n~~~\n~~~~ not closing\nx\n~~~~~\nb"), ["b"]);
+        // Four spaces of indent is no fence.
+        assert_eq!(lines("    ```\na"), ["    ```", "a"]);
     }
 }
