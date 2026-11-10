@@ -128,7 +128,9 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
   the tool calls before its first edit outside `.atelier/` and scratch, build and harness
   directories. An edit is a T3 `file_change`, or a shell command that writes a source,
   configuration or documentation file by redirection, `tee`, `sed -i`, `perl -i`, `cp`, `mv`, a
-  patch or Python's `open(..., 'w')`. Shell commands alone are reported beside it.
+  patch, or Python (`open(p, "w")`, `Path(p).write_text()`, `p.open("w")`, with `p` a literal path
+  or a name bound to one). A relative target is taken from the last `cd` before it in the same
+  command. Shell commands alone are reported beside it.
 - **Rework**: the first-parent history replayed line by line, each line dated when its commit
   reached the base. Of lines written from the window start to 14 days before the cutoff, the
   share deleted within 14 days. `.atelier/` and lock files are left out.
