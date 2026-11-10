@@ -61,6 +61,10 @@ The criterion holds. In the final round (binary at ce0c2d4), three Claude Opus 5
 
 Two rounds by GPT-6.1 Sol. Round 1 (atelier-3k9r, atelier-g29j, both fix now) found the grader missed refusals an enclosing shell hid and counted shell calls rather than invocations; both fixed in 13d00d37, and the table recounted. Round 2 approved at 3bea3c89 (atelier-kuwa) with no new finding.
 
+### After merging master
+
+atelier-xtvh merged first, and the sync (`atelier merge --sync`, merge commit e599642f) conflicted in both specifications' `last_changed` lines and in `submit`'s code and output. Both are kept: `submit` prints "Submitted", then xtvh's forge lines, then this item's warning about uncommitted changes and its handoff; xtvh's two forge `submit` tests now expect that handoff. After the merge, `next/` passes fmt, clippy and 123 of 123 tests, the CI `next` job's steps pass, the harness (7) and grader (8) tests pass, and one fresh Claude and one fresh Codex run passed with no refused or errored call (results file, "Check after merging master").
+
 ### Decisions
 
 - The reviewer is a thread the harness starts, not a second invocation. A Claude Code `Agent` subagent carries its parent's `CLAUDE_CODE_SESSION_ID` (headless and under T3) and its parent's `T3CODE_THREAD_ID` (under T3); a Codex `spawn_agent` child shares `CODEX_SESSION_ID` and has its own `CODEX_THREAD_ID`, which Atelier does not read. So the harness stands in for T3 Code: each agent gets its own `T3CODE_THREAD_ID`, and a `delegate` command, described in the system prompt and nowhere else, starts another as a new thread. The results file and the architecture specification's Threads and roles record this.
