@@ -15,9 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Report the last answer when the bound cuts off `merge`'s final poll: its test failed in CI on pull request 106"
-updated_at: "2026-11-10T21:23:32.308509103+00:00"
+updated_at: "2026-11-10T21:26:40.115392373+00:00"
 ---
 
 ## Goal

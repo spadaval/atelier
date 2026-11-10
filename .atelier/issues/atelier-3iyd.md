@@ -14,9 +14,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Medium: next/crates/atelier-cli/src/merge.rs:101 R1: CI revalidation under the merge lock uses a fresh Github with no d…"
-updated_at: "2026-11-10T21:23:33.433956150+00:00"
+updated_at: "2026-11-10T21:26:42.428832206+00:00"
 ---
 
 ## Goal

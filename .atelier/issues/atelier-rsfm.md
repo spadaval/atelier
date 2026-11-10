@@ -5,6 +5,9 @@ issue_type: "task"
 labels:
 - "deferred-findings"
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-rsfm
 priority: "P1"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Bound merge's CI check under the lock and fix its flaky wait test: follow-ups to atelier-xtvh"
-updated_at: "2026-11-10T21:23:33.142279536+00:00"
+updated_at: "2026-11-10T21:26:37.722392468+00:00"
 ---
 
 ## Goal
