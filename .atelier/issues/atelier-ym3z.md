@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add `setup` for the Git hooks, Claude Code and Codex, keeping a hook a clone already has"
-updated_at: "2026-11-10T23:10:16.005298271+00:00"
+updated_at: "2026-11-10T23:22:09.023544131+00:00"
 ---
 
 ## Goal
@@ -64,6 +64,7 @@ This is the second of step D's three items in `docs/strategies/redesign-2-core.m
   Rejected: A SessionEnd hook, whose output nobody sees
 - 2026-11-10 [decision] A hook is Atelier's only when it is the exact script setup writes and is executable; a byte-identical script that lost its mode is rewritten, not kept
   Reason: Git skips a hook that is not executable, so counting it would make status and a rerun of setup report hooks that never run
+- 2026-11-10 [note] Handoff: approved by sol-ym3z-r2 (atelier-kkd6) at 9eb8e89b after 2 rounds; 1 fix_now finding fixed (atelier-3elo, kept hook with no #! line run through the shell). master (atelier-dxrj) merged in before review. Not merged; the orchestrator merges. See ## Report.
 
 ## Report
 
@@ -240,6 +241,50 @@ $ cat .claude/settings.json | md5sum; atelier setup claude >/dev/null; cat .clau
 59f41c280d5bbe932ec7a6656efb855b  -
 59f41c280d5bbe932ec7a6656efb855b  -
 [exit 0]
+```
+
+### This repository, untouched
+
+`ls -la .git/hooks` in `/home/supadava/projects/atelier` before the work started, then after approval; only the time of `..`, the Git directory itself, differs. `.claude/settings.json` had md5 `5b872c6682550bdc623785ee6fe2edf5` both times and `git status --short .claude` was empty; `core.hooksPath` is unset.
+
+```text
+total 72
+drwxrwxr-x 2 supadava supadava 4096 Oct 15 14:27 .
+drwxrwxr-x 8 supadava supadava 4096 Nov 10 17:57 ..
+-rwxrwxr-x 1 supadava supadava  478 Oct 15 14:27 applypatch-msg.sample
+-rwxrwxr-x 1 supadava supadava  896 Oct 15 14:27 commit-msg.sample
+-rwxrwxr-x 1 supadava supadava 4726 Oct 15 14:27 fsmonitor-watchman.sample
+-rwxrwxr-x 1 supadava supadava  189 Oct 15 14:27 post-update.sample
+-rwxrwxr-x 1 supadava supadava  424 Oct 15 14:27 pre-applypatch.sample
+-rwxrwxr-x 1 supadava supadava 1649 Oct 15 14:27 pre-commit.sample
+-rwxrwxr-x 1 supadava supadava  416 Oct 15 14:27 pre-merge-commit.sample
+-rwxrwxr-x 1 supadava supadava 1374 Oct 15 14:27 pre-push.sample
+-rwxrwxr-x 1 supadava supadava 4898 Oct 15 14:27 pre-rebase.sample
+-rwxrwxr-x 1 supadava supadava  544 Oct 15 14:27 pre-receive.sample
+-rwxrwxr-x 1 supadava supadava 1492 Oct 15 14:27 prepare-commit-msg.sample
+-rwxrwxr-x 1 supadava supadava 2783 Oct 15 14:27 push-to-checkout.sample
+-rwxrwxr-x 1 supadava supadava 2308 Oct 15 14:27 sendemail-validate.sample
+-rwxrwxr-x 1 supadava supadava 3650 Oct 15 14:27 update.sample
+```
+
+```text
+total 72
+drwxrwxr-x 2 supadava supadava 4096 Oct 15 14:27 .
+drwxrwxr-x 8 supadava supadava 4096 Nov 10 18:21 ..
+-rwxrwxr-x 1 supadava supadava  478 Oct 15 14:27 applypatch-msg.sample
+-rwxrwxr-x 1 supadava supadava  896 Oct 15 14:27 commit-msg.sample
+-rwxrwxr-x 1 supadava supadava 4726 Oct 15 14:27 fsmonitor-watchman.sample
+-rwxrwxr-x 1 supadava supadava  189 Oct 15 14:27 post-update.sample
+-rwxrwxr-x 1 supadava supadava  424 Oct 15 14:27 pre-applypatch.sample
+-rwxrwxr-x 1 supadava supadava 1649 Oct 15 14:27 pre-commit.sample
+-rwxrwxr-x 1 supadava supadava  416 Oct 15 14:27 pre-merge-commit.sample
+-rwxrwxr-x 1 supadava supadava 1374 Oct 15 14:27 pre-push.sample
+-rwxrwxr-x 1 supadava supadava 4898 Oct 15 14:27 pre-rebase.sample
+-rwxrwxr-x 1 supadava supadava  544 Oct 15 14:27 pre-receive.sample
+-rwxrwxr-x 1 supadava supadava 1492 Oct 15 14:27 prepare-commit-msg.sample
+-rwxrwxr-x 1 supadava supadava 2783 Oct 15 14:27 push-to-checkout.sample
+-rwxrwxr-x 1 supadava supadava 2308 Oct 15 14:27 sendemail-validate.sample
+-rwxrwxr-x 1 supadava supadava 3650 Oct 15 14:27 update.sample
 ```
 
 ### Surprises
