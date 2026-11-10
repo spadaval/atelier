@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Rewrite the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T04:45:26.197552238+00:00"
+updated_at: "2026-11-10T05:07:03.585629075+00:00"
 ---
 
 ## Outcome

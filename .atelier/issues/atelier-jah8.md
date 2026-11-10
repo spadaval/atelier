@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Measure defects after merge and what process costs, before the redesign changes either"
-updated_at: "2026-11-10T01:48:08.874485293+00:00"
+updated_at: "2026-11-10T05:07:03.305377565+00:00"
 ---
 
 ## Outcome
