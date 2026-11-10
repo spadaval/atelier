@@ -20,12 +20,14 @@ pub struct ItemDir {
     pub reviews: Vec<ReviewFile>,
 }
 
-/// A mission record. The other files of its directory are planning
-/// documents with no required shape, and are not read.
+/// A mission record and its plan reviews, oldest round first. The other
+/// files of its directory are planning documents with no required shape,
+/// and are not read.
 #[derive(Debug, Clone)]
 pub struct MissionDir {
     pub path: PathBuf,
     pub mission: Mission,
+    pub reviews: Vec<ReviewFile>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +67,12 @@ impl Store {
     pub fn mission(&self, id: &str) -> Result<MissionDir, Problem> {
         let path = self.mission_path(id);
         let mission = parse_mission(&path, &read(&path)?)?;
-        Ok(MissionDir { path, mission })
+        let reviews = self.reviews(&self.root.join("missions").join(id).join("reviews"))?;
+        Ok(MissionDir {
+            path,
+            mission,
+            reviews,
+        })
     }
 
     /// Every mission, by ID.
@@ -106,45 +113,6 @@ impl Store {
         fs::write(path, render_mission(mission))
     }
 
-    /// Writes a new review of the item, under a file name no other review
-    /// of its round has, and returns that name.
-    pub fn create_review(&self, item_id: &str, review: &Review) -> io::Result<ReviewName> {
-        let dir = self.item_dir(item_id).join("reviews");
-        fs::create_dir_all(&dir)?;
-        for _ in 0..ids::MAX_ALLOC_ATTEMPTS {
-            let name = ReviewName {
-                round: review.round,
-                suffix: ids::random_suffix()?,
-            };
-            let file = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(dir.join(format!("{name}.md")));
-            match file {
-                Ok(mut file) => {
-                    file.write_all(render_review(review).as_bytes())?;
-                    return Ok(name);
-                }
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Err(io::Error::other("no free review file name"))
-    }
-
-    pub fn write_review(
-        &self,
-        item_id: &str,
-        name: &ReviewName,
-        review: &Review,
-    ) -> io::Result<()> {
-        let path = self
-            .item_dir(item_id)
-            .join("reviews")
-            .join(format!("{name}.md"));
-        fs::write(path, render_review(review))
-    }
-
     fn item_dir(&self, id: &str) -> PathBuf {
         self.root.join("items").join(id)
     }
@@ -173,6 +141,33 @@ impl Store {
     }
 }
 
+/// Writes a new review into `reviews/` of the item or mission directory
+/// `dir`, under a file name no other review of its round has, and returns
+/// that name.
+pub fn create_review(dir: &Path, review: &Review) -> io::Result<ReviewName> {
+    let dir = dir.join("reviews");
+    fs::create_dir_all(&dir)?;
+    for _ in 0..ids::MAX_ALLOC_ATTEMPTS {
+        let name = ReviewName {
+            round: review.round,
+            suffix: ids::random_suffix()?,
+        };
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dir.join(format!("{name}.md")));
+        match file {
+            Ok(mut file) => {
+                file.write_all(render_review(review).as_bytes())?;
+                return Ok(name);
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::other("no free review file name"))
+}
+
 /// A review read from the file at `path`, whose name without `.md` is
 /// `stem`.
 pub(crate) fn review_file(path: PathBuf, stem: &str, text: &str) -> Result<ReviewFile, Problem> {
@@ -197,16 +192,18 @@ impl ItemDir {
 
     /// Whether `## Report` holds anything besides headings and blank lines.
     pub fn report_written(&self) -> bool {
-        body::report_written(&self.item.body)
+        body::written(&self.item.body, "Report")
+    }
+
+    /// Why the item was dropped, from the `Dropped:` line `drop` writes
+    /// first under `## Report`.
+    pub fn dropped(&self) -> Option<&str> {
+        body::dropped(&self.item.body, "Report")
     }
 
     /// Every finding of every review, oldest round first.
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
-        let mut findings = Vec::new();
-        for review in &self.reviews {
-            findings.extend(review.findings()?);
-        }
-        Ok(findings)
+        findings(&self.reviews)
     }
 
     pub fn decisions(&self) -> Result<Vec<Decision>, Problem> {
@@ -229,7 +226,43 @@ impl ItemDir {
     }
 }
 
+impl MissionDir {
+    /// The content under the mission's `## <heading>`, if it has one.
+    pub fn section(&self, heading: &str) -> Option<&str> {
+        body::section(&self.mission.body, 2, heading)
+    }
+
+    /// Whether `## Result` holds anything besides headings and blank lines.
+    pub fn result_written(&self) -> bool {
+        body::written(&self.mission.body, "Result")
+    }
+
+    /// Why the mission was dropped, from the `Dropped:` line `drop` writes
+    /// first under `## Result`.
+    pub fn dropped(&self) -> Option<&str> {
+        body::dropped(&self.mission.body, "Result")
+    }
+
+    /// Every finding of every plan review, oldest round first.
+    pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
+        findings(&self.reviews)
+    }
+}
+
+fn findings(reviews: &[ReviewFile]) -> Result<Vec<Finding>, Problem> {
+    let mut findings = Vec::new();
+    for review in reviews {
+        findings.extend(review.findings()?);
+    }
+    Ok(findings)
+}
+
 impl ReviewFile {
+    /// Writes the review back to its file.
+    pub fn write(&self) -> io::Result<()> {
+        fs::write(&self.path, render_review(&self.review))
+    }
+
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
         body::findings(&self.path, &self.name, &self.review.body)
     }

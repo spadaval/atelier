@@ -1,18 +1,21 @@
-//! The planner's commands: `new`, `set` and `ready`. Planning happens on
+//! The planner's commands: `new`, `set`, `ready`, `drop` and `close`.
+//! Planning happens on
 //! the base and is committed with Git, so each reads and writes records in
 //! the checkout of the base, validates what it writes, commits nothing, and
 //! ends with the Git command that commits what it wrote.
 
 use crate::commands::{refused as refused_act, Outcome};
-use crate::repo::{git_at, item_path, mission_path, Repo};
+use crate::repo::{git_at, item_path, mission_dir, mission_path, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, Result};
-use atelier_app::acts::{check, check_mission, Act, Facts, Refusal, PLANNED, STARTED};
+use atelier_app::acts::{
+    check, check_mission, Act, Facts, MissionFacts, Refusal, PLANNED, STARTED,
+};
 use atelier_core::{
     Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority, Ready, SchemaVersion,
     Status, Threads,
 };
-use atelier_records::{validate, validate_id, ItemDir, MissionDir, Problem};
+use atelier_records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem};
 
 const ITEM_BODY: &str = "\n## Goal\n\n## Done when\n\n## Scope\n";
 const MISSION_BODY: &str =
@@ -193,16 +196,24 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Outcome> {
         at: chrono::Utc::now().into(),
     };
     let (mut items, mut missions, mut unknown, mut refused) = (vec![], vec![], vec![], vec![]);
+    let mut reviewed = String::new();
     let mut named: Vec<&str> = Vec::new();
     for id in ids.iter().map(String::as_str) {
         if named.contains(&id) {
             continue;
         }
         named.push(id);
-        if validate_id(id).is_ok() && repo.root.join(mission_path(id)).exists() {
-            let mut mission = repo.store().mission(id)?.mission;
-            match check_mission(Act::ReadyMission, mission.status) {
+        if is_mission(repo, id) {
+            let dir = repo.store().mission(id)?;
+            let facts = MissionFacts {
+                mission: &dir,
+                items: &[],
+                review: None,
+            };
+            match check_mission(Act::ReadyMission, &facts) {
                 Ok(to) => {
+                    reviewed += &plan_reviewed(repo, &dir)?;
+                    let mut mission = dir.mission;
                     mission.status = to.expect("ready sets a status");
                     mission.ready = Some(ready.clone());
                     missions.push(mission);
@@ -245,9 +256,230 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Outcome> {
     if !unknown.is_empty() || !refused.is_empty() {
         return Ok(Outcome::Refused(output::ready_refused(&unknown, &refused)));
     }
-    let said = output::readied(&named, by);
+    let said = output::readied(&named, by) + &reviewed;
     let message = format!("Ready {}", named.join(", "));
     save(repo, "ready", items, missions, &said, &message)
+}
+
+/// What `ready` says of a mission's plan reviews, for whoever says go:
+/// each review of the latest round with its verdict, and what in the plan
+/// changed since the commit it reviewed. None of it refuses anything.
+fn plan_reviewed(repo: &mut Repo, dir: &MissionDir) -> Result<String> {
+    let id = &dir.mission.id;
+    let Some(round) = dir.reviews.iter().map(|r| r.name.round).max() else {
+        return Ok(output::no_plan_review(id));
+    };
+    let latest: Vec<_> = dir
+        .reviews
+        .iter()
+        .filter(|r| r.name.round == round)
+        .collect();
+    let mut commits: Vec<&str> = latest.iter().map(|r| r.review.commit.as_str()).collect();
+    commits.sort();
+    commits.dedup();
+    let mut changed = Vec::new();
+    for commit in commits {
+        changed.push((commit, plan_changed(repo, id, commit)?));
+    }
+    Ok(output::plan_reviews(id, round, &latest, &changed))
+}
+
+/// The paths of mission `id`'s plan, its directory less its reviews and
+/// the directories of its items then or now, that differ in this checkout
+/// from `commit`; `None` when this clone lacks that commit.
+fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Vec<String>>> {
+    if !git::has_commit(&repo.root, commit)? {
+        return Ok(None);
+    }
+    let own = format!("{}/", mission_dir(id));
+    let reviews = format!("{own}reviews/");
+    let now: Vec<String> = repo
+        .store()
+        .items()?
+        .into_iter()
+        .filter(|dir| dir.item.mission.as_deref() == Some(id))
+        .map(|dir| dir.item.id)
+        .collect();
+    let mut changed = Vec::new();
+    for path in git::changed_since(&repo.root, commit, &[".atelier/missions", ".atelier/items"])? {
+        let item = path
+            .strip_prefix(".atelier/items/")
+            .and_then(|rest| rest.split('/').next());
+        let in_plan = match item {
+            None => path.starts_with(&own) && !path.starts_with(&reviews),
+            // An item that left the mission since, or was deleted, counts;
+            // one whose record then does not read is counted too.
+            Some(item) => {
+                now.iter().any(|i| i == item)
+                    || repo.item_at(commit, item).map_or(true, |then| {
+                        then.is_some_and(|d| d.item.mission.as_deref() == Some(id))
+                    })
+            }
+        };
+        if in_plan {
+            changed.push(path);
+        }
+    }
+    Ok(Some(changed))
+}
+
+/// Whether `id` names a mission in this checkout.
+fn is_mission(repo: &Repo, id: &str) -> bool {
+    validate_id(id).is_ok() && repo.root.join(mission_path(id)).exists()
+}
+
+/// `drop`: ends an item or a mission that will not be done, on the base,
+/// whatever an item's branch holds, with the reason as the first line of
+/// its Report or Result.
+pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> {
+    if let Some(refused) = off_base(repo, "drop")? {
+        return Ok(refused);
+    }
+    let Some(reason) = reason
+        .map(str::trim)
+        .filter(|r| !r.is_empty() && !r.contains(['\n', '\r']))
+    else {
+        return Ok(Outcome::Refused(output::no_drop_reason(id)));
+    };
+    let line = format!("Dropped: {reason}");
+    if is_mission(repo, id) {
+        let dir = repo.store().mission(id)?;
+        let facts = MissionFacts {
+            mission: &dir,
+            items: &[],
+            review: None,
+        };
+        if let Err(refusal) = check_mission(Act::Drop, &facts) {
+            return Ok(Outcome::Refused(output::mission_refused(
+                Act::Drop,
+                id,
+                &refusal,
+            )));
+        }
+        let mut mission = dir.mission;
+        mission.status = MissionStatus::Dropped;
+        mission.body = put_first(&mission.body, "Result", &line);
+        let said = output::dropped(id, "mission", reason, false);
+        return save(
+            repo,
+            "drop",
+            Vec::new(),
+            vec![mission],
+            &said,
+            &format!("Drop {id}"),
+        );
+    }
+    validate_id(id).map_err(|message| anyhow!(message))?;
+    let located = repo.locate_planned(id)?;
+    let Some(record) = located.record() else {
+        return Ok(Outcome::Refused(output::unknown_refused("drop", id)));
+    };
+    let facts = Facts {
+        item: record,
+        branch: located.branch.is_some(),
+        blockers: &[],
+        mission: None,
+        caller: &repo.caller,
+        checkout: None,
+    };
+    let to = match check(Act::Drop, &facts) {
+        Ok(to) => to,
+        Err(refusal) => return Ok(Outcome::Refused(refused_act(Act::Drop, refusal, &facts)?)),
+    };
+    // The base's record, whatever the branch holds. An item only on its
+    // branch, as after `start --new`, has its branch's record put there.
+    let mut item = located.base.as_ref().unwrap_or(record).item.clone();
+    item.status = to.expect("drop sets a status");
+    item.body = put_first(&item.body, "Report", &line);
+    let started = STARTED.contains(&record.item.status);
+    let said = output::dropped(id, "item", reason, started);
+    save(
+        repo,
+        "drop",
+        vec![item],
+        Vec::new(),
+        &said,
+        &format!("Drop {id}"),
+    )
+}
+
+/// `close`: ends a ready mission whose items are all done or dropped and
+/// whose Result is written, or, with its result, a draft or ready item that
+/// has no branch.
+pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome> {
+    if let Some(refused) = off_base(repo, "close")? {
+        return Ok(refused);
+    }
+    if is_mission(repo, id) {
+        if result.is_some() {
+            return Ok(Outcome::Refused(output::close_mission_text(id)));
+        }
+        let dir = repo.store().mission(id)?;
+        let mut items = Vec::new();
+        for located in repo.planned()? {
+            if let Some(record) = located.record() {
+                if record.item.mission.as_deref() == Some(id) {
+                    items.push((located.id.clone(), record.item.status));
+                }
+            }
+        }
+        let facts = MissionFacts {
+            mission: &dir,
+            items: &items,
+            review: None,
+        };
+        if let Err(refusal) = check_mission(Act::CloseMission, &facts) {
+            let refused = output::mission_refused(Act::CloseMission, id, &refusal);
+            return Ok(Outcome::Refused(refused));
+        }
+        let mut mission = dir.mission;
+        mission.status = MissionStatus::Done;
+        let said = output::closed(id, "mission");
+        return save(
+            repo,
+            "close",
+            Vec::new(),
+            vec![mission],
+            &said,
+            &format!("Close {id}"),
+        );
+    }
+    validate_id(id).map_err(|message| anyhow!(message))?;
+    let Some(result) = result.map(str::trim).filter(|r| !r.is_empty()) else {
+        return Ok(Outcome::Refused(output::no_result(id)));
+    };
+    let located = repo.locate_planned(id)?;
+    let Some(record) = located.record() else {
+        return Ok(Outcome::Refused(output::unknown_refused("close", id)));
+    };
+    let facts = Facts {
+        item: record,
+        branch: located.branch.is_some(),
+        blockers: &[],
+        mission: None,
+        caller: &repo.caller,
+        checkout: None,
+    };
+    let to = match check(Act::Close, &facts) {
+        Ok(to) => to,
+        // An item with a branch ends by its merge, or by `drop`.
+        Err(_) if facts.branch && !matches!(record.item.status, Status::Done | Status::Dropped) => {
+            return Ok(Outcome::Refused(output::close_started(id)))
+        }
+        Err(refusal) => return Ok(Outcome::Refused(refused_act(Act::Close, refusal, &facts)?)),
+    };
+    let mut item = record.item.clone();
+    item.status = to.expect("close sets a status");
+    item.body = put_first(&item.body, "Report", result);
+    let said = output::closed(id, "item");
+    save(
+        repo,
+        "close",
+        vec![item],
+        Vec::new(),
+        &said,
+        &format!("Close {id}"),
+    )
 }
 
 /// Refuses a planning command run anywhere but on the base branch.
@@ -295,11 +527,17 @@ fn save(
     for mission in &missions {
         let path = repo.root.join(mission_path(&mission.id));
         written.push((path.clone(), mission_path(&mission.id)));
-        all_missions.retain(|dir| dir.mission.id != mission.id);
-        all_missions.push(MissionDir {
-            path,
-            mission: mission.clone(),
-        });
+        match all_missions
+            .iter_mut()
+            .find(|dir| dir.mission.id == mission.id)
+        {
+            Some(dir) => dir.mission = mission.clone(),
+            None => all_missions.push(MissionDir {
+                path,
+                mission: mission.clone(),
+                reviews: Vec::new(),
+            }),
+        }
     }
     let problems: Vec<Problem> = validate(&all_items, &all_missions)
         .into_iter()

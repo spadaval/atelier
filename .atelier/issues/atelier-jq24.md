@@ -4,6 +4,9 @@ id: "atelier-jq24"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-jq24
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `drop` and `close`, and plan reviews of a mission with `review` and `verdict`"
-updated_at: "2026-11-10T19:33:55.282106206+00:00"
+updated_at: "2026-11-10T20:24:46.140190111+00:00"
 ---
 
 ## Goal

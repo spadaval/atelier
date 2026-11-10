@@ -8,5 +8,5 @@ mod review;
 mod view;
 
 pub use identity::identity;
-pub use review::{carried, Carried};
+pub use review::{carried, carried_plan, Carried};
 pub use view::{entry, overview, Branch, Entry, Located, Overview};
