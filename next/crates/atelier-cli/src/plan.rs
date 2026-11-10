@@ -381,8 +381,22 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
         Err(refusal) => return Ok(Outcome::Refused(refused_act(Act::Drop, refusal, &facts)?)),
     };
     // The base's record, whatever the branch holds. An item only on its
-    // branch, as after `start --new`, has its branch's record put there.
-    let mut item = located.base.as_ref().unwrap_or(record).item.clone();
+    // branch, as after `start --new`, gets its definition there; its
+    // Report, Decisions and reviews stay on the branch, so nothing on the
+    // base names a review the base lacks.
+    let mut item = match &located.base {
+        Some(base) => base.item.clone(),
+        None => {
+            let mut item = record.item.clone();
+            let definition = ["Goal", "Done when", "Scope"].into_iter();
+            let section = |h| match record.section(h)?.trim() {
+                "" => Some(format!("\n## {h}\n")),
+                text => Some(format!("\n## {h}\n\n{text}\n")),
+            };
+            item.body = definition.filter_map(section).collect();
+            item
+        }
+    };
     item.status = to.expect("drop sets a status");
     item.body = put_first(&item.body, "Report", &line);
     let started = STARTED.contains(&record.item.status);

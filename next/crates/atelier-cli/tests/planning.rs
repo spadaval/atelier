@@ -1052,6 +1052,61 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
 }
 
 #[test]
+fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    let work = scratch.worktree("work");
+    let started = atelier(&work, "t1", &["start", "--new", "Sneeze"]);
+    assert_eq!(started.code, 0, "{}", started.stderr);
+    let id = git(&work, &["branch", "--show-current"]);
+    let path = item_path(&id);
+    let text = read(&work, &path)
+        .replace("## Goal\n", "## Goal\n\nSneeze.\n")
+        .replace("## Done when\n", "## Done when\n\n- [x] It sneezes.\n");
+    fs::write(work.join(&path), text + "\n## Report\n\nIt sneezes.\n").unwrap();
+    git(&work, &["commit", "-qam", "Sneeze"]);
+    assert_eq!(atelier(&work, "t1", &["submit"]).code, 0);
+    // Reviewed, with a fix-now finding the Report answers.
+    assert_eq!(atelier(&work, "t2", &["review", &id]).code, 0);
+    let review = files_in(&work, &format!(".atelier/items/{id}/reviews")).remove(0);
+    append(&work, &review, &finding("Too loud"));
+    assert_eq!(atelier(&work, "t2", &["verdict", "changes"]).code, 0);
+    let stem = review
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .strip_suffix(".md")
+        .unwrap();
+    append(
+        &work,
+        &path,
+        &format!("\n### Responses\n\n- {stem}.1: fixed in abc1234\n"),
+    );
+    git(&work, &["commit", "-qam", "Answer"]);
+    let branch = tip(&work, &id);
+
+    let run = plan(&root, &["drop", &id, "--reason", "Nobody asked for it"]);
+    assert_eq!(wrote(&run.stdout), [path.clone()]);
+    let text = read(&root, &path);
+    assert_eq!(front(&text, "status"), "dropped");
+    assert_eq!(front(&text, "implementers"), "t1");
+    assert!(
+        text.ends_with(
+            "\n## Goal\n\nSneeze.\n\n## Done when\n\n- [x] It sneezes.\n\n## Scope\n\n## Report\n\n\
+             Dropped: Nobody asked for it\n"
+        ),
+        "{text}"
+    );
+    assert!(files_in(&root, &format!(".atelier/items/{id}/reviews")).is_empty());
+    assert_eq!(tip(&work, &id), branch);
+    let status = atelier(&work, "t1", &["status"]).stdout;
+    assert!(
+        status.contains("It was dropped on the base: Nobody asked for it\n"),
+        "{status}"
+    );
+}
+
+#[test]
 fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_started_one() {
     let scratch = Scratch::new(&[(ID, "ready"), ("demo-st4r", "ready"), ("demo-d0ne", "done")]);
     let root = scratch.root();

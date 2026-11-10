@@ -484,9 +484,11 @@ post-checkout Git hook prints it on every branch switch.
   local branch, and writes a draft with its section headings and nothing
   under them; an item's priority starts as `medium`.
 - **`drop` and `close`.** `drop` writes the base's record, the one in the
-  base's checkout, whatever the item's branch holds; an item that is only
-  on its branch, as after `start --new`, gets its branch's record written
-  there. Once that is committed, every command reads it first, so a
+  base's checkout, whatever the item's branch holds. An item that is only
+  on its branch, as after `start --new`, gets its branch's front matter
+  and its Goal, Done when and Scope written there, under which its Report
+  holds the reason; its reviews, the rest of its Report and its Decisions
+  stay on the branch, so nothing on the base names a review it lacks. Once that is committed, every command reads it first, so a
   started item's `submit`, `merge` and take-over are refused with its
   reason. Dropping a mission changes no item; `start` on one of its items
   is refused, saying the mission was dropped. `close` on an item with a
