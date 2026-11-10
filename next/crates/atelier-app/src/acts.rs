@@ -138,7 +138,8 @@ pub struct Facts<'a> {
 /// What `merge` reads from Git besides the item's record.
 #[derive(Debug, Clone, Default)]
 pub struct Checkout {
-    /// Tracked files whose changes are not committed.
+    /// Tracked files whose changes are not committed, and files in the
+    /// item's directory that are not tracked.
     pub uncommitted: Vec<String>,
     /// On an approved item: what differs between the commit its approval
     /// reviewed and the branch's head.
@@ -272,7 +273,8 @@ pub enum Condition {
         commit: String,
         changed: Vec<String>,
     },
-    /// Tracked files in the checkout have uncommitted changes.
+    /// The checkout holds changes no commit has: to tracked files, or new
+    /// files in the item's directory.
     Uncommitted(Vec<String>),
     /// `merge --trivial` needs an item nobody reviewed.
     Reviewed,

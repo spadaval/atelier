@@ -7,7 +7,7 @@ mod common;
 use common::*;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// A merge check that waits: it creates `$MERGE_MARK`, then waits until
@@ -86,9 +86,14 @@ struct Waiting {
 
 impl Waiting {
     fn start(at: &Path, thread: &str, scratch: &Path, name: &str) -> Waiting {
+        Waiting::spawn(atelier_command(at, thread, &["merge"]), scratch, name)
+    }
+
+    /// Runs `merge`, which `command` is, until it waits in its check.
+    fn spawn(mut command: Command, scratch: &Path, name: &str) -> Waiting {
         let mark = scratch.join(format!("{name}.mark"));
         let release = scratch.join(format!("{name}.release"));
-        let child = atelier_command(at, thread, &["merge"])
+        let child = command
             .env("MERGE_MARK", &mark)
             .env("MERGE_RELEASE", &release)
             .stdout(Stdio::piped())
@@ -408,7 +413,7 @@ fn uncommitted_changes_in_the_checkout_stop_the_merge() {
     assert_eq!(run.code, 1);
     assert!(
         run.stderr.contains(
-            "  [ ] No tracked file has uncommitted changes (these do: hello.txt)\nCommit them, or set them aside with `git stash`.\n"
+            "  [ ] Every change to a tracked file or to this item's directory is committed (these are not: hello.txt)\nCommit them, or set them aside with `git stash`.\n"
         ),
         "{}",
         run.stderr
@@ -745,8 +750,14 @@ struct Forge {
 
 impl Forge {
     fn new(ci_workflow: Option<&str>) -> Forge {
+        Forge::with(ci_workflow, "")
+    }
+
+    /// As [`Forge::new`], with `checks` added to the base's config.
+    fn with(ci_workflow: Option<&str>, checks: &str) -> Forge {
         let workflow = ci_workflow.map_or(String::new(), |w| format!("ci_workflow = \"{w}\"\n"));
-        let config = format!("\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n{workflow}");
+        let config =
+            format!("{checks}\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n{workflow}");
         let scratch = approved_with(&config, |_| {});
         let root = scratch.root();
         let gh = scratch.dir.path().join("gh");
@@ -781,18 +792,19 @@ impl Forge {
     }
 
     fn merge(&self) -> Run {
-        let root = self.scratch.root();
+        run(self.command().output().unwrap())
+    }
+
+    /// `atelier merge` as t1, with the fake gh first on `PATH`.
+    fn command(&self) -> Command {
         let path = format!(
             "{}:{}",
             self.gh.join("bin").display(),
             std::env::var("PATH").unwrap()
         );
-        let output = atelier_command(&root, "t1", &["merge"])
-            .env("PATH", path)
-            .env("FAKE_GH", &self.gh)
-            .output()
-            .unwrap();
-        run(output)
+        let mut command = atelier_command(&self.scratch.root(), "t1", &["merge"]);
+        command.env("PATH", path).env("FAKE_GH", &self.gh);
+        command
     }
 
     /// The forge's copy of `branch`, if it has one.
@@ -965,4 +977,42 @@ fn a_merge_whose_base_push_failed_pushes_it_when_run_again() {
         )
     );
     assert_eq!(forge.remote("main"), Some(merged));
+}
+
+#[test]
+fn a_forge_merge_whose_branch_moves_during_its_checks_pushes_nothing() {
+    let forge = Forge::with(Some("ci.yml"), &waiting_check());
+    let root = forge.scratch.root();
+    let tip = head(&root, "main");
+    let waiting = Waiting::spawn(forge.command(), forge.scratch.dir.path(), "merge");
+    append(&root, &item_path(ID), "\nMore report.\n");
+    git(&root, &["commit", "-qam", "Meanwhile"]);
+    let run = waiting.finish();
+    wrote_nothing(&forge.scratch, run, &format!("branch {ID}"), &tip);
+    assert_eq!(forge.remote(ID), None);
+    assert_eq!(forge.opened(), 0);
+}
+
+#[test]
+fn an_untracked_file_in_the_items_directory_stops_the_merge() {
+    // A review file nobody committed still means the item was reviewed.
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    let path = root.join(item_path(ID));
+    let text = fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]");
+    fs::write(&path, text + "It prints hello.\n").unwrap();
+    git(&root, &["commit", "-qam", "Report"]);
+    fs::create_dir_all(root.join(REVIEWS)).unwrap();
+    fs::write(root.join(REVIEWS).join("1-aaaa.md"), UNDECIDED).unwrap();
+    let before = state(&root);
+    let run = merge(&root, "t1", &["--trivial", "a typo"]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr
+            .contains(&format!("(these are not: {REVIEWS}/1-aaaa.md)\n")),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(state(&root), before);
 }

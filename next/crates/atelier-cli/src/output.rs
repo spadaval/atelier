@@ -79,7 +79,7 @@ fn condition(id: &str, condition: &Condition) -> String {
             some(changed)
         ),
         Condition::Uncommitted(paths) => format!(
-            "No tracked file has uncommitted changes (these do: {})",
+            "Every change to a tracked file or to this item's directory is committed (these are not: {})",
             some(paths)
         ),
         Condition::Reviewed => {

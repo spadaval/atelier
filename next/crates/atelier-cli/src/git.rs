@@ -281,6 +281,22 @@ pub fn uncommitted(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// The files under `dir` that Git does not track and does not ignore.
+pub fn untracked(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    let listed = listing(
+        repo,
+        &[
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            dir,
+        ],
+    )?;
+    Ok(names(&listed))
+}
+
 /// The paths that differ between the commits `from` and `to`.
 pub fn changed(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     let listed = listing(

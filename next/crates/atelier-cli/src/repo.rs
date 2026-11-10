@@ -130,9 +130,18 @@ impl Repo {
             }
         };
         Ok(Checkout {
-            uncommitted: git::uncommitted(&self.root)?,
+            uncommitted: self.uncommitted(&record.item.id)?,
             since_approval,
         })
+    }
+
+    /// What the checkout holds that no commit does and `merge` would leave
+    /// behind: changes to tracked files, and new files in the item's
+    /// directory, such as a review file.
+    pub fn uncommitted(&self, id: &str) -> Result<Vec<String>> {
+        let mut paths = git::uncommitted(&self.root)?;
+        paths.extend(git::untracked(&self.root, &item_dir(id))?);
+        Ok(paths)
     }
 
     /// `config.toml` as the base's tip holds it, which `merge` reads, so a

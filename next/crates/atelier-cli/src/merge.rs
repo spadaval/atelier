@@ -135,6 +135,11 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         }
     }
 
+    // Confirmed before the forge's writes too, so nothing is pushed for a
+    // head that moved.
+    if let Some(moved) = moved(repo, &head, &base_tip, base_checkout.as_deref())? {
+        return Ok(Outcome::Refused(output::moved(&moved, &id, &base)));
+    }
     let mut said = String::new();
     if let Some(forge) = &config.forge {
         let github = match Github::open(&root, forge).and_then(|g| g.signed_in().map(|()| g)) {
@@ -256,7 +261,7 @@ fn moved(
             && git::head(path)? == tip
             && git::uncommitted(path)?.is_empty())
     };
-    if !unchanged(root, branch, head)? {
+    if !unchanged(root, branch, head)? || !repo.uncommitted(branch)?.is_empty() {
         return Ok(Some(Moved::Checkout(root.clone())));
     }
     let now = git::checkout_of(root, &repo.base)?;
