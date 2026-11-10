@@ -24,8 +24,9 @@ match when the rerun reproduces the baseline. Then check the snapshot is unchang
 nice -n 19 ionice -c3 python3 scripts/scorecard/freeze.py verify
 ```
 
-It prints `ok: 4197 files match the manifest; modes are owner-only` and exits 0 when nothing
-changed; otherwise it lists each changed, missing or unlisted file and each loose mode, and exits 1.
+It takes no arguments: it checks `~/.local/share/atelier-baseline/2026-11`, the path built into
+`freeze.py`, against the committed manifest. It prints
+`ok: 4197 files match the manifest; modes are owner-only` and exits 0 when nothing changed; otherwise it lists each changed, missing or unlisted file and each loose mode, and exits 1.
 
 Options of `counted.py`:
 
