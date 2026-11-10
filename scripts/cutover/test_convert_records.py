@@ -84,7 +84,7 @@ status: approved
 
 # Why
 
-Widgets are square. See [the architecture](architecture.md "the design") and [the shape](#shape).
+Widgets are square. See [the architecture](architecture.md "the design"), [the shape](#shape) and [the mock][m].
 
 ## Detail
 
@@ -382,7 +382,7 @@ Shapes vary.
         self.assertEqual(self.body(mission + "mission.md"), """
 ## Why
 
-Widgets are square. See [the architecture](../../../docs/strategies/architecture.md "the design") and [the shape](design.md#shape).
+Widgets are square. See [the architecture](../../../docs/strategies/architecture.md "the design"), [the shape](design.md#shape) and [the mock][m].
 
 ### Detail
 
@@ -403,6 +403,8 @@ Widgets only.
 ## Authority
 
 The lead decides.
+
+[m]: ../../../docs/strategies/mocks/a.md#a-mock
 """)
         self.assertEqual(self.read(mission + "design.md"), """---
 status: approved
@@ -445,7 +447,10 @@ Corners.
             for target in inline + re.findall(r"^\[[^\]]+\]: <?([^\s>]+)>?$", text, re.M):
                 links += 1
                 self.assertTrue(resolves(self.repo, rel, target), f"{rel}: {target}")
-        self.assertEqual(links, 6)
+            # Each reference a document uses is defined in that document.
+            for label in re.findall(r"\]\[([^\]]+)\]", text) + re.findall(r"\[([^\]]+)\]\[\]", text):
+                self.assertIn(f"\n[{label}]: ", text, f"{rel}: [{label}]")
+        self.assertEqual(links, 7)
         self.assertEqual(self.read("docs/strategies/architecture.md"), FILES["docs/strategies/architecture.md"])
         self.assertIn("Tracked files that still name a moved file's old path, left unchanged:\n"
                       "  docs/other.md: docs/strategies/plan.md\n"

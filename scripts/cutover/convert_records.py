@@ -33,6 +33,7 @@ DECISION_DONE_WHEN = "- [ ] The question is answered and the answer is written i
 # alternative is (what comes before it, the destination).
 LINK = re.compile(r"(\]\(\s*<)([^>\n]+)(?=>)|(\]\(\s*)([^)\s<]+)(?=[\s)])"
                   r"|^( {0,3}\[[^\]]+\]:[ \t]*<)([^>\n]+)(?=>)|^( {0,3}\[[^\]]+\]:[ \t]*)([^\s<]+)", re.M)
+REFERENCE = re.compile(r"^ {0,3}\[([^\]]+)\]:.*$", re.M)
 
 
 def destination(m):
@@ -496,6 +497,18 @@ def split_strategy(text):
             taken[name] = shift_headings(content, 2 - level)
         else:
             rest += head + content
+    # A reference definition goes with each part that uses it.
+    definitions = {m.group(1).lower(): m.group(0) for m in REFERENCE.finditer(text)}
+
+    def missing(part):
+        defined = {m.group(1).lower() for m in REFERENCE.finditer(part)}
+        used = [label for label in sorted(definitions) if f"[{label}]" in part.lower() and label not in defined]
+        return "".join(f"\n{definitions[label]}\n" for label in used)
+
+    if taken:
+        last = [name for name in MISSION_SECTIONS if name in taken][-1]
+        taken[last] = taken[last].rstrip("\n") + "\n" + missing("".join(taken.values()))
+    rest += missing(rest)
     where = {a: "design.md" for a in anchors(rest)}
     where.update({a: "mission.md" for a in anchors("".join(f"# {t}\n{c}" for t, c in taken.items()))})
     return taken, rest, where
