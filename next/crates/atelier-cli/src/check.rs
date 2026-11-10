@@ -111,11 +111,23 @@ fn kept(name: &str, args: &[String], input: Option<&str>) -> Result<Option<Strin
     if !setup::runs(&path) {
         return Ok(None);
     }
-    let stdin = match input {
-        Some(_) => Stdio::piped(),
-        None => Stdio::inherit(),
+    let spawn = |command: &mut Command| {
+        let stdin = match input {
+            Some(_) => Stdio::piped(),
+            None => Stdio::inherit(),
+        };
+        command.args(args).stdin(stdin).spawn()
     };
-    let mut child = match Command::new(&path).args(args).stdin(stdin).spawn() {
+    // Git runs a script with no `#!` line through the shell, as when exec
+    // fails with ENOEXEC, so the kept hook is run the same way.
+    const ENOEXEC: i32 = 8;
+    let spawned = match spawn(&mut Command::new(&path)) {
+        Err(error) if error.raw_os_error() == Some(ENOEXEC) => {
+            spawn(Command::new("/bin/sh").arg(&path))
+        }
+        spawned => spawned,
+    };
+    let mut child = match spawned {
         Ok(child) => child,
         Err(error) => return Ok(Some(format!("it could not start: {error}"))),
     };

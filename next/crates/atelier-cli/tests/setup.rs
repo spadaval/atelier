@@ -379,6 +379,41 @@ fn a_symbolic_link_or_a_hook_that_is_not_executable_is_kept_as_it_was_and_runs_o
 }
 
 #[test]
+fn a_kept_hook_with_no_interpreter_line_runs_through_the_shell_as_git_ran_it() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    let dir = hooks_dir(&root);
+    write_hook(
+        &dir.join("pre-commit"),
+        "echo own hook ran >&2\nexit 0\n",
+        0o755,
+    );
+    fs::write(root.join("one.txt"), "one\n").unwrap();
+    git(&root, &["add", "one.txt"]);
+    let run = git_hooked(&root, &["commit", "-qm", "One"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(run.stderr.contains("own hook ran\n"), "{}", run.stderr);
+
+    assert_eq!(atelier(&root, "t1", &["setup"]).code, 0);
+    fs::write(root.join("two.txt"), "two\n").unwrap();
+    git(&root, &["add", "two.txt"]);
+    let run = git_hooked(&root, &["commit", "-qm", "Two"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(run.stderr.contains("own hook ran\n"), "{}", run.stderr);
+
+    write_hook(&dir.join("pre-commit.local"), "exit 5\n", 0o755);
+    fs::write(root.join("three.txt"), "three\n").unwrap();
+    git(&root, &["add", "three.txt"]);
+    let run = git_hooked(&root, &["commit", "-qm", "Three"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr.contains("refused: it exited with 5."),
+        "{}",
+        run.stderr
+    );
+}
+
+#[test]
 fn a_kept_post_checkout_hook_that_fails_does_not_fail_the_checkout() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
