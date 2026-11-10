@@ -6,6 +6,8 @@ Current guidance:
 - [Validation and review](validation.md)
 - [Architecture quality vocabulary](architecture-quality.md)
 - [Rust quality hazard scans](rust-quality-hazard-scans.md)
+- [Scorecard baseline, November 2026](scorecard-baseline-2026-11.md): the
+  redesign's scorecard before the redesign, with proposed targets
 
 Historical audits preserve evidence from earlier designs. Their command, cache,
 review-provider, and process guidance may be superseded by

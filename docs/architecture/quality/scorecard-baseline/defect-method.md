@@ -141,6 +141,12 @@ are in step 4.
    enough. A bug filed at or before that time was known before the cause
    merged, usually from its review.
 
+   *Amended 2026-11-10 by the full count* ([defects.md](defects.md#what-changed-from-the-method)):
+   compare the bug's `created_at` with when the cause commit reached the
+   base, read from history, and use `closed_at` only where history does not
+   show it. The 30 rows and the Result below use step 6 as first written;
+   under the amended rule row 25 is before merge.
+
 Every trace ends in one of these outcomes:
 
 | Outcome | Meaning | Counted in the scorecard row as |

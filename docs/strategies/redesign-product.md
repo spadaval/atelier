@@ -426,18 +426,22 @@ it drives down, and exchange rates decide what to cut.
 
 | Group | Measure | Before |
 | --- | --- | --- |
-| Outcome | Defects found after merge, traced to the item that caused them | Not measured |
-| Outcome | Sumeet's interventions per mission, by kind: status question, unsticking a stall, correcting direction | 2 to 8 per mission |
-| Cost | Process share: an item's tool calls and tokens not spent reading, editing or testing product code | 28% of calls after the last edit; 12% bookkeeping |
-| Cost | Confusion: refused or errored calls, help lookups, commands run by the wrong role | 4.1% of calls refused |
-| Cost | Tokens per merged item | About $11.50 to $20 at list price |
-| Exchange | Gate precision: refusals that stopped a real mistake | About 16% |
-| Exchange | Review yield: fix-now findings that are product defects | 39% |
-| Exchange | Skips: how often each rule is passed with `ATELIER_SKIP` | No such thing today |
-| Codebase health | Tool calls before an agent's first edit on an item | Not measured |
-| Codebase health | Rework: lines deleted within two weeks of being written | Not measured this way |
-| Codebase health | Where each defect was caught: the author's tests, CI, review, after merge | Only review is counted |
-| Codebase health | Non-test lines of Rust | 48,988 |
+| Outcome | Defects found after merge, traced to the item that caused them | 15 of 277 merged items in atelier (5.4 per 100), a floor; 18 of 361 in astromech; the other three filed almost no bugs |
+| Outcome | Sumeet's interventions per mission, by kind: status question, unsticking a stall, correcting direction | 0 to 17 per started mission, median 2.5; 39 of 60 correcting direction |
+| Cost | Process share: an item's tool calls and tokens not spent reading, editing or testing product code | atelier 28.0% of shell commands and 21.6% of token cost; 7.6% to 20.3% of commands elsewhere |
+| Cost | Confusion: refused or errored calls, help lookups, commands run by the wrong role | atelier 25.2 per 100 `atelier` calls, about half help lookups; 16.39 to 24.27 elsewhere; wrong role not measured |
+| Cost | Tokens per merged item | Median $3.06 in atelier, $3.22 to $13.81 elsewhere, at list price, orchestrator threads left out |
+| Exchange | Gate precision: refusals that stopped a real mistake | 11 of 100 |
+| Exchange | Review yield: fix-now findings that are product defects | 46 of 100 (45 with one label corrected) |
+| Exchange | Skips: how often each rule is passed with `ATELIER_SKIP` | No such mechanism |
+| Codebase health | Tool calls before an agent's first edit on an item | Median 22 in atelier, 10 to 21 elsewhere |
+| Codebase health | Rework: lines deleted within two weeks of being written | atelier 10.8%; 3.4% to 7.2% elsewhere |
+| Codebase health | Where each defect was caught: the author's tests, CI, review, after merge | atelier: review about 191, CI 6, after merge 15; the author's tests not observable |
+| Codebase health | Non-test lines of Rust | 48,989 |
+
+The Before column is the November 2026 baseline. Each number's method,
+coverage and limits are in
+[scorecard-baseline-2026-11.md](../architecture/quality/scorecard-baseline-2026-11.md).
 
 The codebase health rows are trends for one repository against its own past.
 Agents are not scored on them, and none is a limit.
