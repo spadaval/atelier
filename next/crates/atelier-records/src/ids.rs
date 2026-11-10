@@ -39,7 +39,7 @@ pub fn validate_id(id: &str) -> Result<(), String> {
 }
 
 /// Lowercase ASCII letters, digits and inner single hyphens.
-pub fn validate_slug(slug: &str) -> Result<(), String> {
+pub(crate) fn validate_slug(slug: &str) -> Result<(), String> {
     if slug.is_empty()
         || slug.starts_with('-')
         || slug.ends_with('-')

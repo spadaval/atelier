@@ -7,8 +7,7 @@ mod ids;
 mod store;
 mod validate;
 
-pub use body::section;
-pub use ids::{allocate_id, validate_id, validate_slug};
+pub use ids::{allocate_id, validate_id};
 pub use store::{
     parse_config, parse_item, parse_review, render_config, render_item, render_review, ItemDir,
     ReviewFile, Store,

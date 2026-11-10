@@ -1,4 +1,5 @@
-use crate::{ids, section, ItemDir, Problem};
+use crate::body::section;
+use crate::{ids, ItemDir, Problem};
 use atelier_core::{is_open, Finding, FindingName, Verdict};
 
 /// What is wrong with `items`, which are every item of a checkout, so that

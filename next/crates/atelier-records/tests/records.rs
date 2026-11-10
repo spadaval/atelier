@@ -755,6 +755,17 @@ fn config_reads_its_fields() {
 }
 
 #[test]
+fn a_config_error_names_the_line_of_the_key() {
+    let text = CONFIG.replacen(
+        "slug = \"atelier\"\n",
+        "slug = \"atelier\"\nowner = \"me\"\n",
+        1,
+    );
+    let error = parse_config(Path::new("config.toml"), &text).unwrap_err();
+    assert_eq!(error.field, "line 3", "{error}");
+}
+
+#[test]
 fn config_refuses_what_it_does_not_know() {
     let cases = [
         (

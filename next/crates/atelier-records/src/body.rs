@@ -10,7 +10,7 @@ use atelier_core::{
 use std::path::Path;
 
 /// The content under the first heading `heading` of `level` in `text`.
-pub fn section<'a>(text: &'a str, level: usize, heading: &str) -> Option<&'a str> {
+pub(crate) fn section<'a>(text: &'a str, level: usize, heading: &str) -> Option<&'a str> {
     sections(text, level)
         .into_iter()
         .find(|(found, _)| *found == heading)

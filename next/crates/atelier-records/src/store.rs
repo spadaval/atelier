@@ -196,7 +196,7 @@ pub fn parse_config(path: &Path, text: &str) -> Result<Config, Problem> {
     let config: Config = toml::from_str(text).map_err(|error| {
         let line = error
             .span()
-            .map(|span| text[..span.start].lines().count().max(1))
+            .map(|span| text[..span.start].matches('\n').count() + 1)
             .unwrap_or(1);
         Problem::new(path, format!("line {line}"), error.message().to_string())
     })?;
