@@ -1,0 +1,21 @@
+[package]
+name = "atelier-cli"
+description = "The atelier command"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "atelier"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+atelier-app = { path = "../atelier-app" }
+atelier-core = { path = "../atelier-core" }
+atelier-records = { path = "../atelier-records" }
+clap.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

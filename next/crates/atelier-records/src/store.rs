@@ -122,21 +122,40 @@ impl Store {
                 .unwrap_or_default()
                 .to_str()
                 .and_then(|n| n.strip_suffix(".md"))
+                .map(str::to_owned)
             else {
                 continue;
             };
-            let name = stem
-                .parse()
-                .map_err(|message| Problem::new(&path, "file name", message))?;
-            let review = parse_review(&path, &read(&path)?)?;
-            reviews.push(ReviewFile { path, name, review });
+            let text = read(&path)?;
+            reviews.push(review_file(path, &stem, &text)?);
         }
         reviews.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(reviews)
     }
 }
 
+/// A review read from the file at `path`, whose name without `.md` is
+/// `stem`.
+pub(crate) fn review_file(path: PathBuf, stem: &str, text: &str) -> Result<ReviewFile, Problem> {
+    let name = stem
+        .parse()
+        .map_err(|message| Problem::new(&path, "file name", message))?;
+    let review = parse_review(&path, text)?;
+    Ok(ReviewFile { path, name, review })
+}
+
 impl ItemDir {
+    /// Each checklist line of `## Done when`: whether it is ticked, and its
+    /// text.
+    pub fn done_when(&self) -> Vec<(bool, String)> {
+        body::done_when(&self.item.body)
+    }
+
+    /// Whether `## Report` holds anything besides headings and blank lines.
+    pub fn report_written(&self) -> bool {
+        body::report_written(&self.item.body)
+    }
+
     /// Every finding of every review, oldest round first.
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {
         let mut findings = Vec::new();

@@ -1,12 +1,14 @@
 //! Reading, writing and validating Atelier's records: items, their reviews
 //! and `config.toml` (docs/strategies/redesign-architecture.md, Records).
 
+mod at_commit;
 mod body;
 mod document;
 mod ids;
 mod store;
 mod validate;
 
+pub use at_commit::{CommitReader, ReadError};
 pub use ids::{allocate_id, validate_id};
 pub use store::{
     parse_config, parse_item, parse_review, render_config, render_item, render_review, ItemDir,
