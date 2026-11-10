@@ -771,8 +771,9 @@ nothing and says so.
 
 - **A hook the clone already has** is kept: `setup` moves it to
   `<name>.local` and says so, a symbolic link moved as a link. Once its own
-  rule passes, `check --hook <name>` runs `<name>.local`, if Git would run
-  it, which means it is executable, with the same arguments and input. For
+  rule passes, `check --hook <name>` runs `<name>.local` as Git would: only
+  if it is executable, through the shell when it has no `#!` line, and with
+  the same arguments and input. For
   pre-commit and pre-push a failure of the kept hook refuses the commit or
   push; for post-checkout it is printed and the checkout still succeeds. A
   `setup` stopped between moving a hook and writing its own leaves no hook
