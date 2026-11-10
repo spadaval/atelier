@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Freeze the baseline's inputs, so the numbers can be reproduced and the cutover need not wait for the report"
-updated_at: "2026-11-10T05:08:30.940749099+00:00"
+updated_at: "2026-11-10T05:26:13.895593564+00:00"
 ---
 
 ## Goal
@@ -41,6 +41,10 @@ Copying and the manifest. No measurement. The backup runs once; do not query the
 ## Context
 
 Strategy: `docs/strategies/redesign-1-baseline.md`, Design. T3's database is 3.9 GB and in live use by the server Sumeet's phone depends on; the online backup is the safe way to copy it, and the disk has 390 GB free. Claude transcripts are under `~/.claude/projects/`, one directory per checkout, named for the path with `/` and `.` as `-`; Codex sessions are under `~/.codex/sessions/`, by date. The snapshot holds private messages: keep it out of the repository and send nothing from it to any outside service.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by gpt-6.1-sol-scx2-r1 (atelier-sqo2) at 03732309 after one round with no findings. See the Report. Merge waits only on CI (atelier merge atelier-scx2 --push --wait), which the orchestrator runs.
 
 ## Report
 
@@ -67,4 +71,3 @@ The live database was opened once, read-only (`mode=ro`), by the sqlite3 CLI's `
 ### Open items
 
 - The snapshot is on one disk with no backup, as the strategy's Risks say.
-
