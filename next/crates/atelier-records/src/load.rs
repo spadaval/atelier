@@ -66,11 +66,19 @@ pub fn load(files: impl IntoIterator<Item = (String, Vec<u8>)>) -> Loaded {
     let mut items: BTreeMap<String, Dir<_>> = BTreeMap::new();
     let mut missions: BTreeMap<String, Dir<_>> = BTreeMap::new();
     let mut present = BTreeSet::new();
+    // The record each review belongs with.
+    let mut reviewed = BTreeSet::new();
     let mut unread = Vec::new();
     for (path, bytes) in files {
         let Some(place) = place(&path) else { continue };
         let file = Path::new(&path);
         present.insert(path.clone());
+        if let Place::Review { mission, id, .. } = place {
+            reviewed.insert(match mission {
+                true => format!(".atelier/missions/{id}/mission.md"),
+                false => format!(".atelier/items/{id}/item.md"),
+            });
+        }
         let Ok(text) = String::from_utf8(bytes) else {
             unread.push(Problem::new(file, "", "the file is not UTF-8"));
             continue;
@@ -97,37 +105,33 @@ pub fn load(files: impl IntoIterator<Item = (String, Vec<u8>)>) -> Loaded {
     if !present.contains(CONFIG) {
         unread.push(Problem::new(Path::new(CONFIG), "", "the file is missing"));
     }
+    for path in reviewed.difference(&present) {
+        let file = path.rsplit('/').next().unwrap_or_default();
+        let message = format!("its directory has reviews and no {file}");
+        unread.push(Problem::new(Path::new(path), "", message));
+    }
+    // A record that does not read leaves its reviews unread with it.
     let mut loaded = Loaded::default();
-    // A record that did not read leaves its reviews unchecked; one that is
-    // missing is a problem of its own.
-    let mut missing = |path: PathBuf, kind: &str| {
-        if !present.contains(path.to_str().unwrap_or_default()) {
-            let message = format!("its directory has reviews and no {kind}");
-            unread.push(Problem::new(&path, "", message));
-        }
-    };
     for (id, (item, mut reviews)) in items {
-        let path = PathBuf::from(format!(".atelier/items/{id}/item.md"));
-        reviews.sort_by(|a, b| a.name.cmp(&b.name));
-        match item {
-            Some(item) => loaded.items.push(ItemDir {
+        if let Some(item) = item {
+            reviews.sort_by(|a, b| a.name.cmp(&b.name));
+            let path = PathBuf::from(format!(".atelier/items/{id}/item.md"));
+            loaded.items.push(ItemDir {
                 path,
                 item,
                 reviews,
-            }),
-            None => missing(path, "item.md"),
+            });
         }
     }
     for (id, (mission, mut reviews)) in missions {
-        let path = PathBuf::from(format!(".atelier/missions/{id}/mission.md"));
-        reviews.sort_by(|a, b| a.name.cmp(&b.name));
-        match mission {
-            Some(mission) => loaded.missions.push(MissionDir {
+        if let Some(mission) = mission {
+            reviews.sort_by(|a, b| a.name.cmp(&b.name));
+            let path = PathBuf::from(format!(".atelier/missions/{id}/mission.md"));
+            loaded.missions.push(MissionDir {
                 path,
                 mission,
                 reviews,
-            }),
-            None => missing(path, "mission.md"),
+            });
         }
     }
     loaded.unread = unread;

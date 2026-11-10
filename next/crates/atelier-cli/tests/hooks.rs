@@ -213,6 +213,11 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
     let run = commit_all(&root, "Plan");
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(field(&root, "HEAD", "title"), "Say hi");
+
+    // A record deleted leaves nothing to judge.
+    git(&root, &["rm", "-rq", &format!(".atelier/items/{OTHER}")]);
+    let run = git_as(&root, &["commit", "-qm", "Forget it"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
 }
 
 #[test]
@@ -248,6 +253,32 @@ fn the_pre_commit_hook_reads_records_as_staged_and_passes_over_other_files() {
     git(&root, &["add", "-A"]);
     edit(&root, &item_path(ID), "status: finished", "status: ready");
     let run = git_as(&root, &["commit", "-qm", "Finish it"]);
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains("unknown variant `finished`"),
+        "{}",
+        run.stderr
+    );
+
+    // A record renamed is judged at its new path, whose name is its ID's.
+    git(&root, &["reset", "-q", "--hard"]);
+    let renamed = ".atelier/items/demo-zz11";
+    git(&root, &["mv", &format!(".atelier/items/{ID}"), renamed]);
+    let run = git_as(&root, &["commit", "-qm", "Rename it"]);
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains(&format!(
+            "  {renamed}/item.md: id: `{ID}` is not its directory's name\n"
+        )),
+        "{}",
+        run.stderr
+    );
+    git(&root, &["reset", "-q", "--hard"]);
+
+    // A commit in a second worktree is judged by that worktree's index.
+    let other = scratch.worktree("other");
+    edit(&other, &item_path(ID), "status: ready", "status: finished");
+    let run = commit_all(&other, "Finish it there");
     assert_ne!(run.code, 0);
     assert!(
         run.stderr.contains("unknown variant `finished`"),
@@ -329,6 +360,35 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "feature:main"]);
     assert_ne!(run.code, 0);
     assert!(run.stderr.contains("changes hello.txt"));
+
+    // A merge that is not Atelier's is judged by what it brings to the base,
+    // and so is a commit that is no merge but carries the trailer.
+    let run = git_as(
+        &root,
+        &["merge", "-q", "--no-ff", "feature", "-m", "Merge feature"],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let run = git_as(&root, &["push", "-q", "origin", "main"]);
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains("Merge feature: changes hello.txt"),
+        "{}",
+        run.stderr
+    );
+    git(&root, &["reset", "-q", "--hard", "HEAD^"]);
+    fs::write(root.join("hello.txt"), "hi\n").unwrap();
+    assert_eq!(
+        commit_all(&root, "Say hi\n\nAtelier-Merge: demo-ab12").code,
+        0
+    );
+    let run = git_as(&root, &["push", "-q", "origin", "main"]);
+    assert_ne!(run.code, 0);
+    assert!(
+        run.stderr.contains("Say hi: changes hello.txt"),
+        "{}",
+        run.stderr
+    );
+    git(&root, &["reset", "-q", "--hard", "HEAD^"]);
 
     append(
         &root,
