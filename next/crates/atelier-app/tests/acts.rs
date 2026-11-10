@@ -396,8 +396,32 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
         "null",
         "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: fixed\n",
     );
-    let dir2 = mission(MissionStatus::Draft, "", &[raised, blind, fixed.clone()]);
+    let dir2 = mission(
+        MissionStatus::Draft,
+        "",
+        &[raised.clone(), blind, fixed.clone()],
+    );
     assert!(verdict(&dir2, &fixed, Act::PlanVerdictApprove).is_ok());
+    // A blind file of the same round that carries the earlier finding does
+    // not close it for a file that left it out.
+    let carrier = review(
+        "2-eeee",
+        &["r5"],
+        "changes",
+        "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: kept\n",
+    );
+    let both = mission(
+        MissionStatus::Draft,
+        "",
+        &[raised.clone(), missing.clone(), carrier],
+    );
+    assert!(matches!(
+        verdict(&both, &missing, Act::PlanVerdictApprove),
+        Err(Refusal::Unmet(unmet)) if unmet == [Condition::OpenFinding {
+            finding: "1-aaaa.1".parse().unwrap(),
+            title: "Wrong".into(),
+        }]
+    ));
     // A file that does not validate is refused for its problem.
     let mut wrong_round = review("2-dddd", &["r4"], "null", "");
     wrong_round.review.round = 3;

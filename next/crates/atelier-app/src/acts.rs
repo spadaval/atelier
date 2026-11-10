@@ -577,17 +577,20 @@ pub fn unmet_mission(act: Act, facts: &MissionFacts) -> Result<Vec<Condition>, P
 /// item or mission: `changes` an open fix-now finding of the file's own,
 /// and `approve` none open among the file's and those of earlier rounds,
 /// so also none the file should carry and does not. Another file of the
-/// same round is another reviewer's, working blind.
+/// same round is another reviewer's, working blind, so what it carries
+/// does not close a finding for this one.
 fn verdict(
     act: Act,
     file: &ReviewFile,
     findings: &[Finding],
     decisions: &[Decision],
 ) -> Vec<Condition> {
-    let mut open = findings.iter().filter(|f| {
-        (f.name.review == file.name || f.name.review.round < file.name.round)
-            && is_open(f, findings, decisions)
-    });
+    let seen: Vec<Finding> = findings
+        .iter()
+        .filter(|f| f.name.review == file.name || f.name.review.round < file.name.round)
+        .cloned()
+        .collect();
+    let mut open = seen.iter().filter(|f| is_open(f, &seen, decisions));
     if matches!(act, Act::VerdictChanges | Act::PlanVerdictChanges) {
         match open.any(|f| f.name.review == file.name) {
             true => Vec::new(),
