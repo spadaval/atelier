@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Settle deferred findings: `list --deferred`, `new --from` and `drop` on a finding"
-updated_at: "2026-11-10T22:05:53.729057535+00:00"
+updated_at: "2026-11-10T22:32:38.206384464+00:00"
 ---
 
 ## Goal
@@ -53,6 +53,10 @@ Let deferred findings be settled instead of piling up. A finding a reviewer reco
 Design: `docs/strategies/redesign-architecture.md`, Records (the `Taken:` and `Dropped by` lines, which `atelier-core` already parses and writes as `Settlement`), the act table's row "`new --from`, `drop` on a finding", and "Where records are read and written". Behaviour: `docs/strategies/redesign-product.md`, Commands (Planner), "Where records change" and Review ("Deferred findings stay in their review file"). The planning commands are in `atelier-cli`'s `plan.rs`, `drop` on an item or mission is atelier-jq24's, and `list` is atelier-jciw's.
 
 This is the second of step C's three items in `docs/strategies/redesign-2-core.md`.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by Sol (sol-dxrj-r2, atelier-1hjh) at 610b0031 after two rounds; three round-1 fix-now findings fixed and resolved. Outcome and proof are in the Report.
 
 ## Report
 
