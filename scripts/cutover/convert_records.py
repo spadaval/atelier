@@ -667,9 +667,9 @@ def verify(root, commit):
                     ["git", "-C", fresh, "checkout", "-q", "--detach", sha.stdout.strip()]):
             subprocess.run(cmd, check=True, capture_output=True)
         writes, removes, _ = convert(fresh)
-    present = subprocess.run(["git", "-C", root, "ls-files", "-z", "-co", "--exclude-standard", "--", ".atelier"],
-                             capture_output=True, text=True, check=True).stdout.split("\0")
-    present = sorted({p for p in present if p and os.path.isfile(os.path.join(root, p))})
+    # Every file under .atelier/, ignored by Git or not, since none of the old layout may remain.
+    present = sorted(os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(os.path.join(root, ".atelier"))
+                     for f in fs)
     problems = []
     for rel in sorted(set(present) | set(writes)):
         if rel not in writes:

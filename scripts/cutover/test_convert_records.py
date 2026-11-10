@@ -154,6 +154,7 @@ FILES = {
     "docs/strategies/architecture.md": "The plan is [here](plan.md) and in docs/strategies/plan.md.\n",
     "docs/strategies/mocks/a.md": "# A mock\n",
     "README.md": "Demo.\n",
+    ".gitignore": "/.atelier/runtime/\n",
 }
 
 RECORDS = [
@@ -510,13 +511,14 @@ ci_workflow = "ci.yml"
         (self.repo / ".atelier/items/demo-zz99").mkdir()
         (self.repo / ".atelier/items/demo-zz99/item.md").write_text("extra\n")
         (self.repo / ".atelier/missions/demo-m2nd/notes.md").unlink()
-        self.write({"docs/strategies/plan.md": STRATEGY})
+        self.write({"docs/strategies/plan.md": STRATEGY, ".atelier/runtime/leftover.json": "{}\n"})  # ignored by Git
         result = self.run_script("--verify", self.old)
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout.splitlines()[1:], [
             "  differs: .atelier/items/demo-a1ta/item.md",
             "  not in a fresh conversion: .atelier/items/demo-zz99/item.md",
             "  missing: .atelier/missions/demo-m2nd/notes.md",
+            "  not in a fresh conversion: .atelier/runtime/leftover.json",
             "  still present, though moved: docs/strategies/plan.md",
         ])
 
