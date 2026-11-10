@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: submit starts CI where a forge is configured, and merge waits for it up to 9 minutes before taking its lock (atelier-xtvh); a former reviewer is offered nothing, and what a harness's subagent is to Atelier (atelier-67nn)"
+last_changed: "2026-11-10: mission records; new, set, ready and start --new; planning read in the checkout and start reading the base's last commit (atelier-yptz)"
 ---
 
 # Atelier redesign: architecture specification
@@ -130,7 +130,7 @@ schema_version: 3
 id: atelier-06jc
 title: Put open findings in full in the review brief
 status: building        # draft ready building in_review changes_requested approved done dropped
-mission: atelier-icv4   # optional
+mission: atelier-icv4   # optional; names a mission in the checkout
 labels: [review]
 priority: high          # critical high medium low
 blocked_by: []          # each names an item in the checkout
@@ -168,9 +168,10 @@ ready: {by: sumeet, at: <time>}
 created_at: <time>
 ```
 
-Sections: Why, Outcome, Success criteria (optional), Scope, Authority,
-Result. Any other file in the directory is a planning document and has no
-required shape.
+The mission lives in a directory named for its `id`. Sections are `##`
+headings: Why, Outcome, Success criteria (optional), Scope, Authority,
+Result; Outcome is required. Any other file in the directory is a planning
+document with no required shape, and is not read.
 
 ### `reviews/<round>-<suffix>.md`, under an item or a mission
 
@@ -309,8 +310,11 @@ in the merge commit. No act makes a commit only to change a status.
 How the table is built:
 
 - A row joins the table with its command. The table holds the rows of
-  `start`, `start` taking over, `submit`, `review`, both verdicts and
-  `merge` with and without `--trivial`.
+  `ready` on an item and on a mission, `start`, `start --new`, `start`
+  taking over, `submit`, `review`, both verdicts and `merge` with and
+  without `--trivial`. A mission's row is checked with `acts::check_mission`,
+  from the mission's status; `start --new` runs from no status, since it
+  creates its item, and takes the status it sets from its row.
 - A round of an item is the latest round of its reviews until one of them
   has a verdict, which ends it; then it is the next round, which has no file
   until `review` creates one. The round's file is the caller's when it holds
@@ -324,7 +328,9 @@ How the table is built:
   the caller does not hold, then one with an unmet condition, and otherwise
   gives the status to set. An act that binds a role (`start`, `review`)
   needs nothing held; `submit` and `merge` need the caller to be the item's
-  last implementer, and a verdict needs it to be the round's reviewer.
+  last implementer, and a verdict needs it to be the round's reviewer. No
+  thread holds the planner's role, so a planner's act (`ready`) needs
+  nothing held and is never refused for a role the caller holds.
 - `acts::next` names the act the caller would run next: `start` on a ready
   item; as its holder, `submit` from building or changes requested, `merge`
   from approved, and nothing while it is in review; as the round's
@@ -340,9 +346,10 @@ How the table is built:
   that row's From.
 - `start`'s condition that the base's record is not dropped needs no check of
   its own: the base's dropped record is the item's status (below), and
-  `start` does not run from `dropped`. Its condition on the mission waits for
-  missions. A blocker counts as done only when its status, found the same
-  way, is `done`; a blocker that names no item is unmet.
+  `start` does not run from `dropped`. A blocker counts as done only when its
+  status, found the same way, is `done`; a blocker that names no item is
+  unmet. The mission counts as ready only when its record at the base's tip
+  says `ready`; a mission that is not there is unmet.
 - Done when is ticked when every checklist line under `## Done when` (`- [ ]`
   or `- [x]`, outside fenced code) is ticked. The Report is written when
   `## Report` holds a line that is neither blank nor a heading; a fenced
@@ -402,10 +409,13 @@ for an item, `status` speaks to the item's holder as its implementer, to a
 thread that reviewed an earlier round as done with it, and to anyone else as
 a visitor, naming the holder; anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
-ready items, and the started items others hold. On the item's branch it
-speaks to the round's reviewer as reviewer, naming its file, and tells the
-implementer of an item in review which thread holds the round's review, or
-that none does yet. Missions join
+ready items, and the started items others hold; on the base branch it also
+lists the record changes the checkout has not committed. On the item's
+branch it speaks to the round's reviewer as reviewer, naming its file, tells
+the implementer of an item in review which thread holds the round's review,
+or that none does yet, and tells the implementer of a building item whose
+Goal or Done when lines are empty, as after `start --new`, to write them
+first. That line is orientation, not a condition of `submit`. Missions join
 with their commands.
 
 Harness hooks give orientation at session start: `atelier setup claude`
@@ -428,6 +438,31 @@ post-checkout Git hook prints it on every branch switch.
 - **The base's record is the one at the base branch's tip** (`base_branch`
   in the checkout's `config.toml`), read through the commit reader, never the
   base checkout's working tree. A planning edit counts once it is committed.
+  `start` reads its item, the item's blockers and its mission this way. When
+  it is refused while the item or its mission is `ready` in the base's
+  checkout and not at the tip, it says the change is not committed yet and
+  prints the Git command that commits the checkout's planning.
+- **Planning is read and written in the checkout of the base.** `new`, `set`
+  and `ready` run only on the base branch, and are refused elsewhere, naming
+  the checkout that has the base. They read the checkout's records, with an
+  item's branch found as above, so uncommitted planning counts and a started
+  item is still seen as started. Each validates the records it writes against
+  every record of the checkout and writes nothing when one of them has a
+  problem; nothing else validates planning until the Git hooks exist. Each
+  commits nothing, prints the paths it wrote, and ends with a `Then:` line
+  giving the Git command that commits those paths alone. `new` picks an ID
+  that no item or mission has in the checkout, at the base's tip, or as a
+  local branch, and writes a draft with its section headings and nothing
+  under them; an item's priority starts as `medium`.
+- **`set`'s flags.** `set <id>` takes `--title`, `--priority`,
+  `--labels a,b`, `--mission <id>`, `--blocked-by a,b` and
+  `--caused-by <item or commit>`, at least one. A list flag replaces the
+  list, and an empty value clears a list or an optional field. A mission
+  takes only `--title` and `--labels`; an item's other flags on a mission are
+  refused. It changes a draft or ready record and is refused for a started
+  item, naming its branch, and for a done or dropped one. `ready <id>...
+  --by <name>` checks every named ID first and writes nothing when any is
+  unknown or not a draft, naming each.
 - **Who decides what.** `atelier-app` holds the rule, as `Located::record`:
   the base's record when it says done or dropped, else the unmerged branch's,
   else the base's. `atelier-cli` gathers what the rule reads: the base's tip,
@@ -454,7 +489,8 @@ post-checkout Git hook prints it on every branch switch.
   <commit> ""`, which fails when the branch exists. Only then does the
   checkout switch to it. Debug builds can be held between the two steps
   through `ATELIER_TEST_HOLD_BEFORE_BRANCH`, which the tests of an
-  interrupted start and of two starting threads use.
+  interrupted start and of two starting threads use. `start --new` starts
+  the item it creates the same way, in one commit holding only its record.
 - **Taking over** switches the checkout to the branch, appends the caller to
   `implementers` and commits `item.md` alone, leaving the status as it is. A
   branch checked out in another worktree cannot be switched to; `start`
@@ -912,5 +948,5 @@ reaches it.
 - Whether T3's pull request watch wakes a thread when a repository marks no
   check as required.
 - Where video artifacts go when a project needs them.
-- The exact flags of `set` and `list`.
+- The exact flags of `list`.
 - How much of the brief and debrief view code the site keeps.

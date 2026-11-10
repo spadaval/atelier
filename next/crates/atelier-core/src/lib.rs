@@ -2,10 +2,12 @@
 
 mod config;
 mod item;
+mod mission;
 mod review;
 
 pub use config::{Config, Forge, ForgeProvider, MergeCheck};
 pub use item::{Answer, Decision, Item, ItemSchema, Priority, Ready, Response, Status};
+pub use mission::{Mission, MissionSchema, MissionStatus};
 pub use review::{
     is_open, Finding, FindingName, Now, Outcome, Recommendation, Review, ReviewName, ReviewSchema,
     Settlement, Verdict,

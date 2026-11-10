@@ -1,13 +1,13 @@
 //! `status`, `start` and `submit`, and what the commands share.
 
 use crate::forge::Github;
-use crate::repo::{item_dir, item_path, Repo};
-use crate::{git, merge, output};
+use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
+use crate::{git, merge, output, plan};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, Act, Checkout, Facts, Refusal, STARTED};
+use atelier_app::acts::{check, row, Act, Checkout, Facts, Refusal, STARTED};
 use atelier_app::{entry, overview, Located};
-use atelier_core::{Forge, Status};
-use atelier_records::{render_item, validate_id};
+use atelier_core::{Forge, Item, MissionStatus, Status};
+use atelier_records::{render_item, validate_id, Store};
 
 pub enum Outcome {
     Done(String),
@@ -20,20 +20,27 @@ pub enum Outcome {
 pub fn status(repo: &mut Repo) -> Result<String> {
     if let Some(located) = repo.current()? {
         let record = located.record().expect("the current item has a record");
-        let blockers = repo.blockers(record)?;
+        let links = repo.links(record)?;
         let head = git::head(&repo.root)?;
         let checkout = repo.checkout(record, &head)?;
-        let entry = entry(&facts(repo, &located, &blockers, Some(&checkout)))?;
+        let entry = entry(&facts(repo, &located, &links, Some(&checkout)))?;
         let config = repo.base_config()?;
         return Ok(output::item(&repo.caller, &entry, &config));
     }
     let items = repo.everything()?;
-    let overview = overview(&items, &repo.caller)?;
+    let missions = repo.missions()?;
+    let overview = overview(&items, &missions, &repo.caller)?;
+    let uncommitted = match repo.branch.as_deref() == Some(repo.base.as_str()) {
+        true => planning(&repo.root)?,
+        false => Vec::new(),
+    };
     Ok(output::overview(
         &repo.caller,
         repo.branch.as_deref(),
         &repo.base,
         &overview,
+        &uncommitted,
+        git_at(&repo.root),
     ))
 }
 
@@ -41,42 +48,37 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     validate_id(id).map_err(|message| anyhow!(message))?;
     let located = repo.locate(id)?;
     let Some(record) = located.record() else {
-        return Ok(Outcome::Refused(output::no_item(id, &repo.base)));
+        let refused = not_committed(repo, id, None, None)?;
+        return Ok(Outcome::Refused(
+            refused.unwrap_or_else(|| output::no_item(id, &repo.base)),
+        ));
     };
-    let blockers = repo.blockers(record)?;
-    let facts = facts(repo, &located, &blockers, None);
+    let links = repo.links(record)?;
+    let facts = facts(repo, &located, &links, None);
     // `start` takes over an item someone holds, and starts any other.
     let act = if STARTED.contains(&record.item.status) {
         Act::TakeOver
     } else {
         Act::Start
     };
-    if let Some(refused) = refusal(act, &facts)? {
-        return Ok(Outcome::Refused(refused));
-    }
-    let said = if act == Act::Start {
-        let mut item = record.item.clone();
-        item.status = Status::Building;
-        item.implementers.take(repo.caller.clone());
-        let commit = git::commit_file(
-            &repo.root,
-            &repo.base_tip,
-            &[&repo.base_tip],
-            &item_path(id),
-            &render_item(&item),
-            &format!("Start {id}"),
-        )?;
-        hold("ATELIER_TEST_HOLD_BEFORE_BRANCH");
-        if !git::create_branch(&repo.root, id, &commit)? {
-            let holder = repo
-                .locate(id)?
-                .record()
-                .and_then(|r| r.item.implementers.holder().cloned());
-            return Ok(Outcome::Refused(output::lost_race(id, holder.as_ref())));
+    let to = match check(act, &facts) {
+        Ok(to) => to,
+        Err(refusal) => {
+            let base = located.base.as_ref().map(|dir| dir.item.status);
+            let pending = not_committed(repo, id, base, links.mission.as_ref())?;
+            return Ok(Outcome::Refused(match pending {
+                Some(pending) => pending,
+                None => refused(act, refusal, &facts)?,
+            }));
         }
-        git::switch(&repo.root, id).with_context(|| output::not_switched(id))?;
-        output::started(id)
-    } else {
+    };
+    if act == Act::Start {
+        let mut item = record.item.clone();
+        item.status = to.expect("start sets a status");
+        item.implementers.take(repo.caller.clone());
+        return begin(repo, &item, output::started(id));
+    }
+    let said = {
         if repo.branch.as_deref() != Some(id) {
             git::switch(&repo.root, id).with_context(|| output::switch_failed(id))?;
         }
@@ -101,6 +103,88 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
 }
 
+/// `start --new`: an item created already building, held by the caller,
+/// on a new branch named for it.
+pub fn start_new(repo: &mut Repo, title: &str) -> Result<Outcome> {
+    let id = repo.new_id()?;
+    let mut item = plan::draft_item(&id, title, None);
+    item.status = row(Act::StartNew).to.expect("start --new sets a status");
+    item.implementers.take(repo.caller.clone());
+    begin(repo, &item, output::started_new(&id))
+}
+
+/// Starts `item`: commits its record on the base's tip, then creates its
+/// branch at that commit and switches to it, so an interrupted run leaves
+/// no branch.
+fn begin(repo: &mut Repo, item: &Item, said: String) -> Result<Outcome> {
+    let id = &item.id;
+    let commit = git::commit_file(
+        &repo.root,
+        &repo.base_tip,
+        &[&repo.base_tip],
+        &item_path(id),
+        &render_item(item),
+        &format!("Start {id}"),
+    )?;
+    hold("ATELIER_TEST_HOLD_BEFORE_BRANCH");
+    if !git::create_branch(&repo.root, id, &commit)? {
+        let holder = repo
+            .locate(id)?
+            .record()
+            .and_then(|r| r.item.implementers.holder().cloned());
+        return Ok(Outcome::Refused(output::lost_race(id, holder.as_ref())));
+    }
+    git::switch(&repo.root, id).with_context(|| output::not_switched(id))?;
+    let mut repo = Repo::open()?;
+    Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
+}
+
+/// What a refused `start` says instead when the item, or its mission, is
+/// ready in the base's checkout and not at the base's tip, which is what
+/// `start` reads. `base` is the item's status at the tip, and `mission`
+/// the mission the tip's record names, with its status there.
+fn not_committed(
+    repo: &Repo,
+    id: &str,
+    base: Option<Status>,
+    mission: Option<&(String, Option<Status>)>,
+) -> Result<Option<String>> {
+    let Some(checkout) = git::checkout_of(&repo.root, &repo.base)? else {
+        return Ok(None);
+    };
+    // A record there that does not read is no planning to commit.
+    let store = Store::new(checkout.join(".atelier"));
+    let mut ready = Vec::new();
+    if base != Some(Status::Ready)
+        && store
+            .item(id)
+            .is_ok_and(|dir| dir.item.status == Status::Ready)
+    {
+        ready.push(id.to_string());
+    }
+    if let Some((mission, status)) = mission {
+        if *status != Some(Status::Ready)
+            && store
+                .mission(mission)
+                .is_ok_and(|dir| dir.mission.status == MissionStatus::Ready)
+        {
+            ready.push(format!("mission {mission}"));
+        }
+    }
+    if ready.is_empty() {
+        return Ok(None);
+    }
+    let other = (checkout != repo.root).then_some(checkout.as_path());
+    Ok(Some(output::not_committed_ready(
+        id,
+        &ready,
+        &repo.base,
+        other,
+        git_at(&checkout),
+        &planning(&checkout)?,
+    )))
+}
+
 pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let Some(located) = repo.current()? else {
         return Ok(Outcome::Refused(output::not_on_item(
@@ -109,8 +193,8 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
         )));
     };
     let record = located.record().expect("the current item has a record");
-    let blockers = repo.blockers(record)?;
-    let facts = facts(repo, &located, &blockers, None);
+    let links = repo.links(record)?;
+    let facts = facts(repo, &located, &links, None);
     if let Some(refused) = refusal(Act::Submit, &facts)? {
         return Ok(Outcome::Refused(refused));
     }
@@ -180,13 +264,14 @@ pub(crate) fn write_and_commit(
 pub(crate) fn facts<'a>(
     repo: &'a Repo,
     located: &'a Located,
-    blockers: &'a [(String, Option<Status>)],
+    links: &'a Links,
     checkout: Option<&'a Checkout>,
 ) -> Facts<'a> {
     Facts {
         item: located.record().expect("a located item with a record"),
         branch: located.branch.is_some(),
-        blockers,
+        blockers: &links.blockers,
+        mission: links.mission.clone(),
         caller: &repo.caller,
         checkout,
     }

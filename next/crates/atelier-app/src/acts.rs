@@ -3,12 +3,18 @@
 //! an act with [`check`], and `status` lists what [`unmet`] gives for the
 //! act it names next, so the two cannot disagree.
 
-use atelier_core::{is_open, FindingName, Status, Thread, Verdict};
-use atelier_records::{validate, ItemDir, Problem, ReviewFile};
+use atelier_core::{is_open, FindingName, MissionStatus, Status, Thread, Verdict};
+use atelier_records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Act {
+    /// `ready` on an item.
+    Ready,
+    /// `ready` on a mission.
+    ReadyMission,
     Start,
+    /// `start --new`, which creates the item it starts.
+    StartNew,
     TakeOver,
     Submit,
     Review,
@@ -20,6 +26,7 @@ pub enum Act {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
+    Planner,
     Implementer,
     Reviewer,
 }
@@ -30,8 +37,10 @@ pub struct Row {
     pub command: &'static str,
     pub role: Role,
     /// Whether the act binds the caller to its role. An act that does not
-    /// needs the caller to hold the role already.
+    /// needs the caller to hold the role already, unless it is a planner's,
+    /// which no thread holds.
     pub binds: bool,
+    /// The statuses it runs from; none for an act that creates its record.
     pub from: &'static [Status],
     /// The status the act sets; `None` leaves it unchanged.
     pub to: Option<Status>,
@@ -45,13 +54,41 @@ pub const STARTED: &[Status] = &[
     Status::Approved,
 ];
 
-pub const TABLE: [Row; 8] = [
+/// The statuses of an item or mission whose front matter a planner may
+/// still change with `set`.
+pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
+
+pub const TABLE: [Row; 11] = [
+    Row {
+        act: Act::Ready,
+        command: "ready",
+        role: Role::Planner,
+        binds: false,
+        from: &[Status::Draft],
+        to: Some(Status::Ready),
+    },
+    Row {
+        act: Act::ReadyMission,
+        command: "ready",
+        role: Role::Planner,
+        binds: false,
+        from: &[Status::Draft],
+        to: Some(Status::Ready),
+    },
     Row {
         act: Act::Start,
         command: "start",
         role: Role::Implementer,
         binds: true,
         from: &[Status::Ready],
+        to: Some(Status::Building),
+    },
+    Row {
+        act: Act::StartNew,
+        command: "start --new",
+        role: Role::Implementer,
+        binds: true,
+        from: &[],
         to: Some(Status::Building),
     },
     Row {
@@ -128,6 +165,9 @@ pub struct Facts<'a> {
     /// Each item the item is blocked by, with its status; `None` when no
     /// such item is found.
     pub blockers: &'a [(String, Option<Status>)],
+    /// The item's mission, if it names one, with the mission's status on
+    /// the base; `None` when no such mission is found. See [`mission_of`].
+    pub mission: Option<(String, Option<Status>)>,
     pub caller: &'a Thread,
     /// The checkout on the item's branch, which `merge` reads. The CLI
     /// gathers it where `merge` runs and `status` lists its conditions: on
@@ -155,6 +195,14 @@ pub struct SinceApproval {
     /// The item's record at the head, which is what merges, whatever the
     /// checkout holds.
     pub head: Option<ItemDir>,
+}
+
+/// The mission `item` names, if any, with its status among `missions`.
+pub fn mission_of(item: &ItemDir, missions: &[MissionDir]) -> Option<(String, Option<Status>)> {
+    let id = item.item.mission.clone()?;
+    let found = missions.iter().find(|dir| dir.mission.id == id);
+    let status = found.map(|dir| dir.mission.status.status());
+    Some((id, status))
 }
 
 /// The review whose verdict approved the item: one of the latest round's
@@ -252,6 +300,12 @@ pub enum Condition {
         id: String,
         status: Option<Status>,
     },
+    /// The item's mission is not ready; `None` when no such mission is
+    /// found.
+    MissionNotReady {
+        id: String,
+        status: Option<Status>,
+    },
     /// A branch named for the item exists, so `start` cannot create it.
     BranchExists,
     /// No branch named for the item exists to take over.
@@ -317,9 +371,10 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     let row = row(act);
     // A thread that holds one role and runs another's command is told its
     // role, whatever the status. `review` by an implementer is refused by
-    // its own condition instead, so the author sees the brief.
+    // its own condition instead, so the author sees the brief, and a
+    // planner's act on an item nobody holds yet needs no role on it.
     if let Some(role) = facts.role().filter(|role| *role != row.role) {
-        if act != Act::Review {
+        if act != Act::Review && row.role != Role::Planner {
             return Err(Refusal::Role(role));
         }
     }
@@ -331,6 +386,7 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     }
     if !row.binds {
         let (holds, holder) = match row.role {
+            Role::Planner => (true, None),
             Role::Implementer => (facts.holds(), facts.holder()),
             Role::Reviewer => (
                 facts.reviewing().is_some(),
@@ -354,15 +410,37 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     Ok(row.to)
 }
 
+/// The status `act`, a mission's, sets on a mission that is `status`, or
+/// why it is refused. Its rows have no conditions yet.
+pub fn check_mission(act: Act, status: MissionStatus) -> Result<Option<MissionStatus>, Refusal> {
+    let row = row(act);
+    if !row.from.contains(&status.status()) {
+        return Err(Refusal::From {
+            act,
+            status: status.status(),
+        });
+    }
+    Ok(row.to.and_then(MissionStatus::of))
+}
+
 /// The conditions of `act` that do not hold.
 pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match act {
+        Act::Ready | Act::ReadyMission | Act::StartNew => {}
         Act::Start => {
             for (id, status) in facts.blockers {
                 if *status != Some(Status::Done) {
                     unmet.push(Condition::Blocked {
+                        id: id.clone(),
+                        status: *status,
+                    });
+                }
+            }
+            if let Some((id, status)) = &facts.mission {
+                if *status != Some(Status::Ready) {
+                    unmet.push(Condition::MissionNotReady {
                         id: id.clone(),
                         status: *status,
                     });
@@ -413,7 +491,7 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             let Some(file) = facts.reviewing() else {
                 return Ok(unmet);
             };
-            let problems = validate(std::slice::from_ref(item));
+            let problems = validate(std::slice::from_ref(item), &[]);
             if let Some(problem) = problems.into_iter().find(|p| p.file == file.path) {
                 return Err(problem);
             }

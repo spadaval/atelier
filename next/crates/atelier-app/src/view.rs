@@ -1,8 +1,8 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::acts::{next, unmet, Act, Condition, Facts, STARTED};
+use crate::acts::{mission_of, next, unmet, Act, Condition, Facts, STARTED};
 use atelier_core::{Priority, ReviewName, Status, Thread, Verdict};
-use atelier_records::{ItemDir, Problem};
+use atelier_records::{ItemDir, MissionDir, Problem};
 use std::collections::HashMap;
 
 /// An item as the commands find it: its record at the base's tip, and the
@@ -47,6 +47,9 @@ pub struct Entry {
     pub status: Status,
     pub holder: Option<Thread>,
     pub holds: bool,
+    /// The caller holds it building, and its Goal or its Done when lines
+    /// are not written yet, as after `start --new`.
+    pub undefined: bool,
     /// This round's review, when the caller holds it.
     pub review: Option<ReviewName>,
     /// While it is in review, the thread holding this round's review file,
@@ -70,6 +73,10 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         None => Vec::new(),
     };
     let item = &facts.item.item;
+    let goal = facts.item.section("Goal").unwrap_or_default();
+    let undefined = facts.holds()
+        && item.status == Status::Building
+        && (goal.trim().is_empty() || facts.item.done_when().is_empty());
     Ok(Entry {
         id: item.id.clone(),
         title: item.title.clone(),
@@ -77,6 +84,7 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         status: item.status,
         holder: facts.holder().cloned(),
         holds: facts.holds(),
+        undefined,
         review: facts.reviewing().map(|file| file.name.clone()),
         reviewer: match facts.status() {
             Status::InReview => facts
@@ -110,8 +118,13 @@ pub struct Overview {
 }
 
 /// The overview of `items`, which are every item found on the base and on
-/// branches; a blocker is looked up among them.
-pub fn overview(items: &[Located], caller: &Thread) -> Result<Overview, Problem> {
+/// branches; a blocker is looked up among them, and a mission among
+/// `missions`, the base's.
+pub fn overview(
+    items: &[Located],
+    missions: &[MissionDir],
+    caller: &Thread,
+) -> Result<Overview, Problem> {
     let statuses: HashMap<&str, Status> = items
         .iter()
         .filter_map(|located| Some((located.id.as_str(), located.status()?)))
@@ -131,6 +144,7 @@ pub fn overview(items: &[Located], caller: &Thread) -> Result<Overview, Problem>
             item: record,
             branch: located.branch.is_some(),
             blockers: &blockers,
+            mission: mission_of(record, missions),
             caller,
             checkout: None,
         };

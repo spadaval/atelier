@@ -1,9 +1,10 @@
 use atelier_core::{
-    ForgeProvider, Now, Outcome, Recommendation, Response, Settlement, Status, Thread, Verdict,
+    ForgeProvider, MissionStatus, Now, Outcome, Recommendation, Response, Settlement, Status,
+    Thread, Verdict,
 };
 use atelier_records::{
-    parse_config, parse_item, parse_review, render_config, render_item, render_review, validate,
-    ItemDir, Problem, Store,
+    parse_config, parse_item, parse_mission, parse_review, render_config, render_item,
+    render_mission, render_review, validate, ItemDir, Problem, Store,
 };
 use std::fs;
 use std::path::Path;
@@ -79,6 +80,32 @@ created_at: 2026-11-09T19:00:00-05:00
 g
 ## Done when
 d
+";
+
+const MISSION: &str = "---
+schema: atelier.mission
+schema_version: 3
+id: atelier-icv4
+title: Review briefs that carry what a reviewer needs
+status: ready
+labels:
+- review
+lead: t3-lead
+ready:
+  by: sumeet
+  at: 2026-11-09T19:56:00-05:00
+created_at: 2026-11-09T18:00:00Z
+---
+
+# Why
+
+Reviewers fetch findings one by one.
+
+## Outcome
+
+The brief carries them.
+
+## Result
 ";
 
 const REVIEW_1: &str = "---
@@ -161,9 +188,11 @@ fn atelier(files: &[(&str, &str)]) -> TempDir {
     dir
 }
 
-/// The example tree: two items, the first with two reviews.
+/// The example tree: a mission and two items, the first in the mission,
+/// with two reviews.
 fn example() -> Vec<(&'static str, String)> {
     vec![
+        ("missions/atelier-icv4/mission.md", MISSION.to_string()),
         ("items/atelier-06jc/item.md", ITEM.to_string()),
         ("items/atelier-06jc/reviews/1-k3fa.md", REVIEW_1.to_string()),
         ("items/atelier-06jc/reviews/2-m2bn.md", REVIEW_2.to_string()),
@@ -182,7 +211,8 @@ fn problems_after(edits: &[(&str, &str, &str)]) -> Vec<Problem> {
     }
     let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
     let dir = atelier(&files);
-    validate(&Store::new(dir.path()).items().unwrap())
+    let store = Store::new(dir.path());
+    validate(&store.items().unwrap(), &store.missions().unwrap())
 }
 
 /// One problem, in `file`, naming `field`, whose message has `words`.
@@ -206,6 +236,10 @@ fn each_record_kind_reads_and_writes_back_the_same_file() {
     let path = Path::new("item.md");
     assert_eq!(render_item(&parse_item(path, ITEM).unwrap()), ITEM);
     assert_eq!(render_item(&parse_item(path, BLOCKER).unwrap()), BLOCKER);
+    assert_eq!(
+        render_mission(&parse_mission(path, MISSION).unwrap()),
+        MISSION
+    );
     for review in [REVIEW_1, REVIEW_2] {
         assert_eq!(render_review(&parse_review(path, review).unwrap()), review);
     }
@@ -329,6 +363,119 @@ fn an_unknown_status_is_refused_naming_file_and_field() {
         shown.contains("status: unknown variant `blocked`"),
         "{shown}"
     );
+}
+
+#[test]
+fn a_mission_reads_its_fields_and_keeps_its_body() {
+    let dir = atelier(&[("missions/atelier-icv4/mission.md", MISSION)]);
+    let read = Store::new(dir.path()).mission("atelier-icv4").unwrap();
+    assert!(read.path.ends_with("missions/atelier-icv4/mission.md"));
+    let mission = read.mission;
+    assert_eq!(mission.status, MissionStatus::Ready);
+    assert_eq!(mission.labels, ["review"]);
+    assert_eq!(mission.lead, Some(Thread("t3-lead".into())));
+    assert_eq!(mission.ready.unwrap().by, "sumeet");
+    assert_eq!(
+        mission.body,
+        MISSION
+            .split_once("created_at: 2026-11-09T18:00:00Z\n---\n")
+            .unwrap()
+            .1
+    );
+}
+
+#[test]
+fn a_mission_with_an_unknown_status_is_refused_naming_file_and_field() {
+    // `building` is an item's status, and no mission's.
+    for status in ["blocked", "building"] {
+        let text = MISSION.replace("status: ready", &format!("status: {status}"));
+        let dir = atelier(&[("missions/atelier-icv4/mission.md", &text)]);
+        let error = Store::new(dir.path()).missions().unwrap_err();
+        let shown = error.to_string();
+        assert!(
+            error.file.ends_with("missions/atelier-icv4/mission.md"),
+            "{shown}"
+        );
+        assert!(
+            shown.contains(&format!("status: unknown variant `{status}`")),
+            "{shown}"
+        );
+    }
+}
+
+#[test]
+fn a_mission_needs_an_outcome_section() {
+    let file = "missions/atelier-icv4/mission.md";
+    let problems = problems_after(&[(file, "## Outcome\n", "## Outcomes\n")]);
+    assert_one_problem(&problems, file, "Outcome", "no `## Outcome` section");
+    // A heading in a fenced example is no section.
+    let fenced = problems_after(&[(file, "## Outcome\n", "```\n## Outcome\n```\n")]);
+    assert_one_problem(&fenced, file, "Outcome", "no `## Outcome` section");
+}
+
+#[test]
+fn a_missions_other_files_are_not_examined() {
+    let mut files = example();
+    files.push((
+        "missions/atelier-icv4/design.md",
+        "# Design\nNo front matter.\n".into(),
+    ));
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    let dir = atelier(&files);
+    let binary = dir.path().join("missions/atelier-icv4/sketch.png");
+    fs::write(&binary, [0x89, b'P', b'N', b'G', 0xff, 0x00, 0xfe]).unwrap();
+    fs::create_dir_all(dir.path().join("missions/atelier-icv4/spikes")).unwrap();
+    let store = Store::new(dir.path());
+    let missions = store.missions().unwrap();
+    assert_eq!(missions.len(), 1);
+    assert_eq!(validate(&store.items().unwrap(), &missions), []);
+}
+
+#[test]
+fn a_mission_id_must_be_an_id_and_its_directorys_name() {
+    let file = "missions/atelier-icv4/mission.md";
+    let problems = problems_after(&[(file, "id: atelier-icv4", "id: atelier-icv5")]);
+    // The item in it now names no mission, too.
+    let (mission, item): (Vec<Problem>, Vec<Problem>) =
+        problems.into_iter().partition(|p| p.file.ends_with(file));
+    assert_one_problem(&mission, file, "id", "not its directory's name");
+    assert_one_problem(
+        &item,
+        "items/atelier-06jc/item.md",
+        "mission",
+        "names no mission",
+    );
+}
+
+#[test]
+fn an_items_mission_must_name_a_mission() {
+    let file = "items/atelier-06jc/item.md";
+    let problems = problems_after(&[(file, "mission: atelier-icv4", "mission: atelier-g0ne")]);
+    assert_one_problem(
+        &problems,
+        file,
+        "mission",
+        "`atelier-g0ne` names no mission",
+    );
+    // An item is not a mission.
+    let problems = problems_after(&[(file, "mission: atelier-icv4", "mission: atelier-b10c")]);
+    assert_one_problem(
+        &problems,
+        file,
+        "mission",
+        "`atelier-b10c` names no mission",
+    );
+}
+
+#[test]
+fn the_store_writes_a_mission_where_it_reads_it() {
+    let dir = atelier(&[]);
+    let store = Store::new(dir.path());
+    let mut mission = parse_mission(Path::new("x"), MISSION).unwrap();
+    mission.status = MissionStatus::Done;
+    store.write_mission(&mission).unwrap();
+    assert_eq!(store.mission("atelier-icv4").unwrap().mission, mission);
+    assert_eq!(store.missions().unwrap().len(), 1);
 }
 
 #[test]
@@ -556,7 +703,7 @@ fn a_finding_name_in_another_form_is_refused() {
                 .collect::<Vec<_>>(),
             "atelier-06jc",
         );
-        let problems = validate(&[dir]);
+        let problems = validate(&[dir], &[]);
         assert!(
             problems
                 .iter()
@@ -768,7 +915,7 @@ fn field_lines_in_a_fenced_example_are_text() {
         assert!(text.contains(old), "{old}");
         *text = text.replacen(old, new, 1);
     }
-    let rendered: Vec<String> = files.iter().map(|(_, t)| t.clone()).collect();
+    let rendered = |path: &str| files.iter().find(|(p, _)| *p == path).unwrap().1.clone();
     let dir = load(
         &files
             .iter()
@@ -789,8 +936,8 @@ fn field_lines_in_a_fenced_example_are_text() {
         .map(|f| f.name.to_string())
         .collect();
     assert_eq!(open, ["2-m2bn.1", "2-m2bn.2"]);
-    assert_eq!(render_item(&dir.item), rendered[0]);
-    assert_eq!(render_review(&dir.reviews[0].review), rendered[1]);
+    assert_eq!(render_item(&dir.item), rendered(item));
+    assert_eq!(render_review(&dir.reviews[0].review), rendered(review));
 }
 
 #[test]
