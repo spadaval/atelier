@@ -64,222 +64,222 @@ All twelve Done when lines hold, each shown by a test in `next/` that I saw fail
 The new binary driven by hand in a scratch repository (Git's commit lines left out): a mission from draft to closed, an item with no files closed on the base, a started and approved item dropped on the base and then refused at `merge`, `submit` and a take-over, and two blind plan reviews cherry-picked onto the base.
 
 ```text
-### 1. A mission from draft to closed
-$ atelier new --mission "Greet everyone"
-Created draft mission demo-agpp, with empty sections to write.
-Its items are created with: atelier new "<title>" --in demo-agpp
-A planner makes it ready with: atelier ready demo-agpp --by <name>
-Wrote, and did not commit:
-  .atelier/missions/demo-agpp/mission.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/missions/demo-agpp/mission.md && git commit -m "Plan mission demo-agpp" -- .atelier/missions/demo-agpp/mission.md
+  ### 1. A mission from draft to closed
+  $ atelier new --mission "Greet everyone"
+  Created draft mission demo-agpp, with empty sections to write.
+  Its items are created with: atelier new "<title>" --in demo-agpp
+  A planner makes it ready with: atelier ready demo-agpp --by <name>
+  Wrote, and did not commit:
+    .atelier/missions/demo-agpp/mission.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/missions/demo-agpp/mission.md && git commit -m "Plan mission demo-agpp" -- .atelier/missions/demo-agpp/mission.md
 
-(created items demo-z1r2 and demo-7r99 in mission demo-agpp with atelier new --in, and committed each)
+  (created items demo-z1r2 and demo-7r99 in mission demo-agpp with atelier new --in, and committed each)
 
-$ T3CODE_THREAD_ID=p1 atelier ready demo-agpp demo-z1r2 --by sumeet   # in repo
-Made ready, as sumeet said: demo-agpp, demo-z1r2.
-Mission demo-agpp's plan has no review.
-Wrote, and did not commit:
-  .atelier/items/demo-z1r2/item.md
-  .atelier/missions/demo-agpp/mission.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/items/demo-z1r2/item.md .atelier/missions/demo-agpp/mission.md && git commit -m "Ready demo-agpp, demo-z1r2" -- .atelier/items/demo-z1r2/item.md .atelier/missions/demo-agpp/mission.md
-(exit 0)
+  $ T3CODE_THREAD_ID=p1 atelier ready demo-agpp demo-z1r2 --by sumeet   # in repo
+  Made ready, as sumeet said: demo-agpp, demo-z1r2.
+  Mission demo-agpp's plan has no review.
+  Wrote, and did not commit:
+    .atelier/items/demo-z1r2/item.md
+    .atelier/missions/demo-agpp/mission.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/items/demo-z1r2/item.md .atelier/missions/demo-agpp/mission.md && git commit -m "Ready demo-agpp, demo-z1r2" -- .atelier/items/demo-z1r2/item.md .atelier/missions/demo-agpp/mission.md
+  (exit 0)
 
-$ T3CODE_THREAD_ID=t1 atelier start demo-z1r2   # in work
-Started demo-z1r2 on branch demo-z1r2.
+  $ T3CODE_THREAD_ID=t1 atelier start demo-z1r2   # in work
+  Started demo-z1r2 on branch demo-z1r2.
 
-You are the implementer of demo-z1r2 (thread t1).
-Item: .atelier/items/demo-z1r2/item.md
-Title: Say hello
-Status: building
-To submit it for review:
-  [ ] Done when: hello.txt says hello.
-  [ ] Report: written under `## Report`
-`atelier submit` commits only the item's directory, so commit your change first.
-Then: atelier submit
-(exit 0)
+  You are the implementer of demo-z1r2 (thread t1).
+  Item: .atelier/items/demo-z1r2/item.md
+  Title: Say hello
+  Status: building
+  To submit it for review:
+    [ ] Done when: hello.txt says hello.
+    [ ] Report: written under `## Report`
+  `atelier submit` commits only the item's directory, so commit your change first.
+  Then: atelier submit
+  (exit 0)
 
-(t1 submitted; t2 reviewed and approved)
-$ T3CODE_THREAD_ID=t1 atelier merge   # in work
-Merged demo-z1r2 into main with merge commit b2307f7, which marks it done.
-(exit 0)
+  (t1 submitted; t2 reviewed and approved)
+  $ T3CODE_THREAD_ID=t1 atelier merge   # in work
+  Merged demo-z1r2 into main with merge commit b2307f7, which marks it done.
+  (exit 0)
 
-$ T3CODE_THREAD_ID=p1 atelier close demo-agpp   # in repo
-`atelier close demo-agpp` refused; nothing changed.
-To close it:
-  [ ] demo-7r99 is done or dropped (it is draft)
-  [ ] Result: written under `## Result`
-Then: atelier close demo-agpp
-(exit 1)
+  $ T3CODE_THREAD_ID=p1 atelier close demo-agpp   # in repo
+  `atelier close demo-agpp` refused; nothing changed.
+  To close it:
+    [ ] demo-7r99 is done or dropped (it is draft)
+    [ ] Result: written under `## Result`
+  Then: atelier close demo-agpp
+  (exit 1)
 
-$ T3CODE_THREAD_ID=p1 atelier drop demo-7r99 --reason Nobody leaves   # in repo
-Dropped item demo-7r99: Nobody leaves
-Wrote, and did not commit:
-  .atelier/items/demo-7r99/item.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/items/demo-7r99/item.md && git commit -m "Drop demo-7r99" -- .atelier/items/demo-7r99/item.md
-(exit 0)
+  $ T3CODE_THREAD_ID=p1 atelier drop demo-7r99 --reason Nobody leaves   # in repo
+  Dropped item demo-7r99: Nobody leaves
+  Wrote, and did not commit:
+    .atelier/items/demo-7r99/item.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/items/demo-7r99/item.md && git commit -m "Drop demo-7r99" -- .atelier/items/demo-7r99/item.md
+  (exit 0)
 
-$ git add -- .atelier/items/demo-7r99/item.md && git commit -qm 'Drop demo-7r99' -- .atelier/items/demo-7r99/item.md
+  $ git add -- .atelier/items/demo-7r99/item.md && git commit -qm 'Drop demo-7r99' -- .atelier/items/demo-7r99/item.md
 
-$ T3CODE_THREAD_ID=p1 atelier close demo-agpp   # in repo
-Closed mission demo-agpp: it is done.
-Wrote, and did not commit:
-  .atelier/missions/demo-agpp/mission.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/missions/demo-agpp/mission.md && git commit -m "Close demo-agpp" -- .atelier/missions/demo-agpp/mission.md
-(exit 0)
+  $ T3CODE_THREAD_ID=p1 atelier close demo-agpp   # in repo
+  Closed mission demo-agpp: it is done.
+  Wrote, and did not commit:
+    .atelier/missions/demo-agpp/mission.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/missions/demo-agpp/mission.md && git commit -m "Close demo-agpp" -- .atelier/missions/demo-agpp/mission.md
+  (exit 0)
 
-$ git add -- .atelier/missions/demo-agpp/mission.md && git commit -qm 'Close demo-agpp' -- .atelier/missions/demo-agpp/mission.md
+  $ git add -- .atelier/missions/demo-agpp/mission.md && git commit -qm 'Close demo-agpp' -- .atelier/missions/demo-agpp/mission.md
 
-### 1b. An item with no files closed on the base
-$ T3CODE_THREAD_ID=p1 atelier close demo-y3bj   # in repo
-`atelier close demo-y3bj` needs the item's result, the text its Report gets. Nothing changed.
-Then: atelier close demo-y3bj "<what came of it>"
-(exit 1)
+  ### 1b. An item with no files closed on the base
+  $ T3CODE_THREAD_ID=p1 atelier close demo-y3bj   # in repo
+  `atelier close demo-y3bj` needs the item's result, the text its Report gets. Nothing changed.
+  Then: atelier close demo-y3bj "<what came of it>"
+  (exit 1)
 
-$ T3CODE_THREAD_ID=p1 atelier close demo-y3bj Nothing to change: hello.txt already says hello.   # in repo
-Closed item demo-y3bj: it is done.
-Wrote, and did not commit:
-  .atelier/items/demo-y3bj/item.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/items/demo-y3bj/item.md && git commit -m "Close demo-y3bj" -- .atelier/items/demo-y3bj/item.md
-(exit 0)
+  $ T3CODE_THREAD_ID=p1 atelier close demo-y3bj Nothing to change: hello.txt already says hello.   # in repo
+  Closed item demo-y3bj: it is done.
+  Wrote, and did not commit:
+    .atelier/items/demo-y3bj/item.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/items/demo-y3bj/item.md && git commit -m "Close demo-y3bj" -- .atelier/items/demo-y3bj/item.md
+  (exit 0)
 
-$ tail -4 .atelier/items/demo-y3bj/item.md
+  $ tail -4 .atelier/items/demo-y3bj/item.md
 
-## Report
+  ## Report
 
-Nothing to change: hello.txt already says hello.
+  Nothing to change: hello.txt already says hello.
 
-### 2. A started item dropped on the base, then refused at merge
-$ T3CODE_THREAD_ID=t1 atelier start demo-he3l   # in work2
-Started demo-he3l on branch demo-he3l.
+  ### 2. A started item dropped on the base, then refused at merge
+  $ T3CODE_THREAD_ID=t1 atelier start demo-he3l   # in work2
+  Started demo-he3l on branch demo-he3l.
 
-You are the implementer of demo-he3l (thread t1).
-Item: .atelier/items/demo-he3l/item.md
-Title: Wave
-Status: building
-Write its Goal and its Done when lines in .atelier/items/demo-he3l/item.md first: they say what the change must do, and the reviewer judges it against them.
-To submit it for review:
-  [ ] Report: written under `## Report`
-`atelier submit` commits only the item's directory, so commit your change first.
-Then: atelier submit
-(exit 0)
+  You are the implementer of demo-he3l (thread t1).
+  Item: .atelier/items/demo-he3l/item.md
+  Title: Wave
+  Status: building
+  Write its Goal and its Done when lines in .atelier/items/demo-he3l/item.md first: they say what the change must do, and the reviewer judges it against them.
+  To submit it for review:
+    [ ] Report: written under `## Report`
+  `atelier submit` commits only the item's directory, so commit your change first.
+  Then: atelier submit
+  (exit 0)
 
-(t1 submitted; t2 approved it)
+  (t1 submitted; t2 approved it)
 
-$ T3CODE_THREAD_ID=p1 atelier drop demo-he3l --reason The site waves instead   # in repo
-Dropped item demo-he3l: The site waves instead
-Its branch demo-he3l is left as it is. Every command reads the base's record first, so once this is committed nobody can submit, merge or take it over.
-Wrote, and did not commit:
-  .atelier/items/demo-he3l/item.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/items/demo-he3l/item.md && git commit -m "Drop demo-he3l" -- .atelier/items/demo-he3l/item.md
-(exit 0)
+  $ T3CODE_THREAD_ID=p1 atelier drop demo-he3l --reason The site waves instead   # in repo
+  Dropped item demo-he3l: The site waves instead
+  Its branch demo-he3l is left as it is. Every command reads the base's record first, so once this is committed nobody can submit, merge or take it over.
+  Wrote, and did not commit:
+    .atelier/items/demo-he3l/item.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/items/demo-he3l/item.md && git commit -m "Drop demo-he3l" -- .atelier/items/demo-he3l/item.md
+  (exit 0)
 
-$ git add -- .atelier/items/demo-he3l/item.md && git commit -qm 'Drop demo-he3l' -- .atelier/items/demo-he3l/item.md
+  $ git add -- .atelier/items/demo-he3l/item.md && git commit -qm 'Drop demo-he3l' -- .atelier/items/demo-he3l/item.md
 
-$ T3CODE_THREAD_ID=t3 atelier status   # in repo
-You are thread t3, on the base branch main.
-Dropped on the base while started; nothing is left to do on them:
-  demo-he3l: The site waves instead
-Nothing is ready to start.
-(exit 0)
+  $ T3CODE_THREAD_ID=t3 atelier status   # in repo
+  You are thread t3, on the base branch main.
+  Dropped on the base while started; nothing is left to do on them:
+    demo-he3l: The site waves instead
+  Nothing is ready to start.
+  (exit 0)
 
-$ T3CODE_THREAD_ID=t1 atelier status   # in work2
-You are thread t1, on the branch of demo-he3l.
-Title: Wave
-Status: dropped
-It was dropped on the base: The site waves instead
-Nothing is left to do on it.
-(exit 0)
+  $ T3CODE_THREAD_ID=t1 atelier status   # in work2
+  You are thread t1, on the branch of demo-he3l.
+  Title: Wave
+  Status: dropped
+  It was dropped on the base: The site waves instead
+  Nothing is left to do on it.
+  (exit 0)
 
-$ T3CODE_THREAD_ID=t1 atelier merge   # in work2
-demo-he3l is dropped, and `atelier merge` runs on an item that is approved. Nothing changed.
-It was dropped on the base: The site waves instead
-Nothing is left to do on it.
-(exit 1)
+  $ T3CODE_THREAD_ID=t1 atelier merge   # in work2
+  demo-he3l is dropped, and `atelier merge` runs on an item that is approved. Nothing changed.
+  It was dropped on the base: The site waves instead
+  Nothing is left to do on it.
+  (exit 1)
 
-$ T3CODE_THREAD_ID=t1 atelier submit   # in work2
-demo-he3l is dropped, and `atelier submit` runs on an item that is building, changes requested, approved. Nothing changed.
-It was dropped on the base: The site waves instead
-Nothing is left to do on it.
-(exit 1)
+  $ T3CODE_THREAD_ID=t1 atelier submit   # in work2
+  demo-he3l is dropped, and `atelier submit` runs on an item that is building, changes requested, approved. Nothing changed.
+  It was dropped on the base: The site waves instead
+  Nothing is left to do on it.
+  (exit 1)
 
-$ T3CODE_THREAD_ID=t2 atelier start demo-he3l   # in repo
-demo-he3l is dropped, and `atelier start` runs on an item that is ready. Nothing changed.
-It was dropped on the base: The site waves instead
-Nothing is left to do on it.
-(exit 1)
+  $ T3CODE_THREAD_ID=t2 atelier start demo-he3l   # in repo
+  demo-he3l is dropped, and `atelier start` runs on an item that is ready. Nothing changed.
+  It was dropped on the base: The site waves instead
+  Nothing is left to do on it.
+  (exit 1)
 
-### 3. Two blind plan reviews, cherry-picked onto the base
-$ T3CODE_THREAD_ID=r1 atelier review demo-whru   # in rev-a
-You are a reviewer of the plan of mission demo-whru (thread r1), round 1.
-Review the plan as commit 3eb7b57 holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find. Another reviewer may review the same plan blind, in a checkout of its own.
+  ### 3. Two blind plan reviews, cherry-picked onto the base
+  $ T3CODE_THREAD_ID=r1 atelier review demo-whru   # in rev-a
+  You are a reviewer of the plan of mission demo-whru (thread r1), round 1.
+  Review the plan as commit 3eb7b57 holds it, as someone who did not write it: the mission below, its other documents and its items. Read them, and write down each problem you find. Another reviewer may review the same plan blind, in a checkout of its own.
 
-Mission demo-whru: Say farewell
+  Mission demo-whru: Say farewell
 
-Its other documents:
-  .atelier/missions/demo-whru/design.md
-Its items:
-  .atelier/items/demo-pud2/item.md (draft): Print farewell
+  Its other documents:
+    .atelier/missions/demo-whru/design.md
+  Its items:
+    .atelier/items/demo-pud2/item.md (draft): Print farewell
 
-Your review file: .atelier/missions/demo-whru/reviews/1-izp9.md
-Write your review there, and change no other file. Leave its front matter, between the `---` lines, as it is.
-Under `## Summary`, say what you checked and how, and what you could not check. Then add a section for each problem, numbered on from 1:
+  Your review file: .atelier/missions/demo-whru/reviews/1-izp9.md
+  Write your review there, and change no other file. Leave its front matter, between the `---` lines, as it is.
+  Under `## Summary`, say what you checked and how, and what you could not check. Then add a section for each problem, numbered on from 1:
 
-## Finding 1: <a one-line title>
-Recommendation: fix now
-<What is wrong, where (file and line), and how you know.>
+  ## Finding 1: <a one-line title>
+  Recommendation: fix now
+  <What is wrong, where (file and line), and how you know.>
 
-The Recommendation is `fix now` (it must be fixed before the mission starts), `defer` (real, but for later work) or `no action` (a note; nothing to do).
+  The Recommendation is `fix now` (it must be fixed before the mission starts), `defer` (real, but for later work) or `no action` (a note; nothing to do).
 
-When the file is written, record your verdict. It checks the file, then commits it alone, changing no status:
-  atelier verdict changes --model <your model>   if the file holds an open fix-now finding
-  atelier verdict approve --model <your model>   if it holds none
-Give the name of the model you run on, such as gpt-6.1-sol, or leave out `--model` if you do not know it. Then tell whoever started you the commit it prints, which the planner cherry-picks onto main. Your review is then done.
-(exit 0)
+  When the file is written, record your verdict. It checks the file, then commits it alone, changing no status:
+    atelier verdict changes --model <your model>   if the file holds an open fix-now finding
+    atelier verdict approve --model <your model>   if it holds none
+  Give the name of the model you run on, such as gpt-6.1-sol, or leave out `--model` if you do not know it. Then tell whoever started you the commit it prints, which the planner cherry-picks onto main. Your review is then done.
+  (exit 0)
 
-$ T3CODE_THREAD_ID=r1 atelier verdict approve   # in rev-a
-Recorded your verdict on the plan of mission demo-whru, round 1: approved. Committed .atelier/missions/demo-whru/reviews/1-izp9.md alone, in commit 8766cb12f3d5fedb803328c0feaa8efaacbf5b25.
-The planner puts it on main with: git cherry-pick 8766cb12f3d5fedb803328c0feaa8efaacbf5b25
-Your review is done: tell whoever started you that commit, and stop.
-(exit 0)
+  $ T3CODE_THREAD_ID=r1 atelier verdict approve   # in rev-a
+  Recorded your verdict on the plan of mission demo-whru, round 1: approved. Committed .atelier/missions/demo-whru/reviews/1-izp9.md alone, in commit 8766cb12f3d5fedb803328c0feaa8efaacbf5b25.
+  The planner puts it on main with: git cherry-pick 8766cb12f3d5fedb803328c0feaa8efaacbf5b25
+  Your review is done: tell whoever started you that commit, and stop.
+  (exit 0)
 
-(r2 ran atelier review demo-whru in rev-b and wrote a fix-now finding into .atelier/missions/demo-whru/reviews/1-kvpl.md)
-$ T3CODE_THREAD_ID=r2 atelier verdict approve   # in rev-b
-`atelier verdict approve` refused; nothing changed.
-To record your verdict:
-  [ ] No fix-now finding is open; 1-kvpl.1 is: No sizing
-A finding that stands needs `atelier verdict changes`. A carried one closes when your file says `Now: fixed` or `Now: withdrawn` for it.
-Then: atelier verdict approve (or `atelier verdict changes`, once your file holds a fix-now finding)
-(exit 1)
+  (r2 ran atelier review demo-whru in rev-b and wrote a fix-now finding into .atelier/missions/demo-whru/reviews/1-kvpl.md)
+  $ T3CODE_THREAD_ID=r2 atelier verdict approve   # in rev-b
+  `atelier verdict approve` refused; nothing changed.
+  To record your verdict:
+    [ ] No fix-now finding is open; 1-kvpl.1 is: No sizing
+  A finding that stands needs `atelier verdict changes`. A carried one closes when your file says `Now: fixed` or `Now: withdrawn` for it.
+  Then: atelier verdict approve (or `atelier verdict changes`, once your file holds a fix-now finding)
+  (exit 1)
 
-$ T3CODE_THREAD_ID=r2 atelier verdict changes --model gpt-6.1-sol   # in rev-b
-Recorded your verdict on the plan of mission demo-whru, round 1: changes requested. Committed .atelier/missions/demo-whru/reviews/1-kvpl.md alone, in commit 55493ad673f38e5ebafea0e9d468ad2962479076.
-The planner puts it on main with: git cherry-pick 55493ad673f38e5ebafea0e9d468ad2962479076
-Your review is done: tell whoever started you that commit, and stop.
-(exit 0)
+  $ T3CODE_THREAD_ID=r2 atelier verdict changes --model gpt-6.1-sol   # in rev-b
+  Recorded your verdict on the plan of mission demo-whru, round 1: changes requested. Committed .atelier/missions/demo-whru/reviews/1-kvpl.md alone, in commit 55493ad673f38e5ebafea0e9d468ad2962479076.
+  The planner puts it on main with: git cherry-pick 55493ad673f38e5ebafea0e9d468ad2962479076
+  Your review is done: tell whoever started you that commit, and stop.
+  (exit 0)
 
-$ git cherry-pick 8766cb12f3d5fedb803328c0feaa8efaacbf5b25 55493ad673f38e5ebafea0e9d468ad2962479076
+  $ git cherry-pick 8766cb12f3d5fedb803328c0feaa8efaacbf5b25 55493ad673f38e5ebafea0e9d468ad2962479076
 
-$ ls .atelier/missions/demo-whru/reviews/
-1-izp9.md
-1-kvpl.md
+  $ ls .atelier/missions/demo-whru/reviews/
+  1-izp9.md
+  1-kvpl.md
 
-$ T3CODE_THREAD_ID=p1 atelier ready demo-whru --by sumeet   # in repo
-Made ready, as sumeet said: demo-whru.
-Mission demo-whru's plan reviews, round 1:
-  1-izp9 by r1: approved, of commit 3eb7b57
-  1-kvpl by r2: changes requested, of commit 3eb7b57
-Since 3eb7b57, nothing in the mission's directory or its items changed.
-Wrote, and did not commit:
-  .atelier/missions/demo-whru/mission.md
-Planning counts once it is committed on the base.
-Then: git add -- .atelier/missions/demo-whru/mission.md && git commit -m "Ready demo-whru" -- .atelier/missions/demo-whru/mission.md
-(exit 0)
+  $ T3CODE_THREAD_ID=p1 atelier ready demo-whru --by sumeet   # in repo
+  Made ready, as sumeet said: demo-whru.
+  Mission demo-whru's plan reviews, round 1:
+    1-izp9 by r1: approved, of commit 3eb7b57
+    1-kvpl by r2: changes requested, of commit 3eb7b57
+  Since 3eb7b57, nothing in the mission's directory or its items changed.
+  Wrote, and did not commit:
+    .atelier/missions/demo-whru/mission.md
+  Planning counts once it is committed on the base.
+  Then: git add -- .atelier/missions/demo-whru/mission.md && git commit -m "Ready demo-whru" -- .atelier/missions/demo-whru/mission.md
+  (exit 0)
 ```
 
 ### Deviations
