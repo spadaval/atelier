@@ -168,20 +168,24 @@ RECORDS = [
            labels=["bug"], blocks=["demo-c3fe"], children=["demo-c3fe"]),
     record("demo-c3fe", "feature", "in_progress", "Build it", "\n## Goal\n\ng\n",
            relates=[("demo-a1ta", "related")]),
-    record("demo-e4sp", "spike", "draft", "Spike", "\n## Goal\n\ng\n\n## Done when\n\nd\n"),
+    record("demo-e4sp", "spike", "draft", "Spike", "\n## Goal\n\ng\n\n## Done when\n\nd\n",
+           relates=[("demo-m2nd", "advances")], children=["demo-q5gc"]),
     record("demo-f5le", "loose_end", "todo", "Loose end", "\n## Goal\n\ng\n\n## Done when\n\nd\n"),
     record("demo-g6va", "validation", "backlog", "Validate", "\n## Goal\n\ng\n\n## Done when\n\nd\n"),
     record("demo-h7de", "decision", "todo", "Pick a shape",
            "\n## Context\n\nShapes vary.\n\n## Question\n\nRound or oval?\n\n## Options\n\n- round\n- oval\n"),
-    record("demo-n3ch", "task", "todo", "Child", "\n## Goal\n\ng\n\n## Done when\n\nd\n"),
+    record("demo-n3ch", "task", "todo", "Child", "\n## Goal\n\ng\n\n## Done when\n\nd\n", children=["demo-r6gc"]),
+    record("demo-q5gc", "task", "todo", "Grandchild by a spike", "\n## Goal\n\ng\n\n## Done when\n\nd\n"),
+    record("demo-r6gc", "task", "todo", "Grandchild", "\n## Goal\n\ng\n\n## Done when\n\nd\n"),
     record("demo-d9dn", "task", "done", "Done", "\n## Goal\n\ng\n", relates=[("demo-m1ss", "advances")],
-           children=["demo-n3ch"]),
+           children=["demo-n3ch", "demo-e4sp"]),
     record("demo-j8dc", "decision", "done", "Decided", "\n## Question\n\nq\n"),
     record("demo-k1sp", "feature", "superseded", "Superseded", "\n## Goal\n\ng\n"),
     record("demo-l2dc", "task", "declined", "Declined", "\n## Goal\n\ng\n"),
 ]
 
-OPEN_ITEMS = {"demo-a1ta", "demo-b2bu", "demo-c3fe", "demo-e4sp", "demo-f5le", "demo-g6va", "demo-h7de", "demo-n3ch"}
+OPEN_ITEMS = {"demo-a1ta", "demo-b2bu", "demo-c3fe", "demo-e4sp", "demo-f5le", "demo-g6va", "demo-h7de", "demo-n3ch",
+              "demo-q5gc", "demo-r6gc"}
 
 
 def resolves(root, file, target):
@@ -317,11 +321,17 @@ Relationships of the old record that the new format has no field for.
         for rid, label in (("demo-e4sp", "spike"), ("demo-f5le", "loose_end"), ("demo-g6va", "validation")):
             self.assertIn(f"labels:\n- {label}\n", self.read(f".atelier/items/{rid}/item.md"))
         self.assertIn("mission: demo-m1ss\n", self.read(".atelier/items/demo-f5le/item.md"))  # held by the mission
+        # An item that advances no mission takes its nearest ancestor's, and still names its parent.
         child = self.read(".atelier/items/demo-n3ch/item.md")
-        self.assertIn("mission: null\n", child)
+        self.assertIn("mission: demo-m1ss\n", child)  # through a closed parent
         self.assertIn("- parent: demo-d9dn (Done)\n", child)
         self.assertIn("labels: []\n", child)
-        self.assertIn("  demo-n3ch: demo-m1ss, through demo-d9dn\n", out)
+        self.assertIn("mission: demo-m1ss\n", self.read(".atelier/items/demo-r6gc/item.md"))  # past an open parent
+        self.assertIn("mission: demo-m2nd\n", self.read(".atelier/items/demo-q5gc/item.md"))  # the nearest one
+        self.assertIn("mission: demo-m2nd\n", self.read(".atelier/items/demo-e4sp/item.md"))  # its own, not its parent's
+        self.assertIn("Items that advance no mission, given their nearest ancestor's (the parent is in Links):\n"
+                      "  demo-n3ch: demo-m1ss, through demo-d9dn\n  demo-q5gc: demo-m2nd, through demo-e4sp\n"
+                      "  demo-r6gc: demo-m1ss, through demo-d9dn\n", out)
         self.assertIn("  demo-a1ta: advances demo-m2nd, discovered_from review demo-r1vw\n", out)
 
     def test_a_decision_becomes_a_question_and_missing_sections_are_written(self):
@@ -446,7 +456,7 @@ ci_workflow = "ci.yml"
 
     def test_the_output_counts_what_was_converted_and_left(self):
         out = self.convert()
-        for line in ("  item draft: 3\n", "  item ready: 4\n", "  item from decision ready: 1\n",
+        for line in ("  item draft: 3\n", "  item ready: 6\n", "  item from decision ready: 1\n",
                      "  mission draft: 1\n", "  mission ready: 1\n", "  mission done: 1\n", "  task done: 1\n",
                      "  task declined: 1\n", "  feature superseded: 1\n", "  decision done: 1\n",
                      "  reviews files: 1\n", "  evidence files: 1\n",

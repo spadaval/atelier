@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Write the converter from today's records to the new layout, with a `--verify` mode"
-updated_at: "2026-11-10T21:59:51.843742024+00:00"
+updated_at: "2026-11-10T22:56:25.330037055+00:00"
 ---
 
 ## Goal
@@ -34,7 +34,7 @@ Write the script that moves a repository from today's records to the new ones, s
 
 - [x] Run in a repository with the old layout, the script replaces `.atelier/` with the new layout and nothing else of the old one remains there: no `issues/`, `reviews/`, `evidence/`, `runtime/` or `workflow.yaml`. It changes no file outside `.atelier/` except the strategy files it moves, below. It makes no commit.
 - [x] Every open record becomes one new record with the same ID. A mission becomes `missions/<id>/mission.md`; every other open issue becomes `items/<id>/item.md`. Done, declined and superseded records are not carried over. Status maps as: `draft` and `backlog` to `draft`; `todo` to `ready`; `in_progress` to `ready`, with each such record named in the script's output, since a branch's work is not converted. A record made ready carries `ready`, with `conversion` as who and the old record's `updated_at` as when.
-- [x] An item keeps its title, priority, labels, creation time and its Goal, Done when and Scope; its other sections and its Notes follow as text, so nothing an agent wrote on an open item is lost. Its issue type becomes a label, except `task`. Its `mission` is the mission it advances, the first by ID when it names several; a parent that is not a mission is named in the item's text. `blocked_by` keeps the blockers that are still open.
+- [x] An item keeps its title, priority, labels, creation time and its Goal, Done when and Scope; its other sections and its Notes follow as text, so nothing an agent wrote on an open item is lost. Its issue type becomes a label, except `task`. Its `mission` is the mission it advances, the first by ID when it names several, or, when it advances none itself, the mission its nearest parent advances; a parent that is not a mission is named in the item's text. `blocked_by` keeps the blockers that are still open.
 - [x] An open decision record becomes an item labelled `needs-human` whose Goal is the question and whose Done when has one line, that the question is answered and the answer is written in the item's Report. Wherever an old record lacks a section the new format requires, the script writes that heading with one fixed line saying it was not specified, so every record it writes is valid. Evidence records, and review records of every kind, are not carried over; Git keeps them.
 - [x] A mission's `mission.md` takes Why, Outcome, Success criteria, Scope and Authority from the strategy file its record links, and the rest of that file becomes `design.md` beside it; the strategy file is removed from where it was. What the mission's own record holds beyond those sections, such as its Background and its Notes, becomes `notes.md` beside them, so no mission loses text. A mission with no strategy file takes its sections from its record.
 - [x] Moving a strategy file breaks no link the script can see. Relative Markdown links in the moved text are rewritten to resolve from the new place, and a test resolves each. In the records the script writes, a mention of a moved file's old path becomes its new path. Every other tracked file that still names a moved file's old path is listed in the script's output and left unchanged.
@@ -53,6 +53,12 @@ Write the script that moves a repository from today's records to the new ones, s
 Design: `docs/strategies/redesign-architecture.md`, Records and Transition ("2. Rehearse"). The new record formats are what `next/crates/atelier-records` reads; the old ones are in each repository's `.atelier/` and described by `docs/product/` and the root `crates/atelier-records`. `docs/strategies/redesign-product.md`, "What is removed", says what has no place in the new model and why. The mission cut `merge_strategy` from `config.toml`. Deferred findings on done items are not carried over, as the architecture specification says.
 
 This is the first of step E's two items in `docs/strategies/redesign-2-core.md`.
+
+## Notes
+
+- 2026-11-10 [decision] The orchestrator reworded the Done when line on the mission an item takes: an item that advances no mission itself takes the mission of its nearest ancestor that advances one. Its parent still appears in its Links section.
+  Reason: Without it, a mission's lead would not see those items and close on the mission would not wait for them; 35 open items (12 in astromech, 23 in cosplay-studio) are in a mission only through their parent.
+  Rejected: Leave such items with no mission and only name the parent in their Links section
 
 ## Report
 

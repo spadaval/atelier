@@ -421,7 +421,14 @@ class Graph:
                 if rel.get("type") == "advances":
                     self.advances.setdefault(rid, set()).add(rel["id"])
                     self.advances.setdefault(rel["id"], set()).add(rid)
-        self.mission_of = {rid: self.advanced(rid) for rid in records if self.is_open(rid, mission=False)}
+        # An item that advances no mission takes its nearest ancestor's.
+        self.mission_of, self.through = {}, {}
+        for rid in records:
+            if self.is_open(rid, mission=False):
+                found = None if self.advanced(rid) else self.mission_through_parent(rid)
+                self.mission_of[rid] = found[0] if found else self.advanced(rid)
+                if found:
+                    self.through[rid] = found[1]
 
     def is_open(self, rid, mission=None):
         r = self.records.get(rid)
@@ -453,14 +460,14 @@ class Graph:
         return found
 
     def mission_through_parent(self, rid):
-        """(mission, ancestor) when `rid` is in an open mission only through
-        an ancestor that advances it."""
-        ancestor, seen = next(iter(self.parents.get(rid, [])), None), set()
+        """(mission, ancestor) for the nearest ancestor of `rid` that advances
+        an open mission; the first parent by ID at each step."""
+        ancestor, seen = min(self.parents.get(rid, []), default=None), set()
         while ancestor and ancestor not in seen:
             seen.add(ancestor)
             if self.advanced(ancestor):
                 return self.advanced(ancestor), ancestor
-            ancestor = next(iter(self.parents.get(ancestor, [])), None)
+            ancestor = min(self.parents.get(ancestor, []), default=None)
         return None
 
 
@@ -567,7 +574,7 @@ def convert(root):
 
     writes = {".atelier/config.toml": config}
     count = {"converted": {}, "left": {}}
-    report = {"in_progress": [], "as_text": [], "via_parent": []}
+    report = {"in_progress": [], "as_text": []}
     closed_blockers = 0
     for rid, r in sorted(records.items()):
         kind, status = r["issue_type"], r["status"]
@@ -598,14 +605,11 @@ def convert(root):
         else:
             writes.update(item_file(rid, r, sections, preamble, graph, links, front))
             name = "item from decision" if kind == "decision" else "item"
-            through = None if graph.mission_of[rid] else graph.mission_through_parent(rid)
-            if through:
-                report["via_parent"].append(f"{rid}: {through[0]}, through {through[1]}")
         count["converted"][f"{name} {status}"] = count["converted"].get(f"{name} {status}", 0) + 1
-    return writes, sorted(moved), summary(root, count, report, closed_blockers, moved)
+    return writes, sorted(moved), summary(root, count, report, closed_blockers, moved, graph)
 
 
-def summary(root, count, report, closed_blockers, moved):
+def summary(root, count, report, closed_blockers, moved, graph):
     lines = ["Records converted, by kind and new status:"]
     lines += [f"  {k}: {v}" for k, v in sorted(count["converted"].items())]
     lines += ["Records left behind, by kind and status (Git keeps them):"]
@@ -617,8 +621,8 @@ def summary(root, count, report, closed_blockers, moved):
     lines += [f"  {rid}" for rid in report["in_progress"]] or ["  (none)"]
     lines += ["Relationships with no field in the new format, written in the record's Links section:"]
     lines += [f"  {line}" for line in report["as_text"]] or ["  (none)"]
-    lines += ["Open items in an open mission only through a parent, given no mission (the parent is in Links):"]
-    lines += [f"  {line}" for line in report["via_parent"]] or ["  (none)"]
+    lines += ["Items that advance no mission, given their nearest ancestor's (the parent is in Links):"]
+    lines += [f"  {rid}: {graph.mission_of[rid]}, through {a}" for rid, a in sorted(graph.through.items())] or ["  (none)"]
     lines += ["Strategy files moved:"]
     lines += [f"  {old} -> {moved[old][0]}/" for old in sorted(moved)] or ["  (none)"]
     naming = files_naming(root, moved)
