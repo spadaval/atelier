@@ -171,8 +171,9 @@ def run_claude(cmd: list, cwd: Path, env: dict, transcript: Path, timeout):
     """Run the agent into transcript; return its exit code or "timeout"."""
     with transcript.open("w") as out:
         # Own process group, so servers the agent starts die with the run.
-        proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=out,
-                                stderr=subprocess.STDOUT, start_new_session=True)
+        proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                                stdout=out, stderr=subprocess.STDOUT,
+                                start_new_session=True)
         try:
             exit_code = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:

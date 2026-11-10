@@ -223,6 +223,15 @@ impl<'a> Facts<'a> {
         (review.review.reviewers.holder() == Some(self.caller)).then_some(review)
     }
 
+    /// The last review of the item the caller held, if any.
+    pub fn reviewed(&self) -> Option<&'a ReviewFile> {
+        let item: &'a ItemDir = self.item;
+        item.reviews
+            .iter()
+            .filter(|file| file.review.reviewers.0.contains(self.caller))
+            .max_by_key(|file| file.name.round)
+    }
+
     /// The role the caller holds on the item, if any.
     pub fn role(&self) -> Option<Role> {
         if self.holds() {
@@ -516,8 +525,11 @@ pub fn next(facts: &Facts) -> Result<Option<Act>, Problem> {
     }
     if !facts.holds() {
         let implemented = facts.item.item.implementers.0.contains(facts.caller);
-        let review = status == Status::InReview && !implemented;
-        return Ok(Some(if review { Act::Review } else { Act::TakeOver }));
+        if status == Status::InReview && !implemented {
+            return Ok(Some(Act::Review));
+        }
+        // A reviewer whose review is done is not offered the item itself.
+        return Ok(facts.reviewed().is_none().then_some(Act::TakeOver));
     }
     Ok(match status {
         Status::Approved => Some(Act::Merge),

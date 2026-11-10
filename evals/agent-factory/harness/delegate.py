@@ -26,7 +26,7 @@ env = {**conf["env"], "T3CODE_THREAD_ID": thread}
 print(f"Started thread {thread}; waiting for it to finish.", flush=True)
 with transcript.open("w") as f:
     try:
-        code = subprocess.run(argv, cwd=os.getcwd(), env=env, stdout=f,
+        code = subprocess.run(argv, cwd=os.getcwd(), env=env, stdin=subprocess.DEVNULL, stdout=f,
                               stderr=subprocess.STDOUT, timeout=conf["timeout"]).returncode
     except subprocess.TimeoutExpired:
         code = "timeout"

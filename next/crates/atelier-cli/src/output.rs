@@ -94,10 +94,16 @@ fn condition(id: &str, condition: &Condition) -> String {
 fn next(entry: &Entry) -> String {
     let id = &entry.id;
     let Some(act) = entry.next else {
+        if entry.reviewed.is_some() && !entry.holds {
+            return "Your review is done, and nothing on this item is yours to do. Say so to whoever started you, and stop.\n".into();
+        }
         return match entry.status {
-            Status::InReview => format!(
-                "Waiting for a reviewer's verdict. If no reviewer is working on it, start one with: Run `atelier review {id}` and follow what it prints.\n"
-            ),
+            Status::InReview => match &entry.reviewer {
+                Some(reviewer) => format!(
+                    "Thread {reviewer} holds this round's review. Wait for its verdict, then run `atelier status`.\n"
+                ),
+                None => format!("No reviewer has opened this round's review yet.\n{}", start_reviewer(id)),
+            },
             Status::Draft => format!(
                 "It is a draft. A planner makes it ready with: atelier ready {id} --by <name>\n"
             ),
@@ -106,6 +112,13 @@ fn next(entry: &Entry) -> String {
         };
     };
     needs(act, entry.status, id, &entry.unmet)
+}
+
+/// How an implementer gets its item reviewed.
+fn start_reviewer(id: &str) -> String {
+    format!(
+        "A reviewer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:\n  Run `atelier review {id}` and follow what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
+    )
 }
 
 /// The conditions of `act` that do not hold, then its command.
@@ -149,6 +162,19 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
         }
         _ => "",
     };
+    if act == Act::Submit {
+        // The reviewer reviews the branch's last commit.
+        text +=
+            "`atelier submit` commits only the item's directory, so commit your change first.\n";
+    }
+    if act == Act::TakeOver {
+        // Another thread holds it; taking it over is a choice, not a next step.
+        return text
+            + &format!(
+                "Only if you mean to take it over from its holder: {}\n",
+                command(act, id)
+            );
+    }
     text + &format!("Then: {}{or}\n", command(act, id))
 }
 
@@ -174,6 +200,12 @@ pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
             "You are the implementer of {id} (thread {caller}).\nItem: {}\n",
             crate::repo::item_path(id)
         )
+    } else if let (Some((name, verdict)), false) = (&entry.reviewed, entry.holds) {
+        let verdict = verdict.map_or("no verdict", verdict_name);
+        format!(
+            "You reviewed {id} (thread {caller}): review {name}, {verdict}. It is {}.\n",
+            holder(entry)
+        )
     } else {
         format!(
             "You are thread {caller}, on the branch of {id}, which is {}.\n",
@@ -190,6 +222,11 @@ pub fn item(caller: &Thread, entry: &Entry, config: &Config) -> String {
     if entry.next == Some(Act::Merge) && !stale {
         let then = next.rfind("Then: ").expect("it ends with a Then line");
         next.insert_str(then, &gates(config));
+    }
+    let code = outside(id, &entry.uncommitted);
+    if entry.next == Some(Act::Submit) && !code.is_empty() {
+        let then = next.rfind("Then: ").expect("it ends with a Then line");
+        next.insert_str(then, &format!("Not committed: {}\n", some(&code)));
     }
     format!(
         "{who}Title: {}\nStatus: {}\n{next}",
@@ -380,10 +417,23 @@ pub fn already_held(id: &str) -> String {
     format!("You already hold {id}; this checkout is on its branch.\n")
 }
 
-pub fn submitted(id: &str) -> String {
-    format!(
-        "Submitted {id} for review.\nStart a reviewer with: Run `atelier review {id}` and follow what it prints.\n"
-    )
+/// The paths of `uncommitted` outside the item's directory.
+fn outside(id: &str, uncommitted: &[String]) -> Vec<String> {
+    let dir = format!(".atelier/items/{id}/");
+    let outside = uncommitted.iter().filter(|path| !path.starts_with(&dir));
+    outside.cloned().collect()
+}
+
+pub fn submitted(id: &str, uncommitted: &[String]) -> String {
+    let code = outside(id, uncommitted);
+    let mut text = format!("Submitted {id} for review.\n");
+    if !code.is_empty() {
+        text += &format!(
+            "These changes are not committed, so the reviewer will not see them: {}. Commit them now, before the reviewer starts.\n",
+            some(&code)
+        );
+    }
+    text + &start_reviewer(id)
 }
 
 fn place(branch: Option<&str>) -> String {
@@ -419,7 +469,8 @@ pub fn review_taken_over(id: &str, round: u32, before: Option<&Thread>) -> Strin
 
 pub fn author(id: &str, caller: &Thread) -> String {
     format!(
-        "You (thread {caller}) have implemented {id}, and an author does not review its own work. Nothing changed.\nIf no reviewer is working on it, start one with: Run `atelier review {id}` and follow what it prints.\nWhat a reviewer is shown:\n\n"
+        "You (thread {caller}) have implemented {id}, and an author does not review its own work. Nothing changed.\n{}What a reviewer is shown:\n\n",
+        start_reviewer(id)
     )
 }
 

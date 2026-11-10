@@ -118,7 +118,8 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let message = format!("Submit {} for review", item.id);
     let file = [(item_path(&item.id), render_item(&item))];
     write_and_commit(repo, &file, &[&item_dir(&item.id)], &message)?;
-    Ok(Outcome::Done(output::submitted(&item.id)))
+    let left = repo.uncommitted(&item.id)?;
+    Ok(Outcome::Done(output::submitted(&item.id, &left)))
 }
 
 /// Writes each of `files`, a path in the checkout and its text, and
