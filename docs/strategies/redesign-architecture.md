@@ -358,8 +358,9 @@ Two facts are checked live and never stored:
   the head, the item's record at the reviewed commit, and the checkout's
   uncommitted tracked files; `acts::unmet` applies the rule. `status` gathers
   it on the item's branch, so it lists what `merge` will check.
-- **The merge checks pass on the head.** The configured commands, and CI
-  where the forge names a workflow.
+- **The merge checks pass.** The configured commands on the merged tree,
+  and CI on the head where the forge names a workflow. `merge` runs or reads
+  them; `status` does not.
 
 ## Threads and roles
 
