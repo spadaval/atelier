@@ -1,5 +1,6 @@
 //! The `atelier` command (docs/strategies/redesign-product.md, Commands).
 
+mod check;
 mod commands;
 mod forge;
 mod git;
@@ -32,6 +33,19 @@ struct Cli {
 enum Command {
     /// Who this thread is, what it holds, what each thing needs, and the next command.
     Status,
+    /// Validate every record in this checkout, and list record changes not committed yet.
+    Check {
+        /// Run as this Git hook, with the arguments Git gave the hook.
+        #[arg(long, value_name = "HOOK")]
+        hook: Option<check::Hook>,
+        #[arg(
+            requires = "hook",
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            hide = true
+        )]
+        args: Vec<String>,
+    },
     /// One item in full with its reviews, or one mission on one page with its items and questions.
     Show { id: String },
     /// All open work, grouped by mission and then by label; each flag given narrows it.
@@ -166,8 +180,17 @@ enum VerdictArg {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // `check` reads the records itself, and reports a config that does not
+    // read rather than stopping at it.
+    if let Command::Check { hook, args } = &cli.command {
+        return exit(match hook {
+            None => check::check(),
+            Some(hook) => check::hook(*hook, args),
+        });
+    }
     let result = repo::Repo::open().and_then(|mut repo| match cli.command {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
+        Command::Check { .. } => unreachable!("check runs before the repository is opened"),
         Command::Show { id } => views::show(&mut repo, &id),
         Command::List { deferred: true, .. } => views::deferred(&mut repo),
         Command::List {
@@ -242,6 +265,10 @@ fn main() -> ExitCode {
         Command::Lead { mission } => views::lead(&mut repo, &mission),
         Command::Merge { trivial } => merge::merge(&repo.root, trivial),
     });
+    exit(result)
+}
+
+fn exit(result: anyhow::Result<Outcome>) -> ExitCode {
     // A closed stdout, as under `| head`, is no failure of the command.
     match result {
         Ok(Outcome::Done(text)) => {

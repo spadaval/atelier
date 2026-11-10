@@ -241,16 +241,20 @@ pub fn git_at(root: &Path) -> Option<&Path> {
 /// The directories planning is written in.
 const PLANNING: [&str; 2] = [".atelier/missions", ".atelier/items"];
 
+/// Whether `path`, from the root, is under a directory planning is
+/// written in.
+pub fn is_planning(path: &str) -> bool {
+    PLANNING
+        .iter()
+        .any(|dir| path.starts_with(&format!("{dir}/")))
+}
+
 /// The record changes the checkout at `root` holds that no commit does:
 /// changed and new files under `.atelier/missions/` and `.atelier/items/`.
 pub fn planning(root: &Path) -> Result<Vec<String>> {
     let mut paths: Vec<String> = git::uncommitted(root)?
         .into_iter()
-        .filter(|path| {
-            PLANNING
-                .iter()
-                .any(|dir| path.starts_with(&format!("{dir}/")))
-        })
+        .filter(|path| is_planning(path))
         .collect();
     for dir in PLANNING {
         paths.extend(git::untracked(root, dir)?);

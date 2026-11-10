@@ -21,7 +21,7 @@ updated_at: "2026-11-10T03:58:05.871591742+00:00"
 
 ## Outcome
 
-`atelier log` prints the history of acts. A gardener run starts from that, from `atelier list` and from a readiness checklist for the repository, and reads transcripts only to explain a number that moved. It ends with one page for Sumeet: the numbers, the worst spots and at most three proposals. One run has been made in each of the five repositories.
+`atelier log` prints the history of acts. A gardener run starts from that, from `atelier list` and from a readiness checklist for the repository, and reads transcripts only to explain a number that moved. It ends with one page for Sumeet: the numbers, the worst spots and at most three proposals, each a root cause with the trips that show it. One run has been made in each of the five repositories.
 
 ## Background
 
