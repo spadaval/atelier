@@ -487,7 +487,10 @@ mission it leads, its items' unanswered questions with the `decide` that
 answers each, and `show <mission>` lists them too. An approved item says
 since when, in the implementer's and the lead's `status` and in `show`:
 the time of the commit on its branch that set the approving review's
-verdict, which `git log -S` finds; nothing stores it. Missions join
+verdict, which `git log -S` finds; nothing stores it. Away from the item's
+branch, the implementer's list of what it holds gives the same: each
+item's unanswered questions, and since when an approved one is approved.
+Missions join
 with their commands.
 
 Harness hooks give orientation at session start: `atelier setup claude`

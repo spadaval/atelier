@@ -75,6 +75,8 @@ Each new test was seen to fail for its reason: two batches of deliberate breaks 
 
 Review round 1's finding atelier-rop0 (fix now: a question `escalate` wrote was invisible to the mission's lead until committed) is fixed in 3ca83c17: while the question is uncommitted, the lead handoff gives the Git command that commits it, and `decisions::a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_is_approved` now checks the lead does not see it before that command runs and does after, with no commit of the test's own. The full suite passes again (179 tests), with clippy and fmt clean.
 
+Review round 2's finding atelier-lsoh (fix now: away from its branch, the implementer's `status` showed neither a waiting question nor since when it was approved) is fixed in the commit that follows this Report change: the "You hold" list gives each held item's unanswered questions, as "A question waits on a decider", and "approved since <time>". The lead scenario test now checks both from a base worktree, and fails without the fix. 179 tests pass, clippy and fmt clean.
+
 ### Decisions
 
 - Who may decide counts the reviewers of every review in the finding's `Was:` chain, not only the review that raised the open name: a finding carried as kept is the same problem, and the product specification says a reviewer never decides its review's findings. The architecture specification's `decide` row now says so.

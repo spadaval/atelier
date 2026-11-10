@@ -490,6 +490,14 @@ fn a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(!status.contains("commit the question first"), "{status}");
+    // Its implementer, away from the branch, sees the question too.
+    let held = atelier(&base, "t1", &["status"]).stdout;
+    assert!(
+        held.contains(&format!(
+            "You hold:\n  {ID} (building): Say hello\n    A question waits on a decider: {asked}\n"
+        )),
+        "{held}"
+    );
     let status = atelier(&base, "lead1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
@@ -534,5 +542,11 @@ fn a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_
     assert!(
         shown.contains(&format!("Status: approved, held by t1, {since}\n")),
         "{shown}"
+    );
+    // And to its implementer, away from its branch.
+    let held = atelier(&base, "t1", &["status"]).stdout;
+    assert!(
+        held.contains(&format!("You hold:\n  {ID} ({since}): Say hello\n")),
+        "{held}"
     );
 }

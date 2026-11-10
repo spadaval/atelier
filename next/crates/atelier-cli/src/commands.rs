@@ -35,6 +35,7 @@ pub fn status(repo: &mut Repo) -> Result<String> {
     let items = repo.everything()?;
     let missions = repo.missions()?;
     let mut overview = overview(&items, &missions, &repo.caller)?;
+    annotate_all(repo, &mut overview.held, &items)?;
     for (_, entries) in &mut overview.led {
         annotate_all(repo, entries, &items)?;
     }

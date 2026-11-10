@@ -378,12 +378,17 @@ pub fn overview(
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
+            let since = entry.approved.as_ref();
             text += &format!(
-                "  {} ({}): {}\n",
+                "  {} ({}{}): {}\n",
                 entry.id,
                 status_name(entry.status),
+                since.map_or(String::new(), |time| format!(" since {time}")),
                 entry.title
             );
+            for question in &entry.questions {
+                text += &format!("    A question waits on a decider: {question}\n");
+            }
         }
     }
     if !overview.ready.is_empty() {
