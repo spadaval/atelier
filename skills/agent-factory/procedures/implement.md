@@ -57,8 +57,9 @@ until a reviewer approves; your brief authorizes the reviewers you start.
 2. Start a fresh reviewer with `review`, on the model your brief names, and give
    it the printed brief unchanged: it leaves out your notes and Report, which
    would bias it. Without Atelier, give the diff, requirements and proof.
-3. When its completion wakes you (do not poll it or message it), read its
-   findings from Atelier (`atelier review list <id>`) and decide each by
+3. Wait for it to finish, the way your harness says to wait on a child, and
+   do not message it. Then read its findings from Atelier (`atelier review
+   list <id>`) and decide each by
    [Independent Review](../SKILL.md#independent-review)'s Findings rule: fix
    each `FIX NOW` in its own commit and rerun its proof; run `atelier review
    defer <id> --identity <you>` for those recommended `DEFER`, leaving them

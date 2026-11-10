@@ -74,8 +74,8 @@ under one parent so they share a branch.
 Findings follow Independent Review's Findings rule: an implementer and its
 reviewers settle correctness, and scope stays yours, through your brief's
 standing decision and the escalations it sends. You do not read or relay its
-findings round by round. Its completion wakes you; do not poll it. It ends one
-of two ways.
+findings round by round. Wait for it to finish, the way your harness says to
+wait on a child, without reading its work in progress. It ends one of two ways.
 
 - **Approved:** its final report is one summary: approved at which commit,
   rounds, findings fixed and follow-ups filed. Decide any finding left
