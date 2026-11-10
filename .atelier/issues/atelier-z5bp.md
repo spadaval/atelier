@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Trace 30 astromech bug fixes to the merge that caused each, and choose how defects after merge are counted"
-updated_at: "2026-11-10T14:15:25.987673856+00:00"
+updated_at: "2026-11-10T15:00:23.489269240+00:00"
 ---
 
 ## Goal
@@ -44,6 +44,10 @@ Read-only on astromech. A sample of 30, not a full count. No reusable script is 
 ## Context
 
 Strategy: `docs/strategies/redesign-1-baseline.md`, Derisking. The manifest is `docs/architecture/quality/scorecard-baseline/manifest.json`; read no history after the commit it gives. Astromech is at `~/projects/astromech` and adopted Atelier on 2026-10-15. Trace by `git blame` on the lines a fix changed, then read both changes. Astromech is a private repository: report process facts and paraphrase anything about its content, and send nothing from it to an outside service.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by sol-reviewer-r4 (atelier-zmbk) at 8f692e75 after four review rounds. Three fix_now findings fixed (atelier-k10m, atelier-0p3n, atelier-yz6k); none deferred or left undisposed. 27 of 30 traced, so tracing is the measure; see the Report. Merge waits only on CI (ci.passed).
 
 ## Report
 
@@ -67,4 +71,3 @@ All four Done when lines hold in `docs/architecture/quality/scorecard-baseline/d
 ### Open items
 
 - Rows 7, 11 and 13 rest on the attribution conventions; a second tracer could pick a different cause.
-
