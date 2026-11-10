@@ -383,7 +383,8 @@ which stops at the first failure. The cutover item is never started: it stays
 ready, the runbook runs on the base, and the item is closed at the end.
 
 1. Confirm no item is in progress in any of the five repositories and no
-   other thread is running in them. Record each repository's base commit.
+   other thread is running in them. Record each repository's base commit,
+   and copy each clone's Git hooks directory aside.
 2. In atelier, on master: run the converter, replace `AGENTS.md` with the
    reviewed text, and move `skills/agent-factory-next/` to
    `skills/agent-factory/`. Commit. Run `--verify`, and the tree's
@@ -410,10 +411,11 @@ thing that does it.
 
 **Rollback.** The runbook undoes its own work in this order:
 
-1. If step 3 had run, remove the Git hooks the new `setup` installed, from
-   every clone that has them. This comes first: the old tool has no Git
-   hooks, the new ones would refuse the pushes below, and once the fallback
-   is installed they would call commands it lacks.
+1. If step 3 had started, put each clone's Git hooks directory back as the
+   cutover's step 1 copied it. That removes the hooks the new `setup`
+   installed and restores any hook the clone had before. This comes first:
+   the new hooks would refuse the pushes below, and once the fallback is
+   installed they would call commands it lacks.
 2. Undo each repository from what step 1 of the cutover recorded:
 
    | A repository that is | Is undone by |
@@ -421,14 +423,16 @@ thing that does it.
    | Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
    | Converted and pushed | Reverting its conversion commit and pushing |
 
-3. If step 3 had run, reinstall the fallback release, run its `setup`, move
+3. If step 3 had started, reinstall the fallback release, run its `setup`, move
    the skill checkout back to the commit it was on, restart `atelier-serve`,
    and check the site answers.
 
 The rollback is tried on scratch clones before the real cutover, stopping
 after each of these: a conversion that fails `--verify` before its commit;
-step 2's commit; step 3; step 4; and a second repository's conversion in step
-5 that is committed and not pushed.
+step 2's commit; part-way through step 3, with the binary installed and the
+hooks not yet; step 3; step 4; and a second repository's conversion in step 5
+that is committed and not pushed. One of the scratch clones has a hook of
+its own beforehand, and the rehearsal checks it is back afterwards.
 
 **After the cutover**, the first items under the new tool delete the library
 code nothing reaches any more: the workflow crate, the old record types, the
