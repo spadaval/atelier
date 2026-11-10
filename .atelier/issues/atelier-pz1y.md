@@ -4,6 +4,9 @@ id: "atelier-pz1y"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-pz1y
 priority: "P1"
 relationships:
   blocks: []
@@ -24,9 +27,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add `check` and the three Git hook rules"
-updated_at: "2026-11-10T21:30:50.051382946+00:00"
+updated_at: "2026-11-10T22:05:56.194959770+00:00"
 ---
 
 ## Goal

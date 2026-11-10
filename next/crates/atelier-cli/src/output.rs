@@ -596,6 +596,148 @@ pub fn invalid(command: &str, root: &Path, problems: &[Problem]) -> String {
     text
 }
 
+/// "2 items, 1 mission and config.toml".
+fn records((items, missions): (usize, usize)) -> String {
+    let plural = |n: usize, word: &str| match n {
+        1 => format!("1 {word}"),
+        n => format!("{n} {word}s"),
+    };
+    format!(
+        "{}, {} and config.toml",
+        plural(items, "item"),
+        plural(missions, "mission")
+    )
+}
+
+/// Records that do not read, and records that break the rule that every
+/// record is valid, each with its file and field.
+fn problems(unread: &[Problem], invalid: &[Problem]) -> String {
+    let mut text = String::new();
+    if !unread.is_empty() {
+        text += "These do not read as records. That is not a rule, and it cannot be skipped:\n";
+    }
+    for problem in unread {
+        text += &format!("  {problem}\n");
+    }
+    if !invalid.is_empty() {
+        text += "Rule: every record is valid. These are not:\n";
+    }
+    for problem in invalid {
+        text += &format!("  {problem}\n");
+    }
+    text
+}
+
+fn not_committed_records(paths: &[String]) -> String {
+    match paths.is_empty() {
+        true => String::new(),
+        false => format!("Record changes not committed yet: {}\n", some(paths)),
+    }
+}
+
+pub fn checked(counts: (usize, usize), uncommitted: &[String]) -> String {
+    format!(
+        "Every record is valid: {}.\n{}",
+        records(counts),
+        not_committed_records(uncommitted)
+    )
+}
+
+pub fn check_found(
+    counts: (usize, usize),
+    unread: &[Problem],
+    invalid: &[Problem],
+    uncommitted: &[String],
+) -> String {
+    let found = unread.len() + invalid.len();
+    let plural = if found == 1 { "" } else { "s" };
+    format!(
+        "`atelier check` found {found} problem{plural} in {}.\n{}Fix each in the file named, then run atelier check again.\n{}",
+        records(counts),
+        problems(unread, invalid),
+        not_committed_records(uncommitted)
+    )
+}
+
+/// The pre-commit hook's refusal: records that do not read or validate as
+/// staged, and each status changed as no act changes it, with the status
+/// `HEAD` has and the one staged.
+pub fn commit_refused(
+    unread: &[Problem],
+    invalid: &[Problem],
+    acts: &[(String, Status, Status)],
+) -> String {
+    let mut text = "Atelier's pre-commit hook refused this commit; nothing was committed.\n"
+        .to_string()
+        + &problems(unread, invalid);
+    if !acts.is_empty() {
+        text += "Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:\n";
+    }
+    for (path, before, now) in acts {
+        text += &format!(
+            "  {path}: status: {} to {}. Put back the status HEAD has; atelier status names the command for what comes next.\n",
+            status_name(*before),
+            status_name(*now)
+        );
+    }
+    text + "Fix each file named, stage it with git add, and commit again.\n"
+}
+
+/// How many commits a refused push lists.
+const LISTED: usize = 10;
+
+fn commits<T>(found: &[(String, String, T)], what: impl Fn(&T) -> String) -> String {
+    let mut text = String::new();
+    for (commit, subject, detail) in found.iter().take(LISTED) {
+        text += &format!("  {} {subject}: {}\n", short(commit), what(detail));
+    }
+    if found.len() > LISTED {
+        text += &format!("  and {} more\n", found.len() - LISTED);
+    }
+    text
+}
+
+/// The pre-push hook's refusal of a push of `base`: records that do not
+/// read, commits that bring code without an Atelier merge, with the paths
+/// they change outside planning, and commits that set an item done while
+/// its branch exists, with the item.
+pub fn push_refused(
+    base: &str,
+    unread: &[Problem],
+    code: &[(String, String, Vec<String>)],
+    done: &[(String, String, String)],
+) -> String {
+    let mut text = "Atelier's pre-push hook refused this push; nothing was pushed.\n".to_string()
+        + &problems(unread, &[]);
+    if !code.is_empty() {
+        text += &format!(
+            "Rule: code and config.toml reach {base} only through atelier merge. Each new commit on {base}'s first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:\n"
+        );
+        text += &commits(code, |paths| format!("changes {}", some(paths)));
+        text += &format!(
+            "Take these commits off {base} and onto an item's branch (atelier start --new \"<title>\" starts one), and atelier merge brings them in once the item is approved.\n"
+        );
+    }
+    if !done.is_empty() {
+        text += &format!(
+            "Rule: an item whose branch exists is done on {base} only through atelier merge. These set one done:\n"
+        );
+        text += &commits(done, |id| {
+            format!("sets {id} done while branch {id} exists")
+        });
+        text += &format!(
+            "Put each status back on {base}, and run atelier merge on the item's branch.\n"
+        );
+    }
+    text
+}
+
+/// What the post-checkout hook prints when `status` fails. The checkout
+/// itself went ahead.
+pub fn no_status(error: &anyhow::Error) -> String {
+    format!("Switched; `atelier status` cannot say more here: {error:#}\n")
+}
+
 pub fn no_mission(id: &str) -> String {
     format!(
         "`atelier new` refused; nothing changed.\nNo mission {id} is in this checkout. `atelier new --mission \"<title>\"` creates one.\n"
