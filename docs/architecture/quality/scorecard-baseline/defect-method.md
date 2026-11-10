@@ -68,7 +68,7 @@ are in step 4.
 
    A commit that only mentions the item in its body, such as one that filed
    it, is not a fix. If no subject names the item, or the ones that do change
-   only tests or docs, find the commit that first records it as done
+   only test files or docs (as step 2 defines them), find the commit that first records it as done
    (`git log --reverse "$C" -- .atelier/issues/$id.md`, then `git show
    <commit>:.atelier/issues/$id.md` until `status: "done"`) and list its
    first-parent line (`git log --first-parent --format='%h %s' <commit> -25`).
@@ -77,12 +77,18 @@ are in step 4.
    form of the ID (`b0tn` for `astromech-b0tn`). Drop any commit that, read,
    is other work bundled on the branch.
 
-2. **Blame the lines the fix removed or changed.** Only product files count:
-   skip `.atelier/`, tests, fixtures, Markdown and docs, and lockfiles. For
-   each hunk `@@ -a,b` of `git diff -U0 <fix>^ <fix> -- <file>`, run
+2. **Blame the lines the fix removed or changed.** Skip these files, judged
+   by path alone: `.atelier/`; Markdown and anything under `doc/` or
+   `docs/`; lockfiles; and test files, meaning anything under a directory
+   named `test`, `tests`, `fixtures`, `__tests__`, `e2e` or `journeys`, a
+   file whose name starts with `test_`, or one with `.test.`, `.spec.` or
+   `_test.` in its name. Tests written inside a source file, such as a Rust
+   `mod tests`, are blamed with that file. For each hunk `@@ -a,b` of
+   `git diff -U0 <fix>^ <fix> -- <file>`, run
    `git blame -w -L a,+b <fix>^ -- <file>`. A hunk that only adds lines
    (`b` is 0) has no faulty line; blame its two neighbours (`-L a,+2`) and
-   treat the result as a lead, not an answer.
+   treat the result as a lead, not an answer. If the fix changes only test
+   files, blame those.
 
 3. **Follow the faulty line back.** Blame names the last commit to touch a
    line, which is often a later edit. When the blamed commit did not write
@@ -102,6 +108,11 @@ are in step 4.
      already there.
    - When several commits contributed, the cause is the one that wrote the
      faulty logic. Name the others in the notes; they do not count.
+
+   Lines a fix changed only in tests are dropped at this step, unless the
+   defect is in the test itself, such as a test that fails intermittently on
+   the base. That counts like any other defect: it reached the base and
+   failed every branch's CI (row 24).
 
 5. **Name the cause's item.** If the cause commit's subject names an item ID
    (full or short form, for an item created before the commit), that is the
@@ -154,20 +165,20 @@ paraphrased. Pull requests are astromech's, merged before adoption.
 | 4 | astromech-f2k1 | config path | c4cce78b | f3eb3fae (14), 196415b3 (11), abdd8891 (9), 4df831fe (1) | abdd8891 | astromech-c9em | After merge | blame |
 | 5 | astromech-nrhv | journal liveness | d2f40e46 | six commits, 1 to 2 comment lines each | e414024f | astromech-xvjs | After merge | step 3 |
 | 6 | astromech-fyvh | link check | 7fb74f89 | 08d1a204 (1) | ab6ad12c | PR #3 | Before adoption | step 3 |
-| 7 | astromech-qtiw | data cache | 5d25b771 | d7aab952 (5, tests), a2be550e (1) | 8f1e9012 | astromech-proz | After merge | read |
-| 8 | astromech-qhi4 | engineer trips | f8c900b6 | 8976ee14 (24), data catalog lines | 8976ee14 | PR #14 | Before adoption | blame |
+| 7 | astromech-qtiw | data cache | 5d25b771 | d7aab952 (5, test module), a2be550e (1) | 8f1e9012 | astromech-proz | After merge | read |
+| 8 | astromech-qhi4 | engineer trips | f8c900b6 | 8976ee14 (34), d242981a and d5580467 (2,800, data catalog) | 8976ee14 | PR #14 | Before adoption | blame |
 | 9 | astromech-thym | config load | fca4abe0 | ab6ad12c (4), 6cfe4df3 (2), bc1390cf (1), 93687e5d (1) | ab6ad12c | PR #3 | Before adoption | blame |
 | 10 | astromech-zftk | journal liveness | b5404b19 | d2f40e46 (7), 12dfbfe7 (4), 746d65b4 (4), 04037f7d (3), three more | d2f40e46 | astromech-nrhv | Before merge | blame |
 | 11 | astromech-1c66 | voice learning | 1d55799b, 66e61c28 | ed880d67 (24), 274db91e (13), d4d3633b (3), 93687e5d (1) | c1fc6565 | astromech-y296 | Before merge | read |
-| 12 | astromech-k8yk | window start | b4e118b5 | ab6ad12c (5), cost-harness script lines (6), 0cffa0ad (1) | ab6ad12c | PR #3 | Before adoption | blame |
+| 12 | astromech-k8yk | window start | b4e118b5 | ab6ad12c (5), cost-harness script lines (4), 0cffa0ad (1) | ab6ad12c | PR #3 | Before adoption | blame |
 | 13 | astromech-zirr | config path | a1848909 | c4cce78b (8), abdd8891 (3), 196415b3 (1) | abdd8891 | astromech-c9em | After merge | read |
 | 14 | astromech-6a7c | config path | f3eb3fae | abdd8891 (3), 196415b3 (2) | abdd8891 | astromech-c9em | Before merge | blame |
-| 15 | astromech-st8o | upload guard | f895849d | comments only | none | none | Not traceable: the fix changed comments and docs, no behaviour | none |
+| 15 | astromech-st8o | upload guard | f895849d | b449243b (2, comments) | none | none | Not traceable: the fix changed comments and docs, no behaviour | none |
 | 16 | astromech-r3s7 | journal liveness | a0ea8fb2 | 51ce0c0d (5), 210e4af3 (5), a5bff695 (3) | 210e4af3 | astromech-36g1 | After merge | blame |
 | 17 | astromech-koa6 | settings text | 6448c00a | 5ec87289 (1) | 5ec87289 | astromech-09s3 | After merge | blame |
 | 18 | astromech-36g1 | journal liveness | 210e4af3 | 33bdbfda (3), 88b3f919 (3), 04037f7d (1) | 33bdbfda | astromech-0d7l | Before merge | blame |
-| 19 | astromech-k1fw | route follower | dc3cb646, 65ae8a16 | f9444f31 (7), a66e0008 (2), 8e9e5572 (1) | a66e0008 | astromech-g0hm | Before merge | blame |
-| 20 | astromech-0d7l | journal liveness | 33bdbfda, 88b3f919 | 06e57df9 (3), 04037f7d (2) | 06e57df9 | astromech-xvjs | After merge | blame |
+| 19 | astromech-k1fw | route follower | dc3cb646, 65ae8a16 | f9444f31 (7), dc3cb646 (3, the first fix), a66e0008 (2), 8e9e5572 (1) | a66e0008 | astromech-g0hm | Before merge | blame |
+| 20 | astromech-0d7l | journal liveness | 33bdbfda, 88b3f919 | 33bdbfda (5, the first fix), 06e57df9 (3), 04037f7d (2) | 06e57df9 | astromech-xvjs | After merge | blame |
 | 21 | astromech-84vh | dependencies | 81cf4fbb | lockfiles only | none | none | Not traceable: a security advisory against a dependency, no faulty line | none |
 | 22 | astromech-sltm | bind dialog | 87791aa0 | 80f3f0fe (3), 4a43d080 (2), e1f29831 (2) | e1f29831 | PR #4 | Before adoption | blame |
 | 23 | astromech-w064 | body values | 32367962 | 4a39a844 (5) | 4a39a844 | astromech-wu30 | After merge | blame |
