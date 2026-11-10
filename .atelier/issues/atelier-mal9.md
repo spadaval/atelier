@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T01:14:39.608757032+00:00"
+updated_at: "2026-11-10T01:29:38.348744315+00:00"
 ---
 
 ## Goal
@@ -28,6 +28,8 @@ Build the record store the new commands stand on: `items/<id>/item.md`, `reviews
 
 - [ ] Unit tests parse and write each record kind and get the same file back, with the Markdown body preserved byte for byte.
 - [ ] Validation rejects each of these with a message naming the file and the field: an unknown status; an item with no Goal or no Done when section; a finding with no Recommendation line; a review whose verdict is approve while it holds an open fix-now finding; a `blocked_by` that names no item.
+- [ ] An item's `implementers` and a review's `reviewers` are lists; unit tests cover appending a thread and reading the last entry as the holder.
+- [ ] A finding's name is its review's file stem and its number, as in `2-m2bn.1`; unit tests parse `Was:`, Responses lines and a Decisions entry's `Finding:` in that form, and reject a name no review has.
 - [ ] Unit tests cover when a fix-now finding is open: it stays open until a later round marks it fixed or withdrawn, or a Decisions entry naming it has an outcome.
 - [ ] Creating a review for round 2 writes `reviews/2-<suffix>.md` with four random characters, and two reviews created for the same round have different names.
 - [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks, and a forge with and without `ci_workflow`; an unknown key is an error that names it.

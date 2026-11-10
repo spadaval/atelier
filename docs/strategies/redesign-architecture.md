@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 1 (Astra, Grok)"
+last_changed: "2026-11-09: revised after planning review round 2 (Astra, Grok)"
 ---
 
 # Atelier redesign: architecture specification
@@ -14,8 +14,9 @@ replaces the ADRs.
 ## The rule for this work
 
 The aim is better code, not more code. The new command layer is built beside
-the old one. The cutover switches the binary to it and deletes the old one.
-No compatibility layer is built: no binary reads both record layouts. Library
+the old one. One reviewed change then switches the binary to it and deletes
+the old one, and the cutover converts the records. No compatibility layer is
+built: no binary reads both record layouts. Library
 code below the commands is adapted to the new types where it is kept.
 Non-test Rust is reported at the end of each mission as an indication. It is
 not a limit, and no item is shaped to hit a number.
@@ -38,7 +39,7 @@ which 50,438 are CLI integration tests.
 | Prune and history | 2,410 | Deleted |
 | Evidence | 1,931 | Deleted |
 | Bundle | 1,665 | Deleted |
-| Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | Kept; it depends on neither the workflow policy nor the record index today |
+| Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | Kept, with its config type replaced: it takes `workflow_policy::ForgeConfig` today, with a required workflow name |
 | Migrate | 883 | Deleted |
 | Setup | 821 | Kept; gains Codex hooks |
 
@@ -75,7 +76,7 @@ mission: atelier-icv4   # optional
 labels: [review]
 priority: high
 blocked_by: []
-implementer: <thread>   # set by start
+implementers: [<thread>]  # start appends; the last entry holds the item
 ready: {by: sumeet, at: <time>}
 trivial: null           # or the reason given to merge --trivial
 created_at: <time>
@@ -83,11 +84,12 @@ created_at: <time>
 
 Sections: Goal, Done when, Scope, Report, Decisions. Report has Validation
 and Responses subsections when they apply. Responses holds one line per open
-fix-now finding: `2.1: fixed in <commit>` or `2.1: rebutted: <fact>`.
+fix-now finding: `2-m2bn.1: fixed in <commit>` or
+`2-m2bn.1: rebutted: <fact>`.
 
 A Decisions entry is a dated question and, once answered, the answer and the
-deciding thread. An entry may name a finding (`Finding: 2.1`), and its answer
-may then carry `Outcome: defer` or `Outcome: no action`.
+deciding thread. An entry may name a finding (`Finding: 2-m2bn.1`), and its
+answer may then carry `Outcome: defer` or `Outcome: no action`.
 
 ### `missions/<id>/mission.md`
 
@@ -114,7 +116,7 @@ schema: atelier.review
 schema_version: 3
 round: 2
 commit: <sha reviewed>
-reviewer: <thread>
+reviewers: [<thread>]   # review appends; the last entry holds the review
 model: gpt-6.1-sol
 verdict: null           # approve or changes, set by verdict
 created_at: <time>
@@ -122,8 +124,9 @@ created_at: <time>
 
 The suffix is four random characters. Sections: Summary, then
 `## Finding <k>: <title>` with a first line
-`Recommendation: fix now | defer | no action`. A finding carried from an
-earlier round also has `Was: <round>.<k>` and one of `Now: fixed`,
+`Recommendation: fix now | defer | no action`. A finding's name is its
+review's file stem and its number, as in `2-m2bn.1`. A finding carried from
+an earlier round also has `Was: <finding name>` and one of `Now: fixed`,
 `Now: withdrawn`, `Now: kept`, or `Decided: defer | no action`, which the
 tool writes from the Decisions entry and the reviewer cannot change.
 
@@ -165,20 +168,20 @@ table, so what `status` says a thing needs is what the command will check.
 | --- | --- | --- | --- | --- |
 | `ready` (item) | Planner | `draft` | `ready` | none |
 | `ready` (mission) | Planner | `draft` | `ready` | none; changes no item |
-| `start` | Implementer | `ready` | `building` | blockers done; its mission, if any, is ready; no branch `<id>` exists |
+| `start` | Implementer | `ready` | `building` | blockers done; its mission, if any, is ready; no branch `<id>` exists; the base's record is not dropped |
 | `start`, taking over | Implementer | `building`, `in_review`, `changes_requested`, `approved` | unchanged | branch `<id>` exists |
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or a decision; no unanswered question |
-| `review` | Reviewer | `in_review` | unchanged | the caller is not the implementer |
+| `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
 | `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file has an open fix-now finding |
 | `verdict approve` | Reviewer | `in_review` | `approved` | the file has no open fix-now finding |
 | `verdict` on a mission review | Reviewer | any | unchanged | as above, for the file |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
-| `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not the implementer, nor the reviewer who raised the finding |
-| `merge` | Implementer | `approved`, or `building` with `--trivial` | `done` | the merge checks |
+| `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor in the `reviewers` of the review that raised the finding |
+| `merge` | Implementer | `approved`, or `building` with `--trivial` | `done` | the merge checks; the base's record is not dropped |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
-| `drop` | Planner | any but `done` | `dropped` | a reason |
+| `drop` | Planner | any but `done` | `dropped` | a reason; written on the base, whatever the item's branch holds |
 | `lead` | Lead | a `ready` mission | unchanged | none |
 
 Each act writes the status in the commit the act already makes: `submit`
@@ -202,10 +205,11 @@ A thread's identity is `T3CODE_THREAD_ID` when it is set, else the harness's
 session ID (`CLAUDE_CODE_SESSION_ID`, `CODEX_SESSION_ID`,
 `GROK_SESSION_ID`), else `human`.
 
-Entry commands store the identity in the record: `start` in the item's
-`implementer`, `review` in the review file's `reviewer`, `lead` in the
-mission's `lead`. `decide` stores it with the answer. When a role is taken
-over the field is overwritten; Git history keeps the earlier holder.
+Entry commands store the identity in the record: `start` appends it to the
+item's `implementers`, `review` to the review file's `reviewers`, and `lead`
+sets the mission's `lead`. `decide` stores it with the answer. The last entry
+of a list holds the role now. The earlier entries are why a thread that once
+implemented an item can never review it.
 
 There is no local state file. A command works out who is calling by looking
 for the caller's identity in the records it can see: the item of the current
@@ -223,14 +227,20 @@ runs, a project's `AGENTS.md` says to run `atelier status` first.
   is then read from that branch's tip, wherever the reader stands. Once the
   branch is merged, the base's record is the item's record. Nothing is copied
   between branches.
+- **A terminal status on the base wins.** If the base's record is `dropped`
+  or `done`, that is the item's status whatever its branch holds. This is how
+  a started item is cancelled.
 - **Who reads this way:** `status` on the base, `lead`, `list`, `show` and
   the site. The site already enumerates local branches for work in flight.
-- **Starting twice.** `start` on a ready item creates the branch. Git creates
-  a branch atomically, so when two threads in separate checkouts start the
-  same item, one creates it and the other finds it and is told who holds it.
-  Its `start` is then the take-over, which it runs again only if it means to.
-- **Work on another host** is visible after a fetch, as a remote-tracking
-  branch, and is read the same way.
+- **Starting is one atomic step.** `start` writes the commit that sets
+  `building` first, with no branch, and then creates branch `<id>` pointing
+  at it. Git creates a branch atomically, so a branch named for an item
+  always holds its building record, and an interrupted `start` leaves no
+  branch. When two threads in separate checkouts start the same item, one
+  creates the branch and the other finds it and is told who holds it. Its
+  `start` is then the take-over, which it runs again only if it means to.
+- **One clone.** All of this coordinates the threads in one clone and its
+  worktrees. Two clones on different hosts are not coordinated.
 - A command on a work branch reads and writes that branch's `.atelier/`.
 - `land` on the base applies one rule to each unpushed commit: it is a merge
   made by `atelier merge`, or it touches only paths under
@@ -253,8 +263,11 @@ runs, a project's `AGENTS.md` says to run `atelier status` first.
 7. Where a forge is configured: push the base and confirm the pull request
    merged.
 
-`atelier-app/src/forge.rs` is used as it is. The merged-tree checkout, the
-merge commit and the push live today in `atelier-cli`'s `merge.rs`,
+`atelier-app/src/forge.rs` is kept, with one change to its interface: it
+takes the forge section of the new config, whose CI workflow is optional,
+where today it takes `workflow_policy::ForgeConfig` with a required workflow
+name. Its behaviour and its contract tests stay. The merged-tree checkout,
+the merge commit and the push live today in `atelier-cli`'s `merge.rs`,
 `merge_push.rs` and `merge_wait.rs`, bound to `WorkflowPolicy` and
 `RecordIndex`. They are extracted onto the config and item types, and their
 contract tests are rewritten against the new command. Nothing else from
@@ -262,74 +275,103 @@ today's merge is kept.
 
 ## Site
 
-The site is converted to the new records in place, as the last step of the
-core loop mission: its loader reads the three record kinds, its responses
+The site is converted to the new records in mission 3, just before the old
+commands are deleted: its loader reads the three record kinds, its responses
 drop what the new model does not have, and its fixtures are regenerated in
-the new layout. The web typecheck, unit and Playwright jobs must pass in the
-change that does it. How much of the brief and debrief view code survives is
-settled when that step is planned, by reading the site's code.
+the new layout. The new reader is served by `atelier-next serve`, the web
+tests move to it, and `serve` is removed from the old binary in the tree. The
+web typecheck, unit and Playwright jobs must pass in the change that does it.
+How much of the brief and debrief view code survives is settled when that
+step is planned, by reading the site's code.
 
-The installed 0.4.0 binary keeps serving the old-layout repositories until
-the cutover, because nothing rebuilds it. From the site step until the
-cutover, nobody runs `cargo install` from the tree; `AGENTS.md` says so.
+The installed binary keeps serving the old-layout repositories until the
+cutover, because nothing rebuilds it.
 
 ## Transition
 
 The installed binary is one per host and the installed skill is one per host,
 so the process changes for every repository on a host at once. The transition
-is one step per host.
+is one step per host, and it has four parts. The first three are ordinary
+items under the old tool. The fourth is a runbook.
 
-**While the core loop is built.** The installed 0.4.0 binary tracks all work,
+**1. Build beside (mission 2).** The installed binary tracks all work,
 including the redesign's own, and the repository's records stay in the old
 layout. New commands live in new modules of the existing crates and are
 reached through a second binary target, `atelier-next`. The old binary, its
 tests, CI's `atelier check` step and `scripts/smoke-repos.sh` are untouched.
-The tree's `atelier` binary can read the repository's records on every commit
-of master, before and after the cutover.
 
-**The converter** is `scripts/convert_records.py`. It reads the old Markdown
-directly and writes the new layout. It is not a command, and it is deleted
-after the work host converts. It converts open missions and items and the
-strategy files they link. Done and superseded records leave the tree, and
-Git keeps them; deferred findings on them are not carried over, and the
-backlog sort is where any worth keeping become items. It converts one item
-in flight: the cutover item itself.
-
-**Rehearsal** converts a scratch clone of each of the five repositories and
+**2. Rehearse (mission 2).** `scripts/cutover/convert_records.py` reads a
+repository's old `.atelier/` directly and writes the whole new one: missions
+and items from open records and the strategy files they link, and
+`config.toml` from `workflow.yaml`, with no CI workflow where the repository
+has no Actions. Done and superseded records leave the tree, and Git keeps
+them; deferred findings on them are not carried over, and the backlog sort is
+where any worth keeping become items. Run twice on the same input it writes
+the same bytes, and `--verify` checks a converted tree against a fresh run.
+The rehearsal converts a scratch clone of each of the five repositories and
 runs `atelier-next check`, `status` and one full item on each.
 
-**The skill** is rewritten on master before the cutover. It does not go live,
-because the live copy is a checkout that moves only when someone moves it.
+**3. Prepare (mission 3).** Each of these is reviewed and merged under the
+old tool:
 
-**Cutover on a host** is one item, started under the old tool and finished
-under the new one:
+- The skill is rewritten on master. It does not go live, because the live
+  copy is a checkout that moves only when someone moves it.
+- The site is converted, as above.
+- The last release of the old tool, 0.4.1, is cut from master. It is the
+  binary CI and the rollback use.
+- The switch: the `atelier` binary target points at the new command layer,
+  and the old command layer, its integration tests and
+  `scripts/smoke-repos.sh` are deleted. CI's `check` step runs the 0.4.1
+  release while the repository holds `.atelier/issues/` and the tree's
+  binary once it does not. `AGENTS.md` says the installed binary stays the
+  tracker and nobody installs from the tree. The new `AGENTS.md` text for
+  each repository is added under `scripts/cutover/`, so it is reviewed here.
 
-1. Confirm no other item is in progress in any of the five repositories, and
-   no other thread is running in them.
-2. On the cutover item's branch in atelier: run the converter, which also
-   converts the cutover item as `building` with this thread as implementer.
-   Point the `atelier` binary target at the new command layer, and delete the
-   old command layer and its integration tests. Commit.
-3. Using the binary built from that branch, by its path: `submit`, a reviewer
-   child's `review` and `verdict`, then `merge`. CI runs the tree's binary on
-   the converted records, as it always has.
-4. Install the binary from master. Move the skill checkout forward. Run
-   `atelier setup` for each harness.
-5. In each of the other four repositories: run the converter, commit the
-   result on the base, run `atelier check`, and `atelier land --push`. Then
-   start one item there to update its `AGENTS.md` and any pinned Atelier
-   version in its CI.
+After the switch merges, the tree's binary cannot read this repository's
+records, and only the installed binary tracks work. The cutover follows at
+once.
 
-**Rollback.** Before step 4, abandon the branch; nothing outside it changed.
-After it, reinstall the 0.4.0 release, revert the merge and the conversion
-commits, and move the skill checkout back. The rollback is tried once on
-scratch clones before the real cutover.
+**4. Cut over (mission 3).** One thread runs `scripts/cutover/cutover.sh`,
+which stops at the first failure:
+
+1. Confirm no item is in progress in any of the five repositories and no
+   other thread is running in them.
+2. In atelier, on master: run the converter and replace `AGENTS.md` with the
+   reviewed text. Commit. Run `--verify`, and the tree's `atelier check`.
+3. Install the binary from master, run `atelier setup` for each harness, and
+   move the skill checkout forward.
+4. Push master. CI now runs the tree's binary on the converted records.
+5. In each of the other four repositories: convert, replace the process text
+   in `AGENTS.md`, update any Atelier version its CI pins, commit, run
+   `--verify` and `atelier check`, and push.
+6. Close the cutover item with `atelier close`, the first act recorded by the
+   new tool.
+
+The conversion commits are pushed directly, by plain `git push`. They are the
+output of a reviewed script, checked by `--verify`, and the reviewed
+`AGENTS.md` text. This is the one time a commit that is not an Atelier merge
+changes more than planning records on a base, and the runbook is the only
+thing that does it.
+
+**Rollback**, by where the run stopped:
+
+| Stopped | Undo |
+| --- | --- |
+| Before step 3 | Reset the unpushed commit |
+| After step 3 | Also reinstall 0.4.1, run its `setup`, and move the skill checkout back |
+| After step 4 | Also revert the conversion commit on master and push |
+| During step 5 | Also revert the conversion commit in each repository already pushed |
+
+Each row is tried once on scratch clones before the real cutover, including
+stopping straight after step 4 and half-way through step 5.
 
 **After the cutover**, the first items under the new tool delete the library
 code nothing reaches any more: the workflow crate, the old record types, the
-gate code, evidence, bundle, migrate and prune.
+gate code, evidence, bundle, migrate and prune, and CI's 0.4.1 branch.
+`scripts/cutover/` is deleted after the work host converts.
 
-**The work host** converts later by the same runbook, run by Sumeet.
+**The work host** converts later by the same runbook, run by Sumeet. Until it
+does, it must not fetch a repository that has been converted.
 
 ## Testing
 
@@ -337,8 +379,10 @@ gate code, evidence, bundle, migrate and prune.
   repository: the plain path; changes requested and fixed over two rounds; a
   rebuttal withdrawn and one kept; an escalation decided as defer; a trivial
   merge; an item with no files; a mission from draft to closed; an
-  implementer taken over in `approved`; a reviewer taken over mid-round; two
-  threads starting one item from separate checkouts.
+  implementer taken over in `approved`; a reviewer taken over mid-round; a
+  former implementer refused as reviewer and as decider; two threads
+  starting one item from separate checkouts; a started item dropped on the
+  base, then refused at merge.
 - Unit tests on the act table: every act from every status.
 - A fresh-agent scenario, run by the eval harness: an agent given only "run
   `atelier status`" takes a ready item to done. It is run with Claude Opus
@@ -379,7 +423,7 @@ Sumeet made each of these in conversation on 2026-11-09.
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
 
-Four points in this design go beyond what he confirmed, and his approval
+Five points in this design go beyond what he confirmed, and his approval
 should weigh them:
 
 - **The loop is rebuilt as one unit beside the old one.** He agreed to
@@ -390,6 +434,10 @@ should weigh them:
   with the binary reading both layouts. The skill is installed once per host,
   so the process would change for every repository at once anyway, and
   reading both layouts would keep the old code alive through the whole build.
+- **The conversion commits are pushed directly.** Neither tool can gate the
+  commit that replaces one record layout with the other: the old one cannot
+  read what it produces, and the new one cannot read what it starts from.
+  They are a reviewed script's output, checked mechanically.
 - **Deferred findings create no items.** He agreed that a deferred finding
   becomes a draft item at merge. This design leaves it in its review file
   and lists it with `list --deferred`, because the backlog already holds four

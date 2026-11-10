@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 1: the swap moves to the cutover, site last, takeover and discovery"
+last_changed: "2026-11-09: revised after planning review round 2: the site moves to mission 3; atomic start; one clone"
 ---
 
 # Why
@@ -20,7 +20,7 @@ specification's records and commands. It is not installed anywhere, and the
 old binary beside it is untouched. A fresh agent, told only to run
 `atelier status`, takes a ready item to done with an independent reviewer. A
 converted scratch clone of each of the five repositories passes `check` and
-completes one item. The site reads the new records.
+completes one item.
 
 # Success Criteria
 
@@ -38,10 +38,8 @@ completes one item. The site reads the new records.
 - Complexity: high. It replaces the record layout and the whole command
   layer.
 - Value: high. Every later mission and the scorecard depend on it.
-- Risk: low until its last step. Nothing installed changes, and the old
-  binary in the tree keeps working. The last step converts the site in the
-  tree, after which a reinstall from the tree would break the dashboard for
-  the old-layout repositories until the cutover.
+- Risk: low. Nothing installed changes, and the old binary in the tree keeps
+  working throughout.
 
 It is worth its cost against the cheaper alternative, fixing fumbles one at a
 time: about 75 such fixes have merged since October, and the refusal rate in
@@ -60,9 +58,8 @@ and the records, which a skill cannot provide.
   and is reached through a second binary target, `atelier-next`, in
   `atelier-cli`. The old binary, its tests, the CI `check` step and
   `scripts/smoke-repos.sh` keep working untouched. The switch to the new
-  binary and the deletion of the old code belong to mission 3's cutover, so
-  the tree's `atelier` can read the repository's own records on every commit.
-  The tree is larger until then and smaller after.
+  binary, the site's conversion and the deletion of the old code belong to
+  mission 3. The tree is larger until then and smaller after.
 - **The installed 0.4.0 tracks this mission's own work.** The repository's
   records stay in the old layout until mission 3 converts them.
 - **The specifications are the scope.** When qualities conflict: correctness
@@ -74,7 +71,7 @@ and the records, which a skill cannot provide.
 The design is the [architecture specification](redesign-architecture.md). It
 fixes the crate layout, the record formats, the act table, thread identity,
 where records are read and written, and the merge steps. This mission builds
-it in six steps:
+it in five steps:
 
 | Step | Builds | Ready now |
 | --- | --- | --- |
@@ -82,10 +79,9 @@ it in six steps:
 | B. Planning | Mission records; `new`, `set`, `ready`, `drop`, `close`, `list`, `show`, `lead`, `start --new`; plan reviews | No |
 | C. Disagreement | `escalate`, `decide` with its two outcomes, rebuttals and decisions in the brief, `list --deferred` | No |
 | D. Handoff | `land`, `check`, `setup codex`, the hooks' output | No |
-| E. Rehearsal | The converter, and the rehearsal on a scratch clone of each of the five repositories | No |
-| F. Site | The site converted in place to the new records, with its web tests passing | No |
+| E. Rehearsal | The converter, with `config.toml` written from `workflow.yaml` and a `--verify` mode, and the rehearsal on a scratch clone of each of the five repositories | No |
 
-Steps B to F wait in the backlog with preliminary goals. Each is planned at
+Steps B to E wait in the backlog with preliminary goals. Each is planned at
 its boundary, with one planning review, once the step before it has shown
 what it shows.
 
@@ -105,18 +101,19 @@ cheapest to change while only six commands exist.
 The second risk is that started work is found by its branch and not by a
 stored field. A wrong answer there would have `status` hand out work another
 thread already holds. Step A's scenario tests start one item from two
-checkouts at once, take an item over in every started status, and read a
-started item from the base.
+checkouts at once, interrupt a start, take an item over in every started
+status, and read a started item from the base.
 
 The third is real data. The rehearsal in step E runs the converter and the
 new binary on scratch clones of all five repositories.
 
 # Scope
 
-- In: the records, commands, status model, thread binding, merge, config,
-  site conversion and converter in the two specifications.
-- Out: installing the binary; converting any real repository; switching the
-  `atelier` binary or deleting the old code, which the cutover does; the
+- In: the records, commands, status model, thread binding, merge, config and
+  converter in the two specifications.
+- Out: installing the binary; converting any real repository; the site;
+  switching the `atelier` binary or deleting the old code, which mission 3
+  does; coordinating two clones of one repository; the
   Agent Factory skill; the gardener and scorecard; a session database; live
   thread status; any command, record kind, status or config option the
   specifications do not name.
@@ -126,7 +123,7 @@ new binary on scratch clones of all five repositories.
 # Authority
 
 The orchestrator may decide flag names, output wording, module names, test
-structure, and the order of work inside a step. It plans steps B to F at
+structure, and the order of work inside a step. It plans steps B to E at
 their boundaries. It may cut anything in the specifications that proves
 unnecessary, and reports each cut.
 
@@ -150,8 +147,4 @@ to Sumeet.
 - **The Codex session-start hook event** is not yet known. Step D finds it.
   If none fits, `AGENTS.md` tells Codex to run `atelier status` first.
 - **Tree size rises during the mission.** Both command layers exist until
-  the cutover. The report gives the line count at the mission's end.
-- **A reinstall after step F.** From the site step until the cutover, a
-  `cargo install` from the tree would install an old binary whose site
-  cannot read old records. `AGENTS.md` says not to, and step F is last so
-  the window is short.
+  mission 3's switch. The report gives the line count at the mission's end.

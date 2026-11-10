@@ -25,25 +25,28 @@ relationships:
   - kind: "issue"
     id: "atelier-t747"
     type: "blocked_by"
+  - kind: "issue"
+    id: "atelier-u1ko"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Cut this host over: convert atelier and switch the binary in one item, then convert the other four repositories"
-updated_at: "2026-11-10T01:14:42.029304934+00:00"
+title: "Run the cutover on this host"
+updated_at: "2026-11-10T01:29:43.019538533+00:00"
 ---
 
 ## Goal
 
-Make the change of tool once, on this host, as the one item the architecture specification's Transition section describes.
+Make the change of tool once, on this host, by running the reviewed runbook.
 
 ## Done when
 
-- [ ] Provisional: the mission criteria `five-converted` and `no-old-surface`. The item started under the old tool, the converter converted it in flight, and its review and merge ran under the binary built from its branch. The rollback was tried once on scratch clones beforehand.
+- [ ] Provisional: `scripts/cutover/cutover.sh` ran to its end on this host. The mission criteria `five-converted` and `no-old-surface` hold. This item was closed with `atelier close`, the first act the new tool recorded.
 
 ## Context
 
-Preliminary. This step is planned in full at its boundary, with one planning review, as `docs/strategies/redesign-3-cutover.md` says. Target design: `docs/strategies/redesign-product.md` and `docs/strategies/redesign-architecture.md`.
+Preliminary. This step is planned in full at its boundary, with one planning review, as `docs/strategies/redesign-3-cutover.md` says. Protocol: `docs/strategies/redesign-architecture.md`, Transition, part 4, with its rollback table. This item changes no file by hand: the runbook's conversion commits are the only direct pushes, and the mission's Authority allows them.
 
 ## Unknowns
 
-- When no other work is in flight in any of the five repositories.
+- When no work is in flight in any of the five repositories and no other thread is running in them.

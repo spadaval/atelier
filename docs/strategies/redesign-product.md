@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 1 (Astra, Grok)"
+last_changed: "2026-11-09: revised after planning review round 2 (Astra, Grok)"
 ---
 
 # Atelier redesign: product specification
@@ -13,8 +13,8 @@ conversation on 2026-11-09 after an assessment of the project
 | Mission | Strategy | What it delivers |
 | --- | --- | --- |
 | 1. Baseline | [redesign-1-baseline.md](redesign-1-baseline.md) | The scorecard measured before anything changes |
-| 2. Core loop | [redesign-2-core.md](redesign-2-core.md) | The new records and commands, built beside the old ones and rehearsed |
-| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | Every repository and the Agent Factory skill on the new loop, and the old code deleted |
+| 2. Core loop | [redesign-2-core.md](redesign-2-core.md) | The new records and commands, built beside the old ones and rehearsed on real data |
+| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | The skill rewritten, the site converted, the old commands deleted, and every repository moved over |
 | 4. Gardener | [redesign-4-gardener.md](redesign-4-gardener.md) | A gardener that reads a scorecard and a readiness checklist |
 
 The technical design is in [redesign-architecture.md](redesign-architecture.md).
@@ -75,7 +75,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Item | One change, on one branch named for the item, with one review boundary. An item that is never started and has no files to change is done on the base with a written result. |
 | Review | One reviewer's examination of one commit: a summary, findings and a verdict, in one file. |
 | Round | The reviews of one submission. Each `submit` opens a new round. |
-| Finding | One problem in a review, with a recommendation: fix now, defer or no action. |
+| Finding | One problem in a review, with a recommendation: fix now, defer or no action. It is named by its review and its number, as in `2-m2bn.1`. |
 | Verdict | A review's conclusion: approve or changes. |
 | Ready | Someone with authority said this should start now. Ready is about intent. It says nothing about review. |
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
@@ -146,7 +146,14 @@ that binds a role can take the role over, and says which thread held it:
   another thread makes the caller its reviewer.
 - `lead <mission>` makes the caller its lead.
 
-A thread can never review an item it is the implementer of.
+A thread that has ever been an item's implementer can never review that
+item or decide a question on it, and a thread that has ever been a review's
+reviewer can never decide that review's findings. Taking a role over does not
+erase who held it before.
+
+Dropping is final and happens on the base. A dropped item cannot be merged,
+whatever its branch says, and its implementer's `status` says it was dropped
+and why.
 
 ## Commands
 
@@ -181,7 +188,7 @@ matter; `set` and the status commands write it.
 | --- | --- |
 | `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, and binds this thread as implementer. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work Sumeet asked for directly. |
 | `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review`; opens a new round; prints the reviewer's handoff line. |
-| `escalate "<question>"` | Adds an unanswered entry to Decisions and prints the decider's handoff line. `--finding <round>.<k>` ties the question to a finding. |
+| `escalate "<question>"` | Adds an unanswered entry to Decisions and prints the decider's handoff line. `--finding <finding>` ties the question to a finding. |
 | `merge` | Runs the checks below, makes one merge commit that sets `done`, and pushes where a forge is configured. `merge --trivial "<why>"` skips review for a change whose correctness is evident from the diff, and records the claim. |
 
 ### Reviewer
@@ -195,7 +202,7 @@ matter; `set` and the status commands write it.
 
 | Command | Behaviour |
 | --- | --- |
-| `decide <id> "<answer>"` | Records the answer to the open question, with this thread's ID. On a question tied to a finding, `--defer` or `--no-action` settles that finding without a fix. The implementer of the item and the reviewer who raised the finding cannot decide it. |
+| `decide <id> "<answer>"` | Records the answer to the open question, with this thread's ID. On a question tied to a finding, `--defer` or `--no-action` settles that finding without a fix. No past or present implementer of the item, and no reviewer of the review that raised the finding, can decide it. |
 | `lead <mission>` | Binds this thread as lead of a ready mission and prints where each item stands and which need a thread. |
 
 ### What `status` prints
@@ -204,8 +211,8 @@ matter; `set` and the status commands write it.
 You are the implementer of atelier-06jc.
 Status: changes requested (round 2, reviewed by gpt-6.1-sol)
 To return it to review:
-  [ ] Finding 2.1 (fix now): the brief omits Scope when the item has no parent
-  [x] Finding 2.2 (fix now): ...
+  [ ] Finding 2-m2bn.1 (fix now): the brief omits Scope when the item has no parent
+  [x] Finding 2-m2bn.2 (fix now): ...
   [ ] Merge checks on your latest commit (last passed 3 commits ago)
 Then: atelier submit
 ```
@@ -243,14 +250,15 @@ with the harness's own tool, using a line the tool prints:
 | --- | --- | --- | --- |
 | `mission.md` | status, labels, lead thread, ready (who, when) | Why, Outcome, Success criteria (optional), Scope, Authority, Result | Sumeet's direction, recorded by the planner; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
-| `item.md` | status, mission, labels, priority, blocked-by, implementer thread, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses), Decisions | The planner writes the definition; the implementer writes the Report |
-| `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer thread and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
+| `item.md` | status, mission, labels, priority, blocked-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses), Decisions | The planner writes the definition; the implementer writes the Report |
+| `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer threads and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
 
 Rules:
 
 - Only missions and items have IDs. A review is named by its round and a
   short random suffix, so two reviewers working blind on the same round never
-  write the same file. A finding is named `<round>.<k>`.
+  write the same file. A finding is named for its review and its number, as
+  in `2-m2bn.1`, so two blind reviews never share a finding name either.
 - An item's branch is named for its ID. No field records it.
 - Membership is stored once, as `mission:` on the item.
 - `mission.md` changes only at Sumeet's direction. The other documents in a
@@ -379,5 +387,8 @@ Agents are not scored on them, and none is a limit.
 - A scorecard page on the site.
 - A site view of what changed between a mission's go-ahead and its result.
   Git history holds what such a view would need.
+- Coordinating two clones of one repository. Atelier coordinates the threads
+  working in one clone and its worktrees. Work on another host is visible
+  only after a fetch, and nothing stops the same item being started on both.
 - Anything for a second user: onboarding docs, installers beyond what exists,
   other forges.

@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Delete the old library code, and run a first item in a product repository"
-updated_at: "2026-11-10T01:14:42.300877655+00:00"
+updated_at: "2026-11-10T01:29:43.575133060+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Remove what the cutover left unreachable, and find what the rehearsal could not.
 
 ## Done when
 
-- [ ] Provisional: the workflow crate, the old record types, the gate code, evidence, bundle, migrate and prune are deleted, with non-test Rust reported before and after; one item in a product repository has gone from ready to done; each fix made along the way is inside the specifications or was escalated.
+- [ ] Provisional: the workflow crate, the old record types, the gate code, evidence, bundle, migrate and prune are deleted, with non-test Rust reported before and after; one item in atelier and one in a product repository have gone from ready to done under the new binary; CI's 0.4.1 branch is removed; each fix made along the way is inside the specifications or was escalated.
 
 ## Context
 

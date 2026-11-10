@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Classify interventions, refusals and fix-now findings on seeded samples, with a second rater"
-updated_at: "2026-11-10T01:14:39.342323710+00:00"
+updated_at: "2026-11-10T01:29:37.804028492+00:00"
 ---
 
 ## Goal
@@ -33,7 +33,7 @@ Produce the three scorecard measures that need judgment: Sumeet's interventions 
 - [ ] `docs/architecture/quality/scorecard-baseline/classified.md` gives interventions by kind for every mission closed in the window in the five repositories; gate precision on a seeded sample of 100 refusals; and review yield on a seeded sample of 100 fix-now findings, 20 from each repository. The seeds are stated.
 - [ ] For each measure, `docs/architecture/quality/scorecard-baseline/samples/<measure>.json` holds the sample without labels, `<measure>.labels.json` the first rater's labels, and `<measure>.second.json` a second rater's labels for the first 30 entries.
 - [ ] The second rater was a child agent of a different lab from the implementer, started by the implementer and given only `rubric.md` and the unlabelled sample file. The Report names its model and thread.
-- [ ] `classified.md` reports the two raters' agreement for each measure, as a percentage and as Cohen's kappa, computed by a script in `scripts/scorecard/`.
+- [ ] `classified.md` reports the two raters' agreement for each measure as a percentage, with the entries they disagreed on listed.
 - [ ] Sumeet's messages are counted and classified, and quoted only where they are remarks about process. The committed sample files hold identifiers and process facts, not private message text.
 
 ## Scope

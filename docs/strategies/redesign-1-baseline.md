@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 1: frozen inputs, two-week rework, second rater"
+last_changed: "2026-11-09: revised after planning review round 2: classification bound to the frozen cutoff"
 ---
 
 # Why
@@ -64,8 +64,9 @@ A snapshot, four readers and one report.
 The snapshot lives outside the repository, in
 `~/.local/share/atelier-baseline/2026-11/`, because it holds private
 messages. It is a copy of T3's database made with SQLite's online backup, the
-Claude and Codex transcript directories of the five repositories, and a
-manifest. The manifest is committed: the cutoff time, each repository's base
+Claude transcript directories of the five repositories, every Codex session
+since 2026-10-14, and a manifest. Every item of this mission, the spike
+included, reads history only up to the manifest's commits. The manifest is committed: the cutoff time, each repository's base
 commit at the cutoff, and each copied file's size and hash. The window is
 2026-10-14 to the cutoff.
 

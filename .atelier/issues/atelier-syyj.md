@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Add `merge` on the new records, with `--trivial`"
-updated_at: "2026-11-10T01:14:40.410607842+00:00"
+updated_at: "2026-11-10T01:29:39.165031322+00:00"
 ---
 
 ## Goal
@@ -40,7 +40,7 @@ Finish the loop: an approved item reaches the base in one merge commit that mark
 
 ## Scope
 
-`atelier-app/src/forge.rs` is used as it is. The merged-tree checkout, the merge commit and the push are extracted from `merge.rs`, `merge_push.rs` and `merge_wait.rs` onto the config and item types, as copies in the new modules; the old files stay for the old binary. Their contract tests are rewritten against the new command. Nothing else of today's merge is carried over: not `gate_report`, `review_gate`, the light path or base exemptions. `land` belongs to step D.
+`atelier-app/src/forge.rs` is kept with one change: it takes the new config's forge section, whose CI workflow is optional, where today it takes `workflow_policy::ForgeConfig` with a required workflow name; its own contract tests still pass. The merged-tree checkout, the merge commit and the push are extracted from `merge.rs`, `merge_push.rs` and `merge_wait.rs` onto the config and item types, as copies in the new modules; the old files stay for the old binary. Their contract tests are rewritten against the new command. Nothing else of today's merge is carried over: not `gate_report`, `review_gate`, the light path or base exemptions. `land` belongs to step D.
 
 ## Context
 

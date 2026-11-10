@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add missions and the planning commands: `new`, `set`, `ready`, `drop`, `close`, `list`, `show`, `lead` and `start --new`"
-updated_at: "2026-11-10T01:14:40.683832803+00:00"
+updated_at: "2026-11-10T01:29:39.703397721+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Let a planner write and ready work, and a lead run a mission, on the new records
 
 ## Done when
 
-- [ ] Provisional: a scenario test takes a mission from `new --mission` through two plan reviews made in separate checkouts and cherry-picked without conflict, `ready` on the mission and on one of two items, `lead`, the item's work, and `close`. The other item stays draft and cannot be started. `start --new` creates an item already building on its branch. Validation rejects an item whose `mission` names no mission.
+- [ ] Provisional: a scenario test takes a mission from `new --mission` through two plan reviews made in separate checkouts and cherry-picked without conflict, `ready` on the mission and on one of two items, `lead`, and the item's work. The other item stays draft and cannot be started, and `close` on the mission is refused while it is draft; after `drop` on it, `close` succeeds. A started item dropped on the base shows as dropped from the base and from its branch, and `merge` on it is refused. `start --new` creates an item already building on its branch. Validation rejects an item whose `mission` names no mission.
 
 ## Context
 

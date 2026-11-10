@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add `land`, `check` and `setup codex`, and move the session hooks to the new `status`"
-updated_at: "2026-11-10T00:56:08.329209632+00:00"
+updated_at: "2026-11-10T01:29:39.972593149+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Finish the handoff commands and orient Codex sessions as Claude sessions are ori
 
 ## Done when
 
-- [ ] Provisional: `land` on the base refuses an unpushed commit that is not an Atelier merge and touches a path outside `.atelier/`; `check` validates every record; a Codex session in a fixture repository starts with `status` output.
+- [ ] Provisional: `land` on the base refuses an unpushed commit that is not an Atelier merge and touches a path outside `.atelier/missions/` and `.atelier/items/`, with a test that a direct change to `.atelier/config.toml` is refused; `check` validates every record; a Codex session in a fixture repository starts with `status` output.
 
 ## Context
 

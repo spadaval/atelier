@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Freeze the baseline's inputs, so the numbers can be reproduced and the cutover need not wait for the report"
-updated_at: "2026-11-10T01:14:38.531271779+00:00"
+updated_at: "2026-11-10T01:29:37.229558749+00:00"
 ---
 
 ## Goal
@@ -26,7 +26,7 @@ Copy every input the baseline reads, once, so that later runs give the same numb
 
 ## Done when
 
-- [ ] `~/.local/share/atelier-baseline/2026-11/` holds a copy of `~/.t3/userdata/statev2.sqlite` made with SQLite's online backup (`sqlite3 <db> ".backup <copy>"`), and copies of the Claude and Codex transcript directories for atelier, astromech, demiurge, life-on-rails and cosplay-studio, including their T3 worktree directories.
+- [ ] `~/.local/share/atelier-baseline/2026-11/` holds a copy of `~/.t3/userdata/statev2.sqlite` made with SQLite's online backup (`sqlite3 <db> ".backup <copy>"`), copies of the Claude transcript directories for atelier, astromech, demiurge, life-on-rails and cosplay-studio, including their T3 worktree directories, and a copy of every Codex session dated 2026-10-14 or later.
 - [ ] `docs/architecture/quality/scorecard-baseline/manifest.json` is committed and gives the cutoff time, each of the five repositories' base commit at the cutoff, and each copied file's path under the snapshot, size and SHA-256. It holds no message text.
 - [ ] `PRAGMA integrity_check` on the copy returns `ok`, and the Report records it.
 - [ ] Nothing under the snapshot is committed, and the snapshot directory is readable only by its owner.

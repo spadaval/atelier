@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Run a fresh agent through the loop with only `status` to guide it, on Claude Opus and Codex"
-updated_at: "2026-11-10T00:56:07.538002081+00:00"
+updated_at: "2026-11-10T01:29:39.433696321+00:00"
 ---
 
 ## Goal
@@ -33,11 +33,10 @@ Test the redesign's riskiest assumption before anything else is built on it: tha
 - [ ] Its grader checks the state left behind: the item is done on the base, a review file has the verdict approve and a reviewer that is not the implementer, and the change's own test passes. It counts refused and errored `atelier` calls from the transcript.
 - [ ] `evals/agent-factory/results/<date>-next-loop.md` records three runs with Claude Opus and three with a Codex model: pass or fail, refused and errored calls, `atelier` calls, and total tool calls, with the transcript excerpt for each failure and each refusal.
 - [ ] No run in the final round has more than one refused or errored `atelier` call. The results file says what changed between rounds.
-- [ ] If three rounds of changes do not get there, the item is escalated with what was tried.
 
 ## Scope
 
-The six commands of step A, on one fixture. Changes this item makes are to wording, help and the shape of `status`, inside the product specification. A change the specification does not allow is escalated.
+The six commands of step A, on one fixture. Changes this item makes are to wording, help and the shape of `status`, inside the product specification. A change the specification does not allow is escalated. If three rounds of changes do not bring every run to at most one refused or errored call, escalate with what was tried.
 
 ## Context
 

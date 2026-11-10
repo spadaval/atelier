@@ -16,12 +16,12 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Rebuild the work loop as 18 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T01:14:37.829926417+00:00"
+updated_at: "2026-11-10T01:29:36.818778286+00:00"
 ---
 
 ## Outcome
 
-A second binary on master, `atelier-next`, implements the product specification's records and commands. It is installed nowhere, and the old binary beside it is untouched. A fresh agent told only to run `atelier status` takes a ready item to done with an independent reviewer. A converted scratch clone of each of the five repositories passes `check` and completes one item. The site reads the new records.
+A second binary on master, `atelier-next`, implements the product specification's records and commands. It is installed nowhere, and the old binary beside it is untouched. A fresh agent told only to run `atelier status` takes a ready item to done with an independent reviewer. A converted scratch clone of each of the five repositories passes `check` and completes one item.
 
 ## Background
 

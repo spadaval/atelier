@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Add `review` and `verdict`, with the brief and one file per review"
-updated_at: "2026-11-10T01:14:40.145269040+00:00"
+updated_at: "2026-11-10T01:29:38.890745999+00:00"
 ---
 
 ## Goal
@@ -30,11 +30,11 @@ Build the reviewer's side of the loop: one command that gives a reviewer everyth
 ## Done when
 
 - [ ] Scenario test: on an item in review, thread `t2` runs `atelier-next review <id>`. It creates `reviews/1-<suffix>.md` with the head commit, `t2` as reviewer and the template, and prints a brief holding the item's Goal, Done when, Scope and Report, the command that shows the diff, the path of the review file and the two `verdict` commands. Run again by `t2`, it creates nothing and prints the same brief.
-- [ ] The implementer's thread running `review <id>` gets the brief and a line saying an author does not review its own work. No file is created and no reviewer is changed.
+- [ ] A thread anywhere in the item's `implementers`, current or past, that runs `review <id>` gets the brief and a line saying an author does not review its own work. No file is created and no reviewer is changed. A test covers a thread that implemented the item and was then taken over.
 - [ ] `verdict changes` on a file with an open fix-now finding sets `changes_requested` and commits the review file in one commit; on a file with none it is refused. `verdict approve` on a file with an open fix-now finding is refused; otherwise it sets `approved`.
 - [ ] After `changes_requested`, the implementer's `status` lists each open fix-now finding by number and title. `submit` changes nothing until the Report's Responses has a line for each one, as fixed in a commit or as rebutted.
-- [ ] Scenario test, second round: after that `submit`, `review <id>` by a thread creates `reviews/2-<suffix>.md`, which carries each open finding of round 1 with the author's response under `Was:`. The reviewer sets `Now:` to fixed, withdrawn or kept, and a kept fix-now finding counts as open for the verdict. The same holds after an approval went stale and the item was submitted again.
-- [ ] Scenario test, reviewer taken over: with round 1's file created by `t2` and no verdict, `review <id>` by `t3` makes `t3` its reviewer, keeps what the file holds, and says `t2` held it.
+- [ ] Scenario test, second round: after that `submit`, `review <id>` by a thread creates `reviews/2-<suffix>.md`, which carries each open finding of round 1 by its name, such as `1-x7qd.1`, with the author's response under `Was:`. The reviewer sets `Now:` to fixed, withdrawn or kept, and a kept fix-now finding counts as open for the verdict. The same holds after an approval went stale and the item was submitted again.
+- [ ] Scenario test, reviewer taken over: with round 1's file created by `t2` and no verdict, `review <id>` by `t3` appends `t3` to the file's `reviewers` so that it holds the review, keeps what the file holds, and says `t2` held it.
 - [ ] A thread bound as reviewer that runs `submit` or `merge` gets one line naming its role and its two commands, a non-zero exit, and no change.
 - [ ] The Records section of `docs/strategies/redesign-architecture.md` matches the review file as built.
 
