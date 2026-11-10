@@ -15,13 +15,13 @@
 //! `committed_snapshot.rs`'s checks of file modes and index flags are not
 //! carried over.
 
-use crate::commands::{facts, hold, refusal, Outcome};
+use crate::commands::{facts, hold, refusal, refused, Outcome};
 use crate::forge::{ForgeError, Github, PullRequest};
 use crate::git;
 use crate::output;
 use crate::repo::{item_path, Repo};
 use anyhow::{Context, Result};
-use atelier_app::acts::Act;
+use atelier_app::acts::{check, Act, Refusal};
 use atelier_core::{Config, Forge, Status};
 use atelier_records::{parse_item, render_item};
 use std::fs::{File, OpenOptions, TryLockError};
@@ -50,8 +50,22 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
             repo.branch.as_deref(),
         )));
     };
-    // What merges is that commit, so the item is read from it, not from
-    // the checkout, whose uncommitted changes are a condition of their own.
+    let act = if trivial.is_some() {
+        Act::MergeTrivial
+    } else {
+        Act::Merge
+    };
+    // A reviewer is known by the review file it holds, which it may not
+    // have committed, so its role is told from the checkout, as every
+    // command tells it.
+    let blockers = repo.blockers(located.record().expect("the current item has a record"))?;
+    let seen = facts(repo, &located, &blockers, None);
+    if let Err(Refusal::Role(role)) = check(act, &seen) {
+        return Ok(Outcome::Refused(refused(act, Refusal::Role(role), &seen)?));
+    }
+    // What merges is the head, so the item is judged as it holds it, not
+    // as the checkout does, whose uncommitted changes are a condition of
+    // their own.
     if let Some(branch) = located.branch.as_mut() {
         branch.record = repo.item_at(&head, &located.id)?;
     }
@@ -69,13 +83,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         return publish(repo, &config, &id);
     }
     let checkout = repo.checkout(record, &head)?;
-    let blockers = repo.blockers(record)?;
     let facts = facts(repo, &located, &blockers, Some(&checkout));
-    let act = if trivial.is_some() {
-        Act::MergeTrivial
-    } else {
-        Act::Merge
-    };
     if let Some(refused) = refusal(act, &facts)? {
         return Ok(Outcome::Refused(refused));
     }
