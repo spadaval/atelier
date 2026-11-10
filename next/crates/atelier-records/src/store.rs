@@ -260,9 +260,18 @@ fn findings(reviews: &[ReviewFile]) -> Result<Vec<Finding>, Problem> {
 }
 
 impl ReviewFile {
-    /// Writes the review back to its file.
+    /// Writes the review back to its file, whole or not at all: into a
+    /// file beside it, which then replaces it, so a write that fails part
+    /// way leaves the review as it was.
     pub fn write(&self) -> io::Result<()> {
-        fs::write(&self.path, render_review(&self.review))
+        let name = self.path.file_name().unwrap_or_default().to_string_lossy();
+        let partial = self.path.with_file_name(format!(".{name}.partial"));
+        let written = fs::write(&partial, render_review(&self.review))
+            .and_then(|()| fs::rename(&partial, &self.path));
+        if written.is_err() {
+            let _ = fs::remove_file(&partial);
+        }
+        written
     }
 
     pub fn findings(&self) -> Result<Vec<Finding>, Problem> {

@@ -243,31 +243,37 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
 fn new_from_writes_neither_the_item_nor_the_taken_line_when_one_cannot_be_written() {
     let scratch = with_done(&[]);
     let root = scratch.root();
-    let review = root.join(REVIEW);
-    let mut permissions = fs::metadata(&review).unwrap().permissions();
-    permissions.set_readonly(true);
-    fs::set_permissions(&review, permissions).unwrap();
-    let run = atelier(
-        &root,
-        "t9",
-        &["new", "Greet in the locale", "--from", "demo-d0ne/1-aaaa.1"],
-    );
-    assert_eq!(run.code, 2, "{}", run.stdout);
-    assert!(
-        run.stderr
-            .contains("removed the new item it had written; nothing changed"),
-        "{}",
-        run.stderr
-    );
-    assert_eq!(changes(&root), "");
-    assert_eq!(
-        listed(&root),
-        [
+    // A review longer than the file size the command may write, so its
+    // write fails part way, after the new item is written.
+    let long = FINDINGS.replace("Fine.", &"A long summary. ".repeat(600));
+    write_review(&root, REVIEW, "approve", &long);
+    git(&root, &["commit", "-qam", "Summarise"]);
+    let before = read(&root, REVIEW);
+    let output = Command::new("sh")
+        .current_dir(&root)
+        .env("T3CODE_THREAD_ID", "t9")
+        .env_remove("CLAUDE_CODE_SESSION_ID")
+        .env_remove("CODEX_SESSION_ID")
+        .env_remove("GROK_SESSION_ID")
+        .args([
+            "-c",
+            "trap '' XFSZ; ulimit -f 4; exec \"$0\" \"$@\"",
+            env!("CARGO_BIN_EXE_atelier"),
+            "new",
+            "Greet in the locale",
+            "--from",
             "demo-d0ne/1-aaaa.1",
-            "demo-d0ne/1-aaaa.2",
-            "demo-d0ne/1-aaaa.4"
-        ]
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.contains("removed the new item it had written; nothing changed"),
+        "{stderr}"
     );
+    assert_eq!(read(&root, REVIEW), before);
+    assert_eq!(changes(&root), "");
 }
 
 #[test]

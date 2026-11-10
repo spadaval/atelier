@@ -668,12 +668,20 @@ pub fn finding_taken(name: &str, id: &str) -> String {
     )
 }
 
-/// A planning command's write failed; `removed` says it removed the new
-/// item it had written, so nothing changed.
-pub fn write_failed(command: &str, removed: bool) -> String {
-    match removed {
-        true => format!("`atelier {command}` could not write its records, so it removed the new item it had written; nothing changed"),
-        false => format!("`atelier {command}` could not write its records"),
+/// A planning command's write failed. `created` says it had written a new
+/// item, which it removes, and `left` names the directories of those it
+/// could not remove.
+pub fn write_failed(command: &str, created: bool, left: &[String]) -> String {
+    let failed = format!("`atelier {command}` could not write its records");
+    match (created, left) {
+        (false, _) => failed,
+        (true, []) => {
+            format!("{failed}, so it removed the new item it had written; nothing changed")
+        }
+        (true, left) => format!(
+            "{failed}, and could not remove the new item it had written; remove {} by hand",
+            left.join(" and ")
+        ),
     }
 }
 

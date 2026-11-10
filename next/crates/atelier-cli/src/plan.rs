@@ -715,10 +715,16 @@ fn save_with(
         reviews.iter().try_for_each(ReviewFile::write)
     };
     if let Err(error) = writes() {
-        for dir in &created {
-            let _ = std::fs::remove_dir_all(dir);
-        }
-        let said = output::write_failed(command, !created.is_empty());
+        let left: Vec<String> = (created.iter())
+            .filter(|dir| std::fs::remove_dir_all(dir).is_err())
+            .map(|dir| {
+                dir.strip_prefix(&repo.root)
+                    .unwrap_or(dir)
+                    .display()
+                    .to_string()
+            })
+            .collect();
+        let said = output::write_failed(command, !created.is_empty(), &left);
         return Err(anyhow!(error).context(said));
     }
     let paths: Vec<String> = written.into_iter().map(|(_, shown)| shown).collect();
