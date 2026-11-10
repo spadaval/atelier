@@ -87,9 +87,12 @@ are in step 4.
 3. **Follow the faulty line back.** Blame names the last commit to touch a
    line, which is often a later edit. When the blamed commit did not write
    the faulty logic, find the one that did with
-   `git log -S'<the faulty expression>' --format='%h %ad %s' <fix>^ -- <file>`
-   and read it. The fix commit's own message often says what was wrong;
-   read it first.
+   `git log -S'<the faulty expression>' --format='%h %ad %s' <fix>^`, over
+   the whole tree rather than the fixed file, and read the oldest hit. If
+   that commit moved the logic from another file (its diff deletes an
+   earlier form of the same check), search again for the deleted form, and
+   repeat until a commit writes it new. The fix commit's own message often
+   says what was wrong; read it first.
 
 4. **Name the cause.** Read the fix and the candidate cause and pick the
    commit whose change made the program wrong. Two conventions keep this
@@ -180,8 +183,11 @@ Notes on the rows that needed more than blame:
 
 - 5: the deleted lines were comments; `-S` on the comment's rule found the
   commit that wrote that rule, a review fix on astromech-xvjs's branch.
-- 6: blame named a commit that only extended the URL check; `-S'starts_with'`
-  found the check itself in PR #3.
+- 6: blame named a commit that only extended the URL check. `-S` on the
+  check's expression, over the whole tree, finds 1ad98b21, which moved the
+  check into this file from the window's source and deleted the earlier
+  form there; `-S` on that earlier form finds PR #3 (ab6ad12c), which wrote
+  it.
 - 7: the unretried mode switch dates from astromech-h74l, but only became a
   race when astromech-proz made two processes share the file (first
   convention).
