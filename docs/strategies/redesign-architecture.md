@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 3 (Astra, Grok)"
+last_changed: "2026-11-09: revised after planning review round 4 (Astra, Grok)"
 ---
 
 # Atelier redesign: architecture specification
@@ -322,14 +322,16 @@ old tool:
   one. The live skill is a checkout that follows master, and the installed
   binary tells every session to move it forward when it falls behind, so the
   new text must not sit at the live path before the cutover.
-- The last release of the old tool, 0.4.1, is cut from master before
-  anything in the tree changes the old binary. The installed binary today is
-  six commits past 0.4.0. It is the binary CI and the rollback use, and it
-  still has `serve`.
+- The fallback release is fixed before anything in the tree changes the old
+  binary. It is the binary CI and the rollback use, so it must check this
+  repository's records and serve the site as the installed binary does. The
+  installed binary is six commits past 0.4.0, and those commits changed only
+  the wording of the review brief, so the 0.4.0 release is tried first. A
+  0.4.1 is cut only if 0.4.0 fails that test.
 - The site is converted, as above.
 - The switch: the `atelier` binary target points at the new command layer,
   and the old command layer, its integration tests and
-  `scripts/smoke-repos.sh` are deleted. CI's `check` step runs the 0.4.1
+  `scripts/smoke-repos.sh` are deleted. CI's `check` step runs the fallback
   release while the repository holds `.atelier/issues/` and the tree's
   binary once it does not. `AGENTS.md` says the installed binary stays the
   tracker and nobody installs from the tree. Added under `scripts/cutover/`,
@@ -377,7 +379,7 @@ thing that does it.
 | Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
 | Converted and pushed | Reverting its conversion commit and pushing |
 
-If step 3 had run, it also reinstalls 0.4.1, runs its `setup`, moves the
+If step 3 had run, it also reinstalls the fallback release, runs its `setup`, moves the
 skill checkout back to the commit it was on, restarts `atelier-serve`, and
 checks the site answers.
 
@@ -388,7 +390,8 @@ step 2's commit; step 3; step 4; and a second repository's conversion in step
 
 **After the cutover**, the first items under the new tool delete the library
 code nothing reaches any more: the workflow crate, the old record types, the
-gate code, evidence, bundle, migrate and prune, and CI's 0.4.1 branch.
+gate code, evidence, bundle, migrate and prune, and the fallback branch of
+CI's `check` step.
 `scripts/cutover/` is deleted after the work host converts.
 
 **The work host** converts later by the same runbook, run by Sumeet. Until it

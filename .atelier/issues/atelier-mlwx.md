@@ -19,17 +19,17 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Cut release 0.4.1 of the old tool, the fallback the rollback and CI use"
-updated_at: "2026-11-10T01:39:35.640973419+00:00"
+title: "Fix the old tool's fallback release: 0.4.0 if it passes, else a new 0.4.1"
+updated_at: "2026-11-10T01:48:07.663576792+00:00"
 ---
 
 ## Goal
 
-Publish the old tool one last time, complete, before anything in the tree changes the old binary, so that a rollback can reinstall exactly what this host runs today, dashboard included.
+Fix which release of the old tool a rollback reinstalls and CI's `check` step runs, before anything in the tree changes the old binary. It must do what this host's installed binary does today, dashboard included.
 
 ## Done when
 
-- [ ] Provisional: release 0.4.1 is published from master by the existing release process, from a commit where the old `atelier` binary is unchanged and still has `serve`. Installed in a scratch directory, it passes `atelier check` on this repository's records and serves the site.
+- [ ] Provisional: the 0.4.0 release, installed in a scratch directory, is tried first: if it passes `atelier check` on this repository's records and serves the site, it is the fallback and nothing is released. If it fails, the Report names what it lacks, and release 0.4.1 is published from a commit where the old `atelier` binary is unchanged and passes the same test.
 
 ## Context
 
@@ -37,4 +37,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 
 ## Unknowns
 
-- None expected. The installed binary today is 0.4.0 plus six commits, so 0.4.0 itself is not the fallback.
+- Whether 0.4.0 passes. The installed binary is 0.4.0 plus six commits, and planning finding atelier-xzaf found those commits change only the review brief's wording.

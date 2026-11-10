@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: revised after planning review round 3: the fallback release comes before the site; the skill is written beside the live one"
+last_changed: "2026-11-09: revised after planning review round 4: no-old-surface allows history; the fallback is 0.4.0 if it passes"
 ---
 
 # Why
@@ -30,8 +30,10 @@ design record. Sumeet has a runbook to convert his work host.
   all five repositories, and one item has gone from ready to done under the
   new binary in atelier and in one product repository.
 - no-old-surface: a search for each removed command and record path finds
-  nothing in the skill, in the five repositories' `AGENTS.md` and
-  `CLAUDE.md`, or under `docs/`.
+  no instruction to use it in the skill, in the five repositories'
+  `AGENTS.md` and `CLAUDE.md`, or under `docs/`. Naming one as history is
+  allowed: in the design record's list of what was tried and removed, and in
+  the baseline's reports.
 - skill-earns-its-place: a results file records skill against no skill, on
   Claude Opus and on one Codex model, at least three runs per cell. Every
   procedure the skill keeps names a scenario where it changed the outcome.
@@ -78,7 +80,7 @@ protocol is the Transition section of the
 | A. Skill | Write the new skill in `skills/agent-factory-next/`, beside the live one: `SKILL.md` and one file per role against the new commands. Leave out what the tool now prints. Carry the constitution's live rules into the role files. The cutover moves it into place. |
 | B. Evals | Port the scenarios to `atelier-next`. Add a no-skill arm and a Codex arm. Cut each procedure no scenario supports. |
 | C. Backlog sort | Sort the 147 open items and five open missions: converted as they are, rewritten for the new tool, or dropped as obsolete, with the list in the report. |
-| D. Fallback release | Cut release 0.4.1 of the old tool, before anything in the tree changes the old binary. |
+| D. Fallback release | Fix the old tool's fallback release before anything in the tree changes the old binary: 0.4.0 if it checks this repository's records and serves the site, otherwise a new 0.4.1. |
 | E. Site | Convert the site to the new records, served by `atelier-next serve`, with its web tests passing. |
 | F. Switch | Point the `atelier` binary at the new commands and delete the old command layer and its tests. Add the runbook, the new `AGENTS.md` texts, the replacement CI workflows and CI's two-way `check` step. Try the rollback on scratch clones at each stopping point. |
 | G. Cutover | Run the runbook on this host. The item is never started; it is closed on the base at the end. |

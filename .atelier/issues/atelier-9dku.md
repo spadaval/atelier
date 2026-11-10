@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Rewrite the gardener around the scorecard, three tiers of fix and a one-page report, and fold audit into it"
-updated_at: "2026-11-10T00:56:11.236912970+00:00"
+updated_at: "2026-11-10T01:48:08.601621391+00:00"
 ---
 
 ## Goal
@@ -40,4 +40,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 
 ## Unknowns
 
-- Whether groom folds in too.
+- None yet. Groom stays a separate procedure, as the strategy's Scope says.
