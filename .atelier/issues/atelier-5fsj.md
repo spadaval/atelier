@@ -32,12 +32,12 @@ Write the scripts that compute the scorecard's counted measures for a repository
 
 ## Done when
 
-- [ ] `scripts/scorecard/README.md` says how to run each script, which inputs it reads, and which T3 database schema it was written against.
-- [ ] Every script reads its inputs from a snapshot directory given as an argument, and the manifest's commits for Git. No script opens `~/.t3/userdata/` or the live transcript directories; a test asserts that the default paths are not used.
-- [ ] Running them on the baseline snapshot for atelier, astromech, demiurge, life-on-rails and cosplay-studio writes `docs/architecture/quality/scorecard-baseline/counted.json` and `docs/architecture/quality/scorecard-baseline/counted.md`, giving per repository: process share, confusion, tokens per merged item, calls before first edit, rework, the record-only share of commits, and the line count. Each token number has its coverage beside it, and rework says which commits were old enough to count.
-- [ ] `python3 -m unittest discover scripts/scorecard` passes. Its tests build a small SQLite file and a scratch Git repository and check each measure's arithmetic, so a changed definition fails a test.
-- [ ] A script given a T3 database whose schema it does not know exits with a message naming the schema it expected.
-- [ ] A fresh agent given only the README reran the scripts on the same snapshot and got a byte-identical `counted.json`; the Report records who and when.
+- [x] `scripts/scorecard/README.md` says how to run each script, which inputs it reads, and which T3 database schema it was written against.
+- [x] Every script reads its inputs from a snapshot directory given as an argument, and the manifest's commits for Git. No script opens `~/.t3/userdata/` or the live transcript directories; a test asserts that the default paths are not used.
+- [x] Running them on the baseline snapshot for atelier, astromech, demiurge, life-on-rails and cosplay-studio writes `docs/architecture/quality/scorecard-baseline/counted.json` and `docs/architecture/quality/scorecard-baseline/counted.md`, giving per repository: process share, confusion, tokens per merged item, calls before first edit, rework, the record-only share of commits, and the line count. Each token number has its coverage beside it, and rework says which commits were old enough to count.
+- [x] `python3 -m unittest discover scripts/scorecard` passes. Its tests build a small SQLite file and a scratch Git repository and check each measure's arithmetic, so a changed definition fails a test.
+- [x] A script given a T3 database whose schema it does not know exits with a message naming the schema it expected.
+- [x] A fresh agent given only the README reran the scripts on the same snapshot and got a byte-identical `counted.json`; the Report records who and when.
 
 ## Scope
 
@@ -46,3 +46,35 @@ Python with the standard library only. Nothing changes in the `atelier` binary. 
 ## Context
 
 Each measure's definition is in `docs/strategies/redesign-1-baseline.md`, Design; do not change a definition, and escalate if one cannot be computed as written. The snapshot is at `~/.local/share/atelier-baseline/2026-11/`, described by `docs/architecture/quality/scorecard-baseline/manifest.json`. Starting material, not to be committed as it is: `/var/tmp/atelier-assessment/transcripts/` and `/var/tmp/atelier-assessment/history/`. Tie a thread to an item by the branch it worked on and the item IDs in its title and first message.
+
+## Report
+
+All six Done when lines hold. `scripts/scorecard/counted.py --snapshot ~/.local/share/atelier-baseline/2026-11` writes `counted.json` and `counted.md` with the seven measures for the five repositories in about 30 seconds, each token number with its coverage and rework with its eligible commits. `python3 -m unittest discover scripts/scorecard` passes 15 tests (`TMPDIR` under `~/.cache`). They build a small T3 database, Claude and Codex transcripts and a scratch Git repository and check every measure's numbers exactly. Thirteen one-line changes to definitions (rework window, `.atelier/` paths, first versus last usage copy, merged without code, tie order, tests counted, harness exit codes, partly covered and unpriced items, record edit as first edit, records past the cutoff in Codex and T3, one price) each fail a test, and the unchanged copy passes. `Inputs.test_live_stores_are_refused_and_never_opened` asserts `--snapshot` has no default, each live store is refused, and every file and database opened in a full measure lies under the fixture snapshot. Given a database missing the expected tables, `counted.py` exits 1 naming `T3 statev2 with orchestration_v2 projections, as copied on 2026-11-10 (manifest schema_sha256 ebd75cd5...)` and the missing columns (test and a CLI run). Two runs on the snapshot give byte-identical `counted.json` (`Output.test_two_runs_write_identical_files_without_home_paths`, and by hand). `freeze.py verify` still passes: `ok: 4197 files match the manifest; modes are owner-only`, and only `statev2.sqlite` is in `t3/`.
+
+Fresh rerun: a GPT-6 Luna child (`codex`, `gpt-6-luna`), given only the README's text, its path and the checkout path, reran the scripts into a scratch directory on 2026-11-10 at 14:44 UTC, after the last code change (`2026de87`). Its `counted.json` had SHA-256 `debd5f9c270f7effa3912a6145d4b3208073d78fcaa18334e85c2afeb88c24d7`, the committed file's; `freeze.py verify` passed and the 15 tests passed. An earlier Luna rerun at 14:41 UTC on `1ceae157` gave the same hash and noted a `ResourceWarning` from an unclosed pipe and no expected output for `verify`; `2026de87` fixed both.
+
+### Decisions
+
+Where the strategy's definitions left a choice, the scripts read them as follows; the README states each.
+
+- **Merged item**: `done`, closed in the window, not a mission, and named by a commit on the base's history that changes a file outside `.atelier/`. The strategy names merged items but no test for one; a done decision with no code is not merged. Done counts sit beside it in `counted.md`.
+- **Tie**: the first known item ID in the branch, else the title, else the first message, over every T3 thread including subagents Claude's Agent tool started. 1,621 of T3's 2,194 threads are such subagents; tying only top-level threads tied 7 astromech threads to a merged item, against 476 this way. A first message naming several items ties to the first named.
+- **Process share in tokens**: each model response's list-price cost split equally over its tool calls; the share is the cost that went to process commands. A bare `git commit` of records staged by an earlier command is not counted.
+- **Confusion**: per shell command that runs the installed `atelier` (not `target/debug/atelier`), over every thread of the repository, in the window. A refusal is one of atelier's own formats; a harness's `Error: Exit code N` is not.
+- **Calls before first edit**: the strategy says commands, the scorecard says tool calls; the headline counts tool calls and shell commands are reported beside it. An implementer thread is one opened `Act as the implementation sub-agent` or with no role line. The first edit is T3's first `file_change` outside `.atelier/` and scratch directories; a shell write such as `sed -i` is not recognised.
+- **Rework**: lines are dated when they reach the base (first-parent replay, merges diffed against their first parent), so churn inside a branch before merge is not counted. `.atelier/` and lock files are left out. Replaying to the manifest commit reproduces Git's own line count for every file of all five repositories.
+- **Line count**: the main language has the most non-test bytes outside dot-directories (vendored skills live in `.agents/` and `.claude/`). life-on-rails is close: TypeScript 1.13 MB against Kotlin 0.96 MB, so it counts TypeScript. Rust repositories (atelier, astromech) run `scripts/count_non_test_rust.py`.
+- **Prices**: the assessment's table. It has no price for Claude Fable 5.1 and 5.2 or GPT-6 Astra; their tokens are counted, not priced, and an item with such a request is left out of tokens per item (6 threads in all).
+
+### Surprises
+
+- Token coverage is near complete, not 13%: 977 of 981 threads tied to a merged item have a transcript, because subagent transcripts survive where their parents' do not.
+- Median tokens per merged item ($3.06 to $13.81) sit below the assessment's $11.50 to $20, because orchestrator threads name a mission or several items and are not tied to one item.
+- Confusion runs 17 to 24 per 100 atelier calls; about half are `--help` lookups.
+- cosplay-studio's commits name items by suffix (`wip/a197-vzo9`), so 8 of its 23 done items count as merged. It has no commits between July and 2026-11-05, so its rework is n/a.
+- T3's `provider_turns` carry a `tokenUsage` per turn. The scripts do not use it, since the Design takes tokens from transcripts.
+
+### Open items
+
+- Prices for Fable 5.1, Fable 5.2 and GPT-6 Astra are the orchestrator's call; adding them to `PRICES` changes the token numbers.
+- Tie coverage: threads tied to a merged item out of all threads are atelier 346 of 721, astromech 476 of 602, demiurge 64 of 105, life-on-rails 89 of 296, cosplay-studio 6 of 49. Merged items with a tied thread: 147 of 243, 196 of 339, 27 of 83, 34 of 48, 3 of 8.
