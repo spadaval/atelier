@@ -214,4 +214,4 @@ definition behind the earlier figure of 39%.
 `python3 scripts/scorecard/draw_samples.py --out <directory>` rebuilds the
 three unlabelled sample files from the frozen snapshot and records, with the
 seed stated in each file, and prints each population's size. Run it under
-`nice -n 19 ionice -c3`; it takes about 15 seconds.
+`nice -n 19 ionice -c3`; it takes about 30 seconds.
