@@ -294,8 +294,8 @@ will check.
 | `verdict` on a mission review | Reviewer | any | unchanged | as above, for the file |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
 | `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor in the `reviewers` of the review that raised the finding |
-| `merge` | Implementer | `approved` | `done` | a review of the latest round approves it and still covers the head; no unanswered question; no uncommitted change to a tracked file; the base's record is not dropped |
-| `merge --trivial` | Implementer | `building` | `done` | Done when ticked; Report written; no review file; no unanswered question; no uncommitted change to a tracked file |
+| `merge` | Implementer | `approved` | `done` | a review of the latest round approves it and still covers the head; no unanswered question; nothing uncommitted in tracked files or the item's directory; the base's record is not dropped |
+| `merge --trivial` | Implementer | `building` | `done` | Done when ticked; Report written; no review file; no unanswered question; nothing uncommitted in tracked files or the item's directory |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
 | `drop` | Planner | any but `done` | `dropped` | a reason; written on the base, whatever the item's branch holds |
@@ -481,7 +481,9 @@ post-checkout Git hook prints it on every branch switch.
 2. Check the act's conditions from the table: the approval covers the
    head, or `--trivial "<why>"` was given on a building item with no
    review file; no Decisions entry is unanswered; no tracked file has
-   uncommitted changes. Where the base is checked out, that checkout must
+   uncommitted changes and no file in the item's directory is untracked.
+   The role is told from the checkout, as every command tells it; the rest
+   is judged on the item as the head holds it. Where the base is checked out, that checkout must
    have none either, since merging moves it.
 3. Build the merged tree with `git merge-tree`; a conflict refuses, naming
    the files. Write the merge commit object on it, base tip first and
@@ -490,7 +492,8 @@ post-checkout Git hook prints it on every branch switch.
 4. Check out that commit in a temporary worktree in the Git directory and
    run each merge check there with `sh -c`. A failure refuses, printing the
    command, its exit status and the last 20 lines of its output.
-5. Where a forge is configured: push the branch tip and open its pull
+5. Where a forge is configured: confirm nothing moved (as in step 6), then
+   push the branch tip and open its pull
    request, if they are not there yet. Where it names a CI workflow: if no
    run of it on the head has finished, print the pull request and stop
    with exit status 3; if the newest one finished and did not pass, refuse.
