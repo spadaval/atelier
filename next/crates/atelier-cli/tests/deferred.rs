@@ -325,7 +325,29 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
         "{}",
         run.stderr
     );
-    // The base has not settled it until the branch merges.
-    git(&root, &["switch", "-q", "main"]);
-    assert_eq!(listed(&root).len(), 3);
+    // An item done on the base after the branch was made is not in this
+    // checkout, so nothing of it is listed or settled here.
+    let base = scratch.worktree("base");
+    write_item(&base, "demo-l8tr", "done", &["t4"], &[], "Done.");
+    write_review(
+        &base,
+        ".atelier/items/demo-l8tr/reviews/1-cccc.md",
+        "approve",
+        "## Finding 1: Later\nRecommendation: defer\n",
+    );
+    git(&base, &["add", "-A"]);
+    git(&base, &["commit", "-qm", "Merge demo-l8tr"]);
+    git(&base, &["branch", "-f", "main", "HEAD"]);
+    assert_eq!(listed(&root), ["demo-d0ne/1-aaaa.1", "demo-d0ne/1-aaaa.4"]);
+    let run = atelier(
+        &root,
+        "t1",
+        &["drop", "demo-l8tr/1-cccc.1", "--reason", "x"],
+    );
+    assert_eq!(run.code, 1);
+    assert!(run
+        .stderr
+        .contains("A review of demo-l8tr has a finding 1-cccc.1 (none does)"));
+    // The base has not settled the branch's finding until the branch merges.
+    assert_eq!(listed(&base).len(), 4);
 }

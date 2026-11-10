@@ -56,27 +56,13 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
 }
 
 /// `list --deferred`: the deferred findings of done items that nobody has
-/// settled. Done items are read as `list` reads them, from the base's last
-/// commit; a finding this checkout settles, committed or not, is left out
-/// too, so the list shrinks as each one is settled.
+/// settled. It reads the items of this checkout, committed or not, as
+/// `new --from` and `drop` do, so it lists what they would settle here.
 pub fn deferred(repo: &mut Repo) -> Result<Outcome> {
     let mut found = Vec::new();
-    for located in repo.everything()? {
-        let Some(record) = located.record() else {
-            continue;
-        };
-        let here = match repo.checkout_item(&located.id)? {
-            Some(dir) => dir.findings()?,
-            None => Vec::new(),
-        };
-        for finding in unsettled(record)? {
-            let settled_here = here
-                .iter()
-                .any(|f| f.name == finding.name && f.is_settled());
-            if !settled_here {
-                found.push((located.id.clone(), finding));
-            }
-        }
+    for dir in repo.store().items()? {
+        let unsettled = unsettled(&dir)?.into_iter();
+        found.extend(unsettled.map(|finding| (dir.item.id.clone(), finding)));
     }
     Ok(Outcome::Done(view_output::deferred(&found)))
 }

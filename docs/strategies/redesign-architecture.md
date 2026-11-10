@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
+last_changed: "2026-11-10: list --deferred, and new --from and drop on a finding (atelier-dxrj); drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
 ---
 
 # Atelier redesign: architecture specification
@@ -242,18 +242,31 @@ A review whose verdict is approve while one of its own findings is open is
 refused.
 
 A finding is deferred when its recommendation is defer or a decision
-deferred it (`Decided: defer`). A deferred finding is unsettled until its
-text gains
+deferred it, by a `Decided: defer` line or by a Decisions entry naming it
+with `Outcome: defer`, unless a later round carries it: then the carrying
+finding is the one that stands (`atelier_core::is_deferred`). A deferred
+finding is unsettled until its text gains
 `Taken: <item> by <thread>`, written by `new --from`, or
 `Dropped by <thread>: <reason>`, written by `drop`; `<item>` is an item
-ID, and a finding with both lines is refused. Only a finding of a done
-item can be settled, and a settled one is refused. The line is written in
+ID, and a finding with both lines is refused. The tool writes the line
+right after the finding's `Recommendation:` line, which is outside any
+fence, so it is read whatever else the finding holds. Across items a
+finding is named `<item>/<finding>`, as in `atelier-06jc/2-m2bn.1`: `list
+--deferred` prints that name, and `new --from` and `drop` take it. Only a
+finding of a done item can be settled, and a settled one is refused. The
+line is written in
 the checkout the command runs in, like any record write: on the base, or on
 the branch of a gardener's run, where the staleness rule counts it as a
 change outside the run's own item, so it is reviewed and reaches the base in
 the run's merge. Two branches that settle one finding differently conflict
 when the second merges, and Git reports it. These are the only writes to a
 review after its verdict, and the only writes to a done item.
+
+`new "<title>" --from <finding>` writes a draft item whose Goal names the
+finding and its review file and quotes the finding, heading and text, and
+the `Taken:` line, in one run: it validates both first, writes the item and
+then the review, and removes the item again if the review cannot be
+written. `drop <finding> --reason "<why>"` needs a reason on one line.
 
 `caused_by` is checked for form only. The item that caused a bug may have
 left the tree at the cutover, and then its ID or the commit is still worth
@@ -313,7 +326,7 @@ will check.
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `ready` | `done` | every item done or dropped; Result written |
 | `drop` | Planner | `draft`, `ready`, and an item's started statuses | `dropped` | a reason, on one line; written on the base, whatever the item's branch holds |
-| `new --from`, `drop` on a finding | Planner on the base, or an implementer on its branch | a deferred finding not yet settled | unchanged | the finding's item is done |
+| `new --from`, `drop` on a finding | Planner on the base, or an implementer on its branch | `done`, the finding's item | unchanged | a review of the item has the finding; it is deferred; it is not settled |
 | `lead` | Lead | a `ready` mission | unchanged | none |
 
 Each act writes the status in the commit the act already makes: `submit`
@@ -326,8 +339,9 @@ How the table is built:
   `ready` on an item and on a mission, `start`, `start --new`, `start`
   taking over, `submit`, `review`, both verdicts and `merge` with and
   without `--trivial`, `lead`, `drop` (one row, for an item and a
-  mission), `close` on an item and on a mission, and both verdicts on a
-  plan review. A mission's row is checked with `acts::check_mission`, from
+  mission), `close` on an item and on a mission, both verdicts on a
+  plan review, and settling a finding (`Act::Settle`), whose finding's
+  conditions `acts::check_settle` checks after the row's. A mission's row is checked with `acts::check_mission`, from
   the mission's status and, for `close`, the status of each item that names
   it, each found as `Located::record` finds it, and its Result; for a
   verdict, from the caller's plan review. `start --new` runs from no
@@ -480,7 +494,11 @@ post-checkout Git hook prints it on every branch switch.
   prints the Git command that commits the checkout's planning.
 - **Planning is read and written in the checkout of the base.** `new`,
   `set`, `ready`, `drop` and `close` run only on the base branch, and are
-  refused elsewhere, naming the checkout that has the base. They read the checkout's records, with an
+  refused elsewhere, naming the checkout that has the base. `new --from`
+  and `drop` on a finding also run on the branch of a started item whose
+  last implementer is the caller; there they read and write that checkout
+  the same way, and their output says the write reaches the base in that
+  item's merge and makes an approval of it stale. They read the checkout's records, with an
   item's branch found as above, so uncommitted planning counts and a started
   item is still seen as started. Each validates the records it writes against
   every record of the checkout and writes nothing when one of them has a
@@ -544,7 +562,11 @@ post-checkout Git hook prints it on every branch switch.
   the caller holds as implementer or as the round's reviewer, and missions
   it leads with their items; `--done` turns all of this to done and dropped
   items and missions. Flags narrow together; with `--ready`, `--blocked` or
-  `--needs-human` a mission is shown only for an item kept under it. The site already enumerates local branches for work in flight.
+  `--needs-human` a mission is shown only for an item kept under it.
+  `--deferred`, which takes no other flag, lists instead each unsettled
+  deferred finding of a done item, by its name and title; it reads the
+  items of the checkout it runs in, committed or not, as `new --from` and
+  `drop` do, so it lists what they would settle there. The site already enumerates local branches for work in flight.
   Every command also reads its item, and each blocker of a ready item, this
   way.
 - **Starting is one atomic step.** `start` writes the commit that sets

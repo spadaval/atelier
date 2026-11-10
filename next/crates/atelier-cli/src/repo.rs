@@ -221,8 +221,7 @@ impl Repo {
         Ok(parse_config(Path::new(&shown), &text)?)
     }
 
-    /// The item `id` as this checkout holds it, committed or not.
-    pub fn checkout_item(&self, id: &str) -> Result<Option<ItemDir>> {
+    fn checkout_item(&self, id: &str) -> Result<Option<ItemDir>> {
         let store = self.store();
         if !self.root.join(item_path(id)).exists() {
             return Ok(None);
