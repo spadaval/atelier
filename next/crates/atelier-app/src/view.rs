@@ -1,7 +1,7 @@
 //! Where an item's record is read from, and what `status` shows.
 
 use crate::acts::{next, unmet, Act, Condition, Facts, STARTED};
-use atelier_core::{Priority, ReviewName, Status, Thread};
+use atelier_core::{Priority, ReviewName, Status, Thread, Verdict};
 use atelier_records::{ItemDir, Problem};
 use std::collections::HashMap;
 
@@ -49,6 +49,14 @@ pub struct Entry {
     pub holds: bool,
     /// This round's review, when the caller holds it.
     pub review: Option<ReviewName>,
+    /// While it is in review, the thread holding this round's review file,
+    /// if one is open.
+    pub reviewer: Option<Thread>,
+    /// The last review the caller held, with its verdict, when it is not
+    /// this round's reviewer.
+    pub reviewed: Option<(ReviewName, Option<Verdict>)>,
+    /// What the checkout has not committed, where the CLI gathered it.
+    pub uncommitted: Vec<String>,
     /// The act the caller would run next, and its conditions that do not
     /// hold.
     pub next: Option<Act>,
@@ -70,6 +78,23 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         holder: facts.holder().cloned(),
         holds: facts.holds(),
         review: facts.reviewing().map(|file| file.name.clone()),
+        reviewer: match facts.status() {
+            Status::InReview => facts
+                .round()
+                .review
+                .and_then(|file| file.review.reviewers.holder().cloned()),
+            _ => None,
+        },
+        reviewed: facts
+            .reviewing()
+            .is_none()
+            .then(|| facts.reviewed())
+            .flatten()
+            .map(|file| (file.name.clone(), file.review.verdict)),
+        uncommitted: facts
+            .checkout
+            .map(|checkout| checkout.uncommitted.clone())
+            .unwrap_or_default(),
         next,
         unmet,
     })

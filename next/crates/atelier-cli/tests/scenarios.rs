@@ -64,6 +64,7 @@ fn start_commits_building_then_creates_the_branch_and_status_says_what_is_next()
             "You are the implementer of {ID} (thread t1).\nItem: {}\nTitle: Say hello\n\
              Status: building\nTo submit it for review:\n  [ ] Done when: `hello` prints hello.\n\
              \x20 [ ] Done when: A test covers it.\n  [ ] Report: written under `## Report`\n\
+             `atelier submit` commits only the item's directory, so commit your change first.\n\
              Then: atelier submit\n",
             item_path(ID)
         )
@@ -121,7 +122,10 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     assert_eq!(
         submitted.stdout,
         format!(
-            "Submitted {ID} for review.\nStart a reviewer with: Run `atelier review {ID}` and follow what it prints.\n"
+            "Submitted {ID} for review.\nA reviewer must be another thread: not you, and not a \
+             subagent of yours, which runs as your thread. Start one with your harness's tool for \
+             a new agent thread, and give it this task:\n  Run atelier review {ID} and follow \
+             what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
         )
     );
     // One commit, holding the status and the Report; nothing left over.
@@ -131,10 +135,19 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
         .contains("It prints hello, and a test covers it."));
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
 
-    // In review, the implementer waits, and a second submit is refused.
+    // In review, the implementer is told to start a reviewer, then who
+    // holds the review; a second submit is refused.
     let waiting = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        waiting.contains("Status: in review\nWaiting for a reviewer's verdict."),
+        waiting.contains("Status: in review\nNo reviewer has opened this round's review yet.\n"),
+        "{waiting}"
+    );
+    assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
+    let waiting = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        waiting.contains(
+            "Status: in review\nThread t2 holds this round's review. Wait for its verdict"
+        ),
         "{waiting}"
     );
     let again = atelier(&root, "t1", &["submit"]);
@@ -380,7 +393,7 @@ fn only_the_holder_submits_and_others_are_pointed_at_the_take_over() {
         status,
         format!(
             "You are thread t2, on the branch of {ID}, which is held by t1.\nTitle: Say hello\n\
-             Status: building\nThen: atelier start {ID}\n"
+             Status: building\nOnly if you mean to take it over from its holder: atelier start {ID}\n"
         )
     );
     let run = atelier(&root, "t2", &["submit"]);
@@ -511,7 +524,8 @@ fn a_refusal_lists_the_conditions_of_the_act_refused() {
         run.stderr,
         "`atelier submit` refused; nothing changed.\nTo submit it for review:\n  \
          [ ] Done when: `hello` prints hello.\n  [ ] Done when: A test covers it.\n  \
-         [ ] Report: written under `## Report`\nThen: atelier submit\n"
+         [ ] Report: written under `## Report`\n`atelier submit` commits only the item's \
+         directory, so commit your change first.\nThen: atelier submit\n"
     );
 }
 
@@ -743,6 +757,22 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
     assert!(again
         .stderr
         .starts_with(&format!("{ID} is changes requested")));
+    // Nor is it pointed at the item itself, by `status` or by `review`.
+    let done = "Your review is done, and nothing on this item is yours to do.";
+    let status = atelier(&root, "t2", &["status"]).stdout;
+    assert!(
+        status.starts_with(&format!(
+            "You reviewed {ID} (thread t2): review {stem}, changes requested. It is held by t1.\n"
+        )),
+        "{status}"
+    );
+    assert!(
+        status.contains(done) && !status.contains("atelier start"),
+        "{status}"
+    );
+    let review = atelier(&root, "t2", &["review", ID]);
+    assert_eq!(review.code, 1);
+    assert!(review.stderr.contains(done) && !review.stderr.contains("atelier start"));
 }
 
 #[test]

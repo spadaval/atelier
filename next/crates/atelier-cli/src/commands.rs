@@ -120,11 +120,12 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let message = format!("Submit {} for review", item.id);
     let file = [(item_path(&item.id), render_item(&item))];
     write_and_commit(repo, &file, &[&item_dir(&item.id)], &message)?;
+    let left = repo.uncommitted(&item.id)?;
     let shared = match &config.forge {
         Some(forge) => share(repo, forge, &item.id, &item.title)?,
         None => String::new(),
     };
-    Ok(Outcome::Done(output::submitted(&item.id, &shared)))
+    Ok(Outcome::Done(output::submitted(&item.id, &left, &shared)))
 }
 
 /// Pushes the branch and opens its pull request, so CI runs during the

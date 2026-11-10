@@ -71,5 +71,41 @@ class AgentEnvTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class CodexTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="af-codex-test-"))
+        self.real_auth = run.CODEX_AUTH
+
+    def tearDown(self):
+        run.CODEX_AUTH = self.real_auth
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_a_codex_transcript_gives_its_last_reply_once_its_turn_completed(self):
+        transcript = self.tmp / "t.jsonl"
+        transcript.write_text("Reading additional input from stdin...\n" + "\n".join(
+            json.dumps(e) for e in [
+                {"type": "thread.started", "thread_id": "x"},
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "a"}},
+                {"type": "item.completed", "item": {"type": "agent_message", "text": "b"}},
+                {"type": "turn.completed", "usage": {}}]))
+        info = run.read_transcript(transcript)
+        self.assertEqual(info["result"]["result"], "b")
+        self.assertIsNone(run.invalid_reason("none", 0, info))
+        transcript.write_text(json.dumps({"type": "thread.started", "thread_id": "x"}))
+        self.assertEqual(run.invalid_reason("none", 0, run.read_transcript(transcript)),
+                         "no successful result event")
+
+    def test_the_sign_in_is_linked_into_a_scratch_home_and_removed(self):
+        run.CODEX_AUTH = self.tmp / "host-auth.json"
+        run.CODEX_AUTH.write_text("{}")
+        env = run.agent_env(self.tmp / "work", "codex")
+        link = Path(env["CODEX_HOME"]) / "auth.json"
+        self.assertEqual(env["HOME"], str(self.tmp / "work" / "home"))
+        self.assertTrue(link.is_symlink())
+        run.unlink_auth(self.tmp / "work")
+        self.assertFalse(link.exists() or link.is_symlink())
+        self.assertTrue(run.CODEX_AUTH.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1003,7 +1003,10 @@ fn with_a_forge_submit_pushes_the_branch_and_opens_its_pull_request() {
         run.stdout,
         format!(
             "Submitted {ID} for review.\nPushed branch {ID} to origin. {PULL}\
-             Start a reviewer with: Run `atelier review {ID}` and follow what it prints.\n"
+             A reviewer must be another thread: not you, and not a subagent of yours, which runs \
+             as your thread. Start one with your harness's tool for a new agent thread, and give \
+             it this task:\n  Run atelier review {ID} and follow what it prints.\n\
+             Then wait for its verdict, and run `atelier status`.\n"
         )
     );
     assert_eq!(forge.remote(ID), Some(head(&root, ID)));
@@ -1050,7 +1053,7 @@ fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it
     );
     assert!(
         run.stdout.contains(
-            "The item is in review all the same; `atelier merge` will push the branch.\nStart a reviewer with: "
+            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be another thread: "
         ),
         "{}",
         run.stdout

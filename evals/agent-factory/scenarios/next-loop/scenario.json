@@ -1,0 +1,9 @@
+{
+  "description": "The redesigned atelier (next/) on a fixture with one ready item, a small change to slugify with a test, and no skill or instructions: the prompt is only \"Run `atelier status` and do what it says.\" Each agent runs as a thread with its own T3CODE_THREAD_ID and can start another with `delegate`. Pass: the item is done on main by an Atelier merge, a review on main approves it and none of its reviewers ever implemented it, and the change's tests pass on main, cover both Done when examples and fail on the original code. Refused and errored `atelier` calls are counted across every thread; the mission's limit is one per run. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["fresh-agent-loop"],
+  "threads": true,
+  "timeout_sec": 2400,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 15,
+  "thread_budget_usd": 10
+}
