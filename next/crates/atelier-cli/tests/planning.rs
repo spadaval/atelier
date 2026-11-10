@@ -1086,7 +1086,7 @@ fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews
     let branch = tip(&work, &id);
 
     let run = plan(&root, &["drop", &id, "--reason", "Nobody asked for it"]);
-    assert_eq!(wrote(&run.stdout), [path.clone()]);
+    assert_eq!(wrote(&run.stdout), std::slice::from_ref(&path));
     let text = read(&root, &path);
     assert_eq!(front(&text, "status"), "dropped");
     assert_eq!(front(&text, "implementers"), "t1");
