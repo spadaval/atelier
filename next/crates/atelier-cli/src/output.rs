@@ -697,16 +697,21 @@ fn commits<T>(found: &[(String, String, T)], what: impl Fn(&T) -> String) -> Str
     text
 }
 
-/// The pre-push hook's refusal of a push of `base`: records that do not
+/// The pre-push hook's refusal of a push of `base`, whose commit on the
+/// remote, if it has one this clone has, is `old`: records that do not
 /// read, commits that bring code without an Atelier merge, with the paths
 /// they change outside planning, and commits that set an item done while
 /// its branch exists, with the item.
 pub fn push_refused(
     base: &str,
+    old: Option<&str>,
     unread: &[Problem],
     code: &[(String, String, Vec<String>)],
     done: &[(String, String, String)],
 ) -> String {
+    let old = old.map_or("<the remote's commit>".to_string(), |old| {
+        short(old).to_string()
+    });
     let mut text = "Atelier's pre-push hook refused this push; nothing was pushed.\n".to_string()
         + &problems(unread, &[]);
     if !unread.is_empty() {
@@ -718,7 +723,7 @@ pub fn push_refused(
         );
         text += &commits(code, |paths| format!("changes {}", some(paths)));
         text += &format!(
-            "Take these commits off {base} and onto an item's branch (atelier start --new \"<title>\" starts one), and atelier merge brings them in once the item is approved.\n"
+            "Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then git branch -f {base} {old} takes them off {base}, and atelier merge brings them in once the item is approved.\n"
         );
     }
     if !done.is_empty() {
@@ -729,7 +734,7 @@ pub fn push_refused(
             format!("sets {id} done while branch {id} exists")
         });
         text += &format!(
-            "Put each status back on {base}, and run atelier merge on the item's branch.\n"
+            "Take each such commit off {base}: git reset --keep HEAD^ when it is the last, else git rebase -i {old} and drop it. Then run atelier merge on the item's branch.\n"
         );
     }
     text

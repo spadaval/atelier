@@ -142,6 +142,7 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
     let base = Store::new(root.join(".atelier")).config()?.base_branch;
     let target = format!("refs/heads/{base}");
     let mut reader = CommitReader::new(root);
+    let mut old = None;
     let mut unread = Vec::new();
     let mut code = Vec::new();
     let mut done = Vec::new();
@@ -159,6 +160,7 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
             true => None,
             false => Some(remote),
         };
+        old = known;
         for commit in git::first_parent_line(root, local, known)? {
             if commit.atelier_merge && commit.parents.len() > 1 {
                 continue;
@@ -209,7 +211,7 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
         return Ok(Outcome::Done(String::new()));
     }
     Ok(Outcome::Refused(output::push_refused(
-        &base, &unread, &code, &done,
+        &base, old, &unread, &code, &done,
     )))
 }
 

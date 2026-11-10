@@ -407,7 +407,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
         .stderr
         .contains(&format!("  {commit} Say hello: changes hello.txt\n")));
     assert!(run.stderr.contains(
-        "Take these commits off main and onto an item's branch (atelier start --new \"<title>\" starts one), and atelier merge brings them in once the item is approved.\n"
+        &format!("Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then git branch -f main {} takes them off main, and atelier merge brings them in once the item is approved.\n", &pushed[..7])
     ));
     assert_eq!(remote_tip(&root, "main"), pushed);
 
@@ -468,6 +468,18 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let run = git_as(&root, &["push", "-q", "--force", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert_eq!(remote_tip(&root, "main"), pushed);
+
+    // The way out it names: the commits onto an item's branch, the base
+    // back to the remote's commit, and the push goes through.
+    let run = atelier(&root, "t1", &["start", "--new", "Move the check"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let moved = git(&root, &["symbolic-ref", "--short", "HEAD"]);
+    git(&root, &["branch", "-f", "main", &pushed[..7]]);
+    let run = git_as(&root, &["push", "-q", "origin", "main", &moved]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(remote_tip(&root, "main"), pushed);
+    let held = git(&root, &["log", "--format=%s", &moved]);
+    assert!(held.contains("Check it\n"), "{held}");
 }
 
 #[test]
@@ -547,6 +559,7 @@ fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branc
 fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     let scratch = pushed(&[(ID, "ready")]);
     let root = scratch.root();
+    let pushed = remote_tip(&root, "main");
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     git(&root, &["switch", "-q", "main"]);
     // Ready to done is `close`'s change, so the commit itself goes through.
@@ -557,12 +570,21 @@ fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     assert_ne!(run.code, 0);
     assert!(
         run.stderr.contains(&format!(
-            "Rule: an item whose branch exists is done on main only through atelier merge. These set one done:\n  {commit} Call it done: sets {ID} done while branch {ID} exists\nPut each status back on main, and run atelier merge on the item's branch.\n"
+            "Rule: an item whose branch exists is done on main only through atelier merge. These set one done:\n  {commit} Call it done: sets {ID} done while branch {ID} exists\nTake each such commit off main: git reset --keep HEAD^ when it is the last, else git rebase -i {} and drop it. Then run atelier merge on the item's branch.\n",
+            &pushed[..7]
         )),
         "{}",
         run.stderr
     );
     assert!(!run.stderr.contains("Rule: code"));
+    // The way out it names, with both hooks in place.
+    git(&root, &["reset", "-q", "--keep", "HEAD^"]);
+    let run = git_as(&root, &["push", "-q", "origin", "main"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(remote_tip(&root, "main"), pushed);
+
+    edit(&root, &item_path(ID), "status: ready", "status: done");
+    assert_eq!(commit_all(&root, "Call it done").code, 0);
 
     git(&root, &["branch", "-q", "-D", ID]);
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
