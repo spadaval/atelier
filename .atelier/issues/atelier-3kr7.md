@@ -4,6 +4,9 @@ id: "atelier-3kr7"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-3kr7
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Classify interventions, refusals and fix-now findings on seeded samples, with a second rater"
-updated_at: "2026-11-10T01:29:37.804028492+00:00"
+updated_at: "2026-11-10T14:15:30.767281960+00:00"
 ---
 
 ## Goal
