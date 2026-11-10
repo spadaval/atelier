@@ -14,22 +14,25 @@ relationships:
     id: "atelier-fcb7"
     type: "advances"
   - kind: "issue"
+    id: "atelier-nafc"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-yptz"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Have the site read the new records, and show what changed from the plan"
-updated_at: "2026-11-10T00:56:08.595125805+00:00"
+title: "Convert the site to the new records in place"
+updated_at: "2026-11-10T01:14:41.491387566+00:00"
 ---
 
 ## Goal
 
-Keep the site working across the layout change, and give the result view its comparison against the commit a mission was made ready at.
+Keep the dashboard working across the layout change by converting the site in place, last, so the time a reinstall could break the old dashboard is short.
 
 ## Done when
 
-- [ ] Provisional: the site's API tests and Playwright suite pass against fixture repositories in the new layout, and a mission's result page lists items added, dropped or redefined since its ready commit.
+- [ ] Provisional: the site's loader reads the three record kinds, its responses drop what the new model lacks, its fixtures are regenerated in the new layout, and the web typecheck, unit and Playwright jobs pass in the change that does it. `AGENTS.md` says not to run `cargo install` from the tree until the cutover.
 
 ## Context
 
@@ -37,4 +40,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 
 ## Unknowns
 
-- How much of the brief and debrief view code the new records make unnecessary.
+- How much of the brief and debrief view code survives; settled by reading the site's code when this step is planned.

@@ -15,13 +15,13 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "draft"
-title: "Rebuild the work loop as 17 commands that tell each thread what it holds and what comes next"
-updated_at: "2026-11-10T00:56:04.348189885+00:00"
+title: "Rebuild the work loop as 18 commands that tell each thread what it holds and what comes next"
+updated_at: "2026-11-10T01:14:37.829926417+00:00"
 ---
 
 ## Outcome
 
-A new `atelier` binary on master implements the product specification's records and commands, and is installed nowhere. A fresh agent told only to run `atelier status` takes a ready item to done with an independent reviewer. A converted scratch clone of each of the five repositories passes `check` and completes one item. The old commands, their code and their tests are gone from the tree.
+A second binary on master, `atelier-next`, implements the product specification's records and commands. It is installed nowhere, and the old binary beside it is untouched. A fresh agent told only to run `atelier status` takes a ready item to done with an independent reviewer. A converted scratch clone of each of the five repositories passes `check` and completes one item. The site reads the new records.
 
 ## Background
 

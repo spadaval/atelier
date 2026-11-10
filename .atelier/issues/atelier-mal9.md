@@ -17,25 +17,26 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Read, write and validate item, review and config records in the new layout"
-updated_at: "2026-11-10T00:56:06.471222574+00:00"
+updated_at: "2026-11-10T01:14:39.608757032+00:00"
 ---
 
 ## Goal
 
-Build the record store the new commands stand on: `items/<id>/item.md`, `reviews/<n>.md` and `config.toml` at schema version 3, as the architecture specification's Records section defines them, in new modules of `atelier-core` and `atelier-records`.
+Build the record store the new commands stand on: `items/<id>/item.md`, `reviews/<round>-<suffix>.md` and `config.toml` at schema version 3, as the architecture specification's Records section defines them, in new modules of `atelier-core` and `atelier-records`.
 
 ## Done when
 
 - [ ] Unit tests parse and write each record kind and get the same file back, with the Markdown body preserved byte for byte.
-- [ ] Validation rejects each of these with a message naming the file and the field: an unknown status; an item with no Goal or no Done when section; a finding with no Recommendation line; a review whose verdict is approve while it holds a fix-now finding; a `mission` or `blocked_by` that names no record.
-- [ ] Creating a review under an item that has reviews 1 and 2 writes `reviews/3.md`.
-- [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks and the forge, and an unknown key is an error that names it.
+- [ ] Validation rejects each of these with a message naming the file and the field: an unknown status; an item with no Goal or no Done when section; a finding with no Recommendation line; a review whose verdict is approve while it holds an open fix-now finding; a `blocked_by` that names no item.
+- [ ] Unit tests cover when a fix-now finding is open: it stays open until a later round marks it fixed or withdrawn, or a Decisions entry naming it has an outcome.
+- [ ] Creating a review for round 2 writes `reviews/2-<suffix>.md` with four random characters, and two reviews created for the same round have different names.
+- [ ] `config.toml` parsing covers the base branch, the merge strategy, merge checks, and a forge with and without `ci_workflow`; an unknown key is an error that names it.
 - [ ] The old binary's tests pass unchanged.
 - [ ] The Records section of `docs/strategies/redesign-architecture.md` matches what was built; the Report lists each difference corrected there.
 
 ## Scope
 
-Item, review and config records. Mission records belong to step B. No CLI. The new modules reuse the existing front-matter splitting and ID generation and do not depend on `atelier-workflow` or on the old issue and review record types; the old code is not changed.
+Item, review and config records. Mission records, and checking that an item's `mission` names one, belong to step B. No CLI. The new modules reuse the existing front-matter splitting and ID generation and do not depend on `atelier-workflow` or on the old issue and review record types; the old code is not changed.
 
 ## Context
 

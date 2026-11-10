@@ -1,11 +1,11 @@
 ---
 status: draft
-last_changed: "2026-11-09: first draft"
+last_changed: "2026-11-09: revised after planning review round 1: the cutover protocol, waits on the freeze not the report"
 ---
 
 # Why
 
-Mission 2 leaves a new binary on master that nothing uses. The installed
+Mission 2 leaves a second binary on master that nothing uses. The installed
 binary and the installed Agent Factory skill are each one per host, so every
 repository on a host changes process together. This mission makes that change
 once, with a rehearsal behind it and a way back.
@@ -20,14 +20,16 @@ run since.
 On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio
 run on the new records and the new binary. Agent Factory is rewritten against
 the new tool, and each procedure it keeps has an eval scenario it changed.
-The old docs and the ADRs are replaced by the design record. Sumeet has a
-runbook to convert his work host.
+The old command layer and the library code only it used are deleted. The old
+docs and the ADRs are replaced by the design record. Sumeet has a runbook to
+convert his work host.
 
 # Success Criteria
 
 - five-converted: with the new binary installed, `atelier check` passes in
-  all five repositories, and one real item has gone from ready to done in
-  atelier and in one product repository.
+  all five repositories. The cutover item itself went from building to done
+  under the new binary in atelier, and one item went from ready to done in a
+  product repository.
 - no-old-surface: a search for each removed command and record path finds
   nothing in the skill, in the five repositories' `AGENTS.md` and
   `CLAUDE.md`, or under `docs/`.
@@ -58,8 +60,11 @@ June system again: 31% of the Rust ever written here survives.
   to keep it.
 - **Independent review and the three exits of a fix-now finding are fixed.**
   They are Sumeet's, and the evals do not put them up for removal.
-- **One cutover, atelier first.** All five convert in one sitting, atelier
-  before the others, with a smoke check between.
+- **One cutover, atelier first.** All five convert in one sitting. The
+  cutover is one item that starts under the old tool and finishes under the
+  new one: the converter converts it in flight, and its own review and merge
+  are the first use of the new loop.
+- **It waits on the baseline's frozen inputs, not on the baseline report.**
 
 # Design
 
@@ -67,11 +72,11 @@ Six steps, all in the backlog until mission 2's evidence is in.
 
 | Step | Does |
 | --- | --- |
-| A. Skill | Rewrite `SKILL.md` and one file per role against the new commands. Move what the tool now prints out of the skill. Fold the constitution's live rules into the role files and delete the rest. |
-| B. Evals | Port the scenarios to the new binary. Add a no-skill arm and a Codex arm. Cut each procedure no scenario supports. |
+| A. Skill | Rewrite `SKILL.md` and one file per role against the new commands. Move what the tool now prints out of the skill. Fold the constitution's live rules into the role files and delete the rest. It merges to master and does not go live until the cutover moves the skill checkout. |
+| B. Evals | Port the scenarios to `atelier-next`. Add a no-skill arm and a Codex arm. Cut each procedure no scenario supports. |
 | C. Backlog sort | Sort the 147 open items and five open missions: converted as they are, rewritten for the new tool, or dropped as obsolete, with the list in the report. |
-| D. Cutover | Run the runbook in the [architecture specification](redesign-architecture.md#transition) on this host. Update each repository's `AGENTS.md`. |
-| E. First work | Run one real item in atelier and one in a product repository. Fix what the first use breaks. |
+| D. Cutover | The one item the [architecture specification](redesign-architecture.md#transition) describes: convert atelier and switch the binary on its branch, review and merge it with the new binary, install, then convert the other four. The rollback is tried on scratch clones first. |
+| E. Clean-up and first work | Delete the library code nothing reaches any more. Run one item in a product repository. Fix what first use breaks. |
 | F. Docs | Replace `docs/product/`, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record and the current architecture pages. Move open missions' strategies into their directories. |
 
 The skill's size is reported before and after as an indication. The current
@@ -117,7 +122,11 @@ specifications do not name is escalated, not fixed in place.
 
 - **Work in flight at the cutover.** A branch not merged or abandoned before
   conversion loses its reviews. The runbook's first step refuses to go on
-  while any item is in progress.
+  while any item but the cutover item is in progress.
+- **The cutover item's own review is large.** It holds the converted records
+  and the deletion of the old command layer and its tests. Both are
+  mechanical: the reviewer checks the conversion against the rehearsal's
+  output and that the code change only deletes and re-points.
 - **Sumeet's other threads.** An agent working in a product repository during
   the cutover would meet a tool that changed under it. The orchestrator
   checks T3's running threads first and waits.

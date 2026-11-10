@@ -17,25 +17,22 @@ relationships:
     id: "atelier-fcb7"
     type: "advances"
   - kind: "issue"
-    id: "atelier-oci2"
-    type: "blocked_by"
-  - kind: "issue"
     id: "atelier-pz1y"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Convert and rehearse on all five repositories, then delete the old commands and rename the binary"
-updated_at: "2026-11-10T00:56:08.858805140+00:00"
+title: "Write the converter, and rehearse it and the new binary on all five repositories"
+updated_at: "2026-11-10T01:14:41.224064285+00:00"
 ---
 
 ## Goal
 
-Prove the new binary on real data, then remove the old command layer and its tests from the tree.
+Prove the converter and the new binary on real data before the cutover depends on them.
 
 ## Done when
 
-- [ ] Provisional: `scripts/convert_records.py` and the new binary pass `check` and complete one item on a scratch clone of each of the five repositories (the mission criterion `rehearsal`); the old modules, commands and tests are deleted; `atelier-next` is renamed `atelier`; CI's `check` step pins 0.4.0; the Report gives non-test Rust before and after.
+- [ ] Provisional: `scripts/convert_records.py` and `atelier-next` pass `check` and complete one item on a scratch clone of each of the five repositories (the mission criterion `rehearsal`), and the converter converts one item in flight as `building`.
 
 ## Context
 

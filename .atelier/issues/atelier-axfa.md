@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Add `escalate` and `decide`, rebuttals in the brief, and `list --deferred`"
-updated_at: "2026-11-10T00:56:08.066927831+00:00"
+updated_at: "2026-11-10T01:14:40.952472458+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Give a disagreement between implementer and reviewer its three exits in the tool
 
 ## Done when
 
-- [ ] Provisional: scenario tests cover a rebuttal the next reviewer withdraws, one it keeps, and an escalation a decider answers; `list --deferred` shows deferred findings across done items.
+- [ ] Provisional: scenario tests cover a rebuttal the next reviewer withdraws; one it keeps; an escalation tied to a finding that a decider settles with `--defer`, after which `submit` passes, the next review shows the finding as decided and `verdict approve` is allowed; and `decide` refused for the implementer and for the reviewer who raised the finding. `list --deferred` shows deferred findings across done items.
 
 ## Context
 

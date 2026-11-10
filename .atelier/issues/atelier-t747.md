@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Run the skill against no skill on Claude Opus and Codex, and cut what no scenario supports"
-updated_at: "2026-11-10T00:56:09.383226546+00:00"
+updated_at: "2026-11-10T01:14:41.759781943+00:00"
 ---
 
 ## Goal
@@ -37,4 +37,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 
 ## Unknowns
 
-- Whether three runs per cell separate the arms. Where they do not, the procedure is cut.
+- Whether three runs per cell separate the arms. The strategy's default is to cut a procedure whose scenario shows no difference. Planning review finding atelier-395f argues that three tied runs are inconclusive, and that duplicated text should be cut first and judgment rules only on better evidence. Settle which rule applies when this step is planned.

@@ -14,28 +14,31 @@ relationships:
     id: "atelier-5zre"
     type: "blocked_by"
   - kind: "issue"
-    id: "atelier-6sti"
+    id: "atelier-oci2"
     type: "blocked_by"
   - kind: "issue"
     id: "atelier-qr5s"
     type: "advances"
+  - kind: "issue"
+    id: "atelier-scx2"
+    type: "blocked_by"
   - kind: "issue"
     id: "atelier-t747"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Cut this host over: convert the five repositories and install the new binary and skill"
-updated_at: "2026-11-10T00:56:09.915045297+00:00"
+title: "Cut this host over: convert atelier and switch the binary in one item, then convert the other four repositories"
+updated_at: "2026-11-10T01:14:42.029304934+00:00"
 ---
 
 ## Goal
 
-Run the runbook in the architecture specification's Transition section on this host.
+Make the change of tool once, on this host, as the one item the architecture specification's Transition section describes.
 
 ## Done when
 
-- [ ] Provisional: the mission criteria `five-converted` and `no-old-surface`; the rollback was tried once on a scratch clone beforehand.
+- [ ] Provisional: the mission criteria `five-converted` and `no-old-surface`. The item started under the old tool, the converter converted it in flight, and its review and merge ran under the binary built from its branch. The rollback was tried once on scratch clones beforehand.
 
 ## Context
 
@@ -43,4 +46,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 
 ## Unknowns
 
-- When no work is in flight in any of the five repositories.
+- When no other work is in flight in any of the five repositories.

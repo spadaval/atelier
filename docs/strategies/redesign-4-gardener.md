@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: first draft"
+last_changed: "2026-11-09: revised after planning review round 1: what thread fields do and do not give"
 ---
 
 # Why
@@ -13,8 +13,10 @@ before it can edit. Its one digest, atelier-j86z, is ten entries about the
 tool and none about a codebase, and it waits in a queue where 6 of 63 items
 have been answered.
 
-After the cutover, records carry each item's status and threads, so most of
-the scorecard can be computed without reading transcripts.
+After the cutover, records carry each item's status and the threads that
+held it, so the scorecard can tie a thread to an item without guessing from
+thread titles. Tool calls, tokens and Sumeet's messages still come from T3's
+events and the transcripts.
 
 # Outcome
 
@@ -30,7 +32,8 @@ most three proposals. One run has been made in each of the five repositories.
   of one page that holds the scorecard, the worst spots under each of the
   three codebase properties, and at most three proposals.
 - from-records: the scorecard scripts find each item's threads from the
-  records' thread fields, with no matching on thread titles.
+  records' thread fields and their Git history, with no matching on thread
+  titles.
 
 # Sizing
 
@@ -65,7 +68,7 @@ Four steps, all in the backlog until the cutover has happened.
 
 | Step | Does |
 | --- | --- |
-| A. Scorecard from records | Extend `scripts/scorecard/` to read the new records: status changes from Git history, threads from the records' fields. Remove the title matching mission 1 needed. |
+| A. Scorecard from records | Extend `scripts/scorecard/` to read the new records: status changes and earlier holders of a role from Git history, current holders from the records' fields. Remove the title matching mission 1 needed. Keep the event and transcript readers, and state each number's coverage. |
 | B. Readiness checklist | A short default list in the skill, mapped to the three properties, each line with the command or observation that tests it. A repository may add lines. Drawn from Factory's agent-readiness pillars, without the team-shaped criteria. |
 | C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report. Fold `audit.md` into it. The gardener also sorts `list --deferred`. |
 | D. First runs | One run in each of the five repositories. |
@@ -85,7 +88,7 @@ soon enough, for a run to have something to say. Step D's first runs come
 with only days of data under the new tool. They are expected to report the
 baseline and the checklist, and to say which numbers are not yet meaningful.
 The comparison that judges the redesign is a separate item outside this
-mission, picked up two weeks after the cutover.
+mission, atelier-pwhn, picked up two weeks after the cutover.
 
 # Scope
 

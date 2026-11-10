@@ -19,17 +19,17 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Run the first real items under the new tool, and fix what first use breaks"
-updated_at: "2026-11-10T00:56:10.176751966+00:00"
+title: "Delete the old library code, and run a first item in a product repository"
+updated_at: "2026-11-10T01:14:42.300877655+00:00"
 ---
 
 ## Goal
 
-Find what the rehearsal could not: one real item in atelier and one in a product repository, from ready to done.
+Remove what the cutover left unreachable, and find what the rehearsal could not.
 
 ## Done when
 
-- [ ] Provisional: both items are done, and each fix made along the way is inside the specifications or was escalated.
+- [ ] Provisional: the workflow crate, the old record types, the gate code, evidence, bundle, migrate and prune are deleted, with non-test Rust reported before and after; one item in a product repository has gone from ready to done; each fix made along the way is inside the specifications or was escalated.
 
 ## Context
 
@@ -37,4 +37,4 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 
 ## Unknowns
 
-- What breaks.
+- What first use breaks.
