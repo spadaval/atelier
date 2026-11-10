@@ -571,8 +571,8 @@ post-checkout Git hook prints it on every branch switch.
   so does anything that compares a record now with the same record at the
   commit of an earlier act.
 - **A plan review is written where its reviewer works.** `review <mission>`
-  runs in any checkout and reviews the plan as that checkout's HEAD holds
-  it. It creates the round's file under `missions/<id>/reviews/`, or
+  runs in any checkout not on an item's branch, where `verdict` would be
+  the item's, and reviews the plan as that checkout's HEAD holds it. It creates the round's file under `missions/<id>/reviews/`, or
   appends the caller to its `reviewers`, and commits nothing. `verdict`
   in a checkout on no item's branch records the verdict of the one plan
   review there that the caller holds without a verdict, and commits that

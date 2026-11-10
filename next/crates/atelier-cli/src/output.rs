@@ -934,6 +934,13 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
     )
 }
 
+pub fn plan_review_on_item(id: &str, branch: Option<&str>, base: &str) -> String {
+    format!(
+        "`atelier review {id}` reviews a mission's plan, and this checkout is on {}, an item's branch. Nothing changed.\nReview it in a detached worktree of {base}: git worktree add --detach <path> {base}\nThen: atelier review {id}\n",
+        place(branch)
+    )
+}
+
 pub fn plan_verdict_recorded(
     id: &str,
     round: u32,

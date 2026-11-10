@@ -1192,6 +1192,24 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
     let head = tip(&root, "HEAD");
     let reviews = plan_reviews(MISSION);
 
+    // Not on an item's branch, where `verdict` is the item's.
+    git(&root, &["branch", ID]);
+    let on_item = scratch.dir.path().join("on-item");
+    git(
+        &root,
+        &["worktree", "add", "-q", on_item.to_str().unwrap(), ID],
+    );
+    let refused = atelier(&on_item, "r1", &["review", MISSION]);
+    assert_eq!(refused.code, 1);
+    assert!(
+        refused
+            .stderr
+            .ends_with(&format!("Then: atelier review {MISSION}\n")),
+        "{}",
+        refused.stderr
+    );
+    assert!(files_in(&on_item, &reviews).is_empty());
+
     let first = atelier(&root, "r1", &["review", MISSION]);
     assert_eq!(first.code, 0, "{}", first.stderr);
     let files = files_in(&root, &reviews);

@@ -119,6 +119,11 @@ const MISSION_SECTIONS: [&str; 6] = [
 /// the plan's brief. It runs in any checkout, so two reviewers can each
 /// work blind in a detached worktree of their own, and commits nothing.
 fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
+    // There `verdict` records the item's review, not this one.
+    if repo.current()?.is_some() {
+        let refused = output::plan_review_on_item(id, repo.branch.as_deref(), &repo.base);
+        return Ok(Outcome::Refused(refused));
+    }
     let store = repo.store();
     let mission = store.mission(id)?;
     let round = plan_round(&mission, &repo.caller);
