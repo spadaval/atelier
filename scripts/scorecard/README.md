@@ -17,7 +17,7 @@ nice -n 19 ionice -c3 python3 scripts/scorecard/counted.py \
 sha256sum ~/.cache/scorecard-rerun/counted.json docs/architecture/quality/scorecard-baseline/counted.json
 ```
 
-It takes about a minute. Leave out `--out` to overwrite the committed files. The two hashes
+It takes one to two minutes. Leave out `--out` to overwrite the committed files. The two hashes
 match when the rerun reproduces the baseline. Then check the snapshot is unchanged:
 
 ```sh
