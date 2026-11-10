@@ -1,0 +1,850 @@
+{
+ "cutoff": "2026-11-10T05:14:58Z",
+ "prices": {
+  "claude-haiku-5-5": [
+   1.0,
+   0.1,
+   2.0,
+   5.0
+  ],
+  "claude-opus-5-5": [
+   4.0,
+   0.2,
+   8.0,
+   20.0
+  ],
+  "claude-sonnet-5-5": [
+   3.0,
+   0.3,
+   6.0,
+   15.0
+  ],
+  "gpt-6-luna": [
+   0.1,
+   0.01,
+   0.1,
+   0.5
+  ],
+  "gpt-6.1-sol": [
+   2.0,
+   0.1,
+   2.0,
+   10.0
+  ],
+  "grok-4.6-build": [
+   2.0,
+   0.5,
+   2.0,
+   6.0
+  ]
+ },
+ "repositories": {
+  "astromech": {
+   "calls_before_first_edit": {
+    "implementer_threads": 130,
+    "median_shell_commands": 16.5,
+    "median_tool_calls": 18.0
+   },
+   "commit": "ae4d18bac93f4165d9c2efd520e1747644ce0f74",
+   "confusion": {
+    "atelier_calls": 4136,
+    "confused_calls": 976,
+    "help_lookups": 589,
+    "per_100_calls": 23.6,
+    "refused_or_error": 410
+   },
+   "items": {
+    "done_in_window": 383,
+    "merged": 339,
+    "merged_with_threads": 196
+   },
+   "line_count": {
+    "language": "Rust",
+    "non_test_bytes_by_language": {
+     "JavaScript": 26860,
+     "Python": 300913,
+     "Rust": 4250405,
+     "Svelte": 497744,
+     "TypeScript": 405479
+    },
+    "non_test_lines": 78713,
+    "tests": "as `scripts/count_non_test_rust.py` counts them: files whose path contains `/tests/`, `src/test_records.rs`, and `#[cfg(test)]` items"
+   },
+   "process_share": {
+    "process_commands": 3125,
+    "share": 0.1787,
+    "shell_commands": 17485,
+    "token_cost_share": 0.1323,
+    "token_coverage": {
+     "threads_counted": 476,
+     "threads_with_transcript": 476
+    }
+   },
+   "record_only_commits": {
+    "commits": 2492,
+    "record_only": 1833,
+    "share": 0.7356
+   },
+   "rework": {
+    "days": 14,
+    "deleted_within_days": 15120,
+    "eligible_commits": 116,
+    "first_eligible": "d242981abf757b4b34ff0d6910e6ef4ffea0fc7f",
+    "last_eligible": "320366a080454026ae646dbcd67f1d616aa2eaee",
+    "lines_written": 209453,
+    "share": 0.0722,
+    "written_from": "2026-10-14T00:00:00Z",
+    "written_until": "2026-10-27T05:14:58Z"
+   },
+   "threads": {
+    "in_repository": 602,
+    "tied_by": {
+     "branch": 5,
+     "first_message": 462,
+     "title": 9
+    },
+    "tied_to_merged_item": 476,
+    "tied_to_other_item": 84,
+    "untied": 42
+   },
+   "tokens_per_merged_item": {
+    "items_fully_covered": 191,
+    "mean_usd": 9.11,
+    "median_usd": 3.22,
+    "per_item_usd": {
+     "astromech-08w8": 130.46,
+     "astromech-0d7l": 4.1,
+     "astromech-0k88": 5.08,
+     "astromech-0n4h": 1.02,
+     "astromech-0x68": 1.08,
+     "astromech-1135": 3.21,
+     "astromech-12uv": 0.33,
+     "astromech-1842": 16.39,
+     "astromech-1c66": 1.36,
+     "astromech-1hh9": 3.63,
+     "astromech-20dy": 5.59,
+     "astromech-2hml": 0.66,
+     "astromech-2u1x": 8.35,
+     "astromech-2za5": 0.45,
+     "astromech-32i6": 5.96,
+     "astromech-36g1": 0.34,
+     "astromech-3cxd": 1.46,
+     "astromech-3n7q": 2.88,
+     "astromech-3njr": 19.43,
+     "astromech-3x0x": 4.59,
+     "astromech-4irh": 0.28,
+     "astromech-4kw5": 0.27,
+     "astromech-4yds": 0.31,
+     "astromech-54hd": 0.73,
+     "astromech-5ggk": 147.11,
+     "astromech-5llf": 0.44,
+     "astromech-5qh0": 7.48,
+     "astromech-5t34": 5.29,
+     "astromech-5vjx": 3.37,
+     "astromech-627q": 0.22,
+     "astromech-6bjl": 15.69,
+     "astromech-6i8s": 43.13,
+     "astromech-6sf7": 2.31,
+     "astromech-6xyo": 5.4,
+     "astromech-7149": 2.9,
+     "astromech-77a1": 18.63,
+     "astromech-782v": 2.45,
+     "astromech-7ni2": 14.48,
+     "astromech-7rcn": 27.76,
+     "astromech-7uj3": 0.26,
+     "astromech-8997": 1.14,
+     "astromech-8fey": 0.67,
+     "astromech-8joi": 0.24,
+     "astromech-8ozh": 0.19,
+     "astromech-8qsx": 3.83,
+     "astromech-8s6k": 4.89,
+     "astromech-8sx3": 0.59,
+     "astromech-8zdt": 3.98,
+     "astromech-94j4": 1.41,
+     "astromech-96dv": 7.13,
+     "astromech-970a": 5.16,
+     "astromech-9lh3": 5.71,
+     "astromech-9mb9": 5.82,
+     "astromech-a50f": 8.72,
+     "astromech-ah0i": 11.27,
+     "astromech-aiwv": 1.9,
+     "astromech-aonb": 21.18,
+     "astromech-bf25": 1.72,
+     "astromech-bh0c": 0.35,
+     "astromech-bp23": 4.54,
+     "astromech-bztt": 1.14,
+     "astromech-c9em": 1.46,
+     "astromech-cmhv": 9.46,
+     "astromech-cwtv": 2.65,
+     "astromech-d1lo": 6.54,
+     "astromech-d2nq": 5.52,
+     "astromech-dlrb": 5.07,
+     "astromech-dpoc": 1.28,
+     "astromech-dr5j": 1.13,
+     "astromech-dt5h": 1.78,
+     "astromech-dzwy": 6.04,
+     "astromech-e0im": 2.37,
+     "astromech-e0zz": 0.66,
+     "astromech-e8ux": 8.99,
+     "astromech-egyl": 1.36,
+     "astromech-ew3x": 2.19,
+     "astromech-f1us": 3.22,
+     "astromech-f7i0": 6.31,
+     "astromech-fdh3": 11.22,
+     "astromech-fdyn": 6.6,
+     "astromech-fg9l": 1.3,
+     "astromech-flru": 1.29,
+     "astromech-g0hm": 2.45,
+     "astromech-g1ys": 0.25,
+     "astromech-g3qt": 8.72,
+     "astromech-gllh": 5.31,
+     "astromech-gp9x": 1.61,
+     "astromech-gtza": 2.28,
+     "astromech-h5gs": 2.27,
+     "astromech-h74l": 5.07,
+     "astromech-h95t": 5.31,
+     "astromech-hnar": 1.67,
+     "astromech-i1ev": 4.12,
+     "astromech-i8vr": 3.04,
+     "astromech-ipb5": 5.49,
+     "astromech-ix2p": 0.48,
+     "astromech-j4c9": 19.53,
+     "astromech-ja5a": 2.41,
+     "astromech-jdks": 3.32,
+     "astromech-jkgv": 30.81,
+     "astromech-jo3l": 15.74,
+     "astromech-k1fw": 2.55,
+     "astromech-k20i": 0.29,
+     "astromech-k3wp": 13.72,
+     "astromech-koa6": 1.02,
+     "astromech-kv9k": 2.74,
+     "astromech-ky3d": 1.32,
+     "astromech-l5c6": 1.48,
+     "astromech-ldiz": 0.31,
+     "astromech-lo81": 0.24,
+     "astromech-lxma": 20.73,
+     "astromech-m30a": 40.0,
+     "astromech-m3xd": 13.7,
+     "astromech-mcdt": 1.59,
+     "astromech-mcxc": 1.96,
+     "astromech-mf5e": 44.69,
+     "astromech-mh3m": 2.01,
+     "astromech-mk30": 3.4,
+     "astromech-mljg": 12.9,
+     "astromech-mosx": 0.16,
+     "astromech-mycc": 3.23,
+     "astromech-n1ij": 4.34,
+     "astromech-naa3": 0.28,
+     "astromech-ndzx": 3.37,
+     "astromech-ngyt": 46.13,
+     "astromech-nw2d": 0.97,
+     "astromech-o7jl": 0.5,
+     "astromech-ogq4": 0.33,
+     "astromech-oo8y": 7.31,
+     "astromech-p4ls": 26.83,
+     "astromech-p4um": 2.09,
+     "astromech-pb3o": 1.3,
+     "astromech-pd3h": 0.25,
+     "astromech-proz": 4.25,
+     "astromech-q318": 8.25,
+     "astromech-qiey": 3.85,
+     "astromech-qw2m": 6.64,
+     "astromech-qz9u": 14.37,
+     "astromech-r3s7": 0.31,
+     "astromech-rcui": 3.07,
+     "astromech-ro7a": 4.61,
+     "astromech-rpsb": 2.59,
+     "astromech-s0gz": 0.49,
+     "astromech-se44": 3.53,
+     "astromech-sfys": 36.9,
+     "astromech-sltm": 0.63,
+     "astromech-spxx": 0.91,
+     "astromech-ssyo": 1.95,
+     "astromech-t16r": 1.72,
+     "astromech-tgar": 0.54,
+     "astromech-thym": 0.34,
+     "astromech-tpdb": 6.44,
+     "astromech-txzq": 3.19,
+     "astromech-tyjz": 14.71,
+     "astromech-u8ge": 4.62,
+     "astromech-u8ir": 0.27,
+     "astromech-uuqt": 19.31,
+     "astromech-ux0h": 3.8,
+     "astromech-v3u4": 10.79,
+     "astromech-vkzj": 33.5,
+     "astromech-vlsz": 2.42,
+     "astromech-vucf": 7.75,
+     "astromech-w62j": 11.45,
+     "astromech-w8ai": 0.64,
+     "astromech-wgtr": 2.49,
+     "astromech-wzol": 2.11,
+     "astromech-x81p": 11.78,
+     "astromech-xca4": 0.26,
+     "astromech-xk0n": 5.37,
+     "astromech-xvjs": 22.61,
+     "astromech-xz7i": 2.22,
+     "astromech-y296": 1.92,
+     "astromech-y5mz": 0.77,
+     "astromech-y6d6": 49.83,
+     "astromech-y9cj": 0.53,
+     "astromech-yerd": 1.22,
+     "astromech-yil0": 196.67,
+     "astromech-yin0": 20.94,
+     "astromech-yis2": 3.83,
+     "astromech-yn6y": 6.89,
+     "astromech-ys47": 0.27,
+     "astromech-yxtz": 13.18,
+     "astromech-z4jb": 7.83,
+     "astromech-ze13": 2.31,
+     "astromech-zf3s": 25.08,
+     "astromech-zgoo": 3.98,
+     "astromech-zig3": 7.27,
+     "astromech-znhx": 56.66,
+     "astromech-znvi": 0.37,
+     "astromech-zs2q": 3.68,
+     "astromech-ztrb": 1.92
+    },
+    "threads_with_unpriced_model": 5,
+    "token_coverage": {
+     "threads_counted": 476,
+     "threads_with_transcript": 476
+    }
+   }
+  },
+  "atelier": {
+   "calls_before_first_edit": {
+    "implementer_threads": 81,
+    "median_shell_commands": 20.0,
+    "median_tool_calls": 22.0
+   },
+   "commit": "2ff78f214301f5d8d096f088ced4b97636f04700",
+   "confusion": {
+    "atelier_calls": 4619,
+    "confused_calls": 1164,
+    "help_lookups": 632,
+    "per_100_calls": 25.2,
+    "refused_or_error": 565
+   },
+   "items": {
+    "done_in_window": 305,
+    "merged": 243,
+    "merged_with_threads": 147
+   },
+   "line_count": {
+    "language": "Rust",
+    "non_test_bytes_by_language": {
+     "Python": 159420,
+     "Rust": 2225694,
+     "TypeScript": 98549
+    },
+    "non_test_lines": 48989,
+    "tests": "as `scripts/count_non_test_rust.py` counts them: files whose path contains `/tests/`, `src/test_records.rs`, and `#[cfg(test)]` items"
+   },
+   "process_share": {
+    "process_commands": 4007,
+    "share": 0.2803,
+    "shell_commands": 14295,
+    "token_cost_share": 0.216,
+    "token_coverage": {
+     "threads_counted": 346,
+     "threads_with_transcript": 342
+    }
+   },
+   "record_only_commits": {
+    "commits": 2545,
+    "record_only": 1935,
+    "share": 0.7603
+   },
+   "rework": {
+    "days": 14,
+    "deleted_within_days": 6207,
+    "eligible_commits": 169,
+    "first_eligible": "e2c0360025961bd1da744a637f833c4428d47e57",
+    "last_eligible": "5abb365186e4374e273c4b165aa904202a38fafb",
+    "lines_written": 57671,
+    "share": 0.1076,
+    "written_from": "2026-10-14T00:00:00Z",
+    "written_until": "2026-10-27T05:14:58Z"
+   },
+   "threads": {
+    "in_repository": 721,
+    "tied_by": {
+     "branch": 3,
+     "first_message": 124,
+     "title": 219
+    },
+    "tied_to_merged_item": 346,
+    "tied_to_other_item": 246,
+    "untied": 129
+   },
+   "tokens_per_merged_item": {
+    "items_fully_covered": 142,
+    "mean_usd": 7.61,
+    "median_usd": 3.06,
+    "per_item_usd": {
+     "atelier-0349": 2.14,
+     "atelier-0uaj": 28.91,
+     "atelier-1isk": 3.23,
+     "atelier-1mk4": 0.81,
+     "atelier-1ztv": 6.26,
+     "atelier-28mz": 0.84,
+     "atelier-2bjz": 9.25,
+     "atelier-2js4": 0.52,
+     "atelier-37uq": 3.25,
+     "atelier-3jdm": 14.54,
+     "atelier-3mjv": 3.41,
+     "atelier-3sk9": 14.7,
+     "atelier-40i6": 1.08,
+     "atelier-45gr": 8.07,
+     "atelier-4n7v": 2.03,
+     "atelier-4nsl": 35.76,
+     "atelier-4yqd": 7.06,
+     "atelier-59fz": 3.78,
+     "atelier-5fus": 3.47,
+     "atelier-5tl2": 0.77,
+     "atelier-749l": 0.47,
+     "atelier-7b6e": 8.39,
+     "atelier-7hh4": 0.89,
+     "atelier-7o4r": 2.25,
+     "atelier-7tul": 9.49,
+     "atelier-7v9q": 0.93,
+     "atelier-83xi": 1.38,
+     "atelier-8bh4": 28.81,
+     "atelier-8bil": 4.82,
+     "atelier-8bj8": 3.05,
+     "atelier-8v6s": 0.61,
+     "atelier-92mz": 1.32,
+     "atelier-976s": 7.36,
+     "atelier-9co2": 1.29,
+     "atelier-9g48": 1.89,
+     "atelier-9k7o": 0.97,
+     "atelier-9s9i": 1.88,
+     "atelier-acrt": 1.69,
+     "atelier-ah82": 4.92,
+     "atelier-ahpf": 12.43,
+     "atelier-as7i": 2.66,
+     "atelier-aufe": 1.44,
+     "atelier-b7hb": 0.99,
+     "atelier-bibd": 1.52,
+     "atelier-bqbz": 9.13,
+     "atelier-buqu": 8.64,
+     "atelier-by8u": 0.85,
+     "atelier-c3kh": 2.01,
+     "atelier-cafy": 0.74,
+     "atelier-cej5": 3.8,
+     "atelier-cfq9": 1.87,
+     "atelier-dg3h": 4.58,
+     "atelier-dkul": 3.59,
+     "atelier-e4c5": 1.05,
+     "atelier-ecah": 4.44,
+     "atelier-esu1": 0.94,
+     "atelier-fad5": 8.91,
+     "atelier-fip8": 1.97,
+     "atelier-fj1t": 1.49,
+     "atelier-fngz": 2.54,
+     "atelier-fnlu": 1.77,
+     "atelier-fyay": 0.34,
+     "atelier-g8cn": 0.69,
+     "atelier-h1nc": 18.77,
+     "atelier-ha6k": 0.99,
+     "atelier-ho7o": 3.8,
+     "atelier-hrgx": 0.35,
+     "atelier-hwxm": 35.24,
+     "atelier-hyew": 0.9,
+     "atelier-iaas": 6.56,
+     "atelier-ilba": 33.07,
+     "atelier-imbo": 0.97,
+     "atelier-imlh": 9.48,
+     "atelier-iozu": 4.36,
+     "atelier-ip9e": 0.69,
+     "atelier-j48s": 0.38,
+     "atelier-j8kg": 1.97,
+     "atelier-jnrh": 100.26,
+     "atelier-kaor": 1.44,
+     "atelier-ksx6": 2.22,
+     "atelier-l457": 29.44,
+     "atelier-l58v": 10.02,
+     "atelier-l5fu": 17.92,
+     "atelier-l7gl": 3.57,
+     "atelier-l7nz": 16.69,
+     "atelier-lnwf": 1.39,
+     "atelier-mbrf": 5.86,
+     "atelier-md0v": 97.67,
+     "atelier-mgl0": 2.95,
+     "atelier-ml3r": 60.0,
+     "atelier-mvzi": 1.83,
+     "atelier-n0qh": 12.29,
+     "atelier-n642": 9.42,
+     "atelier-n7g1": 1.77,
+     "atelier-nexd": 3.79,
+     "atelier-nn67": 25.18,
+     "atelier-nz6a": 5.29,
+     "atelier-o6h9": 2.05,
+     "atelier-ov97": 3.06,
+     "atelier-p189": 3.5,
+     "atelier-p2f3": 0.44,
+     "atelier-phfo": 6.89,
+     "atelier-pmib": 0.6,
+     "atelier-q8ok": 1.84,
+     "atelier-qj9d": 39.99,
+     "atelier-qohr": 1.03,
+     "atelier-qz9x": 1.06,
+     "atelier-r0fj": 16.44,
+     "atelier-r28p": 5.37,
+     "atelier-r7cd": 1.57,
+     "atelier-r9hb": 7.39,
+     "atelier-rkxm": 4.92,
+     "atelier-rx22": 3.39,
+     "atelier-s2ei": 7.65,
+     "atelier-s66u": 11.68,
+     "atelier-secy": 5.06,
+     "atelier-sfsq": 3.79,
+     "atelier-stnv": 8.62,
+     "atelier-svi6": 1.68,
+     "atelier-t7pb": 4.72,
+     "atelier-tciw": 3.68,
+     "atelier-tqru": 1.81,
+     "atelier-tu8c": 2.55,
+     "atelier-uma8": 6.9,
+     "atelier-uqxh": 20.79,
+     "atelier-v3nm": 3.07,
+     "atelier-v44v": 1.61,
+     "atelier-v5zk": 0.84,
+     "atelier-vmq2": 0.61,
+     "atelier-vo0z": 0.71,
+     "atelier-vqoy": 5.52,
+     "atelier-vy5i": 0.32,
+     "atelier-x3bj": 0.82,
+     "atelier-xb18": 1.73,
+     "atelier-xc5y": 4.24,
+     "atelier-xe9g": 0.56,
+     "atelier-ygul": 8.1,
+     "atelier-yim7": 2.87,
+     "atelier-yn69": 9.15,
+     "atelier-zpmb": 21.85,
+     "atelier-zuow": 2.45,
+     "atelier-zzpp": 1.08
+    },
+    "threads_with_unpriced_model": 1,
+    "token_coverage": {
+     "threads_counted": 346,
+     "threads_with_transcript": 342
+    }
+   }
+  },
+  "cosplay-studio": {
+   "calls_before_first_edit": {
+    "implementer_threads": 4,
+    "median_shell_commands": 17.5,
+    "median_tool_calls": 21.0
+   },
+   "commit": "c288d44f024eb98697dd8b5e46017ce1c887d4ba",
+   "confusion": {
+    "atelier_calls": 342,
+    "confused_calls": 83,
+    "help_lookups": 50,
+    "per_100_calls": 24.27,
+    "refused_or_error": 37
+   },
+   "items": {
+    "done_in_window": 23,
+    "merged": 8,
+    "merged_with_threads": 3
+   },
+   "line_count": {
+    "extensions": [
+     "ts",
+     "tsx"
+    ],
+    "language": "TypeScript",
+    "non_test_bytes_by_language": {
+     "JavaScript": 2313,
+     "Svelte": 121369,
+     "TypeScript": 430297
+    },
+    "non_test_lines": 8380,
+    "tests": "a path with a `test`, `tests`, `__tests__`, `androidTest`, `testFixtures`, `e2e`, `fixture` or `fixtures` directory, a file named `*.test.*`, `*.spec.*`, `*_test.*` or `*-test.*`, or a Kotlin file ending `Test.kt` or `Tests.kt`"
+   },
+   "process_share": {
+    "process_commands": 50,
+    "share": 0.1225,
+    "shell_commands": 408,
+    "token_cost_share": 0.0704,
+    "token_coverage": {
+     "threads_counted": 6,
+     "threads_with_transcript": 6
+    }
+   },
+   "record_only_commits": {
+    "commits": 156,
+    "record_only": 108,
+    "share": 0.6923
+   },
+   "rework": {
+    "days": 14,
+    "deleted_within_days": 0,
+    "eligible_commits": 0,
+    "first_eligible": null,
+    "last_eligible": null,
+    "lines_written": 0,
+    "share": null,
+    "written_from": "2026-10-14T00:00:00Z",
+    "written_until": "2026-10-27T05:14:58Z"
+   },
+   "threads": {
+    "in_repository": 49,
+    "tied_by": {
+     "branch": 0,
+     "first_message": 6,
+     "title": 0
+    },
+    "tied_to_merged_item": 6,
+    "tied_to_other_item": 40,
+    "untied": 3
+   },
+   "tokens_per_merged_item": {
+    "items_fully_covered": 3,
+    "mean_usd": 18.2,
+    "median_usd": 13.81,
+    "per_item_usd": {
+     "cosplay-studio-jby9": 12.48,
+     "cosplay-studio-ktf7": 13.81,
+     "cosplay-studio-ucz2": 28.32
+    },
+    "threads_with_unpriced_model": 0,
+    "token_coverage": {
+     "threads_counted": 6,
+     "threads_with_transcript": 6
+    }
+   }
+  },
+  "demiurge": {
+   "calls_before_first_edit": {
+    "implementer_threads": 49,
+    "median_shell_commands": 10.0,
+    "median_tool_calls": 10.0
+   },
+   "commit": "9fcc3bd97c49b4023d9d75f80a474325cf5be0de",
+   "confusion": {
+    "atelier_calls": 671,
+    "confused_calls": 110,
+    "help_lookups": 72,
+    "per_100_calls": 16.39,
+    "refused_or_error": 43
+   },
+   "items": {
+    "done_in_window": 107,
+    "merged": 83,
+    "merged_with_threads": 27
+   },
+   "line_count": {
+    "extensions": [
+     "ts",
+     "tsx"
+    ],
+    "language": "TypeScript",
+    "non_test_bytes_by_language": {
+     "JavaScript": 613,
+     "TypeScript": 2249381
+    },
+    "non_test_lines": 73155,
+    "tests": "a path with a `test`, `tests`, `__tests__`, `androidTest`, `testFixtures`, `e2e`, `fixture` or `fixtures` directory, a file named `*.test.*`, `*.spec.*`, `*_test.*` or `*-test.*`, or a Kotlin file ending `Test.kt` or `Tests.kt`"
+   },
+   "process_share": {
+    "process_commands": 230,
+    "share": 0.0761,
+    "shell_commands": 3021,
+    "token_cost_share": 0.1246,
+    "token_coverage": {
+     "threads_counted": 64,
+     "threads_with_transcript": 64
+    }
+   },
+   "record_only_commits": {
+    "commits": 737,
+    "record_only": 511,
+    "share": 0.6934
+   },
+   "rework": {
+    "days": 14,
+    "deleted_within_days": 1300,
+    "eligible_commits": 34,
+    "first_eligible": "8f8a86fe03867c835b7963187eef2ed669d9f1de",
+    "last_eligible": "a658fe5d4a50252c2d9602043b06927b25374b91",
+    "lines_written": 38189,
+    "share": 0.034,
+    "written_from": "2026-10-14T00:00:00Z",
+    "written_until": "2026-10-27T05:14:58Z"
+   },
+   "threads": {
+    "in_repository": 105,
+    "tied_by": {
+     "branch": 0,
+     "first_message": 64,
+     "title": 0
+    },
+    "tied_to_merged_item": 64,
+    "tied_to_other_item": 30,
+    "untied": 11
+   },
+   "tokens_per_merged_item": {
+    "items_fully_covered": 27,
+    "mean_usd": 11.79,
+    "median_usd": 7.9,
+    "per_item_usd": {
+     "worldcrafter-2hcn": 24.55,
+     "worldcrafter-2ony": 13.18,
+     "worldcrafter-2tz9": 23.24,
+     "worldcrafter-3eqt": 2.42,
+     "worldcrafter-3lho": 6.03,
+     "worldcrafter-4vxp": 10.55,
+     "worldcrafter-9get": 16.84,
+     "worldcrafter-a8b0": 1.56,
+     "worldcrafter-b0la": 21.92,
+     "worldcrafter-blvm": 1.0,
+     "worldcrafter-efkh": 40.96,
+     "worldcrafter-itgc": 11.36,
+     "worldcrafter-jcj3": 1.4,
+     "worldcrafter-jeue": 0.98,
+     "worldcrafter-ktfa": 9.1,
+     "worldcrafter-lua8": 2.43,
+     "worldcrafter-mxlo": 5.75,
+     "worldcrafter-o0s0": 26.83,
+     "worldcrafter-o8b7": 1.53,
+     "worldcrafter-pz8e": 2.56,
+     "worldcrafter-ql1d": 7.9,
+     "worldcrafter-w716": 37.77,
+     "worldcrafter-wefn": 1.39,
+     "worldcrafter-wtiz": 27.76,
+     "worldcrafter-wtj4": 2.91,
+     "worldcrafter-xzee": 13.27,
+     "worldcrafter-zr67": 3.27
+    },
+    "threads_with_unpriced_model": 0,
+    "token_coverage": {
+     "threads_counted": 64,
+     "threads_with_transcript": 64
+    }
+   }
+  },
+  "life-on-rails": {
+   "calls_before_first_edit": {
+    "implementer_threads": 31,
+    "median_shell_commands": 16.0,
+    "median_tool_calls": 17.0
+   },
+   "commit": "ac6136093f1ef02edad9ce67ca1f6988a3120813",
+   "confusion": {
+    "atelier_calls": 1239,
+    "confused_calls": 279,
+    "help_lookups": 213,
+    "per_100_calls": 22.52,
+    "refused_or_error": 79
+   },
+   "items": {
+    "done_in_window": 51,
+    "merged": 48,
+    "merged_with_threads": 34
+   },
+   "line_count": {
+    "extensions": [
+     "ts",
+     "tsx"
+    ],
+    "language": "TypeScript",
+    "non_test_bytes_by_language": {
+     "JavaScript": 99127,
+     "Kotlin": 964367,
+     "TypeScript": 1126459
+    },
+    "non_test_lines": 29285,
+    "tests": "a path with a `test`, `tests`, `__tests__`, `androidTest`, `testFixtures`, `e2e`, `fixture` or `fixtures` directory, a file named `*.test.*`, `*.spec.*`, `*_test.*` or `*-test.*`, or a Kotlin file ending `Test.kt` or `Tests.kt`"
+   },
+   "process_share": {
+    "process_commands": 1081,
+    "share": 0.2034,
+    "shell_commands": 5314,
+    "token_cost_share": 0.162,
+    "token_coverage": {
+     "threads_counted": 89,
+     "threads_with_transcript": 89
+    }
+   },
+   "record_only_commits": {
+    "commits": 539,
+    "record_only": 281,
+    "share": 0.5213
+   },
+   "rework": {
+    "days": 14,
+    "deleted_within_days": 4086,
+    "eligible_commits": 33,
+    "first_eligible": "82cfadf83b9d83169b52de5a4aab5494d6ecfb87",
+    "last_eligible": "b1aa4880ebde91c86c8e78a609cfd759b5291185",
+    "lines_written": 74203,
+    "share": 0.0551,
+    "written_from": "2026-10-14T00:00:00Z",
+    "written_until": "2026-10-27T05:14:58Z"
+   },
+   "threads": {
+    "in_repository": 296,
+    "tied_by": {
+     "branch": 0,
+     "first_message": 5,
+     "title": 84
+    },
+    "tied_to_merged_item": 89,
+    "tied_to_other_item": 18,
+    "untied": 189
+   },
+   "tokens_per_merged_item": {
+    "items_fully_covered": 34,
+    "mean_usd": 13.4,
+    "median_usd": 11.96,
+    "per_item_usd": {
+     "lor-2imw": 15.37,
+     "lor-2mh2": 2.76,
+     "lor-57bm": 0.4,
+     "lor-6get": 21.48,
+     "lor-72c3": 6.3,
+     "lor-83uq": 4.13,
+     "lor-9uc1": 22.26,
+     "lor-bdus": 12.67,
+     "lor-clgw": 23.96,
+     "lor-dofd": 1.73,
+     "lor-eh0y": 17.8,
+     "lor-el51": 12.1,
+     "lor-eo1g": 6.37,
+     "lor-euec": 7.03,
+     "lor-f3vn": 12.75,
+     "lor-fhk5": 11.55,
+     "lor-gnk0": 23.73,
+     "lor-iabt": 31.6,
+     "lor-iyc3": 16.22,
+     "lor-j87u": 4.46,
+     "lor-leh4": 13.9,
+     "lor-lz97": 49.6,
+     "lor-odtk": 2.71,
+     "lor-ozj2": 19.54,
+     "lor-ph30": 6.61,
+     "lor-q18v": 2.92,
+     "lor-qdmy": 24.42,
+     "lor-r0f9": 31.18,
+     "lor-rz50": 14.37,
+     "lor-sbth": 7.97,
+     "lor-sqfe": 11.81,
+     "lor-v692": 4.83,
+     "lor-vtmn": 4.11,
+     "lor-zzyy": 6.97
+    },
+    "threads_with_unpriced_model": 0,
+    "token_coverage": {
+     "threads_counted": 89,
+     "threads_with_transcript": 89
+    }
+   }
+  }
+ },
+ "t3_schema": "T3 statev2 with orchestration_v2 projections, as copied on 2026-11-10 (manifest schema_sha256 ebd75cd5...)",
+ "window_start": "2026-10-14T00:00:00Z"
+}
