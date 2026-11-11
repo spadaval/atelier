@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8g9d
 title: Name the missions behind status's mission count
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -38,3 +38,7 @@ Current missions: 2
 ## Context
 
 atelier-ihns covers the between-missions state, and atelier-sdb0 adds the owner's mission. Coordinate so a mission appears once.
+
+## Report
+
+Dropped: Describes the old `status` summary block, which 0.5 replaced.
