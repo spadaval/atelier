@@ -23,22 +23,23 @@ Make the scorecard scripts run on the repositories as they are after the cutover
 
 ## Done when
 
-- [ ] `counted.py` takes the window's merged items from the log's `merge` lines, and each thread's item and role from the lines that name it: `start` and an implementer's take-over make it an implementer of that item, `review` and a reviewer's take-over a reviewer. A Codex subagent's identity, `<T3 thread>/<child>`, ties its T3 thread. A T3 thread that Claude's Agent tool started is tied to its parent's item, since it acts under its parent's identity. A thread the log names on more than one item is tied to the first and counted in the coverage the output already gives. Any other thread is untied.
-- [ ] `draw_samples.py` takes each closed mission's start, close and items from `atelier log <mission>`, and its threads from the thread IDs on those lines and T3's parent links. It reads fix-now findings from the review files of the new layout.
+- [ ] The log is a frozen input like the others. `freeze.py copy` writes each repository's whole `atelier log` output into the snapshot as `logs/<repository>.txt`, and the manifest's hashes cover it. The scripts read only those files and never run `atelier`, so a base that moved on, a branch deleted or an item moved to another mission after the freeze changes no number. A test reruns one manifest and snapshot after the fixture repository's base has advanced and a branch is gone, and gets the same output.
+- [ ] `counted.py` takes its candidates for the window's merged items from the log's `merge` lines, and keeps the baseline's population: an item counts as merged only when its merge commit, the one its line names, changes a file outside `.atelier/` from its first parent. A fixture holds a merge that changes code and one that changes only records, and only the first is counted. It takes each thread's item and role from the lines that name it: `start` and an implementer's take-over make it an implementer of that item, `review` and a reviewer's take-over a reviewer. A Codex subagent's identity, `<T3 thread>/<child>`, ties its T3 thread. A T3 thread that Claude's Agent tool started is tied to its parent's item, since it acts under its parent's identity. A thread the log names on more than one item is tied to the first and counted in the coverage the output already gives. Any other thread is untied.
+- [ ] `draw_samples.py` takes each closed mission's start and close from the mission's `ready` and `close` lines in the frozen log, its items from the item records at the manifest commit that name it, and its threads from the thread IDs on the mission's and those items' lines and T3's parent links. It reads fix-now findings from the review files of the new layout at the manifest commit.
 - [ ] Deleted, with nothing left that does their job another way: `records.py`'s reader of `.atelier/issues/` and its walk of commit messages, `threads.tie()`, the role read from "Act as the ... sub-agent", and `draw_samples.py`'s `git log` and `git show` walk of a mission record's versions. A search of `scripts/scorecard/` finds no match of an item ID against a thread's title, branch or message.
-- [ ] The scripts read `log` as text, by the line layout `docs/design.md` gives, from `atelier log` run in each repository; lines after the manifest's cutoff are dropped. They compute none of the numbers the gardener's procedure takes from the log itself (time in each status, rounds, take-overs, escalations, skips).
+- [ ] The scripts read the log as text, by the line layout `docs/design.md` gives; lines after the manifest's cutoff are dropped. They compute none of the numbers the gardener's procedure takes from the log itself (time in each status, rounds, take-overs, escalations, skips).
 - [ ] `python3 -m unittest discover scripts/scorecard` passes, with the fixtures in the new layout and a test of each tie rule above.
 - [ ] `scripts/scorecard/README.md` describes the scripts as they now are, and says which commit's scripts reproduce the November baseline (the base commit this item started from), since these no longer read the baseline's old-layout records. The Rerunning section of `docs/architecture/quality/scorecard-baseline-2026-11.md` names that commit too. No baseline number, sample or label changes.
 
 ## Scope
 
-In: `scripts/scorecard/` and the two documents named above.
+In: `scripts/scorecard/` and the two documents named above. Reading a record file at the manifest commit, and the files one named commit changes from its first parent, is in: neither walks a record's history.
 
 Out, and a review finding that asks for one of these is escalated, not fixed:
 
 - The command forms, the refusal and error text the scripts recognise, the rubric, the done-item counts and the README's runtime. They are atelier-c1z3, which starts after this merges.
 - Any new measure, and any change to how a measure that does not depend on the tie is taken (process share's command reading, pricing, rework, line counts).
-- A new snapshot or a run on live data. Tests use fixtures. The baseline's frozen inputs in `~/.local/share/atelier-baseline/2026-11/` hold private messages and are not needed here: do not read them, and commit nothing from them.
+- A new snapshot or a run on live data, and making `freeze.py` take a second snapshot's name or path, which the after-run's own item does. Tests use fixtures. The baseline's frozen inputs in `~/.local/share/atelier-baseline/2026-11/` hold private messages and are not needed here: do not read them, and commit nothing from them.
 - Any change under `crates/`. If `log` lacks a fact the scripts need, escalate.
 - Keeping a second code path that reads the old layout.
 

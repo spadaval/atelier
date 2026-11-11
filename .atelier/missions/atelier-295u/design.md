@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it"
+last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered"
 ---
 
 # Sizing
@@ -78,6 +78,14 @@ Decided while planning A and B:
   old layout, so they no longer reproduce the November baseline; the README
   names the commit whose scripts do. Keeping both readers would keep the
   code this mission is meant to delete.
+- **The log is frozen with the other inputs.** `atelier log` reads the
+  base and the branches as they are when it runs, and takes no commit to
+  read at. So the scripts never run it: `freeze.py` saves its output into
+  the snapshot, and a rerun from one manifest gives the same numbers
+  whatever the repository has done since. `log` needs no flag for this.
+- **The counted population does not change.** A merged item is still one
+  whose merge changes a file outside `.atelier/`. The log's `merge` lines
+  name the candidates and their commits, and the scripts keep that test.
 - **atelier-c1z3 comes after atelier-x3n5.** Both edit `scripts/scorecard/`.
   atelier-c1z3 also needs the frozen inputs of the run after the cutover,
   which do not exist yet, so it is blocked by atelier-x3n5 and is not part
