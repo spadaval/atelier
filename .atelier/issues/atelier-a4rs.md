@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Port the eval scenarios to the new binary, with a no-skill arm and a Codex skill arm, before any matrix runs"
-updated_at: "2026-11-11T04:55:10.819606495+00:00"
+updated_at: "2026-11-11T06:16:24.255610438+00:00"
 ---
 
 ## Goal
@@ -87,6 +87,7 @@ Expected size: 1,500 to 2,200 lines, nearly all fixtures and graders. The old sc
 
 - 2026-11-10 [decision] The orchestrator of atelier-qr5s sends this plan to a fourth planning round after three that each found a further way a run could exceed two agents. The limit is now stated per launch path with no fallback: where Codex cannot be bounded the item escalates. If round 4 finds another gap in the same rule, the Codex arm of threads scenarios is run with native subagents off and that is reported, instead of a fifth round.
   Reason: Each round's finding was real and narrower than the last; the alternative, dropping the limit to an instruction, would leave token cost unbounded.
+- 2026-11-11 [handoff] Escalated after three review rounds without an approval (rounds at d7a45eef, c8812c67, 17f6947d; 9 FIX NOW findings, all false passes in graders). Round 3's four findings are fixed but unreviewed. See the Report.
 
 ## Report
 
@@ -186,4 +187,3 @@ Where each line's proof is:
 
 - The smoke run of `next-rebuttal-kept` found a grader error: a Responses line written after the decider's answer counted as a second rebuttal. It was fixed in a later commit with two new walks, and the run regraded from its kept work directory to a pass.
 - Agent runs: 2 probes, 2 canaries and 9 smoke runs, 13 in all, never more than two agents at once. Probe 2's first attempt hung on an open stdin before any session started, and called no model.
-
