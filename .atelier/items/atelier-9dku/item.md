@@ -77,7 +77,7 @@ Before: `garden.md` 63 lines and `audit.md` 33, 96 together. After: `garden.md` 
 - Step 1, 16 lines: the commands that open the run and the five Done when lines the gardener writes, so the run's reviewer gets its checks from the brief.
 - Step 2, 51 lines: the window, the `awk` that picks the merged items, the arithmetic for each number, the `atelier list` counts, what is carried, and the worked example (10 lines). This is what makes two agents get the same numbers; the old procedure took no numbers.
 - Step 6, 36 lines: the page's template (27 of them) and the rule for a carried proposal.
-- Step 7, 9 lines: submit, the session, and the merge.
+- Step 7, 8 lines: submit, the session, and the merge.
 
 The old Digest section (19 lines) and Fixing at the Right Level (16) are gone; step 5 (13 lines) holds the three tiers and the deferred findings.
 
