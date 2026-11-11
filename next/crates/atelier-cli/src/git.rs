@@ -361,15 +361,27 @@ pub fn files_at(repo: &Path, commit: &str, dir: &str) -> Result<Vec<String>> {
     Ok(names(&listing(repo, &[&args[..], &["--", dir]].concat())?))
 }
 
-/// The paths under `dirs` whose files in the checkout differ from the
-/// commit `from`, committed or not, and the files there Git does not track.
+/// The paths under `dirs` whose files in the checkout or in its index
+/// differ from the commit `from`, committed or not, and the files there Git
+/// does not track.
 pub fn changed_since(repo: &Path, from: &str, dirs: &[&str]) -> Result<Vec<String>> {
     let args = ["diff", "--name-only", "-z", "--no-renames", from, "--"];
     let mut paths = names(&listing(repo, &[&args[..], dirs].concat())?);
+    let staged = [
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        from,
+        "--",
+    ];
+    paths.extend(names(&listing(repo, &[&staged[..], dirs].concat())?));
     for dir in dirs {
         paths.extend(untracked(repo, dir)?);
     }
     paths.sort();
+    paths.dedup();
     Ok(paths)
 }
 

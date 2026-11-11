@@ -1621,6 +1621,25 @@ fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_com
     let files = files_in(&root, &plan_reviews(MISSION));
     assert_eq!(front(&read(&root, &files[0]), "commit"), head);
 
+    // A change only the index holds, with the file in the checkout put back
+    // as committed, is named too.
+    git(&root, &["checkout", "HEAD", "--", &mission_path(MISSION)]);
+    fs::remove_file(root.join(&sizing)).unwrap();
+    git(&root, &["add", "--", &item_path(ID)]);
+    let committed = git_output(&root, &["show", &format!("HEAD:{}", item_path(ID))]).stdout;
+    fs::write(root.join(item_path(ID)), committed).unwrap();
+    let staged = atelier(&root, "r1", &["review", MISSION]);
+    assert_eq!(staged.code, 0, "{}", staged.stderr);
+    assert!(
+        staged.stdout.contains(&format!(
+            "this review does not cover those changes: {}\n",
+            item_path(ID)
+        )),
+        "{}",
+        staged.stdout
+    );
+    git(&root, &["checkout", "HEAD", "--", &item_path(ID)]);
+
     // A mission no commit holds has no plan to review.
     let other = "demo-m2ss";
     write_mission(&root, other, "draft");
