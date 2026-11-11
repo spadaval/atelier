@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: first draft, from Sumeet's direction in the design discussion over the dashboard spike"
+last_changed: "2026-11-11: planning review fixes: acts run where the new commands run, reads take work branches, the mission finishes on converted clones, the database and feed are named"
 ---
 
 # Why
@@ -19,27 +19,30 @@ tool a product of its own, the Desk, and
 
 # Outcome
 
-On this host, a service reached over the tailnet shows every Atelier
-repository on the redesigned records. A mission has one page with what it is
+On this host, a service reached over the tailnet shows Atelier repositories
+on the redesigned records: converted scratch clones of all five until this
+host's cutover, and the live repositories after it. A mission has one page with what it is
 for, its documents, its items and what happened to them, and the agents
 working on it. An inbox lists what waits on Sumeet. From a page he can say go
 on a mission, answer an open question, and start a planning session with an
-agent. Each act is a commit made by an `atelier` command under his name.
-`atelier` itself has no site.
+agent. Each act is made by the `atelier` command itself, under his name,
+where that command writes. `atelier` itself has no site.
 
 # Success Criteria
 
-- desk-matches-cli: with the Desk running on this host and loaded in a
-  headless browser over the tailnet hostname, every open mission of every
-  Atelier repository here has a page that renders without an error and shows
-  the title, status and per-status item counts that `atelier show <mission>`
-  prints on that repository's base branch, and the inbox lists the same
-  items as `atelier list --needs-human` there. Shown by a validation item
-  filed with the last increment.
-- act-is-a-record: in a scratch clone, saying go on a draft mission from its
-  page leaves the same record change as `atelier ready <mission> --by
-  <name>` run in a second clone of the same commit, in one commit, and the
-  page then shows the mission ready. Shown by a test in the Desk's suite.
+- desk-matches-cli: with the Desk running as a service on this host, serving
+  converted scratch clones of all five repositories and loaded in a headless
+  browser over the tailnet hostname, every open mission in every clone has a
+  page that renders without an error and shows the title, status and
+  per-status item counts that the new `atelier show <mission>` prints in
+  that clone, and the inbox lists the same items as `atelier list
+  --needs-human` there. Shown by a validation item filed with the last
+  increment. It does not need the cutover to have run.
+- act-is-a-record: in a converted scratch clone, saying go on a draft
+  mission from its page leaves the same record change as the new `atelier
+  ready <mission> --by <name>` run in a second clone of the same commit, in
+  one commit, and the page then shows the mission ready. Shown by a test in
+  the Desk's suite.
 
 # Sizing
 
@@ -66,8 +69,10 @@ nothing leaves him reading `atelier show` for every mission.
 - **Missions first.** The mission page is built before anything else,
   because it is what the cutover leaves missing. Items show inside a
   mission. A page that only lists records is not finished.
-- **No database in this mission.** Nothing here needs one. Trends, findings
-  and "since you last looked" come with the feed, in the next mission.
+- **No database in this mission.** Nothing here needs one. The Desk's
+  database is a SQLite file, and a daily run feeds it (ADR 0032, Decision
+  6); both come in the next mission, with trends, findings and "since you
+  last looked".
 - **When qualities conflict:** agreeing with the CLI beats showing more; a
   page the human can act from beats a complete one.
 
@@ -87,20 +92,36 @@ crate depends on it, and a test in the workspace fails if one does.
 ## Data flow
 
 1. **Reads.** For each repository under its roots, the server captures the
-   base branch's commit, loads records with `CommitReader`, asks
-   `atelier-app` for views, and serializes them. Responses are cached by
-   commit. It reads no working tree.
+   base branch's commit and the tip of each local branch named for an item,
+   loads records at those commits with `CommitReader`, and asks
+   `atelier-app` for views. A started item's status, holder, reviews and
+   open question live on its branch, so the server takes each item from
+   where the core's own rule takes it (`view::entries`, as `status`, `list`
+   and `show` do on the base) and never from the base alone. Responses are
+   cached by the set of commits they were read from. It reads no working
+   tree.
 2. **Threads.** At start the server mints a read-only token (`t3 auth
    session issue --subject mcp-client --scope orchestration:read`) and calls
    T3 Code's MCP server over HTTP. It polls `t3_thread_list` filtered to
    live and unsettled threads, and reads one thread's runs on demand. A
    thread is tied to an item by the thread IDs the records hold
    (`redesign-architecture.md`, The log), not by its title.
-3. **Acts.** The server runs the installed `atelier` in a detached scratch
-   worktree at the base's tip, commits what it wrote, and moves the base
-   only if it has not moved, as the spike's server does
-   (`crates/atelier-site/deck/server/sidecar.ts` on the spike branch). A
-   refused command's output is shown as it is.
+3. **Acts.** The server runs the new `atelier`, the binary built from the
+   same workspace commit as itself and named in its configuration; before
+   the cutover that is not the installed one. It runs each command where
+   that command is written to run, with no thread variable set, so the
+   caller is `human`:
+   - `ready <mission> --by <name>` in the checkout that has the base branch
+     out. The command refuses anywhere else (`plan.rs`, `off_base`) and
+     commits only the paths it wrote.
+   - `decide <id> "<answer>"` in the checkout that has the item's branch
+     out, which is where the implementer works and whose `submit` commits
+     the answer (`questions.rs`, `decide`).
+   The server finds the checkout from `git worktree list`. If no checkout
+   has the branch out, it refuses and says so. It never makes a scratch
+   worktree, moves a ref, or commits on the command's behalf: the spike's
+   server did, because the old commands left that to the caller. A refused
+   command's output is shown as it is.
 4. **Sessions.** Starting a planning session calls `t3_thread_launch` with a
    second token that may operate, the repository's T3 project, and a first
    message naming the mission. The page then links to the thread.
@@ -118,7 +139,8 @@ the inbox; live threads; and one `POST` for acts.
 ## Dependencies
 
 - `axum` and `tokio` for the server, as the old site used.
-- `ts-rs` for the app's types, already a workspace dependency.
+- `ts-rs` for the app's types, as the old site used. It is a dependency of
+  the old workspace only, so this mission adds it to `next/`'s.
 - The app keeps the spike's stack: Vite, React, react-router,
   react-markdown, lucide icons, plain CSS with tokens.
 - No SQLite crate in this mission.
@@ -138,31 +160,39 @@ header or from another origin, as the spike does. There is no sign-in.
 # Derisking
 
 The riskiest assumption is that the new core's view layer can feed the
-mission page. Today it has three functions in 227 lines, and the old site
+mission page. Today `view.rs` has three public functions, and the old site
 had views for a board, an inbox, a brief and a debrief. The first increment
 tests it on paper: it lists every field each page shows against the view
 that gives it, and names each view the core lacks, before the server is
 written. If the gap is large, adding views to `atelier-app` is the mission's
 first code and is sized there.
 
-The second is the cutover's timing. The Desk is built against scratch clones
-converted by the rehearsed converter (atelier-1sbw, atelier-nafc), so it
-needs no repository to be converted, and it goes live when this host's
-cutover (atelier-wd1i) has run. Neither mission waits on the other.
+The second is the cutover's timing. The Desk is built, installed and
+validated against scratch clones converted by the rehearsed converter
+(atelier-1sbw, atelier-nafc), so the mission needs no repository to be
+converted and can close before the cutover runs. Pointing the service at the
+live repositories is a loose end outside the mission (atelier-qxmr), which
+waits on this host's cutover (atelier-wd1i). The cutover waits on nothing
+here: its step E removes only the tracker's site and leaves the Desk's crate
+and CI jobs alone.
 
-T3 Code's side is settled: the probe on atelier-aab1 ran the token and the
-MCP calls on this host.
+Reading T3 Code is settled: the probe noted on atelier-aab1 ran the token
+and the read calls on this host. Starting a thread was not exercised. The
+increment that adds sessions proves it against the running T3 Code before
+it is called done.
 
 # Scope
 
 - In: the `atelier-desk` crate; the app; the mission, item, inbox and agents
   pages; the acts `ready` and `decide`; starting a planning session;
-  installing the service on this host; `docs/architecture/desk.md`.
+  installing the service on this host over converted clones; the Desk's own
+  CI jobs; `docs/architecture/desk.md`.
 - Out: health, the feed and any database (the next mission); sessions for
   gardening and grooming; what changed since the human last looked;
   notifications; token and cost figures, which T3 Code's MCP server does not
   give; a release artifact or installer; sign-in; the old site, which the
-  cutover deletes.
+  cutover deletes; pointing the service at the live repositories, which is
+  the loose end atelier-qxmr.
 - Target environment: this host, over the tailnet, at desktop and phone
   widths; the five repositories as converted scratch clones until the
   cutover, and live after it.
@@ -188,6 +218,9 @@ or Review sections.
   CI, which the change's author fixes with the change.
 - **The gap after the cutover.** If the cutover runs before the mission
   page is live, Sumeet reads `atelier show <mission>` until it is.
+- **An act needs a checkout.** `ready` needs some checkout with the base
+  out, and `decide` one with the item's branch out. Where none exists the
+  Desk refuses and names the command to run by hand.
 - **No sign-in.** Anyone on the tailnet can act as Sumeet. Accepted for one
   user on a private tailnet; a second user needs a decision first.
 - **Whether T3 Code's thread links open on the phone** is the one question

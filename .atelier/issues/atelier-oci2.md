@@ -35,7 +35,8 @@ Take the site off the cutover's path. The human's pages become a product of thei
 
 ## Done when
 
-- [ ] Provisional: nothing in `next/` builds or serves a site: there is no `atelier-site` crate and no `serve` command, and `--help` lists neither. The web typecheck, unit and Playwright jobs and the Node build step are gone from the CI and release workflows that the switch puts in place. The old workspace's site is not changed before the switch.
+- [ ] Provisional: the `atelier` binary built from `next/` has no site: there is no `atelier-site` crate, `atelier --help` lists no `serve`, and building or releasing `atelier` needs neither Node nor pnpm. The CI and release workflows the switch puts in place have no job or build step for the old site's app (`crates/atelier-site/web`). The old workspace's site is not changed before the switch.
+- [ ] Provisional: this removes only the tracker's site. The Desk's crate (`atelier-desk`) and app (`desk/`), where mission atelier-z4cr has added them, keep their own build and their own CI jobs, and those jobs do not gate a change that touches neither.
 - [ ] Provisional: no instruction in the new skill or in the `AGENTS.md` texts the cutover installs tells an agent to send the human a site page; a mission is read with `atelier show <mission>` until the Desk's mission page is live.
 
 ## Context

@@ -52,5 +52,5 @@ Preliminary. This step is planned in full at its boundary, with one planning rev
 - Whether a repository's forge requires a pull request for its base; the rehearsal reports it.
 - Every file the move touches: the root `Cargo.toml` and `Cargo.lock`, the release profile and the dist metadata, CI's two sets of jobs and their working directories, and the web paths in `release.yml` and `.github/build-setup.yml`. Only tracked sources move, not `next/target` or `node_modules` (planning findings atelier-8609 and atelier-ncen).
 - Whether installing Atelier in CI from a commit, as astromech does today, is enough, or a release of the new tool is needed (planning finding atelier-nwgr).
-- How the runbook restarts `atelier-serve` and checks it, and restores it on rollback (planning finding atelier-q8or).
+- How the runbook stops and disables `atelier-serve`, and on rollback enables it again and checks the old site answers (planning finding atelier-q8or; the new binary has no `serve`, ADR 0032).
 - Which hook settings each repository needs. `atelier setup` writes `.claude/settings.json` in the repository it runs in, so the conversion commit of each repository must carry them and the rollback restore them (planning finding atelier-qe1q).

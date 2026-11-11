@@ -28,4 +28,5 @@ Preliminary. The acts `ready` and `decide`, each run as the installed `atelier` 
 
 ## Done when
 
-- [ ] Provisional: the strategy's act-is-a-record criterion holds in the Desk's suite; a refused command's output is shown as it is; an act from another origin or without the app's header is refused; starting a session creates a T3 thread in the repository's project and the page links to it.
+- [ ] Provisional: the strategy's act-is-a-record criterion holds in the Desk's suite; `decide` run from a page writes the answer in the checkout that has the item's branch out, as `atelier decide` does there; a refused command's output is shown as it is; an act from another origin or without the app's header is refused.
+- [ ] Provisional: starting a session is proved against the running T3 Code on this host, not a stand-in: one thread is created in a scratch project with `t3_thread_launch` under a token that may operate, its link opens, and the Report gives the thread's ID. The 2026-11-10 probe on atelier-aab1 only read; it never started a thread.
