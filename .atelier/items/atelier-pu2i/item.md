@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-pu2i
 title: Show open work before done work in issue list
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -36,3 +36,7 @@ Inventory ordering, default filter and footer, their tests, and the doc. `--quie
 ## Context
 
 ADR 0022 (dense Markdown; piping means a view is missing). Related: atelier-fpxc (text search), atelier-deyy (dense rows).
+
+## Report
+
+Dropped: Done by the 0.5 rewrite: `atelier list` shows open work only, and `list --done` the rest.
