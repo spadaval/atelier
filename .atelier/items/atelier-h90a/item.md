@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-h90a
 title: Make setup claude report unchanged runs, foreign hooks and the commit step
-status: draft
+status: dropped
 mission: null
 labels:
 - cli-output
@@ -34,3 +34,7 @@ created_at: 2026-10-17T01:10:57.981495535Z
 ## Context
 
 atelier-sdb0 switches the hook to `status` and adds the CLAUDE.md `@AGENTS.md` warning. Keep the message changes compatible with that.
+
+## Report
+
+Dropped: Describes the old `setup claude` message about prime and land hooks; `setup` was rewritten in 0.5.
