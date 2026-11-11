@@ -20,6 +20,20 @@ async function load(page: Page, path: string) {
   expect(errors).toEqual([]);
 }
 
+/** Opens the first finding in `scope` and checks it is laid out as wide as its list, not squeezed into a column. */
+async function expectReadableFinding(page: Page, scope: string) {
+  const finding = page.locator(`${scope} .findings > li`).first();
+  await finding.locator("summary").click();
+  const widths = await finding.evaluate((li) => ({
+    list: li.closest(".findings")!.getBoundingClientRect().width,
+    details: li.querySelector("details")!.getBoundingClientRect().width,
+    title: li.querySelector(".f-title")!.getBoundingClientRect().width,
+  }));
+  expect(widths.details).toBeGreaterThan(widths.list - 4);
+  expect(widths.title).toBeGreaterThan(120);
+  await expect(finding.locator("details > .md")).toBeVisible();
+}
+
 async function expectFits(page: Page) {
   const wider = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(wider, "the page is wider than the screen").toBeLessThanOrEqual(0);
@@ -56,6 +70,7 @@ test("the mission page shows the title, status and counts atelier show prints", 
   await expect(overview).toContainText("Changed since: .atelier/missions/atelier-z4cr/design.md");
   await expect(overview).toContainText("this clone lacks the commit reviewed");
   await expect(overview).toContainText("The strategy does not say where the app's types come from");
+  await expectReadableFinding(page, ".paper-body");
   await expectNoActs(page);
 });
 
@@ -129,6 +144,7 @@ test("the item page shows its goal, Done when ticks, report, reviews and blocker
   await expect(page.locator(".issue-main")).toContainText("Round 1: changes asked");
   await expect(page.locator(".issue-main")).toContainText("Deferred, taken as atelier-e05n");
   await expect(page.locator(".issue-main")).toContainText("fixed in 3333cccc");
+  await expectReadableFinding(page, ".issue-main");
   await expectNoActs(page);
 
   await load(page, "/r/atelier/item/atelier-uwxy");

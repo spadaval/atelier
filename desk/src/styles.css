@@ -742,7 +742,7 @@ button.group-head:hover {
   padding: 0;
 }
 
-.timeline li {
+.timeline > li {
   position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
@@ -750,7 +750,7 @@ button.group-head:hover {
   padding-bottom: 14px;
 }
 
-.timeline li::before {
+.timeline > li::before {
   content: "";
   position: absolute;
   left: 8.5px;
@@ -760,7 +760,7 @@ button.group-head:hover {
   background: var(--line);
 }
 
-.timeline li:last-child::before {
+.timeline > li:last-child::before {
   display: none;
 }
 
