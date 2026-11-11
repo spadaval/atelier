@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:39.182460801+00:00"
-status: "superseded"
+status: "backlog"
 title: "Choose status Next Actions from the checkout's state, in lifecycle order"
-updated_at: "2026-11-11T03:55:39.182460801+00:00"
+updated_at: "2026-11-07T21:03:26.357516413+00:00"
 ---
 
 ## Goal
@@ -41,7 +40,3 @@ updated_at: "2026-11-11T03:55:39.182460801+00:00"
 ## Context
 
 The order is atelier-jnrh's: `review request` refuses while a line is unticked or the Report is empty, and `merge` marks the work done, so there is no done-owner or land-handoff step (decision atelier-mzpn). status is the SessionStart view (atelier-sdb0).
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` prints the one next command for what the thread holds (product specification, Commands: `status`; `Then: atelier start atelier-1oel` in a scratch clone).

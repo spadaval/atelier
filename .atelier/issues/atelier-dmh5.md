@@ -22,10 +22,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:42.992600863+00:00"
-status: "declined"
+status: "backlog"
 title: "Treat a reversed directional link as a different link"
-updated_at: "2026-11-11T03:55:42.992600863+00:00"
+updated_at: "2026-11-07T21:03:29.337341527+00:00"
 ---
 
 ## Goal
@@ -49,7 +48,3 @@ Whether custom roles from `.atelier/config.toml` need a declared direction.
 ## Notes
 
 - 2026-10-17 [note] 2026-10-17, from review of atelier-ihss (finding atelier-3ewf, deferred here): after ihss, links are stored only on the declaring record, but two places still treat a link in the reverse direction as the same link: the duplicate check in RecordStore::add_issue_relation (crates/atelier-records/src/lib.rs ~509-515) and the two-sided dedupe in index_issue_graph (crates/atelier-app/src/record_index.rs ~569-576). So `issue link A B --role supersedes` prints 'already exists' when B already declares 'supersedes A', and if both declare it toward each other only one is indexed. In the index a Relation's issue_id_1 is the declaring record; for legacy two-sided links it is whichever id sorts first, so direction is ambiguous there. blocked_by is now a directional entry in relates; blocks remains the blocker-side form.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new records hold no directional link roles, only `blocked_by` and `caused_by` (product specification, Records), so there is no reversed link to misread.

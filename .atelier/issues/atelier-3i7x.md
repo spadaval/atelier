@@ -15,10 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:47.755138419+00:00"
-status: "superseded"
+status: "backlog"
 title: "Compute in-flight marks without snapshotting each branch's tracker"
-updated_at: "2026-11-11T03:55:47.755138419+00:00"
+updated_at: "2026-11-04T23:03:23.171906482+00:00"
 ---
 
 ## Goal
@@ -32,7 +31,3 @@ In-flight marks come from the owner record blob without a full snapshot, and the
 ## Context
 
 `crates/atelier-cli/src/commands/git.rs` `branch_summaries` (after atelier-7n5u). SessionStart runs `status`, so this also bounds hook latency.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` reads started items without the old snapshot: atelier-nafc's rehearsal timed it at 503 ms with 1 branch and 563 ms with 31 in astromech.

@@ -11,10 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:48.391366021+00:00"
-status: "superseded"
+status: "backlog"
 title: "Drop severity from the review request brief to match Agent Factory's review output"
-updated_at: "2026-11-11T03:55:48.391366021+00:00"
+updated_at: "2026-10-30T06:49:44.817530340+00:00"
 ---
 
 ## Goal
@@ -32,7 +31,3 @@ The brief's finding placeholder reads `"<path:line> <problem, impact, suggested 
 ## Context
 
 Skill output format: `skills/agent-factory/procedures/review.md`, Output, in spadaval/.agents (ADR 0023). Related atelier-abdp also changes this brief (round number); whichever lands second merges the other's text.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new review brief asks for no severity (`grep -rni severity next/crates` prints nothing).

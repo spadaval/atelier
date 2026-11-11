@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:38.227336252+00:00"
-status: "superseded"
+status: "backlog"
 title: "Refuse atelier start on parked items instead of branching"
-updated_at: "2026-11-11T03:55:38.227336252+00:00"
+updated_at: "2026-10-17T01:10:57.966392545+00:00"
 ---
 
 ## Goal
@@ -31,7 +30,3 @@ updated_at: "2026-11-11T03:55:38.227336252+00:00"
 - [ ] `atelier start` on a todo-category status with no `start` transition (backlog, draft) refuses before any Git operation or write, naming the way out: `atelier-fpxc is backlog; plan it first: atelier issue transition atelier-fpxc plan`.
 - [ ] On an item already in an active status it says `already in_progress on <branch>` and still switches to the branch.
 - [ ] CLI tests cover backlog (refused, no branch created, record unchanged) and in_progress (already-started message).
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `start` already refuses a draft item before any Git operation and names `atelier ready` (run in a scratch clone: `atelier-1a5k is draft, and atelier start runs on an item that is ready. Nothing changed.`).

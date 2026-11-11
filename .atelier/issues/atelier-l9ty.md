@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:43.624827345+00:00"
-status: "superseded"
+status: "backlog"
 title: "Mark blocked and needs-human items in issue list"
-updated_at: "2026-11-11T03:55:43.624827345+00:00"
+updated_at: "2026-10-17T01:10:57.963954243+00:00"
 ---
 
 ## Goal
@@ -38,7 +37,3 @@ The `issue list` Status column prints the raw workflow status (`crates/atelier-c
 ## Context
 
 The symbols follow atelier-deyy's rule (✓/⚠ next to the status word).
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `list` marks each blocked and needs-human row (`blocked by ...`, `waits on a human`), run in a scratch clone.

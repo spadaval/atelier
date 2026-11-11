@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:46.805968863+00:00"
-status: "declined"
+status: "backlog"
 title: "Accept --body-file in issue create and issue update"
-updated_at: "2026-11-11T03:55:46.805968863+00:00"
+updated_at: "2026-10-17T19:00:36.340695076+00:00"
 ---
 
 ## Goal
@@ -33,7 +32,3 @@ Agents write bodies to temp files and pass `--body "$(cat ...)"`, or edit record
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168). Related: atelier-cj54 (replace one body section), atelier-rz2l (import a drafted record).
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The product specification has agents edit a record's Markdown body directly, so no command takes a body and `--body-file` has nothing to feed.

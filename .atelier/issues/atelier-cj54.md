@@ -18,10 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:45.533637089+00:00"
-status: "declined"
+status: "backlog"
 title: "Let issue update replace one body section"
-updated_at: "2026-11-11T03:55:45.533637089+00:00"
+updated_at: "2026-11-07T21:03:34.464399543+00:00"
 ---
 
 ## Goal
@@ -42,7 +41,3 @@ From the 2026-10-16 transcript retrospective. Pairs with atelier-sxcj (`--body-f
 ## Notes
 
 - 2026-10-17 [note] Retro 2026-10-17: agents keep splicing record and strategy bodies with Python str.replace (e592938d three times). Still wanted; pairs with the new --body-file item.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The product specification has agents edit a record's Markdown body directly (Commands: "Agents edit the Markdown body of a record directly"), so no command splices a section and the quoting problem it solves does not arise.

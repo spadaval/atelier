@@ -19,10 +19,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:44.577795343+00:00"
-status: "superseded"
+status: "backlog"
 title: "Render issue transition options one line per option"
-updated_at: "2026-11-11T03:55:44.577795343+00:00"
+updated_at: "2026-11-07T21:03:35.179709731+00:00"
 ---
 
 ## Goal
@@ -39,7 +38,3 @@ updated_at: "2026-11-11T03:55:44.577795343+00:00"
 ## Context
 
 atelier-jnrh removed the work item's `close`, so work items now have at most four transitions and the close routes the original quoted are gone; a transition that only lacks `--reason` is already shown as allowed (decision atelier-mzpn). atelier-7u4o compacts the readiness section inside `issue show`; this is the standalone view. ADR 0022: one line per item.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new tool has no transition options view: each status is set by the command that performs the act (product specification, Words: Status), and `status` names the next command.

@@ -15,10 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:58.937582152+00:00"
-status: "superseded"
+status: "backlog"
 title: "Make CLI output use check, close and done as CONTEXT.md defines them"
-updated_at: "2026-11-11T03:55:58.937582152+00:00"
+updated_at: "2026-11-07T12:14:42.350638924+00:00"
 ---
 
 ## Goal
@@ -35,7 +34,3 @@ CONTEXT.md now gives check, review, land, done and close one meaning each (ateli
 ## Context
 
 CONTEXT.md (Check, Gate, Done, Close); docs/product/human-cli-output.md (verdict line, wording contract); crates/atelier-cli/src/commands/session.rs, merge.rs, merge_sync.rs and gate_report.rs print the verdicts.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). Its lines are output of `land`, `merge --check`, `review request` and evidence freshness, none of which the new binary has; the specification's Words table gives each word one meaning in the new CLI.

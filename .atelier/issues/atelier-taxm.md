@@ -13,10 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:57.017713230+00:00"
-status: "declined"
+status: "backlog"
 title: "Use one function to detect a skill linked to a checkout, in setup --link and the update check"
-updated_at: "2026-11-11T03:55:57.017713230+00:00"
+updated_at: "2026-11-08T07:07:49.807640842+00:00"
 ---
 
 ## Goal
@@ -26,7 +25,3 @@ updated_at: "2026-11-11T03:55:57.017713230+00:00"
 ## Done when
 
 - [ ] One function decides whether `~/.agents/skills/agent-factory` or `~/.claude/skills/agent-factory` is linked to a checkout and which one, and both `setup --link`/`--unlink` and the update check call it. Existing tests for both still pass.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new binary has no `setup --link` and no update check (`atelier setup --help`), so there is no second copy of the rule.

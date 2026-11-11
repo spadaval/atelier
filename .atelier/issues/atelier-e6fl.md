@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:45.851724425+00:00"
-status: "declined"
+status: "backlog"
 title: "Refuse --reason on transitions that write no Report"
-updated_at: "2026-11-11T03:55:45.851724425+00:00"
+updated_at: "2026-11-07T21:03:34.812629181+00:00"
 ---
 
 ## Goal
@@ -34,7 +33,3 @@ updated_at: "2026-11-11T03:55:45.851724425+00:00"
 ## Context
 
 Decision atelier-mzpn chose the refuse option, so `--reason` keeps one meaning: it writes the Report (CONTEXT.md, atelier-ml3r). The original's `block` example is gone; no policy on this host has a blocked status.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new tool has no transitions that take `--reason` besides `drop`, which records it (`atelier drop --help`).

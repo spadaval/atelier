@@ -15,10 +15,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:38.864398611+00:00"
-status: "superseded"
+status: "backlog"
 title: "Count ready work net of items in flight on other branches"
-updated_at: "2026-11-11T03:55:38.864398611+00:00"
+updated_at: "2026-10-17T04:01:55.177363540+00:00"
 ---
 
 ## Goal
@@ -32,7 +31,3 @@ After atelier-7n5u, ready rows in `status`, `work ready` and `work all` carry `â
 ## Context
 
 `crates/atelier-cli/src/commands/status.rs`, `git::branch_summaries` / `in_flight`. Found validating atelier-1w8c on 2026-10-17.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` lists only the ready items `start` would accept now and counts the others by what stops them (run in a scratch clone: `14 other ready items cannot start yet: 5 wait on a blocker that is not done, 11 are in a mission that is not ready`).
