@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T08:56:15.818353730+00:00"
+status: "superseded"
 title: "Low: next/crates/atelier-desk/src/main.rs:34 only SIGINT reaches threads.close(); SIGTERM takes the default termination…"
-updated_at: "2026-11-11T06:46:00.431925577+00:00"
+updated_at: "2026-11-11T08:56:15.818353730+00:00"
 ---
 
 ## Goal
@@ -28,3 +29,7 @@ Low: next/crates/atelier-desk/src/main.rs:34 only SIGINT reaches threads.close()
 ## Done when
 
 Done when was not specified.
+
+## Report
+
+Settled by atelier-va99 (pull request #139): atelier-desk stops on SIGTERM as on SIGINT and revokes its T3 Code token, with the test tests/signals.rs.
