@@ -59,7 +59,7 @@ Window: 2026-11-11T15:20:09Z to 2026-11-11T17:56:43Z UTC, 7 items merged. Workin
 
 What means nothing yet: every log number rests on 7 items merged in under three hours of one day; x3n5's 27 minutes waiting is time blocked by 8b0a, not a stall; 6w8d's 30 minutes approved is one CI run that failed on runner DNS. The open counts are mostly the cutover's 106 converted drafts. The carried rows are the baseline itself.
 
-Checklist: 5 met, 4 not met (5: the Desk has no format or lint command; 7: no merge runs clippy; 8: no verify skill; 9: 39 of 39 bugs lack a cause), 0 could not test.
+Checklist: 4 met, 5 not met (4: the Desk server's build named the deleted `next/`, repaired in 94bbfa149; 5: the Desk has no format or lint command; 7: no merge runs clippy; 8: no verify skill; 9: 39 of 39 bugs lack a cause), 0 could not test.
 
 ### Worst Spots
 - Navigate: in a sample of three threads (26 to 34 calls before the first edit), all three read the design record (`docs/design.md`, 1,384 lines) and the product page; both code items read `crates/atelier-cli/src/output.rs` (1,471 lines) and `crates/atelier-cli/tests/scenarios.rs` (1,376 lines).
