@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jdpf
 title: Review a debrief generated under the simpler lifecycle, and file what it finds
-status: ready
+status: dropped
 mission: null
 labels:
 - loose_end
@@ -36,3 +36,7 @@ Whether the debrief keeps earning its place at all is Sumeet's question, alongsi
 Relationships of the old record that the new format has no field for.
 
 - derived_from: atelier-mzpn (Which items of the six draft missions does the simpler lifecycle supersede, revise or keep?)
+
+## Report
+
+Dropped: The `debrief` command it would review was deleted in 0.5, and the ten items it would have planned are dropped with it.
