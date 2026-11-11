@@ -100,6 +100,10 @@ The thread, titled "Plan atelier-295u: ...", replied in one line and ran nothing
 
 - T3 Code started the thread on `claude-fable-5-2` in `approval-required` mode, although I had set the scratch project's default model to Claude Haiku 5.5. The Desk names no model, so planning sessions run on whatever T3 Code picks for a caller outside a thread. The document says so.
 
+### Review
+
+Round 1 (GPT-6.1 Sol, xhigh) recorded two `fix_now` findings at 1f516cb2. atelier-h6zc (pending answers matched by heading, which a Decisions section may repeat) is fixed in 6aa9fc86; the new test `acts::an_answer_is_told_from_an_earlier_one_under_the_same_heading` fails without the fix and passes with it, and 283 of 283 tests pass. atelier-j8f8 (master's `desk/e2e/fixtures.ts` lacks the new fields) is the first open item below, escalated.
+
 ### Open items
 
 - The merge with master will fail the desk CI job's `pnpm typecheck`. atelier-94pv has merged since this branch started, and `desk/e2e/fixtures.ts` builds typed `MissionPage` and `ItemPage` objects without the new `pending_answers`, `can_decide` and `decide_at`. The fix is about four lines in that file, which this item's Scope excludes. It is for the orchestrator to place.
