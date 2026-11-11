@@ -41,7 +41,8 @@ FALLBACK_SHA256=${CUTOVER_FALLBACK_SHA256:-d13f5e4df5c3382715a1247f1ede175d5e436
 # in progress before the switch merges.
 CUTOVER_ITEM=${CUTOVER_ITEM:-atelier-wd1i}
 SWITCH_ITEM=${CUTOVER_SWITCH_ITEM:-atelier-u1ko}
-# The paths a conversion writes, which a rollback cleans.
+# The paths a conversion writes new files into, which a rollback cleans;
+# a reset gives back what it changed or removed.
 CONVERTED_PATHS=".atelier AGENTS.md skills .claude .codex .github/workflows"
 SKIP_REASON="cutover conversion"
 

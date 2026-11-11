@@ -278,7 +278,9 @@ commit_conversion() { # <name> <dir> <base>
       [ "$head" = "$b" ] || die "$r: $d is at ${head:0:8}, neither the base nor its conversion" ;;
   esac
   jstart "$k" "$d	$b"
-  git -C "$d" add -A -- $CONVERTED_PATHS
+  # Everything: the converter also moves strategy files out of docs/. The
+  # checkout was clean at the preflight, so nothing else is there.
+  git -C "$d" add -A
   git -C "$d" commit -q -m "$CONVERT_MESSAGE"
   jdone "$k" "$(git -C "$d" rev-parse HEAD)"
 }
@@ -308,7 +310,7 @@ import os, re, sys
 link = re.compile(r"\]\(\s*<?([^)\s>]+)>?")
 ok = all_ = 0
 for f in sys.stdin.read().split("\0"):
-    if not f: continue
+    if not f or not os.path.exists(f): continue
     for m in link.finditer(open(f, encoding="utf-8", errors="replace").read()):
         t = m.group(1).split("#")[0]
         if not t or re.match(r"[a-z][a-z0-9+.-]*:", t, re.I) or t.startswith("/"): continue
