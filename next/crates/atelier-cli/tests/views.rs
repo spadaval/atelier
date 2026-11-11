@@ -291,10 +291,12 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     // reads the base's last commit, and would refuse it.
     let run = atelier(&root, "p1", &["ready", "demo-c3cc", "--by", "sumeet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
+    // A started item says what its holder's `status` lists as unmet.
     let items = "Its items:\n  Draft:\n    demo-c3cc (medium): Say hi\n  Ready:\n    \
                  demo-a1aa (high, can start now): Say hello\n    \
                  demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
-                 Building:\n    demo-d4dd (medium, held by t1): Wave\n";
+                 Building:\n    demo-d4dd (medium, held by t1): Wave\n      \
+                 [ ] Done when: It is done.\n      [ ] Report: written under `## Report`\n";
     let handoff = "An implementer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:\n  \
                    Run atelier start demo-a1aa and follow what it prints.\n\
                    Then wait for it to finish, and run `atelier status`.\n";

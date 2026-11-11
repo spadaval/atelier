@@ -83,6 +83,9 @@ pub struct Entry {
     /// hold.
     pub next: Option<Act>,
     pub unmet: Vec<Condition>,
+    /// For a started item another thread holds: what its holder's next act
+    /// needs, the conditions the holder's `status` lists as unmet.
+    pub needs: Vec<Condition>,
 }
 
 pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
@@ -130,6 +133,25 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         questions: Vec::new(),
         next,
         unmet,
+        needs: needs(facts)?,
+    })
+}
+
+/// For a started item another thread holds: the conditions its holder's
+/// next act lists as unmet.
+fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
+    let holder = match facts.holder() {
+        Some(holder) if !facts.holds() && STARTED.contains(&facts.status()) => holder,
+        _ => return Ok(Vec::new()),
+    };
+    let theirs = Facts {
+        caller: holder,
+        mission: facts.mission.clone(),
+        ..*facts
+    };
+    Ok(match next(&theirs)? {
+        Some(act) => unmet(act, &theirs)?,
+        None => Vec::new(),
     })
 }
 

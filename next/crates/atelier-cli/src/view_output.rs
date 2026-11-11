@@ -82,8 +82,10 @@ fn labels(labels: &[String]) -> String {
 }
 
 /// A mission's items under a heading for each status, each with what
-/// holds or blocks it; a ready item's other unmet conditions follow it.
-fn by_status(items: &[&Entry]) -> String {
+/// holds or blocks it; a ready item's other unmet conditions follow it,
+/// and with `needs`, as a lead is shown them, what a started item's holder
+/// still needs.
+fn by_status(items: &[&Entry], needs: bool) -> String {
     let mut text = String::new();
     for status in LIFECYCLE {
         let at: Vec<&&Entry> = items.iter().filter(|e| e.status == status).collect();
@@ -100,6 +102,14 @@ fn by_status(items: &[&Entry]) -> String {
                 .filter(|c| !matches!(c, Condition::Blocked { .. }));
             for unmet in other.filter(|_| status == Status::Ready) {
                 text += &format!("    {}\n", condition(&entry.id, unmet));
+            }
+            // A question is listed apart, with the command that answers it.
+            let open = entry
+                .needs
+                .iter()
+                .filter(|c| !matches!(c, Condition::Unanswered(_)));
+            for need in open.filter(|_| needs) {
+                text += &format!("    {}\n", condition(&entry.id, need));
             }
         }
     }
@@ -237,7 +247,7 @@ pub fn mission(
             text += &format!("\n## {heading}\n\n{content}\n");
         }
     }
-    text += &format!("\nItems:\n{}", by_status(items));
+    text += &format!("\nItems:\n{}", by_status(items, false));
     let mut questions: Vec<&(String, Decision)> = questions.iter().collect();
     questions.sort_by_key(|(_, d)| d.answer.is_some());
     text += "\nQuestions:\n";
@@ -344,7 +354,7 @@ pub fn led(led: &[(MissionDir, Vec<Entry>)]) -> String {
             "You lead mission {}: {}\n{}",
             dir.mission.id,
             dir.mission.title,
-            by_status(&items),
+            by_status(&items, true),
         );
         if items.iter().any(|e| !e.questions.is_empty()) {
             text += "Questions waiting on a decider, oldest first on each item:\n";
@@ -385,7 +395,7 @@ pub fn lead(
     };
     format!(
         "{said}Its items:\n{}{}",
-        by_status(items),
+        by_status(items, true),
         start_threads(items)
     )
 }
