@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-rh0d
 title: Fix link role defaults and role errors in issue link and unlink
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -32,3 +32,7 @@ The invalid-role error (`validate_issue_link_role`, `crates/atelier-cli/src/comm
 - [ ] `unlink` without `--role` removes the only link between the two records, or lists the roles that exist and exits non-zero. Unlinking a link that doesn't exist exits non-zero.
 - [ ] The role error groups roles: `readiness: blocked_by, blocks · mission: advances · context: related, … · custom: …`, with no proof roles.
 - [ ] CLI tests cover each case.
+
+## Report
+
+Dropped: `issue link` and link roles were removed in 0.5.
