@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-j79t
 title: Keep an item's Open items in the debrief when review filed follow-ups
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -36,3 +36,7 @@ Relationships of the old record that the new format has no field for.
 
 - supersedes: atelier-cagr (Decide a debrief child's Open items by its own follow-ups)
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The `debrief` command was deleted in 0.5.
