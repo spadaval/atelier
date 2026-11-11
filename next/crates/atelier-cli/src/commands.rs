@@ -3,11 +3,13 @@
 use crate::forge::Github;
 use crate::{git, merge, output, plan, setup};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{approval, check, row, unmet, Act, Checkout, Facts, STARTED};
+use atelier_app::acts::{check, row, unmet, Act, Checkout, Facts, STARTED};
 use atelier_app::repo::{facts, item_dir, item_path, planning, write_and_commit};
-use atelier_app::{decider, entry, overview, refused, Done, Entry, Located, Refused, Repo};
+use atelier_app::{
+    annotate, annotate_all, decider, entry, overview, refused, Done, Entry, Located, Refused, Repo,
+};
 use atelier_core::{Forge, Item, Status};
-use atelier_records::{render_item, validate_id, ItemDir};
+use atelier_records::{render_item, validate_id};
 
 pub enum Outcome {
     Done(String),
@@ -232,38 +234,6 @@ fn share(repo: &Repo, forge: &Forge, id: &str, title: &str) -> Result<String> {
         Ok(pull) => output::pull_request(id, &forge.remote, &pull, true),
         Err(error) => output::submit_no_pull_request(id, &error, true),
     })
-}
-
-/// Adds to `entry`, which `record` gives, what views show besides the act
-/// table: when it was approved, read from Git, and its unanswered questions.
-pub(crate) fn annotate(repo: &Repo, entry: &mut Entry, record: &ItemDir) -> Result<()> {
-    let id = &record.item.id;
-    let approved = approval(record).filter(|_| record.item.status == Status::Approved);
-    if let (Some(review), Some(tip)) = (approved, git::branch_tip(&repo.root, id)?) {
-        let path = format!("{}/reviews/{}.md", item_dir(id), review.name);
-        entry.approved = git::approved_at(&repo.root, &tip, &path)?;
-    }
-    let decisions = record.decisions()?.into_iter();
-    entry.questions = decisions
-        .filter(|d| d.answer.is_none())
-        .map(|d| d.question)
-        .collect();
-    Ok(())
-}
-
-/// [`annotate`] for each of `entries`, found among `items`.
-pub(crate) fn annotate_all<'a>(
-    repo: &Repo,
-    entries: impl IntoIterator<Item = &'a mut Entry>,
-    items: &[Located],
-) -> Result<()> {
-    for entry in entries {
-        let found = items.iter().find(|located| located.id == entry.id);
-        if let Some(record) = found.and_then(Located::record) {
-            annotate(repo, entry, record)?;
-        }
-    }
-    Ok(())
 }
 
 /// What the holder of each approved item of `entries`, which a lead is

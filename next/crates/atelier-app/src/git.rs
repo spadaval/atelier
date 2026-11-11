@@ -312,3 +312,21 @@ pub fn checkout_of(repo: &Path, branch: &str) -> Result<Option<PathBuf>> {
 pub fn head(repo: &Path) -> Result<String> {
     run(repo, &["rev-parse", "--verify", "HEAD^{commit}"])
 }
+
+/// The committer time, in RFC 3339, of the last commit in `rev`'s history
+/// that set `verdict: approve` in the review file at `path`.
+pub fn approved_at(repo: &Path, rev: &str, path: &str) -> Result<Option<String>> {
+    let time = run(
+        repo,
+        &[
+            "log",
+            "-1",
+            "--format=%cI",
+            "-Sverdict: approve",
+            rev,
+            "--",
+            path,
+        ],
+    )?;
+    Ok(Some(time).filter(|time| !time.is_empty()))
+}

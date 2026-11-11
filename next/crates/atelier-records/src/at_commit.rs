@@ -149,6 +149,34 @@ impl CommitReader {
         self.dirs(commit, MISSIONS)
     }
 
+    /// The paths, from the root, of mission `id`'s documents in `commit`:
+    /// the regular files of its directory, at any depth, except its
+    /// `mission.md` and anything under its `reviews/`. In path order; none
+    /// when the commit has no such directory.
+    pub fn mission_documents(&mut self, commit: &str, id: &str) -> Result<Vec<String>, ReadError> {
+        let dir = format!("{MISSIONS}/{id}");
+        let mut paths = Vec::new();
+        self.files(commit, &dir, &mut paths)?;
+        let (record, reviews) = (format!("{dir}/mission.md"), format!("{dir}/reviews/"));
+        paths.retain(|path| *path != record && !path.starts_with(&reviews));
+        paths.sort();
+        Ok(paths)
+    }
+
+    /// Adds to `paths` the path of each regular file under `dir` in
+    /// `commit`, at any depth.
+    fn files(&mut self, commit: &str, dir: &str, paths: &mut Vec<String>) -> Result<(), ReadError> {
+        for entry in self.tree_at(commit, dir)?.unwrap_or_default() {
+            let path = format!("{dir}/{}", name(entry.name)?);
+            match entry.mode.as_str() {
+                "40000" => self.files(commit, &path, paths)?,
+                "100644" | "100755" => paths.push(path),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     fn dirs(&mut self, commit: &str, dir: &str) -> Result<Vec<String>, ReadError> {
         let Some(entries) = self.tree_at(commit, dir)? else {
             return Ok(Vec::new());

@@ -210,3 +210,38 @@ fn reads_a_mission_as_a_commit_holds_it_and_none_where_it_has_none() {
     assert!(reader.mission(&older, "demo-m1ss").unwrap().is_none());
     assert!(reader.mission_ids(&older).unwrap().is_empty());
 }
+
+#[test]
+fn lists_a_missions_documents_without_its_record_or_reviews() {
+    let dir = TempDir::new().unwrap();
+    let repo = dir.path();
+    git(repo, &["init", "-q", "-b", "main"]);
+    let mission = repo.join(".atelier/missions/demo-m1ss");
+    fs::create_dir_all(mission.join("reviews")).unwrap();
+    fs::create_dir_all(mission.join("notes")).unwrap();
+    fs::write(mission.join("mission.md"), "not read\n").unwrap();
+    fs::write(mission.join("design.md"), "# Design\n").unwrap();
+    fs::write(mission.join("notes.md"), "# Notes\n").unwrap();
+    fs::write(mission.join("notes/spike.md"), "# Spike\n").unwrap();
+    fs::write(mission.join("reviews/1-aaaa.md"), REVIEW).unwrap();
+    git(repo, &["add", "-A"]);
+    git(repo, &["commit", "-qm", "plan"]);
+    let commit = git(repo, &["rev-parse", "HEAD"]);
+    // A file the checkout has and no commit does is not listed.
+    fs::write(mission.join("draft.md"), "# Draft\n").unwrap();
+
+    let mut reader = CommitReader::new(repo);
+    let dir = ".atelier/missions/demo-m1ss";
+    assert_eq!(
+        reader.mission_documents(&commit, "demo-m1ss").unwrap(),
+        [
+            format!("{dir}/design.md"),
+            format!("{dir}/notes.md"),
+            format!("{dir}/notes/spike.md"),
+        ]
+    );
+    assert!(reader
+        .mission_documents(&commit, "demo-zz99")
+        .unwrap()
+        .is_empty());
+}

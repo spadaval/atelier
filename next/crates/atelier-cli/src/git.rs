@@ -235,21 +235,3 @@ pub fn merge_tree(repo: &Path, ours: &str, theirs: &str) -> Result<Result<String
         ),
     }
 }
-
-/// The committer time, in RFC 3339, of the last commit in `rev`'s history
-/// that set `verdict: approve` in the review file at `path`.
-pub fn approved_at(repo: &Path, rev: &str, path: &str) -> Result<Option<String>> {
-    let time = run(
-        repo,
-        &[
-            "log",
-            "-1",
-            "--format=%cI",
-            "-Sverdict: approve",
-            rev,
-            "--",
-            path,
-        ],
-    )?;
-    Ok(Some(time).filter(|time| !time.is_empty()))
-}
