@@ -26,19 +26,17 @@ updated_at: "2026-11-05T06:07:19.198719+00:00"
 
 ## Goal
 
-`docs/product/work-view-ordering.md` says `work ready`, `work blocked`, `work mission` and `work parent` show a visible blocker before what it blocks, then sort by state, priority, update time and ID. Only `issue show` calls `ordered_work_indices` (crates/atelier-cli/src/commands/work_order.rs:8, used at issue.rs:404). Instead:
-- `work blocked` uses `sort_work_rows` (priority, status, ID; work_classification.rs). The fixture lists `atelier-5hp9 … 3 blockers` above atelier-fhep and atelier-il31, which block it.
-- `work all` re-sorts blocked rows by ID (crates/atelier-cli/src/commands/work.rs:198-200), so on master `work blocked` prints `sdb0, 7u4o, deyy` and `work all` prints `7u4o, deyy, sdb0`.
-- Mission and parent rows follow `issue_descendant_ids`, i.e. ID order; in `work mission 1w8c` the high-priority sdb0 is last among blocked rows.
+`atelier list` orders rows within each mission and label group by priority, with no regard to blockers: with atelier-1ci8 (medium) blocked by atelier-1a5k (low), links set for the test, `list --mission atelier-4pzj` prints atelier-1ci8 on line 14 and its blocker atelier-1a5k on line 43 (checked 2026-11-11 with the new binary in a converted scratch clone). A reader working down the list meets the blocked work before what unblocks it.
 
 ## Done when
 
-- [ ] Every work view passes its chosen rows through `ordered_work_indices`.
-- [ ] `work blocked` and `work all` print blocked rows in the same order.
-- [ ] A test with chain ubti → il31 → fhep → 5hp9 asserts that order in `work blocked` and `work mission`.
-- [ ] A test pins the order of a mixed `--all` list in `work mission` and `work parent` (from atelier-31l2).
-- [ ] A test with more than 20 ready items shows every row in `work ready` (from atelier-8zxh).
+- [ ] In `list --blocked`, and within each status group of `show <mission>`, a visible blocker comes before what it blocks, then rows sort by state, priority, update time and ID; `list` keeps its mission and label groups and orders each the same way.
+- [ ] A test with chain a → b → c (c blocked by b, b by a) asserts that order in `list --blocked` and in `show <mission>`.
 
 ## Scope
 
 Ordering only; no change to which rows are shown.
+
+## Context
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): `work blocked` and `work mission` became `list --blocked` and `show <mission>`, and `work all` became `list`; the old functions and the shared order doc are gone, so the rule is stated in the Done when.

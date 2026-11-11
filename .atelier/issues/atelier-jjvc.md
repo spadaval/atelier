@@ -19,15 +19,18 @@ updated_at: "2026-10-17T03:34:53.055620141+00:00"
 
 ## Goal
 
-ADR 0022 keeps `prime` as an alias for `status` so adopters' installed SessionStart hooks keep working. Remove it once known adopters' hooks no longer call it.
+The new binary has no `prime`, `land` or `status --hook`, but a clone whose `.claude/settings.json` still runs `atelier status --hook claude` and `atelier land --hook claude`, as this repository's does today, gets no word of it from `atelier check` (checked 2026-11-11 with the new binary in a converted scratch clone). Each session there would then start and stop on errors until someone reruns `atelier setup claude`.
 
 ## Done when
 
-`atelier prime` is gone from the CLI and help, `atelier check` or `land` names a `.claude/settings.json` hook that still calls `prime --hook claude` with the fix (`atelier setup claude`), and the CHANGELOG records the removal. Plan this into `todo` when neither this repository's nor astromech's committed `.claude/settings.json` contains `prime --hook claude`; the project makes no numbered releases.
+- [ ] `atelier check` names a `.claude/settings.json` hook that calls a command or flag the binary does not have, with the fix (`atelier setup claude`).
+- [ ] A test covers a settings file with an old `land --hook claude` hook.
 
 ## Context
 
 ADR 0022 Decision 1; review finding atelier-1ia7 on atelier-bw0b.
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): the new binary already has no `prime`; what remains is naming old hooks, which now include `status --hook` and `land --hook`. The CHANGELOG line and the plan condition went with the alias.
 
 ## Notes
 

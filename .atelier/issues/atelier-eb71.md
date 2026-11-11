@@ -21,12 +21,14 @@ updated_at: "2026-10-28T01:22:01.510371883+00:00"
 
 ## Goal
 
-`atelier` returns an anyhow `Result` from `main`, so with `RUST_BACKTRACE` (or `RUST_LIB_BACKTRACE`) set, ordinary validation errors print a "Stack backtrace:" after the message. Users with it in their shell see noise, and seven exact-output tests fail locally for such developers. CI works around it with a workflow-level `RUST_BACKTRACE: 0`.
+CI's workflow sets `RUST_BACKTRACE: 0` (`.github/workflows/ci.yml`, line 21) to keep backtraces out of exact-output tests. The new binary already prints no backtrace with `RUST_BACKTRACE=1` set (checked 2026-11-11 in a scratch clone: an unknown ID and an invalid `--priority` each printed only their message), so the workaround may now hide nothing.
 
 ## Done when
 
-With `RUST_BACKTRACE=1` exported, `cargo nextest run` passes and an invalid-value error (e.g. `atelier issue list --status bogus`) prints no backtrace; the `RUST_BACKTRACE: 0` env in `.github/workflows/ci.yml` is removed.
+- [ ] With `RUST_BACKTRACE=1` exported, the new workspace's tests pass, and the workflow-level `RUST_BACKTRACE: 0` is removed from CI.
 
 ## Context
 
 Found in review of atelier-lnwf (CI run 40609860117, `record_refs.rs:383`). Fix in the CLI's error printing, not by clearing the variable in tests only.
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): the error printing it asked for is done in the new binary; what remains is the CI workaround and the test run under the variable.
