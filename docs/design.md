@@ -951,7 +951,7 @@ lists each commit once, so each act is printed once.
   and commits of one time keep Git's order, parents first.
 
 In astromech on 2026-11-11, `atelier log` from a debug build printed 88
-lines in 0.06 to 0.07 seconds, starting six Git processes.
+lines in 0.06 to 0.08 seconds, starting six Git processes.
 
 What `log` does not show: `new`, `set` and edits to a record's text, which
 Git's own log has, so an item's time as a draft is read from its
