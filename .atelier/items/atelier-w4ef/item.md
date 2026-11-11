@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-w4ef
 title: Make check and check <id> apply one rule set
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -37,3 +37,7 @@ Whether a `backlog` item may keep placeholder sections (capture now, refine late
 ## Notes
 
 - 2026-11-08 [note] The validation-doc line holds: b13d74e4 merged docs/no-check-fix (the first gardener run's routine upkeep, digest atelier-j86z), which removed check --fix and the export and rebuild diagnostics.
+
+## Report
+
+Dropped: `check <id>` was removed in 0.5; `atelier check` applies one rule set to every record.
