@@ -2,7 +2,9 @@ import { CircleCheck, Target } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import type { InboxRepo } from "../api/InboxRepo";
+import type { InboxQuestion } from "../api/InboxQuestion";
 import type { InboxResponse } from "../api/InboxResponse";
+import type { ItemPage } from "../api/ItemPage";
 import { LiveThreadRow, T3Notice } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";
@@ -12,11 +14,41 @@ import { Empty, ErrorBanner, ScopeBar, Skeleton } from "../components/ui";
 import { api, to, useData } from "../lib/api";
 import { countsLine, plural } from "../lib/words";
 
+/** A question answered from this inbox: the question, the answer given, and the act's text. */
+type Answered = InboxQuestion & { answer: string; text: string };
+
+/**
+ * A question answered from this inbox, shown while its item's page lists the
+ * answer in `pending_answers`, which the inbox does not carry. Once a commit
+ * holds the answer it is no longer pending, and the line goes.
+ */
+function AnsweredLine({ repo, answered: a }: { repo: string; answered: Answered }) {
+  const item = useData<ItemPage>(api.item(repo, a.item));
+  const pending = item.data?.pending_answers.some((p) => p.question === a.question && p.finding === a.finding && p.answer?.text === a.answer);
+  if (item.data && !pending) return null;
+  return (
+    <div className="qline" data-testid="answered">
+      <span className="glyph ok">
+        <CircleCheck size={15} aria-hidden />
+      </span>
+      <span className="grow">
+        <Link to={to.item(repo, a.item)} className="q">
+          {a.question}
+        </Link>
+        <span className="sub">
+          <span className="mono">{a.item}</span> <PendingMark /> Its item's page shows the answer until its implementer commits it.
+        </span>
+        <p className="act-text">{a.text}</p>
+      </span>
+    </div>
+  );
+}
+
 function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
   const name = repo.repo;
   const count = inboxCount(repo);
   // Answers given here this visit. The server leaves an answered question out of the inbox until a commit holds it.
-  const [answered, setAnswered] = useState<{ item: string; question: string; text: string }[]>([]);
+  const [answered, setAnswered] = useState<Answered[]>([]);
   return (
     <section className="inbox-repo" aria-label={name}>
       {many ? (
@@ -87,24 +119,11 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
                 repo={name}
                 question={q}
                 answerable
-                onAnswered={(text) => setAnswered((was) => [...was, { item: q.item, question: q.question, text }])}
+                onAnswered={(text, answer) => setAnswered((was) => [...was, { ...q, answer, text }])}
               />
             ))}
             {answered.map((a, at) => (
-                <div key={at} className="qline" data-testid="answered">
-                  <span className="glyph ok">
-                    <CircleCheck size={15} aria-hidden />
-                  </span>
-                  <span className="grow">
-                    <Link to={to.item(name, a.item)} className="q">
-                      {a.question}
-                    </Link>
-                    <span className="sub">
-                      <span className="mono">{a.item}</span> <PendingMark /> Its item's page shows the answer until its implementer commits it.
-                    </span>
-                    <p className="act-text">{a.text}</p>
-                  </span>
-                </div>
+              <AnsweredLine key={at} repo={name} answered={a} />
             ))}
           </div>
         </div>

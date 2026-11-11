@@ -171,9 +171,10 @@ the tables below suggest:
 - `pending_answers` carries no place among the item's decisions, so the
   app matches each to the first unanswered question of the same item with
   the same text and finding, in order. The inbox has no
-  `pending_answers`: it drops an answered question, and the app keeps the
+  `pending_answers`: it drops an answered question. The app keeps an
   answer given on that visit beneath the questions, marked as not
-  committed yet.
+  committed yet, for as long as the item's own `pending_answers` (read
+  from `/items/{id}`) lists it.
 
 ## Routes
 

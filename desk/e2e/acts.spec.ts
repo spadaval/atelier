@@ -216,6 +216,22 @@ test("an open answer form does not carry over to a question a poll put in its pl
   expect(world.sent).toEqual([]);
 });
 
+test("the inbox drops an answer's not-committed mark once a commit holds it", async ({ page }) => {
+  await load(page, "/inbox");
+  const atelier = page.getByRole("region", { name: "atelier" });
+  await atelier.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
+  await atelier.getByLabel("Your answer, in one line").fill("Yes.");
+  await atelier.getByRole("button", { name: "Send the answer" }).click();
+  await expect(atelier.getByTestId("answered").getByTestId("pending")).toBeVisible();
+  // A poll while the answer is still pending keeps it.
+  await poll(page);
+  await expect(atelier.getByTestId("answered")).toHaveCount(1);
+  world.commitAnswers("atelier-uwxy");
+  await poll(page);
+  await expect(atelier.getByTestId("answered")).toHaveCount(0);
+  await expect(atelier.getByTestId("pending")).toHaveCount(0);
+});
+
 test("an answer from the inbox shows as answered and not committed, and a refused one as given", async ({ page }) => {
   await load(page, "/inbox");
   const atelier = page.getByRole("region", { name: "atelier" });
