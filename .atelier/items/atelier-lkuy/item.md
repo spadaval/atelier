@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-lkuy
 title: Rewrite the Mission Overview entry in plain terms
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -46,3 +46,7 @@ Carries the part of atelier-1w8c's S3 that its validation found unmet.
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-om6l (Show what holds a mission up: a Waiting on section, what Needs a Human items hold, and the overview's Waiting on line)
+
+## Report
+
+Dropped: `work missions` was removed in 0.5; `atelier list` heads each mission with its status and lead.
