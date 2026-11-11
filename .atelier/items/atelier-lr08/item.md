@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-lr08
 title: 'Give issue_histories one directory pathspec: its walk is 0.38 s of the debrief''s 1.04 s on mission atelier-k8h8'
-status: draft
+status: dropped
 mission: null
 labels:
 - fleet-dashboard
@@ -34,3 +34,7 @@ Measured with `GIT_TRACE2_EVENT` on 2026-11-09 after atelier-t7pb. Low priority:
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-t7pb (Make atelier debrief one history walk instead of one per item: 7.4 s to under 1.5 s on mission atelier-k8h8)
+
+## Report
+
+Dropped: `issue_histories` and the debrief it served were deleted in 0.5.
