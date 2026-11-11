@@ -66,6 +66,14 @@ for s in $REPOS; do
 done
 case " $REPOS " in *" atelier:"*) ;; *) die "CUTOVER_REPOS names no atelier" ;; esac
 [ -n "$STATE" ] && [ -n "$REMOTE" ] || die "CUTOVER_STATE and CUTOVER_REMOTE must not be empty"
+# The Desk's service, atelier-desk, and the converted clones it serves are
+# not the cutover's: the runbook stops only the old atelier-serve, and never
+# takes a Desk clone for a repository to convert.
+DESK_CLONES=${CUTOVER_DESK_CLONES:-$HOME/.cache/atelier-desk}
+[ "$SERVICE" = atelier-serve ] || die "CUTOVER_SERVICE is $SERVICE: the runbook stops only the old atelier-serve"
+for s in $REPOS; do
+  case ${s#*:} in "$DESK_CLONES"/*) die "CUTOVER_REPOS names ${s%%:*} at a clone of the Desk's, under $DESK_CLONES" ;; esac
+done
 
 # The repositories' fields: name, main clone, base.
 repo_names() { local s; for s in $REPOS; do echo "${s%%:*}"; done; }

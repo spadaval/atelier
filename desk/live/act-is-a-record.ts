@@ -19,8 +19,7 @@
 // --by and thread. --differ runs the CLI's `ready` under another name, so
 // the two must differ and the command must fail: it shows the comparison
 // can fail. The binaries default to this checkout's builds
-// (next/target/debug/atelier, next/target/release/atelier-desk or else
-// debug) and the app to desk/dist.
+// (target/debug/atelier, target/release/atelier-desk or else debug) and the app to desk/dist.
 
 import { chromium } from "@playwright/test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
@@ -44,8 +43,8 @@ function parseArgs(argv: string[]) {
   const o = {
     clone: "",
     by: "sumeet",
-    atelier: built("next/target/debug/atelier", "target/debug/atelier"),
-    desk: built("next/target/release/atelier-desk", "next/target/debug/atelier-desk", "target/release/atelier-desk", "target/debug/atelier-desk"),
+    atelier: built("target/debug/atelier"),
+    desk: built("target/release/atelier-desk", "target/debug/atelier-desk"),
     app: path.join(top, "desk/dist"),
     differ: false,
     keep: false,

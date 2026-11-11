@@ -19,7 +19,8 @@
 # read them there, and delete the work directory afterwards. A fingerprint
 # of what a cutover would change on the real host (each repository's hooks
 # and remote config, the installed binary, the skill checkout and its links,
-# and the service) is taken before and after, and must match.
+# the service, and the Desk's service and clones) is taken before and after,
+# and must match.
 set -euo pipefail
 [ $# -ge 2 ] || { echo "usage: $0 <work directory> <new binary> [trial...]" >&2; exit 2; }
 mkdir -p "$1"
@@ -55,6 +56,10 @@ fingerprint() {
   echo "skill $(git -C "$REAL_SKILL" rev-parse HEAD)"
   echo "links $(readlink "$HOME/.claude/skills/agent-factory") $(readlink "$HOME/.agents/skills/agent-factory")"
   echo "service $(systemctl --user is-enabled atelier-serve) $(systemctl --user is-active atelier-serve) $(systemctl --user show -p MainPID --value atelier-serve)"
+  # The Desk's service and its clones, which the cutover leaves alone.
+  echo "desk $(systemctl --user is-active atelier-desk || true) $(systemctl --user show -p MainPID --value atelier-desk || true)"
+  local d
+  for d in "$HOME"/.cache/atelier-desk/clones/*/; do [ -d "$d" ] && echo "desk clone $(basename "$d") $(git -C "$d" rev-parse HEAD 2>/dev/null)"; done
 }
 
 # ---------------------------------------------------------------- shared inputs
@@ -577,6 +582,13 @@ trial_preflight() {
     git -C "$S/worktrees/u1ko" commit -qam "More work after the merge, in the sandbox"
     if out=$(run_cutover "$S" preflight 2>&1); then say "    FAILED: after the switch it passed with atelier-u1ko in progress"; exit 1; fi
     say "    after the switch, with atelier-u1ko in progress: stops"
+    # The Desk's service and clones are never the runbook's.
+    mkdir -p "$S/home/.cache/atelier-desk/clones/atelier"
+    if out=$(CUTOVER_REPOS="atelier:$S/home/.cache/atelier-desk/clones/atelier:master" run_cutover "$S" preflight 2>&1); then say "    FAILED: it took a Desk clone for a repository"; exit 1; fi
+    grep -q "a clone of the Desk's" <<< "$out" || { say "    FAILED: no word of the Desk's clone: $out"; exit 1; }
+    if out=$(CUTOVER_SERVICE=atelier-desk run_cutover "$S" preflight 2>&1); then say "    FAILED: it would stop atelier-desk"; exit 1; fi
+    grep -q "stops only the old atelier-serve" <<< "$out" || { say "    FAILED: no word of the service: $out"; exit 1; }
+    say "    a Desk clone given as a repository, or atelier-desk as the service: refused before anything runs"
     "$S/bin/systemctl" stop atelier-serve || true
   ) && say "preflight: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
 }

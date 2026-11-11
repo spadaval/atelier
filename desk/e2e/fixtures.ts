@@ -424,7 +424,7 @@ export const items: Record<string, ItemPage> = {
     can_decide: true,
     decide_at: "/clones/atelier-uwxy",
     goal: "Serve the reading routes. See [the API](../../../docs/architecture/desk.md#routes).",
-    scope: "`next/crates/atelier-desk` only.",
+    scope: "`crates/atelier-desk` only.",
     done_when: [
       { ticked: true, text: "`GET /api/repos` answers." },
       { ticked: false, text: "`GET /api/inbox` answers." },
@@ -448,7 +448,7 @@ export const docs: Record<string, DocResponse> = {
     commit,
     path: ".atelier/missions/atelier-z4cr/design.md",
     markdown:
-      '---\nstatus: draft\nlast_changed: "2026-11-11: amended at Sumeet\'s direction"\n---\n\n# Sizing\n\n- Complexity: high.\n\nThe notes are in [notes](notes.md), and the product intent in [the intent](../../../docs/product/desk.md#why-it-exists). The server is [api.rs](../../../next/crates/atelier-desk/src/api.rs).\n\n# Risks and Unknowns\n\n- The view gap is large.\n',
+      '---\nstatus: draft\nlast_changed: "2026-11-11: amended at Sumeet\'s direction"\n---\n\n# Sizing\n\n- Complexity: high.\n\nThe notes are in [notes](notes.md), and the product intent in [the intent](../../../docs/product/desk.md#why-it-exists). The server is [api.rs](../../../crates/atelier-desk/src/api.rs).\n\n# Risks and Unknowns\n\n- The view gap is large.\n',
   },
   ".atelier/missions/atelier-z4cr/notes.md": {
     commit,

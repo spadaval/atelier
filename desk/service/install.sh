@@ -39,10 +39,8 @@ if [ ! -e "$config" ] && [ -z "$caller" ]; then
   exit 2
 fi
 
-# The Rust workspace is next/ until the switch (atelier-u1ko) moves it to
-# the top of the repository.
-workspace=$top/next
-[ -f "$workspace/Cargo.toml" ] || workspace=$top
+# The Rust workspace is at the top of the repository.
+workspace=$top
 echo "Building atelier-desk at $commit"
 cargo build -j 4 --release -p atelier-desk --manifest-path "$workspace/Cargo.toml"
 echo "Building the app"

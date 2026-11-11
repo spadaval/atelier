@@ -1162,6 +1162,12 @@ one settings block (`common.sh`) or the environment, with this host's
 values as defaults; the trials run the same script with every one pointed
 at a sandbox.
 
+The Desk's service, `atelier-desk`, and the converted clones it serves are
+not the cutover's: they are left running, the settings check refuses a Desk
+clone as a repository and any service but `atelier-serve`, and pointing the
+Desk at the live repositories afterwards is the Desk mission's loose end,
+atelier-qxmr.
+
 The runbook keeps a journal in its state directory. Each entry is written
 before the change it describes and marked done after: each conversion it
 starts, with its directory and base commit; each commit; each push, with the

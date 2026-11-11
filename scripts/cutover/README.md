@@ -17,6 +17,12 @@ everything back. The protocol is the Transition section of
 | `trials.sh` | Runs the runbook and the rollback in sandboxes, at every point it can stop |
 | `first-use-forge.sh`, `rehearse.sh` | The new binary's first read-only questions to GitHub, and mission 2's rehearsal |
 
+The Desk's service, `atelier-desk`, and the converted clones it serves in
+`~/.cache/atelier-desk/clones` are not the cutover's: they are left running
+as they are, the runbook refuses settings that would take one of those
+clones for a repository or stop that service, and pointing the Desk at the
+live repositories afterwards is the Desk mission's loose end, atelier-qxmr.
+
 ## Before: quiet
 
 All of this must hold in the five repositories, and `cutover.sh preflight`

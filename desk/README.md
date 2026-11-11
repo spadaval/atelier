@@ -11,7 +11,7 @@ server of its own.
 It is React with Vite and react-router, Markdown through react-markdown,
 lucide icons and one plain stylesheet with tokens, carried over from the
 mission-control spike. The API's types in `src/api/` are generated from
-`next/crates/atelier-desk/src/api.rs`; do not edit them by hand.
+`crates/atelier-desk/src/api.rs`; do not edit them by hand.
 
 ## Work on the app
 
@@ -61,8 +61,8 @@ Two commands in `live/` check the mission's success criteria
 (`docs/strategies/desk.md`) against a real `atelier-desk` and the new
 `atelier`. They are not part of `pnpm e2e` or the `desk` CI job, which
 builds no Rust. Each prints one line per comparison and exits 1 on any
-difference. Build first: `pnpm build`, and in `next/`, `cargo build -j 4
--p atelier-cli -p atelier-desk`. On this host, set
+difference. Build first: `pnpm build`, and at the repository's root, `cargo build
+-j 4 -p atelier-cli -p atelier-desk`. On this host, set
 `TMPDIR=~/.cache/atelier-desk/tmp`, since `/tmp` is small.
 
 **desk-matches-cli** reads the running service. For every open mission in
@@ -92,6 +92,6 @@ $ pnpm act-is-a-record ~/.cache/atelier-desk/clones/atelier --differ   # must fa
 
 `--differ` runs the CLI's `ready` under another name, to show the
 comparison can fail. `--atelier`, `--desk` and `--app` name other builds;
-by default they are this checkout's `next/target/debug/atelier`, its
+by default they are this checkout's `target/debug/atelier`, its
 release `atelier-desk` (else the debug one) and `dist/`. `desk-matches-cli`
 takes `--atelier` too.
