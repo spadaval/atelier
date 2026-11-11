@@ -4,6 +4,9 @@ id: "atelier-1oel"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-1oel
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-11T04:41:15.029404827+00:00"
+status: "done"
 title: "Give a Codex subagent its own identity, show the round and the three-round rule in status, and name the pull request in the review brief"
-updated_at: "2026-11-11T02:51:32.249684405+00:00"
+updated_at: "2026-11-11T04:41:15.029404827+00:00"
 ---
 
 ## Goal
@@ -33,16 +37,16 @@ Build three small changes to the new binary in `next/` and bring the two specifi
 
 ## Done when
 
-- [ ] `next/crates/atelier-app/src/identity.rs`: when `CODEX_THREAD_ID` and `CODEX_SESSION_ID` are both set to non-empty values that differ, the caller is a Codex subagent, and its identity is the identity today's rule gives (its parent's), then `/`, then its `CODEX_THREAD_ID`. In every other case the identity is what today's rule gives, so a root thread under T3 Code keeps its T3 thread ID and a Claude Code subagent is still its parent. Unit tests cover: the two values measured on this host on 2026-11-11 (`/home/supadava/.cache/atelier-identity-probe/root.txt` and `child.txt`, a root whose two variables are equal and a child whose `CODEX_THREAD_ID` differs, both with one inherited `T3CODE_THREAD_ID`); a Codex subagent outside T3 Code; `CODEX_THREAD_ID` set with no `CODEX_SESSION_ID`, which changes nothing; and an empty value, which counts as unset.
-- [ ] A scenario test drives the real binary with those variables: a thread starts and submits an item; a caller with the same parent variables and its own `CODEX_THREAD_ID` runs `review` and `verdict approve` and is accepted, and the review file's `reviewers` holds `<parent>/<its thread>`; the parent itself is still refused as reviewer; and the subagent is refused `submit` and `merge` on the item, since it is not its implementer. `log` and `show` print the identity whole.
-- [ ] Nothing treats an identity as a path or splits it on `/`. The Report lists each place an identity is parsed out of a line (`Answer by <thread>:`, `Taken: <item> by <thread>`, `Dropped by <thread>:`, the front matter's `implementers`, `reviewers` and `lead`) with the test that reads an identity containing `/` back unchanged through it, and says how the search for other uses was made.
-- [ ] The handoff line `submit`, `escalate` and `lead` print, and the refusal of an author's `review` and `decide`, are true under both harnesses: a subagent of a Claude Code thread runs as that thread and is refused, and a subagent of a Codex thread is a thread of its own and may review or decide. The line still has no backticks. It tells the reader to start the reviewer with fresh context, not as a fork of its own.
-- [ ] One real Codex session proves the rule end to end, in a scratch repository with the binary built from this branch: a `codex exec` root thread starts an item, makes a small change and submits; a child it starts with `spawn_agent` runs `atelier review` and `atelier verdict approve` and is accepted; the root merges. The Report gives the identities the records hold, and says what `spawn_agent` does by default, a fresh context or a fork of its parent's, and how a caller asks for a fresh one if that is not the default. This costs one or two Codex runs on a small model; no more are run.
-- [ ] `status` shows the round: the implementer of an item in review or with changes requested, and the round's reviewer, see which round it is. Once three rounds have ended with no approve verdict, the implementer's `status` says in one line that the Review section requires escalation now and names `atelier escalate`. Nothing is refused: `submit` still opens a fourth round. Tests cover round 1, round 3 with changes requested, and an item approved in round 3, which shows no such line.
-- [ ] The brief `review <item>` prints names the branch's pull request where the base's `config.toml` configures a forge and the forge has one for the branch, found with the forge code `submit` and `merge` already use. With no forge it prints nothing about one. When the forge does not answer, or has no pull request for the branch, the brief says so in one line and `review` still succeeds. The lookup is bounded the way `merge`'s question under the lock is. Tests use the `gh` double the merge tests use.
-- [ ] `docs/strategies/redesign-product.md`, Review section, reworded only as far as points 1 and 3 need, which Sumeet authorised: it says the one-try rule, the three-round rule and the fresh reviewer for a rebuttal are the skill's to apply and the tool shows the round and the one-try rule; and "What the reviewer is given" names the pull request in place of the latest merge check results. The Handoff lines passage and the `status` example under Commands match what the binary prints. Nothing else in Words, Lifecycle or Review changes: the Report gives `git diff` of those three sections and it shows only those sentences.
-- [ ] `docs/strategies/redesign-architecture.md` matches: Threads and roles states the identity rule and what was measured for Codex, and no longer says only a harness-started thread can review; the paragraph of Status that lists what the binary does and does not enforce says `status` shows the round and the three-round rule; and the sentence that the brief carries no merge check results says what it carries instead. The `last_changed` lines of both documents are left alone; the orchestrator writes them once.
-- [ ] In `next/`: `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings` and `cargo nextest run` pass, each with `-j 4` where it builds. The Report gives the non-test line count of `next/` before and after (`scripts/count_non_test_rust.py`).
+- [x] `next/crates/atelier-app/src/identity.rs`: when `CODEX_THREAD_ID` and `CODEX_SESSION_ID` are both set to non-empty values that differ, the caller is a Codex subagent, and its identity is the identity today's rule gives (its parent's), then `/`, then its `CODEX_THREAD_ID`. In every other case the identity is what today's rule gives, so a root thread under T3 Code keeps its T3 thread ID and a Claude Code subagent is still its parent. Unit tests cover: the two values measured on this host on 2026-11-11 (`/home/supadava/.cache/atelier-identity-probe/root.txt` and `child.txt`, a root whose two variables are equal and a child whose `CODEX_THREAD_ID` differs, both with one inherited `T3CODE_THREAD_ID`); a Codex subagent outside T3 Code; `CODEX_THREAD_ID` set with no `CODEX_SESSION_ID`, which changes nothing; and an empty value, which counts as unset.
+- [x] A scenario test drives the real binary with those variables: a thread starts and submits an item; a caller with the same parent variables and its own `CODEX_THREAD_ID` runs `review` and `verdict approve` and is accepted, and the review file's `reviewers` holds `<parent>/<its thread>`; the parent itself is still refused as reviewer; and the subagent is refused `submit` and `merge` on the item, since it is not its implementer. `show` prints the identity whole.
+- [x] Nothing treats an identity as a path or splits it on `/`. The Report lists each place an identity is parsed out of a line (`Answer by <thread>:`, `Taken: <item> by <thread>`, `Dropped by <thread>:`, the front matter's `implementers`, `reviewers` and `lead`) with the test that reads an identity containing `/` back unchanged through it, and says how the search for other uses was made.
+- [x] The handoff line `submit`, `escalate` and `lead` print, and the refusal of an author's `review` and `decide`, are true under both harnesses: a subagent of a Claude Code thread runs as that thread and is refused, and a subagent of a Codex thread is a thread of its own and may review or decide. The line still has no backticks. It tells the reader to start the reviewer with fresh context, not as a fork of its own.
+- [x] One real Codex session proves the rule end to end, in a scratch repository with the binary built from this branch: a `codex exec` root thread starts an item, makes a small change and submits; a child it starts with `spawn_agent` runs `atelier review` and `atelier verdict approve` and is accepted; the root merges. The Report gives the identities the records hold, and says what `spawn_agent` does by default, a fresh context or a fork of its parent's, and how a caller asks for a fresh one if that is not the default. This costs one or two Codex runs on a small model; no more are run.
+- [x] `status` shows the round: the implementer of an item in review or with changes requested, and the round's reviewer, see which round it is. Once three rounds have ended with no approve verdict, the implementer's `status` says in one line that the Review section requires escalation now and names `atelier escalate`. Nothing is refused: `submit` still opens a fourth round. Tests cover round 1, round 3 with changes requested, and an item approved in round 3, which shows no such line.
+- [x] The brief `review <item>` prints names the branch's pull request where the base's `config.toml` configures a forge and the forge has one for the branch, found with the forge code `submit` and `merge` already use. With no forge it prints nothing about one. When the forge does not answer, or has no pull request for the branch, the brief says so in one line and `review` still succeeds. The lookup is bounded the way `merge`'s question under the lock is. Tests use the `gh` double the merge tests use.
+- [x] `docs/strategies/redesign-product.md`, Review section, reworded only as far as points 1 and 3 need, which Sumeet authorised: it says the one-try rule, the three-round rule and the fresh reviewer for a rebuttal are the skill's to apply and the tool shows the round and the one-try rule; and "What the reviewer is given" names the pull request in place of the latest merge check results. The Handoff lines passage and the `status` example under Commands match what the binary prints. Nothing else in Words, Lifecycle or Review changes: the Report gives `git diff` of those three sections and it shows only those sentences.
+- [x] `docs/strategies/redesign-architecture.md` matches: Threads and roles states the identity rule and what was measured for Codex, and no longer says only a harness-started thread can review; the paragraph of Status that lists what the binary does and does not enforce says `status` shows the round and the three-round rule; and the sentence that the brief carries no merge check results says what it carries instead. The `last_changed` lines of both documents are left alone; the orchestrator writes them once.
+- [x] In `next/`: `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings` and `cargo nextest run` pass, each with `-j 4` where it builds. The Report gives the non-test line count of `next/` before and after (`scripts/count_non_test_rust.py`).
 
 ## Scope
 
@@ -61,3 +65,60 @@ Expected size: about 150 lines of Rust outside tests, and 40 changed lines acros
 ## Unknowns
 
 - What `spawn_agent` gives its child by default, a fresh context or a fork. The real session in Done when finds out.
+
+## Notes
+
+- 2026-11-10 [note] Escalated after review round 2 at 7c77c47a: atelier-h4x4 (again as atelier-cy97) needs a scope decision, since the Done when line asks for log, which atelier-8b0a builds. atelier-yul7 is fixed and verified; atelier-s6xa is fixed at 658c783d and not yet reviewed. See the Report.
+- 2026-11-10 [decision] The orchestrator of atelier-qr5s narrowed the second Done when line on 2026-11-11 from '`log` and `show` print the identity whole' to '`show` prints the identity whole', because next/ has no `log` command (atelier-8b0a builds it). The reader tests already prove an identity with / survives every record line it is parsed from (Answer by, Taken, Dropped by, implementers, reviewers, lead). `log`'s own check is left to the item that builds `log`.
+  Reason: next/ has no log command; atelier-8b0a builds it, and building it here is another mission's item
+- 2026-11-10 [decision] The orchestrator of atelier-qr5s authorized a fourth review round on 2026-11-11, past the three-round escalation rule, to review the fixes as they stand.
+  Reason: the three rounds converged: one finding was the plan's error, one a real gap, one a stale Report
+
+## Report
+
+All ten Done when lines hold. The second line was narrowed on 2026-11-11 by the orchestrator to `show` alone, since `next/` has no `log` command (see the decision note). Proof, all run after the last code change at 658c783d (evidence atelier-wf9u): in `next/`, `cargo fmt -- --check` passed, `cargo clippy -j 4 --all-targets -- -D warnings` passed, and `cargo nextest run -j 4` ran 239 tests, 239 passed. Non-test Rust in `next/` (`scripts/count_non_test_rust.py HEAD next`): 11336 before, 11462 after (+126).
+
+- **Identity rule** (`next/crates/atelier-app/src/identity.rs`): unit tests `a_codex_root_thread_keeps_its_identity_and_its_subagent_has_its_own` (the measured root and child, with the inherited `T3CODE_THREAD_ID`), `a_codex_subagent_outside_t3_code_is_its_session_then_its_thread`, `a_codex_thread_without_both_variables_set_changes_nothing` (no `CODEX_SESSION_ID`; an empty or blank value on either side; a Claude Code session stays its parent), and the existing `takes_the_first_variable_set_in_order_else_human`.
+- **Scenario** (`tests/scenarios.rs`, `a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own`): the root (`T3CODE_THREAD_ID=t1`, `CODEX_THREAD_ID` equal to `CODEX_SESSION_ID`) starts and submits; it is refused as reviewer; a caller with the same parent variables and its own `CODEX_THREAD_ID` runs `review` and `verdict approve`, and the committed review's `reviewers` is `t1/<its thread>`; that caller is refused `submit` and `merge` ("do not hold demo-ab12; t1 does"); `show` prints `by t1/<its thread>`; the root merges.
+- **Nothing splits an identity on `/`.** Each place an identity is read out of a line, and the test that reads `<parent>/<child>` back unchanged through it: `Answer by <thread>:`, `Taken: <item> by <thread>` and `Dropped by <thread>:` in `atelier-records/src/body.rs`, test `an_identity_holding_a_slash_reads_back_whole_from_each_line_that_names_one`; the front matter's `implementers`, `reviewers` and `lead`, test `an_identity_holding_a_slash_reads_back_whole_from_each_front_matter_list` in `atelier-records/tests/records.rs`. The search: every `Thread(` construction in `next/crates/*/src` (only `identity.rs` and those three line parsers build one from text), every access to a `Thread` or `Threads` inner value (`.0`: only `contains` equality, in `acts.rs`), and every `split('/')`, `split_once('/')` and `rsplit_once('/')` (a forge URL, a record path, and `<item>/<finding>` names, none an identity). No identity is joined to a path.
+- **Handoff and refusals** (`output.rs`, `handoff`): one line now serves `submit`, `escalate`, `lead`, and the author's refused `review` and `decide`: "A reviewer must be a thread other than yours. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Start one with fresh context, not as a fork of yours, and give it this task:". No backticks. Pinned by the updated tests in `scenarios.rs`, `merge.rs`, `decisions.rs` and `views.rs`.
+- **Real Codex session**, one run of `codex exec -m gpt-6-luna` (Codex 0.167) in `~/.cache/atelier-qr5s/1oel/codex-run/repo`, with this branch's debug binary on `PATH` and `T3CODE_THREAD_ID=t3-root`. (A first launch was stopped before it ran anything: `codex exec` was waiting on stdin.) The root started demo-qgzr, committed `hello.`, submitted; it started one `spawn_agent` child with `fork_turns: "none"`, which ran `atelier review` and `atelier verdict approve` and was accepted; the root merged (`main` holds `status: done`). The records hold `implementers: [t3-root]` and `reviewers: [t3-root/01a1c89d-0f6a-7051-a182-fef6ea11ea9a]`; the child's environment had `CODEX_SESSION_ID=01a1c89c-b1e0-75d1-b3e5-496840e988c3`, its own `CODEX_THREAD_ID=01a1c89d-0f6a-7051-a182-fef6ea11ea9a`, and the inherited `T3CODE_THREAD_ID=t3-root`. **`spawn_agent` forks by default**: its tool definition, as recorded in the session log, says of `fork_turns` "Parent history to inherit. Defaults to `all`; use `none` to start without parent history". A caller asks for a fresh context with `fork_turns: "none"`.
+- **Round in `status`** (`acts.rs` `Facts::unapproved_rounds`, `view.rs`, `output.rs`): the implementer sees `Status: in review, round N` or `Status: changes requested in round N`; the round's reviewer already saw `round N`. Once three rounds have ended with no approve verdict, the implementer's `status` adds "3 rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate \"<question>\"". Tests: `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` (round 1, round 2, round 3 with changes requested, only the implementer is told, `submit` still opens round 4 and its reviewer sees `round 4`) and `an_item_approved_in_round_3_is_not_told_to_escalate`.
+- **Pull request in the brief** (`review.rs`, `output::brief_pull_request`): looked up with `Github::open_pull_request`, bounded by `merge::locked_until()`, which `merge`'s look at CI under its lock now uses too. Tests in `tests/merge.rs` with its `gh` double (two flags added, `pulls-down` and `pulls-stall`): `the_review_brief_names_the_branchs_pull_request`, `a_brief_whose_forge_has_no_pull_request_or_does_not_answer_says_so_in_one_line`, `a_brief_whose_forge_never_answers_is_printed_at_the_bound` (ends within the bound and kills the stalled `gh`), and `with_no_forge_the_brief_says_nothing_of_a_pull_request`.
+- **Specifications**: the product's Review section changed only in these sentences, and Words and Lifecycle not at all. `diff` of each section, before and after:
+
+```text
+== ## Words
+== ## Lifecycle
+== ## Review
+7,8c7,9
+<   findings with the author's responses and any decisions, and the latest
+<   merge check results. It carries no author reasoning beyond the Report.
+---
+>   findings with the author's responses and any decisions, and the branch's
+>   pull request where a forge is configured, where CI's result can be read.
+>   It carries no author reasoning beyond the Report.
+20a22,25
+> - **The skill applies three of these rules:** a rebuttal's one try, the fresh
+>   reviewer for a rebuttal, and escalation after three rounds. The tool
+>   refuses none of them; `status` shows the round, the one-try rule and the
+>   three-round rule.
+```
+
+  The Handoff lines passage and the `status` example and the paragraph under it now match the binary. In the architecture, Threads and roles states the rule and both measurements, and says any harness-started thread and a Codex subagent have identities of their own; the Status paragraph says what `status` shows of the three skill rules and what the brief carries. Neither `last_changed` line changed.
+
+### Responses
+
+- atelier-yul7: fixed in cb648346. `status` away from the item's branch now gives the implementer the round and the escalation line in its list of what it holds; `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` checks both from a detached checkout of the base, and that the round's reviewer is not told. The architecture's Threads and roles says so. `cargo nextest run -j 4`: 239 passed; fmt and clippy clean.
+- atelier-s6xa: fixed in 658c783d. In review after three rounds without an approval, the implementer's `status`, on the branch and away from it, still gives the rule, and says to escalate once the round's verdict is in if it asks for changes too, since `escalate` does not run in review; an approved item gives none. `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` checks round 4 in review both ways. `cargo nextest run -j 4`: 239 passed; fmt and clippy clean.
+- atelier-u48a: fixed in the commit that adds this line: the paragraph above now names 658c783d and the count at the head, 11462.
+- atelier-h4x4 and atelier-cy97 (the same finding, recorded again in round 2): escalated to the orchestrator, who narrowed the second Done when line to "`show` prints the identity whole" on 2026-11-11 (decision note). The line now holds: `a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own` checks `show` prints `by t1/<its thread>`.
+
+### Deviations
+
+- The specifications changed 77 lines (52 added, 28 removed by `git diff --stat`) against the 40 expected, mostly reflowed paragraphs in the two architecture passages.
+
+### Open items
+
+- **`spawn_agent` forks by default.** In Codex 0.167, `spawn_agent`'s `fork_turns` parameter defaults to `"all"`, which gives the child its parent's whole conversation, and `fork_turns: "none"` gives it a fresh context; I read this in the tool definition recorded in the real run's session log, `~/.codex/sessions/2026/11/10/rollout-2026-11-10T22-17-54-01a1c89c-b1e0-75d1-b3e5-496840e988c3.jsonl`. So a skill that has a Codex thread start its reviewer with `spawn_agent` must pass `fork_turns: "none"` (for atelier-orb2).
+- Identity inside Codex's SessionStart hook is not in this change. The hook sets none of `CODEX_THREAD_ID`, `CODEX_SESSION_ID` or `T3CODE_THREAD_ID`; Codex passes the hook a JSON object on stdin whose fields, read from the 0.167 binary's strings and not run, include `session_id`, `cwd`, `hook_event_name`, `model` and `source`. Taking an identity there needs `status` to read that stdin when run as a hook, or `setup codex` to write a command that passes `session_id` on, more than a few lines in this rule.

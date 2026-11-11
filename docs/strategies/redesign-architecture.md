@@ -450,32 +450,48 @@ decides it; `verdict approve` is refused while a fix-now finding is open;
 and a decided finding cannot be reopened. Three it does not enforce, and
 leaves to the skill: that a rebuttal goes to a fresh reviewer and gets one
 try, that escalation is required after three rounds without an approval,
-and that a mission's lead is the one who decides. `status` shows two of
-them: an open finding whose rebuttal a reviewer kept says the rebuttal has
-had its one try, and a question names the lead as its decider when the
-lead may decide it. Nothing counts rounds, nothing stops one thread
-reviewing every round, and any thread that is neither an implementer of
-the item nor a reviewer of the finding may decide. The review brief
-carries no merge check results, since nothing records them.
+and that a mission's lead is the one who decides. `status` shows each of
+them but the fresh reviewer: an open finding whose rebuttal a reviewer kept says the rebuttal has
+had its one try; the implementer is shown the round, and once three rounds
+have ended without an approve verdict (`Facts::unapproved_rounds`, counted
+from the review files and stored nowhere) it is told on one line that
+escalation is required now, though `submit` still opens a fourth, and in
+review that it escalates once the round's verdict is in if that asks for
+changes too; and a
+question names the lead as its decider when the lead may decide it.
+Nothing stops one thread reviewing every round, and any thread that is
+neither an implementer of the item nor a reviewer of the finding may
+decide. The review brief carries no merge check results, since nothing
+records them. Where the base's config names a forge it names the branch's
+open pull request, where CI's result can be read, looked up with the code
+`submit` and `merge` use and bounded as `merge`'s question under its lock
+is; when the forge has none or does not answer, the brief says so in one
+line and `review` goes on.
 
 ## Threads and roles
 
 A thread's identity is `T3CODE_THREAD_ID` when it is set, else the harness's
 session ID (`CLAUDE_CODE_SESSION_ID`, `CODEX_SESSION_ID`,
-`GROK_SESSION_ID`), else `human`. A variable set to an empty value counts as
-unset.
+`GROK_SESSION_ID`), else `human`. When `CODEX_THREAD_ID` and
+`CODEX_SESSION_ID` are both set and differ, the caller is a Codex subagent,
+and its identity is that one, then `/`, then its `CODEX_THREAD_ID`. A
+variable set to an empty value counts as unset. Nothing splits an identity
+on `/` or reads it as a path; it is compared whole.
 
-A harness's own subagent is not a new thread. Observed on 2026-11-10
+A Claude Code subagent is not a new thread. Observed on 2026-11-10
 (atelier-67nn): a Claude Code subagent started with its `Agent` tool runs with
 its parent's `CLAUDE_CODE_SESSION_ID`, and under T3 Code with its parent's
-`T3CODE_THREAD_ID`; a Codex 0.167 `spawn_agent` child shares its parent's
-`CODEX_SESSION_ID` and has its own `CODEX_THREAD_ID`, which Atelier does not
-read; it inherits its parent's environment, so under T3 Code it would carry
-the parent's `T3CODE_THREAD_ID` too (inferred, not run there). Atelier sees
-such a subagent as its parent, and refuses it as the reviewer of its
-parent's item. Only a thread the harness starts as a thread, such as T3
-Code's `delegate_task`, has an identity of its own. `submit`'s handoff and the
-refusal of an author's `review` say so.
+`T3CODE_THREAD_ID`. Atelier sees it as its parent, and refuses it as the
+reviewer of its parent's item. A Codex subagent is one. Measured on
+2026-11-11 with Codex 0.167 `codex exec` inside a T3 thread: the root has
+`CODEX_THREAD_ID` equal to `CODEX_SESSION_ID`, and its `spawn_agent` child
+has the same `CODEX_SESSION_ID` and inherited `T3CODE_THREAD_ID` and a
+`CODEX_THREAD_ID` of its own, so it may review or decide its parent's item
+and not run its parent's `submit` or `merge`. A thread the harness starts
+as a thread, such as T3 Code's `delegate_task`, has an identity of its own
+under any harness. `submit`'s handoff and the refusal of an author's
+`review` and `decide` say which subagents may be used, and to start one with
+fresh context, not as a fork.
 
 Entry commands store the identity in the record: `start` appends it to the
 item's `implementers`, `review` to the review file's `reviewers`, and `lead`
@@ -528,7 +544,9 @@ since when, in the implementer's and the lead's `status` and in `show`:
 the time of the commit on its branch that set the approving review's
 verdict, which `git log -S` finds; nothing stores it. Away from the item's
 branch, the implementer's list of what it holds gives the same: each
-item's unanswered questions, and since when an approved one is approved.
+item's unanswered questions, since when an approved one is approved, the
+round of one in review or with changes requested, and the line that
+escalation is required after three rounds without an approval.
 Missions join
 with their commands.
 

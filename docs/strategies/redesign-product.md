@@ -236,14 +236,17 @@ matter; `set` and the status commands write it.
 You are the implementer of atelier-06jc (thread <thread>).
 Item: .atelier/items/atelier-06jc/item.md
 Title: Put open findings in full in the review brief
-Status: changes requested
+Status: changes requested in round 2
 To return it to review:
   [ ] Finding 2-m2bn.1 (fix now): the brief omits Scope when the item has no parent
 Answer each finding with one line under `### Responses` in the Report, ...
 Then: atelier submit
 ```
 
-It lists only what is not met: a finding already answered is not shown. On
+It lists only what is not met: a finding already answered is not shown. It
+gives the round of an item in review or with changes requested, and once
+three rounds have ended without an approval it says, on one line, that the
+Review section requires escalation now, naming `atelier escalate`. On
 an approved item it names, before `Then: atelier merge`, the merge checks the
 base's `config.toml` lists, which `merge` runs on the merged tree. It does not
 say when they last passed, since nothing records that.
@@ -256,12 +259,14 @@ A thread that runs another role's command gets one line back and no change:
 Atelier never starts an agent. Whoever holds the status starts the next thread
 with the harness's own tool, using a line the tool prints:
 
-- `submit` prints: "A reviewer must be another thread: not you, and not a
-  subagent of yours, which runs as your thread. Start one with your harness's
-  tool for a new agent thread, and give it this task: Run atelier review
-  atelier-06jc and follow what it prints. Then wait for its verdict, and run
-  `atelier status`." A harness's own subagent carries its parent's identity,
-  so it cannot review its parent's item ([architecture, Threads and
+- `submit` prints: "A reviewer must be a thread other than yours. Under Codex
+  a subagent you start is one; under Claude Code a subagent runs as your
+  thread and is refused, so use your harness's tool for a new agent thread.
+  Start one with fresh context, not as a fork of yours, and give it this
+  task: Run atelier review atelier-06jc and follow what it prints. Then wait
+  for its verdict, and run `atelier status`." A Claude Code subagent carries
+  its parent's identity, so it cannot review its parent's item; a Codex
+  subagent has one of its own ([architecture, Threads and
   roles](redesign-architecture.md#threads-and-roles)). The task has no
   backticks, which an agent pasting it into a double-quoted shell argument
   would run as a command.
@@ -327,8 +332,9 @@ Rules:
   checkout, which is where T3 starts a delegated child by default.
 - **What the reviewer is given.** The brief `review <id>` prints: the item's
   definition, the diff, the Report with its validation, earlier rounds' open
-  findings with the author's responses and any decisions, and the latest
-  merge check results. It carries no author reasoning beyond the Report.
+  findings with the author's responses and any decisions, and the branch's
+  pull request where a forge is configured, where CI's result can be read.
+  It carries no author reasoning beyond the Report.
 - **Recommendations.** Fix now, defer, or no action.
 - **A fix-now finding has three exits.** The implementer fixes it. Or it
   rebuts it with a fact or a test in the Report's Responses, and the next
@@ -341,6 +347,10 @@ Rules:
 - **Escalation is required** after three rounds without an approve verdict,
   after a rejected rebuttal the implementer still will not fix, and when a fix
   would leave the item's scope.
+- **The skill applies three of these rules:** a rebuttal's one try, the fresh
+  reviewer for a rebuttal, and escalation after three rounds. The tool
+  refuses none of them; `status` shows the round, the one-try rule and the
+  three-round rule.
 - **Who decides.** The mission's lead, when the item's mission has one. A
   fresh agent given the item, the finding and both positions when it does
   not. Anything that touches product direction goes to Sumeet as a

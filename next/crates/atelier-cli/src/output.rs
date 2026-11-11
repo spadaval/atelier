@@ -260,16 +260,18 @@ fn start_reviewer(id: &str) -> String {
 }
 
 /// The line that has `who` started as another thread with each of
-/// `tasks`, then says what to do meanwhile. A task has no backticks:
-/// pasted into a double-quoted shell argument, they would run the command
-/// as the caller.
+/// `tasks`, then says what to do meanwhile. A Codex subagent has an
+/// identity of its own and a Claude Code one has its parent's
+/// (`atelier_app::identity`), so the line says which may be used. A task
+/// has no backticks: pasted into a double-quoted shell argument, they
+/// would run the command as the caller.
 pub(crate) fn handoff(who: &str, tasks: &[String], then: &str) -> String {
     let (start, give) = match tasks.len() {
         1 => ("one", "this task"),
         _ => ("one for each task", "its task"),
     };
     let mut text = format!(
-        "{who} must be another thread: not you, and not a subagent of yours, which runs as your thread. Start {start} with your harness's tool for a new agent thread, and give it {give}:\n"
+        "{who} must be a thread other than yours. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Start {start} with fresh context, not as a fork of yours, and give it {give}:\n"
     );
     for task in tasks {
         text += &format!("  {task}\n");
@@ -416,15 +418,37 @@ pub fn item(
         ),
         None => String::new(),
     };
-    let since = match &entry.approved {
-        Some(time) => format!(" since {time}"),
-        None => String::new(),
-    };
     format!(
-        "{who}Title: {}\nStatus: {}{since}\n{undefined}{next}",
+        "{who}Title: {}\nStatus: {}{}\n{}{undefined}{next}",
         entry.title,
         status_name(entry.status),
+        since(entry),
+        escalate(entry, ""),
     )
+}
+
+/// What follows the status of an item its implementer holds: since when
+/// it is approved, or which round it is in.
+fn since(entry: &Entry) -> String {
+    match (&entry.approved, entry.round) {
+        (Some(time), _) => format!(" since {time}"),
+        (None, Some(round)) if entry.status == Status::InReview => format!(", round {round}"),
+        (None, Some(round)) => format!(" in round {round}"),
+        (None, None) => String::new(),
+    }
+}
+
+/// The Review section's rule after three rounds without an approval, for
+/// the implementer, indented by `indent`; nothing refuses a fourth round.
+/// In review, `escalate` waits for the round's verdict.
+fn escalate(entry: &Entry, indent: &str) -> String {
+    let when = match entry.status {
+        Status::InReview => "if this round asks for changes too, escalate once its verdict is in",
+        _ => "so escalate now",
+    };
+    entry.unapproved.map_or(String::new(), |rounds| {
+        format!("{indent}{rounds} rounds have ended without an approval, and the Review section requires escalation after three, {when}: atelier escalate \"<question>\"\n")
+    })
 }
 
 /// What `merge` runs and waits for, from the base's config.
@@ -474,14 +498,14 @@ pub fn overview(
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
-            let since = entry.approved.as_ref();
             text += &format!(
                 "  {} ({}{}): {}\n",
                 entry.id,
                 status_name(entry.status),
-                since.map_or(String::new(), |time| format!(" since {time}")),
+                since(entry),
                 entry.title
             );
+            text += &escalate(entry, "    ");
             for question in &entry.questions {
                 text += &format!("    A question waits on a decider: {question}\n");
             }
@@ -1396,6 +1420,23 @@ pub struct Brief<'a> {
     pub carried: &'a [Carried],
     /// The caller's review file; `None` for an author.
     pub path: Option<&'a str>,
+    /// What [`brief_pull_request`] says, where a forge is configured.
+    pub pull_request: Option<String>,
+}
+
+/// The brief's line on branch `id`'s pull request, as the forge `found` it.
+pub fn brief_pull_request(id: &str, found: &Result<Option<PullRequest>, ForgeError>) -> String {
+    match found {
+        Ok(Some(pull)) => format!(
+            "Pull request #{}, where CI's result on the branch can be read: {}\n",
+            pull.number, pull.url
+        ),
+        Ok(None) => format!("The forge has no open pull request for branch {id}, so CI's result cannot be read there.\n"),
+        Err(error) => format!(
+            "The forge did not say which pull request branch {id} has: {}.\n",
+            forge_reason(error).0
+        ),
+    }
 }
 
 pub fn brief(brief: &Brief) -> String {
@@ -1424,6 +1465,7 @@ pub fn brief(brief: &Brief) -> String {
             brief.commit
         );
     }
+    text += brief.pull_request.as_deref().unwrap_or_default();
     text += &carried_findings(brief.carried, brief.path.is_some(), true);
     let Some(path) = brief.path else {
         return text;

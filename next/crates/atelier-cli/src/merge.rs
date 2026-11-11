@@ -34,6 +34,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// When a question put to the forge under the lock is ended: `LOCKED`
+/// from now, and never later than the wait. `review` bounds its look for
+/// the pull request the same way.
+pub(crate) fn locked_until() -> Instant {
+    Instant::now() + LOCKED.min(wait_times().0)
+}
+
 /// How long `merge` waits for CI: under the 10 minutes a harness such as
 /// Claude Code allows a command in the foreground.
 pub(crate) const WAIT: Duration = Duration::from_secs(9 * 60);
@@ -110,7 +117,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     if let Some(forge) = &config.forge {
         if let Some(workflow) = &forge.ci_workflow {
             let github = match Github::open(&root, forge) {
-                Ok(github) => github.until(Instant::now() + LOCKED.min(wait_times().0)),
+                Ok(github) => github.until(locked_until()),
                 Err(error) => return Ok(Outcome::Refused(output::forge_failed(&error, false))),
             };
             let mut known = HashMap::new();
