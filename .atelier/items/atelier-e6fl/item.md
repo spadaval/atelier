@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-e6fl
 title: Refuse --reason on transitions that write no Report
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -30,3 +30,7 @@ created_at: 2026-10-17T01:10:57.965486113Z
 ## Context
 
 Decision atelier-mzpn chose the refuse option, so `--reason` keeps one meaning: it writes the Report (CONTEXT.md, atelier-ml3r). The original's `block` example is gone; no policy on this host has a blocked status.
+
+## Report
+
+Dropped: Transitions were removed in 0.5.
