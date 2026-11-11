@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-l9ty
 title: Mark blocked and needs-human items in issue list
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -34,3 +34,7 @@ The `issue list` Status column prints the raw workflow status (`crates/atelier-c
 ## Context
 
 The symbols follow atelier-deyy's rule (✓/⚠ next to the status word).
+
+## Report
+
+Dropped: `issue list` was removed in 0.5; `atelier list` marks 'blocked by' and 'waits on a human' on each row.
