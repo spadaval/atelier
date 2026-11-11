@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Move the spike's app to desk/ on the new API: the repositories, mission, item and inbox pages"
-updated_at: "2026-11-11T05:26:29.800159730+00:00"
+updated_at: "2026-11-11T05:28:24.918163795+00:00"
 ---
 
 ## Goal

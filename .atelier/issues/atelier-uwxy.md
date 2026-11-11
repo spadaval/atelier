@@ -20,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Serve the Desk's reading routes from commits: the atelier-desk crate, its generated API types and the app's files"
-updated_at: "2026-11-11T05:22:59.694735866+00:00"
+updated_at: "2026-11-11T05:28:24.583031557+00:00"
 ---
 
 ## Goal
@@ -37,6 +37,7 @@ Stand up the Desk's server: a new crate `next/crates/atelier-desk` whose binary 
 - [ ] A test builds a scratch repository on the new records with at least two missions and items in four statuses, one of them started on its own branch, and checks that each mission's title, status and per-status item counts from the API equal what `atelier_app`'s view for `show <mission>` gives at the same commit, and that the inbox's `needs_human` items equal those of `list` with `needs_human` set.
 - [ ] Repositories come from a configuration file the binary is given: one or more roots, each direct child directory holding a repository on the new records being served under its directory name, and the name the human acts under. A repository that does not open, or holds a record that does not read, appears in `/api/repos` with `error` and does not fail the others.
 - [ ] Responses are cached by the set of commits they were read from (the base's tip and the tip of each branch named for an item), and a test shows a new commit on the base changes the response without a restart.
+- [ ] Adding the crate changes nothing the tracker ships. `atelier-app`, `atelier-records`, `atelier-core` and `atelier-cli` gain no dependency: a test reads `cargo metadata` and fails if `axum`, `tokio` or `ts-rs` is in the dependency tree of `atelier-cli`. `cargo install --path crates/atelier-cli` still builds only the `atelier` binary, and the release packaging does not ship `atelier-desk`; the Report says how each was checked, against the release configuration as it is on master and as the switch branch will have it.
 - [ ] The response types are exported for the app with `ts-rs` into `desk/src/api/` and committed. A test fails when the committed files differ from what the types generate.
 - [ ] The binary serves the files of a directory given at start (the built app) with a fallback to its `index.html` for paths outside `/api`, so `cargo build` of the workspace needs no Node. With no directory given it serves the API alone.
 - [ ] It binds to the addresses it is given, loopback by default, and refuses with 403 a request whose `Host` is not one of the names it is configured to answer to. A test covers an allowed and a refused host.
@@ -58,6 +59,6 @@ Expected size: 800 to 1,100 lines of Rust with tests, plus generated types, in o
 - A `Repo` in `atelier-app` is not `Send`: make the `Skip` and open the repository inside the blocking task that uses them.
 - An item or mission ID from a URL is checked with `atelier_records::validate_id` before use. A caller's or thread's identity is an opaque string that can hold `/`, `:` and `%`: it is never split and never part of a path.
 - The old site's server (`crates/atelier-site/src`, on master until the switch) shows how `axum`, `ts-rs` and the generated-types test were set up before. It is a reference for those, not code to carry over.
-- The switch (atelier-u1ko) moves `next/crates/` to `crates/`. Before starting, check that neither atelier-u1ko nor atelier-wd1i is in progress. If the switch merges while this branch is open, bring master in with `atelier merge --sync`.
+- The switch (atelier-u1ko) moves `next/crates/` to `crates/`. The redesign's planner set the rule on 2026-11-11: once atelier-u1ko is started, nothing merges into `next/`, the root `Cargo.toml` or the CI and release workflows until atelier-wd1i has run; work may go on in the branch. The orchestrator checks both before the merge. After the cutover, bring master in with `atelier merge --sync` and carry on at the new paths.
 - Build with `cargo build -j 4` and a target directory inside the item's own worktree. Converted clones live under `~/.cache/atelier-desk/`; never run against a live repository, and put nothing in `/tmp`.
 - Sizes: complexity medium, value high, risk low. Reads that are wrong show as a difference from `show`, which the fourth line tests.

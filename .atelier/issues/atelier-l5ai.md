@@ -20,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Add the six small views the Desk needs to atelier-app: read-only opening from commits, the mission and item views, documents, approval time and plan changes"
-updated_at: "2026-11-11T05:22:58.125720072+00:00"
+updated_at: "2026-11-11T05:28:24.250813075+00:00"
 ---
 
 ## Goal
