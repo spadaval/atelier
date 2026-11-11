@@ -11,7 +11,7 @@ use axum::extract::{Path as UrlPath, Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{any, get};
+use axum::routing::get;
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 
 /// A response kept with the commits it was read from.
@@ -129,23 +130,29 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos/{repo}/doc", get(doc))
         .route("/api/repos/{repo}/items/{id}", get(item))
         .route("/api/inbox", get(inbox))
-        .route("/api", any(no_route))
-        .route("/api/{*rest}", any(no_route))
         .layer(middleware::from_fn(json_errors));
-    let routes = match &desk.config.app {
-        Some(app) => {
-            let index = ServeFile::new(app.join("index.html"));
-            api.fallback_service(ServeDir::new(app).fallback(index))
-        }
-        None => api.fallback(no_route),
-    };
-    routes
+    api.fallback(app_file)
         .layer(middleware::from_fn_with_state(desk.clone(), allowed_host))
         .with_state(desk)
 }
 
-async fn no_route() -> Failure {
-    Failure::NotFound("No such route.".into())
+/// Any path no route takes: under `/api`, however it is spelled, a JSON
+/// 404; elsewhere a file of the built app, or its `index.html` for a path
+/// that names none, when an app is configured.
+async fn app_file(State(desk): State<Arc<Desk>>, request: Request) -> Response {
+    let path = request.uri().path();
+    let app = desk.config.app.as_ref();
+    match app.filter(|_| path != "/api" && !path.starts_with("/api/")) {
+        Some(app) => {
+            let index = ServeFile::new(app.join("index.html"));
+            let files = ServeDir::new(app).fallback(index);
+            match files.oneshot(request).await {
+                Ok(response) => response.into_response(),
+                Err(never) => match never {},
+            }
+        }
+        None => Failure::NotFound("No such route.".into()).into_response(),
+    }
 }
 
 /// Gives an error from the API's routes that is not JSON, such as axum's

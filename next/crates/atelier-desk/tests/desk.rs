@@ -446,10 +446,18 @@ async fn the_app_is_served_with_its_index_for_its_own_paths() {
             "{uri}"
         );
     }
-    assert_eq!(
-        get(&with_app, "/api/nothing").await.0,
-        StatusCode::NOT_FOUND
-    );
+    // No spelling of a path under /api reaches the app's files.
+    for uri in [
+        "/api",
+        "/api/",
+        "/api/nothing",
+        "/api//repos",
+        "/api/repos/demo/missions/x/history",
+    ] {
+        let (status, body) = get(&with_app, uri).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}: {body}");
+        assert!(body["error"].is_string(), "{uri}: {body}");
+    }
 
     let api_only = router_for(Desk::new(config(vec![], None)));
     assert_eq!(get(&api_only, "/").await.0, StatusCode::NOT_FOUND);
