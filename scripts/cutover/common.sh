@@ -32,7 +32,7 @@ SERVICE_CHECK=${CUTOVER_SERVICE_CHECK:-'curl -fsS --max-time 5 http://127.0.0.1:
 GH=${CUTOVER_GH:-gh}
 GH_REPO=${CUTOVER_GH_REPO:-spadaval/atelier}
 CI_WORKFLOW=${CUTOVER_CI_WORKFLOW:-ci.yml}
-CI_WAIT=${CUTOVER_CI_WAIT:-900}
+CI_WAIT=${CUTOVER_CI_WAIT:-420}
 T3_DB=${CUTOVER_T3_DB:-$HOME/.t3/userdata/statev2.sqlite}
 STATE=${CUTOVER_STATE:-$HOME/.cache/atelier-cutover}
 # The fallback release (atelier-mlwx): v0.4.0's archive for this host.

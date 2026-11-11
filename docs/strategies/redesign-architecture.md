@@ -1118,88 +1118,210 @@ old tool:
 - The tracker's site is taken out, as above: the `atelier` binary built
   from the new workspace has no site and no `serve`. The Desk's crate and
   app, where they have been added, stay.
-- The switch: `crates/`, the old workspace with all its tests, and
-  `scripts/smoke-repos.sh` are deleted, and the tracked contents of `next/`
-  move to the repository root, so the root workspace, the release build and
-  `cargo install --path crates/atelier-cli` are all the new tool. The move
-  also touches the root manifest and lock file, the release profile and
-  metadata, CI's two sets of jobs and the web paths in the release workflow;
-  the full list is made when the switch is planned. CI's
-  `check` step runs the fallback release while the repository holds
-  `.atelier/issues/` and the tree's binary once it does not. `AGENTS.md`
-  says the installed binary stays the tracker and nobody installs from the
-  tree. Added under `scripts/cutover/`, so that they are reviewed here: the
-  runbook, the new `AGENTS.md` text for each repository, and a replacement
-  for each workflow that runs Atelier in a repository's CI, installing it
-  from this change's commit. Astromech's workflow installs Atelier from a
-  commit today and runs `doctor` and `land`, which will not exist.
+- The switch (atelier-u1ko): `crates/`, the old workspace with all its
+  tests, and `scripts/smoke-repos.sh` are deleted, and the tracked contents
+  of `next/` move to the repository root, so the root workspace, the release
+  build and `cargo install --path crates/atelier-cli` are all the new tool,
+  version 0.5.0. CI's `check` step runs the fallback release, fetched by its
+  pinned archive and SHA-256, while the repository holds `.atelier/issues/`,
+  and the tree's binary once it does not. `AGENTS.md` says the installed
+  binary stays the tracker and nobody installs from the tree. Added under
+  `scripts/cutover/`, so that they are reviewed here: the runbook and its
+  rollback, the new `AGENTS.md` text for each repository, and the one
+  workflow that runs Atelier in another repository's CI, astromech's, which
+  installs Atelier from the commit of master the cutover converted and runs
+  `atelier check`.
+
+  What the move touched, besides the renames: the root `Cargo.toml` and
+  `Cargo.lock` (the new workspace's, with its version and `dist` profile);
+  `atelier-cli`'s manifest (the version, and `dist = true`, since the
+  workspace does not publish) and its `--version`; the other tracker
+  crates' manifests (the version); the Desk's types test (the path to
+  `desk/src/api/` from its new place); `.github/workflows/ci.yml` (one set
+  of Rust jobs, the two-way `check` step, the Desk's job as it was);
+  `.github/workflows/release.yml` and `dist-workspace.toml` (no Node or
+  pnpm); `scripts/ci-jobs.sh` and its test (the jobs `rust` and `desk`);
+  `scripts/count_non_test_rust.py` (its help); `scripts/cutover/rehearse.sh`
+  and the converter's test (the binary's path); `.gitignore`,
+  `.gitattributes`, `AGENTS.md`, and the eval harness's README and the
+  `next-*` scenarios (the binary's path). Deleted: `.cargo/`, `.config/`,
+  `proptest-regressions/`, `.github/build-setup.yml`, the root
+  `package.json` and `package-lock.json`, `scripts/smoke-repos.sh` and
+  `scripts/bench_read_commands.py`.
 
 After the switch merges, the tree's binary cannot read this repository's
 records, and only the installed binary tracks work. The cutover follows at
 once.
 
-**4. Cut over (mission 3).** One thread runs `scripts/cutover/cutover.sh`,
-which stops at the first failure. The cutover item is never started: it stays
-ready, the runbook runs on the base, and the item is closed at the end.
+**4. Cut over (mission 3).** One thread runs `scripts/cutover/cutover.sh`
+from the worktree that has atelier's master checked out
+(`scripts/cutover/README.md` is the page for the day). The cutover item is
+never started: it stays ready, the runbook runs on the base, and the item is
+closed at the end. Everything outside the script that it touches comes from
+one settings block (`common.sh`) or the environment, with this host's
+values as defaults; the trials run the same script with every one pointed
+at a sandbox.
 
-1. Confirm no item is in progress in any of the five repositories and no
-   other thread is running in them. Record each repository's base commit,
-   and copy each clone's Git hooks directory aside.
-2. In atelier, on master: run the converter, replace `AGENTS.md` with the
-   reviewed text, and move `skills/agent-factory-next/` to
-   `skills/agent-factory/`. Commit. Run `--verify`, and the tree's
-   `atelier check`.
-3. Install the binary from master, run `atelier setup` for each harness and
-   for Git hooks, move the skill checkout forward, and stop and disable the
-   `atelier-serve` service, since the new binary has no `serve`.
-4. Push master, with `ATELIER_SKIP="cutover conversion"`, since the hook
-   just installed would refuse a commit that is not a merge and changes
-   `AGENTS.md` and the skill. CI now runs the tree's binary on the converted
-   records.
-5. In each of the other four repositories: convert, replace the process text
-   in `AGENTS.md` and any workflow that runs Atelier with the reviewed ones,
-   commit, run `--verify` and `atelier check`, run `atelier setup` for Git
-   hooks, and push with the same skip.
-6. Close the cutover item with `atelier close`, the first act recorded by the
-   new tool.
+The runbook keeps a journal in its state directory. Each entry is written
+before the change it describes and marked done after: each conversion it
+starts, with its directory and base commit; each commit; each push, with the
+ref's old and new commits; each ref and checkout it moves and from where;
+each hooks directory it copies; and what it installs, stops or disables. It
+stops at the first failure, and says which step failed and what
+`rollback.sh` will undo. Run again after a stop, it picks up from the
+journal, and it settles an entry started and not marked done by looking at
+the state itself: whether a push happened is read from the remote's tip,
+never assumed.
 
-The conversion commits are pushed directly, by plain `git push`. They are the
-output of a reviewed script, checked by `--verify`, and reviewed text moved
-into place. This is the one time a commit that is not an Atelier merge
-changes more than planning records on a base, and the runbook is the only
-thing that does it.
+1. **Preflight**, also a command of its own, `cutover.sh preflight`, so
+   that it can be run before the switch merges. It stops unless, in each
+   repository, every worktree is clean, the base is at its remote's tip, no
+   item is in progress as the installed old binary reports it (in every
+   worktree's records and the branches its `status` lists; before the
+   switch has merged, atelier-u1ko may be), and no T3 thread other than
+   the one running the script, or a thread waiting on it, has a run going
+   in the repository or one of its worktrees. That last is one read-only,
+   bounded query of T3's database; if it cannot be read, the preflight
+   prints the hand check and continues only when told it was made. It lists
+   each unmerged local branch, whose reviews the conversion does not carry,
+   and each worktree not on its base. Then it records each base commit,
+   what each worktree has checked out, a copy of each clone's hooks
+   directory, the installed binary's version and hash, the skill
+   checkout's commit and the service's state.
+2. **Convert atelier**, in the worktree that has master: build the tree's
+   binary in release (into the state directory), move aside ignored files
+   under the paths the conversion writes (the old tool's runtime cache),
+   run the converter, replace `AGENTS.md` with the reviewed text, move
+   `skills/agent-factory-next/` to `skills/agent-factory/`, and run the
+   tree's `setup claude` and `setup codex`, which write
+   `.claude/settings.json` and `.codex/hooks.json` in the repository.
+   Commit everything, and run `--verify` and the tree's `atelier check`.
+3. **Install**: `cargo install --path crates/atelier-cli --locked`, reusing
+   that build; `atelier setup` for the Git hooks and for each harness,
+   which must change no file; the skill checkout to the conversion commit;
+   `atelier-serve` stopped and disabled, since the new binary has no
+   `serve`.
+4. **Push master** with `ATELIER_SKIP="cutover conversion"` by plain `git
+   push`, since the hook just installed refuses a commit that is not a
+   merge and changes code.
+5. **Each product repository**, in a fresh clone of its base: the
+   converter; its `AGENTS.md` process section replaced (below); in
+   astromech, `.github/workflows/atelier.yml` replaced, with atelier's
+   conversion commit written into it, and no other workflow may run a
+   removed command or install Atelier; the harness hook settings; commit;
+   `--verify` and `atelier check`; push with the same skip.
+6. **Each real clone onto the converted base**, atelier included, so that
+   the directory agents start in is on new records. Fetch, and move the
+   base to the pushed commit: a fast-forward in the worktree that has it
+   checked out, else an update of the ref. A main worktree not on its base
+   is switched to it, or, where another worktree has the base, detached at
+   the base's tip; the branch it left is kept. `atelier setup` installs the
+   Git hooks, keeping a clone's own hook as `<name>.local`. Other worktrees
+   are not touched; each one on a branch that still has the old layout is
+   printed, since `atelier` and the hooks refuse there until it takes the
+   converted base, as the README says.
+7. **Accept**, before anything is closed: in each main and base worktree,
+   `atelier check` passes, `atelier status` runs, and the count of items and
+   missions is the count the conversion printed; each base is at its
+   remote's tip; `atelier --version` is the new tool; the skill checkout's
+   `SKILL.md` is the new text; `atelier-serve` is stopped and disabled; and
+   CI on atelier's master has passed on the conversion commit, its test
+   job's `atelier check` step included, waited for with a bound (7 minutes;
+   past it the runbook exits 3, nothing failed, and run again it waits on).
+   A failure here is a stop like any other.
+8. **Close** the cutover item with `atelier close`, the first act the new
+   tool records, which makes its own commit, and push it. Past step 7 the
+   cutover is not rolled back for a later doubt: a failed push here is
+   retried by running the script again.
 
-**Rollback.** The runbook undoes its own work in this order:
+At the end it prints, for each repository, the conversion commit, the
+count of items and missions, `--verify`'s result, the count of relative
+links that still resolve and where each worktree was left, and how long
+each step took.
 
-1. If step 3 had started, put each clone's Git hooks directory back as the
-   cutover's step 1 copied it. That removes the hooks the new `setup`
-   installed and restores any hook the clone had before. This comes first:
-   the new hooks would refuse the pushes below, and once the fallback is
-   installed they would call commands it lacks.
-2. Undo each repository from what step 1 of the cutover recorded:
+A product repository's `AGENTS.md` keeps all of its own text but the
+sections that name a removed Atelier command (from a heading of level one
+or two to the next): the first becomes the reviewed process section and the
+others go. The runbook stops when a repository has none, or more than the
+number recorded for it. No product repository configures a forge, so their
+process text says to push the base with `git push` after `atelier merge`,
+which the pre-push hook checks.
 
-   | A repository that is | Is undone by |
-   | --- | --- |
-   | Converted and not pushed, committed or not | Resetting it to its recorded base commit and cleaning its working tree |
-   | Converted and pushed | Reverting its conversion commit and pushing |
+The conversion commits are pushed directly, by plain `git push`. They are
+the output of a reviewed script, checked by `--verify`, and reviewed text
+moved into place. This is the one time a commit that is not an Atelier
+merge changes more than planning records on a base, and the runbook is the
+only thing that does it.
 
-3. If step 3 had started, reinstall the fallback release, run its `setup`, move
-   the skill checkout back to the commit it was on, enable and start
-   `atelier-serve` again, and check the site answers.
+**Rollback.** `scripts/cutover/rollback.sh` undoes what the journal says
+was started, and is safe to run twice:
 
-The rollback is tried on scratch clones before the real cutover, stopping
-after each of these: a conversion that fails `--verify` before its commit;
-step 2's commit; part-way through step 3, with the binary installed and the
-hooks not yet; step 3; step 4; and a second repository's conversion in step 5
-that is committed and not pushed. One of the scratch clones has a hook of
-its own beforehand, and the rehearsal checks it is back afterwards.
+1. Every hooks directory goes back from its copy, first, since the new hooks
+   would refuse the pushes below and would call commands the fallback
+   lacks.
+2. For each repository the runbook converted, the remote's base tip, read
+   with `git ls-remote`, decides. Still at the recorded base, nothing was
+   published: a fresh conversion clone is deleted, and in atelier's master
+   worktree the base is reset to the recorded commit and the paths the
+   conversion writes are cleaned, leaving ignored files that were there.
+   Holding the runbook's commits, each one not yet reverted is reverted,
+   newest first, in a clone of the remote's tip, and the reverts are pushed,
+   so a closing commit is undone before the conversion beneath it. Each
+   revert names the commit it undoes in a `Cutover-Revert:` trailer, which
+   is how a second run knows it is done. Holding anything else, the
+   rollback stops for that repository, resets nothing there, and says what
+   it found.
+3. Each real clone's base goes to where its remote now is: the recorded
+   commit, or the reverts' tip, whether the clone had taken the conversion
+   or not; a commit the runbook made and never pushed is dropped. Each
+   worktree is put back on what the journal says it had checked out, and
+   the files set aside in step 2 of the cutover go back.
+4. If the install had started: the fallback release, v0.4.0, is
+   reinstalled from its pinned archive with its SHA-256 checked, its `setup
+   claude` is run in each repository whose harness settings it wrote and
+   must change no file, the skill checkout is moved back, and `atelier-serve`
+   is enabled, started and checked to answer.
+
+Restored means, checked the same way after every trial: where nothing of a
+repository was pushed, its base is the recorded commit; where something was
+pushed, its base holds one revert per pushed commit, its tracked tree is the
+recorded commit's, and local and remote tips agree. In every repository
+each worktree has checked out what it had, or the base's tip where it had
+the base; its status, ignored files included, is as before, except for the
+old tool's own runtime cache, which any old command writes; its hooks
+directory is as copied; and the old binary's `check` passes on the old
+records. The installed binary is the fallback, the skill checkout is at its
+old commit, and the old site answers.
+
+The rollback was tried in sandboxes (`scripts/cutover/trials.sh`) at every
+point the cutover can stop: a conversion that fails before its commit (the
+section rule matching nothing), `--verify` failing after step 2's commit,
+after step 2, part-way through step 3 and after it, after step 4, a second
+product repository committed and not pushed, part-way through step 6,
+CI reported failed in step 7, after step 8's commit and after its push, a
+push in step 4 the remote accepted and reported as failed, and a stop after
+one product repository's push. One sandbox clone has a hook of its own,
+which is back afterwards.
 
 **After the cutover**, the fallback branch of CI's `check` step is removed.
 Nothing else is left to clean up, since the old workspace went whole at the
 switch. `scripts/cutover/` is deleted after the work host converts.
 
-**The work host** converts later by the same runbook, run by Sumeet. Until it
-does, it must not fetch a repository that has been converted.
+**The work host** does not convert: its remotes are already converted. It
+adopts, with the same script's `adopt` command, run from a fresh clone of
+atelier's converted master made for the purpose, which is where it gets the
+reviewed script, the new tool's source and the new skill without moving any
+checkout it works in. In order: the preflight, with each base allowed to be
+behind its remote and never ahead; the new binary installed from that
+clone; the skill installed by the command the settings give, since hosts
+install it differently; `atelier-serve` stopped and disabled where the host
+has it; step 6 for each repository; and step 7 without the CI check, with
+the count of items and missions read by `atelier check` and printed. It
+converts, pushes and closes nothing. `rollback.sh` undoes it from its
+journal and pushes nothing: hooks, refs (remote-tracking refs included) and
+worktrees back to what was recorded, the fallback reinstalled, and the skill
+and the service as they were. Until it adopts, the work host must not fetch
+a repository that has been converted.
 
 ## Testing
 
