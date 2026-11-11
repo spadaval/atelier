@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Fix what the validator found: a plan review of text it does not record, a broken branch that hides a drop, and nine smaller gaps"
-updated_at: "2026-11-11T01:42:57.160475815+00:00"
+updated_at: "2026-11-11T02:12:09.203079325+00:00"
 ---
 
 ## Goal
@@ -48,6 +48,10 @@ The four changes to `next/` above and the two documents. The product specificati
 ## Context
 
 The validator's report is in the mission's notes (`atelier issue show atelier-fcb7`), with the commands it ran for each finding. Plan reviews are in `next/crates/atelier-cli/src/review.rs`; where an item's record is chosen between the base and its branch is `next/crates/atelier-cli/src/repo.rs` and `atelier-app`'s `acts.rs`; the lead's view is `atelier-app`'s `view.rs` and `atelier-cli`'s `view_output.rs`. The commit reader that reads records at a commit without a checkout is `atelier-records`' `at_commit.rs`. Design: `docs/strategies/redesign-architecture.md`, "Where records are read and written" ("A terminal status on the base wins").
+
+## Notes
+
+- 2026-11-10 [note] Implementer handoff: approved by gpt-6.1-sol at 00dc91fe (atelier-be9l) after two rounds; all fix_now findings settled, R5 and R6 deferred to atelier-m2v1 and atelier-lkf5. See the Report.
 
 ## Report
 
