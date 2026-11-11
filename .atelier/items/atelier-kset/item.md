@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-kset
 title: Print each check finding once, on one line, against its record, and say what check checked
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - check
@@ -46,3 +46,7 @@ The diagnostic block also appears in status and transition output, so fix it at 
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-sfd9 (Give a repair route for links to missing records that arrive by merge or hand edit)
+
+## Report
+
+Dropped: Fixed by the 0.5 rewrite: `check` prints each problem once against its file and says how many items and missions it read.
