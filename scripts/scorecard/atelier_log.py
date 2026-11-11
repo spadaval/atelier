@@ -1,9 +1,6 @@
-"""Log reader: the acts in a repository's frozen `atelier log`, the window's merged items, and each T3 thread's item.
+"""Log reader: the window's merged items and each T3 thread's item, from the `atelier log` frozen in the snapshot.
 
-`freeze.py copy` writes the log to the snapshot as `logs/<repository>.txt`. Its line layout is in
-`docs/design.md`, The log: time, commit, record, act and thread separated by single spaces, then
-what changed. The scripts never run `atelier`, so a base that moved on, a deleted branch or an
-item moved to another mission after the freeze changes nothing they read.
+`freeze.py copy` writes it as `logs/<repository>.txt`; its line layout is in `docs/design.md`, The log.
 """
 from collections import namedtuple
 
@@ -48,7 +45,8 @@ def ties(lines):
 
 def merged(lines, repo, window):
     """Items with a `merge` line in the window whose merge commit changes a file outside `.atelier/` from its first parent."""
-    return {line.record for line in lines if line.act == "merge" and line.time in window and _changes_code(repo, line.commit)}
+    return {line.record for line in lines if line.act == "merge" and line.time in window and any(
+        not path.startswith(".atelier/") for path in git(repo, "diff", "--no-renames", "--name-only", f"{line.commit}^1", line.commit).splitlines())}
 
 
 def done(lines, missions, window):
@@ -59,8 +57,3 @@ def done(lines, missions, window):
 def missions(repo, commit):
     """The IDs of the missions recorded at the commit."""
     return {path.rsplit("/", 1)[-1] for path in git(repo, "ls-tree", "--name-only", commit, ".atelier/missions/").split()}
-
-
-def _changes_code(repo, commit):
-    changed = git(repo, "diff", "--no-renames", "--name-only", f"{commit}^1", commit).split("\n")
-    return any(path and not path.startswith(".atelier/") for path in changed)

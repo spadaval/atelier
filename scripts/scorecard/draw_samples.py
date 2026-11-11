@@ -54,6 +54,7 @@ SCRATCH = re.compile(
     r"\$T\b|\$D\b|\$R\b|\$TMP|probe|demo)|mktemp|git init")
 DIAGNOSIS = re.compile(r"atelier\s+(merge|land)\b[^\n;&|]*--check|atelier\s+(check|doctor)\b|--help|atelier\s+help\b")
 TEST_RUN = re.compile(r"cargo\s+(nextest|test)|pnpm\s+(test|e2e)|pytest")
+FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
 
 
 def utc(stamp):
@@ -72,6 +73,20 @@ def reviews(repo, commit):
         if m:
             out.append((path, m.group(1), m.group(2)))
     return out
+
+
+def unfenced(text):
+    """The text's lines outside fenced code blocks, fence lines left out, as the records read them
+    (`unfenced_lines` in crates/atelier-records/src/document.rs): an example is never a heading or a field."""
+    lines, open_ = [], None  # the open fence's marks
+    for line in text.split("\n"):
+        fence = FENCE.fullmatch(line)
+        if fence and not (fence[1][0] == "`" and "`" in fence[2]) and (not open_ or (
+                fence[1][0] == open_[0] and len(fence[1]) >= len(open_) and not fence[2].strip())):
+            open_ = None if open_ else fence[1]
+        elif not open_:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 def field(header, key):
@@ -95,7 +110,7 @@ def draw_findings(manifest, cutoff):
             if not in_window(field(header, "created_at"), cutoff):
                 continue
             target = path.split("/")[2]
-            for section in re.split(r"^## ", body, flags=re.M):
+            for section in re.split(r"^## ", unfenced(body), flags=re.M):
                 number = re.match(r"Finding (\d+): ", section)
                 if number and re.search(r"^Recommendation: fix now$", section, re.M) and not re.search(r"^Was: ", section, re.M):
                     found.append(dict(repository=repo, commit=info["commit"], record=path,
@@ -150,11 +165,14 @@ def closed_missions(manifest, snap, cutoff):
 
 
 def mission_items(repo, commit):
-    """Item IDs by the mission their record names at a commit."""
-    found = {}
-    for line in git(REPOS / repo, "grep", "^mission: ", commit, "--", ".atelier/items/*/item.md").splitlines():
+    """Item IDs by the mission their record's front matter names at a commit."""
+    found, dashes = {}, {}
+    for line in git(REPOS / repo, "grep", "-e", "^---$", "-e", "^mission: ", commit, "--", ".atelier/items/*/item.md").splitlines():
         _, path, text = line.split(":", 2)
-        found.setdefault(text.split(": ", 1)[1], []).append(path.split("/")[2])
+        if text == "---":
+            dashes[path] = dashes.get(path, 0) + 1
+        elif dashes.get(path) == 1 and text != "mission: null":  # between the front matter's two `---` lines
+            found.setdefault(text.split(": ", 1)[1], []).append(path.split("/")[2])
     return found
 
 

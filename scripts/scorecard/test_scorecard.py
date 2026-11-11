@@ -76,10 +76,13 @@ def build_repo(repo):
                                                              "Recommendation: defer"),
         ".atelier/items/demo-aaaa/reviews/2-ij90.md": review("2026-10-16T00:00:00Z", "Recommendation: fix now\nWas: 1-ab12.1",
                                                              "Recommendation: fix now\nText that is the reviewer's."),
+        ".atelier/items/demo-aaaa/reviews/3-kk00.md": review("2026-10-17T00:00:00Z", "Recommendation: fix now\n"
+                                                             "````\n```\nWas: 1-ab12.2\n```\n````").replace(
+            "Text.\n", "~~~\n## Finding 9: An example\nRecommendation: fix now\n~~~\n"),
         ".atelier/items/demo-bbbb/item.md": item_record("demo-bbbb", "done", "demo-cccc"),
         ".atelier/items/demo-bbbb/reviews/1-zz00.md": review("2026-10-01T00:00:00Z", "Recommendation: fix now"),  # before the window
         ".atelier/items/demo-dddd/item.md": item_record("demo-dddd", "ready"),
-        ".atelier/items/demo-eeee/item.md": item_record("demo-eeee", "done"),
+        ".atelier/items/demo-eeee/item.md": item_record("demo-eeee", "done") + "```yaml\n---\nmission: demo-cccc\n```\n",
         ".atelier/items/demo-ffff/item.md": item_record("demo-ffff", "done"),
         "src/old.ts": lines(5), ".agents/vendored.js": lines(200, "vendored javascript")},
         "Start", "2026-10-01T00:00:00Z")}
@@ -329,7 +332,8 @@ class Samples(Fixture):
         return draw_samples.closed_missions(self.manifest_data, self.snap, self.cutoff)
 
     def test_closed_missions(self):
-        # its items name it at the manifest commit; its threads are on its lines and its items' lines
+        # its items name it in their front matter at the manifest commit, not in a fenced example as demo-eeee does;
+        # its threads are on its lines and its items' lines
         self.assertEqual(self.missions(), {"demo-cccc": dict(
             repository="demo", items=["demo-aaaa", "demo-bbbb"], start="2026-10-14T01:00:00.000Z",
             close="2026-10-22T00:00:00.000Z", threads={"t1", "t3", "t4", "t5", "t9"})})
@@ -344,10 +348,11 @@ class Samples(Fixture):
                                      threads_tied_to_several=0, agent_written_messages_left_out=1))
 
     def test_findings(self):
-        # left out: a deferred finding, one carried from an earlier round, and one raised before the window
+        # left out: a deferred finding, one carried from an earlier round, one raised before the window, and one in a fence;
+        # 3-kk00.1 counts, though a fence in it shows a `Was:` line
         findings, sizes = draw_samples.draw_findings(self.manifest_data, self.cutoff)
-        self.assertEqual(sizes, {"demo": 2})
-        self.assertEqual(sorted(f["finding"] for f in findings), ["demo-aaaa/1-ab12.1", "demo-aaaa/2-ij90.2"])
+        self.assertEqual(sizes, {"demo": 3})
+        self.assertEqual(sorted(f["finding"] for f in findings), ["demo-aaaa/1-ab12.1", "demo-aaaa/2-ij90.2", "demo-aaaa/3-kk00.1"])
 
     def test_a_rerun_after_the_freeze_gives_the_same_output(self):
         """The base moves on, an item moves to another mission and branches are deleted: nothing read changes."""

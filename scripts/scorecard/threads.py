@@ -63,7 +63,7 @@ def threads(db, repository, cutoff):
 
     A thread's sessions name its transcripts: ("claudeAgent" or "codex", native session id) for a
     thread T3 ran, and ("claudeSubagent", agent id) for a subagent Claude's Agent tool started. Such
-    a subagent runs with its parent's T3 thread ID, so it acts under the identity its parent acts under.
+    a subagent runs with its parent's T3 thread ID, so it acts as its parent; it cannot start one of its own.
     """
     projects = [pid for pid, root in db.execute("SELECT project_id, workspace_root FROM projection_projects")
                 if (root or "").rstrip("/").rsplit("/", 1)[-1] == repository]
@@ -82,15 +82,11 @@ def threads(db, repository, cutoff):
     for thread_id, created_at in rows:
         if not cutoff(created_at):
             continue
-        acts_as, seen = thread_id, set()
-        while acts_as in agent_parent and acts_as not in seen:
-            seen.add(acts_as)
-            acts_as = agent_parent[acts_as]
         sessions = {((ref := json.loads(p).get("nativeThreadRef") or {}).get("driver"), ref.get("nativeId"))
                     for (p,) in db.execute("SELECT payload_json FROM orchestration_v2_projection_provider_threads WHERE thread_id = ?", (thread_id,))}
         if thread_id in spawned_by:
             sessions.add(("claudeSubagent", spawned_by[thread_id]))
-        found.append(Thread(thread_id, repository, created_at, acts_as, sorted(s for s in sessions if all(s))))
+        found.append(Thread(thread_id, repository, created_at, agent_parent.get(thread_id, thread_id), sorted(s for s in sessions if all(s))))
     return found
 
 
