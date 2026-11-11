@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-tf9n
 title: Show direct blockers on work rows, mark inherited ones, drop the count
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -39,3 +39,7 @@ Reworks the same row rendering as atelier-deyy. Fixture: scratch clone with miss
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-wfan
+
+## Report
+
+Dropped: The `work` views and `apply_ready_execution_gates` were removed in 0.5.
