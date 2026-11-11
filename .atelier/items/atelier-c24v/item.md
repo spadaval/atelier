@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-c24v
 title: skills/agent-factory/SKILL.md:3,95. Once codex-reflect (atelier-6oxt) is deleted, no skill description triggers on 'wha…
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -31,3 +31,7 @@ Relationships of the old record that the new format has no field for.
 
 - parent: atelier-jtsn (Deferred review findings on atelier-9s9i)
 - discovered_from review: atelier-b4mm
+
+## Report
+
+Dropped: Finding on the old skill's subskill list and `audit.md`, deleted by atelier-orb2; audit is folded into the gardener (atelier-9dku).
