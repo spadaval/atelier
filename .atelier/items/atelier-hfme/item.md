@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hfme
 title: Stop writing branch_base and drop start's hidden --base once every Atelier CI pin reads records without it
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -28,3 +28,7 @@ atelier-md0v kept writing `branch_base` into ownership records (set to the polic
 ## Context
 
 Pick this up when astromech next moves its pin past atelier-nn67's merge. docs/adr/0028-simpler-lifecycle.md decision 5; crates/atelier-core/src/lib.rs (`WorkflowBranch`).
+
+## Report
+
+Dropped: Done by the 0.5 rewrite: no code under crates/ reads or writes `branch_base`, and `start` has no `--base`.
