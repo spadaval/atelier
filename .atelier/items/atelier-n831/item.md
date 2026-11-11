@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-n831
 title: Report branch and checkout facts in status in words, not git porcelain
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -35,3 +35,7 @@ Records and code are not separated, although they need different actions. On a w
 ## Context
 
 The behind-base computation is in crates/atelier-cli/src/commands/session.rs:338-360 (`land_text`).
+
+## Report
+
+Dropped: Describes the old `status` Branch and Checkout lines, which copied git porcelain; the 0.5 `status` was written new.
