@@ -216,6 +216,27 @@ test("an open answer form does not carry over to a question a poll put in its pl
   expect(world.sent).toEqual([]);
 });
 
+test("an open answer form does not follow the human to another item's page", async ({ page }) => {
+  // Two items that link to each other, each with an open question at the same place.
+  const other = world.items["atelier-u1ko"];
+  other.can_decide = true;
+  other.decide_at = "/clones/atelier-u1ko";
+  other.decisions = [{ item: "atelier-u1ko", question: "May the old workspace go before the runbook is tried?", finding: null, answer: null, outcome: null }];
+  other.row.blockers = [{ id: "atelier-uwxy", status: "building" }];
+  world.items["atelier-uwxy"].caused_by = "atelier-u1ko";
+  await load(page, "/r/atelier/item/atelier-u1ko");
+  // Client-side navigation, so the item read first is still in the app's cache when it comes back.
+  await page.locator('a.doc-link[href="/r/atelier/item/atelier-uwxy"]').click();
+  await page.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
+  await page.getByLabel("Your answer, in one line").fill("Yes, key it by HEAD too.");
+  await page.locator('.kv a[href="/r/atelier/item/atelier-u1ko"]').click();
+  await expect(page.getByTestId("decision").first()).toContainText("May the old workspace go");
+  await expect(page.getByRole("form")).toHaveCount(0);
+  await page.getByRole("button", { name: "Answer the question on atelier-u1ko" }).click();
+  await expect(page.getByLabel("Your answer, in one line")).toHaveValue("");
+  expect(world.sent).toEqual([]);
+});
+
 test("the inbox drops an answer's not-committed mark once a commit holds it", async ({ page }) => {
   await load(page, "/inbox");
   const atelier = page.getByRole("region", { name: "atelier" });

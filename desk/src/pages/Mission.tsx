@@ -457,7 +457,7 @@ export function MissionPageView() {
     <div className={`work${id ? " picked" : ""}${selected ? "" : " no-side"}`}>
       <Rail repo={repo} loaded={loaded} selected={selected} />
       {selected ? (
-        <MissionView key={selected} repo={repo} id={selected} />
+        <MissionView key={JSON.stringify([repo, selected])} repo={repo} id={selected} />
       ) : (
         <div className="pane center-pane">
           <Crumbs trail={[{ label: repo }]} />

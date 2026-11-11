@@ -5,7 +5,7 @@ import type { MissionPage } from "../api/MissionPage";
 import { AnswerForm } from "../components/Acts";
 import { AgentsCard, Identity } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
-import { PendingMark } from "../components/Questions";
+import { PendingMark, questionKey } from "../components/Questions";
 import { itemFacts } from "../components/ItemLine";
 import { ReviewList } from "../components/Reviews";
 import { Card, Empty, ErrorBanner, Markdown, Priority, Skeleton, StatusGlyph } from "../components/ui";
@@ -118,7 +118,7 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
                     </div>
                     {at === answerable ? (
                       page.can_decide ? (
-                        <AnswerForm key={at} repo={repo} item={row.id} finding={q.finding} />
+                        <AnswerForm key={questionKey(q)} repo={repo} item={row.id} finding={q.finding} />
                       ) : (
                         <p className="sub">
                           {page.decide_at === null
@@ -290,7 +290,8 @@ export function ItemPageView() {
         ]}
       />
       <ErrorBanner loaded={loaded} />
-      {page ? <ItemDetail repo={repo} page={page} /> : loaded.loading ? <Skeleton rows={8} /> : !loaded.error ? <Empty title="No such item." /> : null}
+      {/* Keyed by the item, so a form or fold opened on one item never carries to the next one shown here. */}
+      {page ? <ItemDetail key={JSON.stringify([repo, id])} repo={repo} page={page} /> : loaded.loading ? <Skeleton rows={8} /> : !loaded.error ? <Empty title="No such item." /> : null}
     </div>
   );
 }
