@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8bve
 title: Make issue create confirm the record and suggest the next step
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -28,3 +28,7 @@ The `issue create` confirmation (`crates/atelier-cli/src/commands/issue.rs:667-6
 - [ ] Next steps come from state. Ready work suggests `atelier start <id>`. Non-mission work with no mission suggests `atelier issue link <id> <mission-id> --role advances` (with the real mission ID when exactly one mission is open). The generic four-item menu is gone.
 - [ ] Validation errors raised before the write don't name the unpersisted ID.
 - [ ] CLI tests cover plain, `--parent` and `--status backlog` output.
+
+## Report
+
+Dropped: `issue create` was removed in 0.5; `atelier new` prints the file it wrote and the commit command.
