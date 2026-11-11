@@ -44,7 +44,9 @@ pub fn pass(rules: impl IntoIterator<Item = String>) -> bool {
     let Some(reason) = reason() else {
         return false;
     };
-    let mut passed = PASSED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut passed = PASSED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     for rule in rules {
         let line = format!("{rule}: {reason}");
         if !passed.contains(&line) {

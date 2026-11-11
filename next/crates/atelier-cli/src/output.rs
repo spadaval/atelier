@@ -186,7 +186,9 @@ pub(crate) fn rules(act: Act, id: &str, refusal: &Refusal) -> Vec<String> {
         Refusal::NotHolder { role, holder } => format!(
             "You hold {id} as its {} ({} does)",
             role_name(*role),
-            holder.as_ref().map_or("nobody".to_string(), Thread::to_string)
+            holder
+                .as_ref()
+                .map_or("nobody".to_string(), Thread::to_string)
         ),
         Refusal::Unmet(unmet) => return unmet.iter().map(|c| condition_text(id, c)).collect(),
         Refusal::Record(problem) => problem.to_string(),
@@ -196,14 +198,25 @@ pub(crate) fn rules(act: Act, id: &str, refusal: &Refusal) -> Vec<String> {
 /// The rule that `id` is one of `from`, which it is not.
 pub(crate) fn rule_from(id: &str, from: &[Status], status: Status) -> String {
     let from: Vec<&str> = from.iter().map(|s| status_name(*s)).collect();
-    format!("{id} is {} (it is {})", from.join(" or "), status_name(status))
+    format!(
+        "{id} is {} (it is {})",
+        from.join(" or "),
+        status_name(status)
+    )
 }
 
 /// The rule that planning, or with `settle` the settling of a finding,
 /// happens on the base `base`, not on `branch`.
 pub(crate) fn rule_off_base(base: &str, branch: Option<&str>, settle: bool) -> String {
-    let or = if settle { " or an item's you implement" } else { "" };
-    format!("This checkout is on the base branch {base}{or} (it is on {})", place(branch))
+    let or = if settle {
+        " or an item's you implement"
+    } else {
+        ""
+    };
+    format!(
+        "This checkout is on the base branch {base}{or} (it is on {})",
+        place(branch)
+    )
 }
 
 /// What an entry needs and the command that follows, or what to do when no
@@ -727,24 +740,22 @@ pub fn not_a_finding(command: &str, name: &str) -> String {
 }
 
 /// `new --from` or `drop` on finding `name` of item `id`, refused for its
-/// item's status or for the finding.
-pub fn settle_refused(command: &str, name: &str, id: &str, refusal: &Refusal) -> String {
-    let why = match refusal {
-        Refusal::From { status, .. } => format!(
-            "  [ ] {id} is done (it is {}; only a done item's findings are settled)",
-            status_name(*status)
-        ),
-        Refusal::Unmet(unmet) => {
-            let lines: Vec<String> = unmet.iter().map(|c| condition(id, c)).collect();
-            lines.join("\n")
-        }
-        Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
-            unreachable!("settling a finding needs no role, and a record problem is an error")
-        }
-    };
-    format!(
-        "`atelier {command} {name}` refused; nothing changed.\n{why}\n`atelier list --deferred` lists the deferred findings nobody has settled.\n"
-    )
+/// item's status, for the finding, or both.
+pub fn settle_refused(command: &str, name: &str, id: &str, refusals: &[Refusal]) -> String {
+    let mut text = format!("`atelier {command} {name}` refused; nothing changed.\n");
+    for refusal in refusals {
+        text += &match refusal {
+            Refusal::From { status, .. } => format!(
+                "  [ ] {id} is done (it is {}; only a done item's findings are settled)\n",
+                status_name(*status)
+            ),
+            Refusal::Unmet(unmet) => unmet.iter().map(|c| condition(id, c) + "\n").collect(),
+            Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
+                unreachable!("settling a finding needs no role, and a record problem is an error")
+            }
+        };
+    }
+    text + "`atelier list --deferred` lists the deferred findings nobody has settled.\n"
 }
 
 /// How a finding was settled, after "it was".
@@ -857,7 +868,7 @@ pub fn check_found(
     let found = unread.len() + invalid.len();
     let plural = if found == 1 { "" } else { "s" };
     format!(
-        "`atelier check` found {found} problem{plural} in {}.\n{}Fix each in the file named, then run atelier check again.\n{}",
+        "`atelier check` found {found} problem{plural} in {}.\n{}{}Fix each in the file named, then run atelier check again.\n",
         records(counts),
         problems(unread, invalid),
         not_committed_records(uncommitted)
@@ -1797,7 +1808,10 @@ fn exit_status(code: Option<i32>) -> String {
 
 /// The rule that the merge check `run` passes, which it failed with `code`.
 pub(crate) fn rule_check(run: &str, code: Option<i32>) -> String {
-    format!("The merge check `{run}` passes (it failed: {})", exit_status(code))
+    format!(
+        "The merge check `{run}` passes (it failed: {})",
+        exit_status(code)
+    )
 }
 
 /// The rule that CI passed on the head, where `run` is the run that
@@ -1810,7 +1824,11 @@ pub(crate) fn rule_ci(workflow: &str, run: Option<&CiRun>) -> String {
             url,
             ..
         }) => format!("the latest run of {workflow} was {conclusion}: {url}"),
-        Some(run) => format!("{workflow} is {}: {}", run.status.replace('_', " "), run.url),
+        Some(run) => format!(
+            "{workflow} is {}: {}",
+            run.status.replace('_', " "),
+            run.url
+        ),
     };
     format!("CI passed on the head ({state})")
 }
@@ -1975,7 +1993,9 @@ pub fn skip_offer() -> String {
 
 /// Each rule `ATELIER_SKIP` passed, as `<rule>: <reason>`.
 pub fn skipped(passed: &[String]) -> String {
-    let lines = passed.iter().map(|line| format!("Skipped with ATELIER_SKIP: {line}\n"));
+    let lines = passed
+        .iter()
+        .map(|line| format!("Skipped with ATELIER_SKIP: {line}\n"));
     lines.collect()
 }
 

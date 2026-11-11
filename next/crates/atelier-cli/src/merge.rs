@@ -20,8 +20,8 @@
 use crate::commands::{facts, gate, hold, refusal, refused, Outcome};
 use crate::forge::{CiRun, ForgeError, Github, PullRequest};
 use crate::git;
-use crate::{output, skip};
 use crate::repo::{item_dir, item_path, Repo};
+use crate::{output, skip};
 use anyhow::{Context, Result};
 use atelier_app::acts::{check, Act, Refusal};
 use atelier_core::{Config, Forge, Status};

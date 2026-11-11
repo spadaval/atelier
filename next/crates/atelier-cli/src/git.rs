@@ -220,7 +220,10 @@ fn with_skips(repo: &Path, message: &str) -> Result<String> {
     if passed.is_empty() {
         return Ok(message.to_string());
     }
-    let trailers: Vec<String> = passed.iter().map(|line| format!("Atelier-Skip: {line}")).collect();
+    let trailers: Vec<String> = passed
+        .iter()
+        .map(|line| format!("Atelier-Skip: {line}"))
+        .collect();
     let mut args = vec!["interpret-trailers"];
     for trailer in &trailers {
         args.extend(["--trailer", trailer]);

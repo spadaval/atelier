@@ -685,8 +685,9 @@ fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
 /// unchanged, or the first reason it is refused.
 pub fn check_mission(act: Act, facts: &MissionFacts) -> Result<Option<MissionStatus>, Refusal> {
     match mission_refusals(act, facts) {
-        Ok(found) => (found.into_iter().next())
-            .map_or(Ok(row(act).to.and_then(MissionStatus::of)), Err),
+        Ok(found) => {
+            (found.into_iter().next()).map_or(Ok(row(act).to.and_then(MissionStatus::of)), Err)
+        }
         Err(problem) => Err(Refusal::Record(problem)),
     }
 }

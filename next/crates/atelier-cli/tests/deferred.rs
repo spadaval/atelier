@@ -363,7 +363,8 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
         run.stderr
     );
     assert!(
-        run.stderr.ends_with(&format!("Then: atelier submit\n{SKIP}")),
+        run.stderr
+            .ends_with(&format!("Then: atelier submit\n{SKIP}")),
         "{}",
         run.stderr
     );

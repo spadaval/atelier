@@ -538,7 +538,9 @@ fn a_commit_made_after_merge_read_its_facts_is_not_merged() {
     let again = merge(&root, "t1", &[]);
     assert_eq!(again.code, 1);
     assert!(
-        again.stderr.ends_with(&format!("Then: atelier submit\n{SKIP}")),
+        again
+            .stderr
+            .ends_with(&format!("Then: atelier submit\n{SKIP}")),
         "{}",
         again.stderr
     );
@@ -1601,7 +1603,9 @@ fn a_branch_that_gains_a_commit_outside_the_item_during_the_wait_is_stale() {
     assert_eq!(run.code, 1, "{}", run.stdout);
     assert!(
         run.stderr.contains("(changed: other.txt)")
-            && run.stderr.ends_with(&format!("Then: atelier submit\n{SKIP}")),
+            && run
+                .stderr
+                .ends_with(&format!("Then: atelier submit\n{SKIP}")),
         "{}",
         run.stderr
     );
@@ -1735,4 +1739,164 @@ fn an_ignored_file_in_the_base_checkout_is_not_overwritten() {
     assert_eq!(read(&base, "hello.txt"), "local\n");
     assert_eq!(head(&root, "main"), tip);
     assert_eq!(head(&base, "HEAD"), tip);
+}
+
+const REASON: &str = "Sumeet said to";
+
+/// `atelier merge` as t1 with `ATELIER_SKIP` set, its waiting check
+/// released from the start.
+fn merge_skipping(at: &Path) -> Run {
+    let release = at.parent().unwrap().join("released");
+    fs::write(&release, "").unwrap();
+    let output = atelier_command(at, "t1", &["merge"])
+        .env("ATELIER_SKIP", REASON)
+        .env("MERGE_MARK", at.parent().unwrap().join("mark"))
+        .env("MERGE_RELEASE", &release)
+        .output()
+        .unwrap();
+    run(output)
+}
+
+fn skipped(rule: &str) -> String {
+    format!("Skipped with ATELIER_SKIP: {rule}: {REASON}\n")
+}
+
+fn trailer(rule: &str) -> String {
+    format!("Atelier-Skip: {rule}: {REASON}")
+}
+
+#[test]
+fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_merge() {
+    let check = "echo broken; exit 3";
+    let scratch = approved_with(&format!("\n[[merge_check]]\nrun = \"{check}\"\n"), |_| {});
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "hello?\n").unwrap();
+    let run = merge_skipping(&root);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let rules = [
+        "Every change to a tracked file or to this item's directory is committed (these are not: hello.txt)".to_string(),
+        format!("The merge check `{check}` passes (it failed: exit 3)"),
+    ];
+    assert!(
+        run.stdout
+            .starts_with(&(skipped(&rules[0]) + &skipped(&rules[1]))),
+        "{}",
+        run.stdout
+    );
+    assert_eq!(field(&root, "main", "status"), "done");
+    // The merge commit was made again once the check was skipped, so its
+    // message names both.
+    let message = git(&root, &["log", "-1", "--format=%B", "main"]);
+    assert!(
+        message.ends_with(&format!(
+            "\n\nAtelier-Merge: {ID}\n{}\n{}",
+            trailer(&rules[0]),
+            trailer(&rules[1])
+        )),
+        "{message}"
+    );
+    // What was not committed stays in the checkout, not merged.
+    assert_eq!(read(&root, "hello.txt"), "hello?\n");
+    assert_eq!(git(&root, &["show", "main:hello.txt"]), "hello");
+}
+
+#[test]
+fn with_a_skip_a_conflict_or_an_input_that_moves_still_stops_the_merge() {
+    let scratch = approved();
+    let root = scratch.root();
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    fs::write(base.join("hello.txt"), "goodbye\n").unwrap();
+    git(&base, &["add", "hello.txt"]);
+    git(&base, &["commit", "-qm", "Say goodbye"]);
+    let before = state(&root);
+    let run = merge_skipping(&root);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.contains("does not merge cleanly into main")
+            && run.stderr.ends_with(NOT_SKIPPABLE),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(state(&root), before);
+
+    // The base moves while the checks run.
+    let scratch = approved_with(&waiting_check(), |_| {});
+    let root = scratch.root();
+    let mut command = atelier_command(&root, "t1", &["merge"]);
+    command.env("ATELIER_SKIP", REASON);
+    let waiting = Waiting::spawn(command, scratch.dir.path(), "merge");
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    fs::write(base.join("other.txt"), "other\n").unwrap();
+    git(&base, &["add", "other.txt"]);
+    git(&base, &["commit", "-qm", "Meanwhile"]);
+    let moved = head(&root, "main");
+    let run = waiting.finish();
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr
+            .starts_with("`atelier merge` wrote nothing: the base branch main changed")
+            && run.stderr.ends_with(NOT_SKIPPABLE),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(head(&root, "main"), moved);
+}
+
+#[test]
+fn with_a_skip_ci_that_failed_or_has_not_finished_passes_and_a_failing_forge_does_not() {
+    // Failed.
+    let forge = Forge::new(Some("ci.yml"));
+    let root = forge.scratch.root();
+    let approved = head(&root, ID);
+    forge.ci(ID, &[(&approved, "completed", Some("failure"))]);
+    let mut command = forge.command(&root, "t1", &["merge"]);
+    let run = self::run(command.env("ATELIER_SKIP", REASON).output().unwrap());
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let rule = "CI passed on the head (the latest run of ci.yml was failure: \
+                https://github.com/owner/repo/actions/runs/1)";
+    assert_eq!(
+        run.stdout,
+        format!(
+            "{PULL}{}{}{}",
+            waiting_for("20 seconds"),
+            skipped(rule),
+            merged_and_pushed(&root)
+        )
+    );
+    let message = git(&root, &["log", "-1", "--format=%B", "main"]);
+    assert!(message.ends_with(&trailer(rule)), "{message}");
+
+    // Still running: passed at once, without the wait.
+    let forge = Forge::new(Some("ci.yml"));
+    let root = forge.scratch.root();
+    let approved = head(&root, ID);
+    forge.ci(ID, &[(&approved, "in_progress", None)]);
+    let since = Instant::now();
+    let mut command = forge.command(&root, "t1", &["merge"]);
+    let run = self::run(command.env("ATELIER_SKIP", REASON).output().unwrap());
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(since.elapsed() < Duration::from_secs(10));
+    let rule = "CI passed on the head (ci.yml is in progress: \
+                https://github.com/owner/repo/actions/runs/1)";
+    assert!(run.stdout.contains(&skipped(rule)), "{}", run.stdout);
+    assert_eq!(field(&root, "main", "status"), "done");
+
+    // A forge that fails is not a rule.
+    let forge = Forge::new(Some("ci.yml"));
+    let root = forge.scratch.root();
+    // Its pull request is gone, and opening one fails.
+    fs::remove_file(forge.gh.join("pulls")).unwrap();
+    forge.flag("no-pulls", true);
+    let before = state(&root);
+    let mut command = forge.command(&root, "t1", &["merge"]);
+    let run = self::run(command.env("ATELIER_SKIP", REASON).output().unwrap());
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(
+        run.stderr.contains("HTTP 422: Validation Failed") && run.stderr.ends_with(NOT_SKIPPABLE),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(state(&root), before);
 }

@@ -365,7 +365,11 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
         let run = atelier(&root, "p1", args);
         assert_eq!(run.code, 1, "{args:?}: {}", run.stdout);
         // A flag a mission lacks is no rule; the rest end offering the skip.
-        let end = if says.contains("only an item has") { says } else { SKIP };
+        let end = if says.contains("only an item has") {
+            says
+        } else {
+            SKIP
+        };
         assert!(
             run.stderr.starts_with("`atelier set")
                 && run.stderr.contains(says)
@@ -1043,7 +1047,9 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
         assert!(
             run.stderr
                 .starts_with(&format!("{ID} is dropped, and `atelier {command}` runs on"))
-                && run.stderr.ends_with(&format!("Nothing changed.\n{why}{skip}")),
+                && run
+                    .stderr
+                    .ends_with(&format!("Nothing changed.\n{why}{skip}")),
             "{command}: {}",
             run.stderr
         );

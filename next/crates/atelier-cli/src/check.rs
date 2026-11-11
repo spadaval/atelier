@@ -59,8 +59,10 @@ pub fn check() -> Result<Outcome> {
     }
     let text = output::check_found(counts, unread, invalid, &uncommitted);
     // What a skip passes is still reported.
-    Ok(rules(unread, invalid.iter().map(output::valid), text.clone())
-        .unwrap_or(Outcome::Done(text)))
+    Ok(
+        rules(unread, invalid.iter().map(output::valid), text.clone())
+            .unwrap_or(Outcome::Done(text)),
+    )
 }
 
 /// A refusal `text` of the rules `rules`, which `ATELIER_SKIP` passes when
@@ -140,8 +142,10 @@ fn pre_commit(root: &Path) -> Result<Outcome> {
         return Ok(Outcome::Done(String::new()));
     }
     let text = output::commit_refused(&unread, &invalid, &acts);
-    let broken = (invalid.iter().map(output::valid))
-        .chain(acts.iter().map(|(path, from, to)| output::rule_status(path, *from, *to)));
+    let broken = (invalid.iter().map(output::valid)).chain(
+        acts.iter()
+            .map(|(path, from, to)| output::rule_status(path, *from, *to)),
+    );
     Ok(rules(&unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
@@ -228,8 +232,13 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
         return Ok(Outcome::Done(String::new()));
     }
     let text = output::push_refused(&base, old, &unread, &code, &done);
-    let broken = (code.iter().map(|(commit, subject, _)| output::rule_code(&base, commit, subject)))
-        .chain(done.iter().map(|(commit, _, id)| output::rule_done(&base, commit, id)));
+    let broken = (code
+        .iter()
+        .map(|(commit, subject, _)| output::rule_code(&base, commit, subject)))
+    .chain(
+        done.iter()
+            .map(|(commit, _, id)| output::rule_done(&base, commit, id)),
+    );
     Ok(rules(&unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 

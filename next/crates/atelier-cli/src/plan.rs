@@ -487,10 +487,11 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
     let facts = planned_facts(repo, &located, record);
     if let Err(refusal) = check(Act::Close, &facts) {
         // An item with a branch ends by its merge, or by `drop`.
-        let text = match facts.branch && !matches!(record.item.status, Status::Done | Status::Dropped) {
-            true => output::close_started(id),
-            false => refused_act(Act::Close, &refusal, &facts)?,
-        };
+        let text =
+            match facts.branch && !matches!(record.item.status, Status::Done | Status::Dropped) {
+                true => output::close_started(id),
+                false => refused_act(Act::Close, &refusal, &facts)?,
+            };
         if let Some(refused) = gated(Act::Close, &facts, text) {
             return Ok(refused);
         }
@@ -511,7 +512,10 @@ pub(crate) fn off_base(repo: &Repo, command: &str) -> Result<Option<Outcome>> {
     let checkout = git::checkout_of(&repo.root, &repo.base)?;
     let (base, branch) = (&repo.base, repo.branch.as_deref());
     let text = output::off_base(command, base, branch, checkout.as_deref());
-    Ok(skip::refuse([output::rule_off_base(base, branch, false)], text))
+    Ok(skip::refuse(
+        [output::rule_off_base(base, branch, false)],
+        text,
+    ))
 }
 
 /// How `new --from` or `drop` settles a deferred finding.
@@ -544,7 +548,10 @@ fn off_settling(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
     let checkout = git::checkout_of(&repo.root, &repo.base)?;
     let (base, branch) = (&repo.base, repo.branch.as_deref());
     let text = output::settle_elsewhere(command, base, branch, checkout.as_deref());
-    Ok(skip::refuse([output::rule_off_base(base, branch, true)], text))
+    Ok(skip::refuse(
+        [output::rule_off_base(base, branch, true)],
+        text,
+    ))
 }
 
 /// Settles the deferred finding `name`, `<item>/<finding>`, in this
@@ -561,12 +568,17 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
     let located = repo.locate_planned(id)?;
     let Some(record) = located.record() else {
         let none = Refusal::Unmet(vec![atelier_app::acts::Condition::NoFinding(finding)]);
-        return Ok(Outcome::Refused(output::settle_refused(command, name, id, &none)));
+        return Ok(Outcome::Refused(output::settle_refused(
+            command,
+            name,
+            id,
+            &[none],
+        )));
     };
     let facts = planned_facts(repo, &located, record);
     let all = settle_refusals(&facts, &finding)?;
-    if let Some(first) = all.first() {
-        let text = output::settle_refused(command, name, id, first);
+    if !all.is_empty() {
+        let text = output::settle_refused(command, name, id, &all);
         if let Some(refused) = gate(Act::Settle, id, &all, text) {
             return Ok(refused);
         }
@@ -707,7 +719,9 @@ fn save_with(
         .collect();
     if !problems.is_empty() {
         let text = output::invalid(command, &repo.root, &problems);
-        let rules = problems.iter().map(|problem| output::valid(&output::from_root(&repo.root, problem)));
+        let rules = problems
+            .iter()
+            .map(|problem| output::valid(&output::from_root(&repo.root, problem)));
         if let Some(refused) = skip::refuse(rules, text) {
             return Ok(refused);
         }
