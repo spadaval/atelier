@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-42b4
 title: 'Run fresh agents through a rebuttal, an escalation and a refusal that offers the skip: no fresh-agent run has met them'
-status: draft
+status: dropped
 mission: null
 labels:
 - redesign
@@ -35,3 +35,7 @@ Results so far: `evals/agent-factory/results/2026-11-10-next-loop.md` and `2026-
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-t2jo (Run fresh agents through a round of changes requested, the path most items take)
+
+## Report
+
+Dropped: Done by atelier-a4rs and atelier-t747: scenarios `next-rebuttal-kept`, `next-decide` and `next-refused-push` exist, with runs on Claude Opus and gpt-6.1-sol in evals/agent-factory/results/2026-11-11-next-skill.md.
