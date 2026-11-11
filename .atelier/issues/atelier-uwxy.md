@@ -113,6 +113,7 @@ The inbox's `needs_human` IDs there equal `atelier list --needs-human`'s (atelie
 ### Review fixes
 
 - atelier-xxwm (round 1, fix now): error responses from axum's extractors and method routing were not JSON. Fixed in d69a8bd6 with a middleware on the API's routes; `desk::the_item_and_document_routes` now sends a missing and a malformed query and two wrong methods, and fails without the middleware.
+- atelier-2t1h (round 2, fix now): with an app configured, `GET /api/` served the app's `index.html`. Fixed in d70f94f0: the fallback answers every path under `/api` with the JSON 404 and serves the app only elsewhere; `desk::the_app_is_served_with_its_index_for_its_own_paths` checks `/api`, `/api/`, `/api//repos` and others, and fails without the guard.
 
 ### Open items
 
