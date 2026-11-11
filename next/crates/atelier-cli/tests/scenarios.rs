@@ -752,6 +752,13 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
         )),
         "{status}"
     );
+    assert!(
+        status.contains(&format!(
+            "Answer each finding with one line under `### Responses` in the Report, and nothing \
+             else there, such as `{stem}.1: fixed in <commit>` or `{stem}.1: rebutted: <fact>`. "
+        )),
+        "{status}"
+    );
     assert!(!status.contains("No test"), "{status}");
     let head = git(&root, &["rev-parse", "HEAD"]);
     let refused = atelier(&root, "t1", &["submit"]);

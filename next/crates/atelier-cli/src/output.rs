@@ -288,11 +288,14 @@ fn needs(act: Act, status: Status, id: &str, unmet: &[Condition], decider: Optio
             text += &condition(id, unmet);
             text += "\n";
         }
-        if unmet
-            .iter()
-            .any(|c| matches!(c, Condition::NoResponse { .. }))
-        {
-            text += "Answer each finding under `### Responses` in the Report: `<finding>: fixed in <commit>` or `<finding>: rebutted: <fact>`. Or, when it is right but not worth fixing now, or its fix leaves the item's scope, escalate it: atelier escalate --finding <finding> \"<question>\"\n";
+        // A concrete line: agents copied "Finding <name>" from the list
+        // above, or wrote prose under the line, and every command then
+        // failed to read the item.
+        if let Some(finding) = unmet.iter().find_map(|c| match c {
+            Condition::NoResponse { finding, .. } => Some(finding),
+            _ => None,
+        }) {
+            text += &format!("Answer each finding with one line under `### Responses` in the Report, and nothing else there, such as `{finding}: fixed in <commit>` or `{finding}: rebutted: <fact>`. Or, when it is right but not worth fixing now, or its fix leaves the item's scope, escalate it: atelier escalate --finding <finding> \"<question>\"\n");
         }
         if unmet
             .iter()
