@@ -225,7 +225,7 @@ fn share(repo: &Repo, forge: &Forge, id: &str, title: &str) -> Result<String> {
         Err(error) => return Ok(output::submit_no_pull_request(id, &error, false)),
     };
     let head = git::head(&repo.root)?;
-    if let Err(error) = merge::push(&repo.root, &forge.remote, &head, id) {
+    if let Err(error) = merge::push(&repo.root, &forge.remote, &head, id, repo.skip) {
         return Ok(output::submit_not_pushed(id, &forge.remote, &error));
     }
     Ok(match merge::pull_request(&github, id, title, &repo.base) {

@@ -208,7 +208,7 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
     };
     said += &output::merged(&id, &base, &commit);
     if let Some(forge) = &config.forge {
-        if let Err(error) = push(&root, &forge.remote, &commit, &base) {
+        if let Err(error) = push(&root, &forge.remote, &commit, &base, skip) {
             return Ok(Outcome::Refused(
                 said + &output::base_push_failed(&base, &forge.remote, &error),
             ));
@@ -398,7 +398,7 @@ fn before_lock(
     let pushed = match git::remote_tip(root, &forge.remote, id)? {
         Some(tip) if counts(root, id, head, &tip, &mut known)? => false,
         _ => {
-            if let Err(error) = push(root, &forge.remote, head, id) {
+            if let Err(error) = push(root, &forge.remote, head, id, skip) {
                 let failed = output::branch_push_failed(id, &forge.remote, &error);
                 return Ok(Err(Outcome::Refused(failed)));
             }
@@ -562,7 +562,7 @@ fn publish(repo: &Repo, config: &Config, id: &str) -> Result<Outcome> {
     let base = &repo.base;
     let mut said = output::already_merged(id, base);
     if let Some(Forge { remote, .. }) = &config.forge {
-        if let Err(error) = push(&repo.root, remote, &repo.base_tip, base) {
+        if let Err(error) = push(&repo.root, remote, &repo.base_tip, base, repo.skip) {
             return Ok(Outcome::Refused(
                 said + &output::base_push_failed(base, remote, &error),
             ));
@@ -619,10 +619,17 @@ fn moved(
     }
 }
 
-/// Pushes `commit` to the branch `branch` of `remote`, never forcing.
-pub(crate) fn push(root: &Path, remote: &str, commit: &str, branch: &str) -> Result<()> {
+/// Pushes `commit` to the branch `branch` of `remote`, never forcing, with
+/// the pre-push hook given `skip`'s reason.
+pub(crate) fn push(
+    root: &Path,
+    remote: &str,
+    commit: &str,
+    branch: &str,
+    skip: &Skip,
+) -> Result<()> {
     let to = format!("{commit}:refs/heads/{branch}");
-    git::relayed(root, &["push", "--quiet", remote, &to])
+    git::relayed(root, &["push", "--quiet", remote, &to], skip)
 }
 
 /// The open pull request from `branch` into `base`, opened when there is

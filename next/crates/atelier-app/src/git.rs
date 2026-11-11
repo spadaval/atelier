@@ -4,7 +4,7 @@
 //! `crates/atelier-cli/src/commands/git.rs`, trimmed to plain errors; the
 //! rest is new.
 
-use crate::skip::Skip;
+use crate::skip::{Skip, VARIABLE};
 use anyhow::{bail, Context, Result};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -188,7 +188,7 @@ pub fn commit_paths(repo: &Path, paths: &[&str], message: &str, skip: &Skip) -> 
     let message = with_skips(repo, message, skip)?;
     let mut commit = vec!["commit", "--quiet", "-m", &message, "--"];
     commit.extend(paths);
-    let committed = run(repo, &on_paths(&["add"])).and_then(|_| relayed(repo, &commit));
+    let committed = run(repo, &on_paths(&["add"])).and_then(|_| relayed(repo, &commit, skip));
     if committed.is_err() {
         let unstage = on_paths(&["rm", "--cached", "-r", "-q", "--ignore-unmatch"]);
         let _ = run(repo, &unstage);
@@ -199,9 +199,19 @@ pub fn commit_paths(repo: &Path, paths: &[&str], message: &str, skip: &Skip) -> 
 }
 
 /// Runs a Git command that must succeed, and passes on to stderr what it
-/// printed, which is a hook's output, as the rules a hook skipped.
-pub fn relayed(repo: &Path, args: &[&str]) -> Result<()> {
-    let output = output(repo, args, None)?;
+/// printed, which is a hook's output, as the rules a hook skipped. The
+/// hooks it runs are given `skip`'s reason, or none, whatever this process
+/// was given.
+pub fn relayed(repo: &Path, args: &[&str], skip: &Skip) -> Result<()> {
+    let mut command = git(repo);
+    command.args(args).stdin(Stdio::null());
+    match skip.reason() {
+        Some(reason) => command.env(VARIABLE, reason),
+        None => command.env_remove(VARIABLE),
+    };
+    let output = command
+        .output()
+        .with_context(|| format!("cannot start git {}", args.join(" ")))?;
     if !output.status.success() {
         bail!(
             "git {} failed: {}",

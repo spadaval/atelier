@@ -13,7 +13,7 @@ mod setup;
 mod view_output;
 mod views;
 
-use atelier_app::{identity, Repo, Skip};
+use atelier_app::{identity, Repo, Skip, SKIP_VARIABLE as SKIP};
 use atelier_core::{Priority, Verdict};
 use clap::builder::NonEmptyStringValueParser;
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
@@ -21,10 +21,6 @@ use commands::Outcome;
 use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
-
-/// The variable that names the reason of a skip
-/// (docs/strategies/redesign-architecture.md, Hooks and the bypass).
-const SKIP: &str = "ATELIER_SKIP";
 
 /// `ATELIER_SKIP`'s value, if it is set; blank when it is set to nothing
 /// but whitespace, which every command refuses.

@@ -255,3 +255,43 @@ fn ready_given_no_id_refuses_and_commits_nothing() {
     );
     assert_eq!(after, before);
 }
+
+#[test]
+fn the_hooks_a_commit_runs_are_given_the_invocations_reason_and_not_the_processs() {
+    let (_dir, root) = scratch("draft");
+    for id in ["demo-cd34", "demo-ef56"] {
+        write_item(&root, id, "draft", "[]", "");
+    }
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "Plan more"]);
+    // A pre-commit hook that says what ATELIER_SKIP it was given.
+    let seen = root.join(".git/skip-seen");
+    let hook = root.join(".git/hooks/pre-commit");
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\nprintf '%s' \"${{ATELIER_SKIP-unset}}\" > '{}'\n",
+            seen.display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&hook).unwrap().permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+    fs::set_permissions(&hook, permissions).unwrap();
+    let ready_with = |id: &str, reason: Option<&str>| {
+        let skip = Skip::new(reason);
+        let mut repo = Repo::open(&root, Thread("p1".into()), &skip).unwrap();
+        ready(&mut repo, &[id.into()], "sumeet").unwrap().unwrap();
+        fs::read_to_string(&seen).unwrap()
+    };
+    // Nextest runs each test in a process of its own, so the variable set
+    // here reaches no other test.
+    std::env::set_var("ATELIER_SKIP", "the process's");
+    assert_eq!(ready_with(ID, Some("the invocation's")), "the invocation's");
+    assert_eq!(ready_with("demo-cd34", None), "unset");
+    std::env::remove_var("ATELIER_SKIP");
+    assert_eq!(
+        ready_with("demo-ef56", Some("only this one's")),
+        "only this one's"
+    );
+}

@@ -13,6 +13,10 @@ use crate::{entry, say};
 use anyhow::Result;
 use std::cell::RefCell;
 
+/// The variable that gives a command a skip's reason, which the Git hooks
+/// an act's commit or push runs are given from its [`Skip`].
+pub const VARIABLE: &str = "ATELIER_SKIP";
+
 /// A refused act: the rules it breaks, one line each, which a reason would
 /// pass, or none when what refused it is no rule; what it says; and the way
 /// out, where it names one.
