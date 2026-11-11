@@ -2,7 +2,8 @@ import { CircleCheck, MessageSquareWarning, RotateCcw } from "lucide-react";
 import type { FindingRow } from "../api/FindingRow";
 import type { Review } from "../api/Review";
 import { findingFates, type Fate } from "../lib/findings";
-import { dateTime, plural, recommendationWords, shortCommit, who } from "../lib/words";
+import { dateTime, plural, recommendationWords, shortCommit } from "../lib/words";
+import { Identity } from "./Agents";
 import { Markdown } from "./ui";
 
 /** Findings, each with what became of it, given the fates of every finding of the same reviews. */
@@ -68,7 +69,14 @@ export function ReviewList({ reviews, plan }: { reviews: Review[]; plan?: boolea
                 Round {r.round}: {r.verdict === "approve" ? "approved" : r.verdict === "changes" ? "changes asked" : "no verdict yet"}
               </b>
               <span className="ink2">
-                {r.reviewers.length > 0 ? r.reviewers.map((x) => who(x)).join(", ") : "no reviewer named"}
+                {r.reviewers.length > 0
+                  ? r.reviewers.map((x, at) => (
+                      <span key={at}>
+                        {at > 0 ? ", " : null}
+                        <Identity id={x} />
+                      </span>
+                    ))
+                  : "no reviewer named"}
                 {r.model ? ` on ${r.model}` : ""}
               </span>
               <time dateTime={r.created_at}>{dateTime(r.created_at)}</time>

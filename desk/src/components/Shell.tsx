@@ -1,4 +1,4 @@
-import { FolderGit2, Inbox, LayoutGrid, Menu, Moon, Sun } from "lucide-react";
+import { Bot, FolderGit2, Inbox, LayoutGrid, Menu, Moon, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import type { InboxResponse } from "../api/InboxResponse";
@@ -44,7 +44,7 @@ function ThemeToggle() {
 
 /** How many things wait on the human in one repository of the inbox. */
 export function inboxCount(repo: InboxResponse["repos"][number]): number {
-  return repo.needs_human.reduce((n, g) => n + g.items.length, 0) + repo.drafts.length + repo.questions.length;
+  return repo.needs_human.reduce((n, g) => n + g.items.length, 0) + repo.drafts.length + repo.questions.length + repo.threads.length;
 }
 
 function Sidebar({ open }: { open: boolean }) {
@@ -60,6 +60,9 @@ function Sidebar({ open }: { open: boolean }) {
       <NavLink to="/inbox" className="nav">
         <Inbox size={16} /> Inbox
         {waiting !== undefined ? <span className={`count${waiting > 0 ? " you" : ""}`}>{waiting}</span> : null}
+      </NavLink>
+      <NavLink to="/agents" className="nav">
+        <Bot size={16} /> Agents
       </NavLink>
       <div className="side-head">Repositories</div>
       {(repos.data?.repos ?? []).map((repo) => (

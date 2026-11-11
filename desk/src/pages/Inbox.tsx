@@ -1,9 +1,12 @@
-import { MessageCircleQuestion, Target } from "lucide-react";
+import { CircleCheck, Target } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 import type { InboxRepo } from "../api/InboxRepo";
 import type { InboxResponse } from "../api/InboxResponse";
+import { LiveThreadRow, T3Notice } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";
+import { PendingMark, QuestionLine } from "../components/Questions";
 import { inboxCount } from "../components/Shell";
 import { Empty, ErrorBanner, ScopeBar, Skeleton } from "../components/ui";
 import { api, to, useData } from "../lib/api";
@@ -12,6 +15,8 @@ import { countsLine, plural } from "../lib/words";
 function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
   const name = repo.repo;
   const count = inboxCount(repo);
+  // Answers given here this visit. The server leaves an answered question out of the inbox until a commit holds it.
+  const [answered, setAnswered] = useState<{ item: string; question: string; text: string }[]>([]);
   return (
     <section className="inbox-repo" aria-label={name}>
       {many ? (
@@ -25,7 +30,7 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
             {name} cannot be read: {repo.error}
           </span>
         </div>
-      ) : count === 0 ? (
+      ) : count === 0 && answered.length === 0 ? (
         <div className="list">
           <Empty title="Nothing waits on you here." />
         </div>
@@ -55,7 +60,21 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
         </div>
       ) : null}
 
-      {repo.questions.length > 0 ? (
+      {repo.threads.length > 0 ? (
+        <div className="sect">
+          <div className="sect-head">
+            <h3>Threads waiting on a person</h3>
+            <span className="tally">{repo.threads.length}</span>
+          </div>
+          <div className="list">
+            {repo.threads.map((t) => (
+              <LiveThreadRow key={t.id} thread={t} holds={t.holds} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {repo.questions.length + answered.length > 0 ? (
         <div className="sect">
           <div className="sect-head">
             <h3>Open questions</h3>
@@ -63,19 +82,32 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
           </div>
           <div className="list">
             {repo.questions.map((q) => (
-              <Link key={q.item} to={to.item(name, q.item)} className="qline">
-                <span className="glyph you">
-                  <MessageCircleQuestion size={15} aria-hidden />
-                </span>
-                <span className="grow">
-                  <span className="q">{q.question}</span>
-                  <span className="sub">
-                    <span className="mono">{q.item}</span>
-                    {q.finding ? <> · about finding {q.finding}</> : null}
-                  </span>
-                </span>
-              </Link>
+              <QuestionLine
+                key={q.item}
+                repo={name}
+                question={q}
+                answerable
+                onAnswered={(text) => setAnswered((was) => [...was.filter((a) => a.item !== q.item), { item: q.item, question: q.question, text }])}
+              />
             ))}
+            {answered
+              .filter((a) => !repo.questions.some((q) => q.item === a.item))
+              .map((a) => (
+                <div key={a.item} className="qline" data-testid="answered">
+                  <span className="glyph ok">
+                    <CircleCheck size={15} aria-hidden />
+                  </span>
+                  <span className="grow">
+                    <Link to={to.item(name, a.item)} className="q">
+                      {a.question}
+                    </Link>
+                    <span className="sub">
+                      <span className="mono">{a.item}</span> <PendingMark /> Its item's page shows the answer until its implementer commits it.
+                    </span>
+                    <p className="act-text">{a.text}</p>
+                  </span>
+                </div>
+              ))}
           </div>
         </div>
       ) : null}
@@ -110,11 +142,12 @@ export function InboxPage() {
           <h1>Inbox</h1>
           <p className="lede">
             {loaded.data ? (count === 0 ? "Nothing waits on you." : `${plural(count, "thing waits", "things wait")} on you.`) : "Reading every repository…"} Draft missions wait for
-            your go, questions for an answer, and items labelled needs-human for work only you can do.
+            your go, threads and questions for an answer, and items labelled needs-human for work only you can do.
           </p>
         </div>
       </div>
       <ErrorBanner loaded={loaded} />
+      {loaded.data ? <T3Notice t3={loaded.data.t3} /> : null}
       {!loaded.data && loaded.loading ? <Skeleton rows={8} /> : null}
       {repos.map((r) => (
         <RepoInbox key={r.repo} repo={r} many={repos.length > 1} />
