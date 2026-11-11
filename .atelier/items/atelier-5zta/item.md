@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5zta
 title: Put each work section's count in its heading
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -30,3 +30,7 @@ created_at: 2026-10-17T01:10:57.987773924Z
 ## Context
 
 Reworks the same rendering as atelier-deyy.
+
+## Report
+
+Dropped: The `work` views were removed in 0.5.
