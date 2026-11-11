@@ -120,7 +120,9 @@ preflight_checks() {
     local_tip=$(git -C "$c" rev-parse -q --verify "refs/heads/$b" || true)
     tip=$(remote_tip "$r") || { say "  $r: cannot read $REMOTE's $b"; bad=1; continue; }
     if [ "$mode" = adopt ]; then
-      git -C "$c" fetch -q "$REMOTE" "+refs/heads/$b:refs/cutover/remote-base"
+      # By URL, so that the remote-tracking ref, which the journal records
+      # next, does not move.
+      git -C "$c" fetch -q "$(git -C "$c" remote get-url "$REMOTE")" "+refs/heads/$b:refs/cutover/remote-base"
       if ! git -C "$c" merge-base --is-ancestor "$local_tip" refs/cutover/remote-base; then
         say "  $r: local $b is ahead of or apart from $REMOTE's; push or drop that work first"; bad=1
       fi
