@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2mlh
 title: Run the first real items under the new tool, and fix what first use breaks
-status: ready
+status: building
 mission: atelier-qr5s
 labels:
 - redesign
 priority: medium
 blocked_by:
 - atelier-wd1i
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A2074a88e-920b-49f9-bd17-caf5903cc60f%3Adelegate-task%3A77050191-cad3-4b48-9372-f665e6d5a28e
 ready:
   by: sumeet
   at: 2026-11-11T15:43:38.001833021Z
