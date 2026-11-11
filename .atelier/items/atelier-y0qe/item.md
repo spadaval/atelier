@@ -8,8 +8,7 @@ mission: null
 labels:
 - agent-factory
 priority: high
-blocked_by:
-- atelier-8ep4
+blocked_by: []
 implementers: []
 ready: null
 trivial: null

@@ -7,7 +7,7 @@ status: draft
 mission: null
 labels:
 - redesign
-priority: medium
+priority: high
 blocked_by:
 - atelier-x3n5
 implementers: []
