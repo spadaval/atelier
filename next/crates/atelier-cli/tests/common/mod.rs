@@ -17,6 +17,10 @@ pub const NOT_SKIPPABLE: &str =
 /// What ends every refusal of a rule, after its way out.
 pub const SKIP: &str = "If the rule is wrong for this case, go past it on purpose: run the same command again with ATELIER_SKIP=\"<why>\" in front of it.\n";
 
+/// The line `status` begins with in a clone with none of Atelier's Git
+/// hooks, as every scratch repository is until `setup` runs in it.
+pub const NO_HOOKS: &str = "This clone has none of Atelier's Git hooks, so nothing checks its commits and pushes. Install them with: atelier setup\n";
+
 pub struct Scratch {
     pub dir: TempDir,
 }

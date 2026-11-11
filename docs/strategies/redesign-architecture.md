@@ -510,12 +510,26 @@ item's unanswered questions, and since when an approved one is approved.
 Missions join
 with their commands.
 
-Harness hooks give orientation at session start: `atelier setup claude`
-exists, and `atelier setup codex` is added, since Codex 0.167 has hooks. The
-session-end hook runs `atelier check`, which also reports record changes
-not yet committed. Where no harness hook runs, a
-project's `AGENTS.md` says to run `atelier status` first, and the
-post-checkout Git hook prints it on every branch switch.
+Harness hooks give orientation at session start. `atelier setup claude`
+writes Claude Code's project hooks into `.claude/settings.json`: a
+SessionStart hook runs `atelier status`, whose output Claude Code adds to
+the session, and a Stop hook runs `atelier check` at the end of each turn,
+which also reports record changes not yet committed. The Stop hook's
+command is `atelier check || exit 1`, since a Stop hook that exits 2 makes
+Claude Code go on and run it again. `atelier setup codex` writes Codex's
+into `.codex/hooks.json`, which Codex 0.167 reads for a project in the same
+form: a SessionStart hook runs `atelier status`, whose output Codex adds as
+developer context. Codex runs a project's hooks only once the project is
+trusted and the user has trusted the hook in its `/hooks` list, and
+`setup codex` says so. Each command merges its hooks into the file the
+repository has, keeping every other hook there and replacing only those
+marked `# atelier-managed:<event>`, the old tool's marker, so that either
+tool's `setup` replaces the other's; run again, it changes nothing. A file
+that is not valid JSON, or whose hooks are not in the harness's form, is
+refused with nothing changed. The merging is copied from the old `setup
+claude`. Where no harness hook runs, a project's `AGENTS.md` says to run
+`atelier status` first, and the post-checkout Git hook prints it on every
+branch switch.
 
 ## Where records are read and written
 
@@ -796,8 +810,29 @@ gardener's procedure, not the binary, says which to take.
 
 `atelier setup` installs three Git hooks into the clone's hooks directory,
 which all its worktrees share. Each is a one-line script that runs
-`atelier check --hook <name>` with Git's arguments, so the rules live in the
-binary (`atelier-cli`'s `check.rs`).
+`atelier check --hook <name>` with Git's arguments and input, so the rules
+live in the binary (`atelier-cli`'s `check.rs`). A hook is Atelier's when it
+is that script byte for byte and executable; run again, `setup` changes
+nothing and says so.
+
+- **A hook the clone already has** is kept: `setup` moves it to
+  `<name>.local` and says so, a symbolic link moved as a link. Once its own
+  rule passes, `check --hook <name>` runs `<name>.local` as Git would: only
+  if it is executable, through the shell when it has no `#!` line, and with
+  the same arguments and input. For pre-commit and pre-push a failure of the
+  kept hook refuses the commit or push; for post-checkout it is printed and
+  the checkout still succeeds. A `setup` stopped between moving a hook and writing its own leaves no hook
+  and the kept one in place, and run again writes Atelier's.
+- **Where `<name>.local` is taken** as well, by a hook that is not
+  Atelier's, `setup` refuses and changes no file, and says to put both into
+  `<name>.local` and remove `<name>`.
+- **Where `core.hooksPath` points Git** outside the Git directory the
+  worktrees share, as to a directory of each worktree's own or one shared
+  with other clones, `setup` refuses and changes nothing, and names the
+  shared directory to copy the hooks into and point `core.hooksPath` at.
+
+The cutover's rollback restores a clone's hooks directory from a copy, so
+`setup` has no undo of its own.
 
 | Hook | Rule |
 | --- | --- |
@@ -846,7 +881,8 @@ the commit, a trailer `Atelier-Skip: <rule>: <reason>` goes into its
 message. A skip in a hook writes nothing; it shows in the transcript as the
 variable on the Git command, which is where the scorecard counts it. A
 record that does not parse is not a rule and cannot be skipped. `status`
-reports a clone with no hooks.
+begins with one line, naming `atelier setup`, when the directory Git runs
+the clone's hooks from has none of Atelier's.
 
 ## The forge
 
@@ -1138,7 +1174,6 @@ should weigh them:
 None of these changes the shape of the work. Each is settled by the item that
 reaches it.
 
-- Which Codex hook event runs at session start.
 - Whether T3's pull request watch wakes a thread when a repository marks no
   check as required.
 - Where video artifacts go when a project needs them.

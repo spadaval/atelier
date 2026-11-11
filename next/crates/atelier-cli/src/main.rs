@@ -10,6 +10,7 @@ mod plan;
 mod questions;
 mod repo;
 mod review;
+mod setup;
 mod skip;
 mod view_output;
 mod views;
@@ -48,6 +49,8 @@ enum Command {
         )]
         args: Vec<String>,
     },
+    /// Install Atelier's Git hooks in this clone, keeping any hook it has as <name>.local; or with a harness, its session hooks in this repository.
+    Setup { harness: Option<setup::Harness> },
     /// One item in full with its reviews, or one mission on one page with its items and questions.
     Show { id: String },
     /// All open work, grouped by mission and then by label; each flag given narrows it.
@@ -238,6 +241,10 @@ fn main() -> ExitCode {
     let result = repo::Repo::open().and_then(|mut repo| match cli.command {
         Command::Status => commands::status(&mut repo).map(Outcome::Done),
         Command::Check { .. } => unreachable!("check runs before the repository is opened"),
+        Command::Setup { harness: None } => setup::git_hooks(&repo.root),
+        Command::Setup {
+            harness: Some(harness),
+        } => setup::harness(&repo.root, harness),
         Command::Show { id } => views::show(&mut repo, &id),
         Command::List { deferred: true, .. } => views::deferred(&mut repo),
         Command::List {

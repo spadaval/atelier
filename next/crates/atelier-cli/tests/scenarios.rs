@@ -61,7 +61,7 @@ fn start_commits_building_then_creates_the_branch_and_status_says_what_is_next()
     assert_eq!(
         status.stdout,
         format!(
-            "You are the implementer of {ID} (thread t1).\nItem: {}\nTitle: Say hello\n\
+            "{NO_HOOKS}You are the implementer of {ID} (thread t1).\nItem: {}\nTitle: Say hello\n\
              Status: building\nTo submit it for review:\n  [ ] Done when: `hello` prints hello.\n\
              \x20 [ ] Done when: A test covers it.\n  [ ] Report: written under `## Report`\n\
              `atelier submit` commits only the item's directory, so commit your change first.\n\
@@ -280,7 +280,7 @@ fn status_on_the_base_reads_a_started_item_from_its_branch_until_it_merges() {
     assert_eq!(
         status.stdout,
         format!(
-            "You are thread t3, on the base branch main.\nHeld by other threads:\n  \
+            "{NO_HOOKS}You are thread t3, on the base branch main.\nHeld by other threads:\n  \
              {ID} (building, held by t1): Say hello\nNothing is ready to start.\n"
         )
     );
@@ -358,7 +358,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
     assert_eq!(
         status,
         format!(
-            "You are thread t1, on the base branch main.\nReady to start:\n  \
+            "{NO_HOOKS}You are thread t1, on the base branch main.\nReady to start:\n  \
              demo-b10c (high): Say hello\n  {ID} (high): Say hello\n    \
              [ ] demo-b10c is done (it is ready)\nThen: atelier start demo-b10c\n"
         )
@@ -397,7 +397,7 @@ fn only_the_holder_submits_and_others_are_pointed_at_the_take_over() {
     assert_eq!(
         status,
         format!(
-            "You are thread t2, on the branch of {ID}, which is held by t1.\nTitle: Say hello\n\
+            "{NO_HOOKS}You are thread t2, on the branch of {ID}, which is held by t1.\nTitle: Say hello\n\
              Status: building\nOnly if you mean to take it over from its holder: atelier start {ID}\n"
         )
     );
@@ -600,7 +600,7 @@ fn review_opens_the_rounds_file_and_prints_the_brief_and_run_again_only_the_brie
     assert_eq!(
         status,
         format!(
-            "You are the reviewer of {ID} (thread t2), round 1.\nReview file: {path}\n\
+            "{NO_HOOKS}You are the reviewer of {ID} (thread t2), round 1.\nReview file: {path}\n\
              `atelier review {ID}` prints the brief again.\nTitle: Say hello\nStatus: in review\n\
              Then: atelier verdict approve (or `atelier verdict changes`, once your file holds a fix-now finding)\n"
         )
@@ -771,7 +771,7 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
     let status = atelier(&root, "t2", &["status"]).stdout;
     assert!(
         status.starts_with(&format!(
-            "You reviewed {ID} (thread t2): review {stem}, changes requested. It is held by t1.\n"
+            "{NO_HOOKS}You reviewed {ID} (thread t2): review {stem}, changes requested. It is held by t1.\n"
         )),
         "{status}"
     );
