@@ -171,6 +171,13 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
         plan_reviews.push(review(file, &findings, &[], changed)?);
     }
     let rows = items.iter().map(|entry| item_row(entry, &view.located));
+    let mut threads = agents(named_in_mission(dir), None);
+    for entry in &items {
+        let record = view.located.iter().find(|l| l.id == entry.id);
+        if let Some(record) = record.and_then(Located::record) {
+            threads.extend(agents(named_in_item(record)?, Some(&entry.id)));
+        }
+    }
     Ok(Some(MissionPage {
         commit: base_tip.clone(),
         mission: mission_row(dir, &items, &view.located, view.in_progress)?,
@@ -183,7 +190,90 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
             .map(|(item, decision)| question_of(item, decision))
             .collect(),
         plan_reviews,
+        threads,
+        t3: T3State::default(),
     }))
+}
+
+/// Each identity `dir` names, with its role, once per role: its lead and
+/// the reviewers of its plan reviews.
+fn named_in_mission(dir: &MissionDir) -> Vec<(String, Role)> {
+    let lead = dir
+        .mission
+        .lead
+        .iter()
+        .map(|lead| (lead.0.clone(), Role::Lead));
+    let reviewers = dir.reviews.iter().flat_map(|file| &file.review.reviewers.0);
+    let reviewers = reviewers.map(|reviewer| (reviewer.0.clone(), Role::Reviewer));
+    once_each(lead.chain(reviewers))
+}
+
+/// Each identity `record` names, with its role, once per role: its
+/// implementers, the reviewers of its reviews and the deciders of its
+/// answers.
+fn named_in_item(record: &ItemDir) -> Result<Vec<(String, Role)>> {
+    let implementers = record.item.implementers.0.iter();
+    let implementers = implementers.map(|thread| (thread.0.clone(), Role::Implementer));
+    let reviewers = record
+        .reviews
+        .iter()
+        .flat_map(|file| &file.review.reviewers.0);
+    let reviewers = reviewers.map(|reviewer| (reviewer.0.clone(), Role::Reviewer));
+    let decisions = record.decisions()?;
+    let answers = decisions.iter().filter_map(|d| d.answer.as_ref());
+    let deciders = answers.map(|answer| (answer.by.0.clone(), Role::Decider));
+    Ok(once_each(implementers.chain(reviewers).chain(deciders)))
+}
+
+fn once_each(named: impl Iterator<Item = (String, Role)>) -> Vec<(String, Role)> {
+    let mut seen = Vec::new();
+    for pair in named {
+        if !seen.contains(&pair) {
+            seen.push(pair);
+        }
+    }
+    seen
+}
+
+/// Agents for `named`, on `item`, before T3 Code's threads are joined.
+fn agents(named: Vec<(String, Role)>, item: Option<&str>) -> Vec<Agent> {
+    let agents = named.into_iter().map(|(identity, role)| Agent {
+        identity,
+        role,
+        item: item.map(str::to_string),
+        thread: None,
+    });
+    agents.collect()
+}
+
+/// What each identity holds in the records of the repository served as
+/// `name`: every item, by the record the cross-branch rule picks, and
+/// every mission.
+pub fn holds(repo: &mut Repo, name: &str) -> Result<Option<Vec<(String, Hold)>>> {
+    let records = Records::read(repo)?;
+    let hold = |kind, id: &str, (identity, role)| {
+        let id = id.to_string();
+        let repo = name.to_string();
+        (
+            identity,
+            Hold {
+                repo,
+                kind,
+                id,
+                role,
+            },
+        )
+    };
+    let mut holds = Vec::new();
+    for record in records.items.iter().filter_map(Located::record) {
+        let named = named_in_item(record)?.into_iter();
+        holds.extend(named.map(|named| hold(HoldKind::Item, &record.item.id, named)));
+    }
+    for dir in &records.missions {
+        let named = named_in_mission(dir).into_iter();
+        holds.extend(named.map(|named| hold(HoldKind::Mission, &dir.mission.id, named)));
+    }
+    Ok(Some(holds))
 }
 
 /// Each document of mission `id` at `commit`, titled by its first `# `
@@ -411,6 +501,8 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
             .iter()
             .map(|f| f.name.to_string())
             .collect(),
+        threads: agents(named_in_item(record)?, None),
+        t3: T3State::default(),
     }))
 }
 
@@ -477,6 +569,7 @@ pub fn inbox(repo: &mut Repo, name: &str) -> Result<Option<InboxRepo>> {
         needs_human,
         drafts: drafts.map(|m| records.row(m)).collect::<Result<_>>()?,
         questions,
+        threads: Vec::new(),
     }))
 }
 

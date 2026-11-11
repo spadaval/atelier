@@ -81,6 +81,10 @@ pub struct MissionPage {
     pub items: Vec<ItemRow>,
     pub questions: Vec<Question>,
     pub plan_reviews: Vec<Review>,
+    /// Its lead, the reviewers of its plan reviews, and every agent of
+    /// each of its items, naming the item.
+    pub threads: Vec<Agent>,
+    pub t3: T3State,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -222,6 +226,10 @@ pub struct ItemPage {
     pub reviews: Vec<Review>,
     /// For a done item, its deferred findings nobody has settled, by name.
     pub unsettled: Vec<String>,
+    /// Its implementers, the reviewers of its reviews and the deciders of
+    /// its answers.
+    pub threads: Vec<Agent>,
+    pub t3: T3State,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -241,6 +249,7 @@ pub enum ResponseLine {
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct InboxResponse {
     pub repos: Vec<InboxRepo>,
+    pub t3: T3State,
 }
 
 #[derive(Debug, Clone, Default, Serialize, TS)]
@@ -252,6 +261,9 @@ pub struct InboxRepo {
     pub needs_human: Vec<NeedsHuman>,
     pub drafts: Vec<MissionRow>,
     pub questions: Vec<InboxQuestion>,
+    /// T3 Code's live threads waiting on a person that hold something in
+    /// this repository's records, with only those holds.
+    pub threads: Vec<LiveThread>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -268,6 +280,99 @@ pub struct InboxQuestion {
     pub mission: Option<String>,
     pub question: String,
     pub finding: Option<String>,
+}
+
+/// An identity a record names, in one role, and the live thread it is
+/// when T3 Code lists it as one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct Agent {
+    /// Whole, as the record holds it.
+    pub identity: String,
+    pub role: Role,
+    /// On a mission's page, the item it is on; `null` for the mission's
+    /// own lead and plan reviewers, and on an item's page.
+    pub item: Option<String>,
+    /// `null` when the identity is no live thread of T3 Code's, or T3
+    /// Code has not been reached: then the page shows the identity as
+    /// text.
+    pub thread: Option<ThreadMark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct ThreadMark {
+    pub title: String,
+    pub status: String,
+    pub provider: String,
+    pub model: String,
+    pub link: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    Implementer,
+    Reviewer,
+    Lead,
+    Decider,
+}
+
+/// Whether T3 Code's threads could be read. Threads come from the last
+/// list read, which is `age_seconds` old.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
+pub struct T3State {
+    /// Whether the last poll read T3 Code's thread list.
+    pub reachable: bool,
+    /// The age of the list served; `null` when none has been read.
+    pub age_seconds: Option<u32>,
+    /// Why the last poll failed, or that T3 Code is not configured.
+    pub error: Option<String>,
+}
+
+/// `GET /api/threads`.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ThreadsResponse {
+    pub t3: T3State,
+    pub threads: Vec<LiveThread>,
+}
+
+/// One of T3 Code's live, unsettled threads.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct LiveThread {
+    /// T3 Code's `threadId`, the identity records hold.
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub provider: String,
+    pub model: String,
+    pub parent: Option<String>,
+    pub pull_requests: Vec<PullRequest>,
+    pub link: Option<String>,
+    pub updated_at: String,
+    /// What its identity holds in the records of every repository served.
+    pub holds: Vec<Hold>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct PullRequest {
+    pub repository: String,
+    pub number: u32,
+    pub url: String,
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct Hold {
+    pub repo: String,
+    pub kind: HoldKind,
+    pub id: String,
+    pub role: Role,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HoldKind {
+    Item,
+    Mission,
 }
 
 /// The body of every response that is not a 200.
@@ -347,6 +452,7 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     DocResponse::export_all(&config)?;
     ItemPage::export_all(&config)?;
     InboxResponse::export_all(&config)?;
+    ThreadsResponse::export_all(&config)?;
     ApiError::export_all(&config)?;
     // ts-rs ends some lines with a space; strip them so the committed files
     // pass `git diff --check`.
