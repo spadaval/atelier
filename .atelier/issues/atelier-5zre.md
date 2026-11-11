@@ -207,13 +207,13 @@ Each of these converts as it stands at fc0fe395. Where its Goal or Done when nam
 - atelier-9hkr: as is. A deferred finding on the live skill's opening, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
 - atelier-c24v: as is. A deferred finding on the live skill's description, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
 - atelier-gobs: as is. A deferred finding on the live skill's opening and install procedure, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
-- atelier-hzuk: as is. It README install documentation for pinned releases, whose Goal and Done when name no removed command.
-- atelier-jxce: as is. It an eval of the skill that names no removed command; the new tool keeps fix-now findings and their exits.
-- atelier-jy8k: as is. It scheduling the gardener survives the cutover; mission atelier-295u rewrites the gardener it will run.
-- atelier-pju0: as is. It rebuilding an eval fixture names no removed command; it is jxce's work.
+- atelier-hzuk: as is. README install documentation for pinned releases, whose Goal and Done when name no removed command.
+- atelier-jxce: as is. An eval of the skill that names no removed command; the new tool keeps fix-now findings and their exits.
+- atelier-jy8k: as is. Scheduling the gardener survives the cutover; mission atelier-295u rewrites the gardener it will run.
+- atelier-pju0: as is. Rebuilding an eval fixture names no removed command; it is jxce's work.
 - atelier-t3ko: as is. The product specification keeps `init` ("plus `init` and `setup`") and the new binary has none yet, so its need waits for that `init`. It names `init -q`'s `-q`, which the new tool removed, and is rewritten when it is planned.
-- atelier-wl6u: as is. It porting two eval fixtures names no removed command; step B (atelier-t747) ports the scenarios to the new binary and may take it.
-- atelier-zjgy: as is. It why tracker-only commits are so many is still a question under the new tool, and its Goal and Done when name no removed command.
+- atelier-wl6u: as is. Porting two eval fixtures names no removed command; step B (atelier-t747) ports the scenarios to the new binary and may take it.
+- atelier-zjgy: as is. Why tracker-only commits are so many is still a question under the new tool, and its Goal and Done when name no removed command.
 
 ### Left for Sumeet
 
@@ -313,15 +313,15 @@ Each line gives the fate this sort proposes. The 72 protected records come first
 
 #### Questions for Sumeet: close with this Report
 
-- atelier-8i86: left for Sumeet; proposed close with this Report. Most of its 21 proposals concern records this sort dropped or rewrote; answer it by pointing at this Report and close it.
+- atelier-8i86: left for Sumeet; proposed close with this Report. Most of its 21 proposals concern records this sort dropped or kept as they are; answer it by pointing at this Report and close it.
 - atelier-j86z: left for Sumeet; proposed close with this Report. Eight of its ten recommendations change old commands or old files that the cutover removes; carry R6 (grep for stale docs as a proof step, for step A) and R8 (`check` warns on trailing whitespace) into new items if still wanted, and close it.
 
 #### Not protected, left for Sumeet
 
 - atelier-w0su: left for Sumeet. Its Design section is built on the old model throughout (`workflow_branch`, `branch_base`, `land`, `prime`), so a rewrite of names alone would leave it incoherent; proposal: drop, and refile against the new `start` and `merge` if parallel missions still need it.
-- atelier-g6rp: left for Sumeet. It an open mission, which this item does not change; see Missions.
-- atelier-4pzj: left for Sumeet. It an open mission, which this item does not change; see Missions.
-- atelier-uf97: left for Sumeet. It an open mission, which this item does not change; see Missions.
+- atelier-g6rp: left for Sumeet. An open mission, which this item does not change; see Missions.
+- atelier-4pzj: left for Sumeet. An open mission, which this item does not change; see Missions.
+- atelier-uf97: left for Sumeet. An open mission, which this item does not change; see Missions.
 
 ### Missions
 
@@ -380,12 +380,14 @@ The converter printed 145 items (116 draft, 27 ready, 2 ready from decisions) an
 
 ### Review
 
-Nine rounds of a fresh GPT-6.1 Sol reviewer each recorded `fix_now` findings, all fixed in their own commits and none disputed: atelier-ax6k, atelier-zs8v, atelier-h72a and atelier-shpk (round 1); atelier-1d9u, atelier-3ww2, atelier-s2h3, atelier-qptk and atelier-k6yq (round 2); atelier-p4v4 (round 3); atelier-brmd (round 4, seven protected records dropped, restored); atelier-864b (round 5); atelier-w8mt (round 6); atelier-jaa4 (round 7); atelier-sc6q (round 8); atelier-7f68 and atelier-5yj2 (round 9). All but atelier-shpk, atelier-k6yq and atelier-brmd found a record dropped, or rewritten, where a requirement was lost.
+Ten rounds of a fresh GPT-6.1 Sol reviewer each recorded `fix_now` findings, all fixed in their own commits and none disputed: atelier-ax6k, atelier-zs8v, atelier-h72a and atelier-shpk (round 1); atelier-1d9u, atelier-3ww2, atelier-s2h3, atelier-qptk and atelier-k6yq (round 2); atelier-p4v4 (round 3); atelier-brmd (round 4, seven protected records dropped, restored); atelier-864b (round 5); atelier-w8mt (round 6); atelier-jaa4 (round 7); atelier-sc6q (round 8); atelier-7f68 and atelier-5yj2 (round 9); atelier-oxvm (round 10, a sentence the rescopes had left untrue). All but atelier-shpk, atelier-k6yq, atelier-brmd and atelier-oxvm found a record dropped, or rewritten, where a requirement was lost.
 
 The orchestrator then took both judgments out of the item (decision notes of 2026-11-11):
 
 - After round 7, every drop under (b) was rechecked against each Done when line at fc0fe395. None had every line shown met by a specification line or a run of atelier-next-7b06ed12, so all 26 were restored unchanged. atelier-avx0, dropped under (c), was restored after round 9.
 - After round 9, no record is rewritten. All 28 rewritten records were restored unchanged from fc0fe395, and the rewritten text is kept nowhere. atelier-abdp, the last drop under (c), was kept only if atelier-1oel as merged met each of its Done when lines; its line that docs/product/human-cli-output.md defines a round is not met by atelier-1oel, so it was restored unchanged. Each drop under (a) was read again against reason (a) alone, and 11 whose need survives the removal in another form were restored unchanged: atelier-akkp, atelier-d4b6, atelier-hueh, atelier-ceu3, atelier-1hbk, atelier-g21n, atelier-j79t, atelier-lozn, atelier-1nlr, atelier-fnql and atelier-j458. The protected debrief records' proposals changed to match: the Desk's debrief takes them over.
+
+Before round 11 the Report was read from top to bottom for sentences the two rescopes had made untrue. Fixed then: atelier-8i86's proposal, which spoke of rewrites; nine record lines that began with a stray "It" (atelier-hzuk, atelier-jxce, atelier-jy8k, atelier-pju0, atelier-wl6u, atelier-zjgy, atelier-g6rp, atelier-4pzj and atelier-uf97); and round 10's place in this section.
 
 ### Deviations
 
@@ -404,5 +406,3 @@ The orchestrator then took both judgments out of the item (decision notes of 202
 
 - Proposals for the 72 protected records, the three unprotected missions and atelier-w0su are Sumeet's to decide.
 - Master moved after fc0fe395; records created there since are not in this list.
-
-Round 10 (GPT-6.1 Sol, at fcad5e44) recorded one `fix_now` finding, atelier-oxvm: the proposal for atelier-c6g2 still said its blockers atelier-avx0 and atelier-fb1i were dropped, though both are open as they are. Fixed in this record's Report. Round 10 did not approve and its finding is not a class (a) drop, so under the orchestrator's decision the fix goes back unreviewed.
