@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8b0a
 title: Add `atelier log`, the history of acts
-status: changes_requested
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
@@ -70,8 +70,8 @@ This host: build in your own worktree with its own `CARGO_TARGET_DIR`, at `-j 4`
 
 - The walk is `crates/atelier-app/src/log.rs`. One `git log --full-history --raw` over the base's tip and the tips of local branches named for items lists every commit that changed a record, parents first. The repository's one `git cat-file --batch` reads each record's old and new version as `<commit>:<path>`, and an act is found by comparing the two. `log` starts six Git processes whatever the history holds: `rev-parse` twice, `symbolic-ref`, `for-each-ref`, `log` and `cat-file` (counted with `strace` in astromech).
 - The command and the line layout are `crates/atelier-cli/src/history.rs`, with its help in `atelier log --help`. The layout, and what "what changed" holds for each act, is in `docs/design.md`, The log, which now says how the walk works. `docs/product.md` counts eighteen commands and describes `log` as built.
-- Tests: eleven scenarios in `crates/atelier-cli/tests/log.rs` cover each case the Done when list names, plus a version that does not parse and an ID no record has. `crates/atelier-app/tests/library.rs` reads the history as data from a repository opened as the Desk opens it.
-- Time in astromech (`~/projects/astromech`, read only): `atelier log` from a debug build printed 88 lines in 0.06 to 0.07 seconds over five runs.
+- Tests: thirteen scenarios in `crates/atelier-cli/tests/log.rs` cover each case the Done when list names, plus a version that does not parse, one that is not UTF-8, one broken blob met twice, and an ID no record has. `crates/atelier-app/tests/library.rs` reads the history as data from a repository opened as the Desk opens it.
+- Time in astromech (`~/projects/astromech`, read only): `atelier log` from a debug build printed 88 lines in 0.06 to 0.08 seconds, before and after round 1's fixes.
 - One real item here, `atelier log atelier-6w8d`, prints twelve lines: `ready` by sumeet, `start`, three rounds of `submit`, `review` and `verdict` (changes, then approve twice), and the `merge`, whose line ends with the CI skip its merge commit carries.
 
 Two changes from the Design, with their reasons:
@@ -84,3 +84,8 @@ Choices the item left open, now written in `docs/design.md`:
 - A record a commit adds moves from `new`, as in `new -> ready`. So the cutover's conversion commit shows each record's acts at its time, as the Design asks.
 - A mission's items are those whose record on the base's tip, or else on its branch, names it.
 - A skip goes on the lines of the acts Atelier commits; when a commit carrying one has no such act, every line of that commit shows it.
+
+### Responses
+
+- 1-kn9e.1: fixed in 01fbf8bb1
+- 1-kn9e.2: fixed in 01fbf8bb1
