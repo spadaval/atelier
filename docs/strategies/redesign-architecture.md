@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: check and the three Git hook rules (atelier-pz1y); drop and close; plan reviews of a mission with review and verdict; ready says whether the plan was reviewed (atelier-jq24); show, list and lead, and missions in the base's status (atelier-jciw); merge reports the last answer at the bound, and limits its question under the lock (atelier-rsfm)"
+last_changed: "2026-11-11: brought up to date with what mission atelier-fcb7 built in next/, including Sumeet's decisions of 2026-11-10 that submit starts CI and merge waits for it"
 ---
 
 # Atelier redesign: architecture specification
@@ -476,7 +476,12 @@ for an item, `status` speaks to the item's holder as its implementer, to a
 thread that reviewed an earlier round as done with it, and to anyone else as
 a visitor, naming the holder; anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
-ready items, and the started items others hold; on the base branch it also
+ready items `start` would accept now (`Entry::startable`, as `list --ready`
+reads it), one line counting the other ready items by what stops them (a
+blocker not done, a mission not ready, a branch of their name) that names
+`list`, and the started items others hold. Holding nothing, it ends with
+`start` on an item that can start, or says no ready item can start now and
+names no `start`. On the base branch it also
 lists the record changes the checkout has not committed. Away from an
 item's branch it also lists the missions in progress and, apart from the
 ready items, the items labelled `needs-human` that nobody has started, as
@@ -735,7 +740,11 @@ branch switch.
    to the reason). Nothing points at it yet.
 6. Check out that commit in a temporary worktree in the Git directory and
    run each merge check there with `sh -c`. A failure refuses, printing the
-   command, its exit status and the last 20 lines of its output.
+   command, its exit status and the last 20 lines of its output. When none
+   failed, the output says, before the line that reports the merge, how
+   many checks ran and that each passed, or that `config.toml` names none.
+   A failing check `ATELIER_SKIP` passed has its skip line instead, and no
+   line says the checks passed.
 7. Confirm the branch tip, the base tip and both checkouts are what steps
    3 to 6 read; otherwise write nothing and say to run it again. Then move
    the base to the merge commit: a fast-forward of the base's checkout
@@ -749,7 +758,7 @@ than the bound. The 9 minutes sit under Claude Code's 10-minute limit
 on a command in the foreground; a harness with a shorter limit kills `merge`
 during the wait, which leaves nothing behind. Run again, it picks up where
 the facts now stand: on an item it already merged it only pushes the base
-where a forge is configured, which is what a run that stopped after step 7
+where a forge is configured, and says nothing of merge checks, which is what a run that stopped after step 7
 left undone. Its exit status is 0 when it merged or had nothing left to do,
 1 for a refusal, 2 for an error and 3 when CI has not finished by the bound.
 

@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: list's flags, what replaces each of the nine work views, and lead's handoff (atelier-jciw)"
+last_changed: "2026-11-11: amended for Sumeet's decisions of 2026-11-10 (submit starts CI, merge waits up to 9 minutes) and for what mission atelier-fcb7 built"
 ---
 
 # Atelier redesign: product specification
@@ -171,7 +171,7 @@ Eighteen commands, plus `init`, `setup` and `serve`.
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: ready items, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
 | `show <id>` | An item in full, with its reviews. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
 | `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. |
 | `log` | The history of acts, one line each: when, which item, the act, what changed, and the thread, where the record holds one. For one item, one mission, or everything `--since` a time. It adds nothing up. |
@@ -385,6 +385,13 @@ because the thread that runs it is almost always a delegated child, which
 the harness neither lets watch a pull request nor wakes reliably. A forge
 with no CI workflow still gets the branch pushed and a pull request opened,
 and `merge` waits for nothing.
+
+A merge that runs the checks and makes its commit says, before the line
+that reports the merge, how many of the base's merge checks ran on the
+merged tree and that they passed, or that `config.toml` names none. A
+failing check passed with `ATELIER_SKIP` gets its skip line instead, and
+nothing says the checks passed. A run that finds the item already merged
+only pushes, and says nothing of checks.
 
 An item that is approved and not merged shows that way, with how long it has
 been so, in `status`, `show` and on the site, so a wait that was lost is
