@@ -697,7 +697,9 @@ fn start_new_creates_an_item_building_on_its_own_branch_in_one_commit() {
     let submitted = atelier(&root, "t1", &["submit"]);
     assert_eq!(submitted.code, 0, "{}", submitted.stderr);
 
-    // Once its Goal and a Done when line are written, the line goes.
+    // With its Goal written and its Done when in prose, as many records
+    // converted from the old layout are, the line asks only for the
+    // lines, in the form they take.
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
     let id = started_id(&atelier(&root, "t1", &["start", "--new", "Fix it"]).stdout);
@@ -705,11 +707,23 @@ fn start_new_creates_an_item_building_on_its_own_branch_in_one_commit() {
     let text = read(&root, &path).replace("## Goal\n", "## Goal\n\nFix it.\n");
     fs::write(
         root.join(&path),
-        text.replace("## Done when\n", "## Done when\n\n- [ ] Fixed.\n"),
+        text.replace("## Done when\n", "## Done when\n\nIt is fixed.\n"),
     )
     .unwrap();
     let status = atelier(&root, "t1", &["status"]).stdout;
-    assert!(!status.contains("Write its Goal"), "{status}");
+    assert!(
+        status.contains(&format!(
+            "Status: building\nWrite its Done when lines in {path} first, each as `- [ ] <result>`: \
+             they say what the change must do, and the reviewer judges it against them.\n"
+        )),
+        "{status}"
+    );
+
+    // Once a Done when line is written, the line goes.
+    let text = read(&root, &path).replace("It is fixed.\n", "- [ ] Fixed.\n");
+    fs::write(root.join(&path), text).unwrap();
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(!status.contains("Write its"), "{status}");
 }
 
 #[test]

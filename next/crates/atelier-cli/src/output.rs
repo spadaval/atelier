@@ -398,11 +398,20 @@ pub fn item(
         next.insert_str(then, &format!("Not committed: {}\n", some(&code)));
     }
     let undefined = match entry.undefined {
-        true => format!(
-            "Write its Goal and its Done when lines in {} first: they say what the change must do, and the reviewer judges it against them.\n",
-            crate::repo::item_path(id)
+        Some(unwritten) => format!(
+            "Write its {} in {} first{}: they say what the change must do, and the reviewer judges it against them.\n",
+            match unwritten {
+                (true, true) => "Goal and its Done when lines",
+                (true, false) => "Goal",
+                (false, _) => "Done when lines",
+            },
+            crate::repo::item_path(id),
+            match unwritten {
+                (false, _) => ", each as `- [ ] <result>`",
+                _ => "",
+            }
         ),
-        false => String::new(),
+        None => String::new(),
     };
     let since = match &entry.approved {
         Some(time) => format!(" since {time}"),
