@@ -101,7 +101,8 @@ All ten Done when lines hold, with one deviation: `log` is not built in `next/` 
 ### Responses
 
 - atelier-yul7: fixed in cb648346. `status` away from the item's branch now gives the implementer the round and the escalation line in its list of what it holds; `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` checks both from a detached checkout of the base, and that the round's reviewer is not told. The architecture's Threads and roles says so. `cargo nextest run -j 4`: 239 passed; fmt and clippy clean.
-- atelier-h4x4: escalated to the orchestrator. The `log` clause of the second Done when line cannot hold until atelier-8b0a builds `log`; this item does not build it.
+- atelier-s6xa: fixed in 658c783d. In review after three rounds without an approval, the implementer's `status`, on the branch and away from it, still gives the rule, and says to escalate once the round's verdict is in if it asks for changes too, since `escalate` does not run in review; an approved item gives none. `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` checks round 4 in review both ways. `cargo nextest run -j 4`: 239 passed; fmt and clippy clean.
+- atelier-h4x4 and atelier-cy97 (the same finding, recorded again in round 2): escalated to the orchestrator. The `log` clause of the second Done when line cannot hold until atelier-8b0a builds `log`; this item does not build it.
 
 ### Deviations
 
