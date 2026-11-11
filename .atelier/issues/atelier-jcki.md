@@ -27,11 +27,12 @@ updated_at: "2026-11-07T21:03:28.142255576+00:00"
 
 ## Done when
 
+- [ ] `show <id>` names the item's mission with its title, e.g. `Mission: atelier-1w8c (ready) "Orient a session…"`, from any branch.
 - [ ] `show <id>` marks an approval that no longer covers the head as stale, naming the first path outside the item's directory that changed since it, judged as `merge` judges it.
-- [ ] CLI tests cover an approval that still covers the head and one made stale by a code change.
+- [ ] CLI tests cover an item in a mission, an approval that still covers the head, and one made stale by a code change.
 
 ## Context
 
 Dropped in decision atelier-mzpn: the `(base master)` suffix, since the base is the policy's (atelier-md0v), and a Proof line, since receipts gate nothing (atelier-md0v). Builds on the brief `issue show` (atelier-7u4o, done). Review freshness and findings logic exists for `merge --check` (`atelier_app::review_gate`).
 
-Rewritten for the new tool in the cutover sort (atelier-5zre): `issue show` became `show`, which already prints the mission and each review; the branch is named for the item, and parents are gone, so only the approval's freshness remains.
+Rewritten for the new tool in the cutover sort (atelier-5zre): `issue show` became `show`, which already prints the mission's ID and status and each review; the branch is named for the item, and parents are gone, so the mission's title and the approval's freshness remain.
