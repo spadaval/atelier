@@ -888,10 +888,12 @@ rule names.
   on, and where Atelier makes the commit (`start` and a take-over, `submit`,
   `verdict` and `merge`), `git interpret-trailers` adds a trailer
   `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
-  `Atelier-Merge:`. Whitespace in the reason is made one line. A skip in a
-  hook, or on a command that makes no commit, writes nothing; it shows in
-  the transcript as the variable on the command, which is where the
-  scorecard counts it.
+  `Atelier-Merge:`. Whitespace in the reason and in each rule is made one
+  line. A skip in a hook, or on a command that makes no commit, writes
+  nothing; it shows in the transcript as the variable on the command, which
+  is where the scorecard counts it. Atelier's own `git commit` and `git
+  push` pass on what the hooks printed, so a rule a hook skips there is
+  printed too.
 - **All or nothing.** The skip passes an act's refusals, and is offered,
   only when every one is a rule: `acts::refusals` gives them all, where
   `check` gives the first. Otherwise the first is refused as before, with
@@ -909,8 +911,8 @@ rule names.
   act on that kind of record (an item or a mission, `acts::changes`)
   changes it; and a pushed commit that brings code to the base, or sets an
   item done, outside an Atelier merge. Changes the uncommitted-changes rule
-  let stay are left in the checkout, and `merge` confirms them unchanged
-  with its other inputs.
+  let stay are left in the checkout, and `merge` confirms them unchanged,
+  index entries, modes and contents, with its other inputs.
 - **Not rules:** a record that does not read; an ID, a mission or a finding
   that does not exist, and a finding settled already; a missing or
   malformed argument; a command run where it has nothing to act on: off the
