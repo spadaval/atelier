@@ -23,18 +23,16 @@ updated_at: "2026-10-17T01:10:57.982115462+00:00"
 
 ## Goal
 
-`git_state` (crates/atelier-cli/src/commands/status.rs:182-200) copies `git status --short --branch` output verbatim:
-- the branch line can read `Branch  : master...origin/master [ahead 1]`, `Branch  : HEAD (no branch)` or `Branch  : No commits yet on master`;
-- the checkout line can read `Checkout: dirty (8 paths:  M .atelier/issues/atelier-43m1.md,  M crates/…/init.rs, ?? .atelier/issues/atelier-vhkt.md, 5 more omitted)`, with porcelain codes and a double space.
-
-Records and code are not separated, although they need different actions. On a work branch status never reports how far the branch is behind its base. `land` computes that and prints `Base master has 1 commit(s) this branch does not…`, but status shows only `Branch  : task/atelier-7b6e`.
+`atelier status` states the branch in words, but on an item's branch it says nothing of how far the branch is behind the base, and of uncommitted changes it names code (`Not committed: README.md`) and not record changes, although they need different actions (review finding atelier-qptk, reproduced on the new binary in a scratch clone after starting an item, advancing the base one commit and editing both its `item.md` and `README.md`).
 
 ## Done when
 
-- [ ] The branch line reads like `Branch: task/atelier-7b6e, 1 behind master (git merge master)` or `Branch: master, 1 ahead of origin/master`. A detached HEAD reads `detached at <sha8>`.
-- [ ] The checkout line splits `records: 2 uncommitted (.atelier/issues/atelier-43m1.md, …)` from `code: 6 uncommitted`, with no porcelain codes.
-- [ ] A test covers ahead, behind, detached, records-only and code-only states.
+- [ ] On an item's branch, `status` says how many commits the branch is behind the base, e.g. `1 behind master`, when it is.
+- [ ] `status` names uncommitted record changes separately from code, e.g. `records: 1 uncommitted (.atelier/items/atelier-orb2/item.md)` and `code: 1 uncommitted`.
+- [ ] A test covers a branch behind its base with both kinds of change.
 
 ## Context
 
 The behind-base computation is in crates/atelier-cli/src/commands/session.rs:338-360 (`land_text`).
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): the new `status` already prints the branch in words and no Git porcelain, so those parts left; the record path is now `.atelier/items/<id>/item.md`.
