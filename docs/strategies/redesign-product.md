@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: amended for Sumeet's decisions of 2026-11-10 (submit starts CI, merge waits up to 9 minutes) and for what mission atelier-fcb7 built; the status example, show, the CI rule and the approved-since line corrected to what was built (atelier-8myy)"
+last_changed: "2026-11-11: amended at Sumeet's direction: the tool has no site and no `serve`; the Desk (ADR 0032) shows the brief and debrief. Before that: amended for Sumeet's decisions of 2026-11-10 (submit starts CI, merge waits up to 9 minutes) and for what mission atelier-fcb7 built; the status example, show, the CI rule and the approved-since line corrected to what was built (atelier-8myy)"
 ---
 
 # Atelier redesign: product specification
@@ -14,7 +14,7 @@ conversation on 2026-11-09 after an assessment of the project
 | --- | --- | --- |
 | 1. Baseline | [redesign-1-baseline.md](redesign-1-baseline.md) | The scorecard measured before anything changes |
 | 2. Core loop | [redesign-2-core.md](redesign-2-core.md) | The tool rewritten in a fresh workspace beside the old one, and rehearsed on real data |
-| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | The skill rewritten, the site rebuilt, the old workspace deleted, and every repository moved over |
+| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | The skill rewritten, the old workspace and its site deleted, and every repository moved over |
 | 4. Gardener | [redesign-4-gardener.md](redesign-4-gardener.md) | A gardener that reads a scorecard and a readiness checklist |
 
 The technical design is in [redesign-architecture.md](redesign-architecture.md).
@@ -165,7 +165,8 @@ was dropped and why.
 
 ## Commands
 
-Eighteen commands, plus `init`, `setup` and `serve`.
+Eighteen commands, plus `init` and `setup`. The tool has no site: the human's
+pages are the Desk's ([ADR 0032](../adr/0032-the-desk-is-the-humans-product.md)).
 
 ### Anyone
 
@@ -401,7 +402,7 @@ nothing says the checks passed. A run that finds the item already merged
 only pushes, and says nothing of checks.
 
 An item that is approved and not merged shows that way, with since when, in
-`status`, `show` and on the site, so a wait that was lost is visible. The
+`status`, `show` and on the Desk, so a wait that was lost is visible. The
 time is that of the commit that recorded the approving verdict. It comes
 from the records; nothing looks up CI to show it.
 
@@ -458,7 +459,8 @@ second real project needs one.
 | `bundle`, `migrate`, `doctor`, `prune` | Unused by the skill, one-off, or not yet needed |
 | `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook runs without being remembered and fails the push itself |
 | `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; the wait for CI has a fixed bound and needs no flag; catching up is `git merge`; what merge would check is in `status` |
-| `brief` and `debrief` commands | The site shows them |
+| `brief` and `debrief` commands | The Desk shows them; until its mission page is live, `show <mission>` is how a mission is read |
+| `serve` and the site crate | The human's pages are a product of their own, the Desk (ADR 0032) |
 | The nine `work` views and nine `review` subcommands | `status`, `list`, `review` and `verdict` replace them |
 | Strategy files in `docs/strategies/` | A mission's documents live in its directory |
 | ADRs | One design record, edited in place, with a list of what was tried and removed |
@@ -501,11 +503,12 @@ them, is the gardener's procedure in the skill.
 ## Out of scope
 
 - Atelier starting, stopping or steering agents.
-- A session database, and live thread status on the site.
+- A session database, and live thread status on a page. Both are the Desk's.
 - Per-project lifecycles.
-- A command that computes the scorecard, and a scorecard page on the site.
+- A command that computes the scorecard, and a scorecard page. The page is
+  the Desk's.
 - A view of what changed between a mission's go-ahead and its result. It is
-  a derived view and the dashboard's to build later. This work gives it the
+  a derived view and the Desk's to build later. This work gives it the
   data: every act with the commit it happened in, and records readable at
   any commit.
 - Coordinating two clones of one repository. Atelier coordinates the threads

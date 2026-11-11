@@ -28,6 +28,9 @@ process ownership, review providers, transition actions, and the cache.
   source of truth for work.
   [ADR 0031](adr/0031-a-forge-carries-branches-and-ci.md) lets a forge carry
   branches and report CI, with review staying in the repository.
+  [ADR 0032](adr/0032-the-desk-is-the-humans-product.md), proposed, makes
+  the human's pages a product of their own, the Desk, and removes the site
+  from `atelier`. Its intent is [product/desk.md](product/desk.md).
 - [Development setup](product/development-setup.md): local tools and verification.
 - [Repository contribution](product/repository-contribution.md): ownership and
   integration policy.
