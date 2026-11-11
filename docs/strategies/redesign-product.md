@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: amended for Sumeet's decisions of 2026-11-10 (submit starts CI, merge waits up to 9 minutes) and for what mission atelier-fcb7 built"
+last_changed: "2026-11-11: amended for Sumeet's decisions of 2026-11-10 (submit starts CI, merge waits up to 9 minutes) and for what mission atelier-fcb7 built; the status example, show, the CI rule and the approved-since line corrected to what was built (atelier-8myy)"
 ---
 
 # Atelier redesign: product specification
@@ -172,7 +172,7 @@ Eighteen commands, plus `init`, `setup` and `serve`.
 | Command | Behaviour |
 | --- | --- |
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
-| `show <id>` | An item in full, with its reviews. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
+| `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
 | `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. |
 | `log` | The history of acts, one line each: when, which item, the act, what changed, and the thread, where the record holds one. For one item, one mission, or everything `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
@@ -232,14 +232,20 @@ matter; `set` and the status commands write it.
 ### What `status` prints
 
 ```text
-You are the implementer of atelier-06jc.
-Status: changes requested (round 2, reviewed by gpt-6.1-sol)
+You are the implementer of atelier-06jc (thread <thread>).
+Item: .atelier/items/atelier-06jc/item.md
+Title: Put open findings in full in the review brief
+Status: changes requested
 To return it to review:
   [ ] Finding 2-m2bn.1 (fix now): the brief omits Scope when the item has no parent
-  [x] Finding 2-m2bn.2 (fix now): ...
-  [ ] Merge checks on your latest commit (last passed 3 commits ago)
+Answer each finding with one line under `### Responses` in the Report, ...
 Then: atelier submit
 ```
+
+It lists only what is not met: a finding already answered is not shown. On
+an approved item it names, before `Then: atelier merge`, the merge checks the
+base's `config.toml` lists, which `merge` runs on the merged tree. It does not
+say when they last passed, since nothing records that.
 
 A thread that runs another role's command gets one line back and no change:
 "You are the reviewer of atelier-06jc. Reviewers run `review` and `verdict`."
@@ -371,15 +377,16 @@ Rules:
    a CI workflow, CI passed on the head, or on an earlier commit of the
    branch from which the head differs only inside the item's directory, such
    as the commit `submit` pushed before `verdict approve` committed. The
-   latest finished run among those decides.
+   latest finished run among those decides, except that when it failed and
+   a newer one is still running, the newer one is waited for.
 
 With a forge, `submit` has already pushed the branch and opened its pull
 request, so CI ran during the review. `merge` pushes the branch only when the
 forge's copy is missing or is not a commit whose CI would count, so it never
 cancels a run in progress, and opens the pull request if there is none. Then
 it waits for CI, for up to 9 minutes: it merges as soon as a run that counts
-passes, and refuses as soon as one fails. The wait holds no lock and writes
-nothing, so it can be interrupted. At the bound it stops with "not yet", not
+passes, and refuses as soon as one fails with no newer run still going. The
+wait holds no lock and writes nothing, so it can be interrupted. At the bound it stops with "not yet", not
 a refusal, and the same command run again picks up. `merge` does the waiting
 because the thread that runs it is almost always a delegated child, which
 the harness neither lets watch a pull request nor wakes reliably. A forge
@@ -393,9 +400,10 @@ failing check passed with `ATELIER_SKIP` gets its skip line instead, and
 nothing says the checks passed. A run that finds the item already merged
 only pushes, and says nothing of checks.
 
-An item that is approved and not merged shows that way, with how long it has
-been so, in `status`, `show` and on the site, so a wait that was lost is
-visible. That comes from the records; nothing looks up CI to show it.
+An item that is approved and not merged shows that way, with since when, in
+`status`, `show` and on the site, so a wait that was lost is visible. The
+time is that of the commit that recorded the approving verdict. It comes
+from the records; nothing looks up CI to show it.
 
 A base that moved on needs no catch-up unless the merge conflicts or a check
 fails on the merged tree. Catching up is `git merge` of the base, and the

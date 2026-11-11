@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: brought up to date with what mission atelier-fcb7 built in next/, including Sumeet's decisions of 2026-11-10 that submit starts CI and merge waits for it"
+last_changed: "2026-11-11: brought up to date with what mission atelier-fcb7 built in next/, including Sumeet's decisions of 2026-11-10 that submit starts CI and merge waits for it; what the binary enforces of the Review section, and the fixes the validator's check found (atelier-8myy)"
 ---
 
 # Atelier redesign: architecture specification
@@ -443,6 +443,21 @@ Two facts are checked live and never stored:
   them; `status` lists them, from the base's config, and runs none and looks
   up no CI.
 
+Of the rules in the product specification's Review section, the binary
+enforces four, through the act table: an author never reviews or decides
+its own item; a reviewer of a finding, in any round that carried it, never
+decides it; `verdict approve` is refused while a fix-now finding is open;
+and a decided finding cannot be reopened. Three it does not enforce, and
+leaves to the skill: that a rebuttal goes to a fresh reviewer and gets one
+try, that escalation is required after three rounds without an approval,
+and that a mission's lead is the one who decides. `status` shows two of
+them: an open finding whose rebuttal a reviewer kept says the rebuttal has
+had its one try, and a question names the lead as its decider when the
+lead may decide it. Nothing counts rounds, nothing stops one thread
+reviewing every round, and any thread that is neither an implementer of
+the item nor a reviewer of the finding may decide. The review brief
+carries no merge check results, since nothing records them.
+
 ## Threads and roles
 
 A thread's identity is `T3CODE_THREAD_ID` when it is set, else the harness's
@@ -488,9 +503,10 @@ ready items, the items labelled `needs-human` that nobody has started, as
 waiting on a human, and the items dropped on the base while their branch
 is there, each with its reason. A thread that is the `lead` of a ready
 mission at the base's tip is told so, with each of the mission's items by
-status, what holds or blocks each, and the handoff line that starts a
-thread for each item that can start now; holding nothing else, it is
-pointed at no item itself. On the item's branch it says a dropped item
+status, what holds or blocks each, under each started item the conditions
+its holder's `status` lists as unmet, other than questions, which are listed
+apart, and the handoff line that starts a thread for each item that can
+start now; holding nothing else, it is pointed at no item itself. On the item's branch it says a dropped item
 was dropped and why, as does the refusal of any act on it, and it
 speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
@@ -604,7 +620,9 @@ branch switch.
 - **A terminal status on the base wins.** If the base's record is `dropped`
   or `done`, that is the item's status whatever its branch holds. This is how
   a started item is cancelled. Every command checks the base's record of its
-  item first, including `status` and `merge` run on the item's own branch.
+  item first, including `status` and `merge` run on the item's own branch,
+  and then does not read the branch's record, so one that does not parse
+  cannot hide the drop. `check` still reports it.
 - **Who reads this way:** `status` on the base, `lead`, `list`, `show` and
   the site. `show` reads a mission and its plan reviews at the base's tip.
   `lead` reads its items and the missions this way, so what it says can
@@ -689,7 +707,12 @@ branch switch.
   commit of an earlier act.
 - **A plan review is written where its reviewer works.** `review <mission>`
   runs in any checkout not on an item's branch, where `verdict` would be
-  the item's, and reviews the plan as that checkout's HEAD holds it. It creates the round's file under `missions/<id>/reviews/`, or
+  the item's, and reviews the plan as that checkout's HEAD holds it: the
+  brief reads the mission, its documents and its items from the commit the
+  review records, and names in one line the paths of the plan that the
+  checkout changes from that commit, which the review does not cover. A
+  mission no commit holds is refused, with the Git command that commits
+  it. It creates the round's file under `missions/<id>/reviews/`, or
   appends the caller to its `reviewers`, and commits nothing. `verdict`
   in a checkout on no item's branch records the verdict of the one plan
   review there that the caller holds without a verdict, and commits that
