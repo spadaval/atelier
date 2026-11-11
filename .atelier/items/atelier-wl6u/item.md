@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wl6u
 title: Port cross-repo-regression and vacuous-test-review to Atelier fixtures, so they test the skill again
-status: ready
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -36,3 +36,7 @@ Since atelier-nz6a the skill steps aside when `atelier status` says "Not an Atel
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-nz6a (Make the skill step aside outside Atelier repositories, and give its install lines first)
+
+## Report
+
+Dropped: Settled by atelier-a4rs: `next-vacuous-test-review` is the Atelier port, and `cross-repo-regression` was deleted at the cutover with the old tool's fixtures and not carried into the ten scenarios.
