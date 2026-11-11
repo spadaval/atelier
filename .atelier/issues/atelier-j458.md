@@ -15,10 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:53.161625995+00:00"
-status: "declined"
+status: "backlog"
 title: "Load review history when a record path is not UTF-8"
-updated_at: "2026-11-11T03:55:53.161625995+00:00"
+updated_at: "2026-10-22T23:23:56.029116881+00:00"
 ---
 
 ## Goal
@@ -28,7 +27,3 @@ Since atelier-7b6e, land and doctor load the history of .atelier/issues and .ate
 ## Done when
 
 A history containing a non-UTF-8 path under .atelier/issues or .atelier/reviews loads, either keyed as bytes or skipping paths no record ID can match, and land's answers are unchanged. A test with such a path covers it.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It changes the history loading of `land` and `doctor`, which the What is removed table removes.

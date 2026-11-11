@@ -18,10 +18,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:37.908238922+00:00"
-status: "declined"
+status: "backlog"
 title: "Judge ready work on the records start will check"
-updated_at: "2026-11-11T03:55:37.908238922+00:00"
+updated_at: "2026-10-17T08:54:21.810949377+00:00"
 ---
 
 ## Goal
@@ -32,7 +31,3 @@ When a work item's owner branch already exists, `start` checks that branch's rec
 
 - [ ] Views either judge such rows on the owner branch's records or mark and skip them, as rows started on another branch already are.
 - [ ] A session test reproduces the case above.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). Its case needs a parent's branch that its children share, and the What is removed table removes parents; in the new tool each item starts its own branch.

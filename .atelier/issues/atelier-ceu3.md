@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:45.213768952+00:00"
-status: "declined"
+status: "backlog"
 title: "Make issue create and update body and type errors readable"
-updated_at: "2026-11-11T03:55:45.213768952+00:00"
+updated_at: "2026-10-17T01:10:57.963010672+00:00"
 ---
 
 ## Goal
@@ -39,7 +38,3 @@ Several `issue create`/`update` errors name internal locations or blame the wron
 ## Context
 
 Placeholder IDs in hints (e.g. `<issue-id> <mission-id>`) are handled by a separate cross-cutting item.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It changes `issue create` and `update` errors for `--body` and `--issue-type`, and the What is removed table removes issue types; the new `new` takes only a title and agents edit the body directly.

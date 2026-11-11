@@ -26,21 +26,24 @@ updated_at: "2026-11-07T21:03:27.787222355+00:00"
 
 ## Goal
 
-`atelier list` heads each open mission with one plain line (`Mission atelier-qr5s (ready): …`), but orders missions by ID, so a draft mission is listed above a mission in progress, and the heading gives no count of its items by state and no path to the mission's documents, such as `.atelier/missions/atelier-qr5s/design.md`, which neither `list` nor `show <mission>` prints (checked 2026-11-11 with the new binary in a converted scratch clone).
+Sumeet's verdict on `work missions`: "Scope" is a weird term, "Open blockers" is duplicative, and "Drill down" should be "More info". "More info" and omitting zero buckets have landed. Still left (checked 2026-11-07): entries say `Scope: 13 issues: …`; `Open blockers: N` counts distinct blocker IDs over the mission and every in-scope item, backlog included (crates/atelier-app/src/mission_overview.rs), so it disagrees with the blocked count; draft and todo missions sort together (`category_rank` treats both as todo), so a draft lists above a todo mission with active work; a linked strategy is not shown.
 
 ## Done when
 
-- [ ] `list` orders missions in progress first, then ready, then draft.
-- [ ] Each mission heading gives its items by state, e.g. `10 items: 1 in progress, 1 ready, 6 blocked, 2 draft`, with correct plurals and no "Scope" or "Open blockers" label, and the path of the mission's documents other than `mission.md`, e.g. `design .atelier/missions/atelier-qr5s/design.md`.
-- [ ] Each mission heading, or one line after the list, names `atelier show <mission>` for the mission in full.
-- [ ] The design record describes the heading, and rendering tests are updated.
+- [ ] Each entry is at most three lines, e.g.
+  ```
+  atelier-j76w  todo  high  Ship the widget pipeline
+    10 items: 1 active, 1 ready, 1 needs a human, 6 blocked, 1 backlog · strategy docs/strategies/x.md
+    More info: atelier work mission atelier-j76w
+  ```
+- [ ] No "Scope" or "Open blockers" label, and plurals are correct.
+- [ ] Missions with active work sort before todo, and todo before draft.
+- [ ] docs/product/issue-inventory-and-mission-overview.md describes the entry, and rendering tests are updated.
 
 ## Scope
 
-The mission headings of `list`. The Waiting on line moved to atelier-om6l in decision atelier-mzpn.
+crates/atelier-cli/src/commands/work.rs `missions()` and crates/atelier-app/src/mission_overview.rs. The Waiting on line moved to atelier-om6l in decision atelier-mzpn; with it an entry is at most four lines.
 
 ## Context
 
 Carries the part of atelier-1w8c's S3 that its validation found unmet.
-
-Rewritten for the new tool in the cutover sort (atelier-5zre): `work missions` became `list`, whose heading already uses plain terms and names the mission's status; the strategy link became the path of the mission's documents in its directory.

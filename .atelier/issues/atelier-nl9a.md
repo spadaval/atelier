@@ -18,25 +18,24 @@ updated_at: "2026-11-07T21:03:32.204039302+00:00"
 
 ## Goal
 
-The pre-push hook (`atelier check --hook pre-push`) checks the base's new commits only in a clone that has the hooks and only when nobody skips them (`--no-verify`, or `ATELIER_SKIP`), so once an unreviewed commit is pushed past it, nothing checks it again (incident 1620b534 on 2026-10-17, under the old `land`, was found only because an agent noticed). Apply the hook's base rule to `<previous head>..HEAD` in this repository's CI on each push to master, so a slipped push turns CI red within minutes. The red run is a notice, not a block: the commit is already on the base, and the fix is a reviewed follow-up, through an item or `atelier start --new`.
+`land` on the base checks only the commits not yet on the upstream (`rev-list <tip> --not <upstream>` in crates/atelier-cli/src/commands/git.rs, where `BaseReviews::new(..., &upstream)` takes the same boundary), so once an unreviewed commit is pushed, past a gate whose refusal was masked by `| tail` or a `;` chain, nothing checks it again (incident 1620b534 on 2026-10-17 was found only because an agent noticed). Add `atelier land --since <commit>` that applies land's base rules to `<commit>..HEAD` instead of the unpushed range, and run it in this repository's CI on each push to master with the push's previous head, so a slipped push turns CI red within minutes. The red run is a notice, not a block: the commit is already on the base, and the fix is a reviewed follow-up, through an issue or the light path.
 
 ## Done when
 
-- [ ] Integration tests with a bare origin: an unreviewed code commit pushed to the base with the hook skipped is refused when the base rule runs over the range from the previous head, naming the commit.
-- [ ] A range holding only planning commits (`.atelier/missions/`, `.atelier/items/`) and Atelier merge commits, `--trivial` ones included, passes.
-- [ ] The CI job runs the rule on pushes to master with the push's previous head and accepts a `since` input under `workflow_dispatch`; a dispatched run on a scratch branch whose range holds an unreviewed commit is shown failing, and one on master passing, with the run links in the Report.
+- [ ] Integration tests with a bare origin: an unreviewed code commit pushed to the base passes plain `land` (unchanged behaviour), but `land --since <previous head>` refuses with `land_base_unreviewed` naming it.
+- [ ] A range holding only record commits, merge commits `atelier merge` made on a current approval (of an issue, or of a light-path branch, atelier-4nsl) and trivially exempted commits passes; "reviewed" means approved code as `merge` judges it (atelier-3jdm).
+- [ ] The CI job runs `atelier land --since <before>` on pushes to master and accepts a `since` input under `workflow_dispatch`; a dispatched run on a scratch branch whose range holds an unreviewed commit is shown failing, and one on master passing, with the run links in the Report.
 
 ## Scope
 
-The pre-push hook's base rule and the command that runs it, and the CI workflow. Prevention is the hook's.
+`land` in commands/session.rs and git.rs, the CI workflow, docs/product/sessions-and-hooks.md. Prevention is atelier-fad5's.
 
 ## Context
 
-Kept in decision atelier-mzpn from the superseded atelier-ll3p: a CI notice that costs agents nothing and watches the one invariant the review rule keeps, that no unreviewed code reaches the base.
-
-Rewritten for the new tool in the cutover sort (atelier-5zre): `land --since <commit>` became the pre-push hook's base rule run over a range, since the new tool has no `land`; the light path became `start --new`.
+Kept in decision atelier-mzpn from the superseded atelier-ll3p: a CI notice that costs agents nothing and watches the one invariant atelier-mmpv keeps, that no unreviewed code reaches the base. Its receipt on that mission is dropped.
 
 ## Unknowns
 
-- CI checks out a detached HEAD; running the rule may need to accept one on the base commit.
+- Base rules run only when the branch is the base, and an unowned branch without the base ref stops at `land_work_untraceable`, so `--since` must bypass that checkout rule for the scratch-branch proof.
+- CI checks out a detached HEAD; `land --since` may need to accept one on the base commit.
 - A first push or force push has no usable previous head (`github.event.before` is all zeros or unreachable); decide whether CI then checks from the last merge commit or skips with a visible note.

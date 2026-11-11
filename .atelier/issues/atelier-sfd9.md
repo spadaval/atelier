@@ -23,15 +23,15 @@ updated_at: "2026-11-07T21:03:24.979790291+00:00"
 
 ## Goal
 
-`atelier check` names the file and field of a link to a record that does not exist (`.atelier/items/atelier-5qes/item.md: blocked_by: \`atelier-zzzz\` names no item`) and ends `Fix each in the file named`, but does not say the edit that removes it (checked 2026-11-11 with the new binary in a converted scratch clone). Such links arrive by a merge or a hand edit.
+Since atelier-ilba a command refuses to write a link to a record that does not exist, naming the branch that holds it when one does. Such links still arrive by a merge or a hand edit, and their repair route is missing (checked 2026-11-07): `atelier issue unlink <id> <missing> --role advances` fails with the same load error, because the graph will not load, and the finding names the file but not the field to edit. A deleted target gets a `git restore --source=<commit>^ …` hint; a target that never existed gets none.
 
 ## Done when
 
-- [ ] The finding names the edit that removes the link, e.g. `remove atelier-zzzz from blocked_by, or run atelier set --blocked-by <the others> atelier-5qes`.
-- [ ] Tests cover a never-existed target written by hand.
+- [ ] The finding names the file and field, e.g. `.atelier/issues/atelier-gfi8.md relationships.relates[type: advances] → atelier-nope`, and the edit that removes it.
+- [ ] `issue unlink` removes a dangling link while the graph is otherwise invalid, or the finding says to edit the file by hand.
+- [ ] Advice shared by several findings prints once after the list.
+- [ ] Tests cover a never-existed target written by hand and the unlink path.
 
 ## Context
 
 Narrowed in decision atelier-mzpn to links that reach the records without a command. atelier-kset owns the one-line finding format; share it.
-
-Rewritten for the new tool in the cutover sort (atelier-5zre): the new `check` already names the file and field and prints shared advice once; `issue unlink` is gone, and `set --blocked-by` is the command the specification gives.

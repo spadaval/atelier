@@ -20,16 +20,17 @@ updated_at: "2026-10-17T01:10:57.981495535+00:00"
 
 ## Goal
 
-`atelier setup claude` says it keeps every other hook in `.claude/settings.json` but not which, and says to commit the file without giving the command (checked 2026-11-11 with the new binary in a converted scratch clone). When this was filed, a clone of this repository held `bd prime` handlers for SessionStart and PreCompact, which then ran beside Atelier's without a mention.
+- `atelier setup claude` prints the same paragraph on every run, including runs that changed nothing: `Installed Claude Code SessionStart and Stop hooks in …/.claude/settings.json. Commit shared settings with the change. Hooks run prime on session start and land at Stop; repeated failures warn instead of looping. Restart Claude Code to load the settings.` (crates/atelier-cli/src/commands/setup.rs:96).
+- In a clone of this repository, `.claude/settings.json` holds only `bd prime` handlers for SessionStart and PreCompact. Setup adds `atelier prime --hook claude` next to `bd prime` without mentioning it, so both run every session.
+- "Commit shared settings" gives no command.
 
 ## Done when
 
-- [ ] A first run lists what it added and the other SessionStart, Stop and PreCompact command handlers it keeps (`kept: bd prime (SessionStart, PreCompact)`).
-- [ ] The output ends with `Then: git add .claude/settings.json && git commit`, then `Restart Claude Code`.
-- [ ] Tests cover the foreign-handler list and the last lines.
+- [ ] An unchanged run prints `Hooks already installed in .claude/settings.json; nothing changed`.
+- [ ] A first run lists what it added and warns about other SessionStart, Stop and PreCompact command handlers it keeps (`kept: bd prime (SessionStart, PreCompact)`).
+- [ ] The output ends with `Commit: git add .claude/settings.json && git commit`, then `Restart Claude Code`.
+- [ ] Tests cover the unchanged case and the foreign-handler warning.
 
 ## Context
 
 atelier-sdb0 switches the hook to `status` and adds the CLAUDE.md `@AGENTS.md` warning. Keep the message changes compatible with that.
-
-Rewritten for the new tool in the cutover sort (atelier-5zre): the new `setup claude` already says `nothing changed` on a re-run, so that part left; the hooks it writes are `status` and `check`, not `prime` and `land`.

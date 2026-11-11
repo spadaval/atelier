@@ -23,14 +23,12 @@ updated_at: "2026-10-17T01:10:57.964262389+00:00"
 
 ## Goal
 
-`atelier list` filters take a single value each: `list --label cli-output --label redesign` fails with a clap usage error (`the argument '--label <LABEL>' cannot be used multiple times`), and `list --label cli-output,redesign` prints `No open work matches.` although each label has open work (checked 2026-11-11 with the new binary in a converted scratch clone). The empty result does not name the filters given.
+`issue list` filters take a single value each. `--status todo --status backlog` and `-l a -l b` fail with a clap usage error, and no filter means "not done" (agents tried `-s open`, which errors). Error messages don't help either: `--status bogus` gives `Invalid issue status 'bogus'. Use an exact workflow status or `all`.` and `--category bogus` gives `Use a category from the workflow policy.` Neither lists the values (`crates/atelier-app/src/issue_inventory.rs:47-62`), although `--issue-type nope` does, and `--help` doesn't list them. Contradictory filters (`--category todo --status done`) print `No issues match the selected filters.` and don't name the filters.
 
 ## Done when
 
-- [ ] `--label` accepts repeats or a comma list. Values within one flag are ORed; different flags are ANDed.
-- [ ] The empty result repeats the active filters, e.g. `No open work with label a or b.`
-- [ ] CLI tests cover repeats, a comma list and the empty message.
-
-## Context
-
-Rewritten for the new tool in the cutover sort (atelier-5zre): `issue list` became `list`. The new `list` shows only open work by default and has no `--status`, `--category` or `--issue-type`, so `--open` and the status and category errors went with them.
+- [ ] `--status`, `--category`, `--label` and `--issue-type` accept repeats (or comma lists). Values within one flag are ORed; different flags are ANDed.
+- [ ] `--open` (or `--category open`) selects every non-done category.
+- [ ] Invalid status or category errors list the policy's valid values. `--help` names them, or says where they come from.
+- [ ] The empty result repeats the active filters, e.g. `No issues with status=done and category=todo.`
+- [ ] CLI tests cover repeats, `--open`, an invalid value and the empty message.

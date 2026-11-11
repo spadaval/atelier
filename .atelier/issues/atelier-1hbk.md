@@ -15,10 +15,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:47.122011107+00:00"
-status: "superseded"
+status: "backlog"
 title: "Name every part a collapsed debrief entry hides"
-updated_at: "2026-11-11T03:55:47.122011107+00:00"
+updated_at: "2026-11-05T05:17:15.293246972+00:00"
 ---
 
 ## Goal
@@ -32,7 +31,3 @@ The collapsed label names every part it hides, or Surprised by and Left open sta
 ## Context
 
 Found by the S7 agent re-review of atelier-vt8q's debrief at 7518f516 (FOLLOW-UP).
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It changes the debrief page, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
