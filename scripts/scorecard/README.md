@@ -6,9 +6,15 @@ are in the baseline mission's strategy, `git show
 96d02deb7:docs/strategies/redesign-1-baseline.md` (Design). The output is
 `docs/architecture/quality/scorecard-baseline/counted.json` and `counted.md`.
 
+These scripts take merged items and thread ties from each repository's `atelier log`, frozen in the
+snapshot, and read the record layout of Atelier 0.5. The November baseline's snapshot has no log
+and its repositories the old layout, so only the scripts at commit `df9c84a43` reproduce it.
+
 ## Rerun the counted measures
 
-Needs Python 3.11 or later (standard library only) and Git. From the root of an atelier checkout:
+Needs Python 3.11 or later (standard library only) and Git. To reproduce the November baseline, run
+these from a checkout of `df9c84a43` (`git worktree add --detach ~/.cache/scorecard-baseline df9c84a43`),
+whose README they are; a later snapshot runs from a current checkout. From the checkout's root:
 
 ```sh
 mkdir -p ~/.cache/scorecard-rerun
@@ -51,12 +57,17 @@ TMPDIR=~/.cache/scorecard-tmp python3 -m unittest discover scripts/scorecard
 
 - **The snapshot** (`--snapshot`), made once by `freeze.py` and described by `manifest.json`:
   `t3/statev2.sqlite` (T3's database), `claude-projects/<dir>/<session>.jsonl` with
-  `<session>/subagents/agent-<id>.jsonl`, and `codex-sessions/YYYY/MM/DD/rollout-*-<session>.jsonl`.
-  It holds private messages: never commit it, copy it into the repository, or send any of it to
-  an outside service.
-- **Each repository at its manifest commit**, read through `git log`, `ls-tree`, `cat-file`,
-  `grep` and `show` on that commit and its history, never the working tree. Nothing after the
-  manifest commit is read, so a later checkout gives the same numbers.
+  `<session>/subagents/agent-<id>.jsonl`, `codex-sessions/YYYY/MM/DD/rollout-*-<session>.jsonl`,
+  and `logs/<repository>.txt`, each repository's whole `atelier log` output. It holds private
+  messages: never commit it, copy it into the repository, or send any of it to an outside service.
+- **The log** is read as text, by the line layout in `docs/design.md`, The log. The scripts never
+  run `atelier`, and compute none of the numbers the gardener takes from the log itself (time in
+  each status, rounds, take-overs, escalations, skips).
+- **Each repository at its manifest commit**, read through `git log`, `ls-tree`, `grep` and `show`
+  on that commit and its history, and `diff` of a commit a `merge` line names against its first
+  parent, never the working tree. Nothing after the manifest commit is read, and no record's
+  history is walked, so a base that moved on, a deleted branch or an item moved to another mission
+  after the freeze gives the same numbers.
 - **The window**: 2026-10-14T00:00:00Z (`WINDOW_START` in `snapshot.py`) to the manifest's
   `cutoff`. Records time-stamped after the cutoff are dropped.
 
@@ -69,11 +80,10 @@ the copy taken on 2026-11-10, whose schema fingerprint is the manifest's
 expected schema:
 
 - `projection_projects(project_id, workspace_root)`
-- `orchestration_v2_projection_threads(thread_id, project_id, title, created_at, payload_json)`,
-  using `payload_json.branch`
+- `orchestration_v2_projection_threads(thread_id, project_id, created_at)`
 - `orchestration_v2_projection_turn_items(thread_id, turn_item_id, ordinal, type, status, payload_json)`,
   using items of type `command_execution` (`input`, `output`), `file_change` (`fileName`),
-  `user_message` (`text`), `subagent` (`childThreadId`, `nativeItemRef.nativeId`), and the other
+  `subagent` (`childThreadId`, `nativeItemRef.driver`, `nativeItemRef.nativeId`), and the other
   tool types, each with `startedAt`
 - `orchestration_v2_projection_provider_threads(thread_id, payload_json)`, using
   `nativeThreadRef.driver` and `nativeThreadRef.nativeId`
@@ -84,29 +94,42 @@ appears beside it.
 ## The scripts
 
 `counted.py` is the one to run. The others are modules it imports, one per reader in the
-strategy's Design, and can be imported on their own (`sys.path` set to this directory):
+strategy's Design, and can be imported on their own (`sys.path` set to this directory).
+`draw_samples.py` draws the classified measures' samples from the same inputs: a closed mission's
+start and close from its `ready` and `close` lines, its items from the item records at the
+manifest commit that name it, its threads from the thread IDs on its and its items' lines and the
+T3 threads above them, and fix-now findings from the review files at the manifest commit, leaving
+out a finding a later round carries.
 
 | File | Reads | Gives |
 | --- | --- | --- |
 | `snapshot.py` | the manifest | the window, the live-store guard, a read-only `git` helper |
-| `threads.py` | T3's database | `threads()`: each thread's repository, title, branch, first message, role and transcript keys; `calls()`: its shell commands with output, edits and other tool calls; `tie()`: the item it worked on |
+| `threads.py` | T3's database | `threads()`: each thread's repository, transcript keys and the thread whose identity it acts under; `calls()`: its shell commands with output, edits and other tool calls |
 | `transcripts.py` | the transcripts | `index()`: transcript files by thread key; `requests()`: each model response's tokens, list price and shell commands; `PRICES` |
-| `records.py` | `.atelier/issues/` and history at the manifest commit | `items()`, `merged()`, `id_pattern()` |
+| `atelier_log.py` | the frozen log, and merge commits and missions at the manifest commit | `read()`, `ties()`, `merged()`, `done()`, `missions()` |
 | `gitreader.py` | history up to the manifest commit | `rework()`, `record_only()`, `line_count()` |
 | `commands.py` | a command, its output or an edited path | `simple_commands()`, `atelier_calls()`, `is_process()`, `is_help()`, `refused()`, `shell_writes()`, `is_product_edit()` |
 | `counted.py` | the readers | the seven measures, `counted.json` and `counted.md` |
-| `test_scorecard.py` | a small database, transcripts and Git repository it builds | each measure's arithmetic |
+| `test_scorecard.py` | a small database, transcripts, log and Git repository it builds | each measure's arithmetic, each tie rule, and the samples' populations |
 
 `freeze.py` made the snapshot and checks it (`freeze.py verify`); it is not part of a rerun.
 
 ## How each measure is taken
 
-- **Merged item**: an issue record at the manifest commit with status `done`, closed in the
-  window, not a mission, whose ID is named in the message of a commit on the manifest commit's
-  history that changes a file outside `.atelier/`. `counted.md` shows the done count beside it.
-- **Thread tied to an item**: the first known item ID in the thread's branch, else in its title,
-  else in its first message. Every T3 thread counts, including the subagents Claude's Agent
-  tool started, each tied by its own prompt.
+- **Merged item**: an item with a `merge` line in the window whose merge commit, the one the line
+  names, changes a file outside `.atelier/` from its first parent. `counted.md` shows beside it
+  the items, not missions, with a `merge` or `close` line in the window.
+- **Thread tied to an item**: a T3 thread is tied by the first line that names it with `start` or
+  an implementer's take-over, which make it an implementer of the line's item, or `review` or a
+  reviewer's take-over, which make it a reviewer. A Codex subagent's identity, `<T3
+  thread>/<child>`, names its T3 thread. A thread Claude's Agent tool started runs under its
+  parent's identity, so it takes its parent's item and role (`tied_by` `parent`). A thread named
+  on several items is tied to the first. Any other thread is untied. Every T3 thread counts.
+- **Tie coverage differs from the baseline's**, which tied a thread by the first item ID in its
+  branch, title or first message. A thread that never ran `start` or `review`, such as an
+  orchestrator or a lead, was tied by its title then and is untied now. So the after-run should
+  state, beside its numbers, threads tied and untied (`threads` in `counted.json`) and that the
+  baseline tied by title, and compare process share and tokens per item with that in mind.
 - **Process share**: over threads tied to a merged item, the share of shell commands that call
   atelier or read or write records (see [Command forms](#command-forms)). The token form gives each
   model response's list-price cost to its tool calls in equal parts and sums the parts that went to
@@ -119,8 +142,8 @@ strategy's Design, and can be imported on their own (`sys.path` set to this dire
 - **Tokens per merged item**: the list-price cost of every thread tied to the item, summed. An
   item counts only when every such thread has a transcript and every request in them is to a
   priced model. Coverage is threads with a transcript out of threads counted.
-- **Calls before first edit**: in each thread tied to a merged item whose role is
-  `implementation` or unlabelled (no "Act as the ... sub-agent" opening) and that edited a file,
+- **Calls before first edit**: in each thread tied to a merged item as its implementer that
+  edited a file,
   the tool calls before its first edit: a T3 `file_change`, or a shell command's file write (see
   [Command forms](#command-forms)), to a file outside `.atelier/` and scratch, build and harness
   directories. Shell commands alone are reported beside it.

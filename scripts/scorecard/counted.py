@@ -3,8 +3,8 @@
 
   counted.py --snapshot DIR [--projects DIR] [--manifest FILE] [--out DIR]
 
-Reads T3's database and the transcripts from the snapshot, and each repository's records and
-history at its manifest commit. Run it under `nice -n 19 ionice -c3`.
+Reads T3's database, the transcripts and each repository's `atelier log` from the snapshot, and
+each repository's history at its manifest commit. Run it under `nice -n 19 ionice -c3`.
 """
 import argparse
 import json
@@ -14,15 +14,12 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
+import atelier_log
 import commands
 import gitreader
-import records
 import threads
 import transcripts
 from snapshot import MANIFEST, WINDOW_START, InputError, Window, check_not_live, load_manifest
-
-IMPLEMENTER_ROLES = ("implementation", "unlabelled")
-
 
 @dataclass
 class ThreadStats:
@@ -43,9 +40,10 @@ class ThreadStats:
     process_cost: float = 0.0
 
 
-def thread_stats(thread, item_ids, calls, window):
-    item, tied_by = threads.tie(thread, item_ids)
-    stats = ThreadStats(item, tied_by, thread.role)
+def thread_stats(thread, ties, calls, window):
+    """The thread's counts, and its item and role: its own from the log, or for a Claude Agent-tool child its parent's."""
+    item, role = ties.get(thread.acts_as, (None, None))
+    stats = ThreadStats(item, item and ("log" if thread.acts_as == thread.id else "parent"), role)
     tool_calls = shell_calls = 0
     for call in calls:
         edits = (commands.is_product_edit(call.path) if call.kind == "edit"
@@ -85,13 +83,13 @@ def add_tokens(stats, thread, files, claimed, cutoff):
                     stats.process_cost += request.cost * process / len(request.calls)
 
 
-def measure(db, files, repo, name, commit, window):
-    all_items = records.items(repo, commit)
-    merged = records.merged(repo, commit, all_items, window)
+def measure(db, files, lines, repo, name, commit, window):
+    merged = atelier_log.merged(lines, repo, window)
+    ties = atelier_log.ties(lines)
     found = threads.threads(db, name, window.before_cutoff)
     claimed, stats = set(), []
     for thread in sorted(found, key=lambda t: (t.created_at, t.id)):
-        s = thread_stats(thread, all_items.keys(), threads.calls(db, thread.id, window.before_cutoff), window)
+        s = thread_stats(thread, ties, threads.calls(db, thread.id, window.before_cutoff), window)
         if s.item in merged:
             add_tokens(s, thread, files, claimed, window.before_cutoff)
         stats.append(s)
@@ -106,15 +104,15 @@ def measure(db, files, repo, name, commit, window):
         if all(s.transcript and not s.unpriced for s in mine):
             per_item[item] = round(sum(s.cost for s in mine), 2)
 
-    implementers = [s for s in tied if s.role in IMPLEMENTER_ROLES and s.calls_before_edit is not None]
-    done = sum(1 for i in all_items.values() if i.status == "done" and i.kind != "mission" and i.closed_at and i.closed_at in window)
+    implementers = [s for s in tied if s.role == "implementer" and s.calls_before_edit is not None]
+    done = len(atelier_log.done(lines, atelier_log.missions(repo, commit), window))
     return {
         "commit": commit,
         "items": {"done_in_window": done, "merged": len(merged), "merged_with_threads": len({s.item for s in tied})},
         "threads": {
             "in_repository": len(stats),
             "tied_to_merged_item": len(tied),
-            "tied_by": {source: sum(1 for s in tied if s.tied_by == source) for source in ("branch", "title", "first_message")},
+            "tied_by": {source: sum(1 for s in tied if s.tied_by == source) for source in ("log", "parent")},
             "tied_to_other_item": sum(1 for s in stats if s.item and s.item not in merged),
             "untied": sum(1 for s in stats if not s.item),
         },
@@ -242,7 +240,8 @@ def main(argv=None):
                 "window_start": WINDOW_START,
                 "t3_schema": threads.SCHEMA,
                 "prices": {model: list(price) for model, price in transcripts.PRICES.items()},
-                "repositories": {name: measure(db, files, Path(args.projects) / name, name, repo["commit"], window)
+                "repositories": {name: measure(db, files, atelier_log.read(snapshot, name, window.before_cutoff),
+                                               Path(args.projects) / name, name, repo["commit"], window)
                                  for name, repo in manifest["repositories"].items()},
             }
     except InputError as error:
