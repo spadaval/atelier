@@ -46,10 +46,9 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
     annotate(repo, &mut entry, record)?;
     // A settlement is written in the checkout it is run in, on the base or
     // on an implementer's branch, so one this checkout holds is shown too.
-    // The item's own unmerged branch holds none: the base's done record won
-    // over it, and its record there is not read.
-    let unmerged = located.branch.as_ref().is_some_and(|branch| !branch.merged);
-    let own_branch = unmerged && repo.branch.as_deref() == Some(id);
+    // The item's own branch holds none, merged or not, and its record there
+    // is not read, so one that does not parse cannot hide the base's.
+    let own_branch = repo.branch.as_deref() == Some(id);
     let mut findings = record.findings()?;
     let settling = record.item.status == Status::Done && !own_branch;
     if let Some(here) = settling

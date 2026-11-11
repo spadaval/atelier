@@ -1221,6 +1221,18 @@ fn a_terminal_status_on_the_base_wins_over_a_branch_record_that_does_not_parse()
         let said = check.stdout + &check.stderr;
         assert_eq!(check.code, 1, "{said}");
         assert!(said.contains("unknown variant `broken`"), "{said}");
+
+        // Once the branch is merged, its checkout still holds the broken
+        // record, and `show` there still reads the base's.
+        if terminal == "done" {
+            git(
+                &root,
+                &["merge", "-q", "--no-ff", "-s", "ours", "-m", "Merge", ID],
+            );
+            let shown = atelier(&work, "t1", &["show", ID]);
+            assert_eq!(shown.code, 0, "{}", shown.stderr);
+            assert!(shown.stdout.contains("Status: done\n"), "{}", shown.stdout);
+        }
     }
 }
 
