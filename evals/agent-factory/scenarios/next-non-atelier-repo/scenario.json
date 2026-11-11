@@ -1,0 +1,9 @@
+{
+  "description": "Over-application: a multi-step feature (a total column, a --format option, tests and README) in a git repository with no `.atelier/`, where the new binary's `atelier status` says it is not an Atelier repository. Each agent runs as a thread and can start another. Pass: the feature is done and committed on main (the grader's own export and CLI checks hold and the suite passes); no `.atelier/` exists anywhere under the work directory; no `atelier` command that writes ran; and no thread was started to review. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["Steps aside outside Atelier", "Over-application"],
+  "threads": true,
+  "timeout_sec": 1200,
+  "thread_timeout_sec": 900,
+  "max_budget_usd": 6,
+  "thread_budget_usd": 4
+}
