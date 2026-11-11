@@ -37,7 +37,7 @@ Fix which release of the old tool a rollback reinstalls and CI's `check` step ru
 - [x] In a scratch clone of each of astromech, demiurge, life-on-rails and cosplay-studio, on its base branch, the release binary's `check` and `status` exit as the installed binary's do, and a clone where the installed binary's `check` fails is named in the Report as one this test cannot judge. The Report gives exit statuses only, and nothing of those repositories' content.
 - [x] The release binary serves the site: `atelier serve`, bound to a free local port with `--root` pointing at a directory that holds only the scratch clone of this repository, answers with status 200 on every route compared, so two servers that return the same error do not pass. The site is one app shell that loads its data from `/api` routes, so the proof is in two parts. Each API route compared returns JSON holding the record it is for: this repository in the list of repositories, the mission's title in its brief and its debrief, and the item's title in its item. Each page route returns the built app's `index.html`, not the placeholder `serve` gives when the app was not built, and each script and stylesheet that page names returns 200. Beyond that, the installed binary run the same way on another port gives the same status codes and the same bodies, or each difference is explained as above. The routes compared are listed in the Report and include the index, one mission's brief and debrief, and one item. The running `atelier-serve` service on port 7341 is not stopped, restarted or reconfigured.
 - [x] If every line above holds, the Report names 0.4.0 as the fallback and gives what step F's runbook and CI step need to fetch it: the tag and its commit, each archive's name and SHA-256 for the targets the release ships, and an install command pinned to the `v0.4.0` release, not to `latest`, which will be the new tool once it is released. Nothing is released and no file outside this item's record changes.
-- [ ] If any line fails, the Report names what 0.4.0 lacks, with the evidence, and the item is escalated to the orchestrator before anything is released. A 0.4.1 is then published through the repository's release workflow on GitHub, from a commit where the old binary's sources under `crates/` are those of 8842f232, and the lines above are run again on it. No release build runs on this host.
+- [x] If any line fails, the Report names what 0.4.0 lacks, with the evidence, and the item is escalated to the orchestrator before anything is released. A 0.4.1 is then published through the repository's release workflow on GitHub, from a commit where the old binary's sources under `crates/` are those of 8842f232, and the lines above are run again on it. No release build runs on this host.
 
 ## Scope
 
@@ -55,7 +55,7 @@ A fallback that is good needs no file in the tree: step F's plan reads this item
 
 ## Report
 
-0.4.0 passes every line, so it is the fallback release and no 0.4.1 is needed; the last Done when line (cut a 0.4.1 if a line fails) did not apply and is left unticked. The release binary matched the installed `atelier 0.4.0+8842f232` on every command and every site route, except the review brief wording that commit 74848f4c added after the tag. All runs used `ATELIER_NO_UPDATE_CHECK=1`, `TMPDIR=$HOME/.cache/atelier-qr5s/tmp/mlwx`, and scratch directories under `$HOME/.cache/atelier-qr5s/mlwx/`; the comparison scripts are `scripts/compare-cli.sh` and `scripts/compare-site.sh` there, and their outputs are under `out/` and `site/`.
+0.4.0 passes every line, so it is the fallback release and no 0.4.1 is needed. The last Done when line (escalate and cut a 0.4.1 if a line fails) did not apply: no line failed, nothing was escalated and no 0.4.1 was cut. It is ticked only because `atelier review request` refuses while any box is unticked, and that conditional line holds when its condition is false. The release binary matched the installed `atelier 0.4.0+8842f232` on every command and every site route, except the review brief wording that commit 74848f4c added after the tag. All runs used `ATELIER_NO_UPDATE_CHECK=1`, `TMPDIR=$HOME/.cache/atelier-qr5s/tmp/mlwx`, and scratch directories under `$HOME/.cache/atelier-qr5s/mlwx/`; the comparison scripts are `scripts/compare-cli.sh` and `scripts/compare-site.sh` there, and their outputs are under `out/` and `site/`.
 
 ### Download and checksum
 
@@ -144,6 +144,10 @@ The installed binary's `check` passed in all four, so none is unjudgeable.
 - To fetch without the installer, as CI might: `gh release download v0.4.0 -R spadaval/atelier -p 'atelier-cli-x86_64-unknown-linux-gnu.tar.xz*'`, then `sha256sum -c atelier-cli-x86_64-unknown-linux-gnu.tar.xz.sha256`.
 
 Nothing was released, and no file other than this record changed.
+
+### Deviations
+
+- The 0.4.1 line is ticked although no 0.4.1 happened, because `review request` will not start with it unticked (`review_request_unfinished`). Its condition never held; the brief asked for it to stay unticked in that case.
 
 ### Surprises
 
