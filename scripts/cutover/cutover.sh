@@ -29,6 +29,10 @@ finish_step() {
   say "   step $STEP took ${secs} s"
 }
 point() { [ "${CUTOVER_FAIL_AT:-}" != "$1" ] || die "stopped at $1, as CUTOVER_FAIL_AT asked (trials only)"; }
+# A step a run before this one finished is not done again: what it checked
+# may have moved on since, as step 8's commit moves master.
+already() { [ "$(jstate "step:$1")" = done ] && say "   done by an earlier run" ; }
+finished() { jstart "step:$1"; jdone "step:$1"; }
 
 on_exit() {
   local rc=$?
@@ -160,31 +164,33 @@ preflight_checks() {
 # checked out, a copy of each hooks directory, the installed binary, the
 # skill and the service.
 record() { # <mode>
-  local r c b wt head h copy
-  jstart mode "$1"; jdone mode
+  local r c b wt head h
+  jstart mode "$1"
   for r in $(repo_names); do
     c=$(clone_of "$r") b=$(base_of "$r")
-    jstart "pre:base:$r" "$(git -C "$c" rev-parse "refs/heads/$b")"; jdone "pre:base:$r"
-    jstart "pre:tracking:$r" "$(git -C "$c" rev-parse -q --verify "refs/remotes/$REMOTE/$b" || echo none)"; jdone "pre:tracking:$r"
-    while read -r wt head; do
-      jstart "pre:wt:$r:$wt" "$head"; jdone "pre:wt:$r:$wt"
-    done < <(worktrees "$c")
-    h=$(hooks_dir "$c") copy=$STATE/hooks/$r
-    rm -rf "$copy"; mkdir -p "$STATE/hooks"
-    if [ -d "$h" ]; then cp -a "$h" "$copy"; jstart "pre:hooks:$r" "$h	$copy"; else jstart "pre:hooks:$r" "$h	absent"; fi
-    jdone "pre:hooks:$r"
+    fact "pre:base:$r" "$(git -C "$c" rev-parse "refs/heads/$b")"
+    fact "pre:tracking:$r" "$(git -C "$c" rev-parse -q --verify "refs/remotes/$REMOTE/$b" || echo none)"
+    while read -r wt head; do fact "pre:wt:$r:$wt" "$head"; done < <(worktrees "$c")
+    h=$(hooks_dir "$c")
+    copy_aside "pre:hooks:$r" "$h" "$STATE/hooks/$r"
+    point "record-$r"
   done
   local bin; bin=$(command -v atelier)
-  jstart pre:binary "$(atelier --version)	$(sha256sum "$bin" | cut -d' ' -f1)	$bin"; jdone pre:binary
-  if git -C "$SKILL" rev-parse -q --verify HEAD >/dev/null 2>&1; then
-    jstart pre:skill "$(git -C "$SKILL" rev-parse HEAD)"; jdone pre:skill
-  fi
-  if [ -n "$SKILL_DIR" ]; then
-    rm -rf "$STATE/skill-dir"
-    if [ -e "$SKILL_DIR" ]; then cp -a "$SKILL_DIR" "$STATE/skill-dir"; jstart pre:skill-dir "$SKILL_DIR"; else jstart pre:skill-dir "$SKILL_DIR	absent"; fi
-    jdone pre:skill-dir
-  fi
-  jstart pre:service "$(service_state)"; jdone pre:service
+  fact pre:binary "$(atelier --version)	$(sha256sum "$bin" | cut -d' ' -f1)	$bin"
+  if git -C "$SKILL" rev-parse -q --verify HEAD >/dev/null 2>&1; then fact pre:skill "$(git -C "$SKILL" rev-parse HEAD)"; fi
+  [ -z "$SKILL_DIR" ] || copy_aside pre:skill-dir "$SKILL_DIR" "$STATE/skill-dir"
+  fact pre:service "$(service_state)"
+  # Only now is the preflight done: a stop above leaves it to do again, and
+  # each fact or copy recorded already is kept as it was.
+  jdone mode
+}
+fact() { [ "$(jstate "$1")" = done ] || { jstart "$1" "$2"; jdone "$1"; }; }
+copy_aside() { # <key> <source> <copy>: the copy is made again until it is done
+  [ "$(jstate "$1")" != done ] || return 0
+  if [ -e "$2" ]; then jstart "$1" "$2	$3"; else jstart "$1" "$2	absent"; fi
+  mkdir -p "$(dirname "$3")"; rm -rf "$3"
+  [ ! -e "$2" ] || cp -a "$2" "$3"
+  jdone "$1"
 }
 service_state() { echo "$($SYSTEMCTL is-enabled "$SERVICE" 2>/dev/null || true) $($SYSTEMCTL is-active "$SERVICE" 2>/dev/null || true)"; }
 
@@ -482,7 +488,7 @@ cutover() {
   W=$(base_worktree atelier)
   [ -n "$W" ] || die "no worktree of atelier has $(base_of atelier) checked out"
   [ "$(git -C "$here" rev-parse --show-toplevel)" = "$W" ] || die "run this from $W, the worktree that has $(base_of atelier)"
-  [ "$(jstate mode)" != done ] || [ "$(jfields mode)" = cutover ] || die "the journal in $STATE is an adopt's; give another CUTOVER_STATE"
+  [ "$(jstate mode)" = none ] || [ "$(jfields mode)" = cutover ] || die "the journal in $STATE is an adopt's; give another CUTOVER_STATE"
   export TREE_BIN=$STATE/target/release/atelier
 
   step 1 "Preflight"
@@ -495,81 +501,98 @@ cutover() {
   fi
   point step1-done
 
-  step 2 "Convert atelier"
   B=$(jfields pre:base:atelier)
-  convert_atelier "$W" "$B"
-  conv=$(jresult commit:atelier)
-  point step2-committed
-  (cd "$W" && python3 "$here/convert_records.py" --verify "$B") > "$STATE/report/atelier.verify" \
-    || { cat "$STATE/report/atelier.verify"; die "atelier: --verify fails on the conversion"; }
-  (cd "$W" && "$TREE_BIN" check) || die "atelier: the tree's atelier check fails"
-  links_resolving "$W" > "$STATE/report/atelier.links"
+  step 2 "Convert atelier"
+  if ! already 2; then
+    convert_atelier "$W" "$B"
+    point step2-committed
+    (cd "$W" && python3 "$here/convert_records.py" --verify "$B") > "$STATE/report/atelier.verify" \
+      || { cat "$STATE/report/atelier.verify"; die "atelier: --verify fails on the conversion"; }
+    (cd "$W" && "$TREE_BIN" check) || die "atelier: the tree's atelier check fails"
+    links_resolving "$W" > "$STATE/report/atelier.links"
+    finished 2
+  fi
 
+  conv=$(jresult commit:atelier)
   step 3 "Install"
-  if [ "$(jstate install)" != done ]; then
-    jstart install "$INSTALL_ROOT"
-    (cd "$W" && eval "$INSTALL")
-    jdone install
+  if ! already 3; then
+    if [ "$(jstate install)" != done ]; then
+      jstart install "$INSTALL_ROOT"
+      (cd "$W" && eval "$INSTALL")
+      jdone install
+    fi
+    [ "$(atelier --version)" = "$("$TREE_BIN" --version)" ] || die "atelier on PATH is not the binary just installed"
+    point step3-installed
+    if [ "$(jstate setup:atelier)" != done ]; then
+      jstart setup:atelier
+      (cd "$W" && atelier setup && atelier setup claude && atelier setup codex)
+      [ -z "$(git -C "$W" status --porcelain)" ] || die "atelier: setup changed files the conversion commit should hold"
+      jdone setup:atelier
+    fi
+    if git -C "$SKILL" rev-parse -q --verify HEAD >/dev/null 2>&1 && [ "$(jstate skill)" != done ]; then
+      jstart skill "$(jfields pre:skill)	$conv"
+      git -C "$SKILL" checkout -q --detach "$conv"
+      jdone skill
+    fi
+    stop_service
+    point step3-done
+    finished 3
   fi
-  [ "$(atelier --version)" = "$("$TREE_BIN" --version)" ] || die "atelier on PATH is not the binary just installed"
-  point step3-installed
-  if [ "$(jstate setup:atelier)" != done ]; then
-    jstart setup:atelier
-    (cd "$W" && atelier setup && atelier setup claude && atelier setup codex)
-    [ -z "$(git -C "$W" status --porcelain)" ] || die "atelier: setup changed files the conversion commit should hold"
-    jdone setup:atelier
-  fi
-  if git -C "$SKILL" rev-parse -q --verify HEAD >/dev/null 2>&1 && [ "$(jstate skill)" != done ]; then
-    jstart skill "$(jfields pre:skill)	$conv"
-    git -C "$SKILL" checkout -q --detach "$conv"
-    jdone skill
-  fi
-  stop_service
-  point step3-done
 
   step 4 "Push atelier's $(base_of atelier)"
-  push_base push:atelier atelier "$W" "$B" "$(git -C "$W" rev-parse HEAD)"
-  point step4-done
+  if ! already 4; then
+    push_base push:atelier atelier "$W" "$B" "$(git -C "$W" rev-parse HEAD)"
+    point step4-done
+    finished 4
+  fi
 
   step 5 "Convert the product repositories"
-  for r in $(repo_names); do
-    [ "$r" != atelier ] || continue
-    c=$(clone_of "$r") b=$(base_of "$r") B=$(jfields "pre:base:$r") d=$STATE/convert/$r
-    if [ "$(jstate "convert:$r")" != done ]; then
-      jstart "convert:$r" "$d	$B"
-      rm -rf "$d"
-      git clone -q -b "$b" "$c" "$d"
-      git -C "$d" remote set-url "$REMOTE" "$(git -C "$c" config "remote.$REMOTE.url")"
-      if git -C "$c" config "remote.$REMOTE.pushurl" >/dev/null; then
-        git -C "$d" config "remote.$REMOTE.pushurl" "$(git -C "$c" config "remote.$REMOTE.pushurl")"
+  if ! already 5; then
+    for r in $(repo_names); do
+      [ "$r" != atelier ] || continue
+      c=$(clone_of "$r") b=$(base_of "$r") B=$(jfields "pre:base:$r") d=$STATE/convert/$r
+      if [ "$(jstate "convert:$r")" != done ]; then
+        jstart "convert:$r" "$d	$B"
+        rm -rf "$d"
+        git clone -q -b "$b" "$c" "$d"
+        git -C "$d" remote set-url "$REMOTE" "$(git -C "$c" config "remote.$REMOTE.url")"
+        if git -C "$c" config "remote.$REMOTE.pushurl" >/dev/null; then
+          git -C "$d" config "remote.$REMOTE.pushurl" "$(git -C "$c" config "remote.$REMOTE.pushurl")"
+        fi
+        [ "$(git -C "$d" rev-parse HEAD)" = "$B" ] || die "$r: the fresh clone of $b is not at the recorded base"
+        (cd "$d" && convert_here "$r" "$B" atelier)
+        jdone "convert:$r"
       fi
-      [ "$(git -C "$d" rev-parse HEAD)" = "$B" ] || die "$r: the fresh clone of $b is not at the recorded base"
-      (cd "$d" && convert_here "$r" "$B" atelier)
-      jdone "convert:$r"
-    fi
-    commit_conversion "$r" "$d" "$B"
-    (cd "$d" && python3 "$here/convert_records.py" --verify "$B") > "$STATE/report/$r.verify" \
-      || { cat "$STATE/report/$r.verify"; die "$r: --verify fails on the conversion"; }
-    (cd "$d" && atelier check) || die "$r: atelier check fails on the conversion"
-    links_resolving "$d" > "$STATE/report/$r.links"
-    say "   $r: converted ($(cat "$STATE/report/$r.sections")); $(cat "$STATE/report/$r.verify" | tail -1)"
-    point "step5-$r-committed"
-    push_base "push:$r" "$r" "$d" "$B" "$(git -C "$d" rev-parse HEAD)"
-    point "step5-$r-pushed"
-  done
+      commit_conversion "$r" "$d" "$B"
+      (cd "$d" && python3 "$here/convert_records.py" --verify "$B") > "$STATE/report/$r.verify" \
+        || { cat "$STATE/report/$r.verify"; die "$r: --verify fails on the conversion"; }
+      (cd "$d" && atelier check) || die "$r: atelier check fails on the conversion"
+      links_resolving "$d" > "$STATE/report/$r.links"
+      say "   $r: converted ($(cat "$STATE/report/$r.sections")); $(cat "$STATE/report/$r.verify" | tail -1)"
+      point "step5-$r-committed"
+      push_base "push:$r" "$r" "$d" "$B" "$(git -C "$d" rev-parse HEAD)"
+      point "step5-$r-pushed"
+    done
+    finished 5
+  fi
 
   step 6 "Bring each clone onto the converted base"
-  for r in $(repo_names); do
-    bring_onto_base "$r"
-    point "step6-$r-moved"
-  done
-  for r in $(repo_names); do old_layout_worktrees "$r"; done
+  if ! already 6; then
+    for r in $(repo_names); do
+      bring_onto_base "$r"
+      point "step6-$r-moved"
+    done
+    for r in $(repo_names); do old_layout_worktrees "$r"; done
+    finished 6
+  fi
 
   step 7 "Accept"
-  for r in $(repo_names); do accept_repo "$r" yes; done
-  accept_host "$conv" "$W"
-  wait_for_ci "$conv"
-  jstart accept; jdone accept
+  if ! already 7; then
+    for r in $(repo_names); do accept_repo "$r" yes; done
+    accept_host "$conv" "$W"
+    wait_for_ci "$conv"
+    finished 7
+  fi
 
   step 8 "Close $CUTOVER_ITEM"
   local parent k=commit:close
@@ -601,7 +624,7 @@ adopt() {
   [ ! -d "$src/.atelier/issues" ] && [ -f "$src/.atelier/config.toml" ] || die "run adopt from a clone of atelier's converted $(base_of atelier)"
   [ "$(git -C "$src" rev-parse HEAD)" = "$(git -C "$src" ls-remote "$REMOTE" "refs/heads/$(base_of atelier)" | cut -f1)" ] \
     || die "$src is not at the remote's $(base_of atelier)"
-  [ "$(jstate mode)" != done ] || [ "$(jfields mode)" = adopt ] || die "the journal in $STATE is a cutover's; give another CUTOVER_STATE"
+  [ "$(jstate mode)" = none ] || [ "$(jfields mode)" = adopt ] || die "the journal in $STATE is a cutover's; give another CUTOVER_STATE"
   export TREE_BIN=atelier
 
   step 1 "Preflight"

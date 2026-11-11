@@ -193,15 +193,18 @@ case "\$1 \$2" in
   *) echo "gh double: no answer for: \$*" >&2; exit 1 ;;
 esac
 EOF
-  # A push the remote accepts that then reports failure, once, when
-  # git-fails-push exists.
+  # A push the remote accepts that then reports failure, once: the push
+  # whose ordinal git-fails-push holds (the first when it is empty).
   cat > "$S/bin/git" <<EOF
 #!/bin/bash
 if [ -e $S/git-fails-push ] && [[ " \$* " == *" push "* ]]; then
-  rm -f $S/git-fails-push
-  /usr/bin/git "\$@" || exit
-  echo "fatal: the remote end hung up unexpectedly (a double: the push was accepted)" >&2
-  exit 128
+  n=\$(( \$(cat $S/pushes 2>/dev/null || echo 0) + 1 )); echo \$n > $S/pushes
+  if [ "\$n" = "\$(cat $S/git-fails-push)" ] || [ ! -s $S/git-fails-push ]; then
+    rm -f $S/git-fails-push
+    /usr/bin/git "\$@" || exit
+    echo "fatal: the remote end hung up unexpectedly (a double: the push was accepted)" >&2
+    exit 128
+  fi
 fi
 exec /usr/bin/git "\$@"
 EOF
@@ -412,6 +415,54 @@ trial_resume() {
   ) && say "resume: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
 }
 
+# A run stopped and run again, at <point> or with the push numbered <n>
+# failing after the remote accepted it, then checked by <check>.
+retry_trial() { # <name> <port> <what> <first run's setup> <second run's setup> <check>
+  local name=$1 S=$W/$1 rc
+  sandbox "$S" "$2"
+  (
+    sandbox_env "$S"
+    $4
+    set +e; run_cutover "$S" > "$S/cutover.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 1 ] || { say "$name: FAILED: the first run exited $rc"; exit 1; }
+    say "$name: stopped: $3"
+    awk '/^STOPPED/ { print "    why: " last; exit } NF { last = $0 }' "$S/cutover.log"
+    unset CUTOVER_FAIL_AT; $5
+    set +e; run_cutover "$S" > "$S/cutover2.log" 2>&1; rc=$?; set -e
+    echo "$rc" > "$S/rc2"
+    $6
+    "$S/bin/systemctl" stop atelier-serve || true
+  ) && say "$name: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
+}
+close_commits() { git --git-dir="$S/remotes/atelier.git" log --format=%s master | grep -c '^Close atelier-wd1i$' || true; }
+ran_to_end_with_one_close() {
+  [ "$(cat "$S/rc2")" = 0 ] || { say "    FAILED: run again, it exited $(cat "$S/rc2"); see $S/cutover2.log"; exit 1; }
+  [ "$(close_commits)" = 1 ] || { say "    FAILED: the remote's master has $(close_commits) closing commits"; exit 1; }
+  [ "$(git --git-dir="$S/remotes/atelier.git" show master:.atelier/items/atelier-wd1i/item.md | sed -n 's/^status: //p')" = done ] \
+    || { say "    FAILED: atelier-wd1i is not done on the remote"; exit 1; }
+  say "    run again, it ran to its end: steps 2 to 7 done by the earlier run, $(grep -c 'done by an earlier run' "$S/cutover2.log") skipped; one closing commit on the remote's master"
+}
+push_found() {
+  grep -q '^done	push:close	found on the remote' "$S/state/journal" || { say "    FAILED: the closing push was not settled from the remote"; exit 1; }
+  say "    the closing push was settled from the remote's tip (found on the remote), not pushed again"
+}
+second_stop_at_step2() { export CUTOVER_FAIL_AT=step2-committed; }
+recorded_whole_then_rolled_back() {
+  [ "$(cat "$S/rc2")" = 1 ] || { say "    FAILED: the second run exited $(cat "$S/rc2")"; exit 1; }
+  local r n
+  for r in atelier astromech demiurge life-on-rails cosplay-studio; do
+    for k in "pre:base:$r" "pre:hooks:$r"; do grep -q "^done	$k	" "$S/state/journal" || { say "    FAILED: $k not recorded"; exit 1; }; done
+  done
+  for k in pre:binary pre:skill pre:service mode; do grep -q "^done	$k	" "$S/state/journal" || { say "    FAILED: $k not recorded"; exit 1; }; done
+  n=$(grep -c '^done	pre:base:atelier	' "$S/state/journal")
+  [ "$n" = 1 ] || { say "    FAILED: atelier's base recorded $n times"; exit 1; }
+  say "    run again, it finished the preflight (every base, hooks copy, binary, skill and service recorded once; atelier's kept from the first run) before converting, then stopped after step 2's commit"
+  run_rollback "$S" > "$S/rollback.log" 2>&1 || { say "    FAILED: rollback; see $S/rollback.log"; exit 1; }
+  restored "$S" "$S/before.snapshot" "$S/before.bases" || { say "    FAILED"; exit 1; }
+}
+snapshot_first() { snapshot "$S" > "$S/before.snapshot"; bases "$S" > "$S/before.bases"; export CUTOVER_FAIL_AT=record-atelier; }
+close_push_fails() { echo 6 > "$S/git-fails-push"; }
+
 trial_preflight() {
   local S=$W/preflight-pre rc out
   sandbox "$S" 17322 pre
@@ -535,6 +586,9 @@ run_trial() {
     12) stop_trial 12-one-product-pushed 17313 "in step 5: astromech's conversion pushed, no real clone fetched it" fail_at step5-astromech-pushed ;;
     full) trial_full ;;
     resume) trial_resume ;;
+    retry-record) retry_trial retry-record 17326 "in step 1, between atelier's snapshots and astromech's" snapshot_first second_stop_at_step2 recorded_whole_then_rolled_back ;;
+    retry-close) retry_trial retry-close 17327 "after step 8's commit, before its push" "fail_at step8-committed" : ran_to_end_with_one_close ;;
+    retry-close-push) retry_trial retry-close-push 17328 "step 8's push accepted by the remote, then reported failed" close_push_fails : "eval ran_to_end_with_one_close; push_found" ;;
     preflight) trial_preflight ;;
     adopt) trial_adopt ;;
     *) say "no trial $1"; return 1 ;;
@@ -543,7 +597,7 @@ run_trial() {
 
 fingerprint > "$W/real.before"
 prepare
-trials=${*:-preflight 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume adopt}
+trials=${*:-preflight 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push adopt}
 failed=""
 for t in $trials; do
   t0=$(date +%s)

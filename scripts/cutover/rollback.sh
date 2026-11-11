@@ -152,6 +152,9 @@ say "Rolling back the $MODE recorded in $JOURNAL"
 
 say "1. Hooks directories"
 for k in $(jkeys pre:hooks:); do
+  # A copy the preflight did not finish is no copy; that hooks directory was
+  # not changed after it, since nothing runs past an unfinished preflight.
+  [ "$(jstate "$k")" = done ] || continue
   f=$(jfields "$k") h=${f%%	*} copy=${f#*	}
   rm -rf "$h"
   [ "$copy" = absent ] || cp -a "$copy" "$h"
@@ -200,7 +203,7 @@ if [ "$(jstate install)" != none ] || [ "$(jstate skill)" != none ] || [ "$(jsta
     git -C "$SKILL" checkout -q --detach "$(jfields pre:skill)"
     say "the skill checkout is back at $(git -C "$SKILL" rev-parse --short HEAD)"
   fi
-  if [ "$(jstate skill-dir)" != none ]; then
+  if [ "$(jstate skill-dir)" != none ] && [ "$(jstate pre:skill-dir)" = done ]; then
     f=$(jfields pre:skill-dir)
     rm -rf "$SKILL_DIR"
     case $f in *absent) ;; *) cp -a "$STATE/skill-dir" "$SKILL_DIR" ;; esac
