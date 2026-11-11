@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8ep4
 title: Give each Agent Factory role only its own instructions, with shared guidance in standards files
-status: ready
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -47,3 +47,7 @@ Each Agent Factory role should read only the instructions for its own work. Inst
 ## Context
 
 Analysis that found these, 2026-11-08: every role's read path on master 470e59ec, by atelier-qj9d's rule and a whitespace word count, runs 2,128 to 2,893 words, and the orchestrator's 4,071, of which orchestrate.md itself is about 1,250. SKILL.md's Independent Review is 367 words. atelier-qj9d (2026-11-07) removed every reference but atelier.md and folded each rule into "the one file whose role needs it"; this partly reverses that with a stricter test: a shared file is fine when every role that reads it uses all of it.
+
+## Report
+
+Dropped: Done another way by the skill rewrite (atelier-orb2): each role has one file under roles/, SKILL.md states the review rule in four sentences, and every file this item names (procedures/review.md, orchestrate.md, references/atelier.md, plan.md) is gone.
