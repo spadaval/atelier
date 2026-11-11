@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-j458
 title: Load review history when a record path is not UTF-8
-status: draft
+status: dropped
 mission: null
 labels:
 - land
@@ -30,3 +30,7 @@ Since atelier-7b6e, land and doctor load the history of .atelier/issues and .ate
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-i0w4
+
+## Report
+
+Dropped: `path_log.rs`, `land` and `doctor` were deleted in 0.5.
