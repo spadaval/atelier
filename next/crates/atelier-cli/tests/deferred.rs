@@ -219,26 +219,32 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
     );
     let before = (changes(&root), read(&root, REVIEW));
 
-    for (name, why) in [
+    // A finding settled already, or none, is nothing to settle: no rule.
+    for (name, why, rule) in [
         (
             "demo-d0ne/1-aaaa.2",
             "  [ ] Finding demo-d0ne/1-aaaa.2 is not settled yet (it was dropped by t9: x)\n",
+            false,
         ),
         (
             "demo-0pen/1-bbbb.1",
             "  [ ] demo-0pen is done (it is in review; only a done item's findings are settled)\n",
+            true,
         ),
         (
             "demo-d0ne/1-aaaa.3",
             "  [ ] Finding demo-d0ne/1-aaaa.3 is deferred, by its recommendation or by a decision (it is not)\n",
+            true,
         ),
         (
             "demo-d0ne/1-aaaa.9",
             "  [ ] A review of demo-d0ne has a finding 1-aaaa.9 (none does)\n",
+            false,
         ),
         (
             "demo-n0ne/1-aaaa.1",
             "  [ ] A review of demo-n0ne has a finding 1-aaaa.1 (none does)\n",
+            false,
         ),
     ] {
         for (command, args) in [
@@ -251,7 +257,8 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
                 run.stderr,
                 format!(
                     "`atelier {command} {name}` refused; nothing changed.\n{why}\
-                     `atelier list --deferred` lists the deferred findings nobody has settled.\n"
+                     `atelier list --deferred` lists the deferred findings nobody has settled.\n{}",
+                    if rule { SKIP } else { "" }
                 )
             );
             assert_eq!((changes(&root), read(&root, REVIEW)), before, "{args:?}");
@@ -356,7 +363,7 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
         run.stderr
     );
     assert!(
-        run.stderr.ends_with("Then: atelier submit\n"),
+        run.stderr.ends_with(&format!("Then: atelier submit\n{SKIP}")),
         "{}",
         run.stderr
     );

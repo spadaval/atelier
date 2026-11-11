@@ -141,7 +141,7 @@ fn an_escalation_decided_as_defer_is_carried_as_decided_and_the_item_merges() {
         implementer.stderr,
         format!(
             "`atelier decide {ID}` refused; nothing changed.\nYou (thread t1) implemented {ID}, \
-             and none of its implementers, past or present, decides its questions.\n{}",
+             and none of its implementers, past or present, decides its questions.\n{}{SKIP}",
             decider_handoff(&finding)
         )
     );
@@ -152,7 +152,7 @@ fn an_escalation_decided_as_defer_is_carried_as_decided_and_the_item_merges() {
         format!(
             "`atelier decide {ID}` refused; nothing changed.\nYou (thread r1) reviewed finding \
              {finding}, which its question is about, and none of its reviewers decides it.\n\
-             Say so to whoever started you, and stop.\n"
+             Say so to whoever started you, and stop.\n{SKIP}"
         )
     );
     assert_eq!(read(&root, &item_path(ID)), before);
@@ -234,7 +234,7 @@ fn an_escalation_decided_as_defer_is_carried_as_decided_and_the_item_merges() {
             "`atelier verdict changes` refused; nothing changed.\nTo record your verdict:\n  \
              [ ] Your file carries {finding} with the `Decided: defer` line the tool wrote (a \
              decision settled it; put that finding back as it was)\nThen: atelier verdict \
-             changes\n"
+             changes\n{SKIP}"
         )
     );
     fs::write(root.join(&path), &written).unwrap();

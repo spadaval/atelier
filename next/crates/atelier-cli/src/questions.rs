@@ -3,7 +3,7 @@
 //! Decisions section in the checkout on its branch and commit nothing;
 //! `submit` commits it with the item.
 
-use crate::commands::{facts, refusal, refused, Outcome};
+use crate::commands::{facts, gated, refusal, refused, Outcome};
 use crate::repo::{git_at, item_dir, item_path, Links, Repo};
 use crate::{git, output};
 use anyhow::{anyhow, bail, Result};
@@ -20,7 +20,7 @@ pub fn escalate(repo: &mut Repo, question: &str, finding: Option<&str>) -> Resul
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
     if let Some(refused) = refusal(Act::Escalate, &facts)? {
-        return Ok(Outcome::Refused(refused));
+        return Ok(refused);
     }
     let id = record.item.id.clone();
     let Some(question) = one_line(question) else {
@@ -97,14 +97,17 @@ pub fn decide(
     }
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
-    match check(Act::Decide, &facts) {
-        Ok(_) => {}
+    let text = match check(Act::Decide, &facts) {
+        Ok(_) => None,
         Err(Refusal::Unmet(unmet)) => {
             let handoff = decider(repo, &facts, &links)?;
-            let refused = output::not_decider(id, &repo.caller, &unmet, handoff.as_deref());
-            return Ok(Outcome::Refused(refused));
+            let caller = &repo.caller;
+            Some(output::not_decider(id, caller, &unmet, handoff.as_deref()))
         }
-        Err(refusal) => return Ok(Outcome::Refused(refused(Act::Decide, refusal, &facts)?)),
+        Err(refusal) => Some(refused(Act::Decide, &refusal, &facts)?),
+    };
+    if let Some(refused) = text.and_then(|text| gated(Act::Decide, &facts, text)) {
+        return Ok(refused);
     }
     let Some(text) = one_line(answer_text) else {
         return Ok(Outcome::Refused(output::not_one_line(

@@ -2,9 +2,12 @@
 
 use crate::forge::Github;
 use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
-use crate::{git, merge, output, plan};
+use crate::{git, merge, output, plan, skip};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{approval, check, row, Act, Checkout, Facts, Refusal, STARTED};
+use atelier_app::acts::{
+    approval, check, mission_refusals, refusals, row, Act, Checkout, Facts, MissionFacts, Refusal,
+    STARTED,
+};
 use atelier_app::{entry, overview, Entry, Located};
 use atelier_core::{Forge, Item, MissionStatus, Status};
 use atelier_records::{render_item, validate_id, ItemDir, Store};
@@ -84,11 +87,14 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
         Ok(to) => to,
         Err(refusal) => {
             let base = located.base.as_ref().map(|dir| dir.item.status);
-            let pending = not_committed(repo, id, base, links.mission.as_ref())?;
-            return Ok(Outcome::Refused(match pending {
+            let text = match not_committed(repo, id, base, links.mission.as_ref())? {
                 Some(pending) => pending,
-                None => refused(act, refusal, &facts)?,
-            }));
+                None => refused(act, &refusal, &facts)?,
+            };
+            match gated(act, &facts, text) {
+                Some(refused) => return Ok(refused),
+                None => row(act).to,
+            }
         }
     };
     if act == Act::Start {
@@ -215,7 +221,7 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
     if let Some(refused) = refusal(Act::Submit, &facts)? {
-        return Ok(Outcome::Refused(refused));
+        return Ok(refused);
     }
     let config = repo.base_config()?;
     let mut item = record.item.clone();
@@ -328,19 +334,50 @@ pub(crate) fn facts<'a>(
     }
 }
 
-/// What the caller is told when `act` is refused, or `None` when it may run.
-pub(crate) fn refusal(act: Act, facts: &Facts) -> Result<Option<String>> {
+/// What the caller is told when `act` is refused, or `None` when it may
+/// run, as when `ATELIER_SKIP` passed every refusal.
+pub(crate) fn refusal(act: Act, facts: &Facts) -> Result<Option<Outcome>> {
     match check(act, facts) {
         Ok(_) => Ok(None),
-        Err(refusal) => refused(act, refusal, facts).map(Some),
+        Err(refusal) => {
+            let text = refused(act, &refusal, facts)?;
+            Ok(gated(act, facts, text))
+        }
     }
+}
+
+/// `text`, which refuses `act` and names the way out, as the caller gets
+/// it: `None` when `ATELIER_SKIP` passes every refusal of the act.
+pub(crate) fn gated(act: Act, facts: &Facts, text: String) -> Option<Outcome> {
+    let all = refusals(act, facts).unwrap_or_else(|problem| vec![Refusal::Record(problem)]);
+    gate(act, &facts.item.item.id, &all, text)
+}
+
+/// [`gated`] for the refusals `all` of `act` on `id`: only when every one
+/// is a rule can they be skipped.
+pub(crate) fn gate(act: Act, id: &str, all: &[Refusal], text: String) -> Option<Outcome> {
+    if !all.iter().all(|refusal| refusal.is_rule(act)) {
+        return Some(Outcome::Refused(text));
+    }
+    skip::refuse(all.iter().flat_map(|r| output::rules(act, id, r)), text)
+}
+
+/// What the caller is told when `act`, a mission's, is refused, or `None`
+/// when it may run, as when `ATELIER_SKIP` passed every refusal. A record
+/// that does not read is an error.
+pub(crate) fn mission_gate(act: Act, id: &str, facts: &MissionFacts) -> Result<Option<Outcome>> {
+    let all = mission_refusals(act, facts)?;
+    Ok(match all.first() {
+        None => None,
+        Some(first) => gate(act, id, &all, output::mission_refused(act, id, first)),
+    })
 }
 
 /// What the caller is told when `act` is refused for `refusal`. Only a
 /// refusal that says what comes next reads the item's findings, so a
 /// reviewer's draft that does not parse yet cannot hide its role line.
-pub(crate) fn refused(act: Act, refusal: Refusal, facts: &Facts) -> Result<String> {
-    let entry = match &refusal {
+pub(crate) fn refused(act: Act, refusal: &Refusal, facts: &Facts) -> Result<String> {
+    let entry = match refusal {
         Refusal::Record(problem) => return Err(problem.clone().into()),
         Refusal::From { .. } | Refusal::Unmet(_) => Some(entry(facts)?),
         Refusal::Role(_) | Refusal::NotHolder { .. } => None,
@@ -348,7 +385,7 @@ pub(crate) fn refused(act: Act, refusal: Refusal, facts: &Facts) -> Result<Strin
     let id = &facts.item.item.id;
     Ok(output::refusal(
         act,
-        &refusal,
+        refusal,
         facts.caller,
         id,
         entry.as_ref(),

@@ -10,6 +10,7 @@ mod plan;
 mod questions;
 mod repo;
 mod review;
+mod skip;
 mod view_output;
 mod views;
 
@@ -202,7 +203,30 @@ enum VerdictArg {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        // A usage error, or the help asked for.
+        Err(error) => {
+            let _ = error.print();
+            if error.use_stderr() && skip::reason().is_some() {
+                eprint!("{}", output::not_skippable());
+            }
+            return ExitCode::from(error.exit_code() as u8);
+        }
+    };
+    // A skip needs its reason. A checkout cannot be refused, so the
+    // post-checkout hook only says so.
+    if skip::variable().is_some_and(|reason| reason.is_empty()) {
+        let hook = match &cli.command {
+            Command::Check { hook, .. } => *hook,
+            _ => None,
+        };
+        if !matches!(hook, Some(check::Hook::PostCheckout)) {
+            let _ = std::io::stderr().write_all(output::blank_skip(true).as_bytes());
+            return ExitCode::from(1);
+        }
+        print!("{}", output::blank_skip(false));
+    }
     // `check` reads the records itself, and reports a config that does not
     // read rather than stopping at it.
     if let Command::Check { hook, args } = &cli.command {
@@ -307,24 +331,23 @@ fn main() -> ExitCode {
     exit(result)
 }
 
+/// Prints the outcome, after each rule `ATELIER_SKIP` passed. Every refusal
+/// of a rule was passed or offered the skip, so a refusal or an error
+/// while a reason is given is of something that cannot be skipped.
 fn exit(result: anyhow::Result<Outcome>) -> ExitCode {
-    // A closed stdout, as under `| head`, is no failure of the command.
-    match result {
-        Ok(Outcome::Done(text)) => {
-            let _ = std::io::stdout().write_all(text.as_bytes());
-            ExitCode::SUCCESS
-        }
-        Ok(Outcome::Refused(text)) => {
-            let _ = std::io::stderr().write_all(text.as_bytes());
-            ExitCode::from(1)
-        }
-        Ok(Outcome::NotYet(text)) => {
-            let _ = std::io::stdout().write_all(text.as_bytes());
-            ExitCode::from(3)
-        }
-        Err(error) => {
-            let _ = writeln!(std::io::stderr(), "atelier: {error:#}");
-            ExitCode::from(2)
-        }
+    let (out, err, code) = match result {
+        Ok(Outcome::Done(text)) => (text, String::new(), 0),
+        Ok(Outcome::Refused(text)) => (String::new(), text, 1),
+        Ok(Outcome::NotYet(text)) => (text, String::new(), 3),
+        Err(error) => (String::new(), format!("atelier: {error:#}\n"), 2),
+    };
+    let mut err = err;
+    if code == 1 || code == 2 {
+        err += &skip::reason().map_or(String::new(), |_| output::not_skippable());
     }
+    // A closed stdout, as under `| head`, is no failure of the command.
+    let out = output::skipped(&skip::passed()) + &out;
+    let _ = std::io::stdout().write_all(out.as_bytes());
+    let _ = std::io::stderr().write_all(err.as_bytes());
+    ExitCode::from(code)
 }

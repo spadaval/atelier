@@ -247,7 +247,7 @@ fn stale_after(change: impl Fn(&Path), said: &str) {
     );
     assert_eq!(
         run.stderr,
-        format!("`atelier merge` refused; nothing changed.\n{needs}")
+        format!("`atelier merge` refused; nothing changed.\n{needs}{SKIP}")
     );
     assert_eq!(state(&root), before);
     let status = atelier(&root, "t1", &["status"]).stdout;
@@ -348,7 +348,7 @@ fn a_failing_merge_check_on_the_base_tip_stops_the_merge_with_its_command_and_ou
         format!(
             "`atelier merge` refused: the merge check `{check}` failed (exit 3) on {ID} merged into main. Nothing changed.\n\
              The end of its output:\n  first line\n  the cause\n\
-             Fix it on branch {ID} and commit; if main broke it, bring main in first with `git merge main`. `atelier status` then says what comes next.\n"
+             Fix it on branch {ID} and commit; if main broke it, bring main in first with `git merge main`. `atelier status` then says what comes next.\n{SKIP}"
         )
     );
     assert_eq!(state(&root), before);
@@ -538,7 +538,7 @@ fn a_commit_made_after_merge_read_its_facts_is_not_merged() {
     let again = merge(&root, "t1", &[]);
     assert_eq!(again.code, 1);
     assert!(
-        again.stderr.ends_with("Then: atelier submit\n"),
+        again.stderr.ends_with(&format!("Then: atelier submit\n{SKIP}")),
         "{}",
         again.stderr
     );
@@ -654,7 +654,7 @@ fn a_trivial_merge_needs_no_review_and_stores_its_reason() {
                 .contains("  [ ] Report: written under `## Report`\n")
             && run
                 .stderr
-                .ends_with("Then: atelier merge --trivial \"<why>\"\n"),
+                .ends_with(&format!("Then: atelier merge --trivial \"<why>\"\n{SKIP}")),
         "{}",
         run.stderr
     );
@@ -1601,7 +1601,7 @@ fn a_branch_that_gains_a_commit_outside_the_item_during_the_wait_is_stale() {
     assert_eq!(run.code, 1, "{}", run.stdout);
     assert!(
         run.stderr.contains("(changed: other.txt)")
-            && run.stderr.ends_with("Then: atelier submit\n"),
+            && run.stderr.ends_with(&format!("Then: atelier submit\n{SKIP}")),
         "{}",
         run.stderr
     );

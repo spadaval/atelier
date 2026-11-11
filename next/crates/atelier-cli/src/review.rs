@@ -1,12 +1,12 @@
 //! `review` and `verdict`: the reviewer's side of the loop, on an item
 //! and on a mission's plan.
 
-use crate::commands::{facts, refusal, refused, write_and_commit, Outcome};
+use crate::commands::{facts, gated, mission_gate, refusal, refused, write_and_commit, Outcome};
 use crate::git;
 use crate::output::{self, Brief, PlanBrief};
 use crate::repo::{item_dir, item_path, mission_dir, mission_path, Repo};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{check, check_mission, plan_round, row, Act, Facts, MissionFacts, Refusal};
+use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
 use atelier_app::{carried, carried_plan};
 use atelier_core::{Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict};
 use atelier_records::{create_review, render_item, render_review, validate_id, ReviewFile};
@@ -24,14 +24,16 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     };
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
-    match check(Act::Review, &facts) {
-        Ok(_) => {}
+    let text = match check(Act::Review, &facts) {
+        Ok(_) => None,
         // Its one condition: the caller never implemented the item.
         Err(Refusal::Unmet(_)) => {
-            let brief = brief(repo, &facts, None)?;
-            return Ok(Outcome::Refused(output::author(id, &repo.caller) + &brief));
+            Some(output::author(id, &repo.caller) + &brief(repo, &facts, None)?)
         }
-        Err(refusal) => return Ok(Outcome::Refused(refused(Act::Review, refusal, &facts)?)),
+        Err(refusal) => Some(refused(Act::Review, &refusal, &facts)?),
+    };
+    if let Some(refused) = text.and_then(|text| gated(Act::Review, &facts, text)) {
+        return Ok(refused);
     }
     if repo.branch.as_deref() != Some(id) {
         return Ok(Outcome::Refused(output::elsewhere(
@@ -225,14 +227,8 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         items: &[],
         review: Some(file),
     };
-    match check_mission(act, &facts) {
-        Ok(_) => {}
-        Err(Refusal::Record(problem)) => return Err(problem.into()),
-        Err(refusal) => {
-            return Ok(Outcome::Refused(output::mission_refused(
-                act, &id, &refusal,
-            )))
-        }
+    if let Some(refused) = mission_gate(act, &id, &facts)? {
+        return Ok(refused);
     }
     let mut review = file.review.clone();
     review.verdict = Some(verdict);
@@ -274,7 +270,7 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
         Verdict::Changes => Act::VerdictChanges,
     };
     if let Some(refused) = refusal(act, &facts)? {
-        return Ok(Outcome::Refused(refused));
+        return Ok(refused);
     }
     let file = facts.reviewing().expect("check found the caller's review");
     let mut review = file.review.clone();

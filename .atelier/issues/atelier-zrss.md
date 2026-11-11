@@ -4,6 +4,9 @@ id: "atelier-zrss"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-zrss
 priority: "P2"
 relationships:
   blocks: []
@@ -21,9 +24,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add the `ATELIER_SKIP` bypass to every rule of a command or a hook"
-updated_at: "2026-11-10T21:30:48.869299317+00:00"
+updated_at: "2026-11-10T23:42:39.469755839+00:00"
 ---
 
 ## Goal

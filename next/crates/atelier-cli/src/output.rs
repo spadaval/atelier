@@ -71,7 +71,13 @@ fn goal(act: Act, status: Status) -> &'static str {
 }
 
 pub(crate) fn condition(id: &str, condition: &Condition) -> String {
-    let text = match condition {
+    format!("  [ ] {}", condition_text(id, condition))
+}
+
+/// What `condition` needs, and what stands instead, in one line: also the
+/// rule a skip of it names.
+fn condition_text(id: &str, condition: &Condition) -> String {
+    match condition {
         Condition::Blocked {
             id: blocker,
             status: Some(status),
@@ -147,8 +153,57 @@ pub(crate) fn condition(id: &str, condition: &Condition) -> String {
             "Finding {id}/{finding} is not settled yet (it was {})",
             settled(settlement)
         ),
-    };
-    format!("  [ ] {text}")
+        Condition::Invalid(problem) => valid(problem),
+    }
+}
+
+/// The rule that every record is valid, as `problem` breaks it.
+pub(crate) fn valid(problem: &Problem) -> String {
+    format!("Every record is valid ({problem})")
+}
+
+fn role_name(role: Role) -> &'static str {
+    match role {
+        Role::Planner => "planner",
+        Role::Implementer => "implementer",
+        Role::Reviewer => "reviewer",
+        Role::Decider => "decider",
+        Role::Lead => "lead",
+    }
+}
+
+/// The rules `refusal` of `act` on `id` says are broken, each in one line,
+/// as a skip names them.
+pub(crate) fn rules(act: Act, id: &str, refusal: &Refusal) -> Vec<String> {
+    vec![match refusal {
+        Refusal::Role(role) => format!(
+            "`atelier {}` is run by {id}'s {}, not its {}",
+            row(act).command,
+            role_name(row(act).role),
+            role_name(*role)
+        ),
+        Refusal::From { act, status } => rule_from(id, row(*act).from, *status),
+        Refusal::NotHolder { role, holder } => format!(
+            "You hold {id} as its {} ({} does)",
+            role_name(*role),
+            holder.as_ref().map_or("nobody".to_string(), Thread::to_string)
+        ),
+        Refusal::Unmet(unmet) => return unmet.iter().map(|c| condition_text(id, c)).collect(),
+        Refusal::Record(problem) => problem.to_string(),
+    }]
+}
+
+/// The rule that `id` is one of `from`, which it is not.
+pub(crate) fn rule_from(id: &str, from: &[Status], status: Status) -> String {
+    let from: Vec<&str> = from.iter().map(|s| status_name(*s)).collect();
+    format!("{id} is {} (it is {})", from.join(" or "), status_name(status))
+}
+
+/// The rule that planning, or with `settle` the settling of a finding,
+/// happens on the base `base`, not on `branch`.
+pub(crate) fn rule_off_base(base: &str, branch: Option<&str>, settle: bool) -> String {
+    let or = if settle { " or an item's you implement" } else { "" };
+    format!("This checkout is on the base branch {base}{or} (it is on {})", place(branch))
 }
 
 /// What an entry needs and the command that follows, or what to do when no
@@ -732,14 +787,18 @@ pub fn finding_dropped(name: &str, reason: &str) -> String {
 pub fn invalid(command: &str, root: &Path, problems: &[Problem]) -> String {
     let mut text = format!("`atelier {command}` refused; nothing changed.\n");
     for problem in problems {
-        let file = problem.file.strip_prefix(root).unwrap_or(&problem.file);
-        let shown = Problem {
-            file: file.to_path_buf(),
-            ..problem.clone()
-        };
-        text += &format!("  {shown}\n");
+        text += &format!("  {}\n", from_root(root, problem));
     }
-    text
+    text + "Correct what each names, in the command or in the record, then run it again.\n"
+}
+
+/// `problem` with its file's path from the checkout's root.
+pub(crate) fn from_root(root: &Path, problem: &Problem) -> Problem {
+    let file = problem.file.strip_prefix(root).unwrap_or(&problem.file);
+    Problem {
+        file: file.to_path_buf(),
+        ..problem.clone()
+    }
 }
 
 /// "2 items, 1 mission and config.toml".
@@ -760,7 +819,7 @@ fn records((items, missions): (usize, usize)) -> String {
 fn problems(unread: &[Problem], invalid: &[Problem]) -> String {
     let mut text = String::new();
     if !unread.is_empty() {
-        text += "These do not read as records. That is not a rule, and it cannot be skipped:\n";
+        text += "These do not read as records, so no rule can be checked on them:\n";
     }
     for problem in unread {
         text += &format!("  {problem}\n");
@@ -827,6 +886,34 @@ pub fn commit_refused(
         );
     }
     text + "Fix each file named, stage it with git add, and commit again.\n"
+}
+
+/// The rule that a status changes only as an act changes it, as the
+/// record at `path` breaks it.
+pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
+    format!(
+        "A status changes only as an act of the lifecycle changes it ({path}: {} to {})",
+        status_name(from),
+        status_name(to)
+    )
+}
+
+/// The rule that code reaches `base` only through `atelier merge`, as
+/// `commit` breaks it.
+pub(crate) fn rule_code(base: &str, commit: &str, subject: &str) -> String {
+    format!(
+        "Code and config.toml reach {base} only through atelier merge ({} {subject})",
+        short(commit)
+    )
+}
+
+/// The rule that an item with a branch is done only through `atelier
+/// merge`, as `commit` breaks it for item `id`.
+pub(crate) fn rule_done(base: &str, commit: &str, id: &str) -> String {
+    format!(
+        "An item whose branch exists is done on {base} only through atelier merge ({} sets {id} done)",
+        short(commit)
+    )
 }
 
 /// How many commits a refused push lists.
@@ -1702,10 +1789,34 @@ pub fn merge_message(id: &str, title: &str, base: &str, config: &Config) -> Stri
     text + &format!("\nAtelier-Merge: {id}\n")
 }
 
-pub fn check_failed(id: &str, base: &str, run: &str, code: Option<i32>, tail: &str) -> String {
-    let code = code.map_or("killed by a signal".to_string(), |code| {
+fn exit_status(code: Option<i32>) -> String {
+    code.map_or("killed by a signal".to_string(), |code| {
         format!("exit {code}")
-    });
+    })
+}
+
+/// The rule that the merge check `run` passes, which it failed with `code`.
+pub(crate) fn rule_check(run: &str, code: Option<i32>) -> String {
+    format!("The merge check `{run}` passes (it failed: {})", exit_status(code))
+}
+
+/// The rule that CI passed on the head, where `run` is the run that
+/// failed, or the newest that has not finished.
+pub(crate) fn rule_ci(workflow: &str, run: Option<&CiRun>) -> String {
+    let state = match run {
+        None => format!("no run of {workflow} has started"),
+        Some(CiRun {
+            conclusion: Some(conclusion),
+            url,
+            ..
+        }) => format!("the latest run of {workflow} was {conclusion}: {url}"),
+        Some(run) => format!("{workflow} is {}: {}", run.status.replace('_', " "), run.url),
+    };
+    format!("CI passed on the head ({state})")
+}
+
+pub fn check_failed(id: &str, base: &str, run: &str, code: Option<i32>, tail: &str) -> String {
+    let code = exit_status(code);
     let mut text = format!(
         "`atelier merge` refused: the merge check `{run}` failed ({code}) on {id} merged into {base}. Nothing changed.\nThe end of its output:\n"
     );
@@ -1855,4 +1966,30 @@ pub fn base_push_failed(base: &str, remote: &str, error: &anyhow::Error) -> Stri
 
 pub fn already_merged(id: &str, base: &str) -> String {
     format!("{id} is already merged into {base}; nothing is left to do on it.\n")
+}
+
+/// What ends every refusal of a rule, after the way out.
+pub fn skip_offer() -> String {
+    "If the rule is wrong for this case, go past it on purpose: run the same command again with ATELIER_SKIP=\"<why>\" in front of it.\n".into()
+}
+
+/// Each rule `ATELIER_SKIP` passed, as `<rule>: <reason>`.
+pub fn skipped(passed: &[String]) -> String {
+    let lines = passed.iter().map(|line| format!("Skipped with ATELIER_SKIP: {line}\n"));
+    lines.collect()
+}
+
+/// What ends a refusal of anything but a rule while `ATELIER_SKIP` is set.
+pub fn not_skippable() -> String {
+    "ATELIER_SKIP passes only a rule, and what refused this is not one, so it cannot be skipped.\n"
+        .into()
+}
+
+/// `ATELIER_SKIP` set and blank; `refused` when the command stops for it.
+pub fn blank_skip(refused: bool) -> String {
+    let text = "ATELIER_SKIP is set and blank, and a skip needs a reason: ATELIER_SKIP=\"<why>\".";
+    match refused {
+        true => format!("{text} Nothing changed.\n"),
+        false => format!("{text}\n"),
+    }
 }

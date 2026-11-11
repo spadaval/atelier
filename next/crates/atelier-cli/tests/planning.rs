@@ -182,7 +182,7 @@ fn the_planning_commands_run_only_on_the_base_branch() {
             format!(
                 "`atelier {}` writes planning, which happens on the base branch main, and this \
                  checkout is on branch elsewhere. Nothing changed.\nRun it in a checkout of \
-                 main, as after `git switch main`.\n",
+                 main, as after `git switch main`.\n{SKIP}",
                 args[0]
             )
         );
@@ -197,7 +197,7 @@ fn the_planning_commands_run_only_on_the_base_branch() {
     let run = atelier(&root, "p1", &["new", "Say hello"]);
     assert!(
         run.stderr.ends_with(&format!(
-            "Run it in {}, which has main checked out.\n",
+            "Run it in {}, which has main checked out.\n{SKIP}",
             base.display()
         )),
         "{}",
@@ -364,8 +364,12 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
     for (args, says) in refusals {
         let run = atelier(&root, "p1", args);
         assert_eq!(run.code, 1, "{args:?}: {}", run.stdout);
+        // A flag a mission lacks is no rule; the rest end offering the skip.
+        let end = if says.contains("only an item has") { says } else { SKIP };
         assert!(
-            run.stderr.starts_with("`atelier set") && run.stderr.ends_with(says),
+            run.stderr.starts_with("`atelier set")
+                && run.stderr.contains(says)
+                && run.stderr.ends_with(end),
             "{args:?}: {}",
             run.stderr
         );
@@ -387,7 +391,7 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
         run.stderr,
         format!(
             "`atelier set {ID}` refused; nothing changed.\n{ID} is building: it is started, and \
-             its record now changes only on branch {ID}, by its implementer.\n"
+             its record now changes only on branch {ID}, by its implementer.\n{SKIP}"
         )
     );
     assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
@@ -539,7 +543,7 @@ fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
         format!(
             "`atelier start {ID}` refused; nothing changed.\nTo start it:\n  [ ] Mission \
              {MISSION} is ready (it is draft; a planner makes it ready with: atelier ready \
-             {MISSION} --by <name>)\nThen: atelier start {ID}\n"
+             {MISSION} --by <name>)\nThen: atelier start {ID}\n{SKIP}"
         )
     );
     assert!(!branch_exists(&root, ID));
@@ -610,7 +614,7 @@ fn start_says_when_an_item_or_its_mission_is_ready_in_the_base_checkout_and_not_
              ready in the checkout of main at {}, but not in main's last commit, which is what \
              `atelier start` reads: the change is not committed yet.\nCommit the planning with: \
              {git_c} add -- {paths} && {git_c} commit -m \"Plan\" -- {paths}\nThen: atelier \
-             start {id}\n",
+             start {id}\n{SKIP}",
             root.display()
         )
     );
@@ -972,7 +976,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
         run.stderr,
         format!(
             "Mission {MISSION} is dropped, and `atelier drop` runs on a mission that is draft, \
-             ready. Nothing changed.\nNothing is left to do on it.\n"
+             ready. Nothing changed.\nNothing is left to do on it.\n{SKIP}"
         )
     );
 }
@@ -1024,10 +1028,11 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
         "{status}"
     );
 
-    for (at, thread, command) in [
-        (&work, "t1", "submit"),
-        (&work, "t1", "merge"),
-        (&root, "t2", "start"),
+    // `start` would create branch {ID}, which exists: no rule.
+    for (at, thread, command, skip) in [
+        (&work, "t1", "submit", SKIP),
+        (&work, "t1", "merge", SKIP),
+        (&root, "t2", "start", ""),
     ] {
         let args: Vec<&str> = match command {
             "start" => vec!["start", ID],
@@ -1038,7 +1043,7 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
         assert!(
             run.stderr
                 .starts_with(&format!("{ID} is dropped, and `atelier {command}` runs on"))
-                && run.stderr.ends_with(&format!("Nothing changed.\n{why}")),
+                && run.stderr.ends_with(&format!("Nothing changed.\n{why}{skip}")),
             "{command}: {}",
             run.stderr
         );
@@ -1133,6 +1138,8 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
          demo-st4r was started, and a started item ends when `atelier merge` merges it from that \
          branch. If it will not be done, drop it instead.\nThen: atelier drop demo-st4r --reason \
          \"<why>\"\n"
+            .to_string()
+            + SKIP
     );
     let run = atelier(&root, "p1", &["close", "demo-d0ne", "Again"]);
     assert_eq!(run.code, 1);
@@ -1180,7 +1187,7 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
         run.stderr,
         format!(
             "Mission {mission} is draft, and `atelier close` runs on a mission that is ready. \
-             Nothing changed.\nA planner makes it ready with: atelier ready {mission} --by <name>\n"
+             Nothing changed.\nA planner makes it ready with: atelier ready {mission} --by <name>\n{SKIP}"
         )
     );
     let ready = plan(&root, &["ready", &mission, &a, "--by", "sumeet"]);
@@ -1216,7 +1223,7 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
         format!(
             "`atelier close {mission}` refused; nothing changed.\nTo close it:\n  [ ] {b} is done \
              or dropped (it is draft)\n  [ ] Result: written under `## Result`\nThen: atelier \
-             close {mission}\n"
+             close {mission}\n{SKIP}"
         )
     );
     plan(&root, &["drop", &b, "--reason", "Nobody leaves"]);

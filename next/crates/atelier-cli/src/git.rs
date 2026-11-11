@@ -202,7 +202,8 @@ pub fn commit_file(
             &format!("100644,{blob},{path}"),
         ])?;
         let tree = with_index(&["write-tree"])?;
-        let mut args = vec!["commit-tree", &tree, "-m", message];
+        let message = with_skips(repo, message)?;
+        let mut args = vec!["commit-tree", &tree, "-m", &message];
         for parent in parents {
             args.extend(["-p", parent]);
         }
@@ -210,6 +211,21 @@ pub fn commit_file(
     })();
     let _ = std::fs::remove_file(&index);
     result
+}
+
+/// `message` with a trailer `Atelier-Skip: <rule>: <reason>` for each rule
+/// `ATELIER_SKIP` passed, in its trailer paragraph.
+fn with_skips(repo: &Path, message: &str) -> Result<String> {
+    let passed = crate::skip::passed();
+    if passed.is_empty() {
+        return Ok(message.to_string());
+    }
+    let trailers: Vec<String> = passed.iter().map(|line| format!("Atelier-Skip: {line}")).collect();
+    let mut args = vec!["interpret-trailers"];
+    for trailer in &trailers {
+        args.extend(["--trailer", trailer]);
+    }
+    run_with(repo, &args, Some(message))
 }
 
 /// Creates the local branch `name` at `commit`, or returns `false` when a
@@ -248,7 +264,8 @@ pub fn commit_paths(repo: &Path, paths: &[&str], message: &str) -> Result<()> {
             String::from_utf8_lossy(&staged.stderr).trim()
         );
     }
-    let mut commit = vec!["commit", "--quiet", "-m", message, "--"];
+    let message = with_skips(repo, message)?;
+    let mut commit = vec!["commit", "--quiet", "-m", &message, "--"];
     commit.extend(paths);
     let committed = run(repo, &on_paths(&["add"])).and_then(|_| run(repo, &commit));
     if committed.is_err() {

@@ -33,7 +33,16 @@ fn install_hooks(root: &Path) {
 /// Git run as thread t1 would run it, with what it printed, the hooks'
 /// output included.
 fn git_as(at: &Path, args: &[&str]) -> Run {
+    git_skipping(at, None, args)
+}
+
+/// [`git_as`], with `ATELIER_SKIP` set to `skip` when it is given.
+fn git_skipping(at: &Path, skip: Option<&str>, args: &[&str]) -> Run {
     let mut command = Command::new("git");
+    match skip {
+        Some(reason) => command.env("ATELIER_SKIP", reason),
+        None => command.env_remove("ATELIER_SKIP"),
+    };
     command.current_dir(at).args(args);
     for variable in [
         "CLAUDE_CODE_SESSION_ID",
@@ -126,7 +135,7 @@ fn check_reports_every_problem_with_its_file_and_field_and_lists_uncommitted_rec
         "{said}"
     );
     assert!(said
-        .contains("These do not read as records. That is not a rule, and it cannot be skipped:\n"));
+        .contains("These do not read as records, so no rule can be checked on them:\n"));
     assert!(said.contains("  .atelier/config.toml: line 4: unknown field `colour`"));
     assert!(said.contains(&format!(
         "  {}: front matter: status: unknown variant `finished`",
@@ -189,7 +198,12 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
     let root = scratch.root();
     install_hooks(&root);
     let head = git(&root, &["rev-parse", "HEAD"]);
-    let refused = |run: Run, lines: &[&str]| {
+    // Refused, and with `rule` the skip offered after the way out; then,
+    // with ATELIER_SKIP set, committed as a rule skipped, saying `rule`, or
+    // refused again as no rule.
+    let way_out = "Fix each file named, stage it with git add, and commit again.\n";
+    let refused = |message: &str, lines: &[&str], rule: Option<&str>| {
+        let run = commit_all(&root, message);
         assert_ne!(run.code, 0, "{}", run.stderr);
         assert!(run.stderr.starts_with(
             "Atelier's pre-commit hook refused this commit; nothing was committed.\n"
@@ -197,10 +211,29 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
         for line in lines {
             assert!(run.stderr.contains(line), "{line}\n{}", run.stderr);
         }
-        assert!(run
-            .stderr
-            .ends_with("Fix each file named, stage it with git add, and commit again.\n"));
+        let end = match rule {
+            Some(_) => format!("{way_out}{SKIP}"),
+            None => way_out.to_string(),
+        };
+        assert!(run.stderr.ends_with(&end), "{}", run.stderr);
         assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+        let run = git_skipping(&root, Some("  Sumeet\n said so "), &["commit", "-qm", message]);
+        match rule {
+            Some(rule) => {
+                assert_eq!(run.code, 0, "{}", run.stderr);
+                // Git shows a hook's output on its own stderr.
+                let said = format!("Skipped with ATELIER_SKIP: {rule}: Sumeet said so\n");
+                assert_eq!(run.stderr, said);
+                // A hook writes nothing: the message is Git's.
+                assert_eq!(git(&root, &["log", "-1", "--format=%B"]), message);
+                git(&root, &["reset", "-q", "--hard", &head]);
+            }
+            None => {
+                assert_ne!(run.code, 0);
+                assert!(run.stderr.ends_with(NOT_SKIPPABLE), "{}", run.stderr);
+                assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+            }
+        }
         git(&root, &["reset", "-q", "--hard"]);
     };
 
@@ -214,21 +247,34 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
         "Rule: every record is valid. These are not:\n  {}: blocked_by: `demo-zz99` names no item\n",
         item_path(ID)
     );
-    refused(commit_all(&root, "Block it"), &[&rule]);
+    let valid = format!(
+        "Every record is valid ({}: blocked_by: `demo-zz99` names no item)",
+        item_path(ID)
+    );
+    refused("Block it", &[&rule], Some(&valid));
 
     edit(&root, &item_path(ID), "status: ready", "status: finished");
     let parse = format!(
-        "These do not read as records. That is not a rule, and it cannot be skipped:\n  {}: front matter: status: unknown variant `finished`",
+        "These do not read as records, so no rule can be checked on them:\n  {}: front matter: status: unknown variant `finished`",
         item_path(ID)
     );
-    refused(commit_all(&root, "Finish it"), &[&parse]);
+    refused("Finish it", &[&parse], None);
 
     edit(&root, &item_path(ID), "status: ready", "status: approved");
     let act = format!(
         "Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:\n  {}: status: ready to approved. Put back the status HEAD has; atelier status names the command for what comes next.\n",
         item_path(ID)
     );
-    refused(commit_all(&root, "Approve it"), &[&act]);
+    let status = format!(
+        "A status changes only as an act of the lifecycle changes it ({}: ready to approved)",
+        item_path(ID)
+    );
+    refused("Approve it", &[&act], Some(&status));
+
+    // A record that does not read, beside a rule broken, is not skipped.
+    edit(&root, &item_path(ID), "status: ready", "status: finished");
+    edit(&root, &item_path(OTHER), "blocked_by: []", "blocked_by: [demo-zz99]");
+    refused("Both", &[&parse, "Rule: every record is valid."], None);
 
     // A planner's own edit, a status no command would refuse included.
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
@@ -241,6 +287,33 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
     // A record deleted leaves nothing to judge.
     git(&root, &["rm", "-rq", &format!(".atelier/items/{OTHER}")]);
     let run = git_as(&root, &["commit", "-qm", "Forget it"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+}
+
+#[test]
+fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    let run = atelier(&root, "t1", &["new", "--mission", "Greet"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let id = run.stdout.split_whitespace().nth(3).unwrap().trim_end_matches(',');
+    let path = format!(".atelier/missions/{id}/mission.md");
+    assert_eq!(commit_all(&root, "Plan").code, 0);
+    install_hooks(&root);
+    // An item's `close` goes from draft to done; no act on a mission does.
+    edit(&root, &path, "status: draft", "status: done");
+    let run = commit_all(&root, "Close it");
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr.contains(&format!("  {path}: status: draft to done.")),
+        "{}",
+        run.stderr
+    );
+    git(&root, &["reset", "-q", "--hard"]);
+    edit(&root, &path, "status: draft", "status: ready");
+    assert_eq!(commit_all(&root, "Ready").code, 0);
+    edit(&root, &path, "status: ready", "status: done");
+    let run = commit_all(&root, "Close it");
     assert_eq!(run.code, 0, "{}", run.stderr);
 }
 
@@ -492,7 +565,7 @@ fn a_push_from_a_checkout_whose_config_does_not_read_is_refused_with_the_way_out
     assert!(
         run.stderr.starts_with(
             "Atelier's pre-push hook refused this push; nothing was pushed.\n\
-             These do not read as records. That is not a rule, and it cannot be skipped:\n  \
+             These do not read as records, so no rule can be checked on them:\n  \
              .atelier/config.toml: line 4: unknown field `base`"
         ) && run
             .stderr
@@ -619,7 +692,7 @@ fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     assert_ne!(run.code, 0);
     assert!(
         run.stderr.contains(&format!(
-            "These do not read as records. That is not a rule, and it cannot be skipped:\n  {commit}:{}: front matter: ",
+            "These do not read as records, so no rule can be checked on them:\n  {commit}:{}: front matter: ",
             item_path(ID)
         )) && run.stderr.contains(
             "Fix each record in the commit that broke it: git commit --amend for the last commit, git rebase -i for an earlier one. A later commit that fixes it leaves the broken one in the push.\n"

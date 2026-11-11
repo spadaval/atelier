@@ -3,7 +3,7 @@
 //! branch. `lead` writes planning, so it reads and writes its mission in the
 //! checkout of the base.
 
-use crate::commands::{annotate, annotate_all, facts, Outcome};
+use crate::commands::{annotate, annotate_all, facts, gate, Outcome};
 use crate::repo::{mission_path, Repo};
 use crate::{plan, view_output};
 use anyhow::{anyhow, Result};
@@ -106,7 +106,10 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         let Refusal::From { status, .. } = refusal else {
             unreachable!("lead has no conditions: {refusal:?}")
         };
-        return Ok(Outcome::Refused(view_output::lead_not_ready(id, status)));
+        let text = view_output::lead_not_ready(id, status);
+        if let Some(refused) = gate(Act::Lead, id, &[refusal], text) {
+            return Ok(refused);
+        }
     }
     let before = dir.mission.lead.replace(repo.caller.clone());
     // Its items as `start` will find them, so what can start now can.
