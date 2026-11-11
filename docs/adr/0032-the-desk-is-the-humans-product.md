@@ -61,8 +61,9 @@ records.
 5. **The Desk acts only through `atelier`.** It offers the acts that are
    the human's, such as `ready` and `decide`. It performs each by running
    the `atelier` command under the human's name, in the checkout where that
-   command is written to run, and the command writes and commits as it does
-   for anyone. The Desk writes no record itself and holds no decision the
+   command is written to run. Where a command leaves the commit to its
+   caller, the Desk makes exactly the commit the command asks for and no
+   other. The Desk writes no record itself and holds no decision the
    records lack. It is not a record editor.
 
 6. **One host-wide SQLite database for what Git never held.** ADR 0030's

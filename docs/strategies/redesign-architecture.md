@@ -1064,8 +1064,9 @@ old tool:
   and those commits changed only the wording of the review brief, so the
   0.4.0 release is tried first. A 0.4.1 is cut only if 0.4.0 fails that
   test.
-- The site is taken out, as above: the new workspace builds and serves
-  none.
+- The tracker's site is taken out, as above: the `atelier` binary built
+  from the new workspace has no site and no `serve`. The Desk's crate and
+  app, where they have been added, stay.
 - The switch: `crates/`, the old workspace with all its tests, and
   `scripts/smoke-repos.sh` are deleted, and the tracked contents of `next/`
   move to the repository root, so the root workspace, the release build and

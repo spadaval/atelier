@@ -48,9 +48,9 @@ In order of importance:
 - **Sessions, not queues.** Planning, gardening, grooming and spikes are
   done with an agent in conversation. The Desk starts that session and shows
   its state. It does not leave a list to be answered later.
-- **Everything decided becomes a record.** A go, an answer or a note is
-  written by an `atelier` command under the human's identity and committed.
-  The Desk holds no decision the tracker does not.
+- **Everything decided becomes a record.** A go or an answer is written by
+  an `atelier` command under the human's name. The Desk holds no decision
+  the tracker does not.
 - **Derived figures say where they come from.** A number estimated from git
   or from T3 is marked as one.
 - **Agents never need it.** No agent reads the Desk, and no check or merge
