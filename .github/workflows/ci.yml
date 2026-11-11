@@ -14,11 +14,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # setup-rust-toolchain sets RUST_BACKTRACE, which appends backtraces to the
-# error output that tests compare exactly. ATELIER_NO_UPDATE_CHECK keeps the
-# fallback release's `check` off the network.
+# error output that tests compare exactly.
 env:
   RUST_BACKTRACE: 0
-  ATELIER_NO_UPDATE_CHECK: 1
 
 jobs:
   # Decides which jobs the change needs (scripts/ci-jobs.sh), and checks
@@ -69,31 +67,8 @@ jobs:
           git config --global user.email "ci@atelier.invalid"
       - run: cargo fmt -- --check
       - run: cargo build --locked --all-targets
-      # Until the cutover converts this repository's records, they are in
-      # the old layout, which only the old tool reads: the fallback release
-      # v0.4.0 checks them (atelier-mlwx), fetched for the runner's target
-      # and checked against the SHA-256 written here. Once .atelier/issues/
-      # is gone, the tree's own binary checks them. The fallback branch is
-      # removed after the cutover (atelier-2mlh).
       - name: atelier check
-        run: |
-          if [ -d .atelier/issues ]; then
-            case $(uname -m) in
-              x86_64) target=x86_64-unknown-linux-gnu sha=d13f5e4df5c3382715a1247f1ede175d5e4361309e63a5a36e96ab55b1ce20d7 ;;
-              aarch64) target=aarch64-unknown-linux-gnu sha=a9d7227004a7ced3427fbfdeb53888a0c98f507796f289e9dee423fb5b1432c2 ;;
-              *) echo "No v0.4.0 archive for $(uname -m)"; exit 1 ;;
-            esac
-            dir=$(mktemp -d)
-            curl --proto '=https' --tlsv1.2 -fLsS -o "$dir/atelier.tar.xz" \
-              "https://github.com/spadaval/atelier/releases/download/v0.4.0/atelier-cli-$target.tar.xz"
-            echo "$sha  $dir/atelier.tar.xz" | sha256sum -c -
-            tar -xJf "$dir/atelier.tar.xz" -C "$dir"
-            echo "Records in the old layout: checking them with $("$dir/atelier-cli-$target/atelier" --version)"
-            "$dir/atelier-cli-$target/atelier" check
-          else
-            echo "Records in the new layout: checking them with $(target/debug/atelier --version)"
-            target/debug/atelier check
-          fi
+        run: target/debug/atelier check
       - run: cargo nextest run --locked
 
   # The Desk's app (desk/): typecheck, Vitest, the build, then Playwright on
