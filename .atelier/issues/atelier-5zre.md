@@ -300,7 +300,7 @@ Each line gives the fate this sort proposes. The 72 protected records come first
 - atelier-w4ef: left for Sumeet; proposed as is. Its need, `check` applying one rule set to placeholder sections, survives, and atelier-k55o, kept as it is, does not cover `check`.
 - atelier-2yef: left for Sumeet; proposed drop (b). Where a declined started item's record goes is settled by the specification: dropping is final and happens on the base, and every command reads the base's record first (product specification, Lifecycle: When a thread dies).
 - atelier-pg2b: left for Sumeet; proposed drop. Already done: atelier-nz6a made install.md give the install lines (atelier-8i86, G14), and the skill no longer lives in spadaval/.agents; none of (a) to (c) names this case.
-- atelier-c6g2: left for Sumeet; proposed drop (a). It teaches the skill `work mission --since` and the old references/atelier.md Administration section, and its blockers atelier-avx0 and atelier-fb1i were dropped in this sort.
+- atelier-c6g2: left for Sumeet; proposed drop (a). It teaches the skill `work mission --since` and the old references/atelier.md Administration section, both gone in the new tool; its blockers atelier-avx0 and atelier-fb1i stay open as they are.
 - atelier-5lv9: left for Sumeet; proposed drop (a). It changes the light-path review brief, and the What is removed table removes the light path.
 - atelier-lr08: left for Sumeet; proposed drop (a). It speeds up the `debrief` command, which the What is removed table removes.
 - atelier-3km4: left for Sumeet; proposed drop (a). A taste read of the old site's debrief page, which the What is removed table removes; the Desk (mission atelier-z4cr) gets its own.
@@ -402,3 +402,5 @@ The orchestrator then took both judgments out of the item (decision notes of 202
 
 - Proposals for the 72 protected records, the three unprotected missions and atelier-w0su are Sumeet's to decide.
 - Master moved after fc0fe395; records created there since are not in this list.
+
+Round 10 (GPT-6.1 Sol, at fcad5e44) recorded one `fix_now` finding, atelier-oxvm: the proposal for atelier-c6g2 still said its blockers atelier-avx0 and atelier-fb1i were dropped, though both are open as they are. Fixed in this record's Report. Round 10 did not approve and its finding is not a class (a) drop, so under the orchestrator's decision the fix goes back unreviewed.
