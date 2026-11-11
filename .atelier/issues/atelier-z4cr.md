@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Build the Desk: the human's place to plan missions and read results, on the redesigned records"
-updated_at: "2026-11-11T06:21:55.296312034+00:00"
+updated_at: "2026-11-11T06:27:22.810724282+00:00"
 ---
 
 ## Outcome
@@ -33,3 +33,4 @@ Planned on 2026-11-11 from Sumeet's direction in the design discussion over the 
 - 2026-11-11 [note] 2026-11-11 orchestrator: atelier-psjw merged (pull request #128). Planning review by GPT-6 Astra approved atelier-l5ai (atelier-ecc9), atelier-uwxy (atelier-agar), the mission's decision note (atelier-6y75) and, after one fix (finding atelier-byht), atelier-94pv (atelier-u83k). The redesign's planner answered on the tracker side: (a) merges into next/, the root Cargo.toml and the CI and release workflows are allowed until atelier-u1ko is started, then frozen until atelier-wd1i has run, with work continuing on branches; (b) atelier-uwxy must not change what the release ships or give atelier-app the server's dependencies, now a Done when line there; (c) 'atelier log' belongs to mission atelier-295u, item atelier-8b0a, after the cutover.
 - 2026-11-11 [decision] 2026-11-11 orchestrator, after atelier-l5ai (pull request #130) and atelier-uwxy (pull request #131) merged: atelier-e05n and atelier-h3hl are planned as the server's halves of threads and acts, and a new item atelier-l2aj carries their pages. atelier-h3hl no longer waits on atelier-94pv and now follows atelier-e05n. The browser's end-to-end proof of saying go moves to the validation item atelier-va99.
   Reason: The Rust half can merge into next/ before the switch freezes it, while the app (atelier-94pv) is built in parallel; atelier-e05n and atelier-h3hl edit the same server files, so they run in order. The desk CI job builds no Rust, so a browser test against a real server belongs with the installed service.
+- 2026-11-11 [note] 2026-11-11 orchestrator: planning review by GPT-6 Astra approved atelier-h3hl (atelier-88vm), atelier-l2aj (atelier-63fq) and, after two fixes (findings atelier-69ua and atelier-1p2u), atelier-e05n (atelier-kvnj) and the mission's note (atelier-k1s7). atelier-94pv is being implemented; atelier-e05n starts now beside it.

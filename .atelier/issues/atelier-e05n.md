@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Read T3 Code's threads in the Desk's server and tie them to missions and items by the identities in the records"
-updated_at: "2026-11-11T06:25:27.322868+00:00"
+updated_at: "2026-11-11T06:27:21.693223533+00:00"
 ---
 
 ## Goal

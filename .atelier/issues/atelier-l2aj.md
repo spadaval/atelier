@@ -23,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Show agents on the Desk's pages and add Say go, the answer form and Start a planning session"
-updated_at: "2026-11-11T06:21:51.905925041+00:00"
+updated_at: "2026-11-11T06:27:22.482158942+00:00"
 ---
 
 ## Goal

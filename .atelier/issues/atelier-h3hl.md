@@ -20,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Perform ready and decide from the Desk's server through the core's functions, and start a planning session in T3 Code"
-updated_at: "2026-11-11T06:21:52.568518942+00:00"
+updated_at: "2026-11-11T06:27:22.151590626+00:00"
 ---
 
 ## Goal
