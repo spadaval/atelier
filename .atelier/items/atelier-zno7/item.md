@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-zno7
 title: Re-count agents' Atelier command overhead a week after the CLI fumble fixes ship
-status: ready
+status: dropped
 mission: null
 labels:
 - review
@@ -35,3 +35,7 @@ Check that the mission's fixes cut the turns agents spend on Atelier in real use
 ## Context
 
 The 2026-11-09 audit's extractor parsed Claude Code transcripts under `~/.claude/projects` and Codex rollouts under `~/.codex/sessions`; the mission's Background describes the method and cost model.
+
+## Report
+
+Dropped: Its five fixes were dropped as moot after the 0.5 rewrite; the scorecard rerun (atelier-pwhn) is the recount.
