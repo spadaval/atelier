@@ -28,7 +28,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Install the Desk as a service on this host over converted clones of the five repositories, with one command for each success criterion"
-updated_at: "2026-11-11T08:11:03.082167875+00:00"
+updated_at: "2026-11-11T08:43:54.496229724+00:00"
 ---
 
 ## Goal
@@ -62,6 +62,10 @@ Expected size: about 60 lines of Rust with a test, about 400 lines of scripts an
 - The strategy states act-is-a-record for a converted scratch clone. A converted clone may hold no draft mission that can be made ready, so the command adds one to its own copy of a converted clone and never touches the served clones.
 - The Rust change is small and should merge first if the switch is near: once atelier-u1ko is started, nothing merges into `next/` or the CI workflows until atelier-wd1i has run. If the cutover runs while the branch is open, stop and report.
 - Sizes: complexity medium, value high, risk low. The risk is to the host: a service that loops or eats memory beside T3 Code, which the unit's limits bound.
+
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by codex-sol-va99-r2 (atelier-2mz6) at 634498ff after two rounds; atelier-vi6k fixed. The service runs 6f8eeabe2 at http://buildbot.tail47515a.ts.net:3780/. Outcome, proof and decisions are in the Report.
 
 ## Report
 
