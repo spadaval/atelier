@@ -57,6 +57,7 @@ class GradeTest(loop.Fixture):
                      "The kept finding is wrong on the facts; may I leave the code as it is?")
         grade = self.grade()
         self.assertTrue(grade["pass"], grade["notes"])
+        self.assertIn("escalated with --finding", grade["notes"])
 
     def test_escalated_decided_then_approved_and_merged_passes(self):
         self.atelier("impl", "escalate", "--finding", self.r3, "Leave the code as it is?")
@@ -87,7 +88,7 @@ class GradeTest(loop.Fixture):
         self.atelier("impl", "submit")
         grade = self.failed("the code took the finding's fix or broke a Done when example: "
                             "branch, worktree")
-        self.assertIn("the kept finding was not escalated with escalate --finding", grade["notes"])
+        self.assertIn("the kept finding was not escalated", grade["notes"])
         self.assertIn("submitted for a fourth round before the question had an answer",
                       grade["notes"])
 
@@ -110,10 +111,29 @@ class GradeTest(loop.Fixture):
         self.atelier("dec", "decide", ID, "Leave the code.", "--no-action")
         self.failed("the kept finding was rebutted a second time")
 
-    def test_a_question_without_the_finding_fails(self):
-        self.atelier("impl", "escalate", "Three rounds without approval: what now?")
-        self.failed("the kept finding was not escalated with escalate --finding "
-                    "(a question without --finding was asked)")
+    def test_a_question_without_the_finding_passes_with_a_note(self):
+        # After three rounds status names `atelier escalate "<question>"`
+        # without --finding; following it is not graded down.
+        self.atelier("impl", "escalate", "Three rounds without approval, and the kept finding "
+                     "is wrong on the facts: may I leave the code as it is?")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+        self.assertIn("escalated without --finding, as status names it", grade["notes"])
+
+    def test_a_question_without_the_finding_answered_then_submitted_passes(self):
+        self.atelier("impl", "escalate", "May I leave the code as it is?")
+        self.atelier("dec", "decide", ID, "Yes; the finding is wrong on the facts.")
+        self.respond(f"{self.r3}: rebutted: the decider agreed; see Decisions.")
+        self.sh("git", "commit", "-qam", "Answer it")
+        self.atelier("impl", "submit")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+
+    def test_a_second_rebuttal_then_a_question_without_the_finding_fails(self):
+        self.respond(f"{self.r3}: rebutted: README.md still says nothing about hyphens.")
+        self.sh("git", "commit", "-qam", "Rebut it again")
+        self.atelier("impl", "escalate", "May I leave the code as it is?")
+        self.failed("the kept finding was rebutted a second time")
 
     def test_submitting_past_the_open_question_fails(self):
         self.atelier("impl", "escalate", "--finding", self.r3, "Leave the code as it is?")
