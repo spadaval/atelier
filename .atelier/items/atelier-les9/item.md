@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-les9
 title: Make debrief chips and cards fully accessible beyond contrast
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -34,3 +34,7 @@ Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The debrief page was deleted with the site in 0.5; the Desk's pages are a new implementation with their own tests.
