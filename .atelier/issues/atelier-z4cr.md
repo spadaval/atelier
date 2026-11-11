@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Build the Desk: the human's place to plan missions and read results, on the redesigned records"
-updated_at: "2026-11-11T07:01:54.134769024+00:00"
+updated_at: "2026-11-11T08:11:02.426298751+00:00"
 ---
 
 ## Outcome
@@ -35,3 +35,4 @@ Planned on 2026-11-11 from Sumeet's direction in the design discussion over the 
   Reason: The Rust half can merge into next/ before the switch freezes it, while the app (atelier-94pv) is built in parallel; atelier-e05n and atelier-h3hl edit the same server files, so they run in order. The desk CI job builds no Rust, so a browser test against a real server belongs with the installed service.
 - 2026-11-11 [note] 2026-11-11 orchestrator: planning review by GPT-6 Astra approved atelier-h3hl (atelier-88vm), atelier-l2aj (atelier-63fq) and, after two fixes (findings atelier-69ua and atelier-1p2u), atelier-e05n (atelier-kvnj) and the mission's note (atelier-k1s7). atelier-94pv is being implemented; atelier-e05n starts now beside it.
 - 2026-11-11 [note] 2026-11-11 orchestrator: merged atelier-e05n (pull request #133: the server reads T3 Code's threads, proved against the running T3 Code) and atelier-94pv (pull request #134: the app in desk/ with the repositories, mission, item and inbox pages, and a desk CI job). On the converted clone the mission page of atelier-z4cr shows the title, status and counts 'atelier show' prints, and the inbox the five items of 'atelier list --needs-human'. atelier-h3hl (acts and sessions in the server) is being implemented. One deferred finding from atelier-e05n, atelier-mg2j (SIGTERM does not revoke the T3 token), will be taken into atelier-va99, since a service is stopped with SIGTERM.
+- 2026-11-11 [note] 2026-11-11 orchestrator: merged atelier-h3hl (pull request #136: POST /api/act performs ready and decide through atelier-app's functions, and POST /api/sessions starts a planning thread, proved once against the running T3 Code in a scratch project that was then removed) and atelier-l2aj (pull request #138: agents on the mission and item pages, a live-threads page, Say go, the answer form and Start a planning session). CI caught one real defect before the second merge: a poll that arrived during a read could show stale data for 30 seconds; fixed and re-reviewed. Observations from using the acts, for Sumeet and the tracker's planner, not acted on here: a refusal's text and next step speak to an agent at a terminal ('git switch ... here'); 'rules' often repeats 'text'; and 'ready' accepts a mission whose plan has no review, saying so only in its text. atelier-va99 (install and the two criterion commands) starts now.
