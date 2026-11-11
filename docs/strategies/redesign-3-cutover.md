@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: amended at Sumeet's direction: the site is deleted with the old workspace and not rebuilt; the Desk (atelier-z4cr, ADR 0032) replaces it outside this mission"
+last_changed: "2026-11-11: amended after mission 2 closed: what it showed is listed, the orchestrator plans each step at its boundary, and the switch waits for Sumeet to name the time"
 ---
 
 # Why
@@ -64,14 +64,20 @@ June system again: 31% of the Rust ever written here survives.
   to keep it.
 - **Independent review and the three exits of a fix-now finding are fixed.**
   They are Sumeet's, and the evals do not put them up for removal.
-- **The window is short.** Once the switch merges, the tree's binary cannot
-  read this repository's records. The cutover runs straight after it.
+- **The window is short, and Sumeet opens it.** Once the switch merges, the
+  tree's binary cannot read this repository's records, so the cutover runs
+  straight after it. Everything up to the switch's approval is prepared
+  without him. The switch merges only once he has named the time.
 - **It waits on the baseline's frozen inputs, not on the baseline report.**
 
 # Design
 
-Nine steps, all in the backlog until mission 2's evidence is in. The
-protocol is the Transition section of the
+Nine steps. Each waits in the backlog with a preliminary goal and is planned
+in full at its boundary, with one planning review by a fresh agent from
+another lab before its work starts. Steps F and G get a second planning
+reviewer, because they are the two that cannot be quietly undone. Steps A, C
+and D depend on nothing in this mission and start together. The protocol is
+the Transition section of the
 [architecture specification](redesign-architecture.md#transition).
 
 | Step | Does |
@@ -88,6 +94,50 @@ protocol is the Transition section of the
 
 The skill's size is reported before and after as an indication. The current
 agent-facing text is 1,219 lines.
+
+## What mission 2 showed
+
+Mission 2 (atelier-fcb7) closed on 2026-11-11 with both criteria proved. Its
+dated notes hold the detail. The steps below plan against these facts:
+
+- **Step A.** Fresh agents followed `status` with no skill at all, so the
+  skill starts from nothing and adds only what a scenario shows is missing.
+  The binary leaves three Review rules to the skill: a rebuttal's one try,
+  escalation after three rounds, and a fresh reviewer for a rebuttal. A
+  harness's own subagent has its parent's thread identity and is refused as
+  a reviewer, so the skill says to start reviewers and deciders as threads.
+  Two items change the live skill in ways the new one must also meet:
+  atelier-8ep4 (each role gets only its own instructions) and atelier-y0qe
+  (which roles work with the human). Step A's plan says, for each, whether
+  the new skill starts from its merged text or absorbs it.
+- **Step B.** No fresh agent has met a rebuttal, `escalate`, `decide`, a
+  third round, or a refusal that offers `ATELIER_SKIP` (atelier-42b4). Those
+  are where a skill is most likely to matter, so the ported scenarios cover
+  them.
+- **Step C.** 58 ready items across the five repositories belong to a draft
+  mission and cannot start under the new tool. 93 ready items have a Done
+  when with no checkbox, which the new tool counts as ticked (atelier-t6o6,
+  point 4).
+- **Step F.** The pre-push hook refuses the conversion push unless
+  `ATELIER_SKIP` is set or the push comes before `setup`. No product
+  repository configures a forge, so after conversion nothing pushes their
+  base unless the conversion writes a `[forge]` section or their new
+  `AGENTS.md` says how. astromech's CI installs Atelier and runs `doctor`
+  and `land`, which no longer exist. 11 tracked files outside `.atelier/`
+  name a moved strategy file's old path; the converter lists them. One
+  repository's checkout sits on a feature branch, so the runbook clones and
+  converts on the base branch. `setup codex` writes a `SessionStart` hook
+  that Codex runs only after the user trusts it.
+- **Step G.** The proof of each real conversion is a `--verify` pass and the
+  count of relative links that still resolve. The new binary has not yet
+  talked to real GitHub, been built for release, or run its Claude Code
+  hooks in a live session; step F's plan says where each first happens
+  before the cutover depends on it.
+
+Six points mission 2 left to Sumeet are in atelier-t6o6. Steps A to E do not
+wait for them: the skill carries the Review section's rules as they stand.
+Points 1, 4 and 5 are settled before step F's plan is reviewed, since the
+converter, the skill and the runbook each read one of them.
 
 # Derisking
 
@@ -115,11 +165,16 @@ wrong in: text can be added back when a real failure shows the need.
 
 # Authority
 
-The orchestrator may choose the cutover time, once no work is in flight in
-any of the five repositories and no other thread is running in them. It may
-run the runbook, which pushes the conversion commits directly. It may cut any
-skill procedure no scenario supports, drop the backlog items the sort finds
+The orchestrator plans each step at its boundary. It may cut any skill
+procedure no scenario supports, drop the backlog items the sort finds
 obsolete, and fix what first use breaks inside the specifications.
+
+Sumeet names the time of the cutover. The orchestrator takes the switch as
+far as its approval and stops there, with everything the cutover will run
+reviewed and the rollback tried. Once Sumeet has named the time, and no work
+is in flight in any of the five repositories and no other thread is running
+in them, it merges the switch and runs the runbook, which pushes the
+conversion commits directly.
 
 It may not push anything else directly, weaken the independent review rule
 or the three exits of a fix-now finding, change the specifications' Words,
