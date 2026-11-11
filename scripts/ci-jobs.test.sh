@@ -64,6 +64,8 @@ expect false false true next-source next/crates/atelier-core/src/lib.rs
 expect false false true next-lockfile next/Cargo.lock
 expect false false true next-markdown next/crates/atelier-core/README.md
 expect true true true old-and-next crates/a/src/lib.rs next/Cargo.toml
+expect false false false desk-app desk/src/pages/Mission.tsx desk/package.json
+expect false false true desk-api-types desk/src/api/MissionPage.ts
 expect true true true toolchain rust-toolchain.toml
 expect true true true cargo-config .cargo/config.toml
 
