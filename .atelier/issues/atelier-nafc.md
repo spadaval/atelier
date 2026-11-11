@@ -4,6 +4,9 @@ id: "atelier-nafc"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-nafc
 priority: "P1"
 relationships:
   blocks: []
@@ -30,9 +33,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Rehearse the converter and the new binary on all five repositories, with one item taken to done in two"
-updated_at: "2026-11-10T23:55:48.238353677+00:00"
+updated_at: "2026-11-10T23:55:48.959628027+00:00"
 ---
 
 ## Goal
