@@ -12,7 +12,7 @@ import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";
 import { Findings, ReviewList } from "../components/Reviews";
 import { Card, Counts, Empty, ErrorBanner, Markdown, ScopeBar, Skeleton, StatusGlyph, Tabs, useTab } from "../components/ui";
-import { api, to, useData } from "../lib/api";
+import { api, to, useData, type Loaded } from "../lib/api";
 import { findingFates, fixedInReview } from "../lib/findings";
 import { groupByStatus, waitingOnYou } from "../lib/group";
 import { fileName, recordPath, splitFrontMatter } from "../lib/links";
@@ -42,7 +42,8 @@ function MissionCard({ repo, mission, current }: { repo: string; mission: Missio
   );
 }
 
-function Rail({ repo, body, selected }: { repo: string; body: MissionsResponse | undefined; selected?: string }) {
+function Rail({ repo, loaded, selected }: { repo: string; loaded: Loaded<MissionsResponse>; selected?: string }) {
+  const body = loaded.data;
   const missions = body?.missions ?? [];
   const going = missions.filter((m) => m.in_progress);
   const ready = missions.filter((m) => !m.in_progress && m.status === "ready");
@@ -54,7 +55,8 @@ function Rail({ repo, body, selected }: { repo: string; body: MissionsResponse |
         <b>{repo}</b>
         {body ? <span className="muted mono">{shortCommit(body.commit)}</span> : null}
       </div>
-      {!body ? <Skeleton rows={5} /> : null}
+      <ErrorBanner loaded={loaded} />
+      {!body && loaded.loading ? <Skeleton rows={5} /> : null}
       {going.length > 0 ? <div className="pane-label">In progress</div> : null}
       {going.map((m) => (
         <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />
@@ -455,13 +457,12 @@ export function MissionPageView() {
   const selected = id ?? (body ? currentMission(body.missions) : undefined);
   return (
     <div className={`work${id ? " picked" : ""}${selected ? "" : " no-side"}`}>
-      <Rail repo={repo} body={body} selected={selected} />
+      <Rail repo={repo} loaded={loaded} selected={selected} />
       {selected ? (
         <MissionView key={selected} repo={repo} id={selected} />
       ) : (
         <div className="pane center-pane">
           <Crumbs trail={[{ label: repo }]} />
-          <ErrorBanner loaded={loaded} />
           {body ? (
             <article className="paper">
               <div className="paper-body">

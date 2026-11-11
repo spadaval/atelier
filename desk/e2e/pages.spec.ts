@@ -179,6 +179,14 @@ test("the inbox lists every repository's needs-human items by mission, its draft
   await expectNoActs(page);
 });
 
+test("a repository that cannot be read says so in the rail, where a phone shows it", async ({ page }) => {
+  await load(page, "/r/broken");
+  const rail = page.getByRole("navigation", { name: "Missions of broken" });
+  await expect(rail.getByRole("alert")).toContainText("No repository broken");
+  await expect(rail.getByRole("alert")).toBeVisible();
+  await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
+});
+
 test("an unknown mission says so", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-zzzz");
   await expect(page.getByRole("alert")).toContainText("No mission atelier-zzzz");
