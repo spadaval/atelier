@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-w4j2
 title: Stop atelier check reporting other record kinds as corrupt records
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - check
@@ -35,3 +35,7 @@ created_at: 2026-10-17T01:10:57.972018696Z
 ## Context
 
 Entry point: crates/atelier-cli/src/main.rs:920-923 → commands::issue::lint (crates/atelier-cli/src/commands/issue.rs:1026) → atelier_app::lint.
+
+## Report
+
+Dropped: `check <id>`, review IDs and evidence records were removed in 0.5.
