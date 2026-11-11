@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-avx0
 title: Add a since-commit digest of a mission for orchestrator wake-ups
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - orientation
@@ -33,3 +33,7 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 Whether status also prints a short digest at session start, and since which commit (the upstream, or the last commit the session saw); `git log` or `git diff --stat` since the commit may be enough there.
+
+## Report
+
+Dropped: `work mission --since` names a removed view. `atelier log <mission> --since <time>` (atelier-8b0a) now prints what changed since a point.
