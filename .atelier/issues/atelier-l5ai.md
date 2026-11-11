@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Add the six small views the Desk needs to atelier-app: read-only opening from commits, the mission and item views, documents, approval time and plan changes"
-updated_at: "2026-11-11T05:28:35.802609354+00:00"
+updated_at: "2026-11-11T05:39:07.732202217+00:00"
 ---
 
 ## Goal
@@ -56,6 +56,10 @@ Expected size: about 250 lines of code moved or added and about 200 of tests, in
 - The switch (atelier-u1ko) moves `next/crates/` to `crates/`. Before starting, check that neither atelier-u1ko nor atelier-wd1i is in progress. If the switch merges while this branch is open, bring master in with `atelier merge --sync`.
 - Sizes: complexity low, value high, risk low. The risk is a moved function that changes a command's output; the unchanged CLI tests guard it.
 
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by sol-l5ai-r1 (atelier-d65y) at 36bbd029 in one round with no findings; see the Report. Not merged: the orchestrator merges.
+
 ## Report
 
 All eight Done when lines hold. The new tests are in `next/crates/atelier-app/tests/views.rs` and one in `next/crates/atelier-records/tests/at_commit.rs`; `cargo nextest run -j 4` in `next/` passes 253 of 253 (247 before), with no existing test edited.
@@ -76,4 +80,3 @@ All eight Done when lines hold. The new tests are in `next/crates/atelier-app/te
 ### Surprises
 
 - `config.toml` at `HEAD` is what the Done when asks for, but a detached checkout far behind the base, like this host's main checkout, still gives that old commit's config. The document now says the server opens `git::checkout_of(root, base)` where there is one.
-
