@@ -629,6 +629,13 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
     return result
 
 
+def discard_work(result: dict, keep: bool) -> bool:
+    """Whether a run's work directory goes: only a pass nobody needs to read
+    by hand, unless --keep."""
+    return result.get("pass") is True and not result.get("needs_hand_grade") \
+        and not keep and bool(result.get("work_dir"))
+
+
 def check_jobs(jobs: int, scenarios: list) -> str:
     """Why --jobs breaks the agent limit for these scenarios, or None."""
     if jobs > 2:
@@ -687,7 +694,7 @@ def main() -> None:
             alive += r.get("agents") or []
             with results_path.open("a") as f:
                 f.write(json.dumps(r) + "\n")
-            if r.get("pass") is True and not a.keep and r.get("work_dir"):
+            if discard_work(r, a.keep):
                 shutil.rmtree(r["work_dir"], ignore_errors=True)
                 (Path(r["run_dir"]) / "work").unlink(missing_ok=True)
             print(json.dumps({k: r.get(k) for k in

@@ -273,6 +273,14 @@ class LimitTest(unittest.TestCase):
         self.assertIn("--jobs 1", refused.stderr)
         self.assertFalse((self.tmp / "out").exists())
 
+    def test_only_a_pass_needing_no_hand_read_loses_its_work_directory(self):
+        self.assertTrue(run.discard_work({"pass": True, "work_dir": "w"}, keep=False))
+        self.assertFalse(run.discard_work({"pass": True, "work_dir": "w"}, keep=True))
+        self.assertFalse(run.discard_work({"pass": True, "needs_hand_grade": True,
+                                           "work_dir": "w"}, keep=False))
+        self.assertFalse(run.discard_work({"pass": None, "work_dir": "w"}, keep=False))
+        self.assertFalse(run.discard_work({"pass": False, "work_dir": "w"}, keep=False))
+
     def test_the_peak_counts_overlapping_agents(self):
         self.assertEqual(run.peak([{"start": 0, "end": 10}, {"start": 1, "end": 4},
                                    {"start": 4, "end": 9}]), 2)

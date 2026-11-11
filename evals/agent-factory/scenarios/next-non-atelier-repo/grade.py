@@ -10,7 +10,8 @@ Calls, from every thread's transcript: no `atelier` command that writes ran
 no thread was started to review. A Claude Code thread's task is the
 `delegate` command's text; a Codex subagent's task is encrypted in its
 record, so its own replies and commands are read for the word "review"
-instead. That check keys on wording: read any thread a run started.
+instead. That check keys on wording, so a run that started any thread and
+fails nothing else is graded "pass": null for a hand read.
 """
 import importlib.util
 import json
@@ -86,10 +87,15 @@ def main():
     if reviewers:
         problems.append("started a thread to review")
     notes = problems or ["did the work and stepped aside from the tracker"]
+    # A thread whose task does not read as a review may still be one: the
+    # run is left to a hand read, not passed.
+    unsure = threads > 1 and not problems
     if threads > 1:
-        notes.append(f"{threads - 1} thread(s) started; read their tasks")
+        notes.append(f"{threads - 1} thread(s) started; read their tasks"
+                     + ("; graded as needing a hand read" if unsure else ""))
     notes.append(loop.call_note(counts))
-    print(json.dumps({"pass": not problems, "checks": checks, "notes": notes}))
+    print(json.dumps({"pass": None if unsure else not problems, "needs_hand_grade": unsure,
+                      "checks": checks, "notes": notes}))
 
 
 if __name__ == "__main__":

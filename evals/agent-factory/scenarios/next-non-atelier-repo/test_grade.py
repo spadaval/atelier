@@ -93,6 +93,15 @@ class GradeTest(unittest.TestCase):
         self.assertIn("a .atelier/ directory was created", grade["notes"])
         self.assertIn("ran an atelier command that writes", grade["notes"])
 
+    def test_any_other_thread_is_read_by_hand(self):
+        self.do_the_work()
+        (self.work / "threads").mkdir()
+        (self.work / "threads" / "thread-1.jsonl").write_text("")
+        self.calls('delegate "Check the last commit for bugs and report back."')
+        grade = self.grade()
+        self.assertIsNone(grade["pass"])
+        self.assertTrue(grade["needs_hand_grade"])
+
     def test_delegating_a_review_fails(self):
         self.do_the_work()
         self.calls('delegate "Review the last commit for bugs and report back."',

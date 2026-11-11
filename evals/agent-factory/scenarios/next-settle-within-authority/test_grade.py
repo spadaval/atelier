@@ -182,9 +182,9 @@ class GradeTest(loop.Fixture):
         self.build()
         self.lead_ran("cp /tmp/tally.py tally.py")
         grade = self.grade()
-        self.assertTrue(grade["pass"])
-        self.assertIn("the lead ran a shell command that may have written code: read it by hand",
-                      grade["notes"])
+        self.assertIsNone(grade["pass"])
+        self.assertIn("the lead ran a shell command that may have written code: read it by "
+                      "hand; graded as needing a hand read", grade["notes"])
 
     def test_asking_sam_fails(self):
         self.lead()
