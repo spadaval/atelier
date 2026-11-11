@@ -421,10 +421,16 @@ trial_preflight() {
     git -C "$S/projects/atelier" fetch -q "$TREE" "HEAD:refs/heads/atelier-u1ko"
     out=$("$pf" preflight 2>&1) || { say "preflight: FAILED: before the switch, with atelier-u1ko in progress, it stopped:"; echo "$out" | sed 's/^/    /'; exit 1; }
     say "preflight: before the switch, with only atelier-u1ko in progress and only this thread running: passes"
-    git -C "$S/projects/atelier" fetch -q "$REAL/atelier" "atelier-a4rs:refs/heads/atelier-a4rs"
-    if out=$("$pf" preflight 2>&1); then say "    FAILED: it passed with atelier-a4rs in progress"; exit 1; fi
-    say "    with atelier-a4rs also in progress: stops: $(grep -m1 'in progress' <<< "$out" | sed 's/^ *//')"
-    git -C "$S/projects/atelier" branch -q -D atelier-a4rs
+    # Another item started: a worktree on its branch, its record in progress.
+    local other
+    other=$(cd "$S/projects/atelier" && git grep -l '^status: "todo"$' master -- .atelier/issues | head -1 | sed 's|.*/||; s|\.md$||')
+    git -C "$S/projects/atelier" worktree add -q -b "$other" "$S/worktrees/other" master
+    sed -i 's/^status: "todo"$/status: "in_progress"/' "$S/worktrees/other/.atelier/issues/$other.md"
+    git -C "$S/worktrees/other" commit -qam "Start $other, in the sandbox"
+    if out=$("$pf" preflight 2>&1); then say "    FAILED: it passed with $other in progress"; exit 1; fi
+    say "    with another item also in progress: stops: $(grep -m1 'in progress:' <<< "$out" | sed 's/^ *//')"
+    git -C "$S/projects/atelier" worktree remove --force "$S/worktrees/other"
+    git -C "$S/projects/atelier" branch -q -D "$other"
     sqlite3 "$S/t3.sqlite" "INSERT INTO orchestration_v2_projection_threads VALUES ('other', 'pb', '{\"worktreePath\":null,\"lineage\":{}}'); INSERT INTO orchestration_v2_projection_runs VALUES ('r4', 'other', 'running');"
     if out=$("$pf" preflight 2>&1); then say "    FAILED: it passed with another thread running"; exit 1; fi
     say "    with another thread running in astromech: stops: $(grep -m1 'T3 thread' <<< "$out" | sed "s|$S|<sandbox>|; s/^ *//")"

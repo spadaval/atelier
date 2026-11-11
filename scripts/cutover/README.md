@@ -61,7 +61,7 @@ binary and answers CI from a double:
 | Step | Does | Sandbox | Here |
 | --- | --- | --- | --- |
 | 1. Preflight | The checks above; then records each base, each worktree's checkout, a copy of each hooks directory, the installed binary, the skill checkout's commit and the service | 2 s | the same |
-| 2. Convert atelier | In the master worktree: converter, `AGENTS.md`, `skills/agent-factory-next/` to `skills/agent-factory/`, `setup claude` and `setup codex`; commit; `--verify` and the tree's `atelier check` | 1 s | plus the release build, 13 s on this host (18 s without sccache) |
+| 2. Convert atelier | In the master worktree: converter, `AGENTS.md`, `skills/agent-factory-next` to `skills/agent-factory`, `setup claude` and `setup codex`; commit; `--verify` and the tree's `atelier check` | 1 s | plus the release build, 13 s on this host (18 s without sccache) |
 | 3. Install | `cargo install` from master, reusing that build; `atelier setup` for the Git hooks and each harness; the skill checkout to the conversion commit; `atelier-serve` stopped and disabled | 1 s | a few seconds |
 | 4. Push atelier's master | `ATELIER_SKIP="cutover conversion" git push` | 1 s | the same |
 | 5. Convert the product repositories | Each in a fresh clone of its base: converter, its `AGENTS.md` section, astromech's workflow, harness hooks; commit; `--verify` and `check`; push with the same skip | 5 s | the same |
