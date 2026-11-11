@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9dku
 title: Rewrite the gardener around the scorecard, three tiers of fix and a one-page report, and fold audit into it
-status: building
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
