@@ -15,7 +15,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Build the Desk: the human's place to plan missions and read results, on the redesigned records"
-updated_at: "2026-11-11T03:50:46.624347147+00:00"
+updated_at: "2026-11-11T05:23:07.664887389+00:00"
 ---
 
 ## Outcome
@@ -25,3 +25,8 @@ On this host, a service reached over the tailnet shows Atelier repositories on t
 ## Background
 
 Planned on 2026-11-11 from Sumeet's direction in the design discussion over the dashboard spike (branch `spike/mission-control`). ADR 0032 holds the decisions and `docs/product/desk.md` the product intent. It runs beside the redesign's cutover (atelier-qr5s) and neither waits on the other: the Desk is built, installed and validated against converted scratch clones. Pointing it at the live repositories is a loose end outside the mission, atelier-qxmr, which waits on this host's cutover (atelier-wd1i). The mission's area was swept by hand in place of a groom run: atelier-oci2 now deletes the old site, atelier-wpj2 is superseded by this mission, and a probe noted on atelier-aab1 on 2026-11-10 answers what this mission needs from T3 Code; that item stays open for its own Report and for whether thread links open on the phone. Health, the feed and the database are the next mission.
+
+## Notes
+
+- 2026-11-11 [decision] 2026-11-11 orchestrator, after atelier-1ie1 merged (pull request #129): docs/architecture/desk.md finds the core can feed every page and the Design stands. (1) The server item is split: atelier-l5ai adds six small views to atelier-app (M1, M2, M3, M4, M6, M7), and atelier-uwxy then builds the crate. (2) atelier-l5ai is blocked by atelier-psjw, which is approved with CI running on pull request #128. (3) The history of acts (M5, 'atelier log', specified and not built, sized high) is left out of this mission; the Activity tab and the plan-against-actual part of the old debrief wait for it. (4) atelier-desk serves the built app from a directory given at start and does not embed it.
+  Reason: (1) Two short branches cross the switch more safely than one long one. (2) On master the code that builds each item's record across branches is in atelier-cli, and atelier-psjw moves it, so the reading pages cannot avoid it. (3) Neither success criterion needs the history, the strategy puts the feed in the next mission, and the mission page shows what happened to an item from its Report, reviews and findings. (4) Building the next/ workspace must need no Node, which atelier-oci2 established.
