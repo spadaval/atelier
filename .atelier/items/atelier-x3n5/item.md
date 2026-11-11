@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-x3n5
 title: Take merged items and thread ties in the scorecard scripts from `atelier log`, and delete their own history walks and title matching
-status: building
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
