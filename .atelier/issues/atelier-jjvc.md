@@ -12,10 +12,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:54.118068030+00:00"
-status: "superseded"
+status: "backlog"
 title: "Remove the deprecated prime alias"
-updated_at: "2026-11-11T03:55:54.118068030+00:00"
+updated_at: "2026-10-17T03:34:53.055620141+00:00"
 ---
 
 ## Goal
@@ -33,7 +32,3 @@ ADR 0022 Decision 1; review finding atelier-1ia7 on atelier-bw0b.
 ## Notes
 
 - 2026-10-17 [note] 2026-10-16: atelier-sdb0 merged; this repository's .claude/settings.json now runs 'atelier status --hook claude'. astromech's committed hook (checked in /home/supadava/projects/astromech-atelier at dd28efe) still runs 'atelier prime --hook claude', so the plan condition is unmet; stays in backlog until astromech reruns 'atelier setup claude'.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new binary has no `prime` (`atelier --help`).

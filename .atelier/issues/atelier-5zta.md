@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:35.056771794+00:00"
-status: "superseded"
+status: "backlog"
 title: "Put each work section's count in its heading"
-updated_at: "2026-11-11T03:55:35.056771794+00:00"
+updated_at: "2026-10-17T01:10:57.987773924+00:00"
 ---
 
 ## Goal
@@ -35,7 +34,3 @@ updated_at: "2026-11-11T03:55:35.056771794+00:00"
 ## Context
 
 Reworks the same rendering as atelier-deyy.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It changes the section headings of the `work` views, which the What is removed table removes; the new `status` counts the ready items it does not list by what stops them.

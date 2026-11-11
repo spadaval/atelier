@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:31.557374025+00:00"
-status: "declined"
+status: "backlog"
 title: "Name bundle entries by client_ref in graph errors, and the issues in a cycle"
-updated_at: "2026-11-11T03:55:31.557374025+00:00"
+updated_at: "2026-11-07T21:03:30.990693392+00:00"
 ---
 
 ## Goal
@@ -41,7 +40,3 @@ Error: Bundle apply rejected the staged canonical state: workflow_mission_depend
 ## Context
 
 Error wrapping in crates/atelier-cli/src/commands/bundle.rs; ID allocation in apply_bundle_to_state. The record_index cycle message joined this item from atelier-t18i in decision atelier-mzpn.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It changes the errors of `bundle` staging and the old relationship graph's cycle message, and the What is removed table removes `bundle` and parents.

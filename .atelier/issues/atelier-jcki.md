@@ -16,31 +16,22 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:43.308915324+00:00"
-status: "superseded"
+status: "backlog"
 title: "Show the branch, review state and mission in issue show"
-updated_at: "2026-11-11T03:55:43.308915324+00:00"
+updated_at: "2026-11-07T21:03:28.142255576+00:00"
 ---
 
 ## Goal
 
-`atelier issue show` does not say whether an item is started, how its review stands or which mission it serves:
-- No owner branch: a started item's `workflow_branch` is not shown.
-- No review state: after several review events on one item, `issue show` mentions none of them.
-- No inherited mission: a child whose parent advances a mission shows no mission, although the inventory doc says "A linked parent includes its children in mission execution context".
-
-Agents run `review list`, `git branch` or the parent's show to fill the gaps.
+`atelier show <id>` prints an item's status, mission, blockers and each review's round and verdict, but not whether its approval still covers the branch: after an approving review and a later commit that changes `README.md`, `show` prints `Status: approved` and the old verdict with no stale mark, while `status` on the branch says the approval no longer covers `README.md` (review finding atelier-1d9u, reproduced on the new binary in a scratch clone). Agents then run `status` on the branch to learn what `show` should say.
 
 ## Done when
 
-- [ ] `issue show` prints, from any branch: `Branch: atelier-28mz`, or `Branch: owned by atelier-xxxx (atelier-xxxx)` for a child; `Mission: atelier-1w8c "…"`, directly or `via parent atelier-xxxx`; and `Review: ✓ approved atelier-hleo @c24af21`, `⚠ stale since <commit>`, `⚠ 1 open finding` or `none`.
-- [ ] Review state is judged as `merge --check` judges it: an approval is stale only when code changed since its commit (atelier-3jdm), and a finding is open when it is a `fix_now` finding with no approval recorded after it, or a `defer` or `no_action` finding with no decision (atelier-md0v).
-- [ ] CLI tests cover an owner with reviews, a child with an inherited mission, and an item with neither.
+- [ ] `show <id>` marks an approval that no longer covers the head as stale, naming the first path outside the item's directory that changed since it, judged as `merge` judges it.
+- [ ] CLI tests cover an approval that still covers the head and one made stale by a code change.
 
 ## Context
 
 Dropped in decision atelier-mzpn: the `(base master)` suffix, since the base is the policy's (atelier-md0v), and a Proof line, since receipts gate nothing (atelier-md0v). Builds on the brief `issue show` (atelier-7u4o, done). Review freshness and findings logic exists for `merge --check` (`atelier_app::review_gate`).
 
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `show <id>` prints the item's status, mission, blockers and each review's round and verdict (product specification, Commands: `show`; run on atelier-1oel in a scratch clone), and the branch is named for the item.
+Rewritten for the new tool in the cutover sort (atelier-5zre): `issue show` became `show`, which already prints the mission and each review; the branch is named for the item, and parents are gone, so only the approval's freshness remains.

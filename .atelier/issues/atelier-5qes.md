@@ -19,10 +19,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:34.736331952+00:00"
-status: "superseded"
+status: "backlog"
 title: "Order work-view rows with the shared blocker-first order"
-updated_at: "2026-11-11T03:55:34.736331952+00:00"
+updated_at: "2026-11-05T06:07:19.198719+00:00"
 ---
 
 ## Goal
@@ -43,7 +42,3 @@ updated_at: "2026-11-11T03:55:34.736331952+00:00"
 ## Scope
 
 Ordering only; no change to which rows are shown.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It orders the rows of the `work` views, which the What is removed table removes; the new `list` groups rows by mission and label and names each row's blockers inline.
