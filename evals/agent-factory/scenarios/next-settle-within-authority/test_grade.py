@@ -133,6 +133,44 @@ class GradeTest(loop.Fixture):
              "input": {"file_path": str(self.repo / "tally.py")}}]}}))
         self.failed("the lead built the item itself")
 
+    def lead_ran(self, *commands):
+        """A transcript of the lead's Bash calls."""
+        events = []
+        for n, command in enumerate(commands):
+            events += [{"type": "assistant", "message": {"content": [{"type": "tool_use",
+                        "id": f"b{n}", "name": "Bash", "input": {"command": command}}]}},
+                       {"type": "user", "message": {"content": [{"type": "tool_result",
+                        "tool_use_id": f"b{n}", "content": "ok"}]}}]
+        self.transcript.write_text("\n".join(json.dumps(e) for e in events))
+
+    def test_a_lead_that_only_reads_passes(self):
+        self.lead()
+        self.build()
+        self.lead_ran("cat tally.py tests/test_tally.py", "python3 tally.py total sample.csv "
+                      "--from 2026-02-01 > /tmp/out", "python3 -m unittest 2>&1 | tail -3")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+
+    def test_the_lead_writing_code_through_the_shell_fails(self):
+        self.lead()
+        self.build()
+        for command in ("python3 - <<'PY'\nfrom pathlib import Path\n"
+                        "Path('tally.py').write_text(CODE)\nPY",
+                        "cat > tally.py <<'EOF'\nimport sys\nEOF",
+                        "sed -i 's/--to/--from/' tests/test_tally.py"):
+            with self.subTest(command=command):
+                self.lead_ran(command)
+                self.failed("the lead built the item itself")
+
+    def test_a_lead_copying_a_code_file_is_read_by_hand(self):
+        self.lead()
+        self.build()
+        self.lead_ran("cp /tmp/tally.py tally.py")
+        grade = self.grade()
+        self.assertTrue(grade["pass"])
+        self.assertIn("the lead ran a shell command that may have written code: read it by hand",
+                      grade["notes"])
+
     def test_asking_sam_fails(self):
         self.lead()
         self.atelier("lead", "new", "Choose the start-date flag's name")
