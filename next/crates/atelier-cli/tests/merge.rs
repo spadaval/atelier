@@ -1863,6 +1863,26 @@ fn with_a_skip_a_conflict_or_an_input_that_moves_still_stops_the_merge() {
     let waiting = Waiting::spawn(command, scratch.dir.path(), "merge");
     fs::write(root.join("hello.txt"), "hello!\n").unwrap();
     let run = waiting.finish();
+    moved_checkout(&root, run);
+    assert_eq!(head(&root, "main"), tip);
+
+    // A symbolic link, to nothing, that is pointed elsewhere.
+    let scratch = approved_with(&waiting_check(), |_| {});
+    let root = scratch.root();
+    std::os::unix::fs::symlink("missing-a", root.join("link")).unwrap();
+    git(&root, &["add", "link"]);
+    let tip = head(&root, "main");
+    let mut command = atelier_command(&root, "t1", &["merge"]);
+    command.env("ATELIER_SKIP", REASON);
+    let waiting = Waiting::spawn(command, scratch.dir.path(), "merge");
+    fs::remove_file(root.join("link")).unwrap();
+    std::os::unix::fs::symlink("missing-b", root.join("link")).unwrap();
+    moved_checkout(&root, waiting.finish());
+    assert_eq!(head(&root, "main"), tip);
+}
+
+/// `run` wrote nothing, because the checkout at `root` changed.
+fn moved_checkout(root: &Path, run: Run) {
     assert_eq!(run.code, 1, "{}", run.stdout);
     assert!(
         run.stderr.starts_with(&format!(
@@ -1872,7 +1892,6 @@ fn with_a_skip_a_conflict_or_an_input_that_moves_still_stops_the_merge() {
         "{}",
         run.stderr
     );
-    assert_eq!(head(&root, "main"), tip);
 }
 
 #[test]

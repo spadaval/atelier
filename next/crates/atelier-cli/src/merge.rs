@@ -215,6 +215,7 @@ struct Dirt {
 
 impl Dirt {
     fn read(repo: &Repo, id: &str) -> Result<Dirt> {
+        use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::MetadataExt;
         let paths = repo.uncommitted(id)?;
         let mut args = vec!["ls-files", "--stage", "-z", "--"];
@@ -224,12 +225,21 @@ impl Dirt {
             true => String::new(),
             false => git::run(&repo.root, &args)?,
         };
-        let file = |path: &String| {
+        // A symbolic link is its target; a file gone is `None`.
+        let file = |path: &String| -> Result<Option<(u32, Vec<u8>)>> {
             let path = repo.root.join(path);
-            let mode = std::fs::symlink_metadata(&path).ok()?.mode();
-            Some((mode, std::fs::read(&path).unwrap_or_default()))
+            let meta = match std::fs::symlink_metadata(&path) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                meta => meta?,
+            };
+            let bytes = match meta.file_type() {
+                kind if kind.is_symlink() => std::fs::read_link(&path)?.into_os_string().into_vec(),
+                kind if kind.is_dir() => Vec::new(),
+                _ => std::fs::read(&path)?,
+            };
+            Ok(Some((meta.mode(), bytes)))
         };
-        let files = paths.iter().map(file).collect();
+        let files = paths.iter().map(file).collect::<Result<_>>()?;
         Ok(Dirt {
             paths,
             index,
