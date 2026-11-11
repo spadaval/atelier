@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-pvo0
 title: Name the command for the remaining silent or bare truncations
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -40,3 +40,7 @@ Relationships of the old record that the new format has no field for.
 - discovered_from review: atelier-378y
 - discovered_from review: atelier-hrfh
 - discovered_from review: atelier-wslw
+
+## Report
+
+Dropped: Every command it names (`issue show`, `evidence list`, the old `status`) was removed in 0.5.
