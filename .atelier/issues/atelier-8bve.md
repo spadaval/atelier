@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:44.894959669+00:00"
-status: "superseded"
+status: "backlog"
 title: "Make issue create confirm the record and suggest the next step"
-updated_at: "2026-11-11T03:55:44.894959669+00:00"
+updated_at: "2026-10-17T01:10:57.962045771+00:00"
 ---
 
 ## Goal
@@ -32,7 +31,3 @@ The `issue create` confirmation (`crates/atelier-cli/src/commands/issue.rs:667-6
 - [ ] Next steps come from state. Ready work suggests `atelier start <id>`. Non-mission work with no mission suggests `atelier issue link <id> <mission-id> --role advances` (with the real mission ID when exactly one mission is open). The generic four-item menu is gone.
 - [ ] Validation errors raised before the write don't name the unpersisted ID.
 - [ ] CLI tests cover plain, `--parent` and `--status backlog` output.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `new` already confirms the record's status and path and names the next step (`Created draft item atelier-4d3x ... A planner makes it ready with: atelier ready ...`, run in a scratch clone).

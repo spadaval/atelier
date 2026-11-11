@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:41.724747358+00:00"
-status: "superseded"
+status: "backlog"
 title: "Point start hints at atelier start, not the record-only transition"
-updated_at: "2026-11-11T03:55:41.724747358+00:00"
+updated_at: "2026-10-17T01:10:57.966093266+00:00"
 ---
 
 ## Goal
@@ -37,7 +36,3 @@ Following them moves the item to in_progress without a branch or `workflow_branc
 - [ ] `issue transition <id> start` run outside the item's owner branch prints a warning that no branch was recorded, and names `atelier start <id>`.
 - [ ] `atelier start <mission>` lists the mission's ready items (ID and title, up to 5), or says none is ready.
 - [ ] CLI tests cover the show hint, the warning and the mission error.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new tool has no record-only `issue transition`; `status` names `atelier start <id>`, and `start` on a mission points at `atelier status` (run in a scratch clone).

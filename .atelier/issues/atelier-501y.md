@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:42.357931646+00:00"
-status: "superseded"
+status: "backlog"
 title: "Show the item's title, Done when and mission when start succeeds"
-updated_at: "2026-11-11T03:55:42.357931646+00:00"
+updated_at: "2026-11-07T21:03:26.730432682+00:00"
 ---
 
 ## Goal
@@ -35,7 +34,3 @@ A successful `atelier start` (crates/atelier-cli/src/commands/start.rs) prints t
 ## Context
 
 Dropped in decision atelier-mzpn: a warning when the recorded base differs from the policy base, since atelier-md0v reads the base from the policy everywhere and `start --base` is hidden and ignored.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `start` creates branch `<id>` and `status` on that branch names the item, its status and what it still needs (product specification, Commands: `start` and What status prints).
