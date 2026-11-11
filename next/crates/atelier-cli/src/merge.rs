@@ -88,11 +88,17 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     let base = repo.base.clone();
     let base_tip = repo.base_tip.clone();
     let base_checkout = git::checkout_of(&root, &base)?;
+    let mut base_dirt = None;
     if let Some(path) = &base_checkout {
         let dirty = git::uncommitted(path)?;
         if !dirty.is_empty() {
-            return Ok(Outcome::Refused(output::base_dirty(&base, path, &dirty)));
+            let text = output::base_dirty(&base, path, &dirty);
+            let rule = output::rule_base_dirty(&base, path, &dirty);
+            if let Some(refused) = skip::refuse([rule], text) {
+                return Ok(refused);
+            }
         }
+        base_dirt = Some(Dirt::read(path, dirty)?);
     }
 
     let tree = match git::merge_tree(&root, &base_tip, &head)? {
@@ -149,7 +155,8 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     }
 
     let read = (head.as_str(), base_tip.as_str(), &uncommitted);
-    if let Some(moved) = moved(repo, read, base_checkout.as_deref())? {
+    let base_read = base_checkout.as_deref().zip(base_dirt.as_ref());
+    if let Some(moved) = moved(repo, read, base_read)? {
         return Ok(Outcome::Refused(output::moved(&moved, &id, &base)));
     }
     match &base_checkout {
@@ -547,7 +554,7 @@ pub enum Moved {
 fn moved(
     repo: &Repo,
     (head, base_tip, uncommitted): (&str, &str, &Dirt),
-    base_checkout: Option<&Path>,
+    base_checkout: Option<(&Path, &Dirt)>,
 ) -> Result<Option<Moved>> {
     let root = &repo.root;
     let branch = repo.branch.as_deref().expect("merge runs on a branch");
@@ -567,13 +574,14 @@ fn moved(
         return Ok(Some(Moved::Checkout(root.clone())));
     }
     let now = git::checkout_of(root, &repo.base)?;
-    if now.as_deref() != base_checkout {
-        let path = now.or_else(|| base_checkout.map(Path::to_path_buf));
+    if now.as_deref() != base_checkout.map(|(path, _)| path) {
+        let path = now.or_else(|| base_checkout.map(|(path, _)| path.to_path_buf()));
         return Ok(Some(Moved::Checkout(path.expect("one of them is a path"))));
     }
     match base_checkout {
-        Some(path)
-            if !unchanged(path, &repo.base, base_tip)? || !git::uncommitted(path)?.is_empty() =>
+        Some((path, dirt))
+            if !unchanged(path, &repo.base, base_tip)?
+                || Dirt::read(path, git::uncommitted(path)?)? != *dirt =>
         {
             Ok(Some(Moved::Checkout(path.to_path_buf())))
         }

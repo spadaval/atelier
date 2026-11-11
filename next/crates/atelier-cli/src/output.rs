@@ -1885,6 +1885,16 @@ pub fn base_dirty(base: &str, path: &Path, dirty: &[String]) -> String {
     )
 }
 
+/// The rule that the checkout of `base` at `path` has nothing uncommitted,
+/// as `dirty` breaks it.
+pub(crate) fn rule_base_dirty(base: &str, path: &Path, dirty: &[String]) -> String {
+    format!(
+        "Every change to a tracked file in the checkout of {base} at {} is committed (these are not: {})",
+        path.display(),
+        some(dirty)
+    )
+}
+
 pub fn conflicts(id: &str, base: &str, paths: &[String]) -> String {
     format!(
         "`atelier merge` refused: {id} does not merge cleanly into {base}; these conflict: {}. Nothing changed.\nMerge {base} in with `git merge {base}` on branch {id}, resolve the conflicts and commit. `atelier status` then says what comes next.\n",

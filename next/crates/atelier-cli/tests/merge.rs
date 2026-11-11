@@ -2018,3 +2018,45 @@ fn a_rule_the_pre_push_hook_skips_in_merges_push_of_the_base_is_printed() {
     );
     assert_eq!(forge.remote("main"), Some(head(&root, "main")));
 }
+
+#[test]
+fn with_a_skip_a_base_checkout_with_uncommitted_changes_is_merged_into_and_keeps_them() {
+    let scratch = approved_with(&waiting_check(), |_| {});
+    let root = scratch.root();
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    append(&base, ".atelier/config.toml", "# a note\n");
+    let run = merge(&root, "t1", &[]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.ends_with(&format!("again.\n{SKIP}")),
+        "{}",
+        run.stderr
+    );
+    // Changed again while the checks run, it is a move.
+    let tip = head(&root, "main");
+    let mut command = atelier_command(&root, "t1", &["merge"]);
+    command.env("ATELIER_SKIP", REASON);
+    let waiting = Waiting::spawn(command, scratch.dir.path(), "merge");
+    append(&base, ".atelier/config.toml", "# another\n");
+    let run = waiting.finish();
+    assert!(
+        run.stderr.starts_with(&format!(
+            "`atelier merge` wrote nothing: the checkout at {} changed",
+            base.display()
+        )) && run.stderr.ends_with(NOT_SKIPPABLE),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(head(&root, "main"), tip);
+    // Left as it is, the merge moves that checkout and keeps the change.
+    let run = merge_skipping(&root);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let rule = format!(
+        "Every change to a tracked file in the checkout of main at {} is committed (these are not: .atelier/config.toml)",
+        base.display()
+    );
+    assert!(run.stdout.starts_with(&skipped(&rule)), "{}", run.stdout);
+    assert_eq!(head(&base, "HEAD"), head(&root, "main"));
+    assert!(read(&base, ".atelier/config.toml").ends_with("# a note\n# another\n"));
+}
