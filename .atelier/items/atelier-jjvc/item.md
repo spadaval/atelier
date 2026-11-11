@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jjvc
 title: Remove the deprecated prime alias
-status: draft
+status: dropped
 mission: null
 labels:
 - orientation
@@ -31,3 +31,7 @@ ADR 0022 Decision 1; review finding atelier-1ia7 on atelier-bw0b.
 ## Notes
 
 - 2026-10-17 [note] 2026-10-16: atelier-sdb0 merged; this repository's .claude/settings.json now runs 'atelier status --hook claude'. astromech's committed hook (checked in /home/supadava/projects/astromech-atelier at dd28efe) still runs 'atelier prime --hook claude', so the plan condition is unmet; stays in backlog until astromech reruns 'atelier setup claude'.
+
+## Report
+
+Dropped: Done by the 0.5 rewrite: `atelier prime` no longer exists.
