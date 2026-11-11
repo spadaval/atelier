@@ -22,15 +22,15 @@ updated_at: "2026-10-17T02:37:51.861454745+00:00"
 
 ## Goal
 
-Let a repository define its own work views as committed, declarative definitions, so an orchestrator can see items sliced by the fields and filters its project or role needs (project labels, configured statuses, a reviewer's columns, one mission's land-related items) without scripting around Atelier's output.
+Let a repository define its own views of `atelier list` as committed, declarative definitions, so an orchestrator can see items sliced by the fields and filters its project or role needs (project labels, configured statuses, a reviewer's columns, one mission's land-related items) without scripting around Atelier's output.
 
 ## Done when
 
-A design is accepted (an ADR, since it qualifies ADR 0022 Decision 4) and then built, so that:
+A design is accepted (in the design record, since it qualifies ADR 0022 Decision 4) and then built, so that:
 - [ ] View definitions live in `.atelier/`, are validated by `atelier check`, and are reviewed like other records.
-- [ ] A definition may only filter, choose fields from a fixed vocabulary, sort (using the shared order), and group. It cannot redefine derived states (ready, blocked, evidence freshness, merge readiness); those always come from core, so a view never contradicts a gate.
+- [ ] A definition may only filter, choose fields from a fixed vocabulary, sort (using the shared order), and group. It cannot redefine derived states (ready, blocked); those always come from core, so a view never contradicts a refusal.
 - [ ] Definitions render through the same item-line contract and renderer as built-in views, so output stays dense Markdown. No scripts and no machine format.
-- [ ] Built-in views such as `work ready` and `work mission` are expressed in the same format.
+- [ ] Built-in views such as `list --ready` and `show <mission>` are expressed in the same format.
 
 ## Scope
 
@@ -41,6 +41,8 @@ Declarative configuration only. Runtime code, scripting hooks, and JSON or YAML 
 From discussion with Sumeet on 2026-10-17 about "code mode" interfaces. The questions an orchestrator asks (what is ready, what holds it up, what needs a human) are universal, and wanting a custom view for one of them means the built-in view is incomplete: file that defect, per ADR 0022 Decision 4. How the data is sliced is not universal, and building every slice in would bloat the views. A committed custom view is itself a signal: if many repos define the same one, promote it to built-in.
 
 Blocked by atelier-i2qq, which writes the shared item-line contract this format depends on. Defining views before that contract exists would freeze today's inconsistent views into a public format.
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): `work ready` and `work mission` became `list --ready` and `show <mission>`, the ADR became the design record, which replaces the ADRs, and evidence freshness and merge readiness left the derived states with the evidence records and gates.
 
 ## Unknowns
 

@@ -21,12 +21,14 @@ updated_at: "2026-11-06T23:39:07.679326401+00:00"
 
 ## Goal
 
-Give demiurge, cosplay-studio and life-on-rails a test of the merged tree. They have no CI (life-on-rails' Android builds run off-box, so its check may be limited to what runs on this host) and no suite merge check (life-on-rails has only a whitespace check); until atelier-s66u ships, the only such test is `merge --sync` rerunning recorded suite receipts, which atelier-s66u removes.
+Give demiurge, cosplay-studio and life-on-rails a test of the merged tree. They have no CI (life-on-rails' Android builds run off-box, so its check may be limited to what runs on this host) and no suite merge check (life-on-rails has only a whitespace check).
 
 ## Done when
 
-Each repository's `.atelier/workflow.yaml` has a `merge_checks` `shell.check` that runs its test suite on the tree that lands, under the repository's current merge strategy, and one `atelier merge` there shows the check running and a failing suite refusing the merge.
+- [ ] Each repository's `.atelier/config.toml` names a merge check that runs its test suite on the merged tree, and one `atelier merge` there shows the check running and a failing suite refusing the merge.
 
 ## Context
 
-Pick this up when each repository next adopts an Atelier release containing atelier-s66u (mission atelier-n4mj). It is outside the mission because it is work in other repositories. Strategy: ~/projects/atelier/docs/strategies/lighter-workflow.md (Scope, Risks).
+Pick this up once the cutover has converted each repository (atelier-wd1i). It is work in other repositories. Strategy: ~/projects/atelier/docs/strategies/lighter-workflow.md (Scope, Risks).
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): `workflow.yaml`'s `merge_checks` became `config.toml`'s merge checks, and the sentence about `merge --sync` rerunning suite receipts went with the receipts.
