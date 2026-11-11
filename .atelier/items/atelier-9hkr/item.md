@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9hkr
 title: skills/agent-factory/SKILL.md:8 The opening names only success, "Not an Atelier repository" and atelier not found. Insi…
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -31,3 +31,7 @@ Relationships of the old record that the new format has no field for.
 
 - parent: atelier-hu64 (Deferred review findings on atelier-nz6a)
 - discovered_from review: atelier-0cjk
+
+## Report
+
+Dropped: Finding on the old SKILL.md opening, rewritten by atelier-orb2; the new opening steps aside when `status` fails for want of a Git checkout or an Atelier config.
