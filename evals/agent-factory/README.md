@@ -57,6 +57,8 @@ it `"pass": null` with `needs_hand_grade`, to be read by hand, not passed:
 
 - `next-non-atelier-repo`: any thread the run started. Whether it was a
   reviewer is read from its task, and a Codex subagent's task is encrypted.
+  Also a shell call of several `atelier` invocations, one writing and one
+  asking for help.
 - `next-settle-within-authority`: a lead's shell command that names a code
   file with `cp`, `mv`, `patch` or a Git restore, which may have written it.
   A redirect, `tee`, in-place `sed` or a Python write into one fails the run.

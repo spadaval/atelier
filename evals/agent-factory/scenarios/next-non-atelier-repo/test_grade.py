@@ -102,6 +102,14 @@ class GradeTest(unittest.TestCase):
         self.assertIsNone(grade["pass"])
         self.assertTrue(grade["needs_hand_grade"])
 
+    def test_a_write_beside_a_help_lookup_is_read_by_hand(self):
+        self.do_the_work()
+        self.calls("atelier --help; atelier new \"Track the export\"", "atelier new --help")
+        grade = self.grade()
+        self.assertIsNone(grade["pass"])
+        self.assertEqual(len(grade["checks"]["writes_beside_help"]), 1)
+        self.assertEqual(grade["checks"]["tracker_writes"], [])
+
     def test_delegating_a_review_fails(self):
         self.do_the_work()
         self.calls('delegate "Review the last commit for bugs and report back."',
