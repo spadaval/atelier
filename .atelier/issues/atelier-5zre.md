@@ -359,7 +359,22 @@ atelier-next-3ba4a62f check
 atelier-next-7b06ed12 check
 ```
 
-CONVOUT
+Output at d88fb94e, which is also the last commit that changes a record other than this one; later commits change only this record:
+
+```text
+Records converted, by kind and new status:
+  item draft: 116
+  item from decision ready: 2
+  item ready: 27
+  mission draft: 6
+  mission ready: 2
+Made ready from in_progress; each branch's work is not converted:
+  atelier-5zre
+This tree's .atelier/ and moved files match a fresh conversion of d88fb94e73e34c8c2c0215e0977e5e0d48f3d347: 167 files.
+Every record is valid: 145 items, 8 missions and config.toml.
+```
+
+The converter printed 145 items (116 draft, 27 ready, 2 ready from decisions) and 8 missions (6 draft, 2 ready); `--verify` and `check` each exited 0, `check` on both atelier-next-3ba4a62f and atelier-next-7b06ed12. 145 items and 8 missions are the 181 open records less the 28 dropped. The full output is in `~/.cache/atelier-qr5s/5zre/convout.txt`; it also lists 22 `blocked_by` entries naming a closed or missing record, which the converter leaves out.
 
 ### Review
 
@@ -374,6 +389,7 @@ The orchestrator then took both judgments out of the item (decision notes of 202
 
 - The fourth Done when line was changed by the orchestrator on 2026-11-11: no record is rewritten by this item, and a kept record's line says what it names that the new tool removed.
 - The first pass was not delegated to GPT-6 Luna. I read all 181 records myself, since every drop needed checking by hand anyway.
+- Commit ac1a558a holds all 40 restores of the second rescope (the 28 rewritten records, atelier-abdp and the 11 class (a) records), not only the 28 its message names: `git checkout fc0fe395 -- <file>` had already staged each one.
 - Runs of the new binary were made only on converted scratch clones under `~/.cache/atelier-qr5s/5zre/`, never in a real repository.
 
 ### Decisions
