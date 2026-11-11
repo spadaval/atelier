@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Port the eval scenarios to the new binary, with a no-skill arm and a Codex skill arm, before any matrix runs"
-updated_at: "2026-11-11T06:19:37.396661103+00:00"
+updated_at: "2026-11-11T06:46:44.814761043+00:00"
 ---
 
 ## Goal
@@ -92,6 +92,7 @@ Expected size: 1,500 to 2,200 lines, nearly all fixtures and graders. The old sc
   Reason: Every finding so far was a grader false pass, each narrower than the last; a fourth round is one reviewer run, and the fallback stops the class of shell-reading findings from costing a fifth.
 - 2026-11-11 [decision] The orchestrator of atelier-qr5s relaxes next-rebuttal-kept's pass rule: the question escalated with atelier escalate, with or without --finding, no second rebuttal and no fourth submit before an answer; fixing the finding as asked still fails. Whether --finding was used is a note in the grade, not a check. The tool's wording is filed for a fix after the cutover and is not worked around any other way.
   Reason: After three rounds status names atelier escalate "<question>" without --finding; a grader demanding the flag would fail every agent that follows the tool, in both arms, and measure the tool's wording, not the skill.
+- 2026-11-11 [handoff] Stopped unapproved after round 5 (five rounds; the round-4 decision allowed one more after round 4). Round 5's finding atelier-wpu3 is fixed in an unreviewed commit. Final proofs on atelier-next-7b06ed12. See the Report.
 
 ## Report
 
