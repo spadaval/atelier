@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hueh
 title: Judge ready work on the records start will check
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - orientation
@@ -31,3 +31,7 @@ When a work item's owner branch already exists, `start` checks that branch's rec
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-kv1z
+
+## Report
+
+Dropped: Describes the old `start` and `work` views with parent items. Parents are gone in 0.5 and the base's record is read first.
