@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fpxc
 title: Search issues by text
-status: draft
+status: dropped
 mission: null
 labels:
 - orientation
@@ -36,3 +36,7 @@ Transcript evidence: `atelier issue list --status todo --limit 100 | grep` (9 ru
 ## Notes
 
 - 2026-10-17 [human] 2026-10-17: deferred to backlog by Sumeet: search changes no view read before, during, or after a mission. Plan it when transcript counts still show issue list piped through grep after atelier-7u4o and atelier-ihns land. Not scoped to a mission.
+
+## Report
+
+Dropped: `issue list` was removed in 0.5 and its grep counts are from the old tool. `atelier list` prints every open item on one line, so grep works on titles. Refile with evidence from the new tool.
