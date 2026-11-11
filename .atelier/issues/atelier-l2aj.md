@@ -3,6 +3,9 @@ created_at: "2026-11-11T06:21:51.905925041+00:00"
 id: "atelier-l2aj"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-l2aj
 priority: "P2"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show agents on the Desk's pages and add Say go, the answer form and Start a planning session"
-updated_at: "2026-11-11T06:27:22.482158942+00:00"
+updated_at: "2026-11-11T07:21:06.400699702+00:00"
 ---
 
 ## Goal
