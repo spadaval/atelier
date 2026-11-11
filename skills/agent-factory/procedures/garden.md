@@ -102,8 +102,8 @@ trips and the numbers by cause before you write anything, and bring at most
 three causes as proposals. A proposal that adds a rule or check names one
 you considered removing. Leave out a trip that fits no cause and happened
 once. Something broken today, such as a command that fails or an error that
-hides its reason, you file as an item, as step 5 files a finding, labelled
-`bug` with its `--caused-by`, and it takes no room on the page.
+hides its reason, you file on the base as an item, with `atelier set <id>
+--labels bug --caused-by <item or commit>`, and it takes no room on the page.
 
 The worst spots, one or two under each property:
 
@@ -131,7 +131,7 @@ restructure, or any change to what the product does is a proposal.
 Settle each finding `atelier list --deferred` shows, on the branch: `atelier
 new "<title>" --from <finding>` to take it into an item, or `atelier drop
 <finding> --reason "<why>"`, with `"fixed in <commit>"` for one the run fixed.
-`atelier set` runs only on the base, so an item made on the branch gets its
+`atelier set` runs only on the base, so an item taken this way gets its
 labels and `--caused-by` there after the run merges.
 
 ## 6. Write the Page
