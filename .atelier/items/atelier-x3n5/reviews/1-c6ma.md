@@ -45,6 +45,7 @@ Read the mission field from each item's front matter at the manifest commit, exc
 
 ## Finding 3: Treat a repository with no item records as an empty population
 Recommendation: defer
+Taken: atelier-qf7u by thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3A1c7e22f2-4ce0-40e1-a447-156f728619a3
 
 `scripts/scorecard/draw_samples.py:155` uses snapshot.git(), which sets subprocess check=True. Git grep exits 1 for no matches, so closed_missions() raises CalledProcessError whenever a manifest repository has no item records, even if that repository has no closed missions to sample. I reproduced this with a temporary repository containing only a mission record and a frozen log with its ready and close lines.
 

@@ -66,6 +66,7 @@ cleanup below can follow separately; no blocking finding remains.
 
 ## Finding 1: Two Desk API references still name the deleted architecture specification
 Recommendation: defer
+Dropped by thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3A1c7e22f2-4ce0-40e1-a447-156f728619a3: Fixed by the gardener's upkeep commit 94bbfa149 on atelier-0019: both citations now link the design record's sections.
 
 docs/architecture/desk.md:756 and :786 still cite
 `redesign-architecture.md`, respectively for The log and Records. This item
