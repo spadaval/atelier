@@ -3,6 +3,9 @@ created_at: "2026-11-11T02:17:26.233459064+00:00"
 id: "atelier-94pv"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-94pv
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Move the spike's app to desk/ on the new API: the repositories, mission, item and inbox pages"
-updated_at: "2026-11-11T05:28:24.918163795+00:00"
+updated_at: "2026-11-11T06:19:58.813793189+00:00"
 ---
 
 ## Goal
