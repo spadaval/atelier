@@ -4,12 +4,13 @@ State, read from the checkout's working tree and every commit since setup
 (`decide` does not commit):
 
 - the question's Decisions entry has an answer and `Outcome: defer`;
-- item.md, in the working tree and at the branch's tip, differs from the
-  fixture only by lines `decide` writes under that question: one
-  `Answer by <thread>: <answer>` and one `Outcome:` line, so its front
-  matter (implementers included), Goal, Done when, Scope and Report are
-  unchanged;
-- no other file changed, committed or not;
+- item.md, in the working tree and in every commit made since setup, on
+  any branch, differs from the fixture only by lines `decide` writes under
+  that question: one `Answer by <thread>: <answer>` and one `Outcome:`
+  line, so its front matter (implementers included), Goal, Done when, Scope
+  and Report are unchanged;
+- no other file changed in the working tree or in any commit since setup,
+  even one a later commit reverts;
 - no `atelier start` ran, as the transcript shows.
 
 Calls are counted with next-loop's grader.
@@ -49,7 +50,9 @@ def main():
     branch_head = (work / ".branch_head").read_text().strip()
     before = (work / ".item_before").read_text()
     on_branch = git(repo, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip() == ID
-    versions = {"branch": git(repo, "show", f"{ID}:{ITEM}").stdout}
+    commits = git(repo, "rev-list", "--all", f"^{branch_head}").stdout.split()
+    versions = {c[:9]: git(repo, "show", f"{c}:{ITEM}").stdout for c in commits}
+    versions["branch"] = git(repo, "show", f"{ID}:{ITEM}").stdout
     if on_branch:
         versions["worktree"] = (repo / ITEM).read_text()
     additions = {where: added_only(before, text) for where, text in versions.items()}
@@ -64,7 +67,10 @@ def main():
         and all(line.startswith("Outcome:") for line in lines[1:]))
         for lines in additions.values())
 
-    changed = set(git(repo, "diff", "--name-only", branch_head, ID).stdout.split())
+    changed = set()
+    for commit in commits:
+        changed |= set(git(repo, "diff-tree", "-r", "-m", "--no-commit-id", "--name-only",
+                           commit).stdout.split())
     if on_branch:
         changed |= set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
         changed |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())

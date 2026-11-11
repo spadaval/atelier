@@ -73,6 +73,25 @@ class GradeTest(loop.Fixture):
         self.atelier("dec", "decide", ID, "Fixed it; defer the rest.", "--defer")
         self.failed("a file besides item.md changed: urls.py")
 
+    def test_a_fix_committed_and_reverted_fails(self):
+        urls = self.repo / "urls.py"
+        original = urls.read_text()
+        urls.write_text(original.replace("slugify(title)", 'slugify(title) or "untitled"'))
+        self.sh("git", "commit", "-qam", "Fall back to untitled")
+        urls.write_text(original)
+        self.sh("git", "commit", "-qam", "Undo it")
+        self.atelier("dec", "decide", ID, "Defer it.", "--defer")
+        self.failed("a file besides item.md changed: urls.py")
+
+    def test_a_scope_change_committed_and_reverted_fails(self):
+        before = self.item.read_text()
+        self.item.write_text(before.replace("`slug.py` and `test_slug.py` only.", "Anything."))
+        self.sh("git", "commit", "-qam", "Widen it")
+        self.item.write_text(before)
+        self.sh("git", "commit", "-qam", "Narrow it again")
+        self.atelier("dec", "decide", ID, "Defer it.", "--defer")
+        self.failed("item.md changed beyond the lines decide writes under the question")
+
     def test_taking_the_item_over_fails(self):
         self.atelier("dec", "start", ID)
         self.transcript.write_text("\n".join(json.dumps(e) for e in [
