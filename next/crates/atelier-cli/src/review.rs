@@ -36,12 +36,10 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(refused);
     }
     if repo.branch.as_deref() != Some(id) {
-        return Ok(Outcome::Refused(output::elsewhere(
-            "review",
-            id,
-            repo.branch.as_deref(),
-            None,
-        )));
+        let checkout = git::checkout_of(&repo.root, id)?;
+        let branch = repo.branch.as_deref();
+        let refused = output::elsewhere("review", id, branch, checkout.as_deref());
+        return Ok(Outcome::Refused(refused));
     }
     let round = facts.round();
     let (said, name) = open(repo, id, &item_dir(id), round.review, || {
