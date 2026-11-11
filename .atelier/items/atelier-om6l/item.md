@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-om6l
 title: 'Show what holds a mission up: a Waiting on section, what Needs a Human items hold, and the overview''s Waiting on line'
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -55,3 +55,7 @@ Merged in decision atelier-mzpn: atelier-46nq's "holds N" (its "shown for contex
 - 2026-11-04 [decision] Show what holds a mission up as a Waiting on section of work mission, with per-chain detail under --blocked; no new command
   Reason: It is the view people already open, and a separate command or per-item tree would repeat shared blockers
   Rejected: A dedicated 'what do I do to get this mission moving' command
+
+## Report
+
+Dropped: The `work` views were removed in 0.5; `show <mission>` and `list --blocked` name each blocker that is not done.
