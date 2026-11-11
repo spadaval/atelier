@@ -2,8 +2,8 @@
 //! opened by path, from a working directory outside it, with the caller
 //! naming who acts, and each result read as data.
 
-use atelier_app::{decide, ready, Repo, Skip};
-use atelier_core::Thread;
+use atelier_app::{decide, history, ready, Happened, Move, Repo, Skip};
+use atelier_core::{Status, Thread};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -296,4 +296,36 @@ fn the_hooks_a_commit_runs_are_given_the_invocations_reason_and_not_the_processs
         ready_with("demo-ef56", Some("only this one's")),
         "only this one's"
     );
+}
+
+#[test]
+fn history_returns_the_acts_as_data_to_a_repository_opened_as_the_desk_opens_it() {
+    let (_dir, root) = scratch("draft");
+    outside(&root);
+    let skip = Skip::new(None);
+    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
+    ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
+
+    let mut repo = Repo::open_committed(&root, Thread("desk".into()), &skip).unwrap();
+    let found = history(&mut repo, Some(ID), None).unwrap().unwrap();
+    assert!(found.passed_over.is_empty());
+    let [logged] = found.acts.as_slice() else {
+        panic!("{:?}", found.acts)
+    };
+    assert_eq!(logged.id, ID);
+    assert_eq!(logged.thread, None);
+    assert_eq!(logged.commit, git(&root, &["rev-parse", "--short", "HEAD"]));
+    assert_eq!(
+        logged.act,
+        Happened::Ready {
+            by: Some("sumeet".into()),
+            status: Move {
+                from: Some(Status::Draft),
+                to: Status::Ready
+            }
+        }
+    );
+    assert!(history(&mut repo, Some("demo-zz99"), None)
+        .unwrap()
+        .is_none());
 }

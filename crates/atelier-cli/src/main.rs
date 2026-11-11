@@ -4,6 +4,7 @@ mod check;
 mod commands;
 mod forge;
 mod git;
+mod history;
 mod merge;
 mod output;
 mod plan;
@@ -67,6 +68,18 @@ enum Command {
     Setup { harness: Option<setup::Harness> },
     /// One item in full with its reviews, or one mission on one page with its items and questions.
     Show { id: String },
+    /// The history of acts, read from Git, one line each, oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
+    ///
+    /// Each line is the commit's time in UTC, the commit, the item or mission, the act, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason>`. The first five hold no space; what changed and the skips are parts separated by `; `.
+    ///
+    /// The acts are start, take-over, submit, review, verdict, escalate, decide, merge, settle, lead, ready, drop and close. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two acts on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
+    Log {
+        /// An item or a mission.
+        id: Option<String>,
+        /// Only acts committed at or after this RFC 3339 time, or this date's start in UTC (YYYY-MM-DD).
+        #[arg(long, value_name = "TIME", value_parser = since)]
+        since: Option<chrono::DateTime<chrono::Utc>>,
+    },
     /// All open work, grouped by mission and then by label; each flag given narrows it.
     List {
         /// Only items a thread could start now: ready, their blockers done, their mission ready.
@@ -203,6 +216,10 @@ enum Command {
     },
 }
 
+fn since(text: &str) -> Result<chrono::DateTime<chrono::Utc>, String> {
+    atelier_app::log::since(text)
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum PriorityArg {
     Critical,
@@ -271,6 +288,7 @@ fn main() -> ExitCode {
                 harness: Some(harness),
             } => setup::harness(&repo.root, harness),
             Command::Show { id } => views::show(&mut repo, &id),
+            Command::Log { id, since } => history::log(&mut repo, id.as_deref(), since),
             Command::List { deferred: true, .. } => views::deferred(&mut repo),
             Command::List {
                 ready,

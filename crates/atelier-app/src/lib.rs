@@ -9,6 +9,7 @@ pub mod acts;
 mod decide;
 pub mod git;
 mod identity;
+pub mod log;
 pub mod plan;
 pub mod repo;
 mod review;
@@ -20,6 +21,7 @@ mod work;
 
 pub use decide::{decide, decider, one_line};
 pub use identity::identity;
+pub use log::{history, Happened, History, Logged, Move, PassedOver};
 pub use plan::{ready, Done};
 pub use repo::{Links, Repo};
 pub use review::{carried, carried_plan, Carried};
