@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5qes
 title: Order work-view rows with the shared blocker-first order
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -42,3 +42,7 @@ Ordering only; no change to which rows are shown.
 Relationships of the old record that the new format has no field for.
 
 - supersedes: atelier-31l2 (Order work mission and work parent rows by the shared work order)
+
+## Report
+
+Dropped: The nine `work` views were removed in 0.5; `list` and `show` replace them (docs/design.md, Tried and removed).
