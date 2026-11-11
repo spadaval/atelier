@@ -35,6 +35,9 @@ pub struct Repo<'s> {
     /// The invocation's skip, which its refusals and its commit go through.
     pub skip: &'s Skip,
     reader: CommitReader,
+    /// Opened with [`Repo::open_committed`]: no record is read from the
+    /// checkout's files.
+    pub(crate) committed: bool,
 }
 
 impl<'s> Repo<'s> {
@@ -42,13 +45,36 @@ impl<'s> Repo<'s> {
     /// identity the records are given; `skip` is the invocation's. A caller
     /// the records could not name and read back is refused.
     pub fn open(dir: &Path, caller: Thread, skip: &'s Skip) -> Result<Repo<'s>> {
+        Repo::opened(dir, caller, skip, false)
+    }
+
+    /// The repository of the checkout `dir` is in, opened for reading from
+    /// commits only, as the Desk reads it: its `config.toml` as the commit
+    /// `HEAD` names holds it, and each item's record on its branch from the
+    /// branch's tip even when that branch is checked out here, so nothing
+    /// the checkout has not committed is read. [`Repo::everything`],
+    /// [`Repo::locate`], [`Repo::current`], [`Repo::missions`] and
+    /// [`Repo::links`] read commits only. Planning's and the acts' methods,
+    /// which read and write the checkout (`store`, `checkout_item`,
+    /// `locate_planned`, `planned`, `new_id`, `uncommitted`), are not for a
+    /// repository opened this way.
+    pub fn open_committed(dir: &Path, caller: Thread, skip: &'s Skip) -> Result<Repo<'s>> {
+        Repo::opened(dir, caller, skip, true)
+    }
+
+    fn opened(dir: &Path, caller: Thread, skip: &'s Skip, committed: bool) -> Result<Repo<'s>> {
         if !readable(&caller) {
             bail!("the caller's identity `{caller}` cannot be written into a record and read back as it is: it needs to be one line with no `: ` in it");
         }
         let root = git::root(dir)?;
-        let config = Store::new(root.join(".atelier"))
-            .config()
-            .context("cannot read this repository's Atelier config")?;
+        let mut reader = CommitReader::new(&root);
+        let config = match committed {
+            false => Store::new(root.join(".atelier"))
+                .config()
+                .map_err(Into::into),
+            true => head_config(&root, &mut reader),
+        }
+        .context("cannot read this repository's Atelier config")?;
         let base_tip = git::branch_tip(&root, &config.base_branch)?.with_context(|| {
             format!(
                 "the base branch {} named in .atelier/config.toml does not exist",
@@ -57,7 +83,7 @@ impl<'s> Repo<'s> {
         })?;
         Ok(Repo {
             branch: git::current_branch(&root)?,
-            reader: CommitReader::new(&root),
+            reader,
             caller,
             skip,
             base: config.base_branch,
@@ -65,6 +91,7 @@ impl<'s> Repo<'s> {
             base_tip,
             root,
             dir: dir.to_path_buf(),
+            committed,
         })
     }
 
@@ -110,7 +137,7 @@ impl<'s> Repo<'s> {
                 // is not read, and one that does not parse cannot hide it.
                 let record = if base.as_ref().is_some_and(Located::terminal) {
                     None
-                } else if self.branch.as_deref() == Some(id) {
+                } else if !self.committed && self.branch.as_deref() == Some(id) {
                     self.checkout_item(id)?
                 } else {
                     self.reader.item(&tip, id)?
@@ -282,6 +309,13 @@ impl<'s> Repo<'s> {
         }
         Ok(Some(store.item(id)?))
     }
+}
+
+/// `config.toml` as the commit `HEAD` names holds it.
+fn head_config(root: &Path, reader: &mut CommitReader) -> Result<Config> {
+    let path = ".atelier/config.toml";
+    let text = reader.text(&git::head(root)?, path)?;
+    Ok(parse_config(Path::new(&format!("HEAD:{path}")), &text)?)
 }
 
 /// Whether the records can name `thread` and read it back as it is. Front

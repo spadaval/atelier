@@ -20,20 +20,40 @@ pub struct Branch {
     /// Whether the branch's tip is in the base's history.
     pub merged: bool,
     /// The item's record on the branch: from the checkout on the current
-    /// branch, else from its tip.
+    /// branch, else, or in a repository opened with
+    /// [`Repo::open_committed`](crate::Repo::open_committed), from its tip.
     pub record: Option<ItemDir>,
+}
+
+/// Which of an item's records [`Located::record`] picks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadFrom {
+    /// The base's record.
+    Base,
+    /// The record on the item's unmerged branch.
+    Branch,
 }
 
 impl Located {
     /// The item's record: the base's when that says done or dropped, else
     /// the record on its unmerged branch, else the base's.
     pub fn record(&self) -> Option<&ItemDir> {
-        let base = self.base.as_ref();
-        if base.is_some_and(Located::terminal) {
+        self.picked().map(|(record, _)| record)
+    }
+
+    /// Where [`Located::record`] reads the item's record from.
+    pub fn read_from(&self) -> Option<ReadFrom> {
+        self.picked().map(|(_, from)| from)
+    }
+
+    fn picked(&self) -> Option<(&ItemDir, ReadFrom)> {
+        let base = self.base.as_ref().map(|base| (base, ReadFrom::Base));
+        if self.base.as_ref().is_some_and(Located::terminal) {
             return base;
         }
         let started = self.branch.as_ref().filter(|branch| !branch.merged);
-        started.and_then(|branch| branch.record.as_ref()).or(base)
+        let branch = started.and_then(|branch| branch.record.as_ref());
+        branch.map(|record| (record, ReadFrom::Branch)).or(base)
     }
 
     pub fn status(&self) -> Option<Status> {

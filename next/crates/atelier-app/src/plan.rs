@@ -5,7 +5,7 @@
 //! commit it; `new`, `set` and settling a finding leave the commit to Git.
 
 use crate::acts::{check, check_mission, row, Act, Facts, MissionFacts, Refusal};
-use crate::repo::{item_dir, item_path, mission_dir, mission_path, write_and_commit};
+use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path, write_and_commit};
 use crate::skip::Refused;
 use crate::{git, say, Located, Repo};
 use anyhow::{anyhow, Result};
@@ -134,21 +134,55 @@ pub fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Ve
     if !git::has_commit(&repo.root, commit)? {
         return Ok(None);
     }
-    let own = format!("{}/", mission_dir(id));
-    let reviews = format!("{own}reviews/");
+    let dirs = [".atelier/missions", ".atelier/items"];
+    let paths = git::changed_since(&repo.root, commit, &dirs)?;
     // An item whose record here does not read is judged by the commit.
     let store = repo.store();
-    let now: Vec<String> = store
-        .ids("items")?
-        .into_iter()
-        .filter(|item| {
-            store
-                .item(item)
-                .is_ok_and(|dir| dir.item.mission.as_deref() == Some(id))
-        })
-        .collect();
+    let now = |_: &mut Repo, item: &str| {
+        store
+            .item(item)
+            .is_ok_and(|dir| dir.item.mission.as_deref() == Some(id))
+    };
+    in_plan(repo, id, commit, paths, now).map(Some)
+}
+
+/// [`plan_changed`] read from commits only: the paths of mission `id`'s
+/// plan that differ between the commits `commit` and `tip`, with the
+/// items of the mission now as `tip` holds them; `None` when this clone
+/// lacks `commit`.
+pub fn plan_changed_at(
+    repo: &mut Repo,
+    id: &str,
+    commit: &str,
+    tip: &str,
+) -> Result<Option<Vec<String>>> {
+    if !git::has_commit(&repo.root, commit)? {
+        return Ok(None);
+    }
+    let paths = git::changed(&repo.root, commit, tip)?;
+    let paths = paths.into_iter().filter(|path| is_planning(path)).collect();
+    // An item whose record at `tip` does not read is judged by `commit`.
+    let now = |repo: &mut Repo, item: &str| {
+        repo.item_at(tip, item)
+            .is_ok_and(|dir| dir.is_some_and(|d| d.item.mission.as_deref() == Some(id)))
+    };
+    in_plan(repo, id, commit, paths, now).map(Some)
+}
+
+/// Those of `paths`, changed since `commit`, that are in mission `id`'s
+/// plan: in its directory but not its reviews, or in the directory of an
+/// item of the mission now, as `now` says, or at `commit`.
+fn in_plan(
+    repo: &mut Repo,
+    id: &str,
+    commit: &str,
+    paths: Vec<String>,
+    mut now: impl FnMut(&mut Repo, &str) -> bool,
+) -> Result<Vec<String>> {
+    let own = format!("{}/", mission_dir(id));
+    let reviews = format!("{own}reviews/");
     let mut changed = Vec::new();
-    for path in git::changed_since(&repo.root, commit, &[".atelier/missions", ".atelier/items"])? {
+    for path in paths {
         let item = path
             .strip_prefix(".atelier/items/")
             .and_then(|rest| rest.split('/').next());
@@ -157,7 +191,7 @@ pub fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Ve
             // An item that left the mission since, or was deleted, counts;
             // one whose record then does not read is counted too.
             Some(item) => {
-                now.iter().any(|i| i == item)
+                now(repo, item)
                     || repo.item_at(commit, item).map_or(true, |then| {
                         then.is_some_and(|d| d.item.mission.as_deref() == Some(id))
                     })
@@ -167,7 +201,7 @@ pub fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Ve
             changed.push(path);
         }
     }
-    Ok(Some(changed))
+    Ok(changed)
 }
 
 /// What a planner's act on the item `located`, whose record is `record`,
