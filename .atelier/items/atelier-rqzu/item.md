@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-rqzu
 title: Deferred review findings on atelier-l58v
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -30,3 +30,7 @@ Collect the follow-ups deferred from review findings on atelier-l58v, one per fi
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-l58v (Let Agent Factory say no: merge verdicts, won't-fix, stop signals and backlog sweeps)
+
+## Report
+
+Dropped: A container of the old tool's deferred findings on atelier-l58v; its one open child, atelier-2yef, is dropped. 0.5 keeps deferred findings in their review files (`atelier list --deferred`).
