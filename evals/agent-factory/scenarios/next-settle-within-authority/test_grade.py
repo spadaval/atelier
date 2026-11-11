@@ -108,6 +108,15 @@ class GradeTest(loop.Fixture):
         self.assertIn(note, grade["notes"])
         return grade
 
+    def test_the_lead_s_status_names_its_mission_straight_after_lead(self):
+        out = self.atelier("lead", "lead", "tally-d8rg")
+        if "did not commit" in out:
+            self.skipTest("a binary from before atelier-psjw, whose lead does not commit")
+        status = self.atelier("lead", "status")
+        self.assertIn("You lead mission tally-d8rg", status)
+        self.assertIn("Run atelier start tally-f1ag and follow what it prints.", status)
+        self.assertNotIn("Then: atelier start", status)
+
     def test_chosen_and_built_by_other_threads_passes(self):
         self.lead()
         self.build()

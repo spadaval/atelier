@@ -129,7 +129,7 @@ Where each line's proof is:
   - a child left running is killed when its run ends.
 
   The canary also fails a run whose init offers an agent tool. The Claude canary's tools listed none of them. Peaks: `matrix_peak_agents` was 2 for the eight Haiku runs, and 2 for the Codex run, whose two children ran 29–47 s and 61–84 s.
-- **psjw.** The binary is on the before side: 399fca6a predates atelier-psjw. Every setup ran to its end with it, and again with a wrapper that commits after `ready`, `drop`, `close` and `lead`, as psjw will.
+- **psjw.** The final proofs use `atelier-next-7b06ed12`, built from master after atelier-psjw, whose `ready`, `drop`, `close` and `lead` commit what they write: every `setup.sh` runs to its end and every suite passes with a copy of it. They pass with 399fca6a, from before psjw, as well; one walk, which checks the lead's `status` straight after `lead`, skips there. The first proofs used 399fca6a and a wrapper that commits after those four commands. atelier-t747's matrix runs on a binary from after psjw.
 - **Proved without the matrix.** Every `setup.sh` ran, and the walks above are the scripted passing and failing paths. The canaries passed: Haiku (`claude-haiku-5-5`, $0.003) and `gpt-6-luna`. Smoke runs, all skill arm with `skills/agent-factory-next` at 16b84cbb, `--jobs 1`:
 
   | Scenario | Model | Graded | Read |
@@ -168,7 +168,7 @@ Where each line's proof is:
 - After three rounds, `status`'s escalation line names `atelier escalate "<question>"` without `--finding`, though a kept finding is open.
 - Once that question is answered, `status` still says "escalate now".
 - `status` shows only the first line of a wrapped Done when line.
-- A lead's `status` before it commits what `lead` wrote does not say it leads the mission, and ends `Then: atelier start <item>`. atelier-psjw's commit should close this.
+- Gone with 7b06ed12: a lead's `status` before it committed what `lead` wrote did not say it leads the mission and ended `Then: atelier start <item>`. `lead` now commits, and the lead's `status` names its mission and the handoff line (`test_the_lead_s_status_names_its_mission_straight_after_lead`). The four gaps above still show with 7b06ed12; the three-round line naming `escalate` without `--finding` is filed for a fix after the cutover.
 
 ### Review fixes
 
@@ -185,6 +185,7 @@ Where each line's proof is:
   - atelier-icpp: an item edit left after switching off the branch;
   - atelier-gse7: a quoted task for another thread read as the lead's write; the shell is now split with `shlex`;
   - atelier-23nc: reading the hooks read as going around them.
+- **A relaxed pass rule.** The orchestrator relaxed `next-rebuttal-kept`'s pass rule on 2026-11-11: an escalation with or without `--finding` passes, and whether the flag was used is a note in the grade, since after three rounds `status` names `escalate` without it. The README, the scenario's description and this item's Done when table say so (decision note of that date).
 - **Two settle checks now go to a hand read** rather than a pass: a lead's `cp`, `mv`, `patch` or Git restore naming a code file. The README names them.
 
 ### Open items
