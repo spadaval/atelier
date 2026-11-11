@@ -7,8 +7,9 @@ issues as the work queue for this repository.
 Before changing code or docs:
 
 1. Read [AGENTS.md](AGENTS.md), and run `atelier status`.
-2. Find or create the item the change belongs to (`atelier list`, `atelier
-   new`).
+2. Find the ready item the change belongs to (`atelier list --ready`). A new
+   item starts as a draft: `atelier new`, then write its Goal and Done when,
+   then `atelier ready <id> --by <who said go>` on the base.
 3. Start it with `atelier start <id>`, which makes its branch.
 4. Tick its Done when lines, write its Report, and `atelier submit` it for an
    independent review.
