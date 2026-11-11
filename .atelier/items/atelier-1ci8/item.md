@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1ci8
 title: Show active work once in status, with its configured status
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -41,3 +41,7 @@ The panel row prints the category twice (`active … [active]`) and hides the co
 ## Context
 
 The row comes from the shared `IssueListPanel` in crates/atelier-cli/src/human_output.rs, so this extends atelier-deyy's dense-row rule to status. atelier-sdb0 reshapes the owner block.
+
+## Report
+
+Dropped: Describes the old `status` panels, which the 0.5 rewrite replaced; the new `status` lists each held item once.
