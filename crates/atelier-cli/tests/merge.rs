@@ -1044,10 +1044,7 @@ fn with_a_forge_submit_pushes_the_branch_and_opens_its_pull_request() {
         run.stdout,
         format!(
             "Submitted {ID} for review.\nPushed branch {ID} to origin. {PULL}\
-             A reviewer must be a thread other than yours. Under Codex a subagent you start is one; \
-             under Claude Code a subagent runs as your thread and is refused, so use your \
-             harness's tool for a new agent thread. Start one with fresh context, not as a fork \
-             of yours, and give it this task:\n  Run atelier review {ID} and follow what it prints.\n\
+             A reviewer {START_ONE}  Run atelier review {ID} and follow what it prints.\n\
              Then wait for its verdict, and run `atelier status`.\n"
         )
     );
@@ -1095,7 +1092,7 @@ fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it
     );
     assert!(
         run.stdout.contains(
-            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be a thread other than yours. "
+            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be a thread other than yours, and starting it is your job: "
         ),
         "{}",
         run.stdout

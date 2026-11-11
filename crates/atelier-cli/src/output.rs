@@ -33,13 +33,18 @@ pub(crate) fn holder(entry: &Entry) -> String {
 
 /// `status` on an item's branch. `config` is the base's, whose merge
 /// checks and forge `merge` goes through, `dropped` why the item was
-/// dropped, and `decider` who answers a question waiting on it.
+/// dropped, and `decider` who answers a question waiting on it, for its
+/// implementer. For a thread that holds nothing on it, `decides` says
+/// whether it may answer the oldest question, and `leads` names the
+/// item's mission when it leads it.
 pub fn item(
     caller: &Thread,
     entry: &Entry,
     config: &Config,
     dropped: Option<&str>,
     decider: Option<&str>,
+    decides: bool,
+    leads: Option<&str>,
 ) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
@@ -69,6 +74,16 @@ pub fn item(
         )
     };
     let mut next = next(entry, dropped, decider.filter(|_| entry.holds));
+    // A thread holding nothing on it, a reviewer whose review is done
+    // among them, is told of its questions, which it may decide.
+    let done = entry.next.is_none() && entry.reviewed.is_some() && !entry.holds;
+    if entry.next == Some(Act::TakeOver) || done {
+        // A done reviewer told to decide is not also told to stop.
+        if done && decides && !entry.questions.is_empty() {
+            next.clear();
+        }
+        next = visiting(id, &entry.questions, decides, leads, &next);
+    }
     // Before `merge`, what it will run and wait for; a stale approval is
     // sent to `submit` instead.
     let stale = entry
@@ -121,16 +136,21 @@ fn since(entry: &Entry) -> String {
 }
 
 /// The Review section's rule after three rounds without an approval, for
-/// the implementer, indented by `indent`; nothing refuses a fourth round.
-/// In review, `escalate` waits for the round's verdict.
+/// the implementer, indented by `indent`, naming the finding to escalate;
+/// nothing refuses a fourth round. In review, `escalate` waits for the
+/// round's verdict.
 fn escalate(entry: &Entry, indent: &str) -> String {
     let when = match entry.status {
         Status::InReview => "if this round asks for changes too, escalate once its verdict is in",
         _ => "so escalate now",
     };
-    entry.unapproved.map_or(String::new(), |rounds| {
-        format!("{indent}{rounds} rounds have ended without an approval, and the Review section requires escalation after three, {when}: atelier escalate \"<question>\"\n")
-    })
+    let Some((rounds, finding)) = &entry.unapproved else {
+        return String::new();
+    };
+    let finding = finding
+        .as_ref()
+        .map_or(String::new(), |name| format!("--finding {name} "));
+    format!("{indent}{rounds} rounds have ended without an approval, and the Review section requires escalation after three, {when}: atelier escalate {finding}\"<question>\"\n")
 }
 
 /// What `merge` runs and waits for, from the base's config.

@@ -21,6 +21,10 @@ pub const SKIP: &str = "If the rule is wrong for this case, go past it on purpos
 /// hooks, as every scratch repository is until `setup` runs in it.
 pub const NO_HOOKS: &str = "This clone has none of Atelier's Git hooks, so nothing checks its commits and pushes. Install them with: atelier setup\n";
 
+/// What a handoff line says between who must be another thread and the
+/// one task it gives.
+pub const START_ONE: &str = "must be a thread other than yours, and starting it is your job: it is part of the task you were given, even as another thread's child or subagent, and nobody else will start it. So start one yourself now, without waiting to be asked. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Give it fresh context, not a fork of yours, and give it this task:\n";
+
 pub struct Scratch {
     pub dir: TempDir,
 }

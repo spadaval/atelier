@@ -47,10 +47,7 @@ fn escalate(root: &Path, finding: Option<&str>) -> Run {
 fn decider_handoff(finding: &str) -> String {
     let stem = finding.rsplit_once('.').unwrap().0;
     format!(
-        "A decider must be a thread other than yours. Under Codex a subagent you start is one; \
-         under Claude Code a subagent runs as your thread and is refused, so use your harness's \
-         tool for a new agent thread. Start one with fresh context, not as a fork of yours, and \
-         give it this task:\n  Run atelier show {ID}, and read the question waiting under its Decisions and \
+        "A decider {START_ONE}  Run atelier show {ID}, and read the question waiting under its Decisions and \
          finding {finding} in {REVIEWS}/{stem}.md. Answer it with atelier decide {ID} '<your \
          answer>', adding --defer to defer the finding or --no-action to close it without a fix, \
          or neither to leave it to be fixed.\nThen wait for its answer, and run `atelier status`.\n"
@@ -649,4 +646,36 @@ fn a_finding_deferred_by_a_decision_is_listed_under_its_carriers_name_and_settle
         let again = atelier(&root, "t9", &["drop", &name, "--reason", "Again."]);
         assert_eq!(again.code, 1, "{settle}: {}", again.stdout);
     }
+}
+
+#[test]
+fn a_reviewer_whose_review_is_done_is_told_of_a_question_it_may_decide() {
+    let (scratch, finding) = changes_requested();
+    let root = scratch.root();
+    let waits = format!("A question waits on a decider: {}\n", asked());
+    let stop = "Your review is done, and nothing on this item is yours to do. Say so to whoever \
+                started you, and stop.\n";
+    // About no finding: r1 may decide it, and is told to.
+    let run = escalate(&root, None);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let status = atelier(&root, "r1", &["status"]).stdout;
+    assert!(
+        status.ends_with(&format!("{waits}Then: atelier decide {ID} \"<answer>\"\n")),
+        "{status}"
+    );
+    assert!(!status.contains("take it over"), "{status}");
+    let run = atelier(&root, "r1", &["decide", ID, "No."]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    // About the finding r1 raised: it may not, and is told who may.
+    let run = escalate(&root, Some(&finding));
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let status = atelier(&root, "r1", &["status"]).stdout;
+    assert!(
+        status.ends_with(&format!(
+            "{waits}You may not decide it. A decider answers it with `atelier decide {ID}`: a \
+             thread that never implemented this item nor reviewed the finding a question is \
+             about.\n{stop}"
+        )),
+        "{status}"
+    );
 }

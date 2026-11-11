@@ -77,6 +77,64 @@ fn start_commits_building_then_creates_the_branch_and_status_says_what_is_next()
 }
 
 #[test]
+fn status_shows_a_done_when_line_wrapped_over_several_lines_whole() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    let path = root.join(item_path(ID));
+    let wrapped = fs::read_to_string(&path).unwrap().replace(
+        "- [ ] A test covers it.\n",
+        "- [ ] A test covers it,\n  and CI runs\n  #12 for it.\n",
+    );
+    fs::write(&path, wrapped).unwrap();
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.contains(
+            "  [ ] Done when: `hello` prints hello.\n  [ ] Done when: A test covers it, and CI runs \
+             #12 for it.\n  [ ] Report"
+        ),
+        "{status}"
+    );
+}
+
+#[test]
+fn status_outside_an_atelier_repository_says_so_and_a_config_that_does_not_parse_says_why() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let plain = dir.path().join("plain");
+    git(&plain, &["init", "-q", "-b", "main"]);
+    let run = atelier(&plain, "t1", &["status"]);
+    assert_eq!((run.code, run.stdout.as_str()), (2, ""));
+    assert!(
+        run.stderr
+            .starts_with("atelier: this is not an Atelier repository: "),
+        "{}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.ends_with(" has no .atelier/ directory\n"),
+        "{}",
+        run.stderr
+    );
+    // A config that is there and does not parse still says why.
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    append(&root, ".atelier/config.toml", "colour = \"red\"\n");
+    let run = atelier(&root, "t1", &["status"]);
+    assert_eq!(run.code, 2);
+    assert!(
+        run.stderr
+            .starts_with("atelier: cannot read this repository's Atelier config: "),
+        "{}",
+        run.stderr
+    );
+    assert!(
+        run.stderr.contains("unknown field `colour`"),
+        "{}",
+        run.stderr
+    );
+}
+
+#[test]
 fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
@@ -122,10 +180,7 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     assert_eq!(
         submitted.stdout,
         format!(
-            "Submitted {ID} for review.\nA reviewer must be a thread other than yours. Under Codex a \
-             subagent you start is one; under Claude Code a subagent runs as your thread and is \
-             refused, so use your harness's tool for a new agent thread. Start one with fresh \
-             context, not as a fork of yours, and give it this task:\n  Run atelier review {ID} and follow \
+            "Submitted {ID} for review.\nA reviewer {START_ONE}  Run atelier review {ID} and follow \
              what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
         )
     );
@@ -1091,7 +1146,7 @@ fn changes_in_round_1() -> (Scratch, String) {
     (scratch, first)
 }
 
-const ESCALATE_NOW: &str = "rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate \"<question>\"\n";
+const ESCALATE_NOW: &str = "rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate ";
 
 #[test]
 fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate() {
@@ -1116,7 +1171,8 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
-            "Status: changes requested in round 3\n3 {ESCALATE_NOW}To return it to review:\n"
+            "Status: changes requested in round 3\n3 {ESCALATE_NOW}--finding {third}.1 \"<question>\"\n\
+             To return it to review:\n"
         )),
         "{status}"
     );
@@ -1127,7 +1183,7 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
     let away = atelier(&base, "t1", &["status"]).stdout;
     assert!(
         away.contains(&format!(
-            "You hold:\n  {ID} (changes requested in round 3): Say hello\n    3 {ESCALATE_NOW}"
+            "You hold:\n  {ID} (changes requested in round 3): Say hello\n    3 {ESCALATE_NOW}--finding {third}.1 \"<question>\"\n"
         )),
         "{away}"
     );
@@ -1171,6 +1227,48 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
         )),
         "{status}"
     );
+}
+
+#[test]
+fn the_escalation_line_goes_once_a_question_is_asked_about_the_kept_finding() {
+    let (scratch, first) = changes_in_round_1();
+    let root = scratch.root();
+    let second = another_round(&root, &first, 2, "t3", "changes");
+    let third = another_round(&root, &second, 3, "t4", "changes");
+    let base = scratch.worktree("base");
+    let finding = format!("{third}.1");
+    let run = atelier(
+        &root,
+        "t1",
+        &[
+            "escalate",
+            "--finding",
+            &finding,
+            "Is the period worth a fourth round?",
+        ],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    git(&root, &["commit", "-qam", "Ask"]);
+    // Asked, and then answered without settling the finding, which stays
+    // open: the escalation is made either way.
+    for answered in [false, true] {
+        let status = atelier(&root, "t1", &["status"]).stdout;
+        assert!(
+            status.contains("Status: changes requested in round 3\n"),
+            "{status}"
+        );
+        assert!(
+            !status.contains("rounds have ended"),
+            "{answered}: {status}"
+        );
+        let away = atelier(&base, "t1", &["status"]).stdout;
+        assert!(!away.contains("rounds have ended"), "{answered}: {away}");
+        if !answered {
+            let run = atelier(&root, "d1", &["decide", ID, "Yes: fix it."]);
+            assert_eq!(run.code, 0, "{}", run.stderr);
+            git(&root, &["commit", "-qam", "Decide"]);
+        }
+    }
 }
 
 #[test]
