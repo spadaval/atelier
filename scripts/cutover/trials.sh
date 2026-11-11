@@ -60,7 +60,7 @@ fingerprint() {
 # ---------------------------------------------------------------- shared inputs
 
 prepare() {
-  local s r b url tmp
+  local s r b url tmp base
   mkdir -p "$W/cache" "$W/tmp"
   export TMPDIR=$W/tmp
   if [ ! -f "$W/cache/fallback.tar.xz" ]; then
@@ -80,6 +80,12 @@ prepare() {
     echo "$r $url" >> "$W/cache/urls"
     git clone -q --bare --single-branch -b "$b" "$REAL/$r" "$W/cache/remotes/$r.git"
   done
+  # Atelier's master is the one this branch last took from master (its
+  # merge base), so that the switch merges as it will once the branch is
+  # brought up to date; master may hold newer work the branch has not
+  # taken yet.
+  base=$(git -C "$TREE" merge-base HEAD "$(git -C "$REAL/atelier" rev-parse master)")
+  git --git-dir="$W/cache/remotes/atelier.git" update-ref refs/heads/master "$base"
   # The day's condition: no item in progress on any base. An item a real
   # base holds in progress today goes back to todo, in the sandbox only.
   for s in $SPECS; do
