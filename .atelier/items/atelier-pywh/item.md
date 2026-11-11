@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-pywh
 title: Read the fleet site on your phone for taste
-status: ready
+status: dropped
 mission: null
 labels:
 - fleet-dashboard
@@ -31,3 +31,7 @@ Sumeet reads the site on his phone and says whether it answers where things stan
 ## Context
 
 A human read after the site ships; it does not hold mission atelier-yfqu open (planning review finding atelier-gnh5).
+
+## Report
+
+Dropped: The fleet site it asks Sumeet to read was deleted in 0.5; the Desk replaces it.
