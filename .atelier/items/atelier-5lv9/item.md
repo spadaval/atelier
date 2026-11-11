@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5lv9
 title: Give the light-path review brief the moving-part rule and Verdict/Sizes Report line atelier-fnlu added to the item brief
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -30,3 +30,7 @@ The brief `atelier review request` prints for a change with no issue (`crates/at
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-fnlu (Have reviewers flag code no requirement needs: 1 shrink verdict and no overbuilt-code findings in 1,252 reviews)
+
+## Report
+
+Dropped: The light path and `light_path.rs` were removed in 0.5; `start --new` and `merge --trivial` cover it.
