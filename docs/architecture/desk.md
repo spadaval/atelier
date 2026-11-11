@@ -2,7 +2,8 @@
 
 Status: the contract for mission atelier-z4cr (`docs/strategies/desk.md`),
 written by item atelier-1ie1 before any server code, and corrected by items
-atelier-uwxy and atelier-e05n where the server as built differs. It says what each page
+atelier-uwxy, atelier-e05n and atelier-h3hl where the server as built
+differs. It says what each page
 of the Desk is sent, and for every field, which function of the redesigned
 core in `next/` gives it, or that none does yet. The decisions are in
 [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md); what the Desk is
@@ -114,6 +115,10 @@ app = "/path/to/atelier/desk/dist"
 command = "~/.t3/runtime/versions/0.1.9-nightly.20261110.4478/t3"
 # T3 Code's MCP server.
 url = "http://127.0.0.1:3773/mcp"
+# The first message of a planning session's thread. {mission} and {repo}
+# are replaced by the mission's ID and the repository's name. Optional; the
+# default is given under POST /api/sessions.
+session_message = "Start a planning session for mission {mission} ..."
 ```
 
 A path may start with `~/`, and a relative one is read from the
@@ -151,14 +156,13 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 | `GET /api/repos/{repo}/items/{id}` | Item | One item in full |
 | `GET /api/inbox` | Inbox | What waits on the human, in every repository |
 | `GET /api/threads` | Live threads | T3 Code's live threads, each with what it holds in the records |
-| `POST /api/act` | Any | Runs `ready` or `decide` |
+| `POST /api/act` | Mission, Item | Runs `ready` or `decide` |
+| `POST /api/sessions` | Mission | Starts a planning session as a T3 Code thread |
 
 `?done=true` on `/missions` lists done and dropped missions, as
 `Filter::done` does for `list` (master).
 
-The routes for `/history` and `POST /api/act` are not served yet (item
-atelier-h3hl, and M5): they answer `404`. Nor are `pending_answers`,
-`can_decide` and `decide_at`.
+The route for `/history` is not served yet (M5): it answers `404`.
 
 ## Responses, field by field
 
@@ -211,7 +215,7 @@ gives (added by atelier-uwxy).
 | `plan_reviews[].changed_since[]` | The plan's paths that differ between the commit reviewed and the base's tip; `null` when this clone lacks that commit | M6: `atelier_app::plan::plan_changed_at(&mut repo, id, commit, base_tip)` |
 | `threads[]` | Its lead and the reviewers of its plan reviews, with `item: null`, then each of its items' agents (below) with `item` naming the item, so a mission with no lead still shows who works on its items; joined as in [Tying a thread to an item](#tying-a-thread-to-an-item) | Desk, T3 Code |
 | `t3` | Whether T3 Code could be read, as on `/api/threads` | Desk |
-| `pending_answers[]` | Answers the Desk gave with `decide` that no commit holds yet | Desk memory |
+| `pending_answers[]` | Answers the Desk gave with `decide` to its items' questions that no commit holds yet, each as in `questions[]`; see [Answers not yet committed](#answers-not-yet-committed) | Desk memory |
 
 An **item row**, in a mission, the inbox and the rail's loose work:
 
@@ -261,11 +265,11 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | `decisions[]`, `responses[]` | `ItemDir::decisions`, `ItemDir::responses` | master |
 | `reviews[]` | `ItemDir::reviews`, each as a review | master |
 | `unsettled[]` | The names of `acts::unsettled`, for a done item | master |
-| `decide_at` | `git::checkout_of(root, id)`: the checkout with the item's branch out, where `decide` writes | psjw |
-| `can_decide` | `acts::check(Act::Decide, &facts)` for the human caller | master values, psjw `facts` |
+| `decide_at` | `git::checkout_of(root, id)`: the checkout with the item's branch out, where `decide` writes; `null` when none has it out, and then `decide` is refused. Read on every request, not cached, since a checkout is added without a commit | psjw |
+| `can_decide` | `acts::check(Act::Decide, &atelier_app::repo::facts(..))` for the human caller, from the records the page shows | master values, psjw `facts` |
 | `threads[]` | One agent per identity and role the record names: its implementers, the reviewers of its reviews and the deciders of its answers, each with `item: null` | Desk, T3 Code |
 | `t3` | As on `/api/threads` | Desk |
-| `pending_answers[]` | As on the mission | Desk |
+| `pending_answers[]` | As on the mission, for this item | Desk memory |
 
 An **agent**, in `threads[]` of a mission or an item: `identity`, whole as
 the record holds it; `role`, one of `implementer`, `reviewer`, `lead` or
@@ -287,7 +291,7 @@ on `/api/threads`.
 | --- | --- | --- |
 | `needs_human[] {mission, mission_title, items[]}` | `list(.., &Filter { needs_human: true, .. })`: `Group::id`, `Group::mission`, `Group::items` as item rows | master |
 | `drafts[]` | Missions with `MissionStatus::Draft`, as mission rows on the rail | master |
-| `questions[] {item, mission, question, finding}` | `acts::question` of each started item's record | master |
+| `questions[] {item, mission, question, finding}` | `acts::question` of each started item's record, less a question the Desk has answered and no commit holds yet | master |
 | `threads[]` | Live threads whose status is `waiting`, which T3 Code gives a thread that waits on a person, and that hold something in this repository's records; each as on `/api/threads`, with only this repository's `holds` | Desk, T3 Code |
 
 `needs_human` lists the same items as `atelier list --needs-human`, which
@@ -338,22 +342,119 @@ none (atelier-aab1), and the strategy puts them out of scope.
 The request is one of:
 
 ```json
-{ "repo": "atelier", "act": "ready", "ids": ["atelier-z4cr"] }
-{ "repo": "atelier", "act": "decide", "id": "atelier-xxxx",
+{ "act": "ready", "repo": "atelier", "ids": ["atelier-z4cr"] }
+{ "act": "decide", "repo": "atelier", "id": "atelier-xxxx",
   "answer": "One line.", "settle": null }
 ```
 
-`settle` is `null`, `"defer"` or `"no_action"`, for
-`atelier_core::Outcome`. The app sends the header the strategy's Access
-section names. The response is `200` with one of:
+`settle` is `null` or left out, `"defer"` or `"no_action"`, for
+`atelier_core::Outcome`. A field the act does not take is refused. The
+caller is never in the request: `ready` and `decide` run under the
+configured `caller`, which is also `ready`'s `by`. The types are
+`ActRequest` (`ReadyAct` or `DecideAct`) and `ActResponse` in
+`desk/src/api/`.
+
+The response is `200` with one of:
+
+```json
+{ "result": "done", "text": "Made ready, as sumeet said: atelier-z4cr.\n...",
+  "paths": [".atelier/missions/atelier-z4cr/mission.md"], "commit": "76cbb6c..." }
+{ "result": "refused", "rules": ["..."], "text": "`atelier ready` refused; ...",
+  "next": "Correct what each names, ..." }
+```
 
 | Result | Fields | From |
 | --- | --- | --- |
-| `done` | `text`, `paths[]`, `commit` (`null` for `decide`) | `atelier_app::plan::Done` (psjw) |
-| `refused` | `rules[]`, `text`, `next` (may be `null`) | `atelier_app::Refused` (psjw) |
+| `done` | `text`, `paths[]`, `commit` (`null` for `decide`) | `atelier_app::plan::Done` |
+| `refused` | `rules[]` (empty when no rule refused it), `text`, `next` (may be `null`) | `atelier_app::Refused` |
 
-A failure that is not a refusal, such as Git failing, is `500` with
-`error`. Every page is read again after a `done`.
+The Desk writes none of this text. A `decide` whose `id` is not an ID is
+`400`, an unknown repository `404`, a body that is not JSON `400` or `415`,
+JSON that is not one of the shapes above `422`, and a failure that is not a refusal, such as Git
+failing, `500`; each with `error`. Acts run one at a time. Every page is
+read again after a `done`, since `ready`'s commit moves the base's tip.
+
+#### Only from the app
+
+`POST /api/act` and `POST /api/sessions` are refused with `403` unless the
+request has the header `x-atelier-desk: 1`, and its `Origin`, when it has
+one, names a host in the configuration's `hosts` (its port is ignored). A
+page of another site cannot add the header without the browser asking the
+server first, which it does not answer, and a request from such a page
+carries that page's `Origin`. The check runs before the method's, so a
+`GET` of either route is `403` too. There is no sign-in: anyone who can
+reach the Desk at a host it answers to can act as its caller (strategy,
+Access).
+
+#### Answers not yet committed
+
+`decide` writes the answer into the item's record in the checkout with the
+item's branch out and commits nothing; the implementer's `submit` commits
+it. Pages are read from commits, so after a `done` the server keeps the
+answer in memory, as the record in that checkout then holds it, with the
+item's mission. The item's page and its mission's page list it in
+`pending_answers`, and the inbox leaves the question out of `questions`.
+Once the page's records show that question of that item answered, which
+happens when a commit on the item's branch holds the answer, the server
+forgets it. A restart forgets every one; the answer is still in the
+checkout, and shows once committed.
+
+### `POST /api/sessions`
+
+Starts a planning session for a mission: a new T3 Code thread in the
+repository's T3 project, whose first message names the mission. It writes
+no record. The request is `SessionRequest`:
+
+```json
+{ "repo": "atelier", "mission": "atelier-z4cr" }
+```
+
+The mission must be in the base's last commit (`404` otherwise). The
+response is `200` with `SessionResponse`, one of:
+
+```json
+{ "result": "started", "thread_id": "...", "link": "https://app.t3.codes/threads/...",
+  "project_id": "..." }
+{ "result": "refused", "text": "No T3 Code project has /path as its workspace root, ..." }
+```
+
+`link` is the one `t3_thread_launch` gives, and may be `null`. It is
+refused, and nothing is started, when the configuration has no `[t3]`
+table, when T3 Code cannot be reached, when no project's workspace root is
+the repository, or when T3 Code refuses the launch.
+
+How it starts the thread:
+
+1. **Find the project.** The server lists T3 Code's projects with
+   `t3_project_list` (every page, deleted ones left out), under the token
+   that only reads, and takes the first whose `workspaceRoot` is the
+   served repository's directory, the one under a configured root,
+   compared as canonical paths. A project rooted at another checkout of
+   the same repository is not taken: a T3 project names one checkout, and
+   the thread starts in it.
+2. **Get a token that may operate.** Only now, the server runs the
+   configured `t3` command as `auth session issue --subject mcp-client
+   --scope orchestration:operate --ttl 5m --label atelier-desk --json`.
+   The token is held in memory for this one request: it is never logged,
+   written to disk, or put in a response or an error, and no other route
+   uses it. The read token cannot launch: T3 Code refuses it with
+   `capability_denied` (atelier-aab1).
+3. **Launch.** It calls `t3_thread_launch` with `projectId`, `title`
+   `Plan <mission>: <mission title>`, `message`, and a `clientRequestId`
+   of its own, so that the client's one retry after a refused token
+   replays the launch rather than starting a second thread. Model, runtime
+   mode and workspace are left to the project's defaults; the thread runs
+   in the project's checkout (`workspaceStrategy` `root`).
+4. **Revoke.** It revokes the operating token's session with `auth session
+   revoke`, whether the launch worked or not.
+
+The first message is `[t3] session_message`, with `{mission}` and `{repo}`
+replaced. Its default (`atelier_desk::config::SESSION_MESSAGE`) is:
+
+> Start a planning session for mission {mission} in this repository
+> ({repo}). Load the Agent Factory skill (/agent-factory) and use its
+> `plan` procedure on {mission}: read the mission and its documents, then
+> work with me on its plan until it is ready for me to say go.
 
 ## Act functions
 
@@ -368,12 +469,24 @@ What the server calls for each act, and where it stands:
 | Answer a question | `atelier_app::decide(&mut Repo, id: &str, answer: &str, settled: Option<Outcome>)` | The same types. `Done::paths` is the item's `item.md`; `commit` is `None`, since `submit` commits it | psjw; master's `questions::decide` in `atelier-cli` |
 | Open for reading only | `atelier_app::Repo::open_committed(dir: &Path, caller: Thread, skip: &Skip)` | `anyhow::Result<Repo>`, as `open` | M1 |
 
-For `ready` the server opens the checkout `checkout_of(root, base)` names;
-for `decide`, the one `checkout_of(root, id)` names. Where none has the
-branch out, it opens the repository's root, and the function refuses with
-its own text and next step (`say::off_base` or `say::elsewhere`, psjw), so
-the Desk writes no refusal of its own. `by` for `ready` is the same name as
-the caller. The skip is always `Skip::new(None)`.
+For `ready` the server opens the checkout `checkout_of(root, base)` names,
+with `base` read by `Repo::open_committed` on the served directory; for
+`decide`, the one `checkout_of(root, id)` names. Where none has the branch
+out, it opens the served directory, and the function refuses with its own
+text and next step (`say::off_base` or `say::elsewhere`), so the Desk writes
+no refusal of its own. The caller is `Thread(caller)` with `caller` from the
+configuration, whole, and `by` for `ready` is the same string. The skip is
+always `Skip::new(None)`. The server runs no `atelier` binary and reads no
+command's output, and makes no worktree, moves no ref and makes no commit
+of its own: `ready` commits only the paths it wrote, so a file staged in
+that checkout before stays staged.
+
+The test `saying_go_from_the_desk_leaves_the_commit_the_cli_leaves`
+(`next/crates/atelier-desk/tests/acts.rs`) checks the strategy's
+act-is-a-record criterion: it says go through `POST /api/act` in one clone
+and calls `atelier_app::ready` as the command does in another clone of the
+same commit, and finds one new commit in each with the same message and
+paths, and the same mission record but for `ready.at`.
 
 ## The brief and the debrief on the mission page
 
@@ -495,7 +608,10 @@ The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from
 - One `POST /api/act` for both acts, with the act named in the body, since
   the strategy allows only two and both return the same types.
 - A refusal is `200` with `result: refused`, because it is an answer the
-  page shows, not a failed request.
+  page shows, not a failed request. The same holds for a session that
+  cannot start.
+- The app's header is `x-atelier-desk: 1`, as the spike's was
+  `x-atelier-deck: 1`.
 - The Desk always acts with `Skip::new(None)`: a skip is an agent's
   reason carried in a commit trailer, and the human acting from a page is
   shown the refusal and its next step instead.
