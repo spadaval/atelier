@@ -549,6 +549,26 @@ fn a_missions_lead_decides_its_items_questions_and_sees_each_and_since_when_one_
         held.contains(&format!("You hold:\n  {ID} ({since}): Say hello\n")),
         "{held}"
     );
+
+    // Code committed after the approval makes it stale: the lead sees the
+    // condition its holder's `status` lists, from the branch's last commit.
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello again"]);
+    let stale = "The approval still covers the head: since ";
+    let own = atelier(&root, "t1", &["status"]).stdout;
+    let line = own
+        .lines()
+        .find(|line| line.contains(stale))
+        .unwrap_or_else(|| panic!("{own}"));
+    assert!(line.contains("(changed: hello.txt)"), "{own}");
+    let status = atelier(&base, "lead1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!(
+            "  Approved:\n    {ID} (high, held by t1, {since}): Say hello\n    {line}\n"
+        )),
+        "{status}"
+    );
 }
 
 /// `atelier check` finds every record of the checkout at `root` valid.

@@ -210,22 +210,29 @@ impl Repo {
     /// What `merge` reads from this checkout, on the branch of `record`,
     /// whose HEAD is the commit `head`.
     pub fn checkout(&mut self, record: &ItemDir, head: &str) -> Result<Checkout> {
-        let approved = approval(record).filter(|_| record.item.status == Status::Approved);
-        let since_approval = match approved {
-            None => None,
-            Some(review) => {
-                let commit = &review.review.commit;
-                Some(SinceApproval {
-                    changed: git::changed(&self.root, commit, head)?,
-                    reviewed: self.reader.item(commit, &record.item.id)?,
-                    head: self.reader.item(head, &record.item.id)?,
-                })
-            }
-        };
         Ok(Checkout {
             uncommitted: self.uncommitted(&record.item.id)?,
-            since_approval,
+            since_approval: self.since_approval(record, head)?,
         })
+    }
+
+    /// On an approved `record`: what differs between the commit its
+    /// approval reviewed and the commit `head`.
+    pub fn since_approval(
+        &mut self,
+        record: &ItemDir,
+        head: &str,
+    ) -> Result<Option<SinceApproval>> {
+        let approved = approval(record).filter(|_| record.item.status == Status::Approved);
+        let Some(review) = approved else {
+            return Ok(None);
+        };
+        let commit = &review.review.commit;
+        Ok(Some(SinceApproval {
+            changed: git::changed(&self.root, commit, head)?,
+            reviewed: self.reader.item(commit, &record.item.id)?,
+            head: self.reader.item(head, &record.item.id)?,
+        }))
     }
 
     /// What the checkout holds that no commit does and `merge` would leave
