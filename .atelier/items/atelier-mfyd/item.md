@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-mfyd
 title: Count ready work net of items in flight on other branches
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - orientation
@@ -28,3 +28,7 @@ After atelier-7n5u, ready rows in `status`, `work ready` and `work all` carry `â
 ## Context
 
 `crates/atelier-cli/src/commands/status.rs`, `git::branch_summaries` / `in_flight`. Found validating atelier-1w8c on 2026-10-17.
+
+## Report
+
+Dropped: Describes the old ready count. In 0.5 `status` lists what other threads hold separately from what is ready to start.
