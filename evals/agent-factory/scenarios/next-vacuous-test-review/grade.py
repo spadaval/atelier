@@ -27,7 +27,7 @@ spec.loader.exec_module(loop)
 git = loop.git
 ID = "price-r4nd"
 DIR = f".atelier/items/{ID}"
-TEST = re.compile(r"test_discount_rounds_half_up|\b(new|regression|added) test\b")
+TEST = re.compile(r"test_discount_rounds_half_up|\b(new|regression|added|rounding) test\b")
 CANNOT_FAIL = re.compile(
     r"(pass|passes|passed|passing|green|succeed\w*)\s+(even\s+)?(with|without|on|against|before|"
     r"under)\b.{0,60}(fix|revert|old|original|truncat|main|floor|unfixed|previous)"
