@@ -7,7 +7,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit && vite build",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "desk-matches-cli": "node live/desk-matches-cli.ts",
+    "act-is-a-record": "node live/act-is-a-record.ts"
   },
   "packageManager": "pnpm@12.18.0",
   "dependencies": {

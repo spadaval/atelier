@@ -328,7 +328,10 @@ async fn repos(State(desk): State<Arc<Desk>>) -> Response {
                 },
             });
         }
-        Ok(ReposResponse { repos })
+        Ok(ReposResponse {
+            repos,
+            built_from: crate::BUILT_FROM.into(),
+        })
     })
     .await
 }

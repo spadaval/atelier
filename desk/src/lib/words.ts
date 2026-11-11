@@ -1,5 +1,7 @@
 import type { MissionRow } from "../api/MissionRow";
 import type { MissionStatus } from "../api/MissionStatus";
+import type { Role } from "../api/Role";
+import type { T3State } from "../api/T3State";
 import type { Status } from "../api/Status";
 import type { StatusCount } from "../api/StatusCount";
 
@@ -59,13 +61,43 @@ export function shortCommit(commit: string | null | undefined): string {
   return commit ? commit.slice(0, 8) : "";
 }
 
+/** What a thread is to the records, as the agents list names it. */
+export const roleWords: Record<Role, string> = {
+  implementer: "Implementer",
+  reviewer: "Reviewer",
+  lead: "Lead",
+  decider: "Answered a question",
+};
+
+/** T3 Code's live statuses in words; `waiting` is a thread waiting on a person. */
+const threadWords: Record<string, string> = {
+  preparing: "Preparing",
+  queued: "Queued",
+  starting: "Starting",
+  running: "Running",
+  waiting: "Waiting on a person",
+};
+
+export function threadStatus(status: string): string {
+  return threadWords[status] ?? statusTitle(status as never);
+}
+
 /**
- * A thread identity as a person reads it. T3 Code's delegated-task
- * identities are long and percent-encoded; they are shown whole in the
- * title attribute, and never split to find a parent.
+ * What a page says about T3 Code's threads when they are not fresh, or
+ * `null` when they are. A list read before a failed poll is still served,
+ * with its age; with none read, the page knows no thread at all.
  */
-export function who(identity: string): string {
-  return identity.length > 40 ? `${identity.slice(0, 18)}…${identity.slice(-12)}` : identity;
+export function t3Note(t3: T3State): { known: boolean; text: string; error: string | null } | null {
+  if (t3.reachable) return null;
+  if (t3.age_seconds === null) return { known: false, text: "Threads are unavailable: T3 Code cannot be reached.", error: t3.error };
+  return { known: true, text: `T3 Code cannot be reached just now, so threads are shown as they were ${ago(t3.age_seconds)}.`, error: t3.error };
+}
+
+/** `40 seconds ago`, `3 minutes ago`. */
+export function ago(seconds: number): string {
+  if (seconds < 60) return `${plural(Math.round(seconds), "second")} ago`;
+  if (seconds < 3600) return `${plural(Math.round(seconds / 60), "minute")} ago`;
+  return `${plural(Math.round(seconds / 3600), "hour")} ago`;
 }
 
 export const recommendationWords: Record<string, string> = {

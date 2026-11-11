@@ -4,4 +4,8 @@ import type { RepoSummary } from "./RepoSummary";
 /**
  * `GET /api/repos`.
  */
-export type ReposResponse = { repos: Array<RepoSummary>, };
+export type ReposResponse = { repos: Array<RepoSummary>,
+/**
+ * The commit the server was built from (`crate::BUILT_FROM`).
+ */
+built_from: string, };

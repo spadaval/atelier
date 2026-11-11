@@ -3,15 +3,15 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { ItemRow } from "../api/ItemRow";
 import { to } from "../lib/api";
-import { statusName, who } from "../lib/words";
+import { statusName } from "../lib/words";
 import { Priority, StatusGlyph } from "./ui";
 
 /** What an item needs next, in a few words: who holds it, what blocks it, what it lacks. */
 export function itemFacts(row: ItemRow): string[] {
   const facts: string[] = [];
   if (row.dropped) facts.push(`Dropped: ${row.dropped}`);
-  if (row.holder) facts.push(`Held by ${who(row.holder)}`);
-  if (row.reviewer) facts.push(`Reviewed by ${who(row.reviewer)}`);
+  if (row.holder) facts.push(`Held by ${row.holder}`);
+  if (row.reviewer) facts.push(`Reviewed by ${row.reviewer}`);
   // A ready item's unmet conditions already name its blockers.
   const waiting = row.status === "ready" ? [] : row.blockers.filter((b) => row.waiting_on.includes(b.id));
   if (waiting.length > 0) facts.push(`Waits on ${waiting.map((b) => `${b.id} (${b.status ? statusName(b.status) : "not found"})`).join(", ")}`);

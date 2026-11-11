@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router";
 import { Crumbs } from "./components/Crumbs";
 import { Shell } from "./components/Shell";
 import { Empty } from "./components/ui";
+import { AgentsPage } from "./pages/Agents";
 import { InboxPage } from "./pages/Inbox";
 import { ItemPageView } from "./pages/Item";
 import { MissionPageView } from "./pages/Mission";
@@ -13,6 +14,8 @@ export function App() {
       <Routes>
         <Route path="/" element={<ReposPage />} />
         <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/r/:repo/agents" element={<AgentsPage />} />
         <Route path="/r/:repo" element={<MissionPageView />} />
         <Route path="/r/:repo/mission/:id" element={<MissionPageView />} />
         <Route path="/r/:repo/item/:id" element={<ItemPageView />} />

@@ -17,9 +17,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T08:56:16.150782491+00:00"
+status: "superseded"
 title: "Deferred review findings on atelier-e05n"
-updated_at: "2026-11-11T06:46:00.431925577+00:00"
+updated_at: "2026-11-11T08:56:16.150782491+00:00"
 ---
 
 ## Goal
@@ -29,3 +30,7 @@ Collect the follow-ups deferred from review findings on atelier-e05n, one per fi
 ## Done when
 
 Done when was not specified.
+
+## Report
+
+Its one child, atelier-mg2j, was settled by atelier-va99.
