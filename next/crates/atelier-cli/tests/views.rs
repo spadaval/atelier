@@ -267,14 +267,14 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     let path = ".atelier/missions/demo-m1ss/mission.md";
 
     // Not a ready mission: refused, naming `ready`, and nothing written.
-    for (id, said) in [
-        ("demo-m3dr", "Mission demo-m3dr is draft, and `atelier lead` runs on a mission that is ready. A planner makes it ready with: atelier ready demo-m3dr --by <name>\n"),
-        ("demo-m2dn", "Mission demo-m2dn is done, and `atelier lead` runs on a mission that is ready. Nothing is left to lead on it.\n"),
-        ("demo-a1aa", "No mission demo-a1aa is in this checkout. `atelier list` shows the missions.\n"),
+    for (id, said, skip) in [
+        ("demo-m3dr", "Mission demo-m3dr is draft, and `atelier lead` runs on a mission that is ready. A planner makes it ready with: atelier ready demo-m3dr --by <name>\n", SKIP),
+        ("demo-m2dn", "Mission demo-m2dn is done, and `atelier lead` runs on a mission that is ready. Nothing is left to lead on it.\n", SKIP),
+        ("demo-a1aa", "No mission demo-a1aa is in this checkout. `atelier list` shows the missions.\n", ""),
     ] {
         let run = atelier(&root, "lead1", &["lead", id]);
         assert_eq!(run.code, 1, "{id}");
-        assert_eq!(run.stderr, format!("`atelier lead {id}` refused; nothing changed.\n{said}"));
+        assert_eq!(run.stderr, format!("`atelier lead {id}` refused; nothing changed.\n{said}{skip}"));
     }
     // Planning happens on the base.
     let run = atelier(&second, "lead1", &["lead", "demo-m1ss"]);

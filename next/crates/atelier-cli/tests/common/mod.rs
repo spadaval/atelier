@@ -10,6 +10,13 @@ use tempfile::TempDir;
 
 pub const ID: &str = "demo-ab12";
 
+/// What ends a refusal of anything else while `ATELIER_SKIP` is set.
+pub const NOT_SKIPPABLE: &str =
+    "ATELIER_SKIP passes only a rule, and what refused this is not one, so it cannot be skipped.\n";
+
+/// What ends every refusal of a rule, after its way out.
+pub const SKIP: &str = "If the rule is wrong for this case, go past it on purpose: run the same command again with ATELIER_SKIP=\"<why>\" in front of it.\n";
+
 /// The line `status` begins with in a clone with none of Atelier's Git
 /// hooks, as every scratch repository is until `setup` runs in it.
 pub const NO_HOOKS: &str = "This clone has none of Atelier's Git hooks, so nothing checks its commits and pushes. Install them with: atelier setup\n";
@@ -135,6 +142,7 @@ pub fn atelier_command(at: &Path, thread: &str, args: &[&str]) -> Command {
     }
     command.env("T3CODE_THREAD_ID", thread);
     command.env_remove("ATELIER_TEST_HOLD_BEFORE_BRANCH");
+    command.env_remove("ATELIER_SKIP");
     identity(&mut command);
     command
 }

@@ -91,7 +91,7 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     let refused = atelier(&root, "t1", &["submit"]);
     assert_eq!(refused.code, 1);
     let said: Vec<&str> = refused.stderr.lines().skip(1).collect();
-    assert_eq!(said, list);
+    assert_eq!(said, [&list[..], &[SKIP.trim_end()]].concat());
     assert_eq!(
         refused.stderr.lines().next(),
         Some("`atelier submit` refused; nothing changed.")
@@ -168,7 +168,7 @@ fn start_on_a_draft_changes_nothing_and_names_ready() {
         run.stderr,
         format!(
             "{ID} is draft, and `atelier start` runs on an item that is ready. Nothing changed.\n\
-             It is a draft. A planner makes it ready with: atelier ready {ID} --by <name>\n"
+             It is a draft. A planner makes it ready with: atelier ready {ID} --by <name>\n{SKIP}"
         )
     );
     assert!(!branch_exists(&root, ID));
@@ -369,7 +369,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         run.stderr,
         format!(
             "`atelier start {ID}` refused; nothing changed.\nTo start it:\n  \
-             [ ] demo-b10c is done (it is ready)\nThen: atelier start {ID}\n"
+             [ ] demo-b10c is done (it is ready)\nThen: atelier start {ID}\n{SKIP}"
         )
     );
     assert!(!branch_exists(&root, ID));
@@ -406,7 +406,7 @@ fn only_the_holder_submits_and_others_are_pointed_at_the_take_over() {
     assert_eq!(
         run.stderr,
         format!(
-            "You (thread t2) do not hold {ID}; t1 does. Nothing changed.\nTo take it over: atelier start {ID}\n"
+            "You (thread t2) do not hold {ID}; t1 does. Nothing changed.\nTo take it over: atelier start {ID}\n{SKIP}"
         )
     );
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
@@ -531,6 +531,8 @@ fn a_refusal_lists_the_conditions_of_the_act_refused() {
          [ ] Done when: `hello` prints hello.\n  [ ] Done when: A test covers it.\n  \
          [ ] Report: written under `## Report`\n`atelier submit` commits only the item's \
          directory, so commit your change first.\nThen: atelier submit\n"
+            .to_string()
+            + SKIP
     );
 }
 
@@ -693,6 +695,8 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
         "`atelier verdict changes` refused; nothing changed.\nTo record your verdict:\n  \
          [ ] Your review file holds an open fix-now finding (it holds none; with nothing to fix, \
          run `atelier verdict approve`)\nThen: atelier verdict changes\n"
+            .to_string()
+            + SKIP
     );
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
     assert_eq!(read(&root, &path), opened);
@@ -951,19 +955,25 @@ fn a_reviewer_that_runs_an_implementers_command_is_told_its_role() {
     append(&root, &path, "\n## Finding 1: Half written\n");
     let head = git(&root, &["rev-parse", "HEAD"]);
     let status = git(&root, &["status", "--porcelain"]);
-    for args in [&["submit"][..], &["start", ID][..], &["merge"][..]] {
+    // `submit`'s conditions read that finding, so its skip is not offered.
+    for (args, skip) in [
+        (&["submit"][..], ""),
+        (&["start", ID][..], SKIP),
+        (&["merge"][..], SKIP),
+    ] {
         let run = atelier(&root, "t2", args);
         assert_eq!(run.code, 1, "{args:?}");
         assert_eq!(
             run.stderr,
-            format!("You are the reviewer of {ID}. Reviewers run `review` and `verdict`.\n")
+            format!("You are the reviewer of {ID}. Reviewers run `review` and `verdict`.\n{skip}")
         );
         assert_eq!(run.stdout, "");
         assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
         assert_eq!(git(&root, &["status", "--porcelain"]), status);
         assert_eq!(field(&root, "HEAD", "implementers"), "t1");
     }
-    // And the implementer that runs a reviewer's.
+    // And the implementer that runs a reviewer's, which has no review file
+    // to record a verdict in, so is not offered the skip.
     let run = atelier(&root, "t1", &["verdict", "approve"]);
     assert_eq!(run.code, 1);
     assert_eq!(

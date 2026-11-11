@@ -1,5 +1,5 @@
 use atelier_app::acts::{
-    check, check_mission, check_settle, next, question, row, unmet, unsettled, Act, Condition,
+    check, check_mission, next, question, row, settle_refusals, unmet, unsettled, Act, Condition,
     Facts, MissionFacts, Refusal, Role, TABLE,
 };
 use atelier_app::{carried, carried_plan, entry};
@@ -383,13 +383,13 @@ fn a_finding_is_settled_only_when_its_item_is_done_and_it_is_deferred_and_unsett
     let done = with_reviews(record(Status::Done, &["t1"], &decided), &reviews);
     let caller = thread("p1");
     let name = |text: &str| text.parse::<FindingName>().unwrap();
-    let unmet = |text| match check_settle(&facts(&done, &caller), &name(text)) {
-        Err(Refusal::Unmet(unmet)) => unmet,
+    let refused = |text| settle_refusals(&facts(&done, &caller), &name(text)).unwrap();
+    let unmet = |text| match refused(text).as_slice() {
+        [Refusal::Unmet(unmet)] => unmet.clone(),
         other => panic!("{text}: {other:?}"),
     };
     for settles in ["1-aaaa.1", "1-aaaa.4"] {
-        let found = check_settle(&facts(&done, &caller), &name(settles)).unwrap();
-        assert_eq!(found.name, name(settles));
+        assert!(refused(settles).is_empty(), "{settles}");
     }
     assert_eq!(
         unmet("1-aaaa.2"),
@@ -412,8 +412,8 @@ fn a_finding_is_settled_only_when_its_item_is_done_and_it_is_deferred_and_unsett
     // An item that is not done has no finding to settle yet.
     for status in [Status::Approved, Status::Dropped] {
         let open = with_reviews(record(status, &["t1"], &decided), &reviews);
-        match check_settle(&facts(&open, &caller), &name("1-aaaa.1")) {
-            Err(Refusal::From { act, status: at }) => assert_eq!((act, at), (Act::Settle, status)),
+        match &settle_refusals(&facts(&open, &caller), &name("1-aaaa.1")).unwrap()[..] {
+            [Refusal::From { act, status: at }] => assert_eq!((*act, *at), (Act::Settle, status)),
             other => panic!("{other:?}"),
         }
         assert!(names_unsettled(&open).is_empty());
@@ -512,13 +512,15 @@ fn a_plan_verdict_counts_its_own_file_and_earlier_rounds_not_a_blind_one() {
             title: "Wrong".into(),
         }]
     ));
-    // A file that does not validate is refused for its problem.
+    // A file that does not validate is refused for its problem, which is a
+    // rule's: it reads.
     let mut wrong_round = review("2-dddd", &["r4"], "null", "");
     wrong_round.review.round = 3;
     let dir3 = mission(MissionStatus::Draft, "", std::slice::from_ref(&wrong_round));
     assert!(matches!(
         verdict(&dir3, &wrong_round, Act::PlanVerdictApprove),
-        Err(Refusal::Record(problem)) if problem.field == "round"
+        Err(Refusal::Unmet(unmet))
+            if matches!(&unmet[..], [Condition::Invalid(problem)] if problem.field == "round")
     ));
 }
 
@@ -1013,7 +1015,8 @@ fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
         Err(Refusal::Unmet(unmet)) => assert_eq!(unmet, [open_as("1-aaaa.1")]),
         other => panic!("{other:?}"),
     }
-    // A `Was:` naming no earlier finding is refused as the file's problem.
+    // A `Was:` naming no earlier finding is refused as the file's problem,
+    // a rule's, since the file reads; round 1's finding stays open with it.
     let bad = review(
         "2-bbbb",
         &["r1"],
@@ -1021,10 +1024,14 @@ fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
         "\n## Finding 1: Wrong\nRecommendation: fix now\nWas: 1-aaaa.7\nNow: fixed\n",
     );
     match verdict(&[round_1, bad], Act::VerdictApprove) {
-        Err(Refusal::Record(problem)) => {
-            assert_eq!(problem.file, PathBuf::from("2-bbbb.md"));
-            assert!(problem.message.contains("1-aaaa.7"), "{problem}");
-        }
+        Err(Refusal::Unmet(unmet)) => match &unmet[..] {
+            [Condition::Invalid(problem), open] => {
+                assert_eq!(problem.file, PathBuf::from("2-bbbb.md"));
+                assert!(problem.message.contains("1-aaaa.7"), "{problem}");
+                assert_eq!(*open, open_as("1-aaaa.1"));
+            }
+            other => panic!("{other:?}"),
+        },
         other => panic!("{other:?}"),
     }
 }

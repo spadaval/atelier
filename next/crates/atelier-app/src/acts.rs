@@ -261,6 +261,26 @@ pub const TABLE: [Row; 20] = [
     },
 ];
 
+/// The acts on a mission. `drop` is also an item's; every other act is
+/// only an item's.
+const ON_MISSION: [Act; 6] = [
+    Act::ReadyMission,
+    Act::CloseMission,
+    Act::Drop,
+    Act::PlanVerdictChanges,
+    Act::PlanVerdictApprove,
+    Act::Lead,
+];
+
+/// Whether an act on an item, or with `mission` on a mission, changes a
+/// status `from` to `to`: what the pre-commit hook asks of a status
+/// changed in a commit.
+pub fn changes(mission: bool, from: Status, to: Status) -> bool {
+    (TABLE.iter())
+        .filter(|row| row.act == Act::Drop || ON_MISSION.contains(&row.act) == mission)
+        .any(|row| row.from.contains(&from) && row.to == Some(to))
+}
+
 pub fn row(act: Act) -> &'static Row {
     TABLE
         .iter()
@@ -535,6 +555,28 @@ pub enum Condition {
         finding: FindingName,
         settlement: Settlement,
     },
+    /// A verdict needs its review file valid; this is what is not.
+    Invalid(Problem),
+}
+
+impl Condition {
+    /// Whether `act` refused for this condition breaks a rule, which
+    /// `ATELIER_SKIP` passes, rather than having nothing to act on: a branch
+    /// `start` would create, or one a take-over would switch to; a question
+    /// to decide; a finding to settle, or one settled already.
+    pub fn is_rule(&self, act: Act) -> bool {
+        !matches!(
+            (act, self),
+            (Act::Start, Condition::BranchExists)
+                | (
+                    _,
+                    Condition::NoBranch
+                        | Condition::NoQuestion
+                        | Condition::NoFinding(_)
+                        | Condition::Settled { .. }
+                )
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -556,10 +598,41 @@ pub enum Refusal {
     Record(Problem),
 }
 
-/// The status `act` sets on the item, `None` for unchanged, or why it is
-/// refused.
+impl Refusal {
+    /// Whether this refusal of `act` breaks only rules, which `ATELIER_SKIP`
+    /// passes. A record that does not read is none, nor is a verdict by a
+    /// caller with no review file of the round to record it in.
+    pub fn is_rule(&self, act: Act) -> bool {
+        match self {
+            Refusal::Record(_) => false,
+            Refusal::NotHolder {
+                role: Role::Reviewer,
+                ..
+            } => false,
+            Refusal::Unmet(unmet) => unmet.iter().all(|c| c.is_rule(act)),
+            Refusal::Role(_) | Refusal::From { .. } | Refusal::NotHolder { .. } => true,
+        }
+    }
+}
+
+/// The status `act` sets on the item, `None` for unchanged, or the first
+/// reason it is refused.
 pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
+    match found(act, facts, false) {
+        Ok(found) => found.into_iter().next().map_or(Ok(row(act).to), Err),
+        Err(problem) => Err(Refusal::Record(problem)),
+    }
+}
+
+/// Every reason `act` is refused, in the order [`check`] gives the first:
+/// what `ATELIER_SKIP` would have to pass.
+pub fn refusals(act: Act, facts: &Facts) -> Result<Vec<Refusal>, Problem> {
+    found(act, facts, true)
+}
+
+fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
     let row = row(act);
+    let mut found = Vec::new();
     // A thread that holds one role and runs another's command is told its
     // role, whatever the status. `review` and `decide` by an implementer
     // are refused by their own conditions instead, which name every thread
@@ -567,11 +640,11 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
     // yet needs no role on it.
     if let Some(role) = facts.role().filter(|role| *role != row.role) {
         if !matches!(act, Act::Review | Act::Decide) && row.role != Role::Planner {
-            return Err(Refusal::Role(role));
+            found.push(Refusal::Role(role));
         }
     }
     if !row.from.contains(&facts.status()) {
-        return Err(Refusal::From {
+        found.push(Refusal::From {
             act,
             status: facts.status(),
         });
@@ -591,32 +664,48 @@ pub fn check(act: Act, facts: &Facts) -> Result<Option<Status>, Refusal> {
             ),
         };
         if !holds {
-            return Err(Refusal::NotHolder {
+            found.push(Refusal::NotHolder {
                 role: row.role,
                 holder: holder.cloned(),
             });
         }
     }
-    let unmet = unmet(act, facts).map_err(Refusal::Record)?;
-    if !unmet.is_empty() {
-        return Err(Refusal::Unmet(unmet));
+    // The conditions read the item's findings, which may not parse: a
+    // refusal found before them is said all the same.
+    if all || found.is_empty() {
+        let unmet = unmet(act, facts)?;
+        if !unmet.is_empty() {
+            found.push(Refusal::Unmet(unmet));
+        }
     }
-    Ok(row.to)
+    Ok(found)
 }
 
 /// The status `act`, a mission's, sets on the mission, `None` for
-/// unchanged, or why it is refused.
+/// unchanged, or the first reason it is refused.
 pub fn check_mission(act: Act, facts: &MissionFacts) -> Result<Option<MissionStatus>, Refusal> {
+    match mission_refusals(act, facts) {
+        Ok(found) => {
+            (found.into_iter().next()).map_or(Ok(row(act).to.and_then(MissionStatus::of)), Err)
+        }
+        Err(problem) => Err(Refusal::Record(problem)),
+    }
+}
+
+/// Every reason `act`, a mission's, is refused, as [`refusals`] gives an
+/// item's.
+pub fn mission_refusals(act: Act, facts: &MissionFacts) -> Result<Vec<Refusal>, Problem> {
     let row = row(act);
     let status = facts.mission.mission.status.status();
+    let mut found = Vec::new();
     if !row.from.contains(&status) {
-        return Err(Refusal::From { act, status });
+        found.push(Refusal::From { act, status });
     }
-    let unmet = unmet_mission(act, facts).map_err(Refusal::Record)?;
+    let unmet = unmet_mission(act, facts)?;
     if !unmet.is_empty() {
-        return Err(Refusal::Unmet(unmet));
+        found.push(Refusal::Unmet(unmet));
     }
-    Ok(row.to.and_then(MissionStatus::of))
+    Ok(found)
 }
 
 /// The conditions of `act`, a mission's, that do not hold.
@@ -641,15 +730,20 @@ pub fn unmet_mission(act: Act, facts: &MissionFacts) -> Result<Vec<Condition>, P
             let Some(file) = facts.review else {
                 return Ok(unmet);
             };
-            let problems = validate(&[], std::slice::from_ref(mission));
-            if let Some(problem) = problems.into_iter().find(|p| p.file == file.path) {
-                return Err(problem);
-            }
-            unmet = verdict(act, file, &mission.findings()?, &[]);
+            let findings = mission.findings()?;
+            unmet = invalid(validate(&[], std::slice::from_ref(mission)), file);
+            unmet.extend(verdict(act, file, &findings, &[]));
         }
         _ => {}
     }
     Ok(unmet)
+}
+
+/// The validation problems of the review file `file` among `problems`.
+/// Its findings read, or no verdict gets this far.
+fn invalid(problems: Vec<Problem>, file: &ReviewFile) -> Vec<Condition> {
+    let own = problems.into_iter().filter(|p| p.file == file.path);
+    own.map(Condition::Invalid).collect()
 }
 
 /// What a verdict in `file` needs, given every finding and decision of its
@@ -855,11 +949,9 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
             let Some(file) = facts.reviewing() else {
                 return Ok(unmet);
             };
-            let problems = validate(std::slice::from_ref(item), &[]);
-            if let Some(problem) = problems.into_iter().find(|p| p.file == file.path) {
-                return Err(problem);
-            }
-            unmet = verdict(act, file, &item.findings()?, &item.decisions()?);
+            let (findings, decisions) = (item.findings()?, item.decisions()?);
+            unmet = invalid(validate(std::slice::from_ref(item), &[]), file);
+            unmet.extend(verdict(act, file, &findings, &decisions));
         }
         Act::Close => {
             if facts.branch {
@@ -904,27 +996,32 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     Ok(unmet)
 }
 
-/// `new --from` or `drop` on finding `name` of the item: the act's row
-/// needs the item done, and the finding must be one of its reviews',
-/// deferred and not yet settled. Gives the finding.
-pub fn check_settle(facts: &Facts, name: &FindingName) -> Result<Finding, Refusal> {
-    check(Act::Settle, facts)?;
-    let findings = facts.item.findings().map_err(Refusal::Record)?;
-    let decisions = facts.item.decisions().map_err(Refusal::Record)?;
-    let unmet = |condition| Err(Refusal::Unmet(vec![condition]));
-    let Some(finding) = findings.iter().find(|f| f.name == *name) else {
-        return unmet(Condition::NoFinding(name.clone()));
-    };
-    if !is_deferred(finding, &findings, &decisions) {
-        return unmet(Condition::NotDeferred(name.clone()));
-    }
-    if let Some(settlement) = &finding.settlement {
-        return unmet(Condition::Settled {
+/// Every reason `new --from` or `drop` on finding `name` of the item is
+/// refused: the act's row needs the item done, and the finding must be one
+/// of its reviews', deferred and not yet settled.
+pub fn settle_refusals(facts: &Facts, name: &FindingName) -> Result<Vec<Refusal>, Problem> {
+    let mut found = refusals(Act::Settle, facts)?;
+    let findings = facts.item.findings()?;
+    let decisions = facts.item.decisions()?;
+    // Settled comes first: it is no rule, so a skip never settles twice.
+    let unmet = match findings.iter().find(|f| f.name == *name) {
+        None => vec![Condition::NoFinding(name.clone())],
+        Some(Finding {
+            settlement: Some(settlement),
+            ..
+        }) => vec![Condition::Settled {
             finding: name.clone(),
             settlement: settlement.clone(),
-        });
+        }],
+        Some(finding) if !is_deferred(finding, &findings, &decisions) => {
+            vec![Condition::NotDeferred(name.clone())]
+        }
+        Some(_) => Vec::new(),
+    };
+    if !unmet.is_empty() {
+        found.push(Refusal::Unmet(unmet));
     }
-    Ok(finding.clone())
+    Ok(found)
 }
 
 /// The deferred findings of `item` that nobody has settled, when it is

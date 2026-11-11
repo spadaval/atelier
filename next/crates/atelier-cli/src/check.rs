@@ -5,9 +5,9 @@
 
 use crate::commands::{self, Outcome};
 use crate::repo::{self, Repo};
-use crate::{git, output, setup};
+use crate::{git, output, setup, skip};
 use anyhow::{bail, Context, Result};
-use atelier_app::acts::TABLE;
+use atelier_app::acts::changes;
 use atelier_core::Status;
 use atelier_records::{
     is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store, CONFIG,
@@ -55,15 +55,29 @@ pub fn check() -> Result<Outcome> {
     if config {
         uncommitted.insert(0, CONFIG.to_string());
     }
-    if loaded.unread.is_empty() && loaded.invalid.is_empty() {
+    let (unread, invalid) = (&loaded.unread, &loaded.invalid);
+    if unread.is_empty() && invalid.is_empty() {
         return Ok(Outcome::Done(output::checked(counts, &uncommitted)));
     }
-    Ok(Outcome::Refused(output::check_found(
-        counts,
-        &loaded.unread,
-        &loaded.invalid,
-        &uncommitted,
-    )))
+    let text = output::check_found(counts, unread, invalid, &uncommitted);
+    // What a skip passes is still reported.
+    Ok(
+        rules(unread, invalid.iter().map(output::valid), text.clone())
+            .unwrap_or(Outcome::Done(text)),
+    )
+}
+
+/// A refusal `text` of the rules `rules`, which `ATELIER_SKIP` passes when
+/// every record read: `None` when it does.
+fn rules(
+    unread: &[Problem],
+    rules: impl IntoIterator<Item = String>,
+    text: String,
+) -> Option<Outcome> {
+    match unread.is_empty() {
+        true => skip::refuse(rules, text),
+        false => Some(Outcome::Refused(text)),
+    }
 }
 
 /// `atelier check --hook <hook>`, which the hook's script runs with the
@@ -181,10 +195,8 @@ fn pre_commit(root: &Path) -> Result<Outcome> {
             let Some(Ok(before)) = status_at(&mut reader, &head, &path)? else {
                 continue;
             };
-            let acted = TABLE
-                .iter()
-                .any(|row| row.from.contains(&before) && row.to == Some(now));
-            if before != now && !acted {
+            let mission = path.ends_with("/mission.md");
+            if before != now && !changes(mission, before, now) {
                 acts.push((path.into_owned(), before, now));
             }
         }
@@ -192,9 +204,12 @@ fn pre_commit(root: &Path) -> Result<Outcome> {
     if unread.is_empty() && invalid.is_empty() && acts.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
-    Ok(Outcome::Refused(output::commit_refused(
-        &unread, &invalid, &acts,
-    )))
+    let text = output::commit_refused(&unread, &invalid, &acts);
+    let broken = (invalid.iter().map(output::valid)).chain(
+        acts.iter()
+            .map(|(path, from, to)| output::rule_status(path, *from, *to)),
+    );
+    Ok(rules(&unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
 /// When the push updates the base branch, each new commit on its
@@ -279,9 +294,15 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
     if unread.is_empty() && code.is_empty() && done.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
-    Ok(Outcome::Refused(output::push_refused(
-        &base, old, &unread, &code, &done,
-    )))
+    let text = output::push_refused(&base, old, &unread, &code, &done);
+    let broken = (code
+        .iter()
+        .map(|(commit, subject, _)| output::rule_code(&base, commit, subject)))
+    .chain(
+        done.iter()
+            .map(|(commit, _, id)| output::rule_done(&base, commit, id)),
+    );
+    Ok(rules(&unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
 /// On a branch switch, what `status` prints; else nothing. A failure is

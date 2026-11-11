@@ -17,11 +17,11 @@
 //! carried over. The wait for CI before the lock, and which runs count for
 //! the head, are new.
 
-use crate::commands::{facts, hold, refusal, refused, Outcome};
+use crate::commands::{facts, gate, hold, refusal, refused, Outcome};
 use crate::forge::{CiRun, ForgeError, Github, PullRequest};
 use crate::git;
-use crate::output;
 use crate::repo::{item_dir, item_path, Repo};
+use crate::{output, skip};
 use anyhow::{Context, Result};
 use atelier_app::acts::{check, Act, Refusal};
 use atelier_core::{Config, Forge, Status};
@@ -71,6 +71,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         id,
         config,
         merged,
+        uncommitted,
         ..
     } = match read(repo, trivial.is_some())? {
         Ok(read) => read,
@@ -87,11 +88,17 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     let base = repo.base.clone();
     let base_tip = repo.base_tip.clone();
     let base_checkout = git::checkout_of(&root, &base)?;
+    let mut base_dirt = None;
     if let Some(path) = &base_checkout {
         let dirty = git::uncommitted(path)?;
         if !dirty.is_empty() {
-            return Ok(Outcome::Refused(output::base_dirty(&base, path, &dirty)));
+            let text = output::base_dirty(&base, path, &dirty);
+            let rule = output::rule_base_dirty(&base, path, &dirty);
+            if let Some(refused) = skip::refuse([rule], text) {
+                return Ok(refused);
+            }
         }
+        base_dirt = Some(Dirt::read(path, dirty)?);
     }
 
     let tree = match git::merge_tree(&root, &base_tip, &head)? {
@@ -106,14 +113,9 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
                 Err(error) => return Ok(Outcome::Refused(output::forge_failed(&error, false))),
             };
             let mut known = HashMap::new();
-            match ci(&github, workflow, &root, &id, &head, &mut known)? {
-                Ci::Passed => {}
-                Ci::Failed(run) => return Ok(Outcome::Refused(output::ci_failed(workflow, &run))),
-                Ci::Pending(pending) => {
-                    return Ok(Outcome::NotYet(output::ci_pending(
-                        workflow, &head, &pending,
-                    )))
-                }
+            let now = ci(&github, workflow, &root, &id, &head, &mut known)?;
+            if let Some(stopped) = ci_stops(now, workflow, &head) {
+                return Ok(stopped);
             }
         }
     }
@@ -126,27 +128,35 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         item.trivial = trivial;
     }
     let message = output::merge_message(&id, &item.title, &base, &config);
-    let commit = git::commit_file(
-        &root,
-        &tree,
-        &[&base_tip, &head],
-        &path,
-        &render_item(&item),
-        &message,
-    )?;
+    // Its message carries each rule skipped so far.
+    let commit_merge = || {
+        let item = render_item(&item);
+        git::commit_file(&root, &tree, &[&base_tip, &head], &path, &item, &message)
+    };
+    let mut commit = commit_merge()?;
 
     if !config.merge_checks.is_empty() {
         let checkout = MergedCheckout::add(&root, &commit)?;
+        let mut skipped = false;
         for check in &config.merge_checks {
             if let Some((code, tail)) = run_check(&checkout.path, &check.run)? {
-                return Ok(Outcome::Refused(output::check_failed(
-                    &id, &base, &check.run, code, &tail,
-                )));
+                let text = output::check_failed(&id, &base, &check.run, code, &tail);
+                let rule = output::rule_check(&check.run, code);
+                if let Some(refused) = skip::refuse([rule], text) {
+                    return Ok(refused);
+                }
+                skipped = true;
             }
+        }
+        // The same merge, with the checks it skipped in its message.
+        if skipped {
+            commit = commit_merge()?;
         }
     }
 
-    if let Some(moved) = moved(repo, &head, &base_tip, base_checkout.as_deref())? {
+    let read = (head.as_str(), base_tip.as_str(), &uncommitted);
+    let base_read = base_checkout.as_deref().zip(base_dirt.as_ref());
+    if let Some(moved) = moved(repo, read, base_read)? {
         return Ok(Outcome::Refused(output::moved(&moved, &id, &base)));
     }
     match &base_checkout {
@@ -196,6 +206,71 @@ struct Judged {
     config: Config,
     /// The item is done and its branch merged into the base.
     merged: bool,
+    /// What the checkout holds that no commit does, which a skip let stay.
+    uncommitted: Dirt,
+}
+
+/// What a checkout holds that no commit does, as `merge` read it: its
+/// HEAD, the paths, their index entries, and each one as it is there, so
+/// that a change to what a skip let stay uncommitted is seen as a move.
+#[derive(PartialEq)]
+struct Dirt {
+    head: String,
+    paths: Vec<String>,
+    index: String,
+    entries: Vec<Entry>,
+}
+
+#[derive(PartialEq)]
+enum Entry {
+    Gone,
+    /// A file's mode and contents; a symbolic link's are its target.
+    File(u32, Vec<u8>),
+    /// A directory, which is a submodule, read as a checkout of its own.
+    Submodule(Dirt),
+}
+
+impl Dirt {
+    /// The checkout at `root`, whose `paths` hold what no commit does.
+    fn read(root: &Path, paths: Vec<String>) -> Result<Dirt> {
+        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::fs::MetadataExt;
+        let mut args = vec!["ls-files", "--stage", "-z", "--"];
+        args.extend(paths.iter().map(String::as_str));
+        // With no path, ls-files would list the whole index.
+        let index = match paths.is_empty() {
+            true => String::new(),
+            false => git::run(root, &args)?,
+        };
+        let entry = |path: &String| -> Result<Entry> {
+            let path = root.join(path);
+            let meta = match std::fs::symlink_metadata(&path) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(Entry::Gone)
+                }
+                meta => meta?,
+            };
+            let kind = meta.file_type();
+            Ok(if kind.is_symlink() {
+                Entry::File(
+                    meta.mode(),
+                    std::fs::read_link(&path)?.into_os_string().into_vec(),
+                )
+            } else if kind.is_dir() {
+                let mut paths = git::uncommitted(&path)?;
+                paths.extend(git::untracked(&path, ".")?);
+                Entry::Submodule(Dirt::read(&path, paths)?)
+            } else {
+                Entry::File(meta.mode(), std::fs::read(&path)?)
+            })
+        };
+        Ok(Dirt {
+            head: git::head(root)?,
+            entries: paths.iter().map(entry).collect::<Result<_>>()?,
+            paths,
+            index,
+        })
+    }
 }
 
 /// Reads the head, then the item as the head holds it and the base's
@@ -221,9 +296,11 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     // command tells it.
     let links = repo.links(located.record().expect("the current item has a record"))?;
     let seen = facts(repo, &located, &links, None);
-    if let Err(Refusal::Role(role)) = check(act, &seen) {
-        let refused = refused(act, Refusal::Role(role), &seen)?;
-        return Ok(Err(Outcome::Refused(refused)));
+    if let Err(role @ Refusal::Role(_)) = check(act, &seen) {
+        let text = refused(act, &role, &seen)?;
+        if let Some(refused) = gate(act, &located.id, &[role], text) {
+            return Ok(Err(refused));
+        }
     }
     // What merges is the head, so the item is judged as it holds it, not
     // as the checkout does, whose uncommitted changes are a condition of
@@ -243,11 +320,12 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     let title = record.item.title.clone();
     let merged = record.item.status == Status::Done
         && located.branch.as_ref().is_some_and(|branch| branch.merged);
+    let uncommitted = Dirt::read(&repo.root, repo.uncommitted(&id)?)?;
     if !merged {
         let checkout = repo.checkout(record, &head)?;
         let facts = facts(repo, &located, &links, Some(&checkout));
         if let Some(refused) = refusal(act, &facts)? {
-            return Ok(Err(Outcome::Refused(refused)));
+            return Ok(Err(refused));
         }
     }
     Ok(Ok(Judged {
@@ -256,6 +334,7 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
         title,
         config,
         merged,
+        uncommitted,
     }))
 }
 
@@ -313,9 +392,15 @@ fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
     let mut last = None;
     loop {
         let now = match ci(&github, workflow, root, id, head, &mut known)? {
-            Ci::Passed => return Ok(Ok(judged.id.clone())),
-            Ci::Failed(run) => return Ok(Err(Outcome::Refused(output::ci_failed(workflow, &run)))),
-            Ci::Pending(now) => now,
+            // A skip passes a run that has not finished without waiting
+            // for it; a forge that does not answer is waited for.
+            Ci::Pending(now) if now.is_err() || skip::reason().is_none() => now,
+            now => {
+                return Ok(match ci_stops(now, workflow, head) {
+                    Some(stopped) => Err(stopped),
+                    None => Ok(judged.id.clone()),
+                })
+            }
         };
         // A poll that fails, or that the bound ends, does not replace what
         // an earlier one said: the last answer, or until one comes, the
@@ -331,6 +416,23 @@ fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
             return Ok(Err(Outcome::NotYet(pending)));
         }
         last = Some(pending);
+    }
+}
+
+/// What stops `merge` where CI stands `now`: nothing once it passed, or
+/// once `ATELIER_SKIP` passed the rule that it pass; else a refusal when it
+/// failed, and "not yet" when it has not finished or the forge did not
+/// answer, which is no rule.
+fn ci_stops(now: Ci, workflow: &str, head: &str) -> Option<Outcome> {
+    let pending = |now| Some(Outcome::NotYet(output::ci_pending(workflow, head, &now)));
+    match now {
+        Ci::Passed => None,
+        Ci::Failed(run) => {
+            let rule = output::rule_ci(workflow, Some(&run));
+            skip::refuse([rule], output::ci_failed(workflow, &run))
+        }
+        Ci::Pending(Ok(run)) if skip::pass([output::rule_ci(workflow, run.as_ref())]) => None,
+        Ci::Pending(now) => pending(now),
     }
 }
 
@@ -451,9 +553,8 @@ pub enum Moved {
 /// the branch's tip, the base's tip, or a checkout of either.
 fn moved(
     repo: &Repo,
-    head: &str,
-    base_tip: &str,
-    base_checkout: Option<&Path>,
+    (head, base_tip, uncommitted): (&str, &str, &Dirt),
+    base_checkout: Option<(&Path, &Dirt)>,
 ) -> Result<Option<Moved>> {
     let root = &repo.root;
     let branch = repo.branch.as_deref().expect("merge runs on a branch");
@@ -464,20 +565,24 @@ fn moved(
         return Ok(Some(Moved::Base));
     }
     let unchanged = |path: &Path, branch: &str, tip: &str| -> Result<bool> {
-        Ok(git::current_branch(path)?.as_deref() == Some(branch)
-            && git::head(path)? == tip
-            && git::uncommitted(path)?.is_empty())
+        Ok(git::current_branch(path)?.as_deref() == Some(branch) && git::head(path)? == tip)
     };
-    if !unchanged(root, branch, head)? || !repo.uncommitted(branch)?.is_empty() {
+    // What a skip let the checkout keep uncommitted stays as it was read.
+    if !unchanged(root, branch, head)?
+        || Dirt::read(root, repo.uncommitted(branch)?)? != *uncommitted
+    {
         return Ok(Some(Moved::Checkout(root.clone())));
     }
     let now = git::checkout_of(root, &repo.base)?;
-    if now.as_deref() != base_checkout {
-        let path = now.or_else(|| base_checkout.map(Path::to_path_buf));
+    if now.as_deref() != base_checkout.map(|(path, _)| path) {
+        let path = now.or_else(|| base_checkout.map(|(path, _)| path.to_path_buf()));
         return Ok(Some(Moved::Checkout(path.expect("one of them is a path"))));
     }
     match base_checkout {
-        Some(path) if !unchanged(path, &repo.base, base_tip)? => {
+        Some((path, dirt))
+            if !unchanged(path, &repo.base, base_tip)?
+                || Dirt::read(path, git::uncommitted(path)?)? != *dirt =>
+        {
             Ok(Some(Moved::Checkout(path.to_path_buf())))
         }
         _ => Ok(None),
@@ -486,16 +591,8 @@ fn moved(
 
 /// Pushes `commit` to the branch `branch` of `remote`, never forcing.
 pub(crate) fn push(root: &Path, remote: &str, commit: &str, branch: &str) -> Result<()> {
-    git::run(
-        root,
-        &[
-            "push",
-            "--quiet",
-            remote,
-            &format!("{commit}:refs/heads/{branch}"),
-        ],
-    )
-    .map(drop)
+    let to = format!("{commit}:refs/heads/{branch}");
+    git::relayed(root, &["push", "--quiet", remote, &to])
 }
 
 /// The open pull request from `branch` into `base`, opened when there is

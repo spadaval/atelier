@@ -870,18 +870,68 @@ stopping at it.
 A refusal is printed on stderr with exit 1, inside the Git command's own
 output. It names each rule broken, each file or commit (its short ID and
 subject) that breaks it, and the way out. A record that does not parse is
-listed apart, as no rule and not to be skipped; in a push, the way out is
+listed apart, as no rule; in a push, the way out is
 to rewrite the commit that broke it, since every new commit is read. A
 push from a checkout whose `config.toml` does not read is refused that
 way too, since the config names the base.
 
-`ATELIER_SKIP`, when set to a non-empty reason, lets any rule of a hook or a
-command pass. The tool prints the rule and the reason. Where Atelier makes
-the commit, a trailer `Atelier-Skip: <rule>: <reason>` goes into its
-message. A skip in a hook writes nothing; it shows in the transcript as the
-variable on the Git command, which is where the scorecard counts it. A
-record that does not parse is not a rule and cannot be skipped. `status`
-begins with one line, naming `atelier setup`, when the directory Git runs
+`ATELIER_SKIP`, set to a reason, lets every rule one command or hook meets
+pass. A rule is a refusal that depends on the state of the work or on who
+asks. The variable is the whole interface: no flag, no config, no list of
+rule names.
+
+- **One place.** Every refusal of a rule goes through `atelier-cli`'s
+  `skip::refuse`, given the rules it breaks, each said in one line, and its
+  text, which ends with the way out. Without a reason the refusal ends with
+  the skip, after the way out. With one, each rule passes: the command
+  prints `Skipped with ATELIER_SKIP: <rule>: <reason>` for each and goes
+  on, and where Atelier makes the commit (`start` and a take-over, `submit`,
+  `verdict` and `merge`), `git interpret-trailers` adds a trailer
+  `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
+  `Atelier-Merge:`. Whitespace in the reason and in each rule is made one
+  line. A skip in a hook, or on a command that makes no commit, writes
+  nothing; it shows in the transcript as the variable on the command, which
+  is where the scorecard counts it. Atelier's own `git commit` and `git
+  push` pass on what the hooks printed, so a rule a hook skips there is
+  printed too.
+- **All or nothing.** The skip passes an act's refusals, and is offered,
+  only when every one is a rule: `acts::refusals` gives them all, where
+  `check` gives the first. Otherwise the first is refused as before, with
+  no skip offered.
+- **Rules:** a role, a status and a holder of the act table, and its
+  conditions; a merge check that fails; CI that failed, and CI whose run
+  has not finished, which a skip passes without waiting (the "not yet" at
+  the bound is no refusal and offers no skip); a planning command run off
+  the base, and settling a finding off the base and off an item the caller
+  implements; `set` on a record that is not a draft or ready, which with a
+  skip changes the base's record of a started item; `ready` on a record that
+  is not a draft; `lead` on a mission that is not ready; a record that reads
+  and does not validate, in what a planning command writes, in a verdict's
+  review file, in `check` and in the pre-commit hook; a status changed as no
+  act on that kind of record (an item or a mission, `acts::changes`)
+  changes it; and a pushed commit that brings code to the base, or sets an
+  item done, outside an Atelier merge; and `merge` with uncommitted changes in the
+  item's checkout or in the base's. Changes a skip lets stay are left in
+  their checkout, and `merge` confirms them unchanged,
+  index entries, modes and contents, and a submodule's commit and its own
+  uncommitted changes, with its other inputs.
+- **Not rules:** a record that does not read; an ID, a mission or a finding
+  that does not exist, and a finding settled already; a missing or
+  malformed argument; a command run where it has nothing to act on: off the
+  item's branch it writes, with no review file of the round to record a
+  verdict in, with no question to decide, or `review` of a plan on an
+  item's branch, where `verdict` is the item's; `start` where branch `<id>`
+  exists, and a take-over where it does not; a merge that conflicts, and inputs that
+  moved while `merge` ran; a Git or forge command that failed; `setup`
+  where a hook it would keep is taken, where `core.hooksPath` points
+  outside the clone, or where a harness's settings do not read; and the
+  clone's own kept hook. With a reason set, each of these ends with a line
+  saying it cannot be skipped; without one, it does not mention the skip.
+- **A blank reason**, empty or only whitespace, is refused by every command
+  and hook with a line saying a reason is needed. The post-checkout hook
+  prints that line and still succeeds.
+
+`status` begins with one line, naming `atelier setup`, when the directory Git runs
 the clone's hooks from has none of Atelier's.
 
 ## The forge
@@ -1091,6 +1141,12 @@ does, it must not fetch a repository that has been converted.
   allowed whatever it holds; the refused push allowed with `ATELIER_SKIP`
   set, and the skip printed; a branch switch printing `status`, and one to
   a branch holding a record that does not parse succeeding.
+- `ATELIER_SKIP`: each kind of rule passed, its line printed, and its
+  trailer in the commit of `start`, `submit`, `verdict` and `merge`; a
+  mission set from `draft` to `done` by hand refused, and one closed from
+  `ready` allowed; a blank reason refused by the commands and the hooks;
+  and each kind of refusal that is not a rule refused with the variable
+  set, saying it cannot be skipped.
 - `merge` with CI still running: it waits, holding no lock, and merges as
   soon as CI passes or refuses as soon as it fails; at the bound it stops
   with its "not yet" exit status and changes nothing, also when the forge

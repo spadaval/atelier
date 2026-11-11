@@ -4,13 +4,12 @@
 //! the checkout of the base, validates what it writes, commits nothing, and
 //! ends with the Git command that commits what it wrote.
 
-use crate::commands::{refused as refused_act, Outcome};
+use crate::commands::{gate, gated, mission_gate, refusal, refused as refused_act, Outcome};
 use crate::repo::{git_at, item_dir, item_path, mission_dir, mission_path, Repo};
-use crate::{git, output};
+use crate::{git, output, skip};
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{
-    check, check_mission, check_settle, Act, Condition, Facts, MissionFacts, Refusal, PLANNED,
-    STARTED,
+    check, check_mission, row, settle_refusals, Act, Facts, MissionFacts, Refusal, PLANNED, STARTED,
 };
 use atelier_app::Located;
 use atelier_core::{
@@ -147,8 +146,8 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
         }
         let mut mission = repo.store().mission(id)?.mission;
         let status = mission.status.status();
-        if !PLANNED.contains(&status) {
-            return Ok(Outcome::Refused(output::not_planned(id, status)));
+        if let Some(refused) = unplanned(id, status, output::not_planned(id, status)) {
+            return Ok(refused);
         }
         if let Some(title) = fields.title {
             mission.title = title;
@@ -164,13 +163,16 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
     let Some(record) = located.record() else {
         return Ok(Outcome::Refused(output::set_unknown(id)));
     };
-    let mut item = record.item.clone();
-    if STARTED.contains(&item.status) {
-        return Ok(Outcome::Refused(output::set_started(id, item.status)));
+    let status = record.item.status;
+    let text = match STARTED.contains(&status) {
+        true => output::set_started(id, status),
+        false => output::not_planned(id, status),
+    };
+    if let Some(refused) = unplanned(id, status, text) {
+        return Ok(refused);
     }
-    if !PLANNED.contains(&item.status) {
-        return Ok(Outcome::Refused(output::not_planned(id, item.status)));
-    }
+    // Planning is the base's record, whatever a branch holds.
+    let mut item = located.base.as_ref().unwrap_or(record).item.clone();
     let Fields {
         title,
         priority,
@@ -204,6 +206,15 @@ pub fn set(repo: &mut Repo, id: &str, fields: Fields) -> Result<Outcome> {
     )
 }
 
+/// `set` on a record that is `status`, refused unless it is a draft or
+/// ready, with `text`.
+fn unplanned(id: &str, status: Status, text: String) -> Option<Outcome> {
+    match PLANNED.contains(&status) {
+        true => None,
+        false => skip::refuse([output::rule_from(id, PLANNED, status)], text),
+    }
+}
+
 pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Outcome> {
     if let Some(refused) = off_base(repo, "ready")? {
         return Ok(refused);
@@ -228,16 +239,15 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Outcome> {
                 review: None,
             };
             match check_mission(Act::ReadyMission, &facts) {
-                Ok(to) => {
-                    reviewed += &plan_reviewed(repo, &dir)?;
-                    let mut mission = dir.mission;
-                    mission.status = to.expect("ready sets a status");
-                    mission.ready = Some(ready.clone());
-                    missions.push(mission);
-                }
+                Ok(_) => {}
                 Err(Refusal::From { status, .. }) => refused.push((id, status)),
                 Err(other) => unreachable!("a mission's ready has no conditions: {other:?}"),
             }
+            reviewed += &plan_reviewed(repo, &dir)?;
+            let mut mission = dir.mission;
+            mission.status = MissionStatus::Ready;
+            mission.ready = Some(ready.clone());
+            missions.push(mission);
             continue;
         }
         let located = match validate_id(id) {
@@ -253,18 +263,26 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Outcome> {
         };
         let facts = planned_facts(repo, &located, record);
         match check(Act::Ready, &facts) {
-            Ok(to) => {
-                let mut item = record.item.clone();
-                item.status = to.expect("ready sets a status");
-                item.ready = Some(ready.clone());
-                items.push(item);
-            }
+            Ok(_) => {}
             Err(Refusal::From { status, .. }) => refused.push((id, status)),
-            Err(other) => return Ok(Outcome::Refused(refused_act(Act::Ready, other, &facts)?)),
+            Err(other) => unreachable!("an item's ready has no role or conditions: {other:?}"),
         }
+        let mut item = record.item.clone();
+        item.status = Status::Ready;
+        item.ready = Some(ready.clone());
+        items.push(item);
     }
     if !unknown.is_empty() || !refused.is_empty() {
-        return Ok(Outcome::Refused(output::ready_refused(&unknown, &refused)));
+        let text = output::ready_refused(&unknown, &refused);
+        let from = row(Act::Ready).from;
+        let rules = (refused.iter()).map(|(id, status)| output::rule_from(id, from, *status));
+        let refused = match unknown.is_empty() {
+            true => skip::refuse(rules, text),
+            false => Some(Outcome::Refused(text)),
+        };
+        if let Some(refused) = refused {
+            return Ok(refused);
+        }
     }
     let said = output::readied(&named, by) + &reviewed;
     let message = format!("Ready {}", named.join(", "));
@@ -380,12 +398,8 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
             items: &[],
             review: None,
         };
-        if let Err(refusal) = check_mission(Act::Drop, &facts) {
-            return Ok(Outcome::Refused(output::mission_refused(
-                Act::Drop,
-                id,
-                &refusal,
-            )));
+        if let Some(refused) = mission_gate(Act::Drop, id, &facts)? {
+            return Ok(refused);
         }
         let mut mission = dir.mission;
         mission.status = MissionStatus::Dropped;
@@ -400,10 +414,9 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
         return Ok(Outcome::Refused(output::unknown_refused("drop", id)));
     };
     let facts = planned_facts(repo, &located, record);
-    let to = match check(Act::Drop, &facts) {
-        Ok(to) => to,
-        Err(refusal) => return Ok(Outcome::Refused(refused_act(Act::Drop, refusal, &facts)?)),
-    };
+    if let Some(refused) = refusal(Act::Drop, &facts)? {
+        return Ok(refused);
+    }
     // The base's record, whatever the branch holds. An item only on its
     // branch, as after `start --new`, gets its definition there; its
     // Report, Decisions and reviews stay on the branch, so nothing on the
@@ -421,7 +434,7 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
             item
         }
     };
-    item.status = to.expect("drop sets a status");
+    item.status = Status::Dropped;
     item.body = put_first(&item.body, "Report", &line);
     let started = STARTED.contains(&record.item.status);
     let said = output::dropped(id, "item", reason, started);
@@ -454,9 +467,8 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
             items: &items,
             review: None,
         };
-        if let Err(refusal) = check_mission(Act::CloseMission, &facts) {
-            let refused = output::mission_refused(Act::CloseMission, id, &refusal);
-            return Ok(Outcome::Refused(refused));
+        if let Some(refused) = mission_gate(Act::CloseMission, id, &facts)? {
+            return Ok(refused);
         }
         let mut mission = dir.mission;
         mission.status = MissionStatus::Done;
@@ -473,16 +485,19 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
         return Ok(Outcome::Refused(output::unknown_refused("close", id)));
     };
     let facts = planned_facts(repo, &located, record);
-    let to = match check(Act::Close, &facts) {
-        Ok(to) => to,
+    if let Err(refusal) = check(Act::Close, &facts) {
         // An item with a branch ends by its merge, or by `drop`.
-        Err(_) if facts.branch && !matches!(record.item.status, Status::Done | Status::Dropped) => {
-            return Ok(Outcome::Refused(output::close_started(id)))
+        let text =
+            match facts.branch && !matches!(record.item.status, Status::Done | Status::Dropped) {
+                true => output::close_started(id),
+                false => refused_act(Act::Close, &refusal, &facts)?,
+            };
+        if let Some(refused) = gated(Act::Close, &facts, text) {
+            return Ok(refused);
         }
-        Err(refusal) => return Ok(Outcome::Refused(refused_act(Act::Close, refusal, &facts)?)),
-    };
+    }
     let mut item = record.item.clone();
-    item.status = to.expect("close sets a status");
+    item.status = Status::Done;
     item.body = put_first(&item.body, "Report", result);
     let said = output::closed(id, "item");
     let message = format!("Close {id}");
@@ -495,12 +510,12 @@ pub(crate) fn off_base(repo: &Repo, command: &str) -> Result<Option<Outcome>> {
         return Ok(None);
     }
     let checkout = git::checkout_of(&repo.root, &repo.base)?;
-    Ok(Some(Outcome::Refused(output::off_base(
-        command,
-        &repo.base,
-        repo.branch.as_deref(),
-        checkout.as_deref(),
-    ))))
+    let (base, branch) = (&repo.base, repo.branch.as_deref());
+    let text = output::off_base(command, base, branch, checkout.as_deref());
+    Ok(skip::refuse(
+        [output::rule_off_base(base, branch, false)],
+        text,
+    ))
 }
 
 /// How `new --from` or `drop` settles a deferred finding.
@@ -531,12 +546,12 @@ fn off_settling(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
         return Ok(None);
     }
     let checkout = git::checkout_of(&repo.root, &repo.base)?;
-    Ok(Some(Outcome::Refused(output::settle_elsewhere(
-        command,
-        &repo.base,
-        repo.branch.as_deref(),
-        checkout.as_deref(),
-    ))))
+    let (base, branch) = (&repo.base, repo.branch.as_deref());
+    let text = output::settle_elsewhere(command, base, branch, checkout.as_deref());
+    Ok(skip::refuse(
+        [output::rule_off_base(base, branch, true)],
+        text,
+    ))
 }
 
 /// Settles the deferred finding `name`, `<item>/<finding>`, in this
@@ -550,21 +565,27 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
     let Some((id, finding)) = parsed else {
         return Ok(Outcome::Refused(output::not_a_finding(command, name)));
     };
-    let refused = |refusal| {
-        Ok(Outcome::Refused(output::settle_refused(
-            command, name, id, &refusal,
-        )))
-    };
     let located = repo.locate_planned(id)?;
     let Some(record) = located.record() else {
-        return refused(Refusal::Unmet(vec![Condition::NoFinding(finding)]));
+        let none = Refusal::Unmet(vec![atelier_app::acts::Condition::NoFinding(finding)]);
+        return Ok(Outcome::Refused(output::settle_refused(
+            command,
+            name,
+            id,
+            &[none],
+        )));
     };
     let facts = planned_facts(repo, &located, record);
-    let found = match check_settle(&facts, &finding) {
-        Ok(found) => found,
-        Err(Refusal::Record(problem)) => return Err(problem.into()),
-        Err(refusal) => return refused(refusal),
-    };
+    let all = settle_refusals(&facts, &finding)?;
+    if !all.is_empty() {
+        let text = output::settle_refused(command, name, id, &all);
+        if let Some(refused) = gate(Act::Settle, id, &all, text) {
+            return Ok(refused);
+        }
+    }
+    let found = (record.findings()?.into_iter())
+        .find(|f| f.name == finding)
+        .expect("a finding to settle exists");
     let mut review = (record.reviews.iter())
         .find(|r| r.name == finding.review)
         .expect("a finding is in one of its item's reviews")
@@ -697,9 +718,13 @@ fn save_with(
         .filter(|problem| written.iter().any(|(path, _)| *path == problem.file))
         .collect();
     if !problems.is_empty() {
-        return Ok(Outcome::Refused(output::invalid(
-            command, &repo.root, &problems,
-        )));
+        let text = output::invalid(command, &repo.root, &problems);
+        let rules = problems
+            .iter()
+            .map(|problem| output::valid(&output::from_root(&repo.root, problem)));
+        if let Some(refused) = skip::refuse(rules, text) {
+            return Ok(refused);
+        }
     }
     let created: Vec<PathBuf> = (items.iter())
         .map(|item| repo.root.join(item_dir(&item.id)))
