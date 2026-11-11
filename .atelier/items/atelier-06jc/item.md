@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-06jc
 title: 'Put open findings in full and the item''s Scope in the review brief: re-reviews spend 14% of Sol''s tokens fetching them one by one'
-status: ready
+status: dropped
 mission: atelier-icv4
 labels:
 - review
@@ -49,3 +49,7 @@ Evidence: Sol reviews ran `review show` 74, `review list` 35 and `evidence show`
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-pvo0 (Name the command for the remaining silent or bare truncations)
+
+## Report
+
+Dropped: Names `review request`, `review show`, `review list` and `evidence show`, all removed in 0.5. `atelier review <id>` now prints the brief with the round's findings. The scorecard rerun (atelier-pwhn) measures what reviewers still look up.
