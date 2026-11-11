@@ -90,4 +90,5 @@ Two refusals came back from the real server and match the fixtures' shape: `deci
 ### Surprises
 
 - Size: net growth is about 1,720 lines against the 900 expected. 370 of them are CSS, because the app had no button, field or form styles yet. Tests and fixtures are about 690 lines.
+- CI failed "the inbox drops an answer's not-committed mark once a commit holds it" on desktop (run 42983159995), and it failed locally 7 times in 60 runs at 8 workers. The cause was in the app. `refresh` joined a poll to a read already under way, so a commit landing during that read showed only at the next tick, 30 seconds later. Now a poll during a read gets one more read that starts after it. That is fixed in 8967c46e, with the unit test "answers a read asked for during another..." in `desk/src/lib/api.test.ts`, which fails on the old `refresh`. The e2e test then passed 300 of 300 runs, and the whole suite 500 of 500, at 8 workers.
 - The real refusal texts speak in CLI terms, such as "Run it there, or `git switch atelier-psjw` here". They are shown as given.
