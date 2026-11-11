@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Run fresh agents through a round of changes requested, the path most items take"
-updated_at: "2026-11-11T00:51:31.584904962+00:00"
+updated_at: "2026-11-11T01:31:45.606648877+00:00"
 ---
 
 ## Goal
@@ -47,6 +47,10 @@ One scenario and its grader, and changes to wording, help and the shape of what 
 The first scenario, its grader and the harness's stand-in for T3's threads are atelier-67nn's: `evals/agent-factory/scenarios/next-loop/`, `evals/agent-factory/harness/` and `evals/agent-factory/results/2026-11-10-next-loop.md`. `escalate` and `decide` (atelier-axfa) change what `status` prints for an item in `changes_requested`, which is why this item follows it.
 
 This is the third of step C's three items in `docs/strategies/redesign-2-core.md`. It adds proof, not product behaviour, and it is not a mission criterion.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by gpt-6.1-sol (atelier-kesg) at 7173bd66 after 2 review rounds; 1 fix_now (atelier-atpo, a wrong sentence in the results file) fixed. Final round: 2 Claude + 2 Codex runs, 0 failed calls. See ## Report and evals/agent-factory/results/2026-11-10-next-loop-changes.md. Ready for the orchestrator to merge.
 
 ## Report
 
