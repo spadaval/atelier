@@ -32,7 +32,8 @@ updated_at: "2026-11-07T21:03:27.787222355+00:00"
 
 - [ ] `list` orders missions in progress first, then ready, then draft.
 - [ ] Each mission heading gives its items by state, e.g. `10 items: 1 in progress, 1 ready, 6 blocked, 2 draft`, with correct plurals and no "Scope" or "Open blockers" label.
-- [ ] Rendering tests are updated.
+- [ ] Each mission heading, or one line after the list, names `atelier show <mission>` for the mission in full.
+- [ ] The design record describes the heading, and rendering tests are updated.
 
 ## Scope
 

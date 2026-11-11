@@ -27,7 +27,7 @@ updated_at: "2026-10-17T01:10:57.987773924+00:00"
 
 ## Done when
 
-- [ ] Each mission and label heading in `list` carries its count, e.g. `Labelled cli-output (4):`.
+- [ ] Each mission and label heading in `list` carries its count, e.g. `Labelled cli-output (4):`, and so does each status group of `show <mission>`, e.g. `Draft (14):`, `Done (12):`.
 - [ ] `list --ready`'s count agrees with what `status` counts on the same records; a test asserts it.
 
 ## Context

@@ -27,8 +27,10 @@ updated_at: "2026-10-17T01:10:57.962045771+00:00"
 
 ## Done when
 
-- [ ] The confirmation names the item's title and priority with its ID, e.g. `Created draft item atelier-xxxx, medium: "Title"`; a CLI test covers it.
+- [ ] The confirmation names the item's title and priority with its ID, e.g. `Created draft item atelier-xxxx, medium: "Title"`.
+- [ ] An item created with no mission gets a next step that puts it in one, `atelier set --mission <mission-id> <id>`, with the real mission ID when exactly one mission is open.
+- [ ] CLI tests cover an item created with `--in <mission>` and one with no mission.
 
 ## Context
 
-Rewritten for the new tool in the cutover sort (atelier-5zre): `issue create` became `new`. The new `new` already names the status and the next step (`ready`, then a commit), so those parts left; `--parent`, the type and the unpersisted-ID error went with parents, types and the old command.
+Rewritten for the new tool in the cutover sort (atelier-5zre): `issue create` became `new`. The new `new` already names the status and the `ready` and commit steps, so those parts left, and its missing step toward a mission stays, as `set --mission`; `--parent`, the type and the unpersisted-ID error went with parents, types and the old command.

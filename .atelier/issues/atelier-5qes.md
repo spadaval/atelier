@@ -32,6 +32,8 @@ updated_at: "2026-11-05T06:07:19.198719+00:00"
 
 - [ ] In `list --blocked`, and within each status group of `show <mission>`, a visible blocker comes before what it blocks, then rows sort by state, priority, update time and ID; `list` keeps its mission and label groups and orders each the same way.
 - [ ] A test with chain a → b → c (c blocked by b, b by a) asserts that order in `list --blocked` and in `show <mission>`.
+- [ ] A test pins the order of a mission whose items are in several states in `show <mission>` (from atelier-31l2).
+- [ ] A test with more than 20 ready items shows every row in `list --ready` (from atelier-8zxh).
 
 ## Scope
 

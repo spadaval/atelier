@@ -27,8 +27,8 @@ updated_at: "2026-11-07T21:03:27.041551199+00:00"
 
 ## Done when
 
-- [ ] `show <mission>` ends with a `Then:` line naming the mission's own next step: `ready` for a draft, `lead` for a ready mission with no lead, and for one in progress either what is left before close (items not done or dropped, the Result not written) or `close` once nothing is.
-- [ ] Tests cover a draft, a ready mission with no lead, and a mission whose items are all done.
+- [ ] `show <mission>` ends with a `Then:` line naming the mission's own next step: `ready` for a draft, `lead` for a ready mission with no lead (noting items already started), and for one in progress either what is left before close (items not done or dropped, the Result not written) or `close` once nothing is.
+- [ ] Tests cover a draft, a ready mission with no lead and an item already started, and a mission whose items are all done.
 
 ## Context
 

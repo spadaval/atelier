@@ -27,7 +27,7 @@ updated_at: "2026-10-17T01:10:57.982115462+00:00"
 
 ## Done when
 
-- [ ] On an item's branch, `status` says how many commits the branch is behind the base, e.g. `1 behind master`, when it is. On the base, it says how many commits the base is ahead of its upstream, e.g. `master, 1 ahead of origin/master`. A detached HEAD reads `detached at <sha8>`.
+- [ ] On an item's branch, `status` says how many commits the branch is behind the base, with the command that catches up, e.g. `1 behind master (git merge master)`, when it is. On the base, it says how many commits the base is ahead of its upstream, e.g. `master, 1 ahead of origin/master`. A detached HEAD reads `detached at <sha8>`.
 - [ ] `status` names uncommitted record changes separately from code, e.g. `records: 1 uncommitted (.atelier/items/atelier-orb2/item.md)` and `code: 1 uncommitted`.
 - [ ] Tests cover a branch behind its base with both kinds of change, a base ahead of its upstream, and a detached HEAD.
 

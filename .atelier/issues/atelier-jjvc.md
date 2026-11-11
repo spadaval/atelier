@@ -25,12 +25,13 @@ The new binary has no `prime`, `land` or `status --hook`, but a clone whose `.cl
 
 - [ ] `atelier check` names a `.claude/settings.json` hook that calls a command or flag the binary does not have, with the fix (`atelier setup claude`).
 - [ ] A test covers a settings file with an old `land --hook claude` hook.
+- [ ] The CHANGELOG records that `prime` is gone, with `status` as its replacement.
 
 ## Context
 
 ADR 0022 Decision 1; review finding atelier-1ia7 on atelier-bw0b.
 
-Rewritten for the new tool in the cutover sort (atelier-5zre): the new binary already has no `prime`; what remains is naming old hooks, which now include `status --hook` and `land --hook`. The CHANGELOG line and the plan condition went with the alias.
+Rewritten for the new tool in the cutover sort (atelier-5zre): the new binary already has no `prime`; what remains is naming old hooks, which now include `status --hook` and `land --hook`. The CHANGELOG line stays; the plan condition went with the alias.
 
 ## Notes
 
