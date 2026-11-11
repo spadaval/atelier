@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-zjgy
 title: Find out why so many commits touch only tracker records, and propose what to cut
-status: draft
+status: dropped
 mission: null
 labels:
 - tooling
@@ -27,3 +27,7 @@ In the 2026-11-08 review audit, 59 of 183 non-merge commits in life-on-rails tou
 ## Scope
 
 The investigation and its note. Changes it proposes are filed as separate items.
+
+## Report
+
+Dropped: Its counts are from the old tool's record commands, all removed in 0.5. Process share is a scorecard measure, so the rerun (atelier-pwhn) answers it.
