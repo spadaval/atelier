@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-b99t
 title: Point build.rs rerun-if-changed at the repository's .git, not crates/.git
-status: draft
+status: dropped
 mission: null
 labels:
 - bug
@@ -33,3 +33,7 @@ Found in review of atelier-7v9q (finding R6).
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-7v9q (Publish tagged releases with dist: Linux and macOS archives, checksums, shell installer)
+
+## Report
+
+Dropped: `crates/atelier-cli/build.rs` was deleted in 0.5.
