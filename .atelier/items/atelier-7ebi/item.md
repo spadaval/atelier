@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7ebi
 title: Confirm issue update, note and link with the resulting values
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -31,3 +31,7 @@ Mutating issue commands confirm what was run but not what the record now says, s
 - [ ] `note` prints the stored bullet, e.g. `- 2026-10-16 [plan] Plan note`. `-q` prints nothing.
 - [ ] `link`/`unlink` describe the stored link in canonical direction with titles, e.g. `atelier-f0rr "No body at all" now advances mission atelier-1w8c "Orient a session…"`. For blocked_by they add the readiness effect: `atelier-xmtr is now blocked (1 open blocker)`. "Already exists" uses the same canonical wording. The generic footer is gone.
 - [ ] CLI tests cover each confirmation, including a mission-first advances link.
+
+## Report
+
+Dropped: `issue update`, `note` and `link` were removed in 0.5; `set` changes front matter and bodies are edited in the file.
