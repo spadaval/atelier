@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered; step C planned, plan review 3-x9w6 answered"
+last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered; step C planned, plan review 3-x9w6 answered; step D planned"
 ---
 
 # Sizing
@@ -59,7 +59,7 @@ mission 1 and never again, and the redesign's effect stays an impression.
 Four steps. The cutover ran on 2026-11-11, so the mission can start. Each
 step is planned in full at its boundary, with one plan review, before its
 work starts. Steps A and B do not depend on each other and are planned
-first, then C; D is still provisional.
+first, then C, then D.
 
 | Step | Item | Does |
 | --- | --- | --- |
@@ -121,6 +121,19 @@ atelier-vl5n (pull request 144) merged:
 - **The trial is the first run.** atelier-9dku shows its arithmetic on
   atelier's real log, and atelier's run in step D goes first, as the
   procedure's trial, before the other four.
+
+Decided while planning D, after atelier-9dku merged (pull request 146):
+
+- **Each run is its own item in its own repository,** and atelier-613a
+  holds only the result. atelier's run goes first, as the trial, and one
+  item fixes what it shows wrong in the procedure before the other four
+  start together.
+- **A run stops at its approval.** The session, the run's merge and
+  everything else the session settles are Sumeet's.
+- **Only atelier and demiurge have merged an item since the cutover,** so
+  three pages report the baseline, the checklist and what the records show,
+  and say which numbers mean nothing yet.
+- **A page holds nothing private.** astromech and demiurge are public.
 
 The three properties and what the report shows for each:
 
