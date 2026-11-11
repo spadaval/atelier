@@ -16,10 +16,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:36.326139743+00:00"
-status: "superseded"
+status: "backlog"
 title: "Add a since-commit digest of a mission for orchestrator wake-ups"
-updated_at: "2026-11-11T03:55:36.326139743+00:00"
+updated_at: "2026-11-07T21:03:30.642477339+00:00"
 ---
 
 ## Goal
@@ -37,7 +36,3 @@ Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions
 ## Unknowns
 
 Whether status also prints a short digest at session start, and since which commit (the upstream, or the last commit the session saw); `git log` or `git diff --stat` since the commit may be enough there.
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (c). It duplicates atelier-8b0a, which adds `atelier log` printing every act since a time, the form the specification gives a since-commit digest (`log`, product specification Commands).
