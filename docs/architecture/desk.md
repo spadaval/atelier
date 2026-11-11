@@ -442,9 +442,12 @@ How it starts the thread:
 3. **Launch.** It calls `t3_thread_launch` with `projectId`, `title`
    `Plan <mission>: <mission title>`, `message`, and a `clientRequestId`
    of its own, so that the client's one retry after a refused token
-   replays the launch rather than starting a second thread. Model, runtime
-   mode and workspace are left to the project's defaults; the thread runs
-   in the project's checkout (`workspaceStrategy` `root`).
+   replays the launch rather than starting a second thread. It names no
+   model or runtime mode, so T3 Code picks them as it does for a caller
+   outside a thread; on this host, on 2026-11-11, that was
+   `claude-fable-5-2` in `approval-required` mode, although the scratch
+   project's default model was another. The thread runs in the project's
+   checkout (`workspaceStrategy` `root`).
 4. **Revoke.** It revokes the operating token's session with `auth session
    revoke`, whether the launch worked or not.
 
