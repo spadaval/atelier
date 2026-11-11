@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5xvl
 title: 'Generate the planning review brief: planning reviewers look up record syntax twice as often as work reviewers'
-status: ready
+status: dropped
 mission: atelier-icv4
 labels:
 - review
@@ -44,3 +44,7 @@ Evidence: transcripts 2026-11-04 to 2026-11-09; Sol planning reviews 16, record-
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-4gsb (Drop severity from the review request brief to match Agent Factory's review output)
+
+## Report
+
+Dropped: Done by the 0.5 rewrite: `atelier review <mission>` prints a plan review's brief.
