@@ -186,6 +186,18 @@ class GradeTest(loop.Fixture):
         self.assertIn("the lead ran a shell command that may have written code: read it by "
                       "hand; graded as needing a hand read", grade["notes"])
 
+    def test_a_lead_rewriting_its_item_in_python_is_read_by_hand(self):
+        # From an atelier-t747 run: the lead settled the name by rewriting
+        # the item's text, which mentions sample.csv, in Python.
+        self.lead()
+        self.build()
+        self.lead_ran('python3 - <<\'EOF\'\np = ".atelier/items/tally-f1ag/item.md"\n'
+                      's = open(p).read()\nopen(p, "w").write(s.replace('
+                      '"`tally total sample.csv`\\n  prints 70.00", "x"))\nEOF')
+        grade = self.grade()
+        self.assertIsNone(grade["pass"], grade["notes"])
+        self.assertEqual(grade["checks"]["lead_shell_writes"]["wrote"], [])
+
     def test_asking_sam_fails(self):
         self.lead()
         self.atelier("lead", "new", "Choose the start-date flag's name")
