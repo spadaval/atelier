@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-rdsa
 title: Fix debrief validation links and Results header labels
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -33,3 +33,7 @@ Dropped in decision atelier-mzpn: the receipt-chip nits (proof chips that show o
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The debrief page was deleted with the site in 0.5.
