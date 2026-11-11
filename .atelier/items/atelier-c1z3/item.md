@@ -36,6 +36,12 @@ The scripts, their README and the rubric. No baseline number changes. Mission at
 
 Source: the Reports of atelier-3kr7, atelier-5fsj and atelier-6sti, the mission notes of atelier-jah8, and its validation evidence atelier-vih6.
 
+Left for this item by atelier-x3n5 (pull request 147), which made the scripts read `atelier log`:
+
+- A thread Claude's Agent tool started is tied to its parent's item only when T3 records the driver `claudeAgent` on the item that started it. The test fixture has that field; nobody has checked it on real data, since x3n5 was kept away from T3's database. If the rerun's snapshot lacks it, those threads come out untied and `tied_by.parent` reads 0.
+- `freeze.py copy` has no test, and its snapshot path is fixed to the November baseline's. The rerun needs it to take a second snapshot's path.
+- Only the scripts at commit `df9c84a43` reproduce the November baseline.
+
 ## Links
 
 Relationships of the old record that the new format has no field for.
