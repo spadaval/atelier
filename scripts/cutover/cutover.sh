@@ -84,7 +84,8 @@ old_in_progress() { # <name>
     printf '%s\n' "$out"
   done <<< "$wts"
   out=$(cd "$c" && atelier status 2> "$err") || { echo "atelier status failed in $c: $(tr '\n' ' ' < "$err")"; return 1; }
-  grep -q '^Branches$' <<< "$out" || { echo "atelier status in $c printed no Branches section to read"; return 1; }
+  # A clone with no branch but its base has no Branches section: nothing
+  # to read there, which is not a failure.
   awk '
     /^Branches$/ { s = 1; next }
     s && /^$/ { s = 0 }
