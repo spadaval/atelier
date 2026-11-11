@@ -160,11 +160,24 @@ restore_clone() { # <name> <target>
       *) git -C "$wt" switch -q "$was" ;;
     esac
   done
-  if [ "$r" = atelier ] && [ -d "$STATE/aside/atelier" ]; then
-    local W; W=$(jfields convert:atelier | cut -f1)
-    (cd "$STATE/aside/atelier" && find . -type f) | while read -r p; do
-      [ -e "$W/$p" ] || { mkdir -p "$(dirname "$W/$p")"; mv "$STATE/aside/atelier/$p" "$W/$p"; }
-    done
+  # The ignored paths the conversion set aside go back whole, each as it
+  # was saved (files, links, empty directories, modes). One already back is
+  # skipped; a destination in the way stops this repository, with the
+  # saved copy kept.
+  local list=$STATE/aside/atelier.list
+  if [ "$r" = atelier ] && [ -f "$list" ]; then
+    local W src p; W=$(jfields convert:atelier | cut -f1)
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      src=$STATE/aside/atelier/$p
+      [ -e "$src" ] || [ -L "$src" ] || continue
+      if [ -e "$W/$p" ] || [ -L "$W/$p" ]; then
+        say "$r: $W/$p is in the way of the ignored path the cutover set aside, kept at $src; move it aside, then run rollback.sh again"
+        return 1
+      fi
+      mkdir -p "$(dirname "$W/$p")"
+      mv "$src" "$W/$p"
+    done < "$list"
   fi
   # What was asked for, read back.
   [ "$(git -C "$c" rev-parse "refs/heads/$b")" = "$target" ] || { say "$r: $b is not at ${target:0:8} after restoring"; return 1; }

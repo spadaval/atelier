@@ -358,10 +358,11 @@ commit_conversion() { # <name> <dir> <base>
   jdone "$k" "$(git -C "$d" rev-parse HEAD)"
 }
 
-# Pushes <dir>'s base to the remote. A push started and not marked done is
-# settled from the remote's tip.
-push_base() { # <key> <name> <dir> <old> <new>
-  local k=$1 r=$2 d=$3 old=$4 new=$5 tip
+# Pushes <dir>'s base to the remote, with the conversion's skip unless the
+# sixth argument is "plain". A push started and not marked done is settled
+# from the remote's tip.
+push_base() { # <key> <name> <dir> <old> <new> [plain]
+  local k=$1 r=$2 d=$3 old=$4 new=$5 how=${6:-skip} tip
   case $(jstate "$k") in
     done) return 0 ;;
     started)
@@ -370,8 +371,13 @@ push_base() { # <key> <name> <dir> <old> <new>
       [ "$tip" = "$old" ] || die "$r: the remote's $(base_of "$r") is at ${tip:0:8}, neither ${old:0:8} nor ${new:0:8}" ;;
   esac
   jstart "$k" "$old	$new"
-  ATELIER_SKIP="$SKIP_REASON" git -C "$d" push -q "$REMOTE" "refs/heads/$(base_of "$r")" \
-    || die "$r: the push of $(base_of "$r") failed; the remote's tip decides what happened when this runs again"
+  local pushed=0
+  if [ "$how" = plain ]; then
+    env -u ATELIER_SKIP git -C "$d" push -q "$REMOTE" "refs/heads/$(base_of "$r")" || pushed=$?
+  else
+    ATELIER_SKIP="$SKIP_REASON" git -C "$d" push -q "$REMOTE" "refs/heads/$(base_of "$r")" || pushed=$?
+  fi
+  [ "$pushed" -eq 0 ] || die "$r: the push of $(base_of "$r") failed; the remote's tip decides what happened when this runs again"
   jdone "$k"
 }
 
@@ -411,14 +417,19 @@ convert_atelier() {
     [ "$(git -C "$W" rev-parse HEAD)" = "$B" ] || die "atelier: $W is not at the recorded base"
     aside=$STATE/aside/atelier
     jstart convert:atelier "$W	$B	$aside"
-    # Ignored files under the converted paths, such as the old tool's
-    # runtime directory, go aside: --verify accepts nothing old under
-    # .atelier/, and the rollback puts them back.
-    local ignored
+    # Ignored paths under the converted paths, such as the old tool's
+    # runtime directory, go aside whole, as they are (files, links, empty
+    # directories, modes): --verify accepts nothing old under .atelier/, and
+    # the rollback moves each back. Each is listed in $aside.list before it
+    # is moved, and an earlier copy is never overwritten.
+    local ignored list=$aside.list
     # shellcheck disable=SC2086 # CONVERTED_PATHS is a list of paths
     ignored=$(git -C "$W" status --porcelain --ignored -- $CONVERTED_PATHS | sed -n 's/^!! //p' | sed 's:/$::')
+    mkdir -p "$aside"; touch "$list"
     while IFS= read -r p; do
       [ -n "$p" ] || continue
+      if [ -e "$aside/$p" ] || [ -L "$aside/$p" ]; then die "atelier: $aside/$p holds what an earlier run set aside, and $W/$p is there again; move one of them"; fi
+      grep -qxF -- "$p" "$list" || echo "$p" >> "$list"
       mkdir -p "$aside/$(dirname "$p")"
       mv "$W/$p" "$aside/$p"
     done <<< "$ignored"
@@ -694,7 +705,9 @@ cutover() {
     jdone "$k" "$(git -C "$W" rev-parse HEAD)"
   fi
   point step8-committed
-  push_base push:close atelier "$W" "$(jfields "$k")" "$(jresult "$k")"
+  # The closing commit changes only the item's record, which the pre-push
+  # hook lets through: it is pushed with no skip.
+  push_base push:close atelier "$W" "$(jfields "$k")" "$(jresult "$k")" plain
   point step8-pushed
   finish_step; STEP=""
   rm -rf "$STATE/convert"
