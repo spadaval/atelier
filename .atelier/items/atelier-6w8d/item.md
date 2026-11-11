@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6w8d
 title: Replace the product docs, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record
-status: approved
+status: in_review
 mission: atelier-qr5s
 labels:
 - redesign
@@ -170,7 +170,7 @@ The links: a checker of every relative link and its `#anchor` (GitHub heading sl
 - The Desk's kept page, `docs/product/desk.md`: `AGENTS.md:61`, `desk/README.md:4` and `scripts/cutover/agents/atelier.md:61`.
 - Test fixtures, which are data and not references, and which this item may not change: `desk/e2e/fixtures.ts` (172, 451, 458, 460, 463, 465), `desk/src/lib/links.test.ts` (8, 10, 21), `scripts/ci-jobs.test.sh` (20, 50, 52) and `scripts/cutover/test_convert_records.py` (18 lines).
 - History pointers into Git for the deleted baseline strategy: `docs/architecture/quality/scorecard-baseline-2026-11.md:276` and `scripts/scorecard/README.md:6`.
-- The design record's Tried and removed row "Strategy files in `docs/strategies/`" (`docs/design.md:1196`).
+- The design record's Tried and removed row "Strategy files in `docs/strategies/`" (`docs/design.md:1209`).
 
 `no-old-surface`: one search per command and record path from the two tables (`workflow.yaml`, evidence, `.atelier/issues`, `.atelier/reviews`, `--issue-type`, `atelier issue`, loose ends, `bundle`, `migrate`, `doctor`, `prune`, `land`, `merge`'s six flags, `brief`, `debrief`, `serve`, the nine `work` views, the `review` subcommands, `docs/strategies`, `docs/adr`), plus `atelier serve` and `CONTEXT.md` and `PRODUCT_INTENT.md`, over `skills/`, `AGENTS.md`, `CLAUDE.md` and `docs/`. It finds no instruction to use any of them. Its hits per file:
 
@@ -185,12 +185,14 @@ The links: a checker of every relative link and its `#anchor` (GitHub heading sl
 ```
 
 - The 118 baseline hits are its reports, which are history.
-- The 20 `docs/design.md` hits are lines 1179 to 1213, all inside Tried and removed (1163 to 1214).
+- The 20 `docs/design.md` hits are lines 1192 to 1226, all inside Tried and removed (1176 to 1227).
 - The `lead.md` hit is a false match of `review finding` in "a review finding's fix included".
 
 So the history hits are 20 in the design record's lists and 118 in the baseline, and no other file has any.
 
 `atelier check`: "Every record is valid: 133 items, 7 missions and config.toml." `cargo fmt -- --check` and `git diff --check` pass.
+
+After round 2's approval, atelier-ivbq merged its own edits to the two specifications on master, at their old paths, and `merge` refused the conflict. I merged master in (6a7f29688) and kept ivbq's additions on the moved pages. On the product page these are the wrapped Done when line, `escalate --finding`, the visitor's questions and the no-repository exit in What `status` prints, and the longer `submit` handoff, with its link pointed at `design.md`. In the design record they are the reader's-job sentences, the no-repository line and the `escalate --finding` line in Threads and roles, without "Built so far:" and "Missions join with their commands.", which this item had cut. Afterwards Words, Lifecycle and Review were still unchanged. The checks above were rerun on the merge with the same results, at the new line numbers.
 
 For the reviewer:
 
