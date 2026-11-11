@@ -1931,3 +1931,38 @@ fn with_a_skip_ci_that_failed_or_has_not_finished_passes_and_a_failing_forge_doe
     );
     assert_eq!(state(&root), before);
 }
+
+#[test]
+fn a_rule_the_pre_push_hook_skips_in_merges_push_of_the_base_is_printed() {
+    let forge = Forge::new(None);
+    let root = forge.scratch.root();
+    // A plain commit on the base, which the pre-push hook refuses.
+    let base = forge.scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    fs::write(base.join("other.txt"), "other\n").unwrap();
+    git(&base, &["add", "other.txt"]);
+    git(&base, &["commit", "-qm", "Meanwhile"]);
+    let plain = git(&root, &["rev-parse", "--short=7", "main"]);
+    let hooks = git(
+        &root,
+        &["rev-parse", "--path-format=absolute", "--git-path", "hooks"],
+    );
+    let hook = Path::new(&hooks).join("pre-push");
+    let script = format!(
+        "#!/bin/sh\nexec '{}' check --hook pre-push \"$@\"\n",
+        env!("CARGO_BIN_EXE_atelier")
+    );
+    fs::write(&hook, script).unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    let mut command = forge.command(&root, "t1", &["merge"]);
+    let run = self::run(command.env("ATELIER_SKIP", REASON).output().unwrap());
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        run.stderr,
+        skipped(&format!(
+            "Code and config.toml reach main only through atelier merge ({plain} Meanwhile)"
+        ))
+    );
+    assert_eq!(forge.remote("main"), Some(head(&root, "main")));
+}

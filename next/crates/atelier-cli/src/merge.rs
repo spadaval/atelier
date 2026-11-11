@@ -553,16 +553,8 @@ fn moved(
 
 /// Pushes `commit` to the branch `branch` of `remote`, never forcing.
 pub(crate) fn push(root: &Path, remote: &str, commit: &str, branch: &str) -> Result<()> {
-    git::run(
-        root,
-        &[
-            "push",
-            "--quiet",
-            remote,
-            &format!("{commit}:refs/heads/{branch}"),
-        ],
-    )
-    .map(drop)
+    let to = format!("{commit}:refs/heads/{branch}");
+    git::relayed(root, &["push", "--quiet", remote, &to])
 }
 
 /// The open pull request from `branch` into `base`, opened when there is

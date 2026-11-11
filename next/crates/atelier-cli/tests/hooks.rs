@@ -329,6 +329,35 @@ fn a_commit_of_an_invalid_record_or_of_a_status_no_act_sets_is_refused_and_a_han
 }
 
 #[test]
+fn a_rule_a_hook_skips_in_an_atelier_commit_is_printed() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    install_hooks(&root);
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    let path = root.join(item_path(ID));
+    let text = fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]");
+    let text = text.replace("blocked_by: []", "blocked_by: [demo-zz99]");
+    fs::write(&path, text + "Done.\n").unwrap();
+    // The pre-commit hook refuses `submit`'s commit; with a skip it passes
+    // it, and `submit` says so.
+    assert_eq!(atelier(&root, "t1", &["submit"]).code, 2);
+    let run = atelier_command(&root, "t1", &["submit"])
+        .env("ATELIER_SKIP", "the blocker comes next")
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(run.stderr).unwrap();
+    assert_eq!(run.status.code(), Some(0), "{stderr}");
+    assert_eq!(
+        stderr,
+        format!(
+            "Skipped with ATELIER_SKIP: Every record is valid ({}: blocked_by: `demo-zz99` names no item): the blocker comes next\n",
+            item_path(ID)
+        )
+    );
+    assert_eq!(field(&root, "HEAD", "status"), "in_review");
+}
+
+#[test]
 fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();

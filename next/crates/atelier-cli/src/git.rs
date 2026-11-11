@@ -270,7 +270,7 @@ pub fn commit_paths(repo: &Path, paths: &[&str], message: &str) -> Result<()> {
     let message = with_skips(repo, message)?;
     let mut commit = vec!["commit", "--quiet", "-m", &message, "--"];
     commit.extend(paths);
-    let committed = run(repo, &on_paths(&["add"])).and_then(|_| run(repo, &commit));
+    let committed = run(repo, &on_paths(&["add"])).and_then(|_| relayed(repo, &commit));
     if committed.is_err() {
         let unstage = on_paths(&["rm", "--cached", "-r", "-q", "--ignore-unmatch"]);
         let _ = run(repo, &unstage);
@@ -278,6 +278,23 @@ pub fn commit_paths(repo: &Path, paths: &[&str], message: &str) -> Result<()> {
         let _ = run_with(repo, &["update-index", "-z", "--index-info"], Some(&staged));
     }
     committed.map(drop)
+}
+
+/// Runs a Git command that must succeed, and passes on to stderr what it
+/// printed, which is a hook's output, as the rules a hook skipped.
+pub fn relayed(repo: &Path, args: &[&str]) -> Result<()> {
+    let output = output(repo, args, None)?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let mut stderr = std::io::stderr();
+    let _ = stderr.write_all(&output.stdout);
+    let _ = stderr.write_all(&output.stderr);
+    Ok(())
 }
 
 /// The commit the checkout's HEAD points at.
