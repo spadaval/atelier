@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-613a
 title: Make the first gardener run in each of the five repositories
-status: draft
+status: ready
 mission: atelier-295u
 labels:
 - redesign
@@ -11,7 +11,9 @@ priority: medium
 blocked_by:
 - atelier-9dku
 implementers: []
-ready: null
+ready:
+  by: sumeet, relayed by the task that started the lead
+  at: 2026-11-11T17:55:42.686492262Z
 trivial: null
 caused_by: null
 created_at: 2026-11-10T00:56:11.504215867Z
