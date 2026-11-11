@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8b0a
 title: Add `atelier log`, the history of acts
-status: in_review
+status: changes_requested
 mission: atelier-295u
 labels:
 - redesign
