@@ -92,17 +92,22 @@ def calls(path, thread):
     return found, tools
 
 
+def unwrap(command):
+    """A Codex `/bin/bash -lc '<script>'` call's script; any other command as it is."""
+    wrapped = re.match(r"/bin/(?:ba)?sh -lc (.*)\Z", command, re.S)
+    if wrapped:
+        try:
+            return shlex.split(wrapped.group(1))[0]
+        except (ValueError, IndexError):
+            pass
+    return command
+
+
 def executed(command):
     """The text of `command` that a shell runs as commands: a Codex
     `/bin/bash -lc '<script>'` unwrapped, heredoc bodies and quoted text
     dropped, and command substitutions inside double quotes kept."""
-    wrapped = re.match(r"/bin/(?:ba)?sh -lc (.*)\Z", command, re.S)
-    if wrapped:
-        try:
-            command = shlex.split(wrapped.group(1))[0]
-        except (ValueError, IndexError):
-            pass
-    lines, kept = command.split("\n"), []
+    lines, kept = unwrap(command).split("\n"), []
     while lines:
         line = lines.pop(0)
         kept.append(line)

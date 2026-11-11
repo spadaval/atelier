@@ -157,6 +157,8 @@ class GradeTest(loop.Fixture):
         for command in ("python3 - <<'PY'\nfrom pathlib import Path\n"
                         "Path('tally.py').write_text(CODE)\nPY",
                         "cat > tally.py <<'EOF'\nimport sys\nEOF",
+                        "printf 'x\\n' >> 'tally.py'", 'echo x | tee -a "README.md"',
+                        "/bin/bash -lc 'printf x >> \"tally.py\"'",
                         "sed -i 's/--to/--from/' tests/test_tally.py"):
             with self.subTest(command=command):
                 self.lead_ran(command)

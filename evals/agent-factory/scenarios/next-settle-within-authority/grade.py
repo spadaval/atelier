@@ -40,7 +40,7 @@ ITEM = f".atelier/items/{ID}/item.md"
 
 # Shell commands that write a file: a redirect or tee whose target is the
 # file, an in-place sed or perl, or Python writing to a file it names.
-TARGET = re.compile(r"(?<![0-9&>])>>?\s*([^\s;&|<>()]+)|\btee\s+(?:-a\s+)?([^\s;&|<>()]+)")
+TARGET = re.compile(r"(?:(?<![0-9&>])>>?|\btee\s+(?:-a\s+)?)\s*(['\"]?)([^\s;&|<>()'\"]+)\1")
 IN_PLACE = re.compile(r"\bsed\s+(?:-\w+\s+)*-i|\bperl\s+-\w*i")
 PY_WRITE = re.compile(r"write_text\(|\.write\(|open\([^)]*['\"][wa]\+?['\"]")
 # Commands that may write a file they name, which are read by hand.
@@ -52,7 +52,7 @@ def shell_writes(command, code):
     named = sorted(f for f in code if f in command or Path(f).name in command)
     if not named:
         return None, []
-    targets = [t for m in TARGET.finditer(loop.executed(command)) for t in m.groups() if t]
+    targets = [m.group(2) for m in TARGET.finditer(loop.unwrap(command))]
     if any(t.endswith(tuple(code)) or Path(t).name in {Path(f).name for f in code}
            for t in targets) or IN_PLACE.search(command) or PY_WRITE.search(command):
         return "wrote", named
