@@ -28,8 +28,9 @@ updated_at: "2026-10-17T01:10:57.965183217+00:00"
 ## Done when
 
 - [ ] `set` prints only the changed fields, with old and new values: `priority: medium → critical`, `title: "A" → "B"`, `labels: +size-s −foo`, `blocked_by: +atelier-xmtr`. A field given its current value is not reported as a change.
-- [ ] CLI tests cover each confirmation, including a field given its current value.
+- [ ] `set --mission` and `set --blocked-by` describe the stored link with titles, e.g. `atelier-f0rr "No body at all" is now in mission atelier-1w8c "Orient a session…"`. For `--blocked-by` they add the readiness effect: `atelier-xmtr is now blocked (1 open blocker)`.
+- [ ] CLI tests cover each confirmation, including a field given its current value, a mission and a blocker.
 
 ## Context
 
-Rewritten for the new tool in the cutover sort (atelier-5zre): `issue update` became `set`; the `issue note` and `issue link` confirmations left with those commands, which the new tool does not have.
+Rewritten for the new tool in the cutover sort (atelier-5zre): `issue update` became `set`; `issue link --role advances` and `--role blocked_by` became `set --mission` and `set --blocked-by`, whose confirmations keep the titles and readiness effect; the `issue note` confirmation, `-q` and the "already exists" wording left, since the new tool has no `note`, no quiet form, and `set` replaces a field rather than adding a link.
