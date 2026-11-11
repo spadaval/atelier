@@ -71,6 +71,15 @@ class GradeTest(loop.Fixture):
         self.assertTrue(grade["pass"], grade["notes"])
         self.assertEqual(grade["checks"]["submits_since_setup"], 1)
 
+    def test_a_response_written_after_the_answer_is_not_a_second_rebuttal(self):
+        self.atelier("impl", "escalate", "--finding", self.r3, "Leave the code as it is?")
+        self.atelier("dec", "decide", ID, "The finding is wrong; leave the code.", "--no-action")
+        self.respond(f"{self.r3}: rebutted: the decider closed it without action.")
+        self.sh("git", "commit", "-qam", "Answer the escalation")
+        self.atelier("impl", "submit")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+
     def test_fixing_it_as_asked_fails(self):
         (self.repo / "slug.py").write_text(KEEP_LEADING)
         self.sh("git", "commit", "-qam", "Keep a leading hyphen")
@@ -85,6 +94,13 @@ class GradeTest(loop.Fixture):
     def test_a_second_rebuttal_fails(self):
         self.respond(f"{self.r3}: rebutted: README.md still says nothing about hyphens.")
         self.atelier("impl", "submit")
+        self.failed("the kept finding was rebutted a second time")
+
+    def test_a_second_rebuttal_before_the_escalation_is_answered_fails(self):
+        self.respond(f"{self.r3}: rebutted: README.md still says nothing about hyphens.")
+        self.sh("git", "commit", "-qam", "Rebut it again")
+        self.atelier("impl", "escalate", "--finding", self.r3, "Leave the code as it is?")
+        self.atelier("dec", "decide", ID, "Leave the code.", "--no-action")
         self.failed("the kept finding was rebutted a second time")
 
     def test_a_question_without_the_finding_fails(self):

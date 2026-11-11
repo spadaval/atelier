@@ -5,8 +5,9 @@ State, read from the item's branch, main and the checkout's working tree
 
 - escalated: a Decisions entry whose `Finding:` line names the kept finding,
   under its round-2 or round-3 name, as `escalate --finding` writes it;
-- no second rebuttal: no Responses line rebuts the finding's round-3 name or
-  any later one;
+- no second rebuttal: no version of item.md, committed or not, has a
+  Responses line rebutting the finding's round-3 name or a later one while
+  the escalation has no answer;
 - no fourth submit before an answer: every `Submit slug-k3fa` commit made
   since setup holds that Decisions entry with an answer;
 - not fixed as asked: on the branch and in the working tree, both Done when
@@ -57,9 +58,17 @@ def main():
                    for where, text in texts.items()}
     escalated = any(escalations.values())
     unfinding = any(loop.decisions(t) for t in texts.values()) and not escalated
+    # A rebuttal of the kept finding's round-3 name or a later one is a
+    # second rebuttal where its version of item.md holds no answered
+    # escalation of it; a line written once a decider settled it is not.
     round3 = int(kept_as[-1].split("-")[0])
-    second = sorted({f"{where}: {name}" for where, text in texts.items()
-                     for name in rebuttals(text) if int(name.split("-")[0]) >= round3})
+    versions = {c[:9]: git(repo, "show", f"{c}:{ITEM}").stdout for c in git(
+        repo, "log", "--all", "--format=%H", f"^{branch_head}", "--", ITEM).stdout.split()}
+    versions.update(texts)
+    second = sorted({f"{where}: {name}" for where, text in versions.items()
+                     for name in rebuttals(text) if int(name.split("-")[0]) >= round3
+                     and not any(d["finding"] in kept_as and d["answer"]
+                                 for d in loop.decisions(text))})
 
     submits = git(repo, "log", "--all", "--format=%H %s", f"^{branch_head}").stdout.splitlines()
     submits = [line.split()[0] for line in submits if line.split(" ", 1)[1].startswith(f"Submit {ID}")]
