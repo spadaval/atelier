@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t3ko
 title: Make a re-run of init say what it did, and init -q print the base branch
-status: draft
+status: dropped
 mission: null
 labels:
 - cli-output
@@ -37,3 +37,7 @@ crates/atelier-cli/src/commands/init.rs and crates/atelier-app/src/init.rs. Not 
 ## Context
 
 atelier-l457 (done) left the re-run footer to this item (its Decisions). The rest of the original, the install's next steps, is l457's (decision atelier-mzpn).
+
+## Report
+
+Dropped: `atelier init` was removed in 0.5.
