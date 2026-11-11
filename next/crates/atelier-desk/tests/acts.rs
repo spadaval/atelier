@@ -318,6 +318,45 @@ async fn an_answer_waits_in_memory_until_a_commit_on_the_branch_holds_it() {
 }
 
 #[tokio::test]
+async fn an_answer_is_told_from_an_earlier_one_under_the_same_heading() {
+    let world = world();
+    let checkout = world.dir.path().join("started");
+    let path = checkout.to_str().unwrap();
+    git(&world.served, &["worktree", "add", "-q", path, STARTED]);
+    // The question asked again under the same heading, the first answered.
+    let asked = format!(
+        "\n## Decisions\n\n### {QUESTION}\n\nAnswer by someone: That way.\n\n### {QUESTION}\n"
+    );
+    item(&checkout, STARTED, "building", ALPHA, &asked);
+    git(&checkout, &["commit", "-qam", "Ask again"]);
+    let item_uri = format!("/api/repos/demo/items/{STARTED}");
+    let mission_uri = format!("/api/repos/demo/missions/{ALPHA}");
+    let inbox = get(&world.app, "/api/inbox").await;
+    assert_eq!(inbox["repos"][0]["questions"][0]["item"], STARTED);
+
+    let body = json!({"act": "decide", "repo": "demo", "id": STARTED, "answer": "This way."});
+    assert_eq!(act(&world.app, body).await["result"], "done");
+    let pending = json!([{"item": STARTED, "question": QUESTION, "finding": null,
+        "answer": {"by": CALLER, "text": "This way."}, "outcome": null}]);
+    assert_eq!(
+        get(&world.app, &mission_uri).await["pending_answers"],
+        pending
+    );
+    assert_eq!(get(&world.app, &item_uri).await["pending_answers"], pending);
+    let inbox = get(&world.app, "/api/inbox").await;
+    assert_eq!(inbox["repos"][0]["questions"], json!([]));
+
+    git(&checkout, &["commit", "-qam", "Submit"]);
+    assert_eq!(
+        get(&world.app, &mission_uri).await["pending_answers"],
+        json!([])
+    );
+    let page = get(&world.app, &item_uri).await;
+    assert_eq!(page["pending_answers"], json!([]));
+    assert_eq!(page["decisions"][1]["answer"]["by"], CALLER);
+}
+
+#[tokio::test]
 async fn where_no_checkout_has_the_branch_the_function_refuses() {
     let world = world();
     // `decide` with no checkout of the item's branch, from the checkout

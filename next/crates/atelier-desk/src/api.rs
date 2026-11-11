@@ -291,6 +291,11 @@ pub struct InboxQuestion {
     pub mission: Option<String>,
     pub question: String,
     pub finding: Option<String>,
+    /// Which of the item's decisions it is, so an answer the Desk gave and
+    /// no commit holds yet can leave it out. Not sent.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub index: usize,
 }
 
 /// An identity a record names, in one role, and the live thread it is

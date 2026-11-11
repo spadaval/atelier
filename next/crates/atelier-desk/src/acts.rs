@@ -16,9 +16,12 @@ use std::sync::{Mutex, MutexGuard};
 /// the act belongs in: the one with the base out for `ready`, the one with
 /// the item's branch out for `decide`. Where no checkout has that branch
 /// out, it opens `dir` and the function refuses with its own text. Gives
-/// the response and, for an answer written, the item's mission and the
-/// question as answered.
-pub fn act(dir: &Path, caller: &str, request: &ActRequest) -> Result<(ActResponse, Answered)> {
+/// the response and, for an answer written, the [`Answer`].
+pub fn act(
+    dir: &Path,
+    caller: &str,
+    request: &ActRequest,
+) -> Result<(ActResponse, Option<Answer>)> {
     let skip = Skip::new(None);
     let thread = || Thread(caller.to_string());
     match request {
@@ -41,8 +44,11 @@ pub fn act(dir: &Path, caller: &str, request: &ActRequest) -> Result<(ActRespons
                         return Ok((response(acted), None));
                     };
                     let decision = record.decisions()?.into_iter().nth(index);
-                    let mission = record.item.mission.clone();
-                    decision.map(|decision| (mission, question_of(id, &decision)))
+                    decision.map(|decision| Answer {
+                        mission: record.item.mission.clone(),
+                        index,
+                        question: question_of(id, &decision),
+                    })
                 }
                 _ => None,
             };
@@ -51,9 +57,17 @@ pub fn act(dir: &Path, caller: &str, request: &ActRequest) -> Result<(ActRespons
     }
 }
 
-/// An answer `decide` wrote: the item's mission, and the question
-/// answered.
-pub type Answered = Option<(Option<String>, Question)>;
+/// An answer `decide` wrote.
+#[derive(Debug, Clone)]
+pub struct Answer {
+    /// The item's mission.
+    pub mission: Option<String>,
+    /// Which of the item's decisions it answers, counting from 0 in the
+    /// order its Decisions section gives them: headings may repeat.
+    pub index: usize,
+    /// The question, answered.
+    pub question: Question,
+}
 
 /// The checkout with `branch` out, else `dir`.
 fn checkout(dir: &Path, branch: &str) -> Result<PathBuf> {
@@ -75,12 +89,17 @@ fn response(acted: Result<Done, Refused>) -> ActResponse {
     }
 }
 
-/// An answer given from the Desk to a question of `item`'s, in `mission`.
+/// An answer given from the Desk on repository `repo`.
 #[derive(Debug, Clone)]
 struct Pending {
     repo: String,
-    mission: Option<String>,
-    answer: Question,
+    answer: Answer,
+}
+
+impl Pending {
+    fn is(&self, repo: &str, item: &str, index: usize) -> bool {
+        self.repo == repo && self.answer.question.item == item && self.answer.index == index
+    }
 }
 
 /// The answers given from the Desk that no commit holds yet, kept in
@@ -96,48 +115,52 @@ impl Answers {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Keeps `answer`, given on repository `repo` to an item in `mission`.
-    pub fn add(&self, repo: &str, mission: Option<String>, answer: Question) {
+    /// Keeps `answer`, given on repository `repo`.
+    pub fn add(&self, repo: &str, answer: Answer) {
         let mut held = self.held();
-        held.retain(|p| !(p.repo == repo && same(&p.answer, &answer)));
+        let (item, index) = (&answer.question.item, answer.index);
+        held.retain(|p| !p.is(repo, item, index));
         held.push(Pending {
             repo: repo.to_string(),
-            mission,
             answer,
         });
     }
 
     /// The answers on `repo` to item `item`'s questions, or with `mission`
     /// to those of its items, less each one `committed` shows answered,
-    /// which is forgotten.
+    /// which is forgotten. `committed` holds every decision of each item
+    /// it names, in its record's order, as the item and mission pages do.
     pub fn pending(&self, repo: &str, on: On, committed: &[Question]) -> Vec<Question> {
         let mut held = self.held();
         let picked = |p: &Pending| {
             p.repo == repo
                 && match on {
-                    On::Item(id) => p.answer.item == id,
-                    On::Mission(id) => p.mission.as_deref() == Some(id),
+                    On::Item(id) => p.answer.question.item == id,
+                    On::Mission(id) => p.answer.mission.as_deref() == Some(id),
                 }
         };
-        held.retain(|p| {
-            let answered = committed
-                .iter()
-                .any(|c| same(c, &p.answer) && c.answer.is_some());
-            !(picked(p) && answered)
-        });
+        held.retain(|p| !(picked(p) && answered(committed, &p.answer)));
         held.iter()
             .filter(|p| picked(p))
-            .map(|p| p.answer.clone())
+            .map(|p| p.answer.question.clone())
             .collect()
     }
 
-    /// Whether an answer given on `repo` to `item`'s `question` waits for
-    /// its commit.
-    pub fn waits(&self, repo: &str, item: &str, question: &str) -> bool {
-        let held = self.held();
-        held.iter()
-            .any(|p| p.repo == repo && p.answer.item == item && p.answer.question == question)
+    /// Whether an answer given on `repo` to `item`'s decision `index`
+    /// waits for its commit.
+    pub fn waits(&self, repo: &str, item: &str, index: usize) -> bool {
+        self.held().iter().any(|p| p.is(repo, item, index))
     }
+}
+
+/// Whether `committed` holds `answer`'s decision, the same question at the
+/// same place among its item's decisions, answered.
+fn answered(committed: &[Question], answer: &Answer) -> bool {
+    let asked = &answer.question;
+    let mut decisions = committed.iter().filter(|c| c.item == asked.item);
+    decisions
+        .nth(answer.index)
+        .is_some_and(|c| c.question == asked.question && c.answer.is_some())
 }
 
 /// Which page asks for pending answers.
@@ -145,9 +168,4 @@ impl Answers {
 pub enum On<'a> {
     Item(&'a str),
     Mission(&'a str),
-}
-
-/// Whether two are the same question of the same item.
-fn same(a: &Question, b: &Question) -> bool {
-    a.item == b.item && a.question == b.question
 }

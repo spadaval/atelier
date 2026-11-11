@@ -394,9 +394,10 @@ it. Pages are read from commits, so after a `done` the server keeps the
 answer in memory, as the record in that checkout then holds it, with the
 item's mission. The item's page and its mission's page list it in
 `pending_answers`, and the inbox leaves the question out of `questions`.
-Once the page's records show that question of that item answered, which
-happens when a commit on the item's branch holds the answer, the server
-forgets it. A restart forgets every one; the answer is still in the
+An answer is known by its item and its place among the item's decisions,
+since a heading may repeat. Once the page's records show the decision at
+that place answered, which happens when a commit on the item's branch
+holds the answer, the server forgets it. A restart forgets every one; the answer is still in the
 checkout, and shows once committed.
 
 ### `POST /api/sessions`

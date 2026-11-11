@@ -84,8 +84,8 @@ impl Desk {
         let _one = self.acting.lock().unwrap_or_else(|p| p.into_inner());
         let (response, answered) = acts::act(&dir, &self.config.caller, &request)
             .map_err(|error| Failure::Failed(format!("{error:#}")))?;
-        if let Some((mission, answer)) = answered {
-            self.answers.add(repo, mission, answer);
+        if let Some(answer) = answered {
+            self.answers.add(repo, answer);
         }
         Ok(response)
     }
@@ -455,7 +455,7 @@ async fn inbox(State(desk): State<Arc<Desk>>) -> Response {
                     Ok(inbox) => {
                         let mut inbox = inbox.expect("an inbox is always built");
                         let answers = &desk.answers;
-                        (inbox.questions).retain(|q| !answers.waits(&name, &q.item, &q.question));
+                        (inbox.questions).retain(|q| !answers.waits(&name, &q.item, q.index));
                         let live = snapshot.live(&desk.repo_holds(&name, &dir));
                         let waiting = live.into_iter().filter(|thread| {
                             thread.status == "waiting" && !thread.holds.is_empty()

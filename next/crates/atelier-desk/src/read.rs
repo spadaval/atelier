@@ -559,12 +559,13 @@ pub fn inbox(repo: &mut Repo, name: &str) -> Result<Option<InboxRepo>> {
         if !STARTED.contains(&record.item.status) {
             continue;
         }
-        if let Some((_, decision)) = question(record)? {
+        if let Some((index, decision)) = question(record)? {
             questions.push(InboxQuestion {
                 item: record.item.id.clone(),
                 mission: record.item.mission.clone(),
                 question: decision.question,
                 finding: decision.finding.as_ref().map(ToString::to_string),
+                index,
             });
         }
     }
