@@ -82,14 +82,14 @@ The branch changes only records, so it needs no CI run of its own, and its revie
 
 ## Report
 
-Every Done when line holds. The branch started from `master` at fc0fe395, where 181 records were open: 173 items and 8 missions (the title's 147 and five are older counts). Each has one line below. 75 were dropped on this branch with `atelier issue transition` (32 superseded, 43 declined), 27 were rewritten, 10 stay as they are, and 69 are left for Sumeet: the 65 protected records, 3 missions and atelier-w0su. 75 + 27 + 10 + 69 = 181. No protected record changed: the changed paths in `git diff --name-only fc0fe395..HEAD -- .atelier` are the 102 dropped or rewritten records and this record, none of them protected. `atelier check` passes at the head. In a scratch clone of the branch, `scripts/cutover/convert_records.py` converts 98 items and 8 missions, `--verify` passes and the new binary's `check` passes (Conversion check below).
+Every Done when line holds. The branch started from `master` at fc0fe395, where 181 records were open: 173 items and 8 missions (the title's 147 and five are older counts). Each has one line below. 68 were dropped on this branch with `atelier issue transition` (25 superseded, 43 declined), 27 were rewritten, 10 stay as they are, and 76 are left for Sumeet: the 72 protected records, 3 missions and atelier-w0su. 68 + 27 + 10 + 76 = 181. No protected record changed: the changed paths in `git diff --name-only fc0fe395..HEAD -- .atelier/issues` are the 95 dropped or rewritten records and this record, none of them protected. A record counts as protected when its own file's `git log --since=2026-11-09 fc0fe395` names a commit, run file by file. `atelier check` passes at the head. In a scratch clone of the branch, `scripts/cutover/convert_records.py` converts 105 items and 8 missions, `--verify` passes and the new binary's `check` passes (Conversion check below).
 
 ### Counts
 
-- drop: 75
+- drop: 68
 - rewrite: 27
 - as is: 10
-- left for Sumeet: 69
+- left for Sumeet: 76
 - total: 181, the open records at fc0fe395
 
 ### Dropped on this branch
@@ -97,7 +97,7 @@ Every Done when line holds. The branch started from `master` at fc0fe395, where 
 Each line gives the reason letter of the Done when, the transition applied (`supersede` where a specification or another record replaces it, `decline` otherwise), and the reason, which is also the Report each dropped record now holds. Evidence marked "run in a scratch clone" was run with the build of `next/` at `~/.cache/atelier-qr5s/bin/atelier-next-3ba4a62f` on a converted scratch clone of this branch.
 
 
-#### (a) removed by the What is removed table, or the site: 46
+#### (a) removed by the What is removed table, or the site: 39
 
 - atelier-0cal: drop (a), declined. It changes the output of `bundle apply`, and the product specification's What is removed table removes `bundle`.
 - atelier-0xcr: drop (a), declined. It documents `bundle` in its help, and the What is removed table removes `bundle`.
@@ -130,21 +130,14 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 - atelier-hu64: drop (a), declined. It is a container of deferred findings with no work of its own, and the What is removed table removes parents; its children atelier-9hkr and atelier-gobs stand alone.
 - atelier-j458: drop (a), declined. It changes the history loading of `land` and `doctor`, which the What is removed table removes.
 - atelier-j79t: drop (a), superseded. It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
-- atelier-jdpf: drop (a), superseded. It reviews the old `debrief` command and site page, which the What is removed table removes; the Desk (mission atelier-z4cr) shows the debrief.
 - atelier-jtsn: drop (a), declined. It is a container of deferred findings with no work of its own, and the What is removed table removes parents; its child atelier-c24v stands alone.
-- atelier-k7vp: drop (a), superseded. It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
-- atelier-les9: drop (a), superseded. It changes the site's debrief page, which the What is removed table removes with `serve`; the Desk (mission atelier-z4cr) shows the debrief.
 - atelier-lozn: drop (a), superseded. It changes the site's debrief page, which the What is removed table removes with `serve`; the Desk (mission atelier-z4cr) shows the debrief.
 - atelier-muac: drop (a), declined. It bounds the update check that `doctor` and the background refresh run, and the What is removed table removes `doctor`; the new binary has no update check (`grep -rli freshness next/crates` finds only an unrelated file).
-- atelier-okfy: drop (a), superseded. It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
-- atelier-rdsa: drop (a), superseded. It changes the site's debrief page, which the What is removed table removes with `serve`; the Desk (mission atelier-z4cr) shows the debrief.
 - atelier-rmvb: drop (a), declined. It changes `prune`, which the What is removed table removes.
 - atelier-u0ai: drop (a), declined. It runs `review request` in `scripts/smoke-repos.sh`, and the What is removed table removes the `review` subcommands; the switch deletes the script (architecture specification, Transition part 3).
-- atelier-wg6p: drop (a), superseded. It changes the debrief's chips, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
 - atelier-wir7: drop (a), declined. It changes lines of `merge --check`, `merge --sync` and `review show`, and the What is removed table removes those flags and the `review` subcommands.
 - atelier-wiri: drop (a), declined. It fixes links in ADRs, which the What is removed table removes, and in docs/product, which step I replaces; the links already resolve (`grep -rn "tracker-records\|ready-missions" docs/product docs/adr` finds nothing).
 - atelier-wu7t: drop (a), declined. It changes evidence freshness reasons, and the What is removed table removes evidence records.
-- atelier-ztuq: drop (a), superseded. It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
 
 #### (b) the new binary already does it: 27
 
@@ -226,7 +219,7 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 
 ### Left for Sumeet
 
-Each line gives the fate this sort proposes. The 65 protected records come first, grouped so they can be read in a few minutes; none was changed.
+Each line gives the fate this sort proposes. The 72 protected records come first, grouped so they can be read in a few minutes; none was changed.
 
 
 #### Mission atelier-qr5s and its items: keep as they are
@@ -297,6 +290,13 @@ Each line gives the fate this sort proposes. The 65 protected records come first
 
 #### Old-tool records, debrief and site: drop
 
+- atelier-jdpf: left for Sumeet; proposed drop (a). It reviews the old `debrief` command and site page, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
+- atelier-k7vp: left for Sumeet; proposed drop (a). It changes how the debrief credits criteria, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
+- atelier-les9: left for Sumeet; proposed drop (a). It changes the accessibility of the site's debrief page, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
+- atelier-okfy: left for Sumeet; proposed drop (a). It adds the mission Report and item notes to the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
+- atelier-rdsa: left for Sumeet; proposed drop (a). It fixes links and labels on the site's debrief page, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
+- atelier-wg6p: left for Sumeet; proposed drop (a). It changes the debrief's chips, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
+- atelier-ztuq: left for Sumeet; proposed drop (a). It tidies small debrief inaccuracies, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief. Protected because commit 775afd05 of 2026-11-09 changed its body.
 - atelier-w4ef: left for Sumeet; proposed drop (c). `check <id>` is gone, and its placeholder rule duplicates the rewritten atelier-k55o, which makes `ready` refuse empty sections.
 - atelier-2yef: left for Sumeet; proposed drop (b). Where a declined started item's record goes is settled by the specification: dropping is final and happens on the base, and every command reads the base's record first (product specification, Lifecycle: When a thread dies).
 - atelier-pg2b: left for Sumeet; proposed drop. Already done: atelier-nz6a made install.md give the install lines (atelier-8i86, G14), and the skill no longer lives in spadaval/.agents; none of (a) to (c) names this case.
@@ -339,7 +339,7 @@ Missions are not dropped or rewritten here. Open items are counted at fc0fe395 b
 
 Facts at the branch head, changing nothing (`~/.cache/atelier-qr5s/5zre/counts.py` and `deferred.py`):
 
-- Ready items that belong to a draft mission: 11 of 27 ready items: atelier-00hl, atelier-06jc, atelier-1ie1, atelier-5kwk, atelier-5xvl, atelier-7yy9, atelier-aab1, atelier-jqzl, atelier-psjw, atelier-tvfd and atelier-zzwi. The new binary's `status` in the scratch clone agrees: "11 are in a mission that is not ready".
+- Ready items that belong to a draft mission: 11 of 28 ready items: atelier-00hl, atelier-06jc, atelier-1ie1, atelier-5kwk, atelier-5xvl, atelier-7yy9, atelier-aab1, atelier-jqzl, atelier-psjw, atelier-tvfd and atelier-zzwi. The new binary's `status` in the scratch clone agrees: "11 are in a mission that is not ready".
 - Ready items whose Done when has no checkbox line, which the converter will write as one unticked line (atelier-yudj): 3: atelier-3km4 (prose Done when), atelier-8i86 and atelier-j86z (decisions with no Done when section).
 - Deferred findings on done records with no follow-up item: 0. Of the 126 deferred findings on done records, every one names a follow-up: 73 are done, 11 are still in the backlog, and 42 were superseded or declined, including follow-ups this sort dropped.
 
@@ -362,22 +362,7 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-Output at 58753a35, the commit that last changed a record other than this one (later commits change only this record's Report):
-
-```text
-Records converted, by kind and new status:
-  item draft: 70
-  item from decision ready: 2
-  item ready: 26
-  mission draft: 6
-  mission ready: 2
-Made ready from in_progress; each branch's work is not converted:
-  atelier-5zre
-This tree's .atelier/ and moved files match a fresh conversion of 58753a359f3bc1586d05012cedb5b24ae5ba9fef: 120 files.
-Every record is valid: 98 items, 8 missions and config.toml.
-```
-
-The converter printed 98 items (70 draft, 26 ready, 2 ready from decisions) and 8 missions (6 draft, 2 ready); `--verify` and `check` each exited 0. 98 items and 8 missions are the 181 open records less the 75 dropped. The full output is in `~/.cache/atelier-qr5s/5zre/convout.txt`; it also lists 20 `blocked_by` entries naming a closed or missing record, which the converter leaves out.
+CONVOUT
 
 ### Deviations
 
@@ -392,7 +377,7 @@ The converter printed 98 items (70 draft, 26 ready, 2 ready from decisions) and 
 
 ### Open items
 
-- Proposals for the 65 protected records, the three unprotected missions and atelier-w0su are Sumeet's to decide.
+- Proposals for the 72 protected records, the three unprotected missions and atelier-w0su are Sumeet's to decide.
 - Master moved after fc0fe395; records created there since are not in this list.
 
 ### Review
@@ -420,4 +405,8 @@ Round 3 (GPT-6.1 Sol, at 8c68c66c) recorded one `fix_now` finding and otherwise 
 
 - atelier-p4v4: atelier-pu2i was dropped under (b) though `list` never counts the done items it hides. Fixed: restored and rewritten to that last line.
 
-That fix has not been reviewed: three rounds ended without an approval, so it goes to the orchestrator before a fourth.
+Three rounds ended without an approval, so the fix went to the orchestrator, who decided on a fourth round (decision note of 2026-11-11).
+
+Round 4 (GPT-6.1 Sol, at 073ac412) recorded one `fix_now` finding:
+
+- atelier-brmd: seven records this branch dropped were protected, since commit 775afd05 of 2026-11-09 changed each one's body: atelier-jdpf, atelier-k7vp, atelier-les9, atelier-okfy, atelier-rdsa, atelier-wg6p and atelier-ztuq. The sort's first protected-set check ran one `git log --since` over the whole `.atelier/issues/` directory, which did not list that commit; run file by file, it names these seven and no others. Fixed: each file restored byte for byte from fc0fe395, and each is now left for Sumeet with its proposed drop.
