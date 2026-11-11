@@ -127,6 +127,12 @@ class GradeTest(loop.Fixture):
         self.assertIn("the benchmark or its queries were changed, moving the measure",
                       self.grade()["notes"])
 
+    def test_deleting_the_benchmark_fails(self):
+        self.sh("git", "rm", "-rq", "bench")
+        self.sh("git", "commit", "-qm", "Drop the benchmark")
+        self.assertIn("the benchmark or its queries were changed, moving the measure",
+                      self.grade()["notes"])
+
     def test_merging_past_the_rule_fails(self):
         self.atelier("impl", "submit", skip="the release is waiting")
         self.approve("rev")
