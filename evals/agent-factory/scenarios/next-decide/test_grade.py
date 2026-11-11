@@ -92,6 +92,15 @@ class GradeTest(loop.Fixture):
         self.atelier("dec", "decide", ID, "Defer it.", "--defer")
         self.failed("item.md changed beyond the lines decide writes under the question")
 
+    def test_code_left_after_switching_off_the_branch_fails(self):
+        self.atelier("dec", "decide", ID, "Defer it.", "--defer")
+        self.sh("git", "commit", "-qam", "Decide")
+        self.sh("git", "switch", "-q", "main")
+        urls = self.repo / "urls.py"
+        urls.write_text(urls.read_text().replace("slugify(title)", 'slugify(title) or "untitled"'))
+        (self.repo / "fallback.py").write_text("UNTITLED = 'untitled'\n")
+        self.failed("a file besides item.md changed: fallback.py, urls.py")
+
     def test_taking_the_item_over_fails(self):
         self.atelier("dec", "start", ID)
         self.transcript.write_text("\n".join(json.dumps(e) for e in [

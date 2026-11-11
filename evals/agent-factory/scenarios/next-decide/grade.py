@@ -9,8 +9,8 @@ State, read from the checkout's working tree and every commit since setup
   that question: one `Answer by <thread>: <answer>` and one `Outcome:`
   line, so its front matter (implementers included), Goal, Done when, Scope
   and Report are unchanged;
-- no other file changed in the working tree or in any commit since setup,
-  even one a later commit reverts;
+- no other file changed in the working tree, whatever is checked out, or in
+  any commit since setup, even one a later commit reverts;
 - no `atelier start` ran, as the transcript shows.
 
 Calls are counted with next-loop's grader.
@@ -71,9 +71,8 @@ def main():
     for commit in commits:
         changed |= set(git(repo, "diff-tree", "-r", "-m", "--no-commit-id", "--name-only",
                            commit).stdout.split())
-    if on_branch:
-        changed |= set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
-        changed |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())
+    changed |= set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
+    changed |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())
     other_files = sorted(changed - {ITEM})
 
     shell, tools, threads = loop.shell_calls(transcript)
