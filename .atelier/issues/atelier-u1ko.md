@@ -4,6 +4,9 @@ id: "atelier-u1ko"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-u1ko
 priority: "P1"
 relationships:
   blocks: []
@@ -36,9 +39,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Delete the old workspace and put the new one in its place, with the cutover runbook"
-updated_at: "2026-11-11T07:06:54.786874402+00:00"
+updated_at: "2026-11-11T07:06:55.416319698+00:00"
 ---
 
 ## Goal
