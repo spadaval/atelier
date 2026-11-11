@@ -1767,15 +1767,19 @@ fn trailer(rule: &str) -> String {
 
 #[test]
 fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_merge() {
-    let check = "echo broken; exit 3";
-    let scratch = approved_with(&format!("\n[[merge_check]]\nrun = \"{check}\"\n"), |_| {});
+    // A check of two lines is named in one, so Git still reads the trailers.
+    let check = "echo broken\nexit 3";
+    let scratch = approved_with(
+        &format!("\n[[merge_check]]\nrun = \"\"\"\n{check}\"\"\"\n"),
+        |_| {},
+    );
     let root = scratch.root();
     fs::write(root.join("hello.txt"), "hello?\n").unwrap();
     let run = merge_skipping(&root);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let rules = [
         "Every change to a tracked file or to this item's directory is committed (these are not: hello.txt)".to_string(),
-        format!("The merge check `{check}` passes (it failed: exit 3)"),
+        "The merge check `echo broken exit 3` passes (it failed: exit 3)".to_string(),
     ];
     assert!(
         run.stdout
@@ -1795,6 +1799,12 @@ fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_mer
         )),
         "{message}"
     );
+    let parsed = git(
+        &root,
+        &["log", "-1", "--format=%(trailers:valueonly)", "main"],
+    );
+    assert_eq!(parsed.lines().next(), Some(ID), "{parsed}");
+    assert_eq!(parsed.lines().count(), 3, "{parsed}");
     // What was not committed stays in the checkout, not merged.
     assert_eq!(read(&root, "hello.txt"), "hello?\n");
     assert_eq!(git(&root, &["show", "main:hello.txt"]), "hello");

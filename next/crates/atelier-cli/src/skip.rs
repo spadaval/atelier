@@ -48,6 +48,8 @@ pub fn pass(rules: impl IntoIterator<Item = String>) -> bool {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     for rule in rules {
+        // A trailer is one line: a merge check's command may hold several.
+        let rule = rule.split_whitespace().collect::<Vec<_>>().join(" ");
         let line = format!("{rule}: {reason}");
         if !passed.contains(&line) {
             passed.push(line);
