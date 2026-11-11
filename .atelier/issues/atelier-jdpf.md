@@ -17,10 +17,9 @@ relationships:
     type: "derived_from"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:53.800340464+00:00"
-status: "superseded"
+status: "todo"
 title: "Review a debrief generated under the simpler lifecycle, and file what it finds"
-updated_at: "2026-11-11T03:55:53.800340464+00:00"
+updated_at: "2026-11-07T21:00:32.583286995+00:00"
 ---
 
 ## Goal
@@ -35,7 +34,3 @@ Decision atelier-mzpn superseded the debrief mission atelier-gg6b: its items wer
 ## Context
 
 Whether the debrief keeps earning its place at all is Sumeet's question, alongside his own taste read (atelier-3km4).
-
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (a). It reviews the old `debrief` command and site page, which the What is removed table removes; the Desk (mission atelier-z4cr) shows the debrief.
