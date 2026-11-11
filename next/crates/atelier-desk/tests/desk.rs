@@ -337,7 +337,6 @@ async fn the_item_and_document_routes() {
             "/api/repos/demo/missions/demo-aaaa/history",
             StatusCode::NOT_FOUND,
         ),
-        ("/api/threads", StatusCode::NOT_FOUND),
         ("/api/act", StatusCode::NOT_FOUND),
         // Rejected by axum's extractors.
         ("/api/repos/demo/doc", StatusCode::BAD_REQUEST),

@@ -11,7 +11,7 @@ const TRACKER: [&str; 4] = [
     "atelier-records",
     "atelier-core",
 ];
-const SERVER: [&str; 4] = ["axum", "tokio", "ts-rs", "tower-http"];
+const SERVER: [&str; 5] = ["axum", "tokio", "ts-rs", "tower-http", "ureq"];
 
 /// Each package's dependencies by ID, with whether each is only for its
 /// tests.
