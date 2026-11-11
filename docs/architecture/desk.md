@@ -1,12 +1,12 @@
 # The Desk's API
 
-Status: the contract for mission atelier-z4cr (`docs/strategies/desk.md`),
+Status: the contract for mission atelier-z4cr, closed on 2026-11-11,
 written by item atelier-1ie1 before any server code, and corrected by items
 atelier-uwxy, atelier-e05n and atelier-h3hl where the server as built
 differs. It says what each page
 of the Desk is sent, and for every field, which function of the redesigned
 core in `crates/` gives it, or that none does yet. The decisions are in
-[ADR 0032](../adr/0032-the-desk-is-the-humans-product.md); what the Desk is
+[the design record](../design.md#decisions); what the Desk is
 for is in [its product intent](../product/desk.md).
 
 ## Verdict
@@ -144,7 +144,7 @@ On this host the Desk runs as the systemd user service `atelier-desk`,
 reached over the tailnet at <http://buildbot.tail47515a.ts.net:3780/>
 (item atelier-va99). It serves converted scratch clones of the five
 repositories until this host's cutover; pointing it at the live
-repositories is the loose end atelier-qxmr. Everything it needs is in
+repositories is the follow-up item atelier-qxmr. Everything it needs is in
 `desk/service/`:
 
 | File in the repository | Installed as | What it is |
@@ -410,7 +410,7 @@ A **review**, of an item or a mission's plan:
 that leaves the root or does not end in `.md`. The response's `path` is the
 normalized one. `markdown` is
 `CommitReader::text(base_tip, path)` (master). Links in a mission's files
-are relative to the file (`../../../docs/adr/...` after conversion), so the
+are relative to the file (`../../../docs/design.md`, say), so the
 app resolves them against `path`, as the spike's `DocReader` does.
 
 ### `GET /api/repos/{repo}/items/{id}`
@@ -655,9 +655,9 @@ paths, and the same mission record but for `ready.at`.
 
 ## The brief and the debrief on the mission page
 
-What the mission page shows in place of each part of `atelier brief` and
-`atelier debrief` (today's binary, `crates/atelier-app/src/mission_review.rs`,
-`Brief` and `Debrief`, served by `crates/atelier-site/src/api.rs`):
+What the mission page shows in place of each part of the old tool's mission
+brief and debrief (its `atelier-app`'s `mission_review.rs`, `Brief` and
+`Debrief`, served by its `atelier-site`'s `api.rs`):
 
 | Old part | On the mission page | From |
 | --- | --- | --- |

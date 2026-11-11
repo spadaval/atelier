@@ -1,7 +1,10 @@
 # Atelier
 
-Atelier is a Rust CLI for issue tracking and agent-oriented development
-workflows.
+Atelier tracks the work of coding agents in the repository they change. Its
+records are Markdown in Git, on the branch that does the work, and `atelier
+status` tells each agent thread what it holds and the next command. Every
+non-trivial change is reviewed by a thread that did not write it before
+`atelier merge` takes it to the base.
 
 ## Install
 
@@ -15,8 +18,7 @@ The installer puts `atelier` in `$CARGO_HOME/bin` (`~/.cargo/bin` by default)
 and, if that directory is not already on your `PATH`, adds it in your shell
 profile; open a new shell to use it. Rerun it to upgrade. Releases, with archives and checksums for each platform,
 are on [GitHub](https://github.com/spadaval/atelier/releases). To build from a
-source checkout instead, install Node.js and pnpm, which build the web app
-`atelier serve` embeds, and run `cargo install --path crates/atelier-cli --locked`.
+source checkout instead, run `cargo install --path crates/atelier-cli --locked`.
 
 ## Platform support
 
@@ -26,10 +28,10 @@ Building from source on macOS may work, but nothing tests it.
 
 ## Use
 
-`atelier serve` shows every mission's brief, debrief and strategy as pages,
-for every Atelier repository under `~/projects`, at `http://127.0.0.1:7341`.
-[docs/architecture/site.md](docs/architecture/site.md) says how to develop,
-test and run it as a service.
+What Atelier does is in the [product specification](docs/product.md), and
+how it is built in the [design record](docs/design.md). The human's tool, the
+Desk, is a separate server and web app in this repository
+([desk/](desk/README.md)).
 
 Agents learn Atelier's workflow from the Agent Factory skill, which lives in
 [skills/agent-factory](skills/agent-factory). Install it globally with Vercel's
@@ -40,9 +42,5 @@ npx skills add spadaval/atelier --skill agent-factory -g
 ```
 
 The skill only acts in repositories tracked with Atelier.
-
-Fresh setup, required tools, validation commands, local environment policy, and
-the current devcontainer decision live in
-[docs/product/development-setup.md](docs/product/development-setup.md).
 
 Repository operating rules for agents live in [AGENTS.md](AGENTS.md).

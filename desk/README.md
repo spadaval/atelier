@@ -58,7 +58,8 @@ all four in the `desk` job when a change touches `desk/`.
 ## The success criteria, against the real server
 
 Two commands in `live/` check the mission's success criteria
-(`docs/strategies/desk.md`) against a real `atelier-desk` and the new
+(atelier-z4cr's, in its strategy, which left the tree when the mission
+closed) against a real `atelier-desk` and the new
 `atelier`. They are not part of `pnpm e2e` or the `desk` CI job, which
 builds no Rust. Each prints one line per comparison and exits 1 on any
 difference. Build first: `pnpm build`, and at the repository's root, `cargo build

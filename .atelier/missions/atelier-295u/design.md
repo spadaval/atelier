@@ -59,7 +59,7 @@ Four steps, all in the backlog until the cutover has happened.
 
 | Step | Does |
 | --- | --- |
-| A. The log | Build `atelier log` as the [architecture specification](../../../docs/strategies/redesign-architecture.md#the-log) describes. Remove from `scripts/scorecard/` what `log` now supplies, and tie the remaining scripts to items by the log's thread IDs. |
+| A. The log | Build `atelier log` as the [architecture specification](../../../docs/design.md#the-log) describes. Remove from `scripts/scorecard/` what `log` now supplies, and tie the remaining scripts to items by the log's thread IDs. |
 | B. Readiness checklist | A short default list in the skill, mapped to the three properties, each line with the command or observation that tests it. A repository may add lines. Drawn from Factory's agent-readiness pillars, without the team-shaped criteria. |
 | C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report, with the steps that turn `log` output into its numbers. Fold `audit.md` into it. The gardener settles deferred findings with `new --from` and `drop`, on its run's branch, so its choices are reviewed with the run. |
 | D. First runs | One run in each of the five repositories. |

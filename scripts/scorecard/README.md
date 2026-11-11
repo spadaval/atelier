@@ -2,7 +2,8 @@
 
 These scripts compute the redesign scorecard's counted measures, the ones that need no judgment,
 for each Atelier repository on this host, from frozen inputs. The measures and their definitions
-are in `docs/strategies/redesign-1-baseline.md` (Design). The output is
+are in the baseline mission's strategy, `git show
+96d02deb7:docs/strategies/redesign-1-baseline.md` (Design). The output is
 `docs/architecture/quality/scorecard-baseline/counted.json` and `counted.md`.
 
 ## Rerun the counted measures

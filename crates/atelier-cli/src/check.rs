@@ -1,5 +1,5 @@
 //! `check`, and the three Git hooks that run it as `check --hook <name>`
-//! (docs/strategies/redesign-architecture.md, Hooks and the bypass). Hooks
+//! (docs/design.md, Hooks and the bypass). Hooks
 //! guard, commands act: a rule about a commit is checked by the commit, and
 //! a rule about a push by the push.
 

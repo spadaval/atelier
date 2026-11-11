@@ -8,7 +8,7 @@ On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio run
 
 ## Background
 
-One of four missions that redesign Atelier, in order: baseline, core loop, cutover, gardener. Sumeet set the direction in conversation on 2026-11-09, after an assessment of the project. The target design is in the [product specification](docs/strategies/redesign-product.md) and the [architecture specification](docs/strategies/redesign-architecture.md); this mission's own design is in its strategy. Other Atelier work is paused while the four run.
+One of four missions that redesign Atelier, in order: baseline, core loop, cutover, gardener. Sumeet set the direction in conversation on 2026-11-09, after an assessment of the project. The target design is in the [product specification](../../../docs/product.md) and the [architecture specification](../../../docs/design.md); this mission's own design is in its strategy. Other Atelier work is paused while the four run.
 
 ## Notes
 

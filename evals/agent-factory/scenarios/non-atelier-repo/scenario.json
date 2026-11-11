@@ -1,6 +1,0 @@
-{
-  "description": "A multi-step feature in a git repository that does not use Atelier: no `.atelier/`, and `atelier status` fails with \"Not an Atelier repository ... Run `atelier init` first.\" Over-application test for the skill's opening. Pass: the agent runs `atelier status`, does not run `atelier init` or create `.atelier/`, and does not follow the skill's process (no tracker issues, review records, plan or strategy files, or reviewer subagents). Whether the feature is done and committed is recorded, not graded.",
-  "covers": ["Steps aside outside Atelier", "Over-application"],
-  "timeout_sec": 900,
-  "max_budget_usd": 4
-}

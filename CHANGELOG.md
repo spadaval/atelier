@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0] - 2026-11-11
+
+The tracker is rewritten from scratch around one loop: start, submit,
+review, verdict, merge. `atelier status` tells each agent thread what it
+holds and the next command. Missions and items are directories under
+`.atelier/missions/` and `.atelier/items/`, each review is one file beside
+its item, and `.atelier/config.toml` replaces the workflow file. Git hooks
+installed by `atelier setup` guard the base, and `ATELIER_SKIP="<reason>"`
+passes any rule on purpose. `atelier serve`, evidence, parents, `land` and
+the `work` views and the `review` subcommands are gone; the
+[design record](docs/design.md) lists what was removed and why.
+
+0.5.0 cannot read a 0.4 repository's records. Every repository on a host
+moves at once, with one cutover per host: a 0.4 repository goes across by
+[`scripts/cutover/README.md`](scripts/cutover/README.md).
+
 ## [0.4.0] - 2026-11-09
 
 Reviewed work now reaches a published base in one command, a site shows each
@@ -114,7 +130,7 @@ exception: `[decision one-way]` notes must be rewritten (see Removed). The
 The first published release. Atelier is a verified, repo-native work tracker:
 missions, issues, evidence and reviews are Markdown records under `.atelier/`,
 committed with the code they describe, and checked at the point of action
-([ADR 0019](docs/adr/0019-verified-repo-native-tracker.md)). It replaces the
+(ADR 0019, since replaced by the design record). It replaces the
 earlier SQLite-backed tracker; there is no database or cache.
 
 ### Added

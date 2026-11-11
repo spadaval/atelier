@@ -1,4 +1,4 @@
-//! The one way past a rule (docs/strategies/redesign-architecture.md,
+//! The one way past a rule (docs/design.md,
 //! Hooks and the bypass). A rule is a refusal that depends on the state of
 //! the work or on who asks. Given a reason, a [`Skip`] passes every rule
 //! one invocation meets: the caller says each with the reason, and the

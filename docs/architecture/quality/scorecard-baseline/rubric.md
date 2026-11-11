@@ -2,7 +2,7 @@
 
 Three scorecard measures need a judgment, not a count: the owner's
 interventions per mission, gate precision and review yield
-([product specification](../../../strategies/redesign-product.md#scorecard)).
+([product specification](../../../product.md#scorecard)).
 This rubric is how that judgment is made, before the redesign and again after
 it, so a rater who has only this file and an unlabelled sample file can label
 every entry. Results are in [classified.md](classified.md).

@@ -2,7 +2,7 @@
 """Convert a repository's Atelier records from the old layout to the new one.
 
 Run at the cutover, once per repository, and deleted after it
-(docs/strategies/redesign-architecture.md, Transition).
+(docs/design.md, Transition).
 
     convert_records.py                     replace .atelier/ with the new layout
     convert_records.py --verify <commit>   compare this tree with a fresh conversion of <commit>

@@ -1,37 +1,25 @@
----
-status: draft
-last_changed: "2026-11-11: amended at Sumeet's direction: the tool has no site and no `serve`; the Desk (ADR 0032) shows the brief and debrief. Before that: amended for Sumeet's decisions of 2026-11-10 (submit starts CI, merge waits up to 9 minutes) and for what mission atelier-fcb7 built; the status example, show, the CI rule and the approved-since line corrected to what was built (atelier-8myy)"
----
+# Atelier: product specification
 
-# Atelier redesign: product specification
-
-This is a target design. It does not describe how Atelier behaves today; the
-current behaviour is in `docs/product/`. Sumeet set the direction in
-conversation on 2026-11-09 after an assessment of the project
-(`/var/tmp/atelier-assessment/reports/`). Four missions build it, in order:
-
-| Mission | Strategy | What it delivers |
-| --- | --- | --- |
-| 1. Baseline | [redesign-1-baseline.md](redesign-1-baseline.md) | The scorecard measured before anything changes |
-| 2. Core loop | [redesign-2-core.md](redesign-2-core.md) | The tool rewritten in a fresh workspace beside the old one, and rehearsed on real data |
-| 3. Cutover | [redesign-3-cutover.md](redesign-3-cutover.md) | The skill rewritten, the site taken out, the old workspace deleted with it, and every repository moved over |
-| 4. Gardener | [redesign-4-gardener.md](redesign-4-gardener.md) | A gardener that reads a scorecard and a readiness checklist |
-
-The technical design is in [redesign-architecture.md](redesign-architecture.md).
+This page says what Atelier is for and what it does. How it is built is in
+the [design record](design.md), which also lists what was tried and removed.
+Sumeet set the direction in conversation on 2026-11-09 after an assessment
+of the project (`/var/tmp/atelier-assessment/reports/`). The tool was
+rewritten to this page, and every repository on this host moved onto it on
+2026-11-11.
 
 ## Why
 
 The assessment found that independent review catches real bugs (39 of 100
 sampled fix-now findings in four product repositories) and that the machinery
-around it costs more than it returns. 75% of commits touch only tracker
+around it cost more than it returned. 75% of commits touched only tracker
 records. 38 of 50 sampled refusals were an agent tripping over the tool, not
 the tool stopping a mistake. Sumeet asked "where are we?" 31 times in a month.
 About 85% of the items finished since the October rebuild were Atelier working
 on itself.
 
-The cause is one gap. The tool has gates but no map: it does not know which
-thread is asking or what stage the work is in, so an agent finds its place by
-running a command and reading the refusal.
+The cause was one gap. The tool had gates but no map: it did not know which
+thread was asking or what stage the work was in, so an agent found its place
+by running a command and reading the refusal.
 
 ## Who it is for
 
@@ -40,8 +28,9 @@ Sumeet, on two Linux hosts that both run T3 Code:
 - **Home:** Claude, Codex and Grok agents; GitHub with Actions.
 - **Work:** Codex agents only; GitHub without Actions or any other CI.
 
-It is not designed for a second user. Backward compatibility with today's
-records and commands is not a goal.
+It is not designed for a second user. Backward compatibility with the old
+tool's records and commands was not a goal: the cutover converted the records
+once.
 
 ## Principles
 
@@ -165,8 +154,10 @@ was dropped and why.
 
 ## Commands
 
-Eighteen commands, plus `init` and `setup`. The tool has no site: the human's
-pages are the Desk's ([ADR 0032](../adr/0032-the-desk-is-the-humans-product.md)).
+Seventeen commands are built, plus `setup`. An eighteenth, `log`, is not
+built yet: atelier-8b0a, in the gardener's mission atelier-295u, adds it. The
+tool has no site: the human's pages are the Desk's
+([the Desk](product/desk.md)).
 
 ### Anyone
 
@@ -175,24 +166,12 @@ pages are the Desk's ([ADR 0032](../adr/0032-the-desk-is-the-humans-product.md))
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
 | `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. |
-| `log` | The history of acts, one line each: when, which item, the act, what changed, and the thread, where the record holds one. For one item, one mission, or everything `--since` a time. It adds nothing up. |
+| `log` | Not built yet (atelier-8b0a). The history of acts, one line each: when, which item, the act, what changed, and the thread, where the record holds one. For one item, one mission, or everything `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
-A lead or a planner loses none of today's nine `work` views; they become
-`show`, `list` and `status`:
-
-| Today | Replaced by |
-| --- | --- |
-| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, questions, plan reviews |
-| `work missions` | `list`, which heads each open mission's items with its status, whether it is in progress, and its lead; `status` on the base lists the missions in progress |
-| `work missions --all` | `list --done` for finished missions and items; `list` heads the open ones, and lists items in no mission |
-| `work ready` | `list --ready`, and "Ready to start" in `status` on the base |
-| `work blocked` | `list --blocked`, which names each blocker that is not done |
-| `work human` | `list --needs-human`, and "Waiting on a human" in `status`; open decisions are the unanswered questions in `show <mission>` |
-| `work decisions <id>` | The questions in `show <mission>`, unanswered first; an item's Decisions section is in `show <item>`. Decision records and notes are gone |
-| `work active` | `status`, which lists what the caller holds and what other threads hold, read from their branches; `list` shows each started item with its holder |
-| `work all` | `list` |
-| `work parent <id>` | None: parents are gone, and a mission groups its items |
+A lead or a planner reads where things stand with `show`, `list` and
+`status`. Which of these replaced each of the old tool's nine `work` views is
+in the design record's [Tried and removed](design.md#tried-and-removed).
 
 ### Planner, on the base
 
@@ -266,10 +245,10 @@ with the harness's own tool, using a line the tool prints:
   task: Run atelier review atelier-06jc and follow what it prints. Then wait
   for its verdict, and run `atelier status`." A Claude Code subagent carries
   its parent's identity, so it cannot review its parent's item; a Codex
-  subagent has one of its own ([architecture, Threads and
-  roles](redesign-architecture.md#threads-and-roles)). The task has no
-  backticks, which an agent pasting it into a double-quoted shell argument
-  would run as a command.
+  subagent has one of its own ([design record, Threads and
+  roles](design.md#threads-and-roles)). The task has no backticks, which
+  an agent pasting it into a double-quoted shell argument would run as a
+  command.
 - `escalate` prints the same for a decider, with `show` and `decide`.
 - `lead` prints one, with a `start` task for each item that can start now,
   and the lead's `status` repeats it.
@@ -461,27 +440,10 @@ counts as code: it is reviewed and merged like any other. There is no
 workflow file and no per-project lifecycle. A named option is added when a
 second real project needs one.
 
-## What is removed
-
-| Removed | Why |
-| --- | --- |
-| `workflow.yaml` and the workflow crate | The workflows are identical in all five repositories; every edit followed a tool change |
-| Evidence records and commands | No gate reads them; the project's own audit rated 57% busywork |
-| The light path and base exemptions | `start --new` and `merge --trivial` cover them with one path |
-| Issue types, parents, loose ends, validations, decision records | An item either has files to merge or it does not; the rest are labels |
-| `bundle`, `migrate`, `doctor`, `prune` | Unused by the skill, one-off, or not yet needed |
-| `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook runs without being remembered and fails the push itself |
-| `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; the wait for CI has a fixed bound and needs no flag; catching up is `git merge`; what merge would check is in `status` |
-| `brief` and `debrief` commands | The Desk shows them; until it has its mission page, a mission is read with `atelier show <mission>` |
-| `serve` and the site crate | The human's pages are a product of their own, the Desk (ADR 0032) |
-| The nine `work` views and nine `review` subcommands | `status`, `list`, `review` and `verdict` replace them |
-| Strategy files in `docs/strategies/` | A mission's documents live in its directory |
-| ADRs | One design record, edited in place, with a list of what was tried and removed |
-
 ## Scorecard
 
-The redesign is judged on these. Outcomes are the constraint, costs are what
-it drives down, and exchange rates decide what to cut.
+Atelier is judged on these. Outcomes are the constraint, costs are what it
+drives down, and exchange rates decide what to cut.
 
 | Group | Measure | Before |
 | --- | --- | --- |
@@ -500,13 +462,13 @@ it drives down, and exchange rates decide what to cut.
 
 The Before column is the November 2026 baseline. Each number's method,
 coverage and limits are in
-[scorecard-baseline-2026-11.md](../architecture/quality/scorecard-baseline-2026-11.md).
+[scorecard-baseline-2026-11.md](architecture/quality/scorecard-baseline-2026-11.md).
 
 The codebase health rows are trends for one repository against its own past.
 Agents are not scored on them, and none is a limit.
 
-The tool computes none of this. Its part is facts: `log` says what happened
-to each item, `list` says how things stand, and the records hold the
+The tool computes none of this. Its part is facts: `log`, once built, says
+what happened to each item, `list` says how things stand, and the records hold the
 findings and each bug's `caused-by`. Rework and line counts come from Git.
 Tool calls, tokens and interventions come from T3's events and the
 transcripts, by scripts on the host that has them. Whether a finding was a
@@ -521,9 +483,9 @@ them, is the gardener's procedure in the skill.
 - A command that computes the scorecard, and a scorecard page. The page is
   the Desk's.
 - A view of what changed between a mission's go-ahead and its result. It is
-  a derived view and the Desk's to build later. This work gives it the
-  data: every act with the commit it happened in, and records readable at
-  any commit.
+  a derived view and the Desk's to build later. The tool gives it the
+  data: records readable at any commit, and, once `log` is built, every act
+  with the commit it happened in.
 - Coordinating two clones of one repository. Atelier coordinates the threads
   working in one clone and its worktrees. Work on another host is visible
   only after a fetch, and nothing stops the same item being started on both.

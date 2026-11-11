@@ -1,5 +1,5 @@
 //! `merge`, the one command that writes to the base
-//! (docs/strategies/redesign-architecture.md, Merge and The forge).
+//! (docs/design.md, Merge and The forge).
 //!
 //! Copied from `crates/atelier-cli/src/commands/merge.rs` and trimmed to
 //! what this command calls: the merged-tree checkout (`MergedCheckout` and

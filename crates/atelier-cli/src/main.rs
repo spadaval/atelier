@@ -1,4 +1,4 @@
-//! The `atelier` command (docs/strategies/redesign-product.md, Commands).
+//! The `atelier` command (docs/product.md, Commands).
 
 mod check;
 mod commands;

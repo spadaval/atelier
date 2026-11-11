@@ -1,113 +1,108 @@
----
-status: draft
-last_changed: "2026-11-11: amended at Sumeet's direction: no site crate and no `serve`; the Desk (ADR 0032) reads the core. Before that: brought up to date with what mission atelier-fcb7 built in next/, including Sumeet's decisions of 2026-11-10 that submit starts CI and merge waits for it; what the binary enforces of the Review section, and the fixes the validator's check found (atelier-8myy)"
----
+# Atelier: design record
 
-# Atelier redesign: architecture specification
+This is Atelier's one design record, edited in place to match the code. It
+replaced the ADRs on 2026-11-11, and its [Decisions](#decisions) carry those
+of theirs that still govern. The product behaviour it serves is in the
+[product specification](product.md). Where this page and the binary
+disagree, the page is wrong and is corrected.
 
-This is a target design. Today's architecture is in `docs/architecture/`. The
-product behaviour this serves is in
-[redesign-product.md](redesign-product.md). When the redesign is finished this
-document, edited to match the code, becomes the single design record that
-replaces the ADRs.
+## How the tool was rewritten
 
-## The rule for this work
+The aim was better code, not more code. The tool was rewritten in full, in a
+fresh workspace beside the old one. Nothing new depended on anything old.
+One reviewed change then deleted the old workspace and put the new one in
+its place, and the cutover converted the records. No compatibility layer
+was built: no binary reads both record layouts.
 
-The aim is better code, not more code. The tool is rewritten in full, in a
-fresh workspace beside the old one. Nothing new depends on anything old. One
-reviewed change then deletes the old workspace and puts the new one in its
-place, and the cutover converts the records. No compatibility layer is
-built: no binary reads both record layouts.
-
-A piece of the old code is copied across only when its behaviour is wanted
-as it is. The item that copies it names it, trims what the new tool does not
-call, and it is reviewed as new code. Everything else is written new.
+A piece of the old code was copied across only when its behaviour was
+wanted as it was. The item that copied it named it, trimmed what the new
+tool did not call, and it was reviewed as new code. Everything else was
+written new.
 
 Non-test Rust is reported at the end of each mission as an indication. It is
 not a limit, and no item is shaped to hit a number.
 
-## Why a full rewrite, and what makes it safe
+## Why a full rewrite, and what made it safe
 
-This is the tool's third rebuild, and 31% of the Rust ever written here
-survives, so the choice needs its reasons stated.
+This was the tool's third rebuild, and 31% of the Rust ever written here
+had survived, so the choice needed its reasons stated.
 
-- The record layout changes under every command at once, so the command
-  layer cannot be replaced piece by piece.
-- What would have stayed in place is small, and it is bound to types that go
-  away: the forge code takes the workflow policy's config, and the merge
-  code takes the workflow policy and the record index.
-- A fresh workspace cannot grow a dependency on the old one by accident, and
-  the switch becomes deleting one directory.
+- The record layout changed under every command at once, so the command
+  layer could not be replaced piece by piece.
+- What would have stayed in place was small, and it was bound to types that
+  went away: the forge code took the workflow policy's config, and the merge
+  code took the workflow policy and the record index.
+- A fresh workspace could not grow a dependency on the old one by accident,
+  and the switch became deleting one directory.
 
-What is different from the earlier rebuilds: the scope is two reviewed
-specifications, fixed before any code; the old tool keeps tracking the work
-until the new one is rehearsed on every repository; the scorecard has a
+What was different from the earlier rebuilds: the scope was two reviewed
+specifications, fixed before any code; the old tool kept tracking the work
+until the new one was rehearsed on every repository; the scorecard has a
 baseline to judge the result against; and the list of what was tried and
 removed is in this document.
 
-## Where the code is today
+## What came from the old code
 
-48,988 non-test lines of Rust in six crates under `crates/`, and 59,627
-lines of tests, of which 50,438 are CLI integration tests. None of it is
-edited by this work. It is deleted whole at the switch.
+The old tool had 48,988 non-test lines of Rust in six crates, and 59,627
+lines of tests, of which 50,438 were CLI integration tests. None of it was
+edited by the rewrite. It was deleted whole at the switch.
 
-| Area | Lines today | In the new workspace |
+| Area | Lines in the old tool | In the new tool |
 | --- | --- | --- |
-| Record parsing, validation and index | 7,930 | Written new. Front-matter splitting is copied with one change, so that it keeps a record's body byte for byte where today it strips a newline at each end. ID generation is copied from `record_id.rs`. |
+| Record parsing, validation and index | 7,930 | Written new. Front-matter splitting was copied with one change, so that it keeps a record's body byte for byte where the old code stripped a newline at each end. ID generation was copied from `record_id.rs`. |
 | Merge, gates, freshness, light path | 6,190 | Written new. Copied and put on the new types: the merged-tree checkout, the merge commit and the push from `merge.rs` and `merge_push.rs`, and the protection around them described under The forge. |
 | Issue and work views and output | 5,304 | Written new, as `status`, `show` and `list` |
-| Missions, brief, debrief, criteria | 4,753 | Not carried over. The Desk adds the views its pages need (atelier-z4cr) |
+| Missions, brief, debrief, criteria | 4,753 | Not carried over. The Desk added the views its pages need (atelier-z4cr) |
 | Review and findings | 4,669 | Written new, as `review` and `verdict` over one file per review |
-| Site, Rust and web | 4,926 | Not carried over. Deleted with the old workspace; the Desk replaces it (ADR 0032) |
+| Site, Rust and web | 4,926 | Not carried over. Deleted with the old workspace; the Desk replaces it (see Decisions) |
 | Workflow policy | 3,418 | Not carried over; a short config section replaces it |
-| Status, land and hooks | 2,438 | Written new. The harness hook installer is copied. |
+| Status, land and hooks | 2,438 | Written new. The harness hook installer was copied. |
 | Prune and history | 2,410 | Not carried over |
 | Evidence | 1,931 | Not carried over |
 | Bundle | 1,665 | Not carried over |
-| Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | `forge.rs`, 382 lines, is copied with its contract tests, and takes the new config |
-| Git and shell adapters (`commands/git.rs`, `git_freshness.rs`) | 3,501 | Copied: the Git calls the new commands use, and the object reader, which reads files at a pinned commit through one `git cat-file --batch` process and reports a missing path, a non-regular file and a failed subprocess. The record loader on top of it is written new; today's is bound to types that go. |
+| Forge and CI (`atelier-app/src/forge.rs`) | 1,202 | `forge.rs`, 382 lines, was copied with its contract tests, and takes the new config |
+| Git and shell adapters (`commands/git.rs`, `git_freshness.rs`) | 3,501 | Copied: the Git calls the new commands use, and the object reader, which reads files at a pinned commit through one `git cat-file --batch` process and reports a missing path, a non-regular file and a failed subprocess. The record loader on top of it was written new; the old one was bound to types that went. |
 | Migrate | 883 | Not carried over |
-| Setup | 821 | The merging of hook settings into a harness's config is copied; what it installs is new, and it gains Git hooks and Codex hooks |
+| Setup | 821 | The merging of hook settings into a harness's config was copied; what it installs is new, and it gained Git hooks and Codex hooks |
 
-No old test is ported, except the contract tests that come with a copied
-piece. The new workspace has its own.
+No old test was ported, except the contract tests that came with a copied
+piece. The new tool has its own.
 
 ## Workspace and crates
 
-The new tool lives in `next/`, a Cargo workspace of its own with its own
-lock file, built to `next/target/`. It has four crates, those of the old
-one less `atelier-workflow` and `atelier-site`, under the same names:
+The tool is the Cargo workspace at the repository root, built to
+`target/`. It has four crates under `crates/`, those of the old tool less
+`atelier-workflow` and `atelier-site`, under the same names, and the Desk's
+crate beside them:
 
 | Crate | Owns |
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the history of acts, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
 | `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
 
-The crates sit at `next/crates/<name>/`, so the switch can move them to the
-root `crates/` without changing a path inside them. The dependency direction
-is `cli` to `app` to `records` to `core`. The Desk's crate, `atelier-desk`,
-depends on `app` and `records`, and nothing depends on it.
+The dependency direction is `cli` to `app` to `records` to `core`. The
+Desk's crate, `atelier-desk`, depends on `app` and `records`, and nothing
+depends on it.
 
-Nothing in the new workspace builds from the old one, and CI proves it the
-direct way: the job that builds and tests `next/` deletes the root `crates/`
-directory first. If anything under `next/` reads the old code, by a path
-dependency, a module path, an include, a symlink or a build script, that job
-fails. No list of the ways to reach the old code has to be kept complete.
+The tool was built in `next/`, a workspace of its own beside the old one,
+with its crates at `next/crates/<name>/`, so that the switch moved them to
+the root `crates/` without changing a path inside them. While both
+workspaces stood, CI proved that nothing in the new one built from the old
+the direct way: the job that built and tested `next/` deleted the root
+`crates/` directory first.
 
-The rule is about what the build reads, not about text: a document or a
-comment in `next/` may name the old code a piece came from.
+`scripts/ci-jobs.sh` says which of CI's two jobs a change needs. The Rust
+job checks formatting, builds and tests the workspace, and runs the tree's
+`atelier check` on the records; it is skipped when the change touches only
+Markdown outside `crates/` and the Desk's app outside `desk/src/api/`. The
+Desk's job tests its app, when the change touches `desk/`.
+`scripts/count_non_test_rust.py` counts the non-test Rust of a commit.
 
-CI builds and tests both workspaces. `scripts/ci-jobs.sh` says which a
-change needs, the new one when a path under `next/` changes and the old one
-when a path under `crates/` does, and both when the toolchain, `.cargo/` or
-the CI workflow does, and `.github/workflows/ci.yml` gains the
-jobs that build and test `next/`. `next/target/` is ignored by Git, and
-`scripts/count_non_test_rust.py` can count one workspace at a time.
-
-The new binary is `next/target/debug/atelier`. It is called "the new binary"
-below, and it is installed nowhere until the cutover.
+The binary is `target/debug/atelier` in a build of the tree, and `cargo
+install --path crates/atelier-cli --locked` installs it. One installed
+binary serves every repository on the host.
 
 ## Records
 
@@ -319,7 +314,7 @@ commit, so there is no merge strategy to set. `provider` has one value,
 
 ### IDs
 
-Missions and items keep today's form, `<slug>-<4 characters>`. `show`
+Missions and items keep the old tool's form, `<slug>-<4 characters>`. `show`
 accepts either kind.
 
 ## Status
@@ -513,7 +508,7 @@ implemented an item can never review it.
 There is no local state file. A command works out who is calling by looking
 for the caller's identity in the records it can see: the item of the current
 branch, an open review of that item, and missions on the base. A thread may
-hold several things, and `status` lists each. Built so far: on a branch named
+hold several things, and `status` lists each. On a branch named
 for an item, `status` speaks to the item's holder as its implementer, to a
 thread that reviewed an earlier round as done with it, and to anyone else as
 a visitor, naming the holder; anywhere else it lists the
@@ -558,8 +553,6 @@ branch, the implementer's list of what it holds gives the same: each
 item's unanswered questions, since when an approved one is approved, the
 round of one in review or with changes requested, and the line that
 escalation is required after three rounds without an approval.
-Missions join
-with their commands.
 
 Harness hooks give orientation at session start. `atelier setup claude`
 writes Claude Code's project hooks into `.claude/settings.json`: a
@@ -577,7 +570,7 @@ repository has, keeping every other hook there and replacing only those
 marked `# atelier-managed:<event>`, the old tool's marker, so that either
 tool's `setup` replaces the other's; run again, it changes nothing. A file
 that is not valid JSON, or whose hooks are not in the harness's form, is
-refused with nothing changed. The merging is copied from the old `setup
+refused with nothing changed. The merging was copied from the old `setup
 claude`. Where no harness hook runs, a project's `AGENTS.md` says to run
 `atelier status` first, and the post-checkout Git hook prints it on every
 branch switch.
@@ -833,6 +826,10 @@ is merged, so the base's record is the item's record from then on.
 
 ## The log
 
+Not built yet: atelier-8b0a, in the gardener's mission atelier-295u, adds
+`log`, and nothing in this section is in the binary until it does. This is
+its design.
+
 `atelier log` prints the history of acts. Nothing stores it. It is derived
 from Git history, by finding the commits where a record changed in one of
 the ways below. Each is one line, and each carries the commit it was found
@@ -854,7 +851,7 @@ reads it.
 | drop, close | A status becomes `dropped`, or `done` outside a merge | None |
 
 A skip is shown on the line of the act whose commit carries its trailer,
-which is every act where Atelier makes the commit. Today those are `start`,
+which is every act where Atelier makes the commit. Those are `start`,
 `submit`, `verdict`, `merge`, `ready`, `drop`, `close` and `lead`.
 
 What `log` does not show: `new`, `set` and edits to a record's text, which
@@ -871,10 +868,10 @@ not appear.
 
 The walk covers the base's history, the second-parent side of each Atelier
 merge, and the tips of started items' branches, so an item's acts stay
-visible after its branch is merged and deleted. Today's history reader for
-the debrief follows first parents only and would lose them; how to walk
-both sides without reading each record's history separately is settled when
-the command is planned.
+visible after its branch is merged and deleted. The old tool's history
+reader for the debrief followed first parents only and would lose them; how
+to walk both sides without reading each record's history separately is
+settled when atelier-8b0a is planned.
 
 `log` adds nothing up. Time in each status from `ready` on, rounds per item,
 roles taken over, escalations and skips are counts over its lines, and the
@@ -1019,315 +1016,102 @@ the clone's hooks from has none of Atelier's.
 
 ## The forge
 
-`crates/atelier-app/src/forge.rs` is copied into the new workspace with one
-change to its interface: it takes the forge section of the new config, whose
-CI workflow is optional, where today it takes `workflow_policy::ForgeConfig`
-with a required workflow name. Its behaviour stays, and its contract tests
-come with it. The merged-tree checkout, the merge commit and the push live
-today in `atelier-cli`'s `merge.rs` and `merge_push.rs`, bound to
-`WorkflowPolicy` and `RecordIndex`. They are copied and put on the config
-and item types, and their contract tests are rewritten against the new
-command.
+The forge code, `forge.rs` in `atelier-cli`, was copied from the old
+`atelier-app` with one change to its interface: it takes the forge section
+of the config, whose CI workflow is optional, where the old one took
+`workflow_policy::ForgeConfig` with a required workflow name. Its behaviour
+stayed, and its contract tests came with it. The merged-tree checkout, the
+merge commit and the push lived in the old `atelier-cli`'s `merge.rs` and
+`merge_push.rs`, bound to `WorkflowPolicy` and `RecordIndex`. They were
+copied and put on the config and item types, and their contract tests were
+rewritten against the new command.
 
-One more thing is kept, because it is the kind a rewrite loses by accident.
-Today's merge protects itself against the world moving while its checks run.
-The new `merge` holds an exclusive lock on `atelier-merge.lock` in the Git
-directory every worktree of the clone shares, from the read after its wait
-for CI to its end, so a second merge waits for the first and then reads the
-base it left. The wait itself holds no lock, so a merge waiting for CI does
-not hold up another item's merge, and what it read before the lock is read
-again under it. `merge` is the only command that takes the lock, since it is
-the only one that writes the base.
+One more thing was kept, because it is the kind a rewrite loses by
+accident. The old merge protected itself against the world moving while its
+checks ran. `merge` holds an exclusive lock on `atelier-merge.lock` in the
+Git directory every worktree of the clone shares, from the read after its
+wait for CI to its end, so a second merge waits for the first and then reads
+the base it left. The wait itself holds no lock, so a merge waiting for CI
+does not hold up another item's merge, and what it read before the lock is
+read again under it. `merge` is the only command that takes the lock, since
+it is the only one that writes the base.
 After the checks, and before it writes anything, it confirms that the branch
 tip and the base tip are the ones the checks ran on and that neither the
 work checkout nor the base's checkout has changed, and it refuses if any
-has. The lock and that confirmation are copied from `merge.rs`,
+has. The lock and that confirmation were copied from the old `merge.rs`,
 `mutation_lock` and `committed_snapshot.rs`, with tests that move the base,
 move the branch, change the checkout and run two merges at once. The parts
-of that code that guard against tampering with file modes and index flags
-are not carried over. A merge killed during its checks leaves its temporary
+of that code that guarded against tampering with file modes and index flags
+were not carried over. A merge killed during its checks leaves its temporary
 worktree behind; the next merge, holding the lock, removes it.
 
 `forge.rs` and the merge code live in `atelier-cli`, with the Git calls
 only they make; `atelier-app` runs no forge command and no merge.
 
-Nothing else from today's merge is carried over: not the gate code, the
-polling in `merge_wait.rs`, nor `merge_sync.rs`. The wait for CI is written
-new. `submit` pushes the branch and opens its pull request with the same code
-as `merge`.
+Nothing else from the old merge was carried over: not the gate code, the
+polling in `merge_wait.rs`, nor `merge_sync.rs`. The wait for CI was written
+new. `submit` pushes the branch and opens its pull request with the same
+code as `merge`.
 
 ## Site
 
-The tool has no site. The old workspace's site is deleted with it at the
-switch, and the `atelier` binary built from the new workspace has none: no
-`atelier-site` crate, no `serve` command, and no Node step in its build or
-release. The workflows the switch puts in place have no job for the old
-site's app. The installed binary keeps serving the old-layout repositories
-until the cutover.
+The tool has no site, and no Node step in its build or release. The old
+tool's site went with its workspace at the switch; [Tried and
+removed](#tried-and-removed) says why.
 
-The human's pages are the Desk, a separate binary and web app
-([ADR 0032](../adr/0032-the-desk-is-the-humans-product.md), mission
-atelier-z4cr). Its crate, `atelier-desk`, and its app, `desk/`, are built
-in this workspace with their own CI jobs, which the switch keeps. It reads
-records through `atelier-records` and `atelier-app`, and what it needs from
-this work is already here: every act
-with the commit it happened in, and records readable at any commit. So it
-can load a mission's directory and items as they stood at the commit of its
-`ready` act and compare them with how they stand now.
+The human's pages are the Desk, a separate binary and web app (mission
+atelier-z4cr; see [Decisions](#decisions) and the Desk's
+[product page](product/desk.md) and [API](architecture/desk.md)). Its
+crate, `atelier-desk`, and its app, `desk/`, are built in this workspace,
+and the app has a CI job of its own. It reads records through
+`atelier-records` and `atelier-app`, at any commit, so it can load a
+mission's directory and items as they stood at the commit of its `ready`
+act and compare them with how they stand now.
 
 ## Transition
 
-The installed binary is one per host and the installed skill is one per host,
-so the process changes for every repository on a host at once. The transition
-is one step per host, and it has four parts. The first three are ordinary
-items under the old tool. The fourth is a runbook.
+The installed binary is one per host and the installed skill is one per
+host, so the process changes for every repository on a host at once. The
+move to this tool is one step per host.
 
-**1. Build beside (mission 2).** The installed binary tracks all work,
-including the redesign's own, and the repository's records stay in the old
-layout. The new tool is written in `next/`. The old workspace, its tests,
-CI's `atelier check` step and `scripts/smoke-repos.sh` are untouched.
+**On this host, on 2026-11-11.** At the time Sumeet named, the switch
+(atelier-u1ko) merged: it deleted the old workspace and moved `next/` to the
+root as version 0.5.0. Within four minutes one run of
+`scripts/cutover/cutover.sh` converted atelier, astromech, demiurge,
+life-on-rails and cosplay-studio, installed the binary and the skill,
+stopped the old site's service, pushed each converted base and closed the
+cutover item, atelier-wd1i, the first act the new tool recorded. It stopped
+nowhere, and no rollback was needed. In each repository `--verify` matched
+a fresh conversion of the recorded base, `atelier check` passed, and the
+counts were those the conversion printed: 133 items and 7 missions in
+atelier, 240 and 4 in astromech, 19 and 1 in demiurge, 47 and 3 in
+life-on-rails, and 37 and 7 in cosplay-studio. The first item under the new
+tool, atelier-2mlh, then made CI check the records with the tree's binary
+only.
 
-**2. Rehearse (mission 2).** `scripts/cutover/convert_records.py` reads a
-repository's old `.atelier/` directly and writes the whole new one: missions
-and items from open records and the strategy files they link, and
-`config.toml` from `workflow.yaml`, with no CI workflow where the repository
-has no Actions. Done and superseded records leave the tree, and Git keeps
-them; deferred findings on them are not carried over, and the backlog sort is
-where any worth keeping become items. A Done when with text and no checkbox
-line, which the new tool would count as ticked, becomes one unticked line of
-its prose, ahead of any fenced block or table, which follow unchanged. Run twice on the same input it writes
-the same bytes, and `--verify` checks a converted tree against a fresh run.
-The rehearsal converts a scratch clone of each of the five repositories and
-runs the new binary's `check` and `status` on each. It runs one full item in the
-atelier clone and in one product clone; a full item runs the repository's
-merge checks, and some of those are too heavy to run for all five here.
+What is still to come:
 
-**3. Prepare (mission 3).** Each of these is reviewed and merged under the
-old tool:
-
-- The skill is rewritten in `skills/agent-factory-next/`, beside the live
-  one. The live skill is a checkout that follows master, and the installed
-  binary tells every session to move it forward when it falls behind, so the
-  new text must not sit at the live path before the cutover.
-- The fallback release is fixed. It is the binary CI and the rollback use,
-  so it must check this repository's records and serve the site as the
-  installed binary does. The installed binary is six commits past 0.4.0,
-  and those commits changed only the wording of the review brief, so the
-  0.4.0 release is tried first. A 0.4.1 is cut only if 0.4.0 fails that
-  test.
-- The tracker's site is taken out, as above: the `atelier` binary built
-  from the new workspace has no site and no `serve`. The Desk's crate and
-  app, where they have been added, stay.
-- The switch (atelier-u1ko): `crates/`, the old workspace with all its
-  tests, and `scripts/smoke-repos.sh` are deleted, and the tracked contents
-  of `next/` move to the repository root, so the root workspace, the release
-  build and `cargo install --path crates/atelier-cli` are all the new tool,
-  version 0.5.0. CI's `check` step runs the fallback release, fetched by its
-  pinned archive and SHA-256, while the repository holds `.atelier/issues/`,
-  and the tree's binary once it does not. `AGENTS.md` says the installed
-  binary stays the tracker and nobody installs from the tree. Added under
-  `scripts/cutover/`, so that they are reviewed here: the runbook and its
-  rollback, the new `AGENTS.md` text for each repository, and the one
-  workflow that runs Atelier in another repository's CI, astromech's, which
-  installs Atelier from the commit of master the cutover converted and runs
-  `atelier check`.
-
-  What the move touched, besides the renames: the root `Cargo.toml` and
-  `Cargo.lock` (the new workspace's, with its version and `dist` profile);
-  `atelier-cli`'s manifest (the version, and `dist = true`, since the
-  workspace does not publish) and its `--version`; the other tracker
-  crates' manifests (the version); the Desk's types test (the path to
-  `desk/src/api/` from its new place); `.github/workflows/ci.yml` (one set
-  of Rust jobs, the two-way `check` step, the Desk's job as it was);
-  `.github/workflows/release.yml` and `dist-workspace.toml` (no Node or
-  pnpm); `scripts/ci-jobs.sh` and its test (the jobs `rust` and `desk`);
-  `scripts/count_non_test_rust.py` (its help); `scripts/cutover/rehearse.sh`
-  and the converter's test (the binary's path); `.gitignore`,
-  `.gitattributes`, `AGENTS.md`, and the eval harness's README and the
-  `next-*` scenarios (the binary's path). Deleted: `.cargo/`, `.config/`,
-  `proptest-regressions/`, `.github/build-setup.yml`, the root
-  `package.json` and `package-lock.json`, `scripts/smoke-repos.sh` and
-  `scripts/bench_read_commands.py`.
-
-After the switch merges, the tree's binary cannot read this repository's
-records, and only the installed binary tracks work. The cutover follows at
-once.
-
-**4. Cut over (mission 3).** One thread runs `scripts/cutover/cutover.sh`
-from the worktree that has atelier's master checked out
-(`scripts/cutover/README.md` is the page for the day). The cutover item is
-never started: it stays ready, the runbook runs on the base, and the item is
-closed at the end. Everything outside the script that it touches comes from
-one settings block (`common.sh`) or the environment, with this host's
-values as defaults; the trials run the same script with every one pointed
-at a sandbox.
-
-The Desk's service, `atelier-desk`, and the converted clones it serves are
-not the cutover's: they are left running, the settings check refuses a Desk
-clone as a repository and any service but `atelier-serve`, and pointing the
-Desk at the live repositories afterwards is the Desk mission's loose end,
-atelier-qxmr.
-
-The runbook keeps a journal in its state directory. Each entry is written
-before the change it describes and marked done after: each conversion it
-starts, with its directory and base commit; each commit; each push, with the
-ref's old and new commits; each ref and checkout it moves and from where;
-each hooks directory it copies; and what it installs, stops or disables. It
-stops at the first failure, and says which step failed and what
-`rollback.sh` will undo. Run again after a stop, it picks up from the
-journal, and it settles an entry started and not marked done by looking at
-the state itself: whether a push happened is read from the remote's tip,
-never assumed.
-
-1. **Preflight**, also a command of its own, `cutover.sh preflight`, so
-   that it can be run before the switch merges. It stops unless, in each
-   repository, every worktree is clean, the base is at its remote's tip, no
-   item is in progress as the installed old binary reports it (in every
-   worktree's records and the branches its `status` lists; before the
-   switch has merged, atelier-u1ko may be), and no T3 thread other than
-   the one running the script, or a thread waiting on it, has a run going
-   in the repository or one of its worktrees. That last is one read-only,
-   bounded query of T3's database; if it cannot be read, the preflight
-   prints the hand check and continues only when told it was made. It lists
-   each unmerged local branch, whose reviews the conversion does not carry,
-   and each worktree not on its base. Then it records each base commit,
-   what each worktree has checked out, a copy of each clone's hooks
-   directory, the installed binary's version and hash, the skill
-   checkout's commit and the service's state.
-2. **Convert atelier**, in the worktree that has master: build the tree's
-   binary in release (into the state directory), move aside ignored files
-   under the paths the conversion writes (the old tool's runtime cache),
-   run the converter, replace `AGENTS.md` with the reviewed text, move
-   `skills/agent-factory-next/` to `skills/agent-factory/`, and run the
-   tree's `setup claude` and `setup codex`, which write
-   `.claude/settings.json` and `.codex/hooks.json` in the repository.
-   Commit everything, and run `--verify` and the tree's `atelier check`.
-3. **Install**: `cargo install --path crates/atelier-cli --locked`, reusing
-   that build; `atelier setup` for the Git hooks and for each harness,
-   which must change no file; the skill checkout to the conversion commit;
-   `atelier-serve` stopped and disabled, since the new binary has no
-   `serve`.
-4. **Push master** with `ATELIER_SKIP="cutover conversion"` by plain `git
-   push`, since the hook just installed refuses a commit that is not a
-   merge and changes code.
-5. **Each product repository**, in a fresh clone of its base: the
-   converter; its `AGENTS.md` process section replaced (below); in
-   astromech, `.github/workflows/atelier.yml` replaced, with atelier's
-   conversion commit written into it, and no other workflow may run a
-   removed command or install Atelier; the harness hook settings; commit;
-   `--verify` and `atelier check`; push with the same skip.
-6. **Each real clone onto the converted base**, atelier included, so that
-   the directory agents start in is on new records. Fetch, and move the
-   base to the pushed commit: a fast-forward in the worktree that has it
-   checked out, else an update of the ref. A main worktree not on its base
-   is switched to it, or, where another worktree has the base, detached at
-   the base's tip; the branch it left is kept. `atelier setup` installs the
-   Git hooks, keeping a clone's own hook as `<name>.local`. Other worktrees
-   are not touched; each one on a branch that still has the old layout is
-   printed, since `atelier` and the hooks refuse there until it takes the
-   converted base, as the README says.
-7. **Accept**, before anything is closed: in each main and base worktree,
-   `atelier check` passes, `atelier status` runs, and the count of items and
-   missions is the count the conversion printed; each base is at its
-   remote's tip; `atelier --version` is the new tool; the skill checkout's
-   `SKILL.md` is the new text; `atelier-serve` is stopped and disabled; and
-   CI on atelier's master has passed on the conversion commit, its test
-   job's `atelier check` step included, waited for with a bound (7 minutes;
-   past it the runbook exits 3, nothing failed, and run again it waits on).
-   A failure here is a stop like any other.
-8. **Close** the cutover item with `atelier close`, the first act the new
-   tool records, which makes its own commit, and push it. Past step 7 the
-   cutover is not rolled back for a later doubt: a failed push here is
-   retried by running the script again.
-
-At the end it prints, for each repository, the conversion commit, the
-count of items and missions, `--verify`'s result, the count of relative
-links that still resolve and where each worktree was left, and how long
-each step took.
-
-A product repository's `AGENTS.md` keeps all of its own text but the
-sections that name a removed Atelier command (from a heading of level one
-or two to the next): the first becomes the reviewed process section and the
-others go. The runbook stops when a repository has none, or more than the
-number recorded for it. No product repository configures a forge, so their
-process text says to push the base with `git push` after `atelier merge`,
-which the pre-push hook checks.
-
-The conversion commits are pushed directly, by plain `git push`. They are
-the output of a reviewed script, checked by `--verify`, and reviewed text
-moved into place. This is the one time a commit that is not an Atelier
-merge changes more than planning records on a base, and the runbook is the
-only thing that does it.
-
-**Rollback.** `scripts/cutover/rollback.sh` undoes what the journal says
-was started, and is safe to run twice:
-
-1. Every hooks directory goes back from its copy, first, since the new hooks
-   would refuse the pushes below and would call commands the fallback
-   lacks.
-2. For each repository the runbook converted, the remote's base tip, read
-   with `git ls-remote`, decides. Still at the recorded base, nothing was
-   published: a fresh conversion clone is deleted, and in atelier's master
-   worktree the base is reset to the recorded commit and the paths the
-   conversion writes are cleaned, leaving ignored files that were there.
-   Holding the runbook's commits, each one not yet reverted is reverted,
-   newest first, in a clone of the remote's tip, and the reverts are pushed,
-   so a closing commit is undone before the conversion beneath it. Each
-   revert names the commit it undoes in a `Cutover-Revert:` trailer, which
-   is how a second run knows it is done. Holding anything else, the
-   rollback stops for that repository, resets nothing there, and says what
-   it found.
-3. Each real clone's base goes to where its remote now is: the recorded
-   commit, or the reverts' tip, whether the clone had taken the conversion
-   or not; a commit the runbook made and never pushed is dropped. Each
-   worktree is put back on what the journal says it had checked out, and
-   the files set aside in step 2 of the cutover go back.
-4. If the install had started: the fallback release, v0.4.0, is
-   reinstalled from its pinned archive with its SHA-256 checked, its `setup
-   claude` is run in each repository whose harness settings it wrote and
-   must change no file, the skill checkout is moved back, and `atelier-serve`
-   is enabled, started and checked to answer.
-
-Restored means, checked the same way after every trial: where nothing of a
-repository was pushed, its base is the recorded commit; where something was
-pushed, its base holds one revert per pushed commit, its tracked tree is the
-recorded commit's, and local and remote tips agree. In every repository
-each worktree has checked out what it had, or the base's tip where it had
-the base; its status, ignored files included, is as before, except for the
-old tool's own runtime cache, which any old command writes; its hooks
-directory is as copied; and the old binary's `check` passes on the old
-records. The installed binary is the fallback, the skill checkout is at its
-old commit, and the old site answers.
-
-The rollback was tried in sandboxes (`scripts/cutover/trials.sh`) at every
-point the cutover can stop: a conversion that fails before its commit (the
-section rule matching nothing), `--verify` failing after step 2's commit,
-after step 2, part-way through step 3 and after it, after step 4, a second
-product repository committed and not pushed, part-way through step 6,
-CI reported failed in step 7, after step 8's commit and after its push, a
-push in step 4 the remote accepted and reported as failed, and a stop after
-one product repository's push. One sandbox clone has a hook of its own,
-which is back afterwards.
-
-**After the cutover**, the fallback branch of CI's `check` step is removed.
-Nothing else is left to clean up, since the old workspace went whole at the
-switch. `scripts/cutover/` is deleted after the work host converts.
-
-**The work host** does not convert: its remotes are already converted. It
-adopts, with the same script's `adopt` command, run from a fresh clone of
-atelier's converted master made for the purpose, which is where it gets the
-reviewed script, the new tool's source and the new skill without moving any
-checkout it works in. In order: the preflight, with each base allowed to be
-behind its remote and never ahead; the new binary installed from that
-clone; the skill installed by the command the settings give, since hosts
-install it differently; `atelier-serve` stopped and disabled where the host
-has it; step 6 for each repository; and step 7 without the CI check, with
-the count of items and missions read by `atelier check` and printed. It
-converts, pushes and closes nothing. `rollback.sh` undoes it from its
-journal and pushes nothing: hooks, refs (remote-tracking refs included) and
-worktrees back to what was recorded, the fallback reinstalled, and the skill
-and the service as they were. Until it adopts, the work host must not fetch
-a repository that has been converted.
+- **The work host adopts.** It does not convert: its remotes are already
+  converted, and until it adopts it must not fetch a repository that has
+  been. It adopts with `scripts/cutover/cutover.sh adopt`, run from a fresh
+  clone of atelier's converted master made for the purpose, which is where
+  it gets the reviewed script, the tool's source and the skill without
+  moving any checkout it works in. In order: the preflight, with each base
+  allowed to be behind its remote and never ahead; the binary installed
+  from that clone; the skill installed by the command the settings give,
+  since hosts install it differently; the old site's service, where the
+  host has it, stopped and disabled; each clone's base moved to its
+  remote's converted tip, its main worktree put on the base and `atelier
+  setup` run, as on this host; and the acceptance checks without CI's, with
+  the count of items and missions read by `atelier check` and printed. It
+  converts, pushes and closes nothing. `rollback.sh` undoes it from its
+  journal and pushes nothing: hooks, refs (remote-tracking refs included)
+  and worktrees back to what was recorded, the fallback release
+  reinstalled, and the skill and the service as they were. The page for the
+  day is [scripts/cutover/README.md](../scripts/cutover/README.md#another-host-adopts).
+- **`scripts/cutover/` is deleted** once the work host has adopted. Nothing
+  else is left to clean up, since the old workspace went whole at the
+  switch.
 
 ## Testing
 
@@ -1340,8 +1124,8 @@ a repository that has been converted.
   starting one item from separate checkouts; a started item dropped on the
   base, then refused at merge.
 - Unit tests on the act table: every act from every status.
-- `log` on the plain-path scenario prints its acts in order with the right
-  threads, and still does after the item's branch is merged and deleted; on
+- Once `log` is built (atelier-8b0a): `log` on the plain-path scenario
+  prints its acts in order with the right threads, and still does after the item's branch is merged and deleted; on
   the take-over scenario it shows both holders.
 - `new --from` on a deferred finding of a done item writes `Taken:` with the
   thread, and `list --deferred` no longer shows it; settling it again is
@@ -1372,9 +1156,9 @@ a repository that has been converted.
   everything as it was, and another item's merge completes meanwhile.
   Changes made during the wait are judged under the lock: a new base, a new
   merge check, a branch gone stale.
-- A fresh-agent scenario, run by the eval harness: an agent given only "run
-  `atelier status`" takes a ready item to done. It is run with Claude Opus
-  and with a Codex model.
+- A fresh-agent scenario, run by the eval harness (`next-loop` in
+  `evals/agent-factory/`): an agent given only "run `atelier status`" takes
+  a ready item to done. It is run with Claude Opus and with a Codex model.
 
 ## Tried and removed
 
@@ -1395,10 +1179,45 @@ evidence.
 | `land`, a check an agent had to run | Agents forgot it, or hid its refusal behind a pipe; a pre-push hook runs without being remembered and fails the push itself |
 | Waiting for CI inside `merge`, for as long as `--wait` and `--timeout` said | A command that sleeps for minutes fights the harness, and one network timeout failed it. It came back on 2026-11-10 in another form: bounded at 9 minutes, under the harness's limit, with no flag, holding no lock, and counting a failed question to the forge as not finished. The thread that runs `merge` is a delegated child that nobody wakes when CI finishes |
 
+The redesign also removed these from the old tool, as it stood at 0.4.0:
+
+| Removed | Why |
+| --- | --- |
+| `workflow.yaml` and the workflow crate | The workflows are identical in all five repositories; every edit followed a tool change |
+| Evidence records and commands | No gate reads them; the project's own audit rated 57% busywork |
+| The light path and base exemptions | `start --new` and `merge --trivial` cover them with one path |
+| Issue types, parents, loose ends, validations, decision records | An item either has files to merge or it does not; the rest are labels |
+| `bundle`, `migrate`, `doctor`, `prune` | Unused by the skill, one-off, or not yet needed |
+| `land` | A check an agent had to remember to run, and whose refusal a pipe once hid; a pre-push hook runs without being remembered and fails the push itself |
+| `merge`'s `--push`, `--wait`, `--timeout`, `--sync`, `--check` and `--json` | Pushing follows from the config; the wait for CI has a fixed bound and needs no flag; catching up is `git merge`; what merge would check is in `status` |
+| `brief` and `debrief` commands | The Desk shows them; until it has its mission page, a mission is read with `atelier show <mission>` |
+| `serve` and the site crate | The human's pages are a product of their own, the Desk (see Decisions) |
+| The nine `work` views and nine `review` subcommands | `status`, `list`, `review` and `verdict` replace them |
+| Strategy files in `docs/strategies/` | A mission's documents live in its directory |
+| ADRs | One design record, edited in place, with a list of what was tried and removed |
+
+A lead or a planner lost none of the old tool's nine `work` views; they
+became `show`, `list` and `status`:
+
+| Old view | Replaced by |
+| --- | --- |
+| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, questions, plan reviews |
+| `work missions` | `list`, which heads each open mission's items with its status, whether it is in progress, and its lead; `status` on the base lists the missions in progress |
+| `work missions --all` | `list --done` for finished missions and items; `list` heads the open ones, and lists items in no mission |
+| `work ready` | `list --ready`, and "Ready to start" in `status` on the base |
+| `work blocked` | `list --blocked`, which names each blocker that is not done |
+| `work human` | `list --needs-human`, and "Waiting on a human" in `status`; open decisions are the unanswered questions in `show <mission>` |
+| `work decisions <id>` | The questions in `show <mission>`, unanswered first; an item's Decisions section is in `show <item>`. Decision records and notes are gone |
+| `work active` | `status`, which lists what the caller holds and what other threads hold, read from their branches; `list` shows each started item with its holder |
+| `work all` | `list` |
+| `work parent <id>` | None: parents are gone, and a mission groups its items |
+
 ## Decisions
 
-Sumeet made each of these in conversation on 2026-11-09, except the two
-dated 2026-11-10.
+Sumeet made each of these in conversation on 2026-11-09, except those dated
+otherwise. A line that names an ADR is a decision of that ADR that still
+governs, carried here when the ADRs were deleted on 2026-11-11; Git keeps
+the ADR.
 
 | Decision | Reason |
 | --- | --- |
@@ -1422,9 +1241,20 @@ dated 2026-11-10.
 | `submit` pushes the branch and opens its pull request where a forge is configured (2026-11-10) | CI then runs during the review; it was nearly all of the wait between approval and merge, a median of 5.5 minutes on 25 items |
 | `merge` waits for CI, for up to 9 minutes, with no flag (2026-11-10, reversing "`merge` never waits") | The thread that runs `merge` is almost always a delegated child, which T3 neither lets watch a pull request nor wakes reliably, so "not yet, run me again" left approved items with nobody driving them |
 | His go-ahead stays `ready --by` | A machine account for agents would let GitHub carry it, and his employer's sign-on rules make one too hard to get |
+| The tracker is for agents and the Desk is for the human: two products sharing a vocabulary and the core, which reads records, computes views and performs acts for both. `atelier` has no site. The Desk is its own binary, `atelier-desk`, and web app, `desk/`, one service per host, outside the `atelier` release (ADR 0032, 2026-11-11) | A page that mirrors the tracker's records asks the human to read records; he needs to make a few decisions well, across every repository, at a desk or on a phone |
+| The Desk acts only through the core: it calls the same function the command calls, naming the person acting, and gets the result as data. It runs no `atelier` binary, reads no command output and writes no record itself. What it needs that the core lacks is added to the core (ADR 0032) | A server outside the core spent most of its code re-deriving what the core knows, by parsing output and grepping records |
+| Records in Git are the only source of truth for work. No check, merge or hook consults the Desk, its database or T3 Code; the guards decide from Git and the records, and from CI for a commit where a forge is configured. Dependence runs one way: `atelier-desk` on the core, never the reverse (ADR 0030, 2026-11-08; ADR 0032) | Records with the code are the reason the tool exists, and a guard that read anything else could disagree with them |
+| One SQLite database per host holds only what Git never held: which thread, model and role ran each command, measurements of how work went, what the human has seen. It holds no copy of a record, and agents read it through a command, never from the file. The Desk reads T3 Code through its MCP server with a scoped token, and conversations stay in T3 Code (ADR 0030; ADR 0032) | Nothing else records who ran each command, so models cannot be compared by role; a copy of a record would be a second truth |
+| A forge carries branches and reports CI; review stays in the repository. No forge state feeds a check but a CI result for a commit, and pull request reviews, comments and issues are not read. GitHub is the one forge, run through `gh` and `git` with their own credentials, and another is added only when a repository moves to one (ADR 0031, 2026-11-08) | The routine of push, pull request, CI and merge was run by hand on every change; reviews and findings must stay records the guards can read from Git |
+| Output is dense Markdown for every reader, with no JSON or YAML mode for agents. An agent piping a command's output through `head`, `grep` or `sed` shows a missing view, which is filed rather than met with a machine format (ADR 0022, 2026-10-17) | Agents read Markdown, labels and symbols fluently; a second format is a second interface to keep true |
+| Repository instructions live in `AGENTS.md`, which a harness loads, and Claude Code repositories import it with `@AGENTS.md` in `CLAUDE.md`. Commands print state and the next command, not instructions an agent has already loaded (ADR 0022) | A `CLAUDE.md` without the import once kept `AGENTS.md` from loading, and static text in output is read on every call |
+| Agent Factory's one copy is `skills/agent-factory` in this repository, with its evals in `evals/agent-factory`, installed with `npx skills add spadaval/atelier --skill agent-factory -g`. Nothing under `crates/` reads the skill's files, and a command change that makes the skill wrong updates it in the same commit. The skill steps aside outside an Atelier repository (ADR 0029, 2026-11-08) | A command and the guidance that describes it landed in separate repositories and drifted; a second copy of the skill diverged |
+| A mission's success criteria are optional, and any criterion must be something the mission's own work can make true and an agent can check when it closes. Work that waits on calendar time, outside adoption or a measurement after shipping is its own item outside the mission (ADR 0024, 2026-11-04) | Criteria that restated items or waited on events stalled missions, and each stall asked Sumeet the same question again |
+| A new rule or record kind names the kind of defect it would have caught in real agent sessions, and a rule that only patches another rule's edge case is a reason to remove the first rule (ADR 0028, 2026-11-07) | When qualities conflict, fewer concepts win over finer guarantees; a rule added for another rule's edge case is how the old machinery grew |
+| One installed binary serves every repository on a host, so a later change to the record format keeps reading the old form until every repository on the host has moved. The redesign's change of layout was the one exception, made by converting every repository at once (ADR 0028) | A format change that one repository has not taken stops the binary there |
 
-Three points in this design go beyond what he confirmed, and his approval
-should weigh them:
+Three points of the design went beyond what he had confirmed when it was
+written, and were put to him with it:
 
 - **One cutover per host.** He agreed to convert repositories one at a time
   with the binary reading both layouts. The skill is installed once per host,

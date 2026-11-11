@@ -1,6 +1,6 @@
 //! `setup`: the three Git hooks that run `check --hook`, and the harness
 //! hooks that start a session with `status`
-//! (docs/strategies/redesign-architecture.md, Hooks and the bypass, and
+//! (docs/design.md, Hooks and the bypass, and
 //! Threads and roles). It writes only inside the repository it runs in.
 
 use crate::commands::Outcome;
