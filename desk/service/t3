@@ -1,0 +1,13 @@
+#!/bin/sh
+# Runs the t3 binary of the T3 Code version that is running, so that the
+# Desk's [t3] command survives a T3 Code update, which adds a new directory
+# under ~/.t3/runtime/versions/ and removes old ones. T3 Code names the
+# version it runs as activeVersion in ~/.t3/runtime/service-state.json.
+# Installed as ~/.local/share/atelier-desk/t3 by desk/service/install.sh.
+runtime=${T3CODE_HOME:-$HOME/.t3}/runtime
+version=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["activeVersion"])' \
+  "$runtime/service-state.json") || {
+  echo "cannot read activeVersion from $runtime/service-state.json" >&2
+  exit 1
+}
+exec "$runtime/versions/$version/t3" "$@"

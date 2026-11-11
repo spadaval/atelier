@@ -82,11 +82,15 @@ It takes one argument, the configuration file:
 
 ```console
 $ cd next && cargo build -p atelier-desk
-$ target/debug/atelier-desk --config ~/.config/atelier-desk.toml
-atelier-desk: serving on http://127.0.0.1:3780
+$ target/debug/atelier-desk --config ~/.config/atelier-desk/config.toml
+atelier-desk: built from 66af635eef253e133ab4630aba02285b943431f6, serving on http://127.0.0.1:3780
 ```
 
-It serves until interrupted. The configuration is TOML:
+It serves until it gets SIGINT or SIGTERM, then revokes its T3 Code
+session and exits with success (`tests/signals.rs`). The commit it names is
+the checkout's `HEAD` when it was built (`build.rs`), and `GET /api/repos`
+gives it too; changes not committed are not marked. The configuration is
+TOML:
 
 ```toml
 # The name the human acts under; every view is computed for it.
@@ -110,9 +114,9 @@ app = "/path/to/atelier/desk/dist"
 # are needed.
 [t3]
 # The t3 binary that matches the running T3 Code, which the Desk runs for
-# a token. On this host that is the one under ~/.t3/runtime/versions/
-# named for the running server's version, not the older t3 on PATH.
-command = "~/.t3/runtime/versions/0.1.9-nightly.20261110.4478/t3"
+# a token: not the older t3 on PATH. The service names a wrapper that
+# finds it (see Running it as a service).
+command = "~/.local/share/atelier-desk/t3"
 # T3 Code's MCP server.
 url = "http://127.0.0.1:3773/mcp"
 # The first message of a planning session's thread. {mission} and {repo}
@@ -133,6 +137,114 @@ writes them again when run with `ATELIER_UPDATE_TYPES=1`:
 ```console
 $ cd next && ATELIER_UPDATE_TYPES=1 cargo nextest run -p atelier-desk --test types
 ```
+
+## Running it as a service
+
+On this host the Desk runs as the systemd user service `atelier-desk`,
+reached over the tailnet at <http://buildbot.tail47515a.ts.net:3780/>
+(item atelier-va99). It serves converted scratch clones of the five
+repositories until this host's cutover; pointing it at the live
+repositories is the loose end atelier-qxmr. Everything it needs is in
+`desk/service/`:
+
+| File in the repository | Installed as | What it is |
+| --- | --- | --- |
+| `atelier-desk.service` | `~/.config/systemd/user/atelier-desk.service` | The unit |
+| `t3` | `~/.local/share/atelier-desk/t3` | The `[t3] command`: runs the `t3` of the T3 Code version that is running |
+| `install.sh` | | Builds, installs or updates, restarts and checks the service |
+| `make-clones.sh` | | Makes or refreshes the converted clones |
+| (written by `install.sh` once) | `~/.config/atelier-desk/config.toml` | The configuration |
+| (the release build) | `~/.local/share/atelier-desk/atelier-desk` | The server |
+| (`desk/dist`) | `~/.local/share/atelier-desk/app/` | The built app |
+| (`make-clones.sh`'s output) | `~/.cache/atelier-desk/clones/<repo>/` | The served clones; `~/.cache/atelier-desk/clones.work/` holds their logs |
+
+**The unit** starts at boot (`WantedBy=default.target`, with lingering
+enabled for the user) and has the limits of `atelier-serve.service`:
+`MemoryMax=1G`, `CPUQuota=100%` and `Nice=10`, so it cannot starve T3 Code.
+`Restart=on-failure` with `RestartSec=5` restarts it after a crash or a
+SIGKILL; `systemctl --user stop` sends SIGTERM, on which it exits cleanly
+and stays stopped. `StartLimitIntervalSec=0` lets systemd restart it
+without limit.
+
+**At boot**, the tailnet address exists only once `tailscaled`, a system
+service, has brought `tailscale0` up, and a user unit cannot be ordered
+after a system unit. Until then binding `100.124.153.80:3780` fails, the
+server exits with an error, and systemd starts it again five seconds later,
+until the address exists. Loopback is not served in that time either.
+
+**The configuration** listens on `127.0.0.1:3780` and the tailnet address
+`100.124.153.80:3780`, never on `0.0.0.0`, and answers the hosts
+`localhost`, `127.0.0.1`, `100.124.153.80`, `buildbot` and
+`buildbot.tail47515a.ts.net`; any other `Host` is refused with 403. It is
+not published with `tailscale serve` or `funnel`. Port 7341 is the old
+site's and port 80 on the tailnet address is T3 Code's. `install.sh` writes
+it from `tailscale status` when it does not exist and never overwrites it.
+It holds no token: the server gets each from the `t3` command and keeps it
+in memory.
+
+**The `t3` command after a T3 Code update.** An update adds a directory
+under `~/.t3/runtime/versions/` and removes old ones, so the configuration
+does not name a version. It names the wrapper `~/.local/share/atelier-desk/t3`,
+which reads `activeVersion`, the version T3 Code runs, from
+`~/.t3/runtime/service-state.json` and runs that version's `t3`. The Desk
+runs it for each new token, so after an update the next token comes from
+the new version with no step of ours. `~/.local/share/atelier-desk/t3
+--version` prints the version it finds.
+
+### Install
+
+Once, from a clean checkout of the branch to install:
+
+```console
+$ cargo build -j 4 --manifest-path next/Cargo.toml -p atelier-cli
+$ desk/service/make-clones.sh ~/.cache/atelier-desk/clones
+$ desk/service/install.sh --caller sumeet
+```
+
+`make-clones.sh` clones each repository's base branch from `~/projects/`
+(atelier `master`, astromech `main`, demiurge `master`, life-on-rails
+`main`, cosplay-studio `main`), disables pushes, converts the records with
+`scripts/cutover/convert_records.py`, commits and verifies the conversion,
+and runs the new `atelier check`, printing one line per step. It only reads
+the repositories under `~/projects/`, and moves a clone into place only
+when every step passed. `install.sh` builds `atelier-desk` (release, `-j
+4`, under a minute on this host) and the app, copies them and the wrapper
+into `~/.local/share/atelier-desk/`, writes the configuration, installs and
+enables the unit, restarts it, and fails unless the server answers on
+loopback with the commit it was built from. It refuses a checkout with
+changes not committed, since the commit it reports would not mark them.
+
+### Update
+
+From a clean checkout of `master` after a merge, such as the one with
+`master` out:
+
+```console
+$ desk/service/install.sh
+```
+
+To refresh the clones as well, which the service needs no restart for:
+
+```console
+$ cargo build -j 4 --manifest-path next/Cargo.toml -p atelier-cli
+$ desk/service/make-clones.sh ~/.cache/atelier-desk/clones
+```
+
+`install.sh` keeps the configuration. The server reads each clone's
+commits on every request, so a refreshed clone shows at once.
+
+### Check
+
+```console
+$ systemctl --user status atelier-desk
+$ curl -s -H 'Host: localhost' http://127.0.0.1:3780/api/repos | jq -r .built_from
+$ curl -s -o /dev/null -w '%{http_code}\n' http://buildbot.tail47515a.ts.net:3780/api/repos
+$ curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: elsewhere.example' http://127.0.0.1:3780/api/repos   # 403
+$ journalctl --user -u atelier-desk
+```
+
+The mission's two success criteria each have a command in `desk/live/`;
+`desk/README.md` says how to run them.
 
 ## The app
 
@@ -223,6 +335,10 @@ read at (`Repo::base_tip`, psjw). `/api/repos` gives each repository's
 | `drafts` | Count of `MissionDir` with `MissionStatus::Draft` | master |
 | `waiting` | Item count of `atelier_app::list(&entries, &missions, &caller, &Filter { needs_human: true, .. })` | master |
 | `error` | The error text when the repository does not open or a record does not read (`atelier_records::ReadError`, master); then `base` and `base_tip` are `null` and the counts `0` | Desk |
+
+Beside `repos`, `built_from` is the commit the server was built from
+(`atelier_desk::BUILT_FROM`), or `unknown`. The app shows its first nine
+characters in the sidebar's footer, with the whole ID in its title.
 
 ### `GET /api/repos/{repo}/missions`
 
