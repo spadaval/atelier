@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Fix the old tool's fallback release: 0.4.0 if it passes, else a new 0.4.1"
-updated_at: "2026-11-11T04:10:09.502660095+00:00"
+updated_at: "2026-11-11T04:22:08.898416412+00:00"
 ---
 
 ## Goal
@@ -52,6 +52,10 @@ A fallback that is good needs no file in the tree: step F's plan reads this item
 ## Unknowns
 
 - Whether 0.4.0 passes.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: 0.4.0 passes every line and is the fallback (tag v0.4.0, commit 9a83e21d). Approved by GPT-6.1 Sol in round 1 (atelier-7l29 @ 95e7b8f7), no findings. Only difference from the installed binary is the review brief wording from 74848f4c. The conditional 0.4.1 line is ticked although it did not apply, because review request refuses an unticked box. See the Report.
 
 ## Report
 
