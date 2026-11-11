@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Give a Codex subagent its own identity, show the round and the three-round rule in status, and name the pull request in the review brief"
-updated_at: "2026-11-11T03:08:00.211457711+00:00"
+updated_at: "2026-11-11T03:36:21.259803815+00:00"
 ---
 
 ## Goal
@@ -64,6 +64,10 @@ Expected size: about 150 lines of Rust outside tests, and 40 changed lines acros
 ## Unknowns
 
 - What `spawn_agent` gives its child by default, a fresh context or a fork. The real session in Done when finds out.
+
+## Notes
+
+- 2026-11-10 [note] Escalated after review round 2 at 7c77c47a: atelier-h4x4 (again as atelier-cy97) needs a scope decision, since the Done when line asks for log, which atelier-8b0a builds. atelier-yul7 is fixed and verified; atelier-s6xa is fixed at 658c783d and not yet reviewed. See the Report.
 
 ## Report
 
@@ -113,4 +117,3 @@ All ten Done when lines hold, with one deviation: `log` is not built in `next/` 
 
 - Identity inside Codex's SessionStart hook is not in this change. The hook sets none of `CODEX_THREAD_ID`, `CODEX_SESSION_ID` or `T3CODE_THREAD_ID`; Codex passes the hook a JSON object on stdin whose fields, read from the 0.167 binary's strings and not run, include `session_id`, `cwd`, `hook_event_name`, `model` and `source`. Taking an identity there needs `status` to read that stdin when run as a hook, or `setup codex` to write a command that passes `session_id` on, more than a few lines in this rule.
 - The handoff line tells a Codex caller to start with fresh context but does not name `fork_turns: "none"`; the skill (atelier-orb2) should, since the default is a fork.
-
