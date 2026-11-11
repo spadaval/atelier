@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ztuq
 title: Tidy small debrief inaccuracies from the S7 review
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -33,3 +33,7 @@ Decision atelier-mzpn held the 'Delivered after this validation' nit until valid
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The `debrief` command was deleted in 0.5.
