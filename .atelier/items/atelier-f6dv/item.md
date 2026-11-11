@@ -59,9 +59,13 @@ atelier-0019's branch holds the page (`.atelier/items/atelier-0019/item.md`, pul
 - Step 1: the run joins no mission, its Scope goes in one line, and `atelier start` runs in a worktree of the base made for the run, because in the base checkout it would switch that checkout to the run's branch.
 - `artifacts/` is named in full once, as `.atelier/items/<id>/artifacts/numbers.md` in step 2.
 - Step 2 names the worst item by comparing seconds, not minutes. Step 4 counts once a finding a later round carries, and reads a thread by its ID exactly as the log prints it.
-- Filing: step 4 now files a bug the way step 5 files a finding, instead of saying `atelier set` on the base. Step 5 says an item made on the branch gets its labels and `--caused-by` on the base after the run merges, and that a finding the run fixed is dropped with `"fixed in <commit>"`. The Fixed and Settled template line names the items waiting for the merge.
+- Filing: step 4 still files a fresh bug on the base with `atelier set`. Step 5 says an item taken from a deferred finding on the branch gets its labels and `--caused-by` on the base after the run merges, and that a finding the run fixed is dropped with `"fixed in <commit>"`. The Fixed and Settled template line names the items waiting for the merge.
 - Template: a carried measure's value and date go in the This run column, a "What means nothing yet" line follows the table, and `### Responses` sits above Session. Step 6 says Responses is not counted in the 60 lines.
 - Step 7: `atelier status` offers `atelier merge` once approved, and that merge waits for the session.
 - `readiness.md` line 4 runs every install and build command that `AGENTS.md` and the files it links name, for each thing the repository builds.
 
 To stay within 12 lines, the phrase "which the run's reviewer checks" before the Done when block was cut, and three paragraphs were reflowed.
+
+### Responses
+
+- 1-3oy0.1: fixed in 6d22f5ae0. Step 4 keeps its base route for a fresh bug, and step 5's post-merge labels apply only to items taken from deferred findings.
