@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-gobs
 title: skills/agent-factory/SKILL.md:9 and procedures/install.md:3 For a user who asked to set up Atelier, the opening says to…
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -31,3 +31,7 @@ Relationships of the old record that the new format has no field for.
 
 - parent: atelier-hu64 (Deferred review findings on atelier-nz6a)
 - discovered_from review: atelier-1yc4
+
+## Report
+
+Dropped: `procedures/install.md` was deleted when the skill was rewritten (atelier-orb2).
