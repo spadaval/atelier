@@ -52,6 +52,19 @@ class GradeTest(loop.Fixture):
         grade = self.grade()
         self.assertTrue(grade["pass"], grade["notes"])
 
+    def test_a_finding_naming_the_rounding_test_passes(self):
+        # From an atelier-t747 run, which named the new test only as "the
+        # rounding test".
+        self.review("""
+## Finding 1: The rounding test passes with the original truncating implementation
+Recommendation: fix now
+`test_pricing.py:17` asserts that 1000 cents at 10% off equals 900, an exact-cent
+result that requires no rounding; substituting the original implementation makes all
+four current tests pass.
+""", "changes")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+
     def test_a_review_written_but_not_yet_recorded_passes(self):
         self.review(CANNOT_FAIL)
         grade = self.grade()
