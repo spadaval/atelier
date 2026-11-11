@@ -22,14 +22,12 @@ line whose failure shows in no measure is cut.
 
 ## Easy to Navigate
 
-1. **Each harness loads the map and starts with `atelier status`.**
-   `AGENTS.md` exists. Where `.claude/` exists, Claude Code reads it: there
-   is no `CLAUDE.md` or `.claude/CLAUDE.md`, or that file imports
-   `@AGENTS.md`, since one that does not hides `AGENTS.md`; and
-   `.claude/settings.json` runs `atelier status` at `SessionStart`. Where
-   `.codex/` exists, `.codex/hooks.json` runs it too. Shows in: tool calls
-   before an agent's first edit; Confusion (commands run by the wrong
-   role).
+1. **Each harness loads `AGENTS.md` and starts with `atelier status`.**
+   Test: `AGENTS.md` exists. Claude Code reads it unless a `CLAUDE.md` or
+   `.claude/CLAUDE.md` exists without `@AGENTS.md` in it. Where `.claude/`
+   or `.codex/` exists, its `settings.json` or `hooks.json` runs `atelier
+   status` at `SessionStart`. Shows in: tool calls before an agent's first
+   edit; Confusion (commands run by the wrong role).
 2. **`AGENTS.md` names the commands that build, test, lint and launch the
    code agents are changing now,** or says which of them do not exist. Test:
    read it beside where the last month's work landed, `git log
@@ -55,8 +53,9 @@ line whose failure shows in no measure is cut.
 
 ## Easy to Validate
 
-6. **The tests run from one documented command and pass on the base.** Test:
-   run it in the scratch clone. Where it takes longer than ten minutes,
+6. **The tests run from one documented command and pass on the base,**
+   for each part of the code with its own tests. Test: run it in the
+   scratch clone. Where it takes longer than ten minutes,
    observe the last CI run on the base that ran the tests instead. Shows in:
    where each defect was caught; defects found after merge.
 7. **Every merge runs the checks of lines 5 and 6.** `.atelier/config.toml`
