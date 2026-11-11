@@ -48,8 +48,9 @@ line whose failure shows in no measure is cut.
 
 4. **A fresh clone builds with the documented commands alone.** Dependencies
    install from a committed lockfile, and no step the docs leave out is
-   needed. Test: in the scratch clone, run the install and build commands
-   that `AGENTS.md` names or links, in order. Shows in: time in `building`;
+   needed. Test: in the scratch clone, run every install and build command
+   that `AGENTS.md` and the files it links name, in order, for each thing
+   the repository builds. Shows in: time in `building`;
    tool calls before an agent's first edit.
 5. **Format, lint and type check run from documented commands that change
    nothing, and pass on the base,** for each language the changed code is

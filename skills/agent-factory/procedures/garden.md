@@ -7,8 +7,9 @@ changes nothing on another item's branch.
 ## 1. Open the Run
 
 On the base, `atelier new "Garden <repo>, <YYYY-MM-DD>"` and `atelier set <id>
---labels garden`. In the item, give the window's start (step 2) in the Goal,
-and write these Done when lines, which the run's reviewer checks:
+--labels garden`; the run joins no mission. In the item, give the window's
+start (step 2) in the Goal, its Scope in a line (steps 1 to 7 up to the
+approval, not the session or merge), and these Done when lines:
 
 ```markdown
 - [ ] The numbers follow garden.md's steps, and `artifacts/numbers.md` holds the log lines behind them.
@@ -19,7 +20,9 @@ and write these Done when lines, which the run's reviewer checks:
 ```
 
 Commit the draft with `git commit`, then `atelier ready <id> --by "<who asked
-for the run>"`, `git push`, and `atelier start <id>`.
+for the run>"` and `git push`. Run `atelier start <id>` in a worktree of the
+base made for the run, never in the checkout that has the base, which `start`
+would switch to the run's branch.
 
 ## 2. Take the Numbers
 
@@ -33,7 +36,8 @@ number. Log times compare as text.
 **The items.** An item is the run's when its `merge` line is after the start
 and at or before the end: `atelier log | awk -v s=<start> -v e=<end> '$4 ==
 "merge" && $1 > s && $1 <= e {print $3}'`. For each, read all of `atelier log
-<id>`, its lines before the window too, and copy them into `numbers.md`.
+<id>`, its lines before the window too, and copy them into
+`.atelier/items/<id>/artifacts/numbers.md`.
 
 - **Time in each status.** A line holding `<from> -> <to>` puts the item in
   `<to>` at its time, until the next such line. Sum the seconds in `ready`
@@ -47,8 +51,8 @@ and at or before the end: `atelier log | awk -v s=<start> -v e=<end> '$4 ==
 
 Across the items, give each status's time and the rounds as a median, the
 mean of the middle two when the count is even, and take-overs, escalations
-and each rule's skips as a total. Name the item with the most beside each;
-on a tie, the one merged first.
+and each rule's skips as a total. Name the item with the most beside each,
+comparing seconds, not minutes; on a tie, the one merged first.
 
 From `atelier list`, count open items by status (`atelier list | grep -oE '^
 +[^ ]+ \([a-z_]+' | awk '{print $2}' | sort | uniq -c`), blocked items
@@ -80,17 +84,17 @@ not met or could not test in `artifacts/checklist.md`.
 
 ## 4. Read for Causes
 
-Read the window's fix-now findings, escalations and skips, the base's failed
-CI runs, and the code against its docs: a doc the code contradicts, and
-half-finished work, such as old and new paths with no clear boundary, a
-migration that reached only some call sites, tests that keep a stale
-assumption, or a done item's cleanup with no owner.
+Read the window's fix-now findings, counting once one a later round carries,
+escalations and skips, the base's failed CI runs, and the code against its
+docs: a doc the code contradicts, and half-finished work, such as old and new
+paths with no clear boundary, a migration that reached only some call sites,
+tests that keep a stale assumption, or a done item's cleanup with no owner.
 
-Read transcripts last. Read a thread only to explain a number that moved
-since the last page, or an item named worst beside one, naming the thread by
-the ID its log line gives; under T3 Code, read it with the thread-read tool. For
-navigation, read at most three implementer threads, those of the items
-longest in `building`, up to their first edit, and list the files each read.
+Read transcripts last. Read a thread only to explain a number that moved since
+the last page, or an item named worst beside one, by its ID exactly as the log
+prints it; under T3 Code, with the thread-read tool. For navigation, read at
+most three implementer threads, those of the items longest in `building`, up
+to their first edit, and list the files each read.
 
 A trip is where an agent went wrong or wasted effort: a misread refusal, a
 rule worked around, a retry loop, a mistake review keeps catching. Group the
@@ -126,11 +130,14 @@ restructure, or any change to what the product does is a proposal.
 
 Settle each finding `atelier list --deferred` shows, on the branch: `atelier
 new "<title>" --from <finding>` to take it into an item, or `atelier drop
-<finding> --reason "<why>"`.
+<finding> --reason "<why>"`, with `"fixed in <commit>"` for one the run fixed.
+`atelier set` runs only on the base, so an item taken this way gets its
+labels and `--caused-by` there after the run merges.
 
 ## 6. Write the Page
 
-The page is the run item's `## Report`, at most 60 lines, in this layout.
+The page is the run item's `## Report`, at most 60 lines, in this layout, not
+counting `### Responses`, which `atelier submit` needs after a review.
 Workings go in `artifacts/`, and the page names the file.
 
 ```markdown
@@ -141,7 +148,9 @@ Window: <start> to <end> UTC, <n> items merged. Workings: `artifacts/numbers.md`
 | Waiting to start, building, in review, changes requested, approved: median minutes (worst) | | | |
 | Rounds: median (worst); take-overs; escalations; skips by rule | | | |
 | Open items by status; blocked; unsettled deferred findings | | | |
-| <each carried measure>, measured <date> | | | |
+| <each carried measure> | <value>, measured <date> | | |
+
+What means nothing yet: <which numbers, and why>.
 
 Checklist: <n> met, <n> not met (<lines>), <n> could not test.
 
@@ -156,7 +165,9 @@ Cause: <one root cause>. Evidence: <trip or number>, <how often>; ...
 Moves: <the number>. Change: <what to do>. Considered removing: <rule or check>.
 
 ### Fixed and Settled
-- <commit>: <upkeep or sign>. <finding>: taken into <item>, or dropped: <why>.
+- <commit>: <upkeep or sign>. <finding>: taken into <item>, or dropped: <why>. Items waiting for the merge to get labels and a cause: <items>.
+
+### Responses
 
 ### Session
 ```
@@ -168,9 +179,10 @@ per trip.
 ## 7. Submit and Hold the Session
 
 Run `atelier submit` and start the reviewer it prints. Once approved, the run
-waits for Sumeet, and `atelier status` shows since when. The session is with
-him, in whichever thread he talks to; a new thread takes the run over with
-`atelier start <id>`. Under Session write, for each proposal, what he agreed,
-changed or declined. File each agreed one as an item on the base, commit it
-and push. Editing the Report keeps the approval; any other change needs
-`atelier submit` again. Then run `atelier merge`.
+waits for Sumeet; `atelier status` shows since when, and the `atelier merge`
+it offers waits for the session. The session is with him, in whichever thread
+he talks to; a new thread takes the run over with `atelier start <id>`. Under
+Session write, for each proposal, what he agreed, changed or declined. File
+each agreed one as an item on the base, commit it and push. Editing the Report
+keeps the approval; any other change needs `atelier submit` again. Then run
+`atelier merge`.

@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f6dv
 title: Fix what atelier's first gardener run showed wrong or unclear in `garden.md` and `readiness.md`
-status: ready
+status: done
 mission: atelier-295u
 labels:
 - redesign
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3A932c2504-ac02-42e4-95a0-bbe6ecd5863b
 ready:
   by: sumeet, relayed by the task that started the lead
   at: 2026-11-11T18:14:51.208602129Z
@@ -26,15 +27,15 @@ Make the gardener's procedure say what atelier's first run, atelier-0019, had to
 
 Each line is a change of a sentence or less in `skills/agent-factory/procedures/garden.md`, unless it names `readiness.md`.
 
-- [ ] Step 1 says the run joins no mission, gives its Scope in a line, and says to run `atelier start <id>` in a worktree made for the run, not in the checkout that has the base.
-- [ ] `artifacts/` is named once in full, as `.atelier/items/<id>/artifacts/`.
-- [ ] Step 2 says the worst item is found by comparing seconds, and step 4 that a finding a later round carries is counted once.
-- [ ] Step 4 says a thread is read by its ID exactly as the log prints it.
-- [ ] Steps 4 and 5 no longer contradict each other on filing: an item made with `atelier new --from` on the run's branch gets its labels and `--caused-by` on the base after the run merges, and Fixed and Settled says which items wait for that. A finding the run itself fixed is settled with `atelier drop --reason "fixed in <commit>"`.
-- [ ] The template has a line for which numbers are not yet meaningful and why, and says a carried measure's value goes in the This run column with its date. `### Responses`, which `atelier submit` needs in the Report after a review, goes above Session and is not counted in the 60 lines.
-- [ ] Step 7 says `atelier status` offers `atelier merge` once the run is approved, and that the gardener does not run it before the session.
-- [ ] `readiness.md` line 4 says every install and build command in `AGENTS.md` and the files it links is run, for each thing the repository builds. The first run missed the Desk server's build, which named a deleted directory, and its reviewer caught it.
-- [ ] `garden.md` grows by at most 12 lines (it is 176), and the Report gives the count.
+- [x] Step 1 says the run joins no mission, gives its Scope in a line, and says to run `atelier start <id>` in a worktree made for the run, not in the checkout that has the base.
+- [x] `artifacts/` is named once in full, as `.atelier/items/<id>/artifacts/`.
+- [x] Step 2 says the worst item is found by comparing seconds, and step 4 that a finding a later round carries is counted once.
+- [x] Step 4 says a thread is read by its ID exactly as the log prints it.
+- [x] Steps 4 and 5 no longer contradict each other on filing: an item made with `atelier new --from` on the run's branch gets its labels and `--caused-by` on the base after the run merges, and Fixed and Settled says which items wait for that. A finding the run itself fixed is settled with `atelier drop --reason "fixed in <commit>"`.
+- [x] The template has a line for which numbers are not yet meaningful and why, and says a carried measure's value goes in the This run column with its date. `### Responses`, which `atelier submit` needs in the Report after a review, goes above Session and is not counted in the 60 lines.
+- [x] Step 7 says `atelier status` offers `atelier merge` once the run is approved, and that the gardener does not run it before the session.
+- [x] `readiness.md` line 4 says every install and build command in `AGENTS.md` and the files it links is run, for each thing the repository builds. The first run missed the Desk server's build, which named a deleted directory, and its reviewer caught it.
+- [x] `garden.md` grows by at most 12 lines (it is 176), and the Report gives the count.
 
 ## Scope
 
@@ -50,3 +51,21 @@ Out, and a review finding that asks for one of these is escalated, not fixed:
 ## Context
 
 atelier-0019's branch holds the page (`.atelier/items/atelier-0019/item.md`, pull request 148). Its gardener's full list is in the result of atelier-613a once that closes; the lines above are the ones this item takes. Mission: `.atelier/missions/atelier-295u/`, and atelier-613a's Done when asks for this item before the other four runs start.
+
+## Report
+
+`garden.md` went from 176 to 188 lines, the 12 allowed; `readiness.md` line 4 grew by one line. Commit 4f4788304.
+
+- Step 1: the run joins no mission, its Scope goes in one line, and `atelier start` runs in a worktree of the base made for the run, because in the base checkout it would switch that checkout to the run's branch.
+- `artifacts/` is named in full once, as `.atelier/items/<id>/artifacts/numbers.md` in step 2.
+- Step 2 names the worst item by comparing seconds, not minutes. Step 4 counts once a finding a later round carries, and reads a thread by its ID exactly as the log prints it.
+- Filing: step 4 still files a fresh bug on the base with `atelier set`. Step 5 says an item taken from a deferred finding on the branch gets its labels and `--caused-by` on the base after the run merges, and that a finding the run fixed is dropped with `"fixed in <commit>"`. The Fixed and Settled template line names the items waiting for the merge.
+- Template: a carried measure's value and date go in the This run column, a "What means nothing yet" line follows the table, and `### Responses` sits above Session. Step 6 says Responses is not counted in the 60 lines.
+- Step 7: `atelier status` offers `atelier merge` once approved, and that merge waits for the session.
+- `readiness.md` line 4 runs every install and build command that `AGENTS.md` and the files it links name, for each thing the repository builds.
+
+To stay within 12 lines, the phrase "which the run's reviewer checks" before the Done when block was cut, and three paragraphs were reflowed.
+
+### Responses
+
+- 1-3oy0.1: fixed in 6d22f5ae0. Step 4 keeps its base route for a fresh bug, and step 5's post-merge labels apply only to items taken from deferred findings.
