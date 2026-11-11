@@ -9,6 +9,8 @@ relationships:
   blocks: []
   children:
   - kind: "issue"
+    id: "atelier-lkf5"
+  - kind: "issue"
     id: "atelier-m2v1"
   attachments: []
   relates:
@@ -19,7 +21,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Deferred review findings on atelier-8myy"
-updated_at: "2026-11-11T02:04:16.772227807+00:00"
+updated_at: "2026-11-11T02:11:58.222172144+00:00"
 ---
 
 ## Goal

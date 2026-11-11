@@ -10,6 +10,13 @@ created_at: 2026-11-11T02:11:10.240688629Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: defer
+    identity: claude-opus-5-5
+    commit: 0495fc0340547af068f0e9718295d5eade31af1a
+    recorded_at: 2026-11-11T02:11:58.221236410Z
+    follow_up: atelier-lkf5
+    reason: Deferred to backlog follow-up atelier-lkf5 under atelier-dd3a.
 ---
 
 R6 low: next/crates/atelier-cli/src/plan.rs:344 The exclusion warning misses an item whose mission membership exists only in the index. Reproduced in a scratch repository: commit mission demo-m1ss and draft demo-ab12 with mission: null; change the item to mission: demo-m1ss and git add it; restore its working file to mission: null without resetting the index; review demo-m1ss exits 0 with no exclusion line although git diff --cached shows the staged assignment. changed_since now finds the staged path, but in_plan checks membership only in the working file and reviewed commit, so filters it out. The committed brief and recorded commit remain correct; only the warning is incomplete. Include staged membership when classifying changed item directories and cover this index-only assignment. DEFER under the review procedure rule that a new finding on the fix of a low-severity finding is deferred unless trivial or a regression introduced by that fix: this extends R4 (atelier-o94f), is not a regression from adding cached paths, and snapshot safety holds. No fix_now recommendation.
