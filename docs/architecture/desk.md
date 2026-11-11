@@ -153,6 +153,7 @@ repositories is the loose end atelier-qxmr. Everything it needs is in
 | `t3` | `~/.local/share/atelier-desk/t3` | The `[t3] command`: runs the `t3` of the T3 Code version that is running |
 | `install.sh` | | Builds, installs or updates, restarts and checks the service |
 | `make-clones.sh` | | Makes or refreshes the converted clones |
+| `make-clones.test.sh` | | Checks that `make-clones.sh` refuses a path inside a source repository before writing |
 | (written by `install.sh` once) | `~/.config/atelier-desk/config.toml` | The configuration |
 | (the release build) | `~/.local/share/atelier-desk/atelier-desk` | The server |
 | (`desk/dist`) | `~/.local/share/atelier-desk/app/` | The built app |
@@ -206,8 +207,10 @@ $ desk/service/install.sh --caller sumeet
 `main`, cosplay-studio `main`), disables pushes, converts the records with
 `scripts/cutover/convert_records.py`, commits and verifies the conversion,
 and runs the new `atelier check`, printing one line per step. It only reads
-the repositories under `~/projects/`, and moves a clone into place only
-when every step passed. `install.sh` builds `atelier-desk` (release, `-j
+the repositories under `~/projects/`: before its first write it refuses a
+clones path that, with symbolic links resolved, lies inside `~/projects/`
+or a source repository. It moves a clone into place only when every step
+passed. `install.sh` builds `atelier-desk` (release, `-j
 4`, under a minute on this host) and the app, copies them and the wrapper
 into `~/.local/share/atelier-desk/`, writes the configuration, installs and
 enables the unit, restarts it, and fails unless the server answers on
