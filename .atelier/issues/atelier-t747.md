@@ -32,7 +32,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Run the skill against no skill on Claude Opus and Codex, and cut what no scenario supports"
-updated_at: "2026-11-11T07:36:45.907561915+00:00"
+updated_at: "2026-11-11T09:56:44.316437748+00:00"
 ---
 
 ## Goal
@@ -75,6 +75,10 @@ Expected: 60 no-skill runs, 18 entry runs with the skill, and up to 42 more. The
 ## Unknowns
 
 - Whether three runs per cell separate the arms anywhere. If they do nowhere, the skill is its fixed and entry text and the three carried procedures, and that is the result.
+
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by GPT-6.1 Sol independent reviewer (atelier-offv) at 742ad9d5 in round 1, no findings. Outcome and proof are in this item's Report and evals/agent-factory/results/2026-11-11-next-skill.md. Open for the orchestrator: the Codex max_threads gap (peak 3), two binary gaps (check accepts a hand-written status: done; the handoff does not tell Codex to start a subagent without asking), and groom.md pointing at cut planner text.
 
 ## Report
 
