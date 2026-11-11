@@ -203,47 +203,65 @@ struct Judged {
     uncommitted: Dirt,
 }
 
-/// What the checkout holds that no commit does, as `merge` read it: the
-/// paths, their index entries, and each file's mode and contents, so that a
-/// change to a file a skip let stay uncommitted is seen as a move.
+/// What a checkout holds that no commit does, as `merge` read it: its
+/// HEAD, the paths, their index entries, and each one as it is there, so
+/// that a change to what a skip let stay uncommitted is seen as a move.
 #[derive(PartialEq)]
 struct Dirt {
+    head: String,
     paths: Vec<String>,
     index: String,
-    files: Vec<Option<(u32, Vec<u8>)>>,
+    entries: Vec<Entry>,
+}
+
+#[derive(PartialEq)]
+enum Entry {
+    Gone,
+    /// A file's mode and contents; a symbolic link's are its target.
+    File(u32, Vec<u8>),
+    /// A directory, which is a submodule, read as a checkout of its own.
+    Submodule(Dirt),
 }
 
 impl Dirt {
-    fn read(repo: &Repo, id: &str) -> Result<Dirt> {
+    /// The checkout at `root`, whose `paths` hold what no commit does.
+    fn read(root: &Path, paths: Vec<String>) -> Result<Dirt> {
         use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::MetadataExt;
-        let paths = repo.uncommitted(id)?;
         let mut args = vec!["ls-files", "--stage", "-z", "--"];
         args.extend(paths.iter().map(String::as_str));
         // With no path, ls-files would list the whole index.
         let index = match paths.is_empty() {
             true => String::new(),
-            false => git::run(&repo.root, &args)?,
+            false => git::run(root, &args)?,
         };
-        // A symbolic link is its target; a file gone is `None`.
-        let file = |path: &String| -> Result<Option<(u32, Vec<u8>)>> {
-            let path = repo.root.join(path);
+        let entry = |path: &String| -> Result<Entry> {
+            let path = root.join(path);
             let meta = match std::fs::symlink_metadata(&path) {
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(Entry::Gone)
+                }
                 meta => meta?,
             };
-            let bytes = match meta.file_type() {
-                kind if kind.is_symlink() => std::fs::read_link(&path)?.into_os_string().into_vec(),
-                kind if kind.is_dir() => Vec::new(),
-                _ => std::fs::read(&path)?,
-            };
-            Ok(Some((meta.mode(), bytes)))
+            let kind = meta.file_type();
+            Ok(if kind.is_symlink() {
+                Entry::File(
+                    meta.mode(),
+                    std::fs::read_link(&path)?.into_os_string().into_vec(),
+                )
+            } else if kind.is_dir() {
+                let mut paths = git::uncommitted(&path)?;
+                paths.extend(git::untracked(&path, ".")?);
+                Entry::Submodule(Dirt::read(&path, paths)?)
+            } else {
+                Entry::File(meta.mode(), std::fs::read(&path)?)
+            })
         };
-        let files = paths.iter().map(file).collect::<Result<_>>()?;
         Ok(Dirt {
+            head: git::head(root)?,
+            entries: paths.iter().map(entry).collect::<Result<_>>()?,
             paths,
             index,
-            files,
         })
     }
 }
@@ -295,7 +313,7 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     let title = record.item.title.clone();
     let merged = record.item.status == Status::Done
         && located.branch.as_ref().is_some_and(|branch| branch.merged);
-    let uncommitted = Dirt::read(repo, &id)?;
+    let uncommitted = Dirt::read(&repo.root, repo.uncommitted(&id)?)?;
     if !merged {
         let checkout = repo.checkout(record, &head)?;
         let facts = facts(repo, &located, &links, Some(&checkout));
@@ -543,7 +561,9 @@ fn moved(
         Ok(git::current_branch(path)?.as_deref() == Some(branch) && git::head(path)? == tip)
     };
     // What a skip let the checkout keep uncommitted stays as it was read.
-    if !unchanged(root, branch, head)? || Dirt::read(repo, branch)? != *uncommitted {
+    if !unchanged(root, branch, head)?
+        || Dirt::read(root, repo.uncommitted(branch)?)? != *uncommitted
+    {
         return Ok(Some(Moved::Checkout(root.clone())));
     }
     let now = git::checkout_of(root, &repo.base)?;

@@ -1879,6 +1879,39 @@ fn with_a_skip_a_conflict_or_an_input_that_moves_still_stops_the_merge() {
     std::os::unix::fs::symlink("missing-b", root.join("link")).unwrap();
     moved_checkout(&root, waiting.finish());
     assert_eq!(head(&root, "main"), tip);
+
+    // A submodule at a commit not committed, which moves to another.
+    let subs = Scratch::new(&[]);
+    let sub = subs.dir.path().join("sub");
+    git(&sub, &["init", "-q", "-b", "main"]);
+    for n in ["a", "b", "c"] {
+        fs::write(sub.join("n.txt"), n).unwrap();
+        git(&sub, &["add", "-A"]);
+        git(&sub, &["commit", "-qm", n]);
+    }
+    let url = sub.to_str().unwrap().to_string();
+    let scratch = approved_with(&waiting_check(), move |root| {
+        let add = [
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "-q",
+            &url,
+            "sub",
+        ];
+        git(root, &add);
+        git(&root.join("sub"), &["checkout", "-q", "HEAD~2"]);
+    });
+    let root = scratch.root();
+    git(&root.join("sub"), &["checkout", "-q", "main~1"]);
+    let tip = head(&root, "main");
+    let mut command = atelier_command(&root, "t1", &["merge"]);
+    command.env("ATELIER_SKIP", REASON);
+    let waiting = Waiting::spawn(command, scratch.dir.path(), "merge");
+    git(&root.join("sub"), &["checkout", "-q", "main"]);
+    moved_checkout(&root, waiting.finish());
+    assert_eq!(head(&root, "main"), tip);
 }
 
 /// `run` wrote nothing, because the checkout at `root` changed.
