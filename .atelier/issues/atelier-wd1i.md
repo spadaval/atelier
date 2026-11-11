@@ -41,7 +41,7 @@ Make the change of tool once, on this host, by running the reviewed runbook.
 
 ## Done when
 
-- [ ] Provisional: `scripts/cutover/cutover.sh` ran to its end on this host: all five repositories are converted and pushed, `atelier check` passes in each under the installed new binary, and the site answers for each. This item was closed with `atelier close`, the first act the new tool recorded.
+- [ ] Provisional: `scripts/cutover/cutover.sh` ran to its end on this host: all five repositories are converted and pushed, `atelier check` passes in each under the installed new binary, and the `atelier-serve` service is stopped and disabled, since the new binary has no `serve`. This item was closed with `atelier close`, the first act the new tool recorded.
 
 ## Context
 
