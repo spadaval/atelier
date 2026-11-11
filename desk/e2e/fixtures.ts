@@ -109,6 +109,7 @@ export const z4cr: MissionPage = {
   items: z4crItems,
   threads: [],
   t3,
+  pending_answers: [],
   questions: [
     { item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null },
     { item: "atelier-1ie1", question: "Is the history of acts in this mission?", finding: null, answer: { by: "sumeet", text: "No: it waits for M5." }, outcome: "defer" },
@@ -190,6 +191,7 @@ for (const [id, title, status, items, more] of otherMissions) {
     t3,
     questions: [],
     plan_reviews: [],
+    pending_answers: [],
   };
 }
 
@@ -225,6 +227,9 @@ function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
     unsettled: [],
     threads: [],
     t3,
+    can_decide: false,
+    decide_at: null,
+    pending_answers: [],
     ...more,
   };
 }
