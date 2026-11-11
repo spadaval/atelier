@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: amended at Sumeet's direction: the mission may change the tracker, so the Desk calls the core's own act functions and `ready` commits its own write (item atelier-psjw)"
+last_changed: "2026-11-11: amended at Sumeet's direction: the mission may change the tracker, so the Desk calls the core's own act functions and `ready` commits its own write (item atelier-psjw, which the cutover's orchestrator implements before the switch)"
 ---
 
 # Why
@@ -40,10 +40,12 @@ command calls, under his name, and saying go ends in one commit that
   --needs-human` there. Shown by a validation item filed with the last
   increment. It does not need the cutover to have run.
 - act-is-a-record: in a converted scratch clone, saying go on a draft
-  mission from its page leaves the same commit, by tree and message, as the
-  new `atelier ready <mission> --by <name>` run in a second clone of the
-  same commit, and the page then shows the mission ready. Shown by a test
-  in the Desk's suite.
+  mission from its page leaves one new commit with the same message and
+  the same changed paths as the new `atelier ready <mission> --by <name>`
+  run in a second clone of the same commit, and the two records are equal
+  once the time `ready` records is set aside, since the two runs happen at
+  different moments. The page then shows the mission ready. Shown by a
+  test in the Desk's suite.
 
 # Sizing
 
@@ -134,6 +136,10 @@ crate depends on it, and a test in the workspace fails if one does.
    The server finds the checkout from `git worktree list`. If no checkout
    has the branch out, it refuses and says so. It never makes a scratch
    worktree or moves a ref. A refusal is shown with its text and next step.
+   A caller's identity is an opaque string: a Codex subagent's has a slash
+   in it (atelier-1oel), so the Desk never splits one or uses one as a
+   path. Any thread independent of an item may `decide` it (atelier-t6o6),
+   so the human answering from the Desk needs no special standing.
 4. **Sessions.** Starting a planning session calls `t3_thread_launch` with a
    second token that may operate, the repository's T3 project, and a first
    message naming the mission. The page then links to the thread.
@@ -236,11 +242,15 @@ running, or change the specifications' Words, Lifecycle or Review sections.
 - **An act needs a checkout.** `ready` needs some checkout with the base
   out, and `decide` one with the item's branch out. Where none exists the
   Desk refuses and names the command to run by hand.
-- **The tracker change meets the cutover.** Item atelier-psjw edits code the
-  switch moves. It is done by the cutover's orchestrator before the switch,
-  or by this mission after this host's cutover; which is settled with the
-  thread that runs the redesign. Until it lands, the increment that adds
-  acts cannot start, and the reading pages are not held up.
+- **The tracker change meets the cutover.** Item atelier-psjw edits code
+  the switch moves. Settled with the redesign's planner on 2026-11-11: the
+  cutover's orchestrator plans and implements it, after atelier-1oel and
+  before the switch branch is cut, and this mission's orchestrator does not
+  start or edit it. If it is not approved when the rest of the cutover's
+  preparation is done, it does not hold the switch: it waits until after
+  atelier-wd1i and this mission takes it then. Until it lands, the
+  increment that adds acts cannot start, and the reading pages are not
+  held up.
 - **No sign-in.** Anyone on the tailnet can act as Sumeet. Accepted for one
   user on a private tailnet; a second user needs a decision first.
 - **Whether T3 Code's thread links open on the phone** is the one question
