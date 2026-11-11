@@ -912,7 +912,8 @@ rule names.
   changes it; and a pushed commit that brings code to the base, or sets an
   item done, outside an Atelier merge. Changes the uncommitted-changes rule
   let stay are left in the checkout, and `merge` confirms them unchanged,
-  index entries, modes and contents, with its other inputs.
+  index entries, modes and contents, and a submodule's commit and its own
+  uncommitted changes, with its other inputs.
 - **Not rules:** a record that does not read; an ID, a mission or a finding
   that does not exist, and a finding settled already; a missing or
   malformed argument; a command run where it has nothing to act on: off the
