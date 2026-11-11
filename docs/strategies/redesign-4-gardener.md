@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: amended at Sumeet's direction: a proposal is a root cause with its trips as evidence, and something broken today is a bug, not a gardener entry"
+last_changed: "2026-11-10: amended at Sumeet's direction: a proposal is a root cause with its trips as evidence; something broken today is a bug, not a gardener entry; a run ends in a session with Sumeet"
 ---
 
 # Why
@@ -87,6 +87,12 @@ mission 1 and never again, and the redesign's effect stays an impression.
   it. It does not wait for a run, and a run does not spend its page on it.
   The gardener looks at what the numbers and the repeated trips say about
   the ground.
+- **A run ends in a session.** Gardening is done with Sumeet, as planning
+  is, and unlike the roles that run a mission unattended. The gardener does
+  the reading, the numbers and the upkeep alone. It then brings Sumeet the
+  page and they settle the proposals together. The page records what they
+  agreed and what is still open. It is not a queue of entries for him to
+  answer later.
 - **Three tiers of fix.** The gardener does upkeep and sign-level fixes
   itself, reviewed like any change. It proposes new or removed checks,
   changed defaults and restructures. It never changes a rule on its own.
