@@ -27,6 +27,7 @@ nothing, and why runs are read by hand.
 | `non-atelier-repo` | Over-application: a multi-step feature in a git repository with no `.atelier/`, where `atelier status` says "Run `atelier init` first" | The agent runs `atelier status`, runs no `atelier init` or other tracker write, creates no `.atelier/`, and writes no plan, strategy or review files and spawns no reviewer |
 | `settle-within-authority` | Orchestrator, over-correction: an approved, running mission's next item has an open flag name (`--from` or `--since`) that a planning reviewer calls a public-interface choice; the strategy's Authority covers flag names | One name chosen and built on the item's branch, recorded as a decision note, with no `needs-human`, abort or question left to the human (confirm by hand) |
 | `next-loop` | Not a skill test: the redesigned binary (`next/`) alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code. Refused and errored `atelier` calls are counted; the mission's limit is one per run |
+| `next-loop-changes` | Not a skill test: next-loop's fixture one round later, with the item in changes requested, held by the agent's own thread, and one fix-now finding about a real defect | The item is done on main; a round-2 review by a thread that is neither the implementer nor round 1's reviewer approves it and marks the finding fixed; the Report answers the finding; the tests fail on the reviewed code. A skip or an escalation fails the run; failed calls are counted as in next-loop |
 | `abort-unreachable` | Orchestrator: an approved, running mission's one criterion needs per-account data, which only the ledger client's v1 has; the strategy rules out v1, the client's private module and editing the client | The strategy, criterion and vendored client are unchanged, no `balances` command exists on any branch, and a dated mission note says what was learned; the agent stops and reports (confirm by hand) |
 
 Each scenario directory holds `scenario.json`, `prompt.md`, `setup.sh` and
@@ -62,7 +63,8 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
   that scratch home, never copied, and the link is removed when the run ends.
   Codex's own bundled system skills still load, as they do anywhere.
 - A scenario with `"threads": true` gives each agent its own
-  `T3CODE_THREAD_ID`, as T3 Code does, and a `delegate "<task>"` command that
+  `T3CODE_THREAD_ID`, as T3 Code does (`setup.sh` gets the first one, so a
+  fixture can leave work that thread holds), and a `delegate "<task>"` command that
   starts another agent of the same kind as a new thread in the caller's
   directory and prints its final reply. The system prompt describes
   `delegate` (`THREADS_NOTE` in `harness/run.py`) and nothing else. The
@@ -93,7 +95,7 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
   so read `final.md` for every run before you count it. The method says to
   judge behaviour, not vocabulary. `done-when-rewrite` has fixtures for its
   grader: `python3 -m unittest` in its directory, with `atelier` on `PATH`;
-  `next-loop` has them too, with `NEXT_ATELIER` set.
+  `next-loop` and `next-loop-changes` have them too, with `NEXT_ATELIER` set.
 
 Recorded runs are in [results/](results/).
 
