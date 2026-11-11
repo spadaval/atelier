@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-sl01
 title: Say a transition needing an argument the same way when it runs and when it is shown
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -28,3 +28,7 @@ Mission atelier-o3lm validation (evidence atelier-ba8q) found two wording gaps:
 - [ ] A transition run without its required argument refuses with wording that matches "allowed, needs --reason" (for example "needs --reason") and one recovery step.
 - [ ] The doc sentence says exactly when the report is printed.
 - [ ] Tests cover both.
+
+## Report
+
+Dropped: Transitions were removed in 0.5.
