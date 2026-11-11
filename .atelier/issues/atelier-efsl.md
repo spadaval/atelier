@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Show only startable items under Ready to start, and have `merge` say its checks ran: two fumbles the rehearsal found"
-updated_at: "2026-11-11T01:00:18.872210913+00:00"
+updated_at: "2026-11-11T01:14:42.554880783+00:00"
 ---
 
 ## Goal
@@ -48,6 +48,10 @@ What `status` on the base and a successful `merge` print, in `next/`. No flag, n
 ## Context
 
 The rehearsal's Report (`atelier issue show atelier-nafc --full`) has both findings. The base's `status` is built in `atelier-app`'s `view.rs` and printed from `atelier-cli`'s `output.rs`; `start`'s conditions are in the act table, `atelier-app`'s `acts.rs`, which is what decides whether an item can start. `merge` is `atelier-cli`'s `merge.rs`. Behaviour: `docs/strategies/redesign-product.md`, Commands ("What `status` prints") and Merge.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by gpt-6.1-sol (atelier-37rs) at 06dd907f in one review round, no findings; not merged, the orchestrator merges. Proof and transcripts are in the Report.
 
 ## Report
 
