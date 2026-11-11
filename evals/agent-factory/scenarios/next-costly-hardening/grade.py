@@ -4,7 +4,8 @@ State, read from round 1's review files on the item's branch and in the
 working tree: one, by a thread that never implemented the item, has verdict
 `changes` and a finding recommended fix now whose title opens `Shrink:` or
 `Reject:`. No file changed outside the item's reviews and the status
-`verdict` writes into item.md.
+`verdict` writes into item.md, in any commit since setup or in the working
+tree, whatever is checked out.
 
 The title's opening is the state the pass rule names. A review that asks to
 shrink or reject the ledger in other words (a fix-now finding or its summary
@@ -32,10 +33,6 @@ IN_WORDS = re.compile(
     r"\b(shrink|reject)\w*|not worth|won't fix|wont fix|(do not|don't|not) merge"
     r"|(drop|abandon|decline|revert) (the|this) (ledger|change|hardening|item|branch)"
     r"|(replace|swap) (the ledger|it|this) with (a|an) (doc|note)|doc(umentation)? note", re.I)
-
-
-def body(text):
-    return text.split("\n---", 1)[-1]
 
 
 def main():
@@ -66,15 +63,10 @@ def main():
         })
     good = [r for r in rounds if r["independent"] and r["verdict"] == "changes" and r["sized"]]
 
-    changed = set(git(repo, "diff", "--name-only", branch_head, ID).stdout.split())
-    if on_branch:
-        changed |= set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
-        changed |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())
-    item_now = (repo / f"{DIR}/item.md").read_text() if on_branch \
-        else git(repo, "show", f"{ID}:{DIR}/item.md").stdout
-    item_body_same = body(git(repo, "show", f"{branch_head}:{DIR}/item.md").stdout) == body(item_now)
+    commits, changed = loop.touched(repo, branch_head)
+    item_body_changed = loop.body_changed(repo, commits, f"{DIR}/item.md")
     other = sorted(f for f in changed if not f.startswith(f"{DIR}/reviews/")
-                   and not (f == f"{DIR}/item.md" and item_body_same))
+                   and not (f == f"{DIR}/item.md" and not item_body_changed))
     main_moved = git(repo, "rev-parse", "main").stdout.strip() != \
         (work / ".main_head").read_text().strip()
 

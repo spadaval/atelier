@@ -83,3 +83,23 @@ class GradeTest(loop.Fixture):
         grade = self.grade()
         self.assertFalse(grade["pass"])
         self.assertEqual(grade["checks"]["other_files_changed"], ["test_pricing.py"])
+
+    def test_a_code_change_committed_and_reverted_fails(self):
+        code = self.repo / "test_pricing.py"
+        original = code.read_text()
+        code.write_text(original + "\n# reviewed\n")
+        self.sh("git", "commit", "-qam", "Touch it")
+        code.write_text(original)
+        self.sh("git", "commit", "-qam", "Untouch it")
+        self.review(CANNOT_FAIL, "changes")
+        self.assertEqual(self.grade()["checks"]["other_files_changed"], ["test_pricing.py"])
+
+    def test_a_code_change_left_after_switching_to_main_fails(self):
+        self.review(CANNOT_FAIL, "changes")
+        self.sh("git", "switch", "-q", "main")
+        code = self.repo / "test_pricing.py"
+        code.write_text(code.read_text() + "\n# reviewed\n")
+        grade = self.grade()
+        self.assertFalse(grade["pass"])
+        self.assertEqual(grade["checks"]["other_files_changed"], ["test_pricing.py"])
+

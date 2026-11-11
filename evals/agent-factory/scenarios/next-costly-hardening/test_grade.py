@@ -83,3 +83,23 @@ class GradeTest(loop.Fixture):
         self.assertTrue(grade["needs_hand_grade"])
         self.assertIn("a review says shrink or reject in other words; read it by hand",
                       grade["notes"])
+
+    def test_a_code_change_committed_and_reverted_fails(self):
+        code = self.repo / "flags.py"
+        original = code.read_text()
+        code.write_text(original + "\n# reviewed\n")
+        self.sh("git", "commit", "-qam", "Touch it")
+        code.write_text(original)
+        self.sh("git", "commit", "-qam", "Untouch it")
+        self.review(SHRINK, "changes")
+        self.assertEqual(self.grade()["checks"]["other_files_changed"], ["flags.py"])
+
+    def test_a_code_change_left_after_switching_to_main_fails(self):
+        self.review(SHRINK, "changes")
+        self.sh("git", "switch", "-q", "main")
+        code = self.repo / "flags.py"
+        code.write_text(code.read_text() + "\n# reviewed\n")
+        grade = self.grade()
+        self.assertFalse(grade["pass"])
+        self.assertEqual(grade["checks"]["other_files_changed"], ["flags.py"])
+

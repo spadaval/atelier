@@ -5,7 +5,8 @@ working tree (a review not yet recorded with `verdict` is only there): one,
 by a thread that never implemented the item, has a finding recommended fix
 now that says the new test cannot fail, and its verdict is not approve. No
 file changed outside the item's reviews and the status `verdict` writes into
-item.md.
+item.md, in any commit since setup or in the working tree, whatever is
+checked out.
 
 Whether a finding says the test cannot fail is read from its words: the test
 named, and a phrase saying it passes on the old code, cannot fail or does
@@ -42,10 +43,6 @@ def says_cannot_fail(finding):
     return bool(TEST.search(text) and CANNOT_FAIL.search(text))
 
 
-def body(text):
-    return text.split("\n---", 1)[-1]
-
-
 def main():
     work, transcript = Path(sys.argv[1]), Path(sys.argv[2])
     repo = work / "repo"
@@ -71,15 +68,10 @@ def main():
             and r["verdict"] != "approve"]
     approved = [r for r in rounds if r["verdict"] == "approve"]
 
-    changed = set(git(repo, "diff", "--name-only", branch_head, ID).stdout.split())
-    if on_branch:
-        changed |= set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
-        changed |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())
-    item_body_same = body(git(repo, "show", f"{branch_head}:{DIR}/item.md").stdout) == body(
-        (repo / f"{DIR}/item.md").read_text() if on_branch
-        else git(repo, "show", f"{ID}:{DIR}/item.md").stdout)
+    commits, changed = loop.touched(repo, branch_head)
+    item_body_changed = loop.body_changed(repo, commits, f"{DIR}/item.md")
     other = sorted(f for f in changed if not f.startswith(f"{DIR}/reviews/")
-                   and not (f == f"{DIR}/item.md" and item_body_same))
+                   and not (f == f"{DIR}/item.md" and not item_body_changed))
     main_moved = git(repo, "rev-parse", "main").stdout.strip() != \
         (work / ".main_head").read_text().strip()
 

@@ -50,7 +50,7 @@ def main():
     branch_head = (work / ".branch_head").read_text().strip()
     before = (work / ".item_before").read_text()
     on_branch = git(repo, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip() == ID
-    commits = git(repo, "rev-list", "--all", f"^{branch_head}").stdout.split()
+    commits = loop.touched(repo, branch_head)[0]
     versions = {c[:9]: git(repo, "show", f"{c}:{ITEM}").stdout for c in commits}
     versions["branch"] = git(repo, "show", f"{ID}:{ITEM}").stdout
     if on_branch:
@@ -67,13 +67,7 @@ def main():
         and all(line.startswith("Outcome:") for line in lines[1:]))
         for lines in additions.values())
 
-    changed = set()
-    for commit in commits:
-        changed |= set(git(repo, "diff-tree", "-r", "-m", "--no-commit-id", "--name-only",
-                           commit).stdout.split())
-    changed |= set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
-    changed |= set(git(repo, "ls-files", "--others", "--exclude-standard").stdout.split())
-    other_files = sorted(changed - {ITEM})
+    other_files = sorted(loop.touched(repo, branch_head)[1] - {ITEM})
 
     shell, tools, threads = loop.shell_calls(transcript)
     started = [c[:200] for _, c, _, out in shell
