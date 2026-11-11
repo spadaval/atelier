@@ -16,31 +16,26 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-closed_at: "2026-11-11T03:55:40.447359948+00:00"
-status: "superseded"
+status: "backlog"
 title: "Show open work before done work in issue list"
-updated_at: "2026-11-11T03:55:40.447359948+00:00"
+updated_at: "2026-10-17T01:10:57.964569101+00:00"
 ---
 
 ## Goal
 
-`atelier issue list` sorts by ID and stops at 50 rows (`crates/atelier-app/src/issue_inventory.rs:70-89`; "neutral ID ordering" in `docs/product/issue-inventory-and-mission-overview.md`). On master (86 records, 67 done) the default view shows 39 done rows and only 11 of the 19 open records. atelier-jjvc, kops, majk, mp6v, r6bt, sdb0, stsa and w0su are hidden behind `Showing 50 of 86 issues`. Agents work around it with `--limit 200 | grep -v ' done '` (4 runs), `--status todo --limit 100 | grep` (9+ runs), and `-s open`, which errors. The page is also padded with generic lines: an `Issue Inventory` title, `Narrow the metadata filters or raise --limit.`, and a `Drill Down / Inspect a record: atelier issue show <issue-id>` block on every run (`crates/atelier-cli/src/human_output.rs:429-452`).
+`atelier list` with no flags shows only open work and leaves done and dropped items out, but says nothing of what it left out: the list ends after its last open row, with no count of the hidden items and no command to see them (review finding atelier-p4v4, reproduced on the new binary in a scratch clone, where `list --done` showed the one done item `list` hid). Under the old tool, agents worked around a list that hid open records with `--limit 200 | grep -v ' done '` (4 runs) and `--status todo --limit 100 | grep` (9+ runs).
 
 ## Done when
 
-- [ ] With no filters, non-done records are listed before done ones (or done ones are left out), and the footer counts what is hidden, e.g. `19 open shown · 67 done hidden: atelier issue list --category done`.
-- [ ] When rows are cut, the truncation line gives the exact next command, e.g. `36 more: atelier issue list --limit 86`.
-- [ ] The `Issue Inventory` title, the "metadata filters" sentence and the `Drill Down` block are gone.
-- [ ] A CLI test with 55 records, 50 of them done, shows every open one by default. Rendering tests are updated. `issue-inventory-and-mission-overview.md` states the new order.
+- [ ] `list` with no flags ends with a line counting the done and dropped items it leaves out and naming the command that shows them, e.g. `67 done or dropped not shown: atelier list --done`.
+- [ ] A CLI test with done items shows the line, and one with none shows no such line.
 
 ## Scope
 
-Inventory ordering, default filter and footer, their tests, and the doc. `--quiet` order stays deterministic.
+The last line of `list` and its test.
 
 ## Context
 
 ADR 0022 (dense Markdown; piping means a view is missing). Related: atelier-fpxc (text search), atelier-deyy (dense rows).
 
-## Report
-
-Dropped in the cutover sort (atelier-5zre), reason (b). The new `list` with no flags shows only open work and `list --done` the finished (product specification, Commands: `list`).
+Rewritten for the new tool in the cutover sort (atelier-5zre): `issue list` became `list`, which already lists open work only and has no title or padding block, so those parts left; the truncation line went, since `list` does not cut rows; the footer counting hidden records remains, naming `list --done`. The inventory doc is replaced by the design record.
