@@ -56,8 +56,8 @@ All six Done when lines hold. Each code defect has a test that fails on `master`
 What changed:
 
 - `Repo::locate_at` reads an item's branch record only when the base's record is not done or dropped (`Located::terminal`), and `merge` does not re-read it at the head then; `show` reads the checkout's settlements of a done item except on its own unmerged branch. So a broken branch record no longer hides a terminal status, and `check` on the branch still reports it.
-- `review <mission>` reads the mission, its documents (`git::files_at`, an `ls-tree` of the commit) and its items from the commit the review records, and adds one line naming the plan's paths the checkout changes from it (`plan::plan_changed`, which `ready` already used). A mission no commit holds is refused, with the Git command that commits it; that refusal is new.
-- `Entry::needs` holds, for a started item another thread holds, the unmet conditions of its holder's next act; `status` for a lead and `lead` print them under the item in `condition`'s wording, leaving out questions, which have their own list. `show <mission>` does not print them.
+- `review <mission>` reads the mission, its documents (`git::files_at`, an `ls-tree` of the commit) and its items from the commit the review records, and adds one line naming the plan's paths the checkout or its index changes from it (`plan::plan_changed`, which `ready` already used; `git::changed_since` now adds the index's differences, and an item whose checkout record does not parse is judged by the commit). A mission no commit holds is refused, with the Git command that commits it; that refusal is new.
+- `Entry::needs` holds, for a started item another thread holds, the unmet conditions of its holder's next act; `status` for a lead and `lead` print them under the item in `condition`'s wording, leaving out questions, which have their own list. `show <mission>` does not print them. For an approved item, the lead's `status` reads what changed since the approval from the branch's last commit (`Repo::since_approval`, split out of `Repo::checkout`), so it lists a stale approval as the holder does; what the holder has not committed is not seen.
 - `review <id>` off the item's branch names the checkout that has it, through `git::checkout_of`, as `decide` does.
 
 Hand transcripts. A dropped item whose branch then commits `status: broken`, before:
@@ -131,6 +131,10 @@ This checkout changes the plan from commit b14d768, and this review does not cov
 Cases tried by hand around the record choice, each in a scratch repository: done on the base with a healthy leftover branch, dropped with a healthy branch, and dropped with the branch's record deleted all print the terminal status and its reason, with `submit` and `start` refused (exit 1); a healthy started item is unchanged (`status`, `show`, `list`, `submit`'s refusal and a take-over by another thread). A drop made in the base's checkout and not committed does not win, as the specification says (a planning edit counts once committed): with a healthy branch the item reads as building, and with a broken branch every command still exits 2 on the parse error.
 
 The product specification's diff touches lines 1-6 (front matter), 172-178 (`show` row, under Commands), 232-249 ("What `status` prints", under Commands), 371-391 and 393-406 (both under Merge); Words is lines 73-95, Lifecycle 97-164 and Review 317-349, none changed.
+
+### Review rounds
+
+Round 1 (Sol): R1 `atelier-r9f5` (lead missed a stale approval), R2 `atelier-xn9k` (`show` on a done item's merged own branch read its broken record), R4 `atelier-o94f` (staged-only plan changes unnamed) fixed, each in its own commit with its regression added to the tests above; R3 `atelier-pb9t` fixed for an item of the plan whose checkout record does not parse, and answered by rebuttal for a `mission.md` that does not parse; R5 `atelier-w495` deferred as recommended, filed as `atelier-m2v1`.
 
 ### Deviations
 
