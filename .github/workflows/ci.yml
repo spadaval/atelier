@@ -31,6 +31,7 @@ jobs:
       rust: ${{ steps.jobs.outputs.rust }}
       web: ${{ steps.jobs.outputs.web }}
       next: ${{ steps.jobs.outputs.next }}
+      desk: ${{ steps.jobs.outputs.desk }}
     env:
       BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
@@ -130,5 +131,31 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: cargo build -p atelier-cli
+      - run: pnpm exec playwright install --with-deps chromium-headless-shell
+      - run: pnpm e2e
+
+  # The Desk's app (desk/): typecheck, Vitest, the build, then Playwright on
+  # the built app with the API answered from fixtures. It builds no Rust.
+  desk:
+    needs: changes
+    if: needs.changes.outputs.desk == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desk
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desk/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: desk/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium-headless-shell
       - run: pnpm e2e
