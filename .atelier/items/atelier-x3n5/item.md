@@ -54,17 +54,17 @@ The coverage of the tie will differ from the baseline's, which tied by title: sa
 
 ## Report
 
-The scorecard scripts now run on the repositories after the cutover. They take merged items and each thread's item and role from `atelier log`, frozen in the snapshot as `logs/<repository>.txt`, and no longer walk commit messages, read old record versions or match item IDs in thread titles, branches or messages. The scripts outside the tests lost 10 lines net: they gained 161 and lost 171.
+The scorecard scripts now run on the repositories after the cutover. They take merged items and each thread's item and role from `atelier log`, frozen in the snapshot as `logs/<repository>.txt`, and no longer walk commit messages, read old record versions or match item IDs in thread titles, branches or messages. The scripts outside the tests lost 3 lines net: they gained 168 and lost 171.
 
 | File | Added | Removed |
 | --- | --- | --- |
-| `atelier_log.py` (new) | 66 | 0 |
+| `atelier_log.py` (new) | 59 | 0 |
 | `records.py` (deleted) | 0 | 61 |
-| `threads.py` | 16 | 35 |
+| `threads.py` | 12 | 35 |
 | `counted.py` | 16 | 17 |
-| `draw_samples.py` | 55 | 56 |
+| `draw_samples.py` | 73 | 56 |
 | `freeze.py` | 8 | 2 |
-| `test_scorecard.py` | 165 | 38 |
+| `test_scorecard.py` | 170 | 38 |
 | `README.md` | 45 | 22 |
 | `scorecard-baseline-2026-11.md` | 4 | 0 |
 
@@ -72,15 +72,20 @@ What changed:
 
 - `freeze.py copy` runs `atelier log` in each repository and writes the output to `logs/<repository>.txt`. `freeze.py hash` already hashes every file in the snapshot, so the manifest covers the logs. Nothing else runs `atelier`.
 - `atelier_log.py` replaces `records.py`. `read()` splits each line by the layout in `docs/design.md` and drops lines committed after the cutoff. `merged()` keeps an item when its `merge` line falls in the window and `git diff <commit>^1 <commit>` shows a file outside `.atelier/`. `ties()` gives each T3 thread the item and role of the first `start`, `review` or take-over line that names it. A take-over whose text starts `from ` is an implementer's, and any other take-over is a reviewer's. A Codex identity `<T3 thread>/<child>` counts for the part before the `/`.
-- `threads.py` lost `tie()`, the "Act as the ... sub-agent" role, and the title, branch and first-message reads. In their place it gives each thread `acts_as`: the thread itself, or, for a thread Claude's Agent tool started (a `subagent` item with driver `claudeAgent`), the parent it runs as. `counted.py` looks the tie up under `acts_as`. `tied_by` in `counted.json` is now `log` or `parent`, where it used to be `branch`, `title` or `first_message`. Calls before first edit counts threads whose role is `implementer`.
+- `threads.py` lost `tie()`, the "Act as the ... sub-agent" role, and the title, branch and first-message reads. In their place it gives each thread `acts_as`: the thread itself, or, for a thread Claude's Agent tool started (a `subagent` item with driver `claudeAgent`), the parent it runs as. Claude Code gives a subagent no Agent tool, so there is one level to follow. `counted.py` looks the tie up under `acts_as`. `tied_by` in `counted.json` is now `log` or `parent`, where it used to be `branch`, `title` or `first_message`. Calls before first edit counts threads whose role is `implementer`.
 - `done_in_window` counts the items, not missions, with a `merge` or `close` line in the window. Missions are the directories under `.atelier/missions/` at the manifest commit. Reconciling this count with `defects.md` is still atelier-c1z3's job.
-- `draw_samples.py` takes a closed mission's start and close from its first `ready` line and its `close` line. It takes the mission's items from `git grep '^mission: '` over the item records at the manifest commit, and its threads from the thread IDs on its own lines and its items' lines, then walks T3's parent links upward as before. It draws fix-now findings from `reviews/*.md` files at the manifest commit and skips findings with a `Was:` line, since those were raised in an earlier round. Findings are named `<item>/<review>.<n>`. The `git log`/`git show` walk of a mission record's versions is gone.
+- `draw_samples.py` takes a closed mission's start and close from its first `ready` line and its `close` line. It takes the mission's items from `git grep '^mission: '` over the item records at the manifest commit, and its threads from the thread IDs on its own lines and its items' lines, then walks T3's parent links upward as before. It draws fix-now findings from `reviews/*.md` files at the manifest commit and skips findings with a `Was:` line, since those were raised in an earlier round. It reads a review's body, and an item's `mission:` from its front matter only, outside fenced code by the rule of `unfenced_lines` in `crates/atelier-records/src/document.rs`, so an example in a fence is never a finding, a field or a membership. Findings are named `<item>/<review>.<n>`. The `git log`/`git show` walk of a mission record's versions is gone.
 - The README describes the scripts as they now are. It says only the scripts at `df9c84a43` (this item's base) reproduce the November baseline, and gives the `git worktree add` command that checks them out. It also says how tie coverage differs from the baseline's and what the after-run should state beside its numbers. The Rerunning section of `scorecard-baseline-2026-11.md` names `df9c84a43` too. No baseline number, sample or label changed.
 
-Tests: `TMPDIR=~/.cache/atelier-x3n5-tmp python3 -m unittest discover scripts/scorecard` runs 22 tests, all passing. The fixture repository uses the new layout, with real `--no-ff` merges: demo-aaaa's merge brings code and is counted, and demo-bbbb's brings only its record and is not. The fixture log holds a merge before the window, lines after the cutoff, a `lead` line, and a `merge` by a non-T3 identity. `test_each_tie_rule` checks every rule thread by thread: start, an implementer's take-over, review, a reviewer's take-over, a Codex subagent, an Agent-tool child, a thread named on two items, and threads left untied. `Samples` tests closed missions, interventions and findings. `test_a_rerun_after_the_freeze_gives_the_same_output` freezes the outputs, adds a commit to main that moves demo-aaaa to another mission and adds a fix-now review, deletes both item branches, and gets the same `counted.json`, `counted.md`, missions and findings. Breaking the Codex split or reading item records at `main` instead of the manifest commit fails these tests. As a smoke check, `read()`, `merged()`, `done()` and `ties()` parsed this repository's real `atelier log` (96 lines, 5 merged items, 25 tied threads). That output was not kept.
+Tests: `TMPDIR=~/.cache/atelier-x3n5-tmp python3 -m unittest discover scripts/scorecard` runs 22 tests, all passing. The fixture repository uses the new layout, with real `--no-ff` merges: demo-aaaa's merge brings code and is counted, and demo-bbbb's brings only its record and is not. The fixture log holds a merge before the window, lines after the cutoff, a `lead` line, and a `merge` by a non-T3 identity. `test_each_tie_rule` checks every rule thread by thread: start, an implementer's take-over, review, a reviewer's take-over, a Codex subagent, an Agent-tool child, a thread named on two items, and threads left untied. `Samples` tests closed missions, interventions and findings, including a fenced example finding, a fenced `Was:` line inside a real finding, and an item whose body shows another mission in a fence. `test_a_rerun_after_the_freeze_gives_the_same_output` freezes the outputs, adds a commit to main that moves demo-aaaa to another mission and adds a fix-now review, deletes both item branches, and gets the same `counted.json`, `counted.md`, missions and findings. Breaking the Codex split or reading item records at `main` instead of the manifest commit fails these tests. As a smoke check, `read()`, `merged()`, `done()` and `ties()` parsed this repository's real `atelier log` (96 lines, 5 merged items, 25 tied threads). That output was not kept.
 
 Surprises:
 
 - The old test fixture tied 6 threads to merged items through titles and first messages. The log-based rules tie exactly the same threads with the same roles, so every measure's expected number in the tests stayed the same.
 - The Agent-tool child rule depends on T3 writing `nativeItemRef.driver` on `subagent` items. The fixture has it, but I could not check the live database, which the brief rules out. If real items lack the field, those children would come out untied, and the after-run's `tied_by.parent` count would show it as 0.
 - `freeze.py copy` is not under test, because its paths are fixed to the November snapshot, and making them configurable belongs to the after-run's item. Its new step is four lines.
+
+### Responses
+
+- 1-c6ma.1: fixed in fefff2355
+- 1-c6ma.2: fixed in fefff2355
