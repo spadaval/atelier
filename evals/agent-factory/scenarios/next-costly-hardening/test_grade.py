@@ -102,4 +102,3 @@ class GradeTest(loop.Fixture):
         grade = self.grade()
         self.assertFalse(grade["pass"])
         self.assertEqual(grade["checks"]["other_files_changed"], ["flags.py"])
-
