@@ -364,7 +364,7 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-Output at 64506273. Its parent 9fa05f03 is the last commit that changes a record other than this one; later commits change only this record:
+Output at 8a46b3c9. Its parent 1a9cb68a is the last commit that changes a record other than this one; later commits change only this record:
 
 ```text
 Records converted, by kind and new status:
@@ -375,7 +375,7 @@ Records converted, by kind and new status:
   mission ready: 2
 Made ready from in_progress; each branch's work is not converted:
   atelier-5zre
-This tree's .atelier/ and moved files match a fresh conversion of 645062732d7ebaccb213f51a86c831e8da820403: 127 files.
+This tree's .atelier/ and moved files match a fresh conversion of 8a46b3c9fbcb74c190cdbe8ac8d8e5d4610a5b2a: 127 files.
 Every record is valid: 105 items, 8 missions and config.toml.
 ```
 
