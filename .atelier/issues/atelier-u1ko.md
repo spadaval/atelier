@@ -32,16 +32,13 @@ relationships:
     id: "atelier-qr5s"
     type: "advances"
   - kind: "issue"
-    id: "atelier-t747"
-    type: "blocked_by"
-  - kind: "issue"
     id: "atelier-yudj"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Delete the old workspace and put the new one in its place, with the cutover runbook"
-updated_at: "2026-11-11T04:46:58.250378721+00:00"
+updated_at: "2026-11-11T07:06:54.786874402+00:00"
 ---
 
 ## Goal
@@ -129,3 +126,8 @@ Expected size: the move is about 50 renames and 290 deletions with a dozen files
 
 - How T3's database shows a thread running in a repository. If one bounded read-only query cannot answer it, the preflight asks for the hand check instead, and the Report says so.
 - Whether the old binary's merge checks and its `check` pass on the switched tree, since they run until the cutover. The branch's own CI run and `atelier merge --check` answer it early.
+
+## Notes
+
+- 2026-11-11 [decision] The orchestrator of atelier-qr5s starts this item before atelier-t747 and atelier-a4rs have merged, and removes atelier-t747 as its blocker; atelier-wd1i still waits for both. The branch brings master in with atelier merge --sync before its final review round, and applies its lines to what they added.
+  Reason: This item is not merged until Sumeet names a time, by which both will have merged. They change evals/ and skills/agent-factory-next/, which this item touches only for the binary's path, and waiting for the eval matrix would add hours with nothing gained.
