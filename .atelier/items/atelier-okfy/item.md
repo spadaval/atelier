@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-okfy
 title: Show the mission's own Report and item notes in the debrief
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -34,3 +34,7 @@ Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8. vt8q's recor
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The `debrief` command was deleted in 0.5; `atelier show <mission>` prints the mission's Result.
