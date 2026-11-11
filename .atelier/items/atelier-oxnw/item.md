@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-oxnw
 title: Make the refused start report one line per blocker
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -32,3 +32,7 @@ A refused `atelier start sdb0` prints 17 lines (`ensure_transition_allowed` and 
 ## Context
 
 atelier-7n5u computes in-flight branches for ready work; reuse it if it has landed.
+
+## Report
+
+Dropped: Describes the old 17-line refused start. The 0.5 refusal is three lines: the reason, the way out and the skip.
