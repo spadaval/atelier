@@ -910,8 +910,9 @@ rule names.
   review file, in `check` and in the pre-commit hook; a status changed as no
   act on that kind of record (an item or a mission, `acts::changes`)
   changes it; and a pushed commit that brings code to the base, or sets an
-  item done, outside an Atelier merge. Changes the uncommitted-changes rule
-  let stay are left in the checkout, and `merge` confirms them unchanged,
+  item done, outside an Atelier merge; and `merge` with uncommitted changes in the
+  item's checkout or in the base's. Changes a skip lets stay are left in
+  their checkout, and `merge` confirms them unchanged,
   index entries, modes and contents, and a submodule's commit and its own
   uncommitted changes, with its other inputs.
 - **Not rules:** a record that does not read; an ID, a mission or a finding
@@ -920,9 +921,8 @@ rule names.
   item's branch it writes, with no review file of the round to record a
   verdict in, with no question to decide, or `review` of a plan on an
   item's branch, where `verdict` is the item's; `start` where branch `<id>`
-  exists, and a take-over where it does not; a merge that conflicts, a base
-  checkout with uncommitted changes, which merging would move, and inputs
-  that moved while `merge` ran; a Git or forge command that failed; `setup`
+  exists, and a take-over where it does not; a merge that conflicts, and inputs that
+  moved while `merge` ran; a Git or forge command that failed; `setup`
   where a hook it would keep is taken, where `core.hooksPath` points
   outside the clone, or where a harness's settings do not read; and the
   clone's own kept hook. With a reason set, each of these ends with a line
