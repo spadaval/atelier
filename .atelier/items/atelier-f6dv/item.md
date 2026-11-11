@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f6dv
 title: Fix what atelier's first gardener run showed wrong or unclear in `garden.md` and `readiness.md`
-status: changes_requested
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
