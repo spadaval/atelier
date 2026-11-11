@@ -132,8 +132,12 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
 #[derive(Debug, Default)]
 pub struct Overview {
     pub held: Vec<Entry>,
-    /// Ready items, except those waiting on a human.
+    /// Ready items `start` would accept now, except those waiting on a
+    /// human.
     pub ready: Vec<Entry>,
+    /// The other ready items not waiting on a human, which `start` would
+    /// refuse for the conditions each lists as unmet.
+    pub cannot_start: Vec<Entry>,
     pub started: Vec<Entry>,
     /// Items labelled needs-human that nobody has started.
     pub waiting: Vec<Entry>,
@@ -203,8 +207,10 @@ pub fn overview(
     for entry in entries {
         if entry.needs_human() && PLANNED.contains(&entry.status) {
             overview.waiting.push(entry);
-        } else if entry.status == Status::Ready {
+        } else if entry.startable() {
             overview.ready.push(entry);
+        } else if entry.status == Status::Ready {
+            overview.cannot_start.push(entry);
         } else if STARTED.contains(&entry.status) {
             if entry.holds {
                 overview.held.push(entry);
@@ -213,9 +219,8 @@ pub fn overview(
             }
         }
     }
-    // What can start now comes first, the most urgent first.
-    let order = |e: &Entry| (!e.unmet.is_empty(), e.priority, e.id.clone());
-    overview.ready.sort_by_key(order);
+    // The most urgent first.
+    overview.ready.sort_by_key(|e| (e.priority, e.id.clone()));
     overview.held.sort_by(|a, b| a.id.cmp(&b.id));
     overview.started.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(overview)

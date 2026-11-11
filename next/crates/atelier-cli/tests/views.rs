@@ -250,8 +250,9 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
         stdout(&root, "p1", &["status"]),
         NO_HOOKS.to_string()
             + "You are thread p1, on the base branch main.\n\
-         Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n  \
-         demo-b2bb (medium): Say goodbye\n    [ ] demo-a1aa is done (it is ready)\n\
+         Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n\
+         1 other ready item cannot start yet: 1 waits on a blocker that is not done. \
+         See it with: atelier list\n\
          Held by other threads:\n  demo-d4dd (building, held by t1): Wave\n\
          Missions in progress:\n  demo-m1ss (ready, in progress): Greet everyone\n\
          Waiting on a human (labelled needs-human):\n  \

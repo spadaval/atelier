@@ -493,11 +493,9 @@ pub fn overview(
                 priority_name(entry.priority),
                 entry.title
             );
-            for unmet in &entry.unmet {
-                text += &format!("  {}\n", condition(&entry.id, unmet));
-            }
         }
     }
+    text += &cannot_start(&overview.cannot_start, !overview.ready.is_empty());
     if !overview.started.is_empty() {
         text += "Held by other threads:\n";
         for entry in &overview.started {
@@ -536,12 +534,56 @@ pub fn overview(
             text += &format!("Then: atelier start {} (switches to its branch)\n", held.id)
         }
         (None, Some(ready)) => text += &format!("Then: atelier start {}\n", ready.id),
-        (None, None) if overview.ready.is_empty() => {
+        (None, None) if overview.cannot_start.is_empty() => {
             text += "Nothing is ready to start.\n";
         }
-        (None, None) => text += "Nothing is ready to start until what blocks it is done.\n",
+        (None, None) => text += "No ready item can start now.\n",
     }
     text
+}
+
+/// One line counting the ready items `start` would refuse, by each cause
+/// among their unmet conditions, after `others` that can start, if any.
+fn cannot_start(entries: &[Entry], others: bool) -> String {
+    if entries.is_empty() {
+        return String::new();
+    }
+    let with = |cause: fn(&Condition) -> bool| {
+        let entries = entries.iter().filter(|e| e.unmet.iter().any(cause));
+        entries.count()
+    };
+    let causes = [
+        (
+            with(|c| matches!(c, Condition::Blocked { .. })),
+            "waits on a blocker that is not done",
+            "wait on a blocker that is not done",
+        ),
+        (
+            with(|c| matches!(c, Condition::MissionNotReady { .. })),
+            "is in a mission that is not ready",
+            "are in a mission that is not ready",
+        ),
+        (
+            with(|c| matches!(c, Condition::BranchExists)),
+            "has a branch of its name already",
+            "have a branch of their name already",
+        ),
+    ];
+    let counts: Vec<String> = causes
+        .into_iter()
+        .filter(|(count, ..)| *count > 0)
+        .map(|(count, one, many)| format!("{count} {}", if count == 1 { one } else { many }))
+        .collect();
+    let (item, them) = match entries.len() {
+        1 => ("item", "it"),
+        _ => ("items", "them"),
+    };
+    let other = if others { " other" } else { "" };
+    format!(
+        "{}{other} ready {item} cannot start yet: {}. See {them} with: atelier list\n",
+        entries.len(),
+        counts.join(", ")
+    )
 }
 
 /// `entry` is what `status` shows the caller, which a refusal of the
@@ -2088,6 +2130,20 @@ pub fn not_merged(base: &str) -> String {
     format!(
         "Moving {base} to the merge commit failed, so {base} is as it was. Run `atelier merge` again once the cause below is fixed"
     )
+}
+
+/// What `merge` says once each of the `count` merge checks in the base's
+/// config passed on the merged tree.
+pub fn checks_passed(base: &str, count: usize) -> String {
+    match count {
+        0 => format!("{base}'s config.toml names no merge check, so none ran.\n"),
+        1 => {
+            format!("Ran 1 merge check from {base}'s config.toml on the merged tree; it passed.\n")
+        }
+        _ => format!(
+            "Ran {count} merge checks from {base}'s config.toml on the merged tree; each passed.\n"
+        ),
+    }
 }
 
 pub fn merged(id: &str, base: &str, commit: &str) -> String {

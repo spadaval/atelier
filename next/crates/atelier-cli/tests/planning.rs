@@ -551,13 +551,15 @@ fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
         )
     );
     assert!(!branch_exists(&root, ID));
-    // `status` lists the same condition.
+    // `status` counts it as an item that cannot start, for the same reason.
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains(&format!("    [ ] Mission {MISSION} is ready (it is draft;")),
+        status.ends_with(
+            "1 ready item cannot start yet: 1 is in a mission that is not ready. \
+             See it with: atelier list\nNo ready item can start now.\n"
+        ),
         "{status}"
     );
-    assert!(status.ends_with("Nothing is ready to start until what blocks it is done.\n"));
 
     assert_eq!(
         atelier(&root, "p1", &["ready", MISSION, "--by", "s"]).code,
@@ -566,6 +568,53 @@ fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
     commit_all(&root, "Ready");
     let run = atelier(&root, "t1", &["start", ID]);
     assert_eq!(run.code, 0, "{}", run.stderr);
+}
+
+#[test]
+fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
+    let scratch = Scratch::new(&[("demo-a1aa", "ready"), ("demo-c3cc", "draft")]);
+    let root = scratch.root();
+    write_item(&root, "demo-b2bb", "ready", &[], &["demo-c3cc"], "");
+    write_item(&root, "demo-d4dd", "ready", &[], &[], "");
+    write_mission(&root, MISSION, "draft");
+    join_mission(&root, "demo-d4dd", MISSION);
+    commit_all(&root, "Plan");
+
+    let others = "2 other ready items cannot start yet: 1 waits on a blocker that is not done, \
+                  1 is in a mission that is not ready. See them with: atelier list\n";
+    assert_eq!(
+        atelier(&root, "t1", &["status"]).stdout,
+        format!(
+            "{NO_HOOKS}You are thread t1, on the base branch main.\nReady to start:\n  \
+             demo-a1aa (high): Say hello\n{others}Then: atelier start demo-a1aa\n"
+        )
+    );
+    for id in ["demo-b2bb", "demo-d4dd"] {
+        assert_eq!(atelier(&root, "t1", &["start", id]).code, 1);
+    }
+
+    // Once t1 holds the one that could, nothing can start: a thread
+    // holding nothing is told so and offered no start, and t1 is still
+    // sent back to its item.
+    assert_eq!(atelier(&root, "t1", &["start", "demo-a1aa"]).code, 0);
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    let count = "2 ready items cannot start yet: 1 waits on a blocker that is not done, \
+                 1 is in a mission that is not ready. See them with: atelier list\n";
+    assert_eq!(
+        atelier(&base, "t2", &["status"]).stdout,
+        format!(
+            "{NO_HOOKS}You are thread t2, on the base branch main.\n{count}Held by other \
+             threads:\n  demo-a1aa (building, held by t1): Say hello\nNo ready item can start now.\n"
+        )
+    );
+    assert_eq!(
+        atelier(&base, "t1", &["status"]).stdout,
+        format!(
+            "{NO_HOOKS}You are thread t1, on the base branch main.\nYou hold:\n  demo-a1aa \
+             (building): Say hello\n{count}Then: atelier start demo-a1aa (switches to its branch)\n"
+        )
+    );
 }
 
 #[test]

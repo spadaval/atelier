@@ -112,7 +112,8 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
         run.stdout,
         skipped(&[&status, approval])
             + &format!(
-                "Merged {ID} into main with merge commit {}, which marks it done.\n",
+                "main's config.toml names no merge check, so none ran.\n\
+                 Merged {ID} into main with merge commit {}, which marks it done.\n",
                 git(&root, &["rev-parse", "--short=7", "main"])
             )
     );

@@ -4,6 +4,9 @@ id: "atelier-efsl"
 issue_type: "bug"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-efsl
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Show only startable items under Ready to start, and have `merge` say its checks ran: two fumbles the rehearsal found"
-updated_at: "2026-11-11T00:57:39.599582995+00:00"
+updated_at: "2026-11-11T01:00:18.872210913+00:00"
 ---
 
 ## Goal
