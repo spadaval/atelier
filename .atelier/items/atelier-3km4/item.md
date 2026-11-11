@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-3km4
 title: Read atelier-vt8q's HTML debrief for taste after r6bt closes
-status: ready
+status: dropped
 mission: null
 labels:
 - needs-human
@@ -38,3 +38,7 @@ Relationships of the old record that the new format has no field for.
 
 - related: atelier-gg6b (Let a reviewer do post-mission review from the debrief alone)
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The page it asks Sumeet to read no longer exists: the `debrief` command and the site were deleted in 0.5, and the Desk replaces them.
