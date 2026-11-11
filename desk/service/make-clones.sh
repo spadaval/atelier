@@ -24,16 +24,30 @@ here=$(cd "$(dirname "$0")" && pwd)
 top=$(cd "$here/../.." && pwd)
 convert=$top/scripts/cutover/convert_records.py
 atelier=${2:-$top/next/target/debug/atelier}
-projects=$(cd "${DESK_PROJECTS:-$HOME/projects}" && pwd)
+projects=$(realpath -e -- "${DESK_PROJECTS:-$HOME/projects}")
 NO_PUSH=/nonexistent/atelier-desk-scratch-clone
 [ -x "$atelier" ] || { echo "No new atelier binary at $atelier: build it with cargo build -j 4 --manifest-path next/Cargo.toml" >&2; exit 2; }
 [ -f "$convert" ] || { echo "No converter at $convert" >&2; exit 2; }
 atelier=$(cd "$(dirname "$atelier")" && pwd)/$(basename "$atelier")
-mkdir -p "$1"
-out=$(cd "$1" && pwd)
-case $out/ in "$projects"/*) echo "$out is under $projects: give a scratch directory" >&2; exit 2 ;; esac
-work=$out.work
-mkdir -p "$work/tmp"
+# Before anything is written: the clones and their work directory, with
+# every symbolic link resolved, may not lie inside ~/projects or inside a
+# repository the clones are made from.
+out=$(realpath -m -- "$1")
+work=$(realpath -m -- "$out.work")
+inside() { case $1/ in "$2"/*) true ;; *) false ;; esac; }
+sources=("$projects")
+for r in atelier astromech demiurge life-on-rails cosplay-studio; do
+  [ ! -e "$projects/$r" ] || sources+=("$(realpath -e -- "$projects/$r")")
+done
+for at in "${sources[@]}"; do
+  for path in "$out" "$work"; do
+    if inside "$path" "$at"; then
+      echo "$1 needs $path, which is inside $at: give a scratch directory outside it" >&2
+      exit 2
+    fi
+  done
+done
+mkdir -p "$out" "$work/tmp"
 export TMPDIR=$work/tmp
 # No harness's thread reaches the clones, and the conversion's commit names
 # no person.
