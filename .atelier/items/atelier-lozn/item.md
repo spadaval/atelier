@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-lozn
 title: Make the debrief's verdict links and More toggles visibly interactive
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -33,3 +33,7 @@ Found by the S7 agent re-review of atelier-vt8q's debrief at 7518f516 (FOLLOW-UP
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The debrief page was deleted with the site in 0.5.
