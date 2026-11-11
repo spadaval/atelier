@@ -1,0 +1,33 @@
+---
+schema: atelier.item
+schema_version: 3
+id: atelier-jjvc
+title: Remove the deprecated prime alias
+status: draft
+mission: null
+labels:
+- orientation
+priority: low
+blocked_by: []
+implementers: []
+ready: null
+trivial: null
+caused_by: null
+created_at: 2026-10-16T23:43:14.236220229Z
+---
+
+## Goal
+
+ADR 0022 keeps `prime` as an alias for `status` so adopters' installed SessionStart hooks keep working. Remove it once known adopters' hooks no longer call it.
+
+## Done when
+
+- [ ] `atelier prime` is gone from the CLI and help, `atelier check` or `land` names a `.claude/settings.json` hook that still calls `prime --hook claude` with the fix (`atelier setup claude`), and the CHANGELOG records the removal. Plan this into `todo` when neither this repository's nor astromech's committed `.claude/settings.json` contains `prime --hook claude`; the project makes no numbered releases.
+
+## Context
+
+ADR 0022 Decision 1; review finding atelier-1ia7 on atelier-bw0b.
+
+## Notes
+
+- 2026-10-17 [note] 2026-10-16: atelier-sdb0 merged; this repository's .claude/settings.json now runs 'atelier status --hook claude'. astromech's committed hook (checked in /home/supadava/projects/astromech-atelier at dd28efe) still runs 'atelier prime --hook claude', so the plan condition is unmet; stays in backlog until astromech reruns 'atelier setup claude'.

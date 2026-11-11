@@ -1,9 +1,17 @@
-schema = "atelier.project_config"
-schema_version = 1
-project_slug = "atelier"
+schema_version = 3
+slug = "atelier"
+base_branch = "master"
 
-[paths]
-state_root = ".atelier"
+[[merge_check]]
+run = "git diff --check HEAD^ HEAD -- . ':!.atelier'"
 
-[prune]
-canonical_retention_days = 7
+[[merge_check]]
+run = "cargo fmt -- --check"
+
+[[merge_check]]
+run = "cargo metadata --locked --format-version 1 > /dev/null"
+
+[forge]
+provider = "github"
+remote = "origin"
+ci_workflow = "ci.yml"

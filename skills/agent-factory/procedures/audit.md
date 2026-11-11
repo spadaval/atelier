@@ -22,13 +22,12 @@ or behavior), the **impact** of fixing it, your **confidence** (high, medium or
 low), and the **next step** (no action, spike, decision, implementation,
 migration or docs update), adding the likely cause, or the risk that a fix would
 be premature, where either is not obvious. If findings should become work, file
-them as tracker items, and record architecture decisions per the [record
-test](../references/atelier.md#records).
+them as items (`atelier new`).
 
 ## Session Retrospectives
 
-When the scope is an earlier agent run, read it as
-[Transcripts](../references/transcripts.md) says, and judge it against the root
+When the scope is an earlier agent run, read its
+transcripts, and judge it against the root
 task. Report what went well and should be kept, what went wrong, and what to
 change in code, tooling, guidance or skills, each citing a session and the event
 behind it; changes worth doing become findings as above.
