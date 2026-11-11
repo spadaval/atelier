@@ -3,12 +3,15 @@
 State, read from the checkout's working tree and every commit since setup
 (`decide` does not commit):
 
-- the question's Decisions entry has an answer and `Outcome: defer`;
+- the question's Decisions entry, the one naming finding 1-d3c1.1, has an
+  answer and `Outcome: defer`;
 - item.md, in the working tree and in every commit made since setup, on
   any branch, differs from the fixture only by lines `decide` writes under
-  that question: one `Answer by <thread>: <answer>` and one `Outcome:`
-  line, so its front matter (implementers included), Goal, Done when, Scope
-  and Report are unchanged;
+  that question: outside Decisions nothing changes, and inside it only an
+  `Answer by <thread>: <answer>` and an `Outcome:` line are added, so its
+  front matter (implementers included), Goal, Done when, Scope and Report
+  are unchanged; item.md left changed while another branch is checked out
+  counts as a change;
 - no other file changed in the working tree, whatever is checked out, or in
   any commit since setup, even one a later commit reverts;
 - no `atelier start` ran, as the transcript shows.
@@ -28,6 +31,7 @@ loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 ID, git = loop.ID, loop.git
 ITEM = f".atelier/items/{ID}/item.md"
+FINDING = "1-d3c1.1"
 DECIDED = re.compile(r"^(Answer by [^:\s]+: \S.*|Outcome: (defer|no action))$")
 
 
@@ -55,10 +59,23 @@ def main():
     versions["branch"] = git(repo, "show", f"{ID}:{ITEM}").stdout
     if on_branch:
         versions["worktree"] = (repo / ITEM).read_text()
-    additions = {where: added_only(before, text) for where, text in versions.items()}
+    # decide writes only under the question in Decisions: everything outside
+    # that section stays as the fixture left it, and inside it lines are
+    # only added. The answer and outcome are read from the question's entry.
+    outside = loop.section(before, "Decisions")
+    additions = {}
+    for where, text in versions.items():
+        same_outside = text.replace(loop.section(text, "Decisions"), "", 1) == \
+            before.replace(outside, "", 1)
+        additions[where] = added_only(outside, loop.section(text, "Decisions")) \
+            if same_outside else None
+    dirty = set(git(repo, "diff", "--name-only", "HEAD").stdout.split())
+    if not on_branch and ITEM in dirty:
+        additions["worktree off the branch"] = None
+    final = versions.get("worktree", versions["branch"])
+    entry = next((d for d in loop.decisions(final) if d["finding"] == FINDING), {})
     decided = additions.get("worktree") or additions["branch"] or []
-    outcome = next((line.split(": ", 1)[1] for line in decided if line.startswith("Outcome:")),
-                   None)
+    outcome = entry.get("outcome")
     stray = {where: [line for line in lines if not DECIDED.match(line)] if lines is not None
              else "changed or removed lines" for where, lines in additions.items()}
     stray = {where: lines for where, lines in stray.items() if lines}
@@ -83,7 +100,7 @@ def main():
         **counts,
     }
     problems = []
-    if not decided or not any(line.startswith("Answer by") for line in decided):
+    if not entry.get("answer"):
         problems.append("the question has no answer")
     elif outcome != "defer":
         problems.append(f"the question was answered with outcome {outcome}, not --defer")
