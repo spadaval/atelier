@@ -3,11 +3,13 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-295u
 title: Give the gardener `atelier log` and a readiness checklist, so a run starts from facts
-status: draft
+status: ready
 labels:
 - redesign
 lead: null
-ready: null
+ready:
+  by: sumeet, relayed by the task that started the lead
+  at: 2026-11-11T17:10:10.404909184Z
 created_at: 2026-11-10T00:56:04.888418157Z
 ---
 

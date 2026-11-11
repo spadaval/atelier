@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vl5n
 title: Write the readiness checklist, mapped to the three codebase properties
-status: draft
+status: ready
 mission: atelier-295u
 labels:
 - redesign
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: sumeet, relayed by the task that started the lead
+  at: 2026-11-11T17:10:10.404909184Z
 trivial: null
 caused_by: null
 created_at: 2026-11-10T00:56:10.972580408Z
