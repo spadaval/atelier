@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:31.873423713+00:00"
+status: "declined"
 title: "Make bundle errors name the entry and drop the garbage tail"
-updated_at: "2026-10-17T01:10:57.968659947+00:00"
+updated_at: "2026-11-11T03:55:31.873423713+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,7 @@ Bundle validation errors reuse record-parser messages that do not fit bundles:
 ## Context
 
 crates/atelier-cli/src/commands/bundle.rs:38-58 (parse errors), :143 and :472 (body errors).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `bundle` error messages, and the What is removed table removes `bundle`.

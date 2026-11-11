@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:48.071955467+00:00"
+status: "declined"
 title: "Remove the read path for separate disposition events"
-updated_at: "2026-11-07T01:11:19.111580398+00:00"
+updated_at: "2026-11-11T03:55:48.071955467+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ Every repository using the shared binary (atelier, astromech, demiurge, cosplay-
 ## Context
 
 Trigger and owner per ADR 0025 decision 6. History keeps old events, so `parse_review_file` keeps parsing them for the append-only and tracing checks.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It removes `migrate dispositions` and the old review events' read path, and the What is removed table removes `migrate` and the old review subcommands.

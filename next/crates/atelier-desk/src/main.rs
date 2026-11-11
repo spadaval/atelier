@@ -1,7 +1,8 @@
 //! `atelier-desk --config <file>`: serves the Desk until interrupted.
 
 use anyhow::{bail, Context, Result};
-use atelier_desk::{router, Config};
+use atelier_desk::threads::keep_polling;
+use atelier_desk::{router_for, Config, Desk};
 use std::future::IntoFuture;
 use std::path::PathBuf;
 use tokio::net::TcpListener;
@@ -23,16 +24,23 @@ async fn main() -> Result<()> {
         eprintln!("atelier-desk: serving on http://{address}");
         listeners.push(listener);
     }
-    let app = router(config);
+    let desk = Desk::new(config);
+    keep_polling(desk.threads.clone());
+    let app = router_for(desk.clone());
     let mut servers = JoinSet::new();
     for listener in listeners {
         servers.spawn(axum::serve(listener, app.clone()).into_future());
     }
-    tokio::select! {
+    let ended = tokio::select! {
         _ = tokio::signal::ctrl_c() => Ok(()),
-        Some(ended) = servers.join_next() => {
-            ended?.context("the server stopped")?;
-            bail!("the server stopped")
+        Some(ended) = servers.join_next() => match ended {
+            Ok(Ok(())) => Err(anyhow::anyhow!("the server stopped")),
+            Ok(Err(error)) => Err(anyhow::Error::from(error).context("the server stopped")),
+            Err(error) => Err(anyhow::Error::from(error).context("the server stopped")),
         }
-    }
+    };
+    // The token's session is revoked however the server ends.
+    let threads = desk.threads.clone();
+    let _ = tokio::task::spawn_blocking(move || threads.close()).await;
+    ended
 }

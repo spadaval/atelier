@@ -24,9 +24,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:29.971119759+00:00"
+status: "declined"
 title: "Check the kind of every bundle reference before apply"
-updated_at: "2026-10-17T09:06:42.943158161+00:00"
+updated_at: "2026-11-11T03:55:29.971119759+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,7 @@ Found in review of atelier-lr8o:
 - [ ] Preview refuses a wrong-kind reference in every slot with the shared wrong-kind message.
 - [ ] Update entry IDs use the shared not-found and wrong-kind messages.
 - [ ] Bundle tests cover each case.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes reference checks in `bundle` preview and apply and evidence IDs, and the What is removed table removes `bundle` and evidence records.

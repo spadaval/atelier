@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:32.508949707+00:00"
+status: "declined"
 title: "Say a mission defines no criteria when evidence --criterion targets one without them"
-updated_at: "2026-11-04T23:37:33.232515927+00:00"
+updated_at: "2026-11-11T03:55:32.508949707+00:00"
 ---
 
 ## Goal
@@ -26,3 +27,7 @@ updated_at: "2026-11-04T23:37:33.232515927+00:00"
 ## Done when
 
 The refusal says the mission defines no success criteria and to drop `--criterion`; a CLI test covers it.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes a refusal of `evidence record --criterion`, and the What is removed table removes evidence records and commands.

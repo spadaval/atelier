@@ -1,9 +1,12 @@
 //! The HTTP server: the reading routes, the `Host` check, the cache, and
 //! the built app's files.
 
-use crate::api::{ApiError, InboxRepo, InboxResponse, RepoSummary, ReposResponse};
+use crate::api::{
+    ApiError, Hold, InboxRepo, InboxResponse, RepoSummary, ReposResponse, ThreadsResponse,
+};
 use crate::config::Config;
 use crate::read;
+use crate::threads::Threads;
 use anyhow::Result;
 use atelier_app::{Repo, Skip};
 use atelier_records::validate_id;
@@ -27,6 +30,8 @@ type Slot = (Vec<String>, Arc<dyn Any + Send + Sync>);
 
 pub struct Desk {
     config: Config,
+    /// T3 Code's live threads, as last polled.
+    pub threads: Arc<Threads>,
     /// By repository and route.
     cache: Mutex<HashMap<(String, String), Slot>>,
     /// How many responses were built rather than taken from the cache.
@@ -36,6 +41,7 @@ pub struct Desk {
 impl Desk {
     pub fn new(config: Config) -> Arc<Desk> {
         Arc::new(Desk {
+            threads: Arc::new(Threads::new(config.t3.as_ref())),
             config,
             cache: Mutex::default(),
             built: AtomicUsize::new(0),
@@ -70,6 +76,24 @@ impl Desk {
         let kept: Arc<dyn Any + Send + Sync> = Arc::new(built.clone());
         self.cache.lock().unwrap().insert(slot, (commits, kept));
         Ok(Some(built))
+    }
+
+    /// What each identity holds in the records of every repository
+    /// served. A repository that does not read holds nothing here;
+    /// `/api/repos` gives its error.
+    fn holds(&self) -> Vec<(String, Hold)> {
+        let mut holds = Vec::new();
+        for (name, dir, duplicate) in self.config.repositories() {
+            if duplicate.is_none() {
+                holds.extend(self.repo_holds(&name, &dir));
+            }
+        }
+        holds
+    }
+
+    fn repo_holds(&self, name: &str, dir: &Path) -> Vec<(String, Hold)> {
+        let held = self.read(name, dir, "holds", |r| read::holds(r, name));
+        held.ok().flatten().unwrap_or_default()
     }
 
     /// The response for `route` of the repository served as `name`.
@@ -130,6 +154,7 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos/{repo}/doc", get(doc))
         .route("/api/repos/{repo}/items/{id}", get(item))
         .route("/api/inbox", get(inbox))
+        .route("/api/threads", get(threads))
         .layer(middleware::from_fn(json_errors));
     api.fallback(app_file)
         .layer(middleware::from_fn_with_state(desk.clone(), allowed_host))
@@ -259,9 +284,13 @@ async fn mission(
     blocking(move || {
         checked(&id)?;
         let missing = || format!("No mission {id} is in the base's last commit.");
-        desk.repo_route(&repo, &format!("mission {id}"), missing, |r| {
+        let mut page = desk.repo_route(&repo, &format!("mission {id}"), missing, |r| {
             read::mission(r, &id)
-        })
+        })?;
+        let snapshot = desk.threads.snapshot();
+        snapshot.join(&mut page.threads);
+        page.t3 = snapshot.state;
+        Ok(page)
     })
     .await
 }
@@ -274,9 +303,13 @@ async fn item(
         checked(&id)?;
         let missing =
             || format!("No item {id} is in the base's last commit or on a branch named {id}.");
-        desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
+        let mut page = desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
             read::item(r, &id)
-        })
+        })?;
+        let snapshot = desk.threads.snapshot();
+        snapshot.join(&mut page.threads);
+        page.t3 = snapshot.state;
+        Ok(page)
     })
     .await
 }
@@ -324,6 +357,7 @@ fn normalized(path: &str) -> Option<String> {
 
 async fn inbox(State(desk): State<Arc<Desk>>) -> Response {
     blocking(move || {
+        let snapshot = desk.threads.snapshot();
         let mut repos = Vec::new();
         for (name, dir, duplicate) in desk.config.repositories() {
             let failed = |error: String| InboxRepo {
@@ -334,12 +368,36 @@ async fn inbox(State(desk): State<Arc<Desk>>) -> Response {
             repos.push(match duplicate {
                 Some(error) => failed(error),
                 None => match desk.read(&name, &dir, "inbox", |r| read::inbox(r, &name)) {
-                    Ok(inbox) => inbox.expect("an inbox is always built"),
+                    Ok(inbox) => {
+                        let mut inbox = inbox.expect("an inbox is always built");
+                        let live = snapshot.live(&desk.repo_holds(&name, &dir));
+                        let waiting = live.into_iter().filter(|thread| {
+                            thread.status == "waiting" && !thread.holds.is_empty()
+                        });
+                        inbox.threads = waiting.collect();
+                        inbox
+                    }
                     Err(error) => failed(format!("{error:#}")),
                 },
             });
         }
-        Ok(InboxResponse { repos })
+        Ok(InboxResponse {
+            repos,
+            t3: snapshot.state,
+        })
+    })
+    .await
+}
+
+/// T3 Code's live threads as last polled, with what each holds in every
+/// repository's records.
+async fn threads(State(desk): State<Arc<Desk>>) -> Response {
+    blocking(move || {
+        let snapshot = desk.threads.snapshot();
+        Ok(ThreadsResponse {
+            threads: snapshot.live(&desk.holds()),
+            t3: snapshot.state,
+        })
     })
     .await
 }

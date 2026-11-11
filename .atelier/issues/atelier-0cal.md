@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:28.798255670+00:00"
+status: "declined"
 title: "Point bundle apply's next step at the new graph and at committing"
-updated_at: "2026-10-17T01:10:57.968045340+00:00"
+updated_at: "2026-11-11T03:55:28.798255670+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ After a successful apply, `Next Commands` lists `atelier issue show <first creat
 - [ ] A `Commit: git add .atelier && git commit` line follows.
 - [ ] `atelier check` is dropped from the footer.
 - [ ] A test asserts the footer for a mission bundle.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes the output of `bundle apply`, and the product specification's What is removed table removes `bundle`.

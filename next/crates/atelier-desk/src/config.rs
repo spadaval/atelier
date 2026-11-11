@@ -24,6 +24,19 @@ pub struct Config {
     pub hosts: Vec<String>,
     /// The built app's directory. Without one only `/api` is served.
     pub app: Option<PathBuf>,
+    /// How to reach T3 Code. Without it the Desk makes no call to T3 Code
+    /// and reports its threads as unavailable.
+    pub t3: Option<T3Config>,
+}
+
+/// The `[t3]` table: both keys are needed.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct T3Config {
+    /// The `t3` binary that matches the running T3 Code, run for tokens.
+    pub command: PathBuf,
+    /// T3 Code's MCP server, such as `http://127.0.0.1:3773/mcp`.
+    pub url: String,
 }
 
 pub const DEFAULT_PORT: u16 = 3780;
@@ -49,6 +62,9 @@ impl Config {
             *root = resolve(here, root);
         }
         config.app = config.app.map(|app| resolve(here, &app));
+        if let Some(t3) = &mut config.t3 {
+            t3.command = resolve(here, &t3.command);
+        }
         if config.roots.is_empty() {
             bail!("{} names no root", path.display());
         }
@@ -140,6 +156,20 @@ mod tests {
         assert_eq!(config.hosts, ["desk"]);
         let home = PathBuf::from(std::env::var_os("HOME").unwrap());
         assert_eq!(config.roots, [home.join("r")]);
+
+        assert!(config.t3.is_none());
+
+        let t3 = "[t3]\ncommand = \"~/t3\"\nurl = \"http://127.0.0.1:3773/mcp\"\n";
+        std::fs::write(&path, format!("caller = \"s\"\nroots = [\"r\"]\n{t3}")).unwrap();
+        let t3 = Config::load(&path).unwrap().t3.unwrap();
+        assert_eq!(t3.command, home.join("t3"));
+        assert_eq!(t3.url, "http://127.0.0.1:3773/mcp");
+        let half = "caller = \"s\"\nroots = [\"r\"]\n[t3]\nurl = \"http://127.0.0.1:1/mcp\"\n";
+        std::fs::write(&path, half).unwrap();
+        assert!(
+            Config::load(&path).is_err(),
+            "a [t3] table needs its command"
+        );
 
         std::fs::write(&path, "caller = \"s\"\nroots = []\n").unwrap();
         assert!(Config::load(&path).is_err());

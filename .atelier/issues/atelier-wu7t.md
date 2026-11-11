@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:58.619491960+00:00"
+status: "declined"
 title: "Give the right reason when evidence is stale because its item was uncommitted at the pin"
-updated_at: "2026-10-23T18:02:22.121093790+00:00"
+updated_at: "2026-11-11T03:55:58.619491960+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ A test: start an item without committing records, commit code, capture a passing
 ## Context
 
 Found by acceptance validation atelier-1o56.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes evidence freshness reasons, and the What is removed table removes evidence records.

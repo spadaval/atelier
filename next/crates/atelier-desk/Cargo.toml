@@ -28,6 +28,8 @@ toml.workspace = true
 tower = { version = "0.5", default-features = false, features = ["util"] }
 tower-http = { version = "0.6", features = ["fs"] }
 ts-rs = "12"
+# The T3 Code client: blocking HTTP over loopback, with no TLS.
+ureq = { version = "3", default-features = false }
 
 [dev-dependencies]
 tempfile.workspace = true

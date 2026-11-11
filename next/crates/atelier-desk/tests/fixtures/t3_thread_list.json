@@ -1,0 +1,99 @@
+{
+  "projectId": null,
+  "currentThreadId": null,
+  "threads": [
+    {
+      "threadId": "thread:delegated-task:command%3Amcp%3A6af4c410-6472-441b-a989-9c1e2f169013%3Adelegate-task%3A8af8daf7-6459-4882-8fc4-88701b938d2e",
+      "projectId": "mcp:6767fcba-53d7-4aaa-985c-3210ab28cece",
+      "title": "Review atelier-a4rs, round 4",
+      "link": "https://app.t3.codes/threads/f69ed1d3-873d-498a-9515-8ab96392223c/thread%3Adelegated-task%3Acommand%253Amcp%253A6af4c410-6472-441b-a989-9c1e2f169013%253Adelegate-task%253A8af8daf7-6459-4882-8fc4-88701b938d2e",
+      "createdBy": "agent",
+      "creationSource": "mcp",
+      "status": "running",
+      "latestRunId": "run:thread:thread%3Adelegated-task%3Acommand%253Amcp%253A6af4c410-6472-441b-a989-9c1e2f169013%253Adelegate-task%253A8af8daf7-6459-4882-8fc4-88701b938d2e:ordinal:1",
+      "providerInstanceId": "codex",
+      "model": "gpt-6.1-sol",
+      "runtimeMode": "full-access",
+      "interactionMode": "default",
+      "linkedPullRequest": null,
+      "pullRequests": [],
+      "settled": false,
+      "settledAt": null,
+      "snoozed": false,
+      "snoozedUntil": null,
+      "parentThreadId": "thread:delegated-task:command%3Amcp%3Ad8c1e5a8-c427-4a56-96a6-7cf82a328f22%3Adelegate-task%3Af24bf323-016f-474e-9b12-357353e3fdfa",
+      "relationshipToParent": "subagent",
+      "itemCount": 56,
+      "createdAt": "2026-11-11T06:23:16.752Z",
+      "updatedAt": "2026-11-11T06:28:57.728Z"
+    },
+    {
+      "threadId": "5bcb08e9-f2d3-4f91-8690-1f2c2e9401a5",
+      "projectId": "mcp:6767fcba-53d7-4aaa-985c-3210ab28cece",
+      "title": "Atelier complexity vs usefulness",
+      "link": "https://app.t3.codes/threads/f69ed1d3-873d-498a-9515-8ab96392223c/5bcb08e9-f2d3-4f91-8690-1f2c2e9401a5",
+      "createdBy": "user",
+      "creationSource": "web",
+      "status": "running",
+      "latestRunId": "run:thread:5bcb08e9-f2d3-4f91-8690-1f2c2e9401a5:ordinal:79",
+      "providerInstanceId": "claudeAgent",
+      "model": "claude-fable-5-2",
+      "runtimeMode": "full-access",
+      "interactionMode": "default",
+      "linkedPullRequest": null,
+      "pullRequests": [
+        {
+          "host": "github.com",
+          "repository": "spadaval/atelier",
+          "number": 88,
+          "url": "https://github.com/spadaval/atelier/pull/88",
+          "source": "agent",
+          "state": "merged"
+        },
+        {
+          "host": "github.com",
+          "repository": "spadaval/atelier",
+          "number": 89,
+          "url": "https://github.com/spadaval/atelier/pull/89",
+          "source": "agent",
+          "state": "merged"
+        },
+        {
+          "host": "github.com",
+          "repository": "spadaval/atelier",
+          "number": 90,
+          "url": "https://github.com/spadaval/atelier/pull/90",
+          "source": "agent",
+          "state": "merged"
+        },
+        {
+          "host": "github.com",
+          "repository": "spadaval/atelier",
+          "number": 91,
+          "url": "https://github.com/spadaval/atelier/pull/91",
+          "source": "agent",
+          "state": "merged"
+        },
+        {
+          "host": "github.com",
+          "repository": "spadaval/atelier",
+          "number": 119,
+          "url": "https://github.com/spadaval/atelier/pull/119",
+          "source": "agent",
+          "state": "merged"
+        }
+      ],
+      "settled": false,
+      "settledAt": null,
+      "snoozed": false,
+      "snoozedUntil": null,
+      "parentThreadId": null,
+      "relationshipToParent": null,
+      "itemCount": 848,
+      "createdAt": "2026-11-09T22:02:26.554Z",
+      "updatedAt": "2026-11-11T06:28:22.762Z"
+    }
+  ],
+  "nextCursor": null,
+  "total": 2
+}

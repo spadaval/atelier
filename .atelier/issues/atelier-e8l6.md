@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:50.299526183+00:00"
+status: "declined"
 title: "Do not let an inline backtick line open an evidence fence"
-updated_at: "2026-10-23T14:41:04.594628762+00:00"
+updated_at: "2026-11-11T03:55:50.299526183+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ A records test shows a body with an inline triple-backtick line still yields its
 ## Context
 
 Review finding atelier-mrq7 on atelier-dg3h; `markdown_sections` and `opening_fence_len` in crates/atelier-records/src/lib.rs.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes evidence body parsing, and the What is removed table removes evidence records.

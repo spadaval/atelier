@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:29.651594241+00:00"
+status: "declined"
 title: "Regenerate the bundle preview fixture and test it against real output"
-updated_at: "2026-10-17T01:10:57.969258244+00:00"
+updated_at: "2026-11-11T03:55:29.651594241+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ docs/spec/bundle/fixtures/dry-run-preview.txt lacks the `updated:` count line an
 ## Context
 
 Land this after the preview-tree item in this mission, or regenerate the fixture again when that changes the output.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It tests the output of `bundle preview`, and the What is removed table removes `bundle`.

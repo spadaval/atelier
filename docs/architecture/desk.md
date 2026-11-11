@@ -1,8 +1,8 @@
 # The Desk's API
 
 Status: the contract for mission atelier-z4cr (`docs/strategies/desk.md`),
-written by item atelier-1ie1 before any server code, and corrected by item
-atelier-uwxy where the server as built differs. It says what each page
+written by item atelier-1ie1 before any server code, and corrected by items
+atelier-uwxy and atelier-e05n where the server as built differs. It says what each page
 of the Desk is sent, and for every field, which function of the redesigned
 core in `next/` gives it, or that none does yet. The decisions are in
 [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md); what the Desk is
@@ -103,10 +103,21 @@ hosts = ["localhost", "127.0.0.1"]
 # The built app's directory, served for every path outside /api, with its
 # index.html for a path that names no file. Without it only /api is served.
 app = "/path/to/atelier/desk/dist"
+
+# How to reach T3 Code. Without this table the Desk makes no call to T3
+# Code and every response reports its threads as unavailable. Both keys
+# are needed.
+[t3]
+# The t3 binary that matches the running T3 Code, which the Desk runs for
+# a token. On this host that is the one under ~/.t3/runtime/versions/
+# named for the running server's version, not the older t3 on PATH.
+command = "~/.t3/runtime/versions/0.1.9-nightly.20261110.4478/t3"
+# T3 Code's MCP server.
+url = "http://127.0.0.1:3773/mcp"
 ```
 
 A path may start with `~/`, and a relative one is read from the
-configuration file's directory. When two roots have a child of the same
+configuration file's directory; that holds for `t3.command` too. When two roots have a child of the same
 name, the first is served and the second is listed with an error.
 
 The app's TypeScript types are generated from `src/api.rs` into
@@ -166,9 +177,9 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 `?done=true` on `/missions` lists done and dropped missions, as
 `Filter::done` does for `list` (master).
 
-The routes for `/history`, `/api/threads` and `POST /api/act` are not served
-yet (items atelier-e05n and atelier-h3hl, and M5): they answer `404`. Nor
-are `threads`, `holds`, `pending_answers`, `can_decide` and `decide_at`.
+The routes for `/history` and `POST /api/act` are not served yet (item
+atelier-h3hl, and M5): they answer `404`. Nor are `pending_answers`,
+`can_decide` and `decide_at`.
 
 ## Responses, field by field
 
@@ -219,7 +230,8 @@ gives (added by atelier-uwxy).
 | `questions[] {item, question, finding, answer {by, text}, outcome}` | `ItemDir::decisions` of each item's record | M3: `MissionView::questions` |
 | `plan_reviews[]` | `MissionDir::reviews`, each as a review (below) | master |
 | `plan_reviews[].changed_since[]` | The plan's paths that differ between the commit reviewed and the base's tip; `null` when this clone lacks that commit | M6: `atelier_app::plan::plan_changed_at(&mut repo, id, commit, base_tip)` |
-| `threads[]` | The join in [Tying a thread to an item](#tying-a-thread-to-an-item) | master, T3 Code |
+| `threads[]` | Its lead and the reviewers of its plan reviews, with `item: null`, then each of its items' agents (below) with `item` naming the item, so a mission with no lead still shows who works on its items; joined as in [Tying a thread to an item](#tying-a-thread-to-an-item) | Desk, T3 Code |
+| `t3` | Whether T3 Code could be read, as on `/api/threads` | Desk |
 | `pending_answers[]` | Answers the Desk gave with `decide` that no commit holds yet | Desk memory |
 
 An **item row**, in a mission, the inbox and the rail's loose work:
@@ -272,7 +284,16 @@ app resolves them against `path`, as the spike's `DocReader` does.
 | `unsettled[]` | The names of `acts::unsettled`, for a done item | master |
 | `decide_at` | `git::checkout_of(root, id)`: the checkout with the item's branch out, where `decide` writes | psjw |
 | `can_decide` | `acts::check(Act::Decide, &facts)` for the human caller | master values, psjw `facts` |
-| `threads[]`, `pending_answers[]` | As on the mission | master, Desk |
+| `threads[]` | One agent per identity and role the record names: its implementers, the reviewers of its reviews and the deciders of its answers, each with `item: null` | Desk, T3 Code |
+| `t3` | As on `/api/threads` | Desk |
+| `pending_answers[]` | As on the mission | Desk |
+
+An **agent**, in `threads[]` of a mission or an item: `identity`, whole as
+the record holds it; `role`, one of `implementer`, `reviewer`, `lead` or
+`decider`; `item`; and `thread`, the live thread's `title`, `status`,
+`provider`, `model` and `link` when T3 Code lists the identity as a live
+thread, else `null`, and then the page shows the identity as text with no
+link. An identity named in two roles is listed once for each.
 
 `show <item>` also shows a settlement written in the base checkout and not
 committed. The Desk does not, since it reads commits only.
@@ -280,13 +301,15 @@ committed. The Desk does not, since it reads commits only.
 ### `GET /api/inbox`
 
 `repos[]`, each with `repo`, `commit`, `error` (as on `/api/repos`; the
-lists are then empty) and:
+lists are then empty) and the fields below. The response also has `t3`, as
+on `/api/threads`.
 
 | Field | Given by | State |
 | --- | --- | --- |
 | `needs_human[] {mission, mission_title, items[]}` | `list(.., &Filter { needs_human: true, .. })`: `Group::id`, `Group::mission`, `Group::items` as item rows | master |
 | `drafts[]` | Missions with `MissionStatus::Draft`, as mission rows on the rail | master |
 | `questions[] {item, mission, question, finding}` | `acts::question` of each started item's record | master |
+| `threads[]` | Live threads whose status is `waiting`, which T3 Code gives a thread that waits on a person, and that hold something in this repository's records; each as on `/api/threads`, with only this repository's `holds` | Desk, T3 Code |
 
 `needs_human` lists the same items as `atelier list --needs-human`, which
 the criterion desk-matches-cli checks. `drafts` and `questions` are in
@@ -295,15 +318,38 @@ addition. A question is listed because the human may answer any question
 
 ### `GET /api/threads`
 
-The server polls T3 Code's MCP server, `t3_thread_list` with `allProjects`,
-`includeSubagents`, `settled: false` and the live statuses (`preparing`,
-`queued`, `starting`, `running`, `waiting`), with a read-only token, as the
-2026-11-10 note on atelier-aab1 describes.
+The server reads T3 Code's thread list every 10 seconds on a thread of its
+own and keeps it in memory, so no request waits on T3 Code and none calls
+it. Each poll calls the MCP tool `t3_thread_list` with `allProjects`,
+`includeSubagents`, `settled: false`, the live statuses (`preparing`,
+`queued`, `starting`, `running`, `waiting`) and `limit: 100`, following
+`nextCursor` to the last page. A poll that fails keeps the last list read,
+which every response then serves with its age.
+
+The client is `atelier_desk::t3::Client`. It runs the configured command as
+`auth session issue --subject mcp-client --scope orchestration:read --ttl
+1h --label atelier-desk --json` and keeps the token in memory only: it is
+never logged, written to disk or put in a response or an error. It opens
+an MCP session (`initialize`, then `notifications/initialized`) and sends
+the token as a bearer token with each request. A token within two minutes
+of the expiry `issue` printed, or one the server refuses with `401` or
+`403`, is replaced, the old session revoked with `auth session revoke`, and
+the call made once more; so is an MCP session the server no longer knows
+(`400` or `404`). Stopping the server revokes the session it holds. The
+token can read and do nothing else: T3 Code refuses it on
+`t3_thread_launch` with `capability_denied` (atelier-aab1).
 
 | Field | Given by | State |
 | --- | --- | --- |
-| `id`, `title`, `status`, `provider`, `model`, `parent`, `branch`, `pull_requests`, `link`, `updated_at` | T3 Code: `threadId`, `title`, `status`, `providerInstanceId`, `model`, `parentThreadId`, `branch`, `pullRequests`, `link`, `updatedAt` | T3 Code |
-| `holds[] {repo, kind, id, role}` | The join below, over every repository | master |
+| `threads[].id`, `title`, `status`, `provider`, `model`, `parent`, `pull_requests[] {repository, number, url, state}`, `link`, `updated_at` | T3 Code: `threadId`, `title`, `status`, `providerInstanceId`, `model`, `parentThreadId`, `pullRequests`, `link`, `updatedAt` | T3 Code |
+| `threads[].holds[] {repo, kind, id, role}` | The join below, over every repository served; `kind` is `item` or `mission` | Desk |
+| `t3 {reachable, age_seconds, error}` | Whether the last poll read the list; the age in seconds of the list served (`null` before one is read); and why the last poll failed, or that the configuration has no `[t3]` table | Desk |
+
+`t3_thread_list` gives no `branch`, so the response has none. T3 Code's
+`t3_thread_read` gives one, but it is `null` for a thread working on a
+branch, as the example below shows. `link` is the T3 Code web app's address
+for the thread, such as `https://app.t3.codes/threads/<environment>/<thread
+ID, percent-encoded>`.
 
 Effort, context use and token counts are not shown: the MCP server gives
 none (atelier-aab1), and the strategy puts them out of scope.
@@ -418,6 +464,16 @@ Code gives `branch: null` although the thread works on branch
 `atelier-1ie1`, so a thread's branch cannot do the join, and neither can
 its title.
 
+A live thread that no record names is tied to no repository: on
+`/api/threads` it is listed with empty `holds`, and it is in no
+repository's inbox. The Desk does not guess from where the thread runs.
+A T3 project's workspace root names one checkout, such as
+`/home/supadava/projects/atelier` for the project `atelier`, while its
+threads work in worktrees elsewhere, and until the cutover the Desk serves
+converted clones, not those checkouts. A thread that holds nothing in the
+records is doing no tracked work, so tying it to a repository would show
+it beside work it is not doing.
+
 An item with none, such as `atelier-psjw` in the same clone
 (`implementers: []`), shows "No thread has started this item." A ready item
 says that and nothing else; a started one whose holder is no live thread
@@ -473,3 +529,6 @@ The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from
   because saying go and answering are the two acts the Desk offers.
 - Live threads are polled as a list and joined to records on the server,
   so a page needs one request for its agents.
+- A response read from records is cached by its commits without its
+  threads; each request joins the threads of the last poll to it, so a
+  thread's status is never older than the last poll.
