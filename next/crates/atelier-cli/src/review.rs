@@ -2,13 +2,16 @@
 //! and on a mission's plan.
 
 use crate::commands::{facts, gated, mission_gate, refusal, refused, write_and_commit, Outcome};
-use crate::git;
+use crate::forge::Github;
 use crate::output::{self, Brief, PlanBrief};
 use crate::repo::{git_at, item_dir, item_path, mission_dir, mission_path, Repo};
+use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
 use atelier_app::{carried, carried_plan};
-use atelier_core::{Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict};
+use atelier_core::{
+    Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
+};
 use atelier_records::{create_review, render_item, render_review, validate_id, ReviewFile};
 
 /// Opens this round's review file, or takes it over, and prints the brief.
@@ -23,12 +26,13 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(Outcome::Refused(output::no_item(id, &repo.base)));
     };
     let links = repo.links(record)?;
+    let forge = repo.base_config()?.forge;
     let facts = facts(repo, &located, &links, None);
     let text = match check(Act::Review, &facts) {
         Ok(_) => None,
         // Its one condition: the caller never implemented the item.
         Err(Refusal::Unmet(_)) => {
-            Some(output::author(id, &repo.caller) + &brief(repo, &facts, None)?)
+            Some(output::author(id, &repo.caller) + &brief(repo, &facts, None, forge.as_ref())?)
         }
         Err(refusal) => Some(refused(Act::Review, &refusal, &facts)?),
     };
@@ -56,7 +60,9 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let located = repo.locate(id)?;
     let facts = self::facts(repo, &located, &links, None);
     let path = format!("{}/reviews/{name}.md", item_dir(id));
-    Ok(Outcome::Done(said + &brief(repo, &facts, Some(path))?))
+    Ok(Outcome::Done(
+        said + &brief(repo, &facts, Some(path), forge.as_ref())?,
+    ))
 }
 
 /// The caller's review file in the record directory `dir` of `id`: `file`,
@@ -317,8 +323,14 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
 }
 
 /// The brief for the round `facts` shows, with the caller's review file at
-/// `path`, or none for an author.
-fn brief(repo: &Repo, facts: &Facts, path: Option<String>) -> Result<String> {
+/// `path`, or none for an author, and the pull request on `forge`, the
+/// one the base's config names.
+fn brief(
+    repo: &Repo,
+    facts: &Facts,
+    path: Option<String>,
+    forge: Option<&Forge>,
+) -> Result<String> {
     let item = facts.item;
     let round = facts.round();
     let commit = match round.review {
@@ -336,6 +348,7 @@ fn brief(repo: &Repo, facts: &Facts, path: Option<String>) -> Result<String> {
         .filter_map(|heading| Some((heading, item.section(heading)?)))
         .collect();
     Ok(output::brief(&Brief {
+        pull_request: forge.map(|forge| pull_request(repo, forge, &item.item.id)),
         id: &item.item.id,
         title: &item.item.title,
         caller: &repo.caller,
@@ -347,6 +360,18 @@ fn brief(repo: &Repo, facts: &Facts, path: Option<String>) -> Result<String> {
         carried: &carried(item, round.number)?,
         path: path.as_deref(),
     }))
+}
+
+/// What the brief says of branch `id`'s pull request on `forge`, where
+/// CI's result is read. The forge is asked under the bound `merge` gives a
+/// question under its lock.
+fn pull_request(repo: &Repo, forge: &Forge, id: &str) -> String {
+    let found = Github::open(&repo.root, forge).and_then(|github| {
+        github
+            .until(merge::locked_until())
+            .open_pull_request(id, &repo.base)
+    });
+    output::brief_pull_request(id, &found)
 }
 
 /// The commit branch `id` points at.

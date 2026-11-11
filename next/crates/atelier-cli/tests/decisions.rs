@@ -47,9 +47,10 @@ fn escalate(root: &Path, finding: Option<&str>) -> Run {
 fn decider_handoff(finding: &str) -> String {
     let stem = finding.rsplit_once('.').unwrap().0;
     format!(
-        "A decider must be another thread: not you, and not a subagent of yours, which runs as \
-         your thread. Start one with your harness's tool for a new agent thread, and give it this \
-         task:\n  Run atelier show {ID}, and read the question waiting under its Decisions and \
+        "A decider must be a thread other than yours. Under Codex a subagent you start is one; \
+         under Claude Code a subagent runs as your thread and is refused, so use your harness's \
+         tool for a new agent thread. Start one with fresh context, not as a fork of yours, and \
+         give it this task:\n  Run atelier show {ID}, and read the question waiting under its Decisions and \
          finding {finding} in {REVIEWS}/{stem}.md. Answer it with atelier decide {ID} '<your \
          answer>', adding --defer to defer the finding or --no-action to close it without a fix, \
          or neither to leave it to be fixed.\nThen wait for its answer, and run `atelier status`.\n"
@@ -117,7 +118,7 @@ fn an_escalation_decided_as_defer_is_carried_as_decided_and_the_item_merges() {
     // Its status shows the question and who decides it; submit waits.
     let status = atelier(&root, "t1", &["status"]).stdout;
     let waits = format!(
-        "Status: changes requested\nTo return it to review:\n  [ ] Question answered: {asked}\n{}",
+        "Status: changes requested in round 1\nTo return it to review:\n  [ ] Question answered: {asked}\n{}",
         decider_handoff(&finding)
     );
     assert!(status.contains(&waits), "{status}");
@@ -178,7 +179,7 @@ fn an_escalation_decided_as_defer_is_carried_as_decided_and_the_item_merges() {
     // Settled, the finding needs no response, and nothing is left to ask.
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains("Status: changes requested\n`atelier submit` commits"),
+        status.contains("Status: changes requested in round 1\n`atelier submit` commits"),
         "{status}"
     );
     let again = atelier(&root, "d1", &["decide", ID, "Yes."]);

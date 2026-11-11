@@ -297,7 +297,7 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
                  demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
                  Building:\n    demo-d4dd (medium, held by t1): Wave\n      \
                  [ ] Done when: It is done.\n      [ ] Report: written under `## Report`\n";
-    let handoff = "An implementer must be another thread: not you, and not a subagent of yours, which runs as your thread. Start one with your harness's tool for a new agent thread, and give it this task:\n  \
+    let handoff = "An implementer must be a thread other than yours. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Start one with fresh context, not as a fork of yours, and give it this task:\n  \
                    Run atelier start demo-a1aa and follow what it prints.\n\
                    Then wait for it to finish, and run `atelier status`.\n";
     let then = format!(

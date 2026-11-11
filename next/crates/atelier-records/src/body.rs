@@ -471,6 +471,38 @@ mod tests {
     }
 
     #[test]
+    fn an_identity_holding_a_slash_reads_back_whole_from_each_line_that_names_one() {
+        let by = Thread("t3-root/codex-child".into());
+        let path = Path::new("item.md");
+        // `Answer by <thread>: <answer>`.
+        let asked = ask("## Goal\ng\n", "2026-11-11: Why?", None);
+        let answered = answer(&asked, 0, &by, "Because: reasons.", None).unwrap();
+        let read = decisions(path, &answered).unwrap();
+        let answer = read[0].answer.as_ref().unwrap();
+        assert_eq!(
+            (&answer.by, answer.text.as_str()),
+            (&by, "Because: reasons.")
+        );
+        // `Taken: <item> by <thread>` and `Dropped by <thread>: <reason>`.
+        let review = "1-aaaa".parse().unwrap();
+        let body = "## Finding 1: One\nRecommendation: defer\n";
+        for settlement in [
+            Settlement::Taken {
+                item: "demo-x1y2".into(),
+                by: by.clone(),
+            },
+            Settlement::Dropped {
+                by: by.clone(),
+                reason: "gone: for good".into(),
+            },
+        ] {
+            let settled = settle(body, 1, &settlement).unwrap();
+            let read = findings(Path::new("r.md"), &review, &settled).unwrap();
+            assert_eq!(read[0].settlement, Some(settlement), "{settled}");
+        }
+    }
+
+    #[test]
     fn a_settlement_goes_right_after_the_recommendation_where_a_fence_cannot_hide_it() {
         let taken = Settlement::Taken {
             item: "demo-x1y2".into(),

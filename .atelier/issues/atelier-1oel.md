@@ -4,6 +4,9 @@ id: "atelier-1oel"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-1oel
 priority: "P1"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Give a Codex subagent its own identity, show the round and the three-round rule in status, and name the pull request in the review brief"
-updated_at: "2026-11-11T02:51:32.249684405+00:00"
+updated_at: "2026-11-11T03:08:00.211457711+00:00"
 ---
 
 ## Goal

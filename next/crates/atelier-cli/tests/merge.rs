@@ -757,7 +757,9 @@ fn merge_takes_no_flag_but_trivial() {
 /// its process ID to `stalled`; while `once` exists it answers and then
 /// creates `stall`, so every later one stalls; while `helper` exists it answers but leaves
 /// a process holding its output, whose ID it writes to `helped`; while
-/// `no-pulls` exists opening a pull request fails.
+/// `no-pulls` exists opening a pull request fails. While `pulls-down`
+/// exists looking one up fails, and while `pulls-stall` exists it never
+/// answers, after writing its process ID to `stalled`.
 const FAKE_GH: &str = r#"#!/bin/sh
 echo "$*" >> "$FAKE_GH/calls"
 if [ "$1" = auth ]; then exit 0; fi
@@ -780,6 +782,10 @@ case "$answer" in
     if [ -f "$FAKE_GH/helper" ]; then sleep 60 & echo $! >> "$FAKE_GH/helped"; fi
     ;;
 esac
+if [ "$answer" = pulls ] && [ "$method" = GET ]; then
+  if [ -f "$FAKE_GH/pulls-stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
+  if [ -f "$FAKE_GH/pulls-down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+fi
 if [ "$answer" = pulls ] && [ "$method" = POST ]; then
   if [ -f "$FAKE_GH/no-pulls" ]; then echo "HTTP 422: Validation Failed" >&2; exit 1; fi
   echo '[{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}]' > "$FAKE_GH/pulls"
@@ -1038,9 +1044,10 @@ fn with_a_forge_submit_pushes_the_branch_and_opens_its_pull_request() {
         run.stdout,
         format!(
             "Submitted {ID} for review.\nPushed branch {ID} to origin. {PULL}\
-             A reviewer must be another thread: not you, and not a subagent of yours, which runs \
-             as your thread. Start one with your harness's tool for a new agent thread, and give \
-             it this task:\n  Run atelier review {ID} and follow what it prints.\n\
+             A reviewer must be a thread other than yours. Under Codex a subagent you start is one; \
+             under Claude Code a subagent runs as your thread and is refused, so use your \
+             harness's tool for a new agent thread. Start one with fresh context, not as a fork \
+             of yours, and give it this task:\n  Run atelier review {ID} and follow what it prints.\n\
              Then wait for its verdict, and run `atelier status`.\n"
         )
     );
@@ -1088,7 +1095,7 @@ fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it
     );
     assert!(
         run.stdout.contains(
-            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be another thread: "
+            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be a thread other than yours. "
         ),
         "{}",
         run.stdout
@@ -2091,4 +2098,93 @@ fn with_a_skip_a_base_checkout_with_uncommitted_changes_is_merged_into_and_keeps
     assert!(run.stdout.starts_with(&skipped(&rule)), "{}", run.stdout);
     assert_eq!(head(&base, "HEAD"), head(&root, "main"));
     assert!(read(&base, ".atelier/config.toml").ends_with("# a note\n# another\n"));
+}
+
+/// `review`'s brief, as t2, with the forge set as `set` leaves it after
+/// the item was submitted.
+fn brief_with(set: impl Fn(&Forge)) -> Run {
+    let forge = Forge::set_up(Some("ci.yml"), "", &[ID]);
+    let root = forge.scratch.root();
+    forge.start(&root, ID);
+    assert_eq!(forge.submit(&root, ID).code, 0);
+    set(&forge);
+    forge.atelier(&root, "t2", &["review", ID])
+}
+
+#[test]
+fn the_review_brief_names_the_branchs_pull_request() {
+    let run = brief_with(|_| {});
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    // After the change it names.
+    let pull = "Pull request #7, where CI's result on the branch can be read: \
+                https://github.com/owner/repo/pull/7\n";
+    let diff = run.stdout.find("  git diff main...").unwrap();
+    assert!(
+        run.stdout[diff..].lines().nth(1) == pull.lines().next(),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn a_brief_whose_forge_has_no_pull_request_or_does_not_answer_says_so_in_one_line() {
+    let none = brief_with(|forge| fs::remove_file(forge.gh.join("pulls")).unwrap());
+    assert_eq!(none.code, 0, "{}", none.stderr);
+    assert!(
+        none.stdout.contains(&format!(
+            "\nThe forge has no open pull request for branch {ID}, so CI's result cannot be read there.\n"
+        )),
+        "{}",
+        none.stdout
+    );
+    let down = brief_with(|forge| forge.flag("pulls-down", true));
+    assert_eq!(down.code, 0, "{}", down.stderr);
+    assert!(
+        down.stdout.contains(&format!(
+            "\nThe forge did not say which pull request branch {ID} has: gh failed: HTTP 502: Bad Gateway.\n"
+        )),
+        "{}",
+        down.stdout
+    );
+    assert!(down.stdout.contains("Your review file"), "{}", down.stdout);
+}
+
+#[test]
+fn a_brief_whose_forge_never_answers_is_printed_at_the_bound() {
+    let forge = Forge::set_up(Some("ci.yml"), "", &[ID]);
+    let root = forge.scratch.root();
+    forge.start(&root, ID);
+    assert_eq!(forge.submit(&root, ID).code, 0);
+    forge.flag("pulls-stall", true);
+    let since = Instant::now();
+    let output = forge
+        .command(&root, "t2", &["review", ID])
+        .env("ATELIER_TEST_CI_WAIT", "1000,50")
+        .output()
+        .unwrap();
+    assert!(since.elapsed() < Duration::from_secs(10));
+    let run = run(output);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.contains(&format!(
+            "\nThe forge did not say which pull request branch {ID} has: gh failed: gh api repos/owner/repo/pulls did not answer in time.\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    let stalled = fs::read_to_string(forge.gh.join("stalled")).unwrap();
+    let proc = PathBuf::from(format!("/proc/{}", stalled.trim()));
+    assert!(!proc.exists(), "the stalled gh is still running");
+}
+
+#[test]
+fn with_no_forge_the_brief_says_nothing_of_a_pull_request() {
+    let scratch = submitted();
+    let run = atelier(&scratch.root(), "t2", &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        !run.stdout.to_lowercase().contains("pull request"),
+        "{}",
+        run.stdout
+    );
 }

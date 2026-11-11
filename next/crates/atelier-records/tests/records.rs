@@ -689,6 +689,29 @@ fn implementers_and_reviewers_are_lists_whose_last_entry_holds_the_role() {
     );
 }
 
+/// A Codex subagent's identity: its parent's, `/`, then its own thread.
+const SUBAGENT: &str = "5bcb08e9-f2d3-4f91-8690-1f2c2e9401a5/01a1c881-65c2-7162-8484-fc63ec812d04";
+
+#[test]
+fn an_identity_holding_a_slash_reads_back_whole_from_each_front_matter_list() {
+    let path = Path::new("x");
+    let thread = Thread(SUBAGENT.into());
+    let mut item = parse_item(path, ITEM).unwrap();
+    item.implementers.take(thread.clone());
+    let reread = parse_item(path, &render_item(&item)).unwrap();
+    assert_eq!(reread.implementers.holder(), Some(&thread));
+
+    let mut review = parse_review(path, REVIEW_2).unwrap();
+    review.reviewers.take(thread.clone());
+    let reread = parse_review(path, &render_review(&review)).unwrap();
+    assert_eq!(reread.reviewers.holder(), Some(&thread));
+
+    let mut mission = parse_mission(path, MISSION).unwrap();
+    mission.lead = Some(thread.clone());
+    let reread = parse_mission(path, &render_mission(&mission)).unwrap();
+    assert_eq!(reread.lead, Some(thread));
+}
+
 #[test]
 fn findings_are_named_by_review_stem_and_number() {
     let files = example();

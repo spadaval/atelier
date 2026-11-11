@@ -136,6 +136,7 @@ pub fn atelier_command(at: &Path, thread: &str, args: &[&str]) -> Command {
     for variable in [
         "CLAUDE_CODE_SESSION_ID",
         "CODEX_SESSION_ID",
+        "CODEX_THREAD_ID",
         "GROK_SESSION_ID",
     ] {
         command.env_remove(variable);

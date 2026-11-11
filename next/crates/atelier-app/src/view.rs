@@ -1,6 +1,8 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::acts::{mission_of, next, unmet, Act, Condition, Facts, PLANNED, STARTED};
+use crate::acts::{
+    mission_of, next, unmet, Act, Condition, Facts, ESCALATE_AFTER, PLANNED, STARTED,
+};
 use crate::work::{in_progress, items_of};
 use atelier_core::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use atelier_records::{ItemDir, MissionDir, Problem};
@@ -69,6 +71,14 @@ pub struct Entry {
     /// While it is in review, the thread holding this round's review file,
     /// if one is open.
     pub reviewer: Option<Thread>,
+    /// For its implementer, while it is in review or changes are
+    /// requested: the round under review, or the round that asked for
+    /// the changes.
+    pub round: Option<u32>,
+    /// For its implementer, with changes requested: how many rounds have
+    /// ended with no approve verdict, once that is enough to require
+    /// escalation.
+    pub unapproved: Option<usize>,
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
@@ -100,6 +110,15 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
     let undefined =
         (facts.holds() && item.status == Status::Building && unwritten != (false, false))
             .then_some(unwritten);
+    let round = match item.status {
+        _ if !facts.holds() => None,
+        Status::InReview => Some(facts.round().number),
+        Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
+        _ => None,
+    };
+    let unapproved = Some(facts.unapproved_rounds()).filter(|rounds| {
+        facts.holds() && item.status == Status::ChangesRequested && *rounds >= ESCALATE_AFTER
+    });
     Ok(Entry {
         id: item.id.clone(),
         title: item.title.clone(),
@@ -112,6 +131,8 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         holds: facts.holds(),
         undefined,
         review: facts.reviewing().map(|file| file.name.clone()),
+        round,
+        unapproved,
         reviewer: match facts.status() {
             Status::InReview => facts
                 .round()

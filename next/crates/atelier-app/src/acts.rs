@@ -390,6 +390,11 @@ pub fn approval(item: &ItemDir) -> Option<&ReviewFile> {
         .find(|r| r.name.round == latest && r.review.verdict == Some(Verdict::Approve))
 }
 
+/// The rounds without an approve verdict after which the product
+/// specification's Review section requires escalation. `status` says so;
+/// nothing is refused.
+pub const ESCALATE_AFTER: usize = 3;
+
 /// The sections of an item that a review approves along with the code.
 const REQUIREMENTS: [&str; 3] = ["Goal", "Done when", "Scope"];
 
@@ -445,6 +450,26 @@ impl<'a> Facts<'a> {
         }
         let review = self.round().review?;
         (review.review.reviewers.holder() == Some(self.caller)).then_some(review)
+    }
+
+    /// How many rounds of the item's review ended with no approve verdict:
+    /// those whose reviews hold a verdict and none `approve`.
+    pub fn unapproved_rounds(&self) -> usize {
+        let mut ended: Vec<(u32, bool)> = Vec::new();
+        for file in &self.item.reviews {
+            let Some(verdict) = file.review.verdict else {
+                continue;
+            };
+            let approve = verdict == Verdict::Approve;
+            match ended
+                .iter_mut()
+                .find(|(round, _)| *round == file.name.round)
+            {
+                Some((_, approved)) => *approved |= approve,
+                None => ended.push((file.name.round, approve)),
+            }
+        }
+        ended.iter().filter(|(_, approved)| !approved).count()
     }
 
     /// The last review of the item the caller held, if any.

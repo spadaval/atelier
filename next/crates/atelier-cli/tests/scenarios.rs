@@ -122,9 +122,10 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     assert_eq!(
         submitted.stdout,
         format!(
-            "Submitted {ID} for review.\nA reviewer must be another thread: not you, and not a \
-             subagent of yours, which runs as your thread. Start one with your harness's tool for \
-             a new agent thread, and give it this task:\n  Run atelier review {ID} and follow \
+            "Submitted {ID} for review.\nA reviewer must be a thread other than yours. Under Codex a \
+             subagent you start is one; under Claude Code a subagent runs as your thread and is \
+             refused, so use your harness's tool for a new agent thread. Start one with fresh \
+             context, not as a fork of yours, and give it this task:\n  Run atelier review {ID} and follow \
              what it prints.\nThen wait for its verdict, and run `atelier status`.\n"
         )
     );
@@ -139,14 +140,16 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     // holds the review; a second submit is refused.
     let waiting = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        waiting.contains("Status: in review\nNo reviewer has opened this round's review yet.\n"),
+        waiting.contains(
+            "Status: in review, round 1\nNo reviewer has opened this round's review yet.\n"
+        ),
         "{waiting}"
     );
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
     let waiting = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         waiting.contains(
-            "Status: in review\nThread t2 holds this round's review. Wait for its verdict"
+            "Status: in review, round 1\nThread t2 holds this round's review. Wait for its verdict"
         ),
         "{waiting}"
     );
@@ -767,7 +770,7 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
-            "Status: changes requested\nTo return it to review:\n  [ ] Finding {stem}.1 (fix now): No period\n"
+            "Status: changes requested in round 1\nTo return it to review:\n  [ ] Finding {stem}.1 (fix now): No period\n"
         )),
         "{status}"
     );
@@ -1051,4 +1054,201 @@ fn a_refused_commit_leaves_the_verdict_to_be_run_again() {
         git(&root, &["diff", "--cached", "--name-only"]),
         "notes.txt"
     );
+}
+
+/// Answers the open finding of review `previous` as fixed and submits;
+/// then `reviewer` takes round `round` and ends it with `verdict`, setting
+/// the carried finding fixed for an approval. Gives the round's review.
+fn another_round(root: &Path, previous: &str, round: u32, reviewer: &str, verdict: &str) -> String {
+    let head = git(root, &["rev-parse", "--short", "HEAD"]);
+    append(
+        root,
+        &item_path(ID),
+        &format!("- {previous}.1: fixed in {head}\n"),
+    );
+    let submit = atelier(root, "t1", &["submit"]);
+    assert_eq!(submit.code, 0, "{}", submit.stderr);
+    assert_eq!(atelier(root, reviewer, &["review", ID]).code, 0);
+    let (stem, path) = review_of(root, round);
+    if verdict == "approve" {
+        let fixed = read(root, &path).replace("Now: kept", "Now: fixed");
+        fs::write(root.join(&path), fixed).unwrap();
+    }
+    let run = atelier(root, reviewer, &["verdict", verdict]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    stem
+}
+
+/// An item whose round 1 asked for a fix, with a Responses list begun.
+fn changes_in_round_1() -> (Scratch, String) {
+    let scratch = submitted();
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
+    let (first, path) = review_of(&root, 1);
+    append(&root, &path, NO_PERIOD);
+    assert_eq!(atelier(&root, "t2", &["verdict", "changes"]).code, 0);
+    append(&root, &item_path(ID), "\n### Responses\n\n");
+    (scratch, first)
+}
+
+const ESCALATE_NOW: &str = "rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate \"<question>\"\n";
+
+#[test]
+fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate() {
+    let (scratch, first) = changes_in_round_1();
+    let root = scratch.root();
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.contains("Status: changes requested in round 1\nTo return it to review:\n"),
+        "{status}"
+    );
+    assert!(!status.contains(ESCALATE_NOW), "{status}");
+
+    let second = another_round(&root, &first, 2, "t3", "changes");
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.contains("Status: changes requested in round 2\n"),
+        "{status}"
+    );
+    assert!(!status.contains(ESCALATE_NOW), "{status}");
+
+    let third = another_round(&root, &second, 3, "t4", "changes");
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.contains(&format!(
+            "Status: changes requested in round 3\n3 {ESCALATE_NOW}To return it to review:\n"
+        )),
+        "{status}"
+    );
+    // Only its implementer is told.
+    let status = atelier(&root, "t4", &["status"]).stdout;
+    assert!(!status.contains(ESCALATE_NOW), "{status}");
+
+    // Nothing is refused: submit opens round 4, whose reviewer and
+    // implementer see its number.
+    let head = git(&root, &["rev-parse", "--short", "HEAD"]);
+    append(
+        &root,
+        &item_path(ID),
+        &format!("- {third}.1: fixed in {head}\n"),
+    );
+    let submit = atelier(&root, "t1", &["submit"]);
+    assert_eq!(submit.code, 0, "{}", submit.stderr);
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(
+        status.contains("Status: in review, round 4\nNo reviewer has opened"),
+        "{status}"
+    );
+    assert_eq!(atelier(&root, "t5", &["review", ID]).code, 0);
+    let status = atelier(&root, "t5", &["status"]).stdout;
+    assert!(
+        status.contains(&format!(
+            "You are the reviewer of {ID} (thread t5), round 4.\n"
+        )),
+        "{status}"
+    );
+}
+
+#[test]
+fn an_item_approved_in_round_3_is_not_told_to_escalate() {
+    let (scratch, first) = changes_in_round_1();
+    let root = scratch.root();
+    let second = another_round(&root, &first, 2, "t3", "changes");
+    another_round(&root, &second, 3, "t4", "approve");
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    assert!(status.contains("Status: approved since "), "{status}");
+    assert!(!status.contains("rounds have ended"), "{status}");
+}
+
+/// The variables `codex exec` inside a T3 thread had set, measured on
+/// 2026-11-11: a root thread has `CODEX_THREAD_ID` equal to
+/// `CODEX_SESSION_ID`, and its `spawn_agent` child its own.
+const SESSION: &str = "01a1c881-3c90-7600-9c6d-231de181a3c1";
+const CHILD: &str = "01a1c881-65c2-7162-8484-fc63ec812d04";
+
+/// `atelier` run as the Codex thread `thread` of T3 thread `t1`.
+fn codex(at: &Path, thread: &str, args: &[&str]) -> Run {
+    let output = atelier_command(at, "t1", args)
+        .env("CODEX_SESSION_ID", SESSION)
+        .env("CODEX_THREAD_ID", thread)
+        .output()
+        .unwrap();
+    Run {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
+    }
+}
+
+#[test]
+fn a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    // The root thread starts the item and submits it, as t1.
+    assert_eq!(codex(&root, SESSION, &["start", ID]).code, 0);
+    fs::write(root.join("hello.txt"), "hello.\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    let path = root.join(item_path(ID));
+    let ticked = fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]");
+    fs::write(&path, ticked + "It prints hello.\n").unwrap();
+    let run = codex(&root, SESSION, &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(field(&root, "HEAD", "implementers"), "t1");
+
+    // The parent itself is still refused as its reviewer.
+    let run = codex(&root, SESSION, &["review", ID]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr
+            .starts_with(&format!("You (thread t1) have implemented {ID}")),
+        "{}",
+        run.stderr
+    );
+    assert!(reviews(&root).is_empty());
+
+    // Its subagent is accepted, and recorded whole.
+    let subagent = format!("t1/{CHILD}");
+    let run = codex(&root, CHILD, &["review", ID]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "You are the reviewer of {ID} (thread {subagent}), round 1.\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    let run = codex(&root, CHILD, &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let (_, review) = review_of(&root, 1);
+    let committed = git(&root, &["show", &format!("HEAD:{review}")]);
+    assert_eq!(front(&committed, "reviewers"), subagent);
+    assert_eq!(field(&root, "HEAD", "status"), "approved");
+
+    // It is not the item's implementer, so cannot submit or merge it.
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    for command in ["submit", "merge"] {
+        let run = codex(&root, CHILD, &[command]);
+        assert_eq!(run.code, 1, "{command}: {}", run.stdout);
+        let refused =
+            format!("You (thread {subagent}) do not hold {ID}; t1 does. Nothing changed.\n");
+        assert!(
+            run.stderr.starts_with(&refused),
+            "{command}: {}",
+            run.stderr
+        );
+        assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+    }
+
+    // `show` prints the identity whole. (`log` is not built yet.)
+    let show = codex(&root, SESSION, &["show", ID]).stdout;
+    assert!(
+        show.contains(&format!(" by {subagent}, of commit ")),
+        "{show}"
+    );
+
+    // And the root merges.
+    let run = codex(&root, SESSION, &["merge"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(field(&root, "main", "status"), "done");
 }
