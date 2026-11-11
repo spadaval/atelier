@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8b0a
 title: Add `atelier log`, the history of acts
-status: ready
+status: building
 mission: atelier-295u
 labels:
 - redesign
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3Ad3b10278-c0d6-48d8-ab9f-2f66c69a7e79
 ready:
   by: sumeet, relayed by the task that started the lead
   at: 2026-11-11T17:10:10.404909184Z
