@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-tvfd
 title: 'Show write commands'' full forms in atelier --help: agents ran 541 help lookups to find --role, --kind and section names'
-status: ready
+status: dropped
 mission: atelier-icv4
 labels:
 - cli-output
@@ -50,3 +50,7 @@ Evidence: transcripts 2026-11-04 to 2026-11-09; lookups by role: orchestrators 3
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-rh0d (Fix link role defaults and role errors in issue link and unlink)
+
+## Report
+
+Dropped: Every write command it lists (`issue create`, `link`, `note`, `evidence record`, `review disposition`) was removed in 0.5, which has 17 commands. The scorecard rerun (atelier-pwhn) counts help lookups again.
