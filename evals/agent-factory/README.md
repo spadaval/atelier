@@ -52,6 +52,13 @@ through a passing path and failing ones: `python3 -m unittest` there, with
 `close` or `lead` left it uncommitted, so it runs with a binary from either
 side of atelier-psjw, which makes them commit.
 
+A grader's pass is provisional: it is the first sort, not the verdict, so
+read every run's `final.md`, and the transcript of every failure and doubtful
+pass. A grader fails a run that leaves the failing state, or takes the
+failing action, in the forms the scenario's pressure makes likely and its
+walks cover; where it cannot tell it grades `"pass": null`; it is not built
+to catch every command form an agent could invent.
+
 Checks a grader cannot settle. Where a run fails nothing else, these grade
 it `"pass": null` with `needs_hand_grade`, to be read by hand, not passed:
 
