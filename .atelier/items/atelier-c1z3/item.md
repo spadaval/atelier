@@ -8,7 +8,8 @@ mission: null
 labels:
 - redesign
 priority: medium
-blocked_by: []
+blocked_by:
+- atelier-x3n5
 implementers: []
 ready: null
 trivial: null
@@ -29,7 +30,7 @@ The baseline (mission atelier-jah8) left four things that do not affect its numb
 
 ## Scope
 
-The scripts, their README and the rubric. No baseline number changes. Mission atelier-295u's item atelier-8b0a also edits these scripts; do this with it or after it.
+The scripts, their README and the rubric. No baseline number changes. Mission atelier-295u's item atelier-x3n5 also edits these scripts, to read `atelier log`; this starts after it has merged.
 
 ## Context
 

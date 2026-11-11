@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-10: amended at Sumeet's direction: a proposal is a root cause with its trips as evidence; something broken today is a bug, not a gardener entry; a run ends in a session with Sumeet"
+last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it"
 ---
 
 # Sizing
@@ -55,14 +55,43 @@ mission 1 and never again, and the redesign's effect stays an impression.
 
 # Design
 
-Four steps, all in the backlog until the cutover has happened.
+Four steps. The cutover ran on 2026-11-11, so the mission can start. Each
+step is planned in full at its boundary, with one plan review, before its
+work starts. Steps A and B do not depend on each other and are planned
+first; C and D are still provisional.
 
-| Step | Does |
-| --- | --- |
-| A. The log | Build `atelier log` as the [architecture specification](../../../docs/design.md#the-log) describes. Remove from `scripts/scorecard/` what `log` now supplies, and tie the remaining scripts to items by the log's thread IDs. |
-| B. Readiness checklist | A short default list in the skill, mapped to the three properties, each line with the command or observation that tests it. A repository may add lines. Drawn from Factory's agent-readiness pillars, without the team-shaped criteria. |
-| C. Procedure | Rewrite `garden.md` around the two layers, the three tiers and the one-page report, with the steps that turn `log` output into its numbers. Fold `audit.md` into it. The gardener settles deferred findings with `new --from` and `drop`, on its run's branch, so its choices are reviewed with the run. |
-| D. First runs | One run in each of the five repositories. |
+| Step | Item | Does |
+| --- | --- | --- |
+| A. The log | atelier-8b0a | Build `atelier log` as the [design record](../../../docs/design.md#the-log) describes. |
+| A. The scripts | atelier-x3n5, after atelier-8b0a | Take from `log` what `scripts/scorecard/` found by walking history and matching thread titles, and delete those readers. |
+| B. Readiness checklist | atelier-vl5n | A short default list in the skill, mapped to the three properties, each line with the command or observation that tests it. A repository may add lines. Drawn from Factory's agent-readiness pillars, without the team-shaped criteria. |
+| C. Procedure | atelier-9dku, after atelier-8b0a and atelier-vl5n | Rewrite `garden.md` around the two layers, the three tiers and the one-page report, with the steps that turn `log` output into its numbers. Fold `audit.md` into it. The gardener settles deferred findings with `new --from` and `drop`, on its run's branch, so its choices are reviewed with the run. |
+| D. First runs | atelier-613a, after atelier-9dku | One run in each of the five repositories. |
+
+Decided while planning A and B:
+
+- **Step A is two items.** The command is Rust and the scripts are Python,
+  each with its own tests, and the scripts read the line layout the command
+  fixes. Two items give each one review boundary, and the scripts can be
+  done while step C is. Step C needs only the command.
+- **The scripts keep one reader, for the new layout.** They stop reading the
+  old layout, so they no longer reproduce the November baseline; the README
+  names the commit whose scripts do. Keeping both readers would keep the
+  code this mission is meant to delete.
+- **atelier-c1z3 comes after atelier-x3n5.** Both edit `scripts/scorecard/`.
+  atelier-c1z3 also needs the frozen inputs of the run after the cutover,
+  which do not exist yet, so it is blocked by atelier-x3n5 and is not part
+  of this mission. atelier-pwhn, the comparison, stays outside it too.
+- **A log line** is the commit's time, its short hash, the record's ID, the
+  act, the thread or `-`, then what changed, with a skip last. atelier-8b0a
+  holds the layout in full.
+- **A repository's own checklist lines** live in `.atelier/readiness.md` in
+  that repository. `atelier check` accepts the file, and the pre-push hook
+  counts it as code, so a line reaches the base only through a reviewed
+  merge.
+- **No scorecard number from T3 or the transcripts is new in this
+  mission.** Those need a frozen snapshot, about 7.5 GB, which a routine run
+  does not take. What a run does about them is settled in step C.
 
 The three properties and what the report shows for each:
 
@@ -87,7 +116,7 @@ mission, atelier-pwhn, picked up two weeks after the cutover.
 - **The checklist grows.** Each line names the number that would show its
   failure, and a line with no such number is cut.
 - **The history walk.** `log` has to follow both sides of each merge, which
-  today's debrief reader does not, and astromech has the most records. The
-  debrief's walk went from 7.8 s to 1.04 s when it became one `git log` over
-  the records; step A's planning settles how `log` stays a single walk.
-- **Where a repository's own checklist lines live** is settled in step B.
+  the old debrief reader did not. atelier-8b0a settles it: one `git log`
+  over the record paths and one `git cat-file --batch`. Only commits since
+  the cutover hold records in the new layout, so the walk is short today: a
+  `git log` over astromech's record paths took 0.04 s on 2026-11-11.

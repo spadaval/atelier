@@ -28,7 +28,7 @@ Make a gardener run start from numbers and end with one page.
 
 ## Context
 
-Preliminary. This step is planned in full at its boundary, with one planning review, as `.atelier/missions/atelier-295u/` says. Target design: `docs/strategies/redesign-product.md` and `docs/strategies/redesign-architecture.md`.
+Preliminary. This step is planned in full at its boundary, with one plan review, as `.atelier/missions/atelier-295u/design.md` says, and is not planned yet. Target design: `docs/product.md` and `docs/design.md`.
 
 ## Unknowns
 
