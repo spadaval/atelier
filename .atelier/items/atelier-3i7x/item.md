@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-3i7x
 title: Compute in-flight marks without snapshotting each branch's tracker
-status: draft
+status: dropped
 mission: null
 labels:
 - orientation
@@ -33,3 +33,7 @@ created_at: 2026-10-17T03:12:59.504595810Z
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-iigf
+
+## Report
+
+Dropped: `branch_summaries` and `Snapshot::at` were deleted in 0.5; refile with a timing if the new `status` is slow.
