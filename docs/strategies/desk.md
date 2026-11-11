@@ -52,9 +52,10 @@ its caller to make. `atelier` itself has no site.
 - Value: high. After the cutover it is the only place a brief or debrief can
   be read, and "where are we?" is asked in nearly every session.
 - Risk: medium. Reads can be wrong and show it: the first criterion checks
-  them against the CLI. An act writes a record, but only by running a
-  reviewed `atelier` command in a scratch worktree, and a wrong act is one
-  commit to revert.
+  them against the CLI. An act writes a record, but only by running the
+  `atelier` command in the checkout where that command is written to run.
+  Saying go adds one commit of the paths `ready` wrote, which is one commit
+  to revert; an answer stays uncommitted until the implementer's `submit`.
 
 It is worth its cost because the cheaper path, porting the old site at the
 cutover, spends that time on pages Sumeet has already rejected, and doing
