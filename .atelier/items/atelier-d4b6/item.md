@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-d4b6
 title: Classify draft missions consistently and drop empty context panels
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -27,3 +27,7 @@ A `todo` mission is classified Context and listed under "Parents and Missions (c
 - [ ] Open missions of every status appear in one place with their status word, or `work all` leaves missions to `work missions`.
 - [ ] Empty context panels are omitted in `work ready` and `work all`.
 - [ ] Tests cover a draft and a todo mission.
+
+## Report
+
+Dropped: The `work` views and their classification were removed in 0.5.
