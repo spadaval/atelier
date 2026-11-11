@@ -504,8 +504,9 @@ waiting on a human, and the items dropped on the base while their branch
 is there, each with its reason. A thread that is the `lead` of a ready
 mission at the base's tip is told so, with each of the mission's items by
 status, what holds or blocks each, under each started item the conditions
-its holder's `status` lists as unmet, other than questions, which are listed
-apart, and the handoff line that starts a thread for each item that can
+its holder's `status` lists as unmet, read from the branch's last commit and
+so without what the holder has not committed, other than questions, which
+are listed apart, and the handoff line that starts a thread for each item that can
 start now; holding nothing else, it is pointed at no item itself. On the item's branch it says a dropped item
 was dropped and why, as does the refusal of any act on it, and it
 speaks to the round's reviewer as reviewer, naming its file, tells
@@ -710,7 +711,8 @@ branch switch.
   the item's, and reviews the plan as that checkout's HEAD holds it: the
   brief reads the mission, its documents and its items from the commit the
   review records, and names in one line the paths of the plan that the
-  checkout changes from that commit, which the review does not cover. A
+  checkout or its index changes from that commit, which the review does not
+  cover. A
   mission no commit holds is refused, with the Git command that commits
   it. It creates the round's file under `missions/<id>/reviews/`, or
   appends the caller to its `reviewers`, and commits nothing. `verdict`
