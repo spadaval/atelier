@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-c6g2
 title: Teach Agent Factory to use the mission digest and check's skipped-graph notice
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -27,3 +27,7 @@ Two Atelier items had Done when clauses that needed a change in the Agent Factor
 - [ ] Once atelier-avx0 lands, the skill tells orchestrators to read `work mission <id> --since <commit>` on wake-up and to ask subagents for short reports.
 - [ ] Once atelier-fb1i lands, the Administration section of `skills/agent-factory/references/atelier.md` states how `check` reports graph errors when a record fails to parse.
 - [ ] Both edits are committed in spadaval/.agents.
+
+## Report
+
+Dropped: Both commands it waits on are dropped (atelier-avx0, atelier-fb1i), and the skill file it would edit was deleted by atelier-orb2.
