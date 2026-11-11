@@ -148,7 +148,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         }
     }
 
-    let read = (head.as_str(), base_tip.as_str(), uncommitted.as_slice());
+    let read = (head.as_str(), base_tip.as_str(), &uncommitted);
     if let Some(moved) = moved(repo, read, base_checkout.as_deref())? {
         return Ok(Outcome::Refused(output::moved(&moved, &id, &base)));
     }
@@ -200,7 +200,42 @@ struct Judged {
     /// The item is done and its branch merged into the base.
     merged: bool,
     /// What the checkout holds that no commit does, which a skip let stay.
-    uncommitted: Vec<String>,
+    uncommitted: Dirt,
+}
+
+/// What the checkout holds that no commit does, as `merge` read it: the
+/// paths, their index entries, and each file's mode and contents, so that a
+/// change to a file a skip let stay uncommitted is seen as a move.
+#[derive(PartialEq)]
+struct Dirt {
+    paths: Vec<String>,
+    index: String,
+    files: Vec<Option<(u32, Vec<u8>)>>,
+}
+
+impl Dirt {
+    fn read(repo: &Repo, id: &str) -> Result<Dirt> {
+        use std::os::unix::fs::MetadataExt;
+        let paths = repo.uncommitted(id)?;
+        let mut args = vec!["ls-files", "--stage", "-z", "--"];
+        args.extend(paths.iter().map(String::as_str));
+        // With no path, ls-files would list the whole index.
+        let index = match paths.is_empty() {
+            true => String::new(),
+            false => git::run(&repo.root, &args)?,
+        };
+        let file = |path: &String| {
+            let path = repo.root.join(path);
+            let mode = std::fs::symlink_metadata(&path).ok()?.mode();
+            Some((mode, std::fs::read(&path).unwrap_or_default()))
+        };
+        let files = paths.iter().map(file).collect();
+        Ok(Dirt {
+            paths,
+            index,
+            files,
+        })
+    }
 }
 
 /// Reads the head, then the item as the head holds it and the base's
@@ -250,7 +285,7 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     let title = record.item.title.clone();
     let merged = record.item.status == Status::Done
         && located.branch.as_ref().is_some_and(|branch| branch.merged);
-    let uncommitted = repo.uncommitted(&id)?;
+    let uncommitted = Dirt::read(repo, &id)?;
     if !merged {
         let checkout = repo.checkout(record, &head)?;
         let facts = facts(repo, &located, &links, Some(&checkout));
@@ -483,7 +518,7 @@ pub enum Moved {
 /// the branch's tip, the base's tip, or a checkout of either.
 fn moved(
     repo: &Repo,
-    (head, base_tip, uncommitted): (&str, &str, &[String]),
+    (head, base_tip, uncommitted): (&str, &str, &Dirt),
     base_checkout: Option<&Path>,
 ) -> Result<Option<Moved>> {
     let root = &repo.root;
@@ -498,7 +533,7 @@ fn moved(
         Ok(git::current_branch(path)?.as_deref() == Some(branch) && git::head(path)? == tip)
     };
     // What a skip let the checkout keep uncommitted stays as it was read.
-    if !unchanged(root, branch, head)? || repo.uncommitted(branch)? != uncommitted {
+    if !unchanged(root, branch, head)? || Dirt::read(repo, branch)? != *uncommitted {
         return Ok(Some(Moved::Checkout(root.clone())));
     }
     let now = git::checkout_of(root, &repo.base)?;

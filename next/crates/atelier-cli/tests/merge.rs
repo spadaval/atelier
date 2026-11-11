@@ -1852,6 +1852,27 @@ fn with_a_skip_a_conflict_or_an_input_that_moves_still_stops_the_merge() {
         run.stderr
     );
     assert_eq!(head(&root, "main"), moved);
+
+    // A file a skip let stay uncommitted changes again while they run.
+    let scratch = approved_with(&waiting_check(), |_| {});
+    let root = scratch.root();
+    fs::write(root.join("hello.txt"), "hello?\n").unwrap();
+    let tip = head(&root, "main");
+    let mut command = atelier_command(&root, "t1", &["merge"]);
+    command.env("ATELIER_SKIP", REASON);
+    let waiting = Waiting::spawn(command, scratch.dir.path(), "merge");
+    fs::write(root.join("hello.txt"), "hello!\n").unwrap();
+    let run = waiting.finish();
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(
+        run.stderr.starts_with(&format!(
+            "`atelier merge` wrote nothing: the checkout at {} changed",
+            root.display()
+        )) && run.stderr.ends_with(NOT_SKIPPABLE),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(head(&root, "main"), tip);
 }
 
 #[test]
