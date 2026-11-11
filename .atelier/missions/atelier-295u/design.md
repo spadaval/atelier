@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered; step C planned"
+last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered; step C planned, plan review 3-x9w6 answered"
 ---
 
 # Sizing
@@ -50,8 +50,9 @@ mission 1 and never again, and the redesign's effect stays an impression.
 - **Net size.** A run that proposes a rule or check names one it considered
   removing.
 - **A run is an item.** It is labelled `garden`, the gardener holds it as its
-  implementer, and its Report is the page. The next run's window starts
-  where the last one's item closed.
+  implementer, and its Report is the page. The page states the window it
+  measured, and the next run's window starts where that one ended, so an
+  item merged while a run waited for its session is counted by the next.
 
 # Design
 
@@ -126,7 +127,7 @@ The three properties and what the report shows for each:
 | Property | Worst spots shown |
 | --- | --- |
 | Easy to navigate | Files agents read most before their first edit |
-| Easy and reliable to change | Files with the most rework and the most fix-now findings |
+| Easy and reliable to change | Files most named in fix-now findings. Rework by file when a measurement gives it; a routine run carries the repository's rework share and does not rank files by how much they changed |
 | Easy to validate | Features with no proof command in the verify skill; defects caught after merge, by the `caused-by` their bug items carry |
 
 # Derisking
