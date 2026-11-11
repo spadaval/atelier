@@ -364,7 +364,22 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-CONVOUT
+Output at 5c230e27. Its parent 1665d88d is the last commit that changes a record other than this one; later commits change only this record:
+
+```text
+Records converted, by kind and new status:
+  item draft: 77
+  item from decision ready: 2
+  item ready: 27
+  mission draft: 6
+  mission ready: 2
+Made ready from in_progress; each branch's work is not converted:
+  atelier-5zre
+This tree's .atelier/ and moved files match a fresh conversion of 5c230e27c187dd5e417ddb616801c9d0620b70c9: 128 files.
+Every record is valid: 106 items, 8 missions and config.toml.
+```
+
+The converter printed 106 items (77 draft, 27 ready, 2 ready from decisions) and 8 missions (6 draft, 2 ready); `--verify` and `check` each exited 0. 106 items and 8 missions are the 181 open records less the 67 dropped. The full output is in `~/.cache/atelier-qr5s/5zre/convout.txt`; it also lists 21 `blocked_by` entries naming a closed or missing record, which the converter leaves out.
 
 ### Deviations
 
