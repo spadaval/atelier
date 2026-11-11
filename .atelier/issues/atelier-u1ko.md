@@ -209,6 +209,7 @@ The full run, sandbox times: preflight 3 s, convert atelier 1 s, install 0 s, pu
 - The preflight lets the threads waiting on the cutover's own thread (its T3 ancestors) run, besides the thread itself, since under T3 the orchestrator that started it is running while it waits.
 - The runbook builds the tree's binary into its state directory, not atelier's worktree, and sets aside ignored files under the converted paths (the old tool's `.atelier/runtime/`) before converting: `--verify` accepts no old file under `.atelier/`, and the rollback puts them back.
 - The four product texts are one template with the base branch filled in.
+- The settings block is `common.sh`'s, which `cutover.sh` sources on its first line after `set`, because `rollback.sh` reads the same settings and the same journal helpers.
 - `scripts/ci-jobs.sh` is kept and reshaped rather than deleted, so a records-only change still skips the Rust jobs and the Desk's job still runs only for `desk/`.
 
 ### Surprises
