@@ -130,7 +130,7 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
       ) : null}
 
       {repo.needs_human.map((group) => (
-        <div key={group.mission ?? ""} className="sect">
+        <div key={group.mission ?? ""} className="sect" data-testid="needs-human">
           <div className="sect-head">
             <h3>{group.mission ? <Link to={to.mission(name, group.mission)}>{group.mission_title ?? group.mission}</Link> : "In no mission"}</h3>
             <span className="tally">{group.items.length}</span>

@@ -1,0 +1,28 @@
+# A systemd user unit for atelier-desk, the Desk's server, on loopback and
+# the tailnet address. desk/service/install.sh installs it as
+# ~/.config/systemd/user/atelier-desk.service; docs/architecture/desk.md,
+# "Running it as a service", has the steps.
+[Unit]
+Description=Atelier Desk (atelier-desk)
+After=network-online.target
+# The tailnet address exists only once tailscaled has brought tailscale0 up,
+# and a user unit cannot be ordered after tailscaled.service, a system unit.
+# Until then binding it fails, the server exits with an error, and systemd
+# starts it again every RestartSec, with no limit on how often.
+StartLimitIntervalSec=0
+
+[Service]
+ExecStart=%h/.local/share/atelier-desk/atelier-desk --config %h/.config/atelier-desk/config.toml
+Environment=TMPDIR=%h/.cache/atelier-desk/tmp
+# Restarts after a crash or SIGKILL; a stop with SIGTERM is a clean exit and
+# stays stopped.
+Restart=on-failure
+RestartSec=5
+# Keep the host's other services (T3 Code) responsive: at most one core and
+# 1 GiB, at a low priority, as atelier-serve.service has.
+MemoryMax=1G
+CPUQuota=100%
+Nice=10
+
+[Install]
+WantedBy=default.target

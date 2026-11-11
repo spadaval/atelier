@@ -418,6 +418,17 @@ async fn a_repository_that_does_not_read_is_listed_with_its_error() {
 }
 
 #[tokio::test]
+async fn the_repositories_response_names_the_commit_the_server_was_built_from() {
+    let served = serve();
+    let listed = ok(&served.app, "/api/repos").await;
+    let head = git(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &["rev-parse", "HEAD"],
+    );
+    assert_eq!(listed["built_from"], head);
+}
+
+#[tokio::test]
 async fn a_request_for_another_host_is_refused() {
     let served = serve();
     let (status, _) = get_from(&served.app, "/api/repos", "localhost:3780").await;

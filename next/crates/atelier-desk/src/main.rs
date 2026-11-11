@@ -6,6 +6,7 @@ use atelier_desk::{router_for, Config, Desk};
 use std::future::IntoFuture;
 use std::path::PathBuf;
 use tokio::net::TcpListener;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::task::JoinSet;
 
 #[tokio::main]
@@ -21,7 +22,11 @@ async fn main() -> Result<()> {
         let listener = TcpListener::bind(address)
             .await
             .with_context(|| format!("cannot listen on {address}"))?;
-        eprintln!("atelier-desk: serving on http://{address}");
+        eprintln!(
+            "atelier-desk: built from {}, serving on http://{}",
+            atelier_desk::BUILT_FROM,
+            listener.local_addr()?
+        );
         listeners.push(listener);
     }
     let desk = Desk::new(config);
@@ -31,8 +36,11 @@ async fn main() -> Result<()> {
     for listener in listeners {
         servers.spawn(axum::serve(listener, app.clone()).into_future());
     }
+    let mut terminate = signal(SignalKind::terminate()).context("cannot watch for SIGTERM")?;
     let ended = tokio::select! {
+        // systemd stops the service with SIGTERM; a terminal with SIGINT.
         _ = tokio::signal::ctrl_c() => Ok(()),
+        _ = terminate.recv() => Ok(()),
         Some(ended) = servers.join_next() => match ended {
             Ok(Ok(())) => Err(anyhow::anyhow!("the server stopped")),
             Ok(Err(error)) => Err(anyhow::Error::from(error).context("the server stopped")),
