@@ -10,6 +10,12 @@ created_at: 2026-11-11T02:27:40.931434842Z
 event:
   event: finding
   recommendation: defer
+  disposition:
+    decision: fix_now
+    identity: Claude Fable 5.2 (planner of atelier-z4cr)
+    commit: d94d7f9a91f9864fd7ac0848126ce3d5f27cd2d6
+    recorded_at: 2026-11-11T02:50:21.843043919Z
+    reason: 'Fixed instead of deferred, in 07418b1b: the two specifications call the human''s product the Desk.'
 ---
 
 The amended specifications still name the human's product "the dashboard". docs/strategies/redesign-product.md:512 and docs/strategies/redesign-architecture.md:1234 call the derived post-go-ahead view "the dashboard's to build later" / "the dashboard's to derive". ADR 0032 and docs/product/desk.md name that product the Desk. Replace dashboard with Desk in those two lines so a reader of the specifications does not keep a second human tool.
