@@ -75,8 +75,8 @@ piece. The new workspace has its own.
 ## Workspace and crates
 
 The new tool lives in `next/`, a Cargo workspace of its own with its own
-lock file, built to `next/target/`. It has the crates the old one has, less
-`atelier-workflow`, under the same names:
+lock file, built to `next/target/`. It has four crates, those of the old
+one less `atelier-workflow` and `atelier-site`, under the same names:
 
 | Crate | Owns |
 | --- | --- |
