@@ -6,7 +6,7 @@ title: Give the gardener `atelier log` and a readiness checklist, so a run start
 status: ready
 labels:
 - redesign
-lead: null
+lead: thread:delegated-task:command%3Amcp%3A386345c9-a3d2-4f5d-b47b-a12ac38636b5%3Adelegate-task%3A5850a386-2088-4c43-87fe-0dec52d3ebbe
 ready:
   by: sumeet, relayed by the task that started the lead
   at: 2026-11-11T17:10:10.404909184Z
