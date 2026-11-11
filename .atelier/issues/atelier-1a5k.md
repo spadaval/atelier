@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:34.101570533+00:00"
+status: "declined"
 title: "Stop work parent listing and counting the parent as its own row"
-updated_at: "2026-11-07T21:03:28.888905387+00:00"
+updated_at: "2026-11-11T03:55:34.101570533+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ updated_at: "2026-11-07T21:03:28.888905387+00:00"
 ## Context
 
 Already done since the original: the header uses the mission's form with the parent's mission, and the `Proof gaps` count is gone (a test asserts it). Decision atelier-mzpn dropped naming the items without proof, since receipts gate nothing (atelier-md0v).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `work parent`, and the What is removed table removes the nine `work` views and parents.

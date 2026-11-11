@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:31.240438996+00:00"
+status: "declined"
 title: "Show field-level changes for update entries in bundle preview"
-updated_at: "2026-10-17T01:10:57.970482449+00:00"
+updated_at: "2026-11-11T03:55:31.240438996+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ An `update` entry replaces `labels`, `title`, `body` and `priority` wholesale (d
   `title: "Validate bundle fixtures" → "Validate bundle fixtures (revised)"`, `labels: bundle, fixtures → bundle (removes fixtures)`, `+1 note`, `+blocks p.b`.
 - [ ] Body replacement shows which sections change (`body: Goal, Done when replaced`).
 - [ ] A test covers a label removal shown in preview.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `bundle preview` output, and the What is removed table removes `bundle`.

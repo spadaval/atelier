@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:30.604710425+00:00"
+status: "declined"
 title: "Draw bundle preview as a tree with type, status and new/updated marks"
-updated_at: "2026-10-17T01:10:57.970167371+00:00"
+updated_at: "2026-11-11T03:55:30.604710425+00:00"
 ---
 
 ## Goal
@@ -62,3 +63,7 @@ Apply prints the same tree with allocated IDs (`m = atelier-fz5l`). The `Applied
 ## Context
 
 Follows the one-line-per-item rule in ADR 0022 and atelier-deyy. Field changes for update entries are a separate item in this mission.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `bundle preview` output, and the What is removed table removes `bundle`.
