@@ -1,1881 +1,390 @@
-use anyhow::{Context, Result};
-use atelier::commands;
-use atelier::commands::record_commit::{RecordCommit, RecordCommitArgs};
-use atelier_app::storage_layout::StorageLayout;
-use atelier_app::use_cases::{self, load_repository};
-use atelier_core::{EvidenceResult, FindingDecision, InvalidValue};
-use clap::builder::TypedValueParser;
-use clap::{Parser, Subcommand};
-use std::env;
+//! The `atelier` command (docs/strategies/redesign-product.md, Commands).
 
-mod issue_cli;
-mod workflow_help;
+mod check;
+mod commands;
+mod forge;
+mod git;
+mod merge;
+mod output;
+mod plan;
+mod questions;
+mod review;
+mod setup;
+mod view_output;
+mod views;
 
-/// Help lists global options after every command's own options.
-const GLOBAL_OPTION_ORDER: usize = 1000;
+use atelier_app::{identity, Repo, Skip, SKIP_VARIABLE as SKIP};
+use atelier_core::{Priority, Verdict};
+use clap::builder::NonEmptyStringValueParser;
+use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
+use commands::Outcome;
+use std::io::Write;
+use std::path::Path;
+use std::process::ExitCode;
+
+/// `ATELIER_SKIP`'s value, if it is set; blank when it is set to nothing
+/// but whitespace, which every command refuses.
+fn skip_variable() -> Option<String> {
+    let value = std::env::var_os(SKIP)?;
+    Some(value.to_str().unwrap_or("?").to_string())
+}
+
+/// The repository of the checkout this command runs in, opened for the
+/// calling thread with this invocation's skip.
+pub(crate) fn open<'s>(dir: &Path, skip: &'s Skip) -> anyhow::Result<Repo<'s>> {
+    Repo::open(dir, identity(|name| std::env::var(name).ok()), skip)
+}
 
 #[derive(Parser)]
-#[command(name = "atelier")]
-#[command(about = "Mission and proof oriented work coordination for agents")]
-#[command(after_help = "Common commands:
-  atelier status
-  atelier work ready
-  atelier work mission <id>
-  atelier issue show <id>
-  atelier start <id>
-  atelier review request <id>
-  atelier review approve <id> --identity <name> \"...\"
-  atelier merge <id>
-  atelier land
-
-One issue, in order: start it; implement; tick every Done when line and
-write its ## Report; review request, which refuses until both hold; fix
-each fix_now finding and get the fix reviewed again; approve; merge, which
-makes one merge commit and marks the work done. Work has no close step. Only
-a code change makes an approval stale; a Done when line rewritten after start
-is shown in the review brief and by merge --check, and refuses nothing. Work
-that changes no code and can only happen after a merge or release, such as
-pushing a tag, is a loose end (--issue-type loose_end); an independent
-validation is a validation item instead. A change with no issue takes review
-request and merge with no ID on its own branch. Run land before every
-handoff.")]
-#[command(version = option_env!("ATELIER_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
-struct Cli {
-    /// Quiet mode: only output essential data (IDs, counts)
-    #[arg(short, long, global = true, display_order = GLOBAL_OPTION_ORDER)]
-    quiet: bool,
-
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(clap::Args)]
 #[command(
-    override_usage = "atelier review <EVENT> [OPTIONS] --identity <IDENTITY> <ID> <SUMMARY>\n       atelier review <EVENT> [OPTIONS] --identity <IDENTITY> --branch <NAME> <SUMMARY>"
+    name = "atelier",
+    about = "Tracks work in this repository. Start with `atelier status`."
 )]
-struct ReviewArgs {
-    /// The branch owner, parent issue or standalone issue the event is
-    /// about, then what was reviewed, found or decided; with --branch, the
-    /// summary alone
-    #[arg(value_names = ["ID", "SUMMARY"], required = true, num_args = 1..=2)]
-    subject: Vec<String>,
-    /// The checked-out branch the event is about, when no issue owns it: a
-    /// release, docs or a mockup on the light path, merged on an approval of
-    /// its head
-    #[arg(long, value_name = "NAME")]
-    branch: Option<String>,
-    /// Who records the event, recorded with it
-    #[arg(long)]
-    identity: String,
-    /// Commit the event pins, a full or unique short ID of an ancestor on the work branch [default: HEAD]
-    #[arg(long, value_parser = parse_commit)]
-    commit: Option<String>,
-    #[command(flatten)]
-    record_commit: RecordCommitArgs,
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
 }
-impl ReviewArgs {
-    /// What the event is about, and its summary.
-    fn subject(&self) -> Result<(commands::review::Subject, &str)> {
-        use commands::review::Subject;
-        match (&self.branch, self.subject.as_slice()) {
-            (Some(branch), [summary]) => Ok((Subject::Branch(branch.clone()), summary)),
-            (None, [id, summary]) => Ok((Subject::Issue(id.clone()), summary)),
-            (Some(_), _) => {
-                anyhow::bail!("with --branch, give only the summary; the branch is the subject")
-            }
-            (None, _) => {
-                anyhow::bail!("name the issue and the summary, or --branch <name> and the summary")
-            }
-        }
-    }
-}
-#[derive(clap::Args)]
-struct TrivialArgs {
-    /// The branch owner, parent issue or standalone issue the exemption is
-    /// about, then why correctness is evident from the diff; with --base, the
-    /// reason alone
-    #[arg(value_names = ["ID", "SUMMARY"], required = true, num_args = 1..=2)]
-    subject: Vec<String>,
-    /// Who records the exemption
-    #[arg(long)]
-    identity: String,
-    /// Commit the exemption pins, a full or unique short ID of an ancestor on the work branch [default: HEAD]
-    #[arg(long, conflicts_with = "base", value_parser = parse_commit)]
-    commit: Option<String>,
-    /// Exempt exactly this commit (a full or unique short ID) on the base
-    /// branch, with no owner issue or work branch; run on the base, and
-    /// `land` counts that commit alone as reviewed
-    #[arg(long, value_name = "COMMIT")]
-    base: Option<String>,
-    #[command(flatten)]
-    record_commit: RecordCommitArgs,
-}
+
 #[derive(Subcommand)]
-enum ReviewCommands {
-    /// Record a review account: what was reviewed and its limits
-    Record(ReviewArgs),
-    /// Record an independent approval of the work at the pinned commit
-    Approve(ReviewArgs),
-    /// Record a finding; an approval after its fix resolves a fix_now finding, and defer, no_action or wont_fix needs a disposition before merge
-    ///
-    /// Recommend fix_now to fix it on this branch, defer to fix it later in a
-    /// follow-up issue, no_action when the finding is wrong (mistaken, a
-    /// duplicate, or without consequence), and wont_fix when it is real but
-    /// not worth fixing.
-    Finding {
-        #[command(flatten)]
-        args: ReviewArgs,
-        /// Recommended decision: fix_now, defer (later, in a follow-up),
-        /// no_action (the finding is wrong) or wont_fix (real, not worth
-        /// fixing)
-        #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
-        recommendation: FindingDecision,
+enum Command {
+    /// Who this thread is, what it holds, what each thing needs, and the next command.
+    Status,
+    /// Validate every record in this checkout, and list record changes not committed yet.
+    Check {
+        /// Run as this Git hook, with the arguments Git gave the hook.
+        #[arg(long, value_name = "HOOK")]
+        hook: Option<check::Hook>,
+        #[arg(
+            requires = "hook",
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            hide = true
+        )]
+        args: Vec<String>,
     },
-    /// Record an explicit trivial exemption, with why correctness is evident
-    ///
-    /// For an owner, the exemption covers its branch to the pinned commit,
-    /// as an approval would. With --base and no owner, it covers exactly one
-    /// commit already on the base branch.
-    #[command(
-        override_usage = "atelier review trivial [OPTIONS] --identity <IDENTITY> <ID> <SUMMARY>\n       atelier review trivial [OPTIONS] --identity <IDENTITY> --base <COMMIT> <SUMMARY>"
-    )]
-    Trivial(TrivialArgs),
-    /// Set the decision on a finding, replacing any earlier one
-    ///
-    /// A finding recommended defer, no_action or wont_fix needs one before
-    /// merge; a fix_now finding needs none, since the approval after its fix
-    /// resolves it. defer names the follow-up issue that fixes it later;
-    /// no_action means the finding is wrong (mistaken, a duplicate, or
-    /// without consequence); wont_fix means it is real but not worth fixing,
-    /// and needs no follow-up. The disposition is a field of the finding,
-    /// with who set it and the commit it was set at; Git keeps earlier ones
-    /// in the finding file's history.
-    Disposition {
-        /// The finding's review event ID
-        finding: String,
-        /// Who decides, recorded with the decision
+    /// Install Atelier's Git hooks in this clone, keeping any hook it has as <name>.local; or with a harness, its session hooks in this repository.
+    Setup { harness: Option<setup::Harness> },
+    /// One item in full with its reviews, or one mission on one page with its items and questions.
+    Show { id: String },
+    /// All open work, grouped by mission and then by label; each flag given narrows it.
+    List {
+        /// Only items a thread could start now: ready, their blockers done, their mission ready.
         #[arg(long)]
-        identity: String,
-        /// The decision on the finding: defer (with --follow-up), no_action
-        /// (the finding is wrong) or wont_fix (real, not worth fixing)
-        #[arg(long, value_parser = named_values(FindingDecision::ALL, FindingDecision::as_str))]
-        decision: FindingDecision,
-        /// Only for an older Atelier's fix_now disposition, which named the commit (a full or unique short ID) that resolved the finding; a fix_now finding now needs no disposition
-        #[arg(long, value_parser = parse_resolution_commit)]
-        resolution_commit: Option<String>,
-        /// For defer: the existing follow-up issue
+        ready: bool,
+        /// Only items with a blocker that is not done.
         #[arg(long)]
-        follow_up: Option<String>,
-        /// Why the decision was taken
-        summary: String,
-        #[command(flatten)]
-        record_commit: RecordCommitArgs,
+        blocked: bool,
+        /// Only items labelled needs-human.
+        #[arg(long)]
+        needs_human: bool,
+        /// Only this mission's items.
+        #[arg(long, value_name = "ID")]
+        mission: Option<String>,
+        /// Only items, and missions, with this label.
+        #[arg(long, value_name = "LABEL")]
+        label: Option<String>,
+        /// Only what you hold as implementer, reviewer or lead.
+        #[arg(long)]
+        mine: bool,
+        /// Finished missions and items, done or dropped, instead of open ones.
+        #[arg(long)]
+        done: bool,
+        /// Instead, the deferred findings of done items that nobody has taken into an item or dropped.
+        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done"])]
+        deferred: bool,
     },
-    /// Defer every finding on an item recommended defer with no decision yet
-    ///
-    /// Each one gets a backlog follow-up discovered from it and a defer
-    /// disposition naming it. The follow-ups go under one parent per item,
-    /// labelled deferred-findings and discovered from the item; the first
-    /// run creates it and later runs reuse it while it is open. A finding
-    /// already decided is left alone, so a second run files nothing twice.
-    Defer {
-        /// The item whose findings to defer, with its children's
-        id: String,
-        /// Who decides, recorded with each disposition
+    /// Create a draft item, or with --mission a draft mission, in this checkout of the base, without committing it.
+    New {
+        #[arg(value_parser = NonEmptyStringValueParser::new())]
+        title: String,
+        /// Make the item part of this mission.
+        #[arg(long = "in", value_name = "MISSION", conflicts_with = "mission")]
+        into: Option<String>,
+        /// Create a mission instead of an item.
         #[arg(long)]
-        identity: String,
-        /// List what would be deferred and filed, and write nothing
-        #[arg(long, conflicts_with_all = ["commit_records", "stage_records"])]
-        dry_run: bool,
-        #[command(flatten)]
-        record_commit: RecordCommitArgs,
-    },
-    /// Print the brief an independent reviewer is given for an item
-    ///
-    /// The item's Goal and Done when, Done when edits made after the start,
-    /// the commits to review, earlier findings, dispositions and reviews,
-    /// recorded proof, the working rules from policy, and the commands that
-    /// record the review. It never includes the author's notes or Report,
-    /// and it refuses while the item it names, or for the owner a started
-    /// child, has an unticked Done when line or an empty Report.
-    ///
-    /// With no ID it prints the brief for the checked-out branch: its owner's
-    /// work, or, on a branch no issue owns, the branch's commits since it left
-    /// the base (the light path), with their messages and diff stat.
-    Request {
-        /// Branch owner, or an item of the owner's parent, to be reviewed
-        /// [default: the checked-out branch]
-        id: Option<String>,
-        /// The name the reviewer records under, filled into the commands
-        #[arg(long)]
-        identity: Option<String>,
-        /// Review the commits after this one [default: since the last review]
-        #[arg(long)]
+        mission: bool,
+        /// Make the item from a deferred finding of a done item, named as `atelier list --deferred` prints it, and mark the finding taken; also on the branch of an item you implement.
+        #[arg(long, value_name = "FINDING", conflicts_with = "mission")]
         from: Option<String>,
     },
-    /// List review events, for one owner or all
-    List {
-        /// Owner or issue ID; omit to list every event
-        id: Option<String>,
-        /// Print JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Show one review event
-    Show {
-        /// Review event ID
+    /// Change front-matter fields of a draft or ready item or mission, without committing them.
+    #[command(group(ArgGroup::new("fields").required(true).multiple(true)))]
+    Set {
         id: String,
+        #[arg(long, group = "fields", value_parser = NonEmptyStringValueParser::new())]
+        title: Option<String>,
+        /// The item's priority.
+        #[arg(long, group = "fields")]
+        priority: Option<PriorityArg>,
+        /// Comma-separated; replaces the labels, and "" clears them.
+        #[arg(long, group = "fields", value_name = "LABELS")]
+        labels: Option<String>,
+        /// The item's mission; "" takes it out of its mission.
+        #[arg(long, group = "fields", value_name = "MISSION")]
+        mission: Option<String>,
+        /// Comma-separated item IDs; replaces the item's blockers, and "" clears them.
+        #[arg(long, group = "fields", value_name = "IDS")]
+        blocked_by: Option<String>,
+        /// On a bug, the item ID or commit hash that introduced it; "" clears it.
+        #[arg(long, group = "fields", value_name = "CAUSE")]
+        caused_by: Option<String>,
     },
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Initialize atelier in the current directory
-    Init {
-        /// Reconcile core tracker state even if already initialized
-        #[arg(short, long)]
-        force: bool,
-        /// Project slug for new record IDs [default: repository directory name]
-        #[arg(long)]
-        slug: Option<String>,
-    },
-
-    /// Install supported harness session hooks, or link the Agent Factory skill to a checkout
-    #[command(after_help = "Linking the skill:
-  atelier setup --link [<checkout>]  point ~/.agents/skills/agent-factory and
-                                     ~/.claude/skills/agent-factory at <checkout>/skills/agent-factory
-  atelier setup --unlink             remove those links; reinstall with
-                                     npx skills add spadaval/atelier --skill agent-factory -g
-
-Link a checkout that stays on master, such as a worktree detached at master
-(git worktree add --detach ~/projects/atelier-skill master). The live skill
-follows whatever that checkout has checked out, so a checkout that switches
-branches for work changes the skill under every session. Move it forward with
-git -C <checkout> checkout --detach master. --link also removes agent-factory
-from the skills lock file, so npx skills update -g leaves the links alone.")]
-    Setup {
-        /// Harness whose hooks to install
-        #[arg(
-            value_parser = ["claude"],
-            required_unless_present_any = ["link", "unlink"],
-            conflicts_with_all = ["link", "unlink"]
-        )]
-        harness: Option<String>,
-        /// Explicit executable for local dogfooding; otherwise use atelier on PATH
-        #[arg(long, requires = "harness")]
-        binary: Option<std::path::PathBuf>,
-        /// Point the installed Agent Factory skill at <checkout>/skills/agent-factory [default: this repository's root]
-        #[arg(long, value_name = "CHECKOUT", num_args = 0..=1, conflicts_with = "unlink")]
-        link: Option<Option<std::path::PathBuf>>,
-        /// Remove the links --link made
-        #[arg(long)]
-        unlink: bool,
-    },
-
-    /// Orient a session: checkout, owner, work, missions, and other branches
-    Status {
-        /// Consume Claude Code SessionStart JSON and emit hook context
-        #[arg(long, value_parser = ["claude"])]
-        hook: Option<String>,
-    },
-
-    /// Deprecated alias for status
-    #[command(hide = true)]
-    Prime {
-        /// Consume Claude Code SessionStart JSON and emit hook context
-        #[arg(long, value_parser = ["claude"])]
-        hook: Option<String>,
-    },
-
-    /// Operational multi-issue work views
-    Work {
-        #[command(subcommand)]
-        action: Option<WorkCommands>,
-    },
-
-    /// Issue lifecycle commands (create, show, transition, note, link, ...)
-    Issue {
-        #[command(subcommand)]
-        action: IssueCommands,
-    },
-
-    /// Start an issue on its work branch: its recorded branch, else on the base a new branch named with its ID, else the current branch
-    Start {
-        /// Issue ID
-        id: String,
-        /// Deprecated and ignored: the base is the policy's base_branch
-        #[arg(long, hide = true, value_name = "BRANCH")]
-        base: Option<String>,
-        /// Start even though another live session or worktree holds the item
-        #[arg(long)]
-        take_over: bool,
-    },
-
-    /// Optional receipts for proof nothing else records; no gate reads them
-    Evidence {
-        #[command(subcommand)]
-        action: EvidenceCommands,
-    },
-
-    /// Independent review: the brief, findings, approvals and dispositions
-    Review {
-        #[command(subcommand)]
-        action: ReviewCommands,
-    },
-
-    /// Run at every handoff: judges committed records and the commits about to be pushed; reports open work on a branch, refuses unreviewed code on the base
-    Land {
-        /// Issue or branch owner (otherwise inferred from the checkout)
-        id: Option<String>,
-        /// Consume Claude Code Stop JSON and emit its decision
-        #[arg(long, value_parser = ["claude"])]
-        hook: Option<String>,
-        /// Confirm that this unowned branch installs Atelier: the base has no
-        /// workflow policy yet, so it merges through the repository's usual review
-        #[arg(long)]
-        install: bool,
-        /// Push the current branch to its own configured upstream when its
-        /// gates pass, or when land reports work in progress on a work
-        /// branch; a refusal (on the base or a detached HEAD) pushes nothing,
-        /// and it or a failed push exits non-zero
-        #[arg(long, conflicts_with = "hook")]
-        push: bool,
-    },
-
-    /// Evaluate the merge gates, then merge with one merge commit that marks the owner's open work done
-    Merge {
-        /// Issue, or child of the parent, that owns the checked-out work
-        /// branch [default: the branch's owner, or, on a branch no issue
-        /// owns, the branch itself on an approval of its head]
-        id: Option<String>,
-        /// Check the merge gates only; merge nothing
-        #[arg(long, conflicts_with = "sync")]
-        check: bool,
-        /// Print the gate results as JSON
-        #[arg(long, conflicts_with = "sync")]
-        json: bool,
-        /// Catch up first: merge the base into the work branch and report
-        /// whether the approval survived. Records nothing and integrates
-        /// nothing
-        #[arg(long)]
-        sync: bool,
-        /// Publish the merge through the policy's forge: push the branch to
-        /// `forge.remote` and open its pull request if it has none, fetch the
-        /// base, merge, judge the base as `land` does, push it, and confirm
-        /// the pull request merged. The branch and pull request are pushed
-        /// even when a gate refuses
-        #[arg(long, conflicts_with_all = ["check", "json", "sync"])]
-        push: bool,
-        /// When every other gate passes and CI is pending, poll it every 30
-        /// seconds until it finishes or `--timeout` passes, then merge if it
-        /// passed. Without `--push`, merges without publishing
-        #[arg(long, conflicts_with_all = ["check", "json", "sync"])]
-        wait: bool,
-        /// Minutes `--wait` waits for CI before refusing
-        #[arg(long, value_name = "MINUTES", default_value_t = 30, requires = "wait")]
-        timeout: u64,
-    },
-
-    /// One-shot graph bundle files
-    Bundle {
-        #[command(subcommand)]
-        action: BundleCommands,
-    },
-
-    /// Validate tracker records and their graph
-    Check {
-        /// Optional issue ID
-        id: Option<String>,
-    },
-
-    /// Judge every done item and the whole review history, and check
-    /// whether atelier and the Agent Factory skill are out of date
-    ///
-    /// `land` judges only what changed since the base. The update check
-    /// never fails the command; `ATELIER_NO_UPDATE_CHECK=1` turns it off.
-    Doctor,
-
-    /// Refresh the cached update check that status reads (status runs it,
-    /// detached)
-    #[command(name = "refresh-update-check", hide = true)]
-    RefreshUpdateCheck,
-
-    /// Review a mission's plan before work starts: outcome, criteria, scope
-    /// with sizes, blockers, unknowns, human decisions, risks and approvals
-    Brief {
-        /// Mission ID
-        id: String,
-    },
-
-    /// Review a finished mission: criteria and proof, each item's report,
-    /// decisions, derived deviations and follow-ups
-    Debrief {
-        /// Mission ID
-        id: String,
-    },
-
-    /// Serve every mission's brief, debrief and strategy as pages and JSON,
-    /// read-only, for every Atelier repository under the roots, from each
-    /// one's base branch
-    #[command(after_help = "Pages:
-  /                                         every repository and its missions
-  /<repo>/mission/<id>[/brief|/debrief|/strategy]
-
-Routes:
-  GET /api/repos                            repositories, their counts and missions
-  GET /api/<repo>/mission/<id>              one mission and the review it opens on
-  GET /api/<repo>/mission/<id>/brief        the view `atelier brief` prints
-  GET /api/<repo>/mission/<id>/debrief      the view `atelier debrief` prints
-  GET /api/<repo>/mission/<id>/strategy     the strategy's Markdown
-
-Each repository is read from one commit of its base branch, never from a
-checkout, and nothing is written to it.")]
-    Serve {
-        /// Address to listen on
-        #[arg(long, default_value = "127.0.0.1:7341")]
-        bind: std::net::SocketAddr,
-        /// Directory to search for Atelier repositories; repeat for more [default: ~/projects]
-        #[arg(long = "root", value_name = "DIR")]
-        roots: Vec<std::path::PathBuf>,
-    },
-
-    /// Prune accumulated artifacts safely
-    Prune {
-        /// Apply eligible cleanup; without this flag the command only reports candidates
-        #[arg(long)]
-        apply: bool,
-        /// Override record retention, in days, for this prune pass
-        #[arg(long, allow_negative_numbers = true, value_parser = parse_retention_days)]
-        retention_days: Option<u64>,
-    },
-
-    /// One-shot record migrations
-    Migrate {
-        #[command(subcommand)]
-        action: MigrateCommands,
-    },
-}
-
-#[derive(Subcommand)]
-enum MigrateCommands {
-    /// Retype retired epic records as parent issues; dry run unless --apply
-    ///
-    /// Outcome becomes Goal, Proof and Delivers become Done when, draft
-    /// becomes backlog (or the type's initial status), and the policy loses
-    /// the epic type.
-    Epics {
-        /// Issue type for migrated epics
-        #[arg(long, default_value = "feature")]
-        to: String,
-        /// Write the changes; without this flag the command only reports them
-        #[arg(long)]
-        apply: bool,
-    },
-    /// Write separate disposition events into their findings; dry run unless --apply
-    ///
-    /// Optional cleanup: Atelier already reads each finding's latest
-    /// disposition event as its disposition. This writes it as the finding's
-    /// field, naming the event, and removes every disposition event; Git
-    /// history keeps them (ADR 0025).
-    Dispositions {
-        /// Write the changes; without this flag the command only reports them
-        #[arg(long)]
-        apply: bool,
-    },
-    /// Turn open After merge lines into loose ends; dry run unless --apply
-    ///
-    /// Each unticked `After merge (<reason>): <text>` Done when line becomes
-    /// a loose end blocked_by its item: the text is its Done when, the
-    /// reason goes in its Goal, and it is labelled needs-human when the
-    /// reason is the human's judgment or a device or place no agent can
-    /// reach. An item that is not done keeps the line's stand-in as an
-    /// ordinary Done when line, and loses a line with none unless that would
-    /// leave its Done when empty, when the line stays as an ordinary one and
-    /// the item is named; a done item is left as it is. Lines carried to
-    /// another issue are skipped, and rerunning changes nothing.
-    AfterMerge {
-        /// Write the changes; without this flag the command only reports them
-        #[arg(long)]
-        apply: bool,
-    },
-}
-
-// ============================================================================
-// Issue subcommands (canonical path: `atelier issue <command>`)
-// ============================================================================
-
-#[derive(Subcommand)]
-enum WorkCommands {
-    /// Show one mission dashboard
-    #[command(group(clap::ArgGroup::new("filter").multiple(false)))]
-    Mission {
-        /// Mission ID
-        id: String,
-        /// Show mission-scoped ready work only
-        #[arg(long, group = "filter")]
-        ready: bool,
-        /// Show mission-scoped blocked work only
-        #[arg(long, group = "filter")]
-        blocked: bool,
-        /// Show mission-scoped active work only
-        #[arg(long, group = "filter")]
-        active: bool,
-        /// Show mission-scoped done work only
-        #[arg(long, group = "filter")]
-        done: bool,
-        /// Show all mission-scoped work
-        #[arg(long, group = "filter")]
-        all: bool,
-    },
-    /// Show one parent issue's dashboard: the parent and its children
-    Parent {
-        /// Parent issue ID
-        id: String,
-        /// Show every item in the parent's scope, none omitted
-        #[arg(long)]
-        all: bool,
-    },
-    /// Show the decisions across a mission's scope: decision records first,
-    /// then decision notes
-    Decisions {
-        /// Mission ID
-        id: String,
-    },
-    /// Show ready work an agent can pick up; work labelled needs-human is
-    /// listed separately
-    Ready,
-    /// Show ready work only the human can do: open decisions and work
-    /// labelled needs-human
-    Human,
-    /// Show blocked work
-    Blocked,
-    /// Show active work
-    Active,
-    /// Show all operational work buckets
-    All,
-    /// Show the Mission Overview across current missions
-    Missions {
-        /// Include done missions, and show every mission and unassigned item
-        #[arg(long)]
-        all: bool,
-    },
-}
-
-#[derive(Subcommand)]
-enum IssueCommands {
-    /// Create a new issue
-    Create {
-        /// Issue title
-        title: String,
-        /// Markdown body with the type's `## ` sections: Goal and Done when
-        /// (optionally Scope, Context, Unknowns, Design, Background) for work
-        /// items; Outcome for missions (optionally Success criteria,
-        /// Background); Question (optionally Options,
-        /// Decision, Context, Background) for decisions. Plain text becomes
-        /// the Goal, Outcome, or Question. Each Done when line is a `- [ ]`
-        /// box, ticked before `review request`. Work that changes no code and
-        /// can only happen after a merge or release, such as pushing a tag or
-        /// a play-test, is a loose end: its own issue (`--issue-type
-        /// loose_end`), linked with `--role blocked_by` to what it waits on
-        #[arg(long)]
-        body: Option<String>,
-        /// Priority: P0-P3 or critical, high, medium, low
-        #[arg(short, long, default_value = "medium")]
-        priority: String,
-        /// Add labels to the issue
-        #[arg(short, long)]
-        label: Vec<String>,
-        /// Explicit work type from .atelier/workflow.yaml issue_types, or built-in mission
-        #[arg(long)]
-        issue_type: Option<String>,
-        /// Parent issue ID
-        #[arg(long)]
-        parent: Option<String>,
-        /// Initial status for work not yet started, such as backlog for
-        /// someday work; which statuses are allowed depends on the issue
-        /// type. Defaults to the workflow's initial status
-        #[arg(long)]
-        status: Option<String>,
-        /// Repository-relative strategy file a mission links; this path,
-        /// not the strategy's front matter, is the link
-        #[arg(long)]
-        strategy: Option<String>,
-        /// Record this work was found in: issue, review event or receipt
-        #[arg(long, value_name = "ID")]
-        discovered_from: Option<String>,
-    },
-
-    /// Show a brief view of one or more issues; --full shows the whole record
-    Show {
-        /// Issue IDs, each shown in turn
+    /// Mark each named draft item or mission ready, recording who said so, and commit that alone.
+    Ready {
         #[arg(required = true)]
         ids: Vec<String>,
-        /// Show the full record: metadata, every section, links, rollups, and
-        /// transition commands
-        #[arg(long)]
-        full: bool,
+        /// Who said it should start now.
+        #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
+        by: String,
     },
-
-    /// List issue records as generic inventory
-    List {
-        /// Filter by exact workflow status, or all
-        #[arg(short, long, default_value = "all")]
-        status: String,
-        /// Filter by derived workflow category
-        #[arg(long)]
-        category: Option<String>,
-        /// Filter by issue type from .atelier/workflow.yaml
-        #[arg(long = "issue-type")]
-        issue_type: Option<String>,
-        /// Filter by label
-        #[arg(short, long)]
-        label: Option<String>,
-        /// Filter by priority: P0-P3 or critical, high, medium, low
-        #[arg(short, long)]
-        priority: Option<String>,
-        /// Maximum number of matching records to show
-        #[arg(
-            long,
-            default_value_t = 50,
-            allow_negative_numbers = true,
-            value_parser = atelier_app::issue_inventory::parse_limit
-        )]
-        limit: usize,
-    },
-
-    /// Show or execute issue transitions
-    Transition {
-        /// Issue ID
+    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base, and commit that alone. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped without committing it; also on the branch of an item you implement.
+    Drop {
+        /// An item, a mission, or a finding.
         id: String,
-        /// Transition name to execute; omit to inspect options and blockers.
-        /// To begin work, use `atelier start <id>`, which also creates and
-        /// records the owner branch; `start` here only changes the record
-        transition: Option<String>,
-        /// The Report a transition that requires one stores, such as a
-        /// supersede reason or a mission's close report; it replaces the
-        /// record's Report. With neither flag, the record's own Report is used
-        #[arg(long = "reason", conflicts_with = "reason_file")]
-        close_reason: Option<String>,
-        /// File holding the whole Report
-        #[arg(long)]
-        reason_file: Option<std::path::PathBuf>,
-        /// Show validator passes, action preflight detail, descriptions, and debug context
-        #[arg(long)]
-        verbose: bool,
-        #[command(flatten)]
-        record_commit: RecordCommitArgs,
-    },
-
-    /// Update an issue
-    Update {
-        /// Issue ID
-        id: String,
-        /// New title
-        #[arg(short, long)]
-        title: Option<String>,
-        /// New priority: P0-P3 or critical, high, medium, low
-        #[arg(short, long)]
-        priority: Option<String>,
-        /// New issue type from .atelier/workflow.yaml issue_types
-        #[arg(long)]
-        issue_type: Option<String>,
-        /// Replace the typed body sections, given as `## ` headings for the
-        /// record's type and checked like `atelier check`; Notes and the
-        /// Report are kept, and done records cannot be revised. Change
-        /// status with `atelier issue transition`
-        #[arg(long)]
-        body: Option<String>,
-        /// Add labels to the issue
-        #[arg(short, long)]
-        label: Vec<String>,
-        /// Remove labels from the issue
-        #[arg(long = "remove-label")]
-        remove_label: Vec<String>,
-        /// Set the parent issue ID
-        #[arg(long, conflicts_with = "no_parent")]
-        parent: Option<String>,
-        /// Clear parent issue
-        #[arg(long)]
-        no_parent: bool,
-        /// Set the repository-relative strategy file a mission links
-        #[arg(long, conflicts_with = "no_strategy")]
-        strategy: Option<String>,
-        /// Clear a mission's strategy link
-        #[arg(long)]
-        no_strategy: bool,
-        /// Set the repository-relative ADR a decision record produced
-        #[arg(long, conflicts_with = "no_adr")]
-        adr: Option<String>,
-        /// Clear a decision record's ADR link
-        #[arg(long)]
-        no_adr: bool,
-    },
-
-    /// Append a dated note to the issue record's Notes section
-    Note {
-        /// Issue ID
-        id: String,
-        /// Note text; for a decision, the choice
-        text: String,
-        /// Note kind (note, plan, observation, blocker, resolution, result, handoff, human, decision)
-        #[arg(long, default_value = "note")]
-        kind: String,
-        /// Why the decision was made; required with --kind decision
+        /// Why it will not be done, on one line.
         #[arg(long)]
         reason: Option<String>,
-        /// An alternative the decision rejected; repeat for several
-        #[arg(long)]
-        rejected: Vec<String>,
     },
-
-    /// Add a typed link from one issue to another
-    Link {
-        /// Source issue ID
+    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; on the base, and commit that alone.
+    Close {
         id: String,
-        /// Target issue ID
-        target: String,
-        /// Relationship role. Readiness: blocked_by (the source waits for the
-        /// target) and blocks (the target waits for the source). Mission scope:
-        /// advances (stored under relates). Context only, no effect on
-        /// readiness: related, part_of, implements, supersedes, duplicates,
-        /// derived_from, discovered_from, contributes_to, assumption, falsifies, derived, and
-        /// custom roles from .atelier/config.toml; these are stored under the
-        /// record's relates field. Only the source record is written; the
-        /// target reads the link from it
-        #[arg(long, default_value = "advances")]
-        role: String,
+        /// The item's result, written into its Report. A mission's is written in its file.
+        result: Option<String>,
     },
-
-    /// Remove a typed link from one issue to another
-    Unlink {
-        /// Source issue ID
+    /// Start a ready item on a new branch named for it, or take over a started one.
+    #[command(group(ArgGroup::new("what").required(true).args(["id", "new"])))]
+    Start {
+        id: Option<String>,
+        /// Create an item already started, for work asked for directly, with this title.
+        #[arg(long, value_name = "TITLE", value_parser = NonEmptyStringValueParser::new())]
+        new: Option<String>,
+    },
+    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
+    Submit,
+    /// Ask a question about this branch's item that a decider answers, as when a finding is right but not worth fixing now, without committing it.
+    Escalate {
+        /// The question, on one line, with your position.
+        #[arg(value_parser = NonEmptyStringValueParser::new())]
+        question: String,
+        /// The open fix-now finding it is about, as in 2-m2bn.1.
+        #[arg(long, value_name = "FINDING")]
+        finding: Option<String>,
+    },
+    /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief.
+    Review { id: String },
+    /// Record your verdict in your review file and commit it.
+    Verdict {
+        verdict: VerdictArg,
+        /// The model you run on, such as gpt-6.1-sol; written into the review file.
+        #[arg(long)]
+        model: Option<String>,
+    },
+    /// Answer the oldest question waiting on an item, in the checkout on its branch, without committing it.
+    Decide {
         id: String,
-        /// Target issue ID
-        target: String,
-        /// Relationship role. Readiness: blocked_by (the source waits for the
-        /// target) and blocks (the target waits for the source). Mission scope:
-        /// advances (stored under relates). Context only, no effect on
-        /// readiness: related, part_of, implements, supersedes, duplicates,
-        /// derived_from, discovered_from, contributes_to, assumption, falsifies, derived, and
-        /// custom roles from .atelier/config.toml; these are stored under the
-        /// record's relates field
-        #[arg(long, default_value = "advances")]
-        role: String,
+        /// The answer, on one line.
+        #[arg(value_parser = NonEmptyStringValueParser::new())]
+        answer: String,
+        /// Settle the question's finding as deferred: real, but for later work.
+        #[arg(long, conflicts_with = "no_action")]
+        defer: bool,
+        /// Settle the question's finding with no action.
+        #[arg(long)]
+        no_action: bool,
+    },
+    /// Lead a ready mission, in this checkout of the base, commit that alone, and see what each of its items needs.
+    Lead { mission: String },
+    /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done.
+    Merge {
+        /// Merge an item nobody reviewed, whose correctness is evident from its diff, giving why.
+        #[arg(long, value_name = "WHY")]
+        trivial: Option<String>,
     },
 }
 
-#[derive(Subcommand)]
-enum BundleCommands {
-    /// Preview an authored bundle JSON file without mutating tracker state
-    Preview {
-        /// Path to the bundle JSON file
-        input: String,
-    },
-    /// Apply an authored bundle JSON file
-    Apply {
-        /// Path to the bundle JSON file
-        input: String,
-        /// Confirm the apply; without it the command refuses
-        #[arg(long)]
-        yes: bool,
-    },
+#[derive(Clone, Copy, ValueEnum)]
+enum PriorityArg {
+    Critical,
+    High,
+    Medium,
+    Low,
 }
 
-#[derive(Subcommand)]
-enum EvidenceCommands {
-    /// Record proof manually or by capturing a command transcript
-    #[command(after_help = "Examples:
-  atelier evidence record --target issue/<id> --kind validation --result pass \"verified claim X\"
-  atelier evidence record --target issue/<id> --kind test -- <command>
-
-Use `evidence attach` only when you need to reuse an existing evidence record on
-another target.")]
-    Record {
-        /// Kind of proof, such as test or validation
-        #[arg(long = "kind")]
-        evidence_kind: String,
-        /// Explicit manual result; command capture derives it from the exit status
-        #[arg(
-            long,
-            conflicts_with = "command",
-            value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str)
-        )]
-        result: Option<atelier_core::EvidenceResult>,
-        /// Accountable target: an issue ID, or kind/id such as issue/atelier-1234
-        /// or evidence/atelier-5678
-        #[arg(long)]
-        target: Option<String>,
-        /// Relation to the target
-        #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
-        role: String,
-        /// What the evidence shows; the same as the positional summary
-        #[arg(long, conflicts_with = "summary_text")]
-        summary: Option<String>,
-        /// Path of an artifact the evidence refers to
-        #[arg(long)]
-        path: Option<String>,
-        /// URI of an artifact the evidence refers to
-        #[arg(long)]
-        uri: Option<String>,
-        /// Who or what produced the evidence, such as an agent name
-        #[arg(long)]
-        producer: Option<String>,
-        /// A mission success criterion this receipt judges, as <slug>=<result>
-        /// for manual proof, or a bare <slug> that takes a captured command's
-        /// result; repeat for several. Needs --target on the mission, or on an
-        /// item that only that mission holds
-        #[arg(long = "criterion", value_name = "CRITERION")]
-        criteria: Vec<String>,
-        /// Manual evidence summary; command-backed evidence passes its command after `--`
-        summary_text: Option<String>,
-        /// Command to run and capture; its exit status sets the result
-        #[arg(last = true, num_args = 0..)]
-        command: Vec<String>,
-        #[command(flatten)]
-        record_commit: RecordCommitArgs,
-    },
-    /// Show an evidence record: its result, standing and output tail
-    Show {
-        /// Evidence record ID
-        id: String,
-        /// Show the stored record and every field
-        #[arg(long)]
-        full: bool,
-    },
-    /// Reuse an existing evidence record on another target
-    #[command(after_help = "Examples:
-  atelier evidence attach <evidence-id> issue/<issue-id>
-  atelier evidence attach <evidence-id> <issue-id>
-  atelier evidence attach <evidence-id> issue <issue-id>")]
-    Attach {
-        /// Evidence record ID
-        id: String,
-        /// Target: an issue ID, kind/id such as issue/atelier-1234, or a
-        /// kind (issue or evidence) followed by the ID
-        target: String,
-        /// Target record ID, when TARGET is a kind
-        target_id: Option<String>,
-        /// Relation to the target
-        #[arg(long, default_value = "validates", value_parser = EVIDENCE_ROLES)]
-        role: String,
-    },
-    /// List evidence records, newest first, with each one's freshness
-    List {
-        /// List only the receipts that validate this issue
-        item: Option<String>,
-        /// Show only records with this result
-        #[arg(long, value_parser = named_values(EvidenceResult::ALL, EvidenceResult::as_str))]
-        result: Option<atelier_core::EvidenceResult>,
-        /// Show at most this many records (default 20)
-        #[arg(
-            long,
-            conflicts_with = "all",
-            allow_negative_numbers = true,
-            value_parser = atelier_app::issue_inventory::parse_limit
-        )]
-        limit: Option<usize>,
-        /// Show every matching record
-        #[arg(long)]
-        all: bool,
-    },
+#[derive(Clone, Copy, ValueEnum)]
+enum VerdictArg {
+    /// No fix-now finding is open.
+    Approve,
+    /// Your review file holds an open fix-now finding.
+    Changes,
 }
 
-/// The relation roles evidence may have to its target.
-const EVIDENCE_ROLES: [&str; 1] = ["validates"];
-
-/// Lists `values` by name in help and parses a name back to its value, so
-/// any other name is a usage error.
-fn named_values<T, const N: usize>(
-    values: [T; N],
-    name: fn(T) -> &'static str,
-) -> impl TypedValueParser<Value = T>
-where
-    T: Copy + Send + Sync + 'static,
-{
-    clap::builder::PossibleValuesParser::new(values.map(name)).map(move |chosen| {
-        values
-            .into_iter()
-            .find(|value| name(*value) == chosen)
-            .expect("the parser accepts only listed names")
-    })
-}
-
-/// A full commit ID, or a short one of at least four hexadecimal digits
-/// that the command resolves to the full ID it stores (atelier-md0v): the
-/// shared invalid-value form for anything else (atelier-d8ku).
-fn commit_value(field: &str, value: &str) -> Result<String, InvalidValue> {
-    if (4..=64).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        Ok(value.to_owned())
-    } else {
-        Err(InvalidValue::new(
-            field,
-            value,
-            &["full or short commit IDs of at least 4 hexadecimal digits"],
-        ))
-    }
-}
-fn parse_commit(value: &str) -> Result<String, InvalidValue> {
-    commit_value("commit", value)
-}
-fn parse_resolution_commit(value: &str) -> Result<String, InvalidValue> {
-    commit_value("resolution commit", value)
-}
-fn parse_retention_days(value: &str) -> Result<u64, InvalidValue> {
-    value
-        .parse()
-        .map_err(|_| InvalidValue::new("retention days", value, &["whole numbers of days"]))
-}
-
-// ============================================================================
-// Main
-// ============================================================================
-
-/// The exit status of a usage error, which clap also uses.
-const USAGE_ERROR: u8 = 2;
-
-fn main() -> std::process::ExitCode {
-    restore_default_sigpipe();
-    match load_dotenv().and_then(|()| run()) {
-        Ok(()) => std::process::ExitCode::SUCCESS,
-        Err(error) if error.is::<commands::session::Reported>() => std::process::ExitCode::from(1),
+fn main() -> ExitCode {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        // A usage error, or the help asked for.
         Err(error) => {
-            // A record a newer Atelier wrote needs a reinstall; the reads
-            // that met it add nothing (atelier-u4ql).
-            match commands::session::newer_schema(&error) {
-                Some(newer) => eprintln!("Error: {newer}"),
-                None => eprintln!("Error: {error:?}"),
+            let _ = error.print();
+            let skip = Skip::new(skip_variable().as_deref());
+            if error.use_stderr() && skip.reason().is_some() {
+                eprint!("{}", output::not_skippable());
             }
-            // An invalid value is a usage error wherever it is checked.
-            let invalid_value = error.chain().any(|cause| cause.is::<InvalidValue>());
-            std::process::ExitCode::from(if invalid_value { USAGE_ERROR } else { 1 })
-        }
-    }
-}
-
-/// Rust ignores SIGPIPE, so a write to a reader that closed early, as `head`
-/// does, fails and `println!` panics. Restoring the default ends the process
-/// quietly instead, with the conventional status 141, as other command-line
-/// tools do.
-fn restore_default_sigpipe() {
-    #[cfg(unix)]
-    // SAFETY: called first in `main`, before any thread or I/O exists;
-    // SIG_DFL is a valid disposition for SIGPIPE.
-    unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
-    }
-}
-
-fn load_dotenv() -> Result<()> {
-    match dotenvy::dotenv() {
-        Ok(_) => Ok(()),
-        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn run() -> Result<()> {
-    let cli = parse_cli_or_exit();
-    // Status's detached refresh reads no repository.
-    if let Commands::RefreshUpdateCheck = cli.command {
-        commands::freshness::refresh();
-        return Ok(());
-    }
-    // The server reads repositories under its roots, not the current one.
-    if let Commands::Serve { bind, roots } = cli.command {
-        let roots = if roots.is_empty() {
-            vec![atelier_site::default_root()
-                .context("HOME is not set; name a directory with --root")?]
-        } else {
-            roots
-        };
-        return atelier_site::serve(bind, roots, cli.quiet);
-    }
-    // Every record write passes the rules `atelier check` applies before it
-    // lands, and is refused before anything is written (atelier-ilba).
-    atelier_app::record_guard::install();
-    // Hold an association transaction across every repository command's
-    // complete read/validate/write lifetime. Reads share it; every writer owns
-    // it exclusively so read-modify-write commands cannot lose concurrent edits.
-    let _canonical_transaction_lock = match canonical_transaction_mode(&cli.command) {
-        CanonicalTransactionMode::None => None,
-        mode => {
-            let state_dir = StorageLayout::discover()?.canonical_dir();
-            Some(match mode {
-                CanonicalTransactionMode::Shared => {
-                    atelier_records::mutation_lock::CanonicalMutationLock::shared(&state_dir)?
-                }
-                CanonicalTransactionMode::Exclusive => {
-                    atelier_records::mutation_lock::CanonicalMutationLock::exclusive(&state_dir)?
-                }
-                CanonicalTransactionMode::None => unreachable!(),
-            })
+            return ExitCode::from(error.exit_code() as u8);
         }
     };
-    let quiet = cli.quiet;
-
-    // Status renders policy diagnostics in its own page, and the gates
-    // (land, doctor, merge) report the policy they read with their checks,
-    // so an invalid policy is reported once.
-    if !matches!(
-        &cli.command,
-        Commands::Init { .. }
-            | Commands::Status { .. }
-            | Commands::Prime { .. }
-            | Commands::Land { .. }
-            | Commands::Doctor
-            | Commands::Merge { sync: false, .. }
-    ) {
-        if let Ok(layout) = StorageLayout::discover() {
-            if let Ok(source) = atelier_app::base_policy::working(layout.repo_root()) {
-                for diagnostic in source.diagnostics {
-                    eprintln!("{diagnostic}");
-                }
-            }
+    // A skip needs its reason. A checkout cannot be refused, so the
+    // post-checkout hook only says so.
+    let variable = skip_variable();
+    if variable
+        .as_deref()
+        .is_some_and(|reason| reason.trim().is_empty())
+    {
+        let hook = match &cli.command {
+            Command::Check { hook, .. } => *hook,
+            _ => None,
+        };
+        if !matches!(hook, Some(check::Hook::PostCheckout)) {
+            let _ = std::io::stderr().write_all(output::blank_skip(true).as_bytes());
+            return ExitCode::from(1);
         }
+        print!("{}", output::blank_skip(false));
     }
-    match cli.command {
-        Commands::Init { force, slug } => {
-            let cwd = env::current_dir()?;
-            commands::init::run(&cwd, force, slug, quiet)
-        }
-
-        Commands::Status { hook } => commands::status::run(hook.is_some(), quiet, false),
-        Commands::Prime { hook } => commands::status::run(hook.is_some(), quiet, true),
-        Commands::Land {
-            id,
-            hook,
-            install,
-            push,
-        } => commands::session::land(id.as_deref(), hook.is_some(), install, push, quiet),
-        Commands::Setup {
-            link: Some(checkout),
-            ..
-        } => commands::skill_link::link(checkout.as_deref(), quiet),
-        Commands::Setup { unlink: true, .. } => commands::skill_link::unlink(quiet),
-        Commands::Setup { binary, .. } => commands::setup::run(binary.as_deref(), quiet),
-        Commands::Doctor => commands::session::doctor(quiet),
-        Commands::RefreshUpdateCheck | Commands::Serve { .. } => {
-            unreachable!("handled before the repository is read")
-        }
-        Commands::Brief { id } => {
-            let (_, index) = load_repository()?;
-            commands::mission_review::brief(&index, &id, quiet)
-        }
-        Commands::Debrief { id } => {
-            let (_, index) = load_repository()?;
-            commands::mission_review::debrief(&index, &id, quiet)
-        }
-
-        Commands::Work { action: None } => {
-            work_index(quiet);
-            Ok(())
-        }
-        Commands::Work {
-            action: Some(action),
-        } => {
-            let (_, index) = load_repository()?;
-            match action {
-                WorkCommands::Mission {
-                    id,
+    let skip = Skip::new(variable.as_deref());
+    // `check` reads the records itself, and reports a config that does not
+    // read rather than stopping at it.
+    if let Command::Check { hook, args } = &cli.command {
+        let checked = match hook {
+            None => check::check(&skip),
+            Some(hook) => check::hook(*hook, args, &skip),
+        };
+        return exit(checked, &skip);
+    }
+    let here = std::env::current_dir();
+    let result = here
+        .map_err(anyhow::Error::from)
+        .and_then(|here| open(&here, &skip))
+        .and_then(|mut repo| match cli.command {
+            Command::Status => commands::status(&mut repo).map(Outcome::Done),
+            Command::Check { .. } => unreachable!("check runs before the repository is opened"),
+            Command::Setup { harness: None } => setup::git_hooks(&repo.root),
+            Command::Setup {
+                harness: Some(harness),
+            } => setup::harness(&repo.root, harness),
+            Command::Show { id } => views::show(&mut repo, &id),
+            Command::List { deferred: true, .. } => views::deferred(&mut repo),
+            Command::List {
+                ready,
+                blocked,
+                needs_human,
+                mission,
+                label,
+                mine,
+                done,
+                deferred: false,
+            } => {
+                let filter = atelier_app::Filter {
                     ready,
                     blocked,
-                    active,
+                    needs_human,
+                    mission,
+                    label,
+                    mine,
                     done,
-                    all,
-                } => commands::work::mission_dashboard(
-                    &index,
-                    &id,
-                    commands::work::MissionDashboardOptions {
-                        ready,
-                        blocked,
-                        active,
-                        done,
-                        all,
-                    },
-                    quiet,
-                ),
-                WorkCommands::Parent { id, all } => {
-                    commands::work::parent_dashboard(&index, &id, all, quiet)
-                }
-                WorkCommands::Decisions { id } => commands::work::decisions(&index, &id, quiet),
-                WorkCommands::Ready => commands::work::list(&index, "ready", quiet),
-                WorkCommands::Blocked => commands::work::list(&index, "blocked", quiet),
-                WorkCommands::Human => commands::work::list(&index, "human", quiet),
-                WorkCommands::Active => commands::work::list(&index, "active", quiet),
-                WorkCommands::All => commands::work::list(&index, "all", quiet),
-                WorkCommands::Missions { all } => commands::work::missions(&index, all, quiet),
-            }
-        }
-
-        Commands::Issue { action } => issue_cli::dispatch(action, quiet),
-
-        Commands::Start {
-            id,
-            base,
-            take_over,
-        } => {
-            // Older guidance still passes `--base`; it is accepted and
-            // ignored, since the base comes from policy (atelier-md0v).
-            if base.is_some() {
-                eprintln!("Note: start --base is deprecated and ignored; the base is the policy's base_branch.");
-            }
-            let (state_dir, index) = load_repository()?;
-            commands::start::run(&index, &state_dir, &id, take_over, quiet)
-        }
-
-        Commands::Merge { id, sync: true, .. } => commands::merge_sync::run(id.as_deref(), quiet),
-        Commands::Merge {
-            id,
-            check,
-            json,
-            push,
-            wait,
-            timeout,
-            ..
-        } => commands::merge::run(
-            id.as_deref(),
-            check,
-            json,
-            quiet,
-            push,
-            wait.then(|| std::time::Duration::from_secs(timeout * 60)),
-        ),
-        Commands::Review { action } => {
-            use atelier_core::ReviewEvent;
-            let append = |args: ReviewArgs, event: ReviewEvent| {
-                let (subject, summary) = args.subject()?;
-                let group = RecordCommit::begin(args.record_commit)?;
-                let verb = event.name();
-                commands::review::append(
-                    &subject,
-                    &args.identity,
-                    args.commit.as_deref(),
-                    summary,
-                    event,
-                    quiet,
-                )?;
-                group.finish(verb, quiet)
-            };
-            match action {
-                ReviewCommands::Record(args) => append(args, ReviewEvent::Review),
-                ReviewCommands::Approve(args) => append(args, ReviewEvent::Approval),
-                ReviewCommands::Trivial(args) => match (args.base, args.subject.as_slice()) {
-                    (Some(base), [summary]) => {
-                        let group = RecordCommit::begin(args.record_commit)?;
-                        commands::review::exempt_base(&base, &args.identity, summary, quiet)?;
-                        group.finish("trivial_exemption", quiet)
-                    }
-                    (None, [id, summary]) => append(
-                        ReviewArgs {
-                            subject: vec![id.clone(), summary.clone()],
-                            branch: None,
-                            identity: args.identity,
-                            commit: args.commit,
-                            record_commit: args.record_commit,
-                        },
-                        ReviewEvent::TrivialExemption,
-                    ),
-                    (Some(_), _) => anyhow::bail!(
-                        "review trivial --base takes only the reason; a base exemption has no owner"
-                    ),
-                    (None, _) => anyhow::bail!(
-                        "review trivial needs the owner and the reason, or --base <commit> and the reason"
-                    ),
-                },
-                ReviewCommands::Finding {
-                    args,
-                    recommendation,
-                } => append(args, ReviewEvent::Finding {
-                        recommendation,
-                        disposition: None,
-                    }),
-                ReviewCommands::Disposition {
-                    finding,
-                    identity,
-                    decision,
-                    resolution_commit,
-                    follow_up,
-                    summary,
-                    record_commit,
-                } => {
-                    let group = RecordCommit::begin(record_commit)?;
-                    commands::review::disposition(
-                        &finding,
-                        &identity,
-                        decision,
-                        resolution_commit,
-                        follow_up,
-                        &summary,
-                        quiet,
-                    )?;
-                    group.finish("disposition", quiet)
-                }
-                ReviewCommands::Defer {
-                    id,
-                    identity,
-                    dry_run,
-                    record_commit,
-                } => {
-                    let group = RecordCommit::begin(record_commit)?;
-                    commands::review_defer::run(&id, &identity, dry_run, quiet)?;
-                    group.finish("defer", quiet)
-                }
-                ReviewCommands::Request { id, identity, from } => commands::review_request::run(
-                    id.as_deref(),
-                    identity.as_deref(),
-                    from.as_deref(),
-                    quiet,
-                ),
-                ReviewCommands::List { id, json } => {
-                    commands::review::list(id.as_deref(), json, quiet)
-                }
-                ReviewCommands::Show { id } => commands::review::show(&id, quiet),
-            }
-        }
-        Commands::Bundle { action } => {
-            let (state_dir, index) = load_repository()?;
-            match action {
-                BundleCommands::Preview { input } => {
-                    commands::bundle::preview(&index, &input, quiet)
-                }
-                BundleCommands::Apply { input, yes } => {
-                    commands::bundle::apply(&index, &state_dir, &input, yes, quiet)
-                }
-            }
-        }
-
-        Commands::Evidence { action } => match action {
-            EvidenceCommands::Record {
-                evidence_kind,
-                result,
-                target,
-                role,
-                summary,
-                path,
-                uri,
-                producer,
-                criteria,
-                summary_text,
-                command,
-                record_commit,
-            } => {
-                let group = RecordCommit::begin(record_commit)?;
-                let parsed_target = match target.as_deref() {
-                    Some(target) => Some(use_cases::parse_evidence_target_arg(target)?),
-                    None => None,
                 };
-                if command.is_empty() {
-                    let (state_dir, index) = load_repository()?;
-                    commands::evidence::warn_unknown_kind(&index, &evidence_kind);
-                    let resolved_target = parsed_target
-                        .as_ref()
-                        .map(|target| {
-                            use_cases::resolve_evidence_target_ref(&index, &target.kind, &target.id)
-                                .map(|id| (target.kind.clone(), id))
-                        })
-                        .transpose()?;
-                    let summary = summary
-                        .as_deref()
-                        .or(summary_text.as_deref())
-                        .context("evidence record without a command requires a summary")?;
-                    let evidence_id = commands::evidence::add_returning_id(
-                        &index,
-                        &state_dir,
-                        &evidence_kind,
-                        summary,
-                        result.context(
-                            "manual evidence requires --result pass|fail|blocked|not-applicable",
-                        )?,
-                        path.as_deref(),
-                        uri.as_deref(),
-                        producer.as_deref(),
-                        resolved_target.as_ref().map(|(kind, id)| {
-                            commands::evidence::TargetMetadata {
-                                kind,
-                                id,
-                                role: &role,
-                            }
-                        }),
-                        &commands::evidence::manual_criteria(&criteria)?,
-                    )?;
-                    if let Some((kind, id)) = resolved_target {
-                        commands::evidence::attach_silently(
-                            &index,
-                            &state_dir,
-                            &evidence_id,
-                            &kind,
-                            &id,
-                            &role,
-                        )?;
-                    }
-                    let evidence = atelier_records::RecordStore::new(&state_dir)
-                        .load_evidence_by_id(&evidence_id)?;
-                    commands::evidence::report_new_record(&evidence, group, quiet)
-                } else {
-                    // Capture reports its own refusal when the repository
-                    // cannot be read, before it runs anything.
-                    if let Ok((_, index)) = load_repository() {
-                        commands::evidence::warn_unknown_kind(&index, &evidence_kind);
-                    }
-                    let command_summary = summary.as_deref().or(summary_text.as_deref());
-                    let evidence =
-                        commands::evidence::capture_record(commands::evidence::CaptureOptions {
-                            evidence_kind: &evidence_kind,
-                            summary: command_summary,
-                            path: path.as_deref(),
-                            uri: uri.as_deref(),
-                            producer: producer.as_deref(),
-                            target_kind: parsed_target.as_ref().map(|target| target.kind.as_str()),
-                            target_id: parsed_target.as_ref().map(|target| target.id.as_str()),
-                            role: &role,
-                            command: &command,
-                            criteria: &commands::evidence::captured_criteria(&criteria)?,
-                        })?;
-                    commands::evidence::report_new_record(&evidence, group, quiet)
-                }
+                views::list(&mut repo, &filter)
             }
-            EvidenceCommands::Show { id, full } => {
-                let (state_dir, index) = load_repository()?;
-                commands::evidence::show(&index, &repo_root_of(&state_dir), &id, full, quiet)
-            }
-            EvidenceCommands::Attach {
+            Command::New {
+                title,
+                into,
+                mission,
+                from,
+            } => plan::new(&mut repo, &title, into, mission, from.as_deref()),
+            Command::Set {
                 id,
-                target,
-                target_id,
-                role,
+                title,
+                priority,
+                labels,
+                mission,
+                blocked_by,
+                caused_by,
             } => {
-                let (state_dir, index) = load_repository()?;
-                let (target_kind, target_id) = match target_id {
-                    Some(target_id) => (target, target_id),
-                    None => {
-                        let parsed = use_cases::parse_evidence_target_arg(&target)?;
-                        (parsed.kind, parsed.id)
-                    }
-                };
-                let target_id =
-                    use_cases::resolve_evidence_target_ref(&index, &target_kind, &target_id)?;
-                let id = index.resolve(atelier_app::record_ref::RecordKind::Evidence, &id)?;
-                commands::evidence::attach(
-                    &index,
-                    &state_dir,
-                    &id,
-                    &target_kind,
-                    &target_id,
-                    &role,
-                    quiet,
-                )
-            }
-            EvidenceCommands::List {
-                item,
-                result,
-                limit,
-                all,
-            } => {
-                let (state_dir, index) = load_repository()?;
-                commands::evidence::list(
-                    &index,
-                    &repo_root_of(&state_dir),
-                    commands::evidence::ListOptions {
-                        item: item.as_deref(),
-                        result,
-                        limit,
-                        all,
-                        quiet,
-                    },
-                )
-            }
-        },
-
-        Commands::Migrate {
-            action: MigrateCommands::Epics { to, apply },
-        } => commands::migrate::epics(&to, apply, quiet),
-        Commands::Migrate {
-            action: MigrateCommands::Dispositions { apply },
-        } => commands::migrate::dispositions(apply, quiet),
-        Commands::Migrate {
-            action: MigrateCommands::AfterMerge { apply },
-        } => {
-            let (_, index) = load_repository()?;
-            commands::migrate::after_merge(&index, apply, quiet)
-        }
-
-        Commands::Prune {
-            apply,
-            retention_days,
-        } => {
-            let (state_dir, index) = load_repository()?;
-            let repo_root = state_dir
-                .parent()
-                .expect("state directory has a repository root")
-                .to_path_buf();
-            let config = atelier_app::project_config::ProjectConfig::load(&repo_root)?;
-            commands::prune::run(
-                commands::prune::TrackerContext {
-                    index,
-                    repo_root,
-                    state_dir,
-                    canonical_retention_days: config.prune.canonical_retention_days,
-                },
-                apply,
-                retention_days,
-                quiet,
-            )
-        }
-
-        Commands::Check { id } => {
-            let state_dir = StorageLayout::discover()?.canonical_dir();
-            commands::issue::lint(&state_dir, id.as_deref(), quiet)
-        }
-    }
-}
-
-/// The repository root a records directory belongs to.
-fn repo_root_of(state_dir: &std::path::Path) -> std::path::PathBuf {
-    state_dir
-        .parent()
-        .expect("state directory has a repository root")
-        .to_path_buf()
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CanonicalTransactionMode {
-    None,
-    Shared,
-    Exclusive,
-}
-
-fn canonical_transaction_mode(command: &Commands) -> CanonicalTransactionMode {
-    match command {
-        // Fresh initialization has no repository association to lock. Forced
-        // reconciliation of an existing tracker does.
-        Commands::Init { .. } if std::path::Path::new(".atelier").exists() => {
-            CanonicalTransactionMode::Exclusive
-        }
-        Commands::Init { .. } => CanonicalTransactionMode::None,
-        // Bare `work` only lists the work views.
-        Commands::Work { action: None } => CanonicalTransactionMode::None,
-        Commands::Bundle {
-            action: BundleCommands::Apply { .. },
-        } => CanonicalTransactionMode::Exclusive,
-        // Note append is a read-modify-write of one record; it owns an
-        // exclusive transaction so concurrent notes cannot lose updates.
-        Commands::Issue {
-            action: IssueCommands::Note { .. },
-        } => CanonicalTransactionMode::Exclusive,
-        // Start reads records, switches branches, and rewrites the owner and
-        // issue records; no other writer may interleave.
-        Commands::Start { .. } => CanonicalTransactionMode::Exclusive,
-        Commands::Prune { apply: true, .. } => CanonicalTransactionMode::Exclusive,
-        Commands::Migrate {
-            action:
-                MigrateCommands::Epics { apply: true, .. }
-                | MigrateCommands::Dispositions { apply: true }
-                | MigrateCommands::AfterMerge { apply: true },
-        } => CanonicalTransactionMode::Exclusive,
-        Commands::Review {
-            action:
-                ReviewCommands::Record(_)
-                | ReviewCommands::Approve(_)
-                | ReviewCommands::Finding { .. }
-                | ReviewCommands::Trivial(_)
-                | ReviewCommands::Disposition { .. }
-                | ReviewCommands::Defer { dry_run: false, .. },
-        } => CanonicalTransactionMode::Exclusive,
-        // Shell checks may run Atelier read commands; revalidate snapshots
-        // rather than hold a lock across arbitrary child execution. Status
-        // locks for itself once a hook payload has named the checkout.
-        Commands::Merge { .. }
-        | Commands::Status { .. }
-        | Commands::Prime { .. }
-        | Commands::Land { .. }
-        | Commands::Doctor
-        | Commands::RefreshUpdateCheck
-        | Commands::Serve { .. }
-        | Commands::Setup { .. } => CanonicalTransactionMode::None,
-        // Command-backed evidence deliberately executes its arbitrary child
-        // before acquiring an association transaction for the canonical
-        // append. The child may itself be an Atelier writer or migration.
-        Commands::Evidence {
-            action: EvidenceCommands::Record { command, .. },
-        } if !command.is_empty() => CanonicalTransactionMode::None,
-        Commands::Issue {
-            action:
-                IssueCommands::Create { .. }
-                | IssueCommands::Update { .. }
-                | IssueCommands::Link { .. }
-                | IssueCommands::Unlink { .. }
-                | IssueCommands::Transition { .. },
-        } => CanonicalTransactionMode::Exclusive,
-        Commands::Evidence {
-            action: EvidenceCommands::Record { .. } | EvidenceCommands::Attach { .. },
-        } => CanonicalTransactionMode::Exclusive,
-        _ => CanonicalTransactionMode::Shared,
-    }
-}
-
-#[cfg(test)]
-fn command_uses_canonical_transaction(command: &Commands) -> bool {
-    canonical_transaction_mode(command) != CanonicalTransactionMode::None
-}
-
-/// Bare `atelier work` lists the work views from the command tree, as
-/// `atelier work --help` does; `--quiet` prints only their names.
-fn work_index(quiet: bool) {
-    use clap::CommandFactory;
-    if quiet {
-        let root = Cli::command();
-        let work = root.find_subcommand("work").expect("work subcommand");
-        for view in work.get_subcommands().filter(|view| !view.is_hide_set()) {
-            if view.get_name() != "help" {
-                println!("{}", view.get_name());
-            }
-        }
-        return;
-    }
-    if let Err(help) = Cli::command().try_get_matches_from(["atelier", "work", "--help"]) {
-        let _ = help.print();
-    }
-}
-
-/// `--quiet` and `--json` are two script formats, so asking for both is a
-/// usage error. Clap does not check conflicts against a global flag, so the
-/// conflict is raised here as the same parser error.
-fn reject_quiet_json(cli: Cli) -> Result<Cli, clap::Error> {
-    use clap::CommandFactory;
-    let json = matches!(
-        cli.command,
-        Commands::Review {
-            action: ReviewCommands::List { json: true, .. }
-        } | Commands::Merge { json: true, .. }
-    );
-    if cli.quiet && json {
-        return Err(Cli::command().error(
-            clap::error::ErrorKind::ArgumentConflict,
-            "the argument '--quiet' cannot be used with '--json'",
-        ));
-    }
-    Ok(cli)
-}
-
-fn parse_cli_or_exit() -> Cli {
-    match Cli::try_parse().and_then(reject_quiet_json) {
-        Ok(cli) => cli,
-        Err(error) => {
-            if let Some(invalid) = invalid_argument_value(&error) {
-                eprintln!("Error: {invalid}");
-                std::process::exit(error.exit_code());
-            }
-            let error = workflow_help::with_workflow_values(error);
-            let exit_code = error.exit_code();
-            if let Err(print_error) = error.print() {
-                eprintln!("{print_error}");
-            }
-            std::process::exit(exit_code);
-        }
-    }
-}
-
-/// Words a value the parser rejects in the form every invalid value takes:
-/// one outside an option's possible values, or one a value parser refused
-/// with an [`InvalidValue`].
-fn invalid_argument_value(error: &clap::Error) -> Option<InvalidValue> {
-    use clap::error::{ContextKind, ContextValue, ErrorKind};
-    match error.kind() {
-        ErrorKind::InvalidValue => {
-            let string = |kind| match error.get(kind) {
-                Some(ContextValue::String(value)) => Some(value.as_str()),
-                _ => None,
-            };
-            let Some(ContextValue::Strings(valid)) = error.get(ContextKind::ValidValue) else {
-                return None;
-            };
-            let invalid = InvalidValue::new(
-                &argument_field(string(ContextKind::InvalidArg)?),
-                string(ContextKind::InvalidValue)?,
-                valid,
-            );
-            // Keep clap's typo suggestion as the guidance sentence.
-            Some(match string(ContextKind::SuggestedValue) {
-                Some(suggested) => invalid.with_hint(&format!("Did you mean '{suggested}'?")),
-                None => invalid,
-            })
-        }
-        ErrorKind::ValueValidation => std::error::Error::source(error)?
-            .downcast_ref::<InvalidValue>()
-            .cloned(),
-        _ => None,
-    }
-}
-
-/// The field an argument names, as `issue type` for `--issue-type
-/// <ISSUE_TYPE>` and `target kind` for `<TARGET_KIND>`.
-fn argument_field(argument: &str) -> String {
-    let name = argument.trim_start_matches('-');
-    let name = name.split([' ', '=']).next().unwrap_or(name);
-    name.trim_matches(['<', '>', '[', ']', '.'])
-        .to_lowercase()
-        .replace(['-', '_'], " ")
-}
-
-#[cfg(test)]
-mod help_tests {
-    use super::Cli;
-    use clap::{Command, CommandFactory, Parser};
-
-    /// Every command in the tree, with its path, after globals propagate.
-    /// clap's generated `help` subcommands take no arguments and are skipped.
-    fn commands() -> Vec<(String, Command)> {
-        fn walk(path: String, command: &Command, out: &mut Vec<(String, Command)>) {
-            out.push((path.clone(), command.clone()));
-            for sub in command
-                .get_subcommands()
-                .filter(|sub| sub.get_name() != "help")
-            {
-                walk(format!("{path} {}", sub.get_name()), sub, out);
-            }
-        }
-        let mut root = Cli::command();
-        root.build();
-        let mut out = Vec::new();
-        walk("atelier".into(), &root, &mut out);
-        out
-    }
-
-    #[test]
-    fn every_argument_has_help() {
-        let mut missing = Vec::new();
-        for (path, command) in commands() {
-            for arg in command.get_arguments() {
-                if arg
-                    .get_help()
-                    .is_none_or(|help| help.to_string().trim().is_empty())
-                {
-                    missing.push(format!("{path} {}", arg.get_id()));
-                }
-            }
-        }
-        assert!(missing.is_empty(), "arguments without help: {missing:?}");
-    }
-
-    /// Help uses CONTEXT.md terms (docs/product/human-cli-output.md, Errors):
-    /// "lint" and "canonical" appear only joined into a code or key by `_`
-    /// or `.`; a hyphen does not join, so "non-canonical" is caught.
-    #[test]
-    fn no_help_page_uses_internal_words() {
-        let mut found = Vec::new();
-        for (path, mut command) in commands() {
-            let help = command.render_long_help().to_string();
-            for word in help
-                .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
-                .map(|word| word.trim_matches('.').to_lowercase())
-            {
-                if matches!(word.as_str(), "lint" | "canonical") {
-                    found.push(format!("{path}: {word}"));
-                }
-            }
-        }
-        assert!(found.is_empty(), "internal words in help: {found:?}");
-    }
-
-    #[test]
-    fn every_visible_subcommand_is_listed_in_its_parent_help() {
-        let mut missing = Vec::new();
-        for (path, mut command) in commands() {
-            let help = command.render_help().to_string();
-            for sub in command.get_subcommands().filter(|sub| !sub.is_hide_set()) {
-                let about = sub.get_about().map(ToString::to_string).unwrap_or_default();
-                let listed = help.lines().any(|line| {
-                    let line = line.trim_start();
-                    line.strip_prefix(sub.get_name())
-                        .is_some_and(|rest| rest.trim_start() == about)
+                let priority = priority.map(|priority| match priority {
+                    PriorityArg::Critical => Priority::Critical,
+                    PriorityArg::High => Priority::High,
+                    PriorityArg::Medium => Priority::Medium,
+                    PriorityArg::Low => Priority::Low,
                 });
-                if !listed {
-                    missing.push(format!("{path} {}", sub.get_name()));
-                }
+                let fields = plan::Fields {
+                    title,
+                    priority,
+                    labels,
+                    mission,
+                    blocked_by,
+                    caused_by,
+                };
+                plan::set(&mut repo, &id, fields)
             }
-        }
-        assert!(
-            missing.is_empty(),
-            "subcommands missing from help: {missing:?}"
-        );
-    }
-
-    #[test]
-    fn migrate_epics_summary_fits_one_line() {
-        let root = Cli::command();
-        let epics = root
-            .find_subcommand("migrate")
-            .and_then(|migrate| migrate.find_subcommand("epics"))
-            .expect("migrate epics");
-        let about = epics.get_about().expect("about").to_string();
-        assert!(about.chars().count() <= 80, "{about}");
-        assert!(
-            epics.get_long_about().is_some(),
-            "detail moved to long help"
-        );
-    }
-
-    #[test]
-    fn fixed_values_are_listed_and_others_are_usage_errors() {
-        let cases: [(&[&str], &str); 6] = [
-            (
-                &[
-                    "review",
-                    "finding",
-                    "x",
-                    "s",
-                    "--identity",
-                    "i",
-                    "--recommendation",
-                ],
-                "fix_now, defer, no_action, wont_fix",
-            ),
-            (
-                &[
-                    "review",
-                    "disposition",
-                    "x",
-                    "s",
-                    "--identity",
-                    "i",
-                    "--decision",
-                ],
-                "fix_now, defer, no_action, wont_fix",
-            ),
-            (
-                &["evidence", "record", "--kind", "test", "s", "--result"],
-                "pass, fail, blocked, not-applicable",
-            ),
-            (
-                &["evidence", "list", "--result"],
-                "pass, fail, blocked, not-applicable",
-            ),
-            (
-                &["evidence", "record", "--kind", "test", "s", "--role"],
-                "validates",
-            ),
-            (
-                &["evidence", "attach", "e", "issue", "t", "--role"],
-                "validates",
-            ),
-        ];
-        for (args, values) in cases {
-            let args = std::iter::once("atelier")
-                .chain(args.iter().copied())
-                .chain(["bogus"]);
-            let error = match Cli::try_parse_from(args) {
-                Ok(_) => panic!("an option with values {values} accepted bogus"),
-                Err(error) => error,
-            };
-            assert_eq!(error.kind(), clap::error::ErrorKind::InvalidValue);
-            assert_eq!(error.exit_code(), 2);
-            assert!(
-                error
-                    .to_string()
-                    .contains(&format!("[possible values: {values}]")),
-                "{error}"
-            );
-        }
-    }
-
-    #[test]
-    fn global_options_follow_command_options() {
-        for (path, mut command) in commands() {
-            let help = command.render_help().to_string();
-            let quiet = help
-                .lines()
-                .position(|line| line.trim_start().starts_with("-q, --quiet"))
-                .unwrap_or_else(|| panic!("{path} help lists no --quiet:\n{help}"));
-            let later_option = help
-                .lines()
-                .skip(quiet + 1)
-                .find(|line| line.trim_start().starts_with('-'));
-            assert!(
-                later_option.is_none(),
-                "{path} lists {later_option:?} after the global --quiet:\n{help}"
-            );
-        }
-    }
+            Command::Ready { ids, by } => {
+                atelier_app::ready(&mut repo, &ids, &by).map(Outcome::from)
+            }
+            Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
+            Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
+            Command::Start { id: Some(id), .. } => commands::start(&mut repo, &id),
+            Command::Start {
+                new: Some(title), ..
+            } => commands::start_new(&mut repo, &title),
+            Command::Start { .. } => unreachable!("clap requires an ID or --new"),
+            Command::Submit => commands::submit(&mut repo),
+            Command::Escalate { question, finding } => {
+                questions::escalate(&mut repo, &question, finding.as_deref())
+            }
+            Command::Review { id } => review::review(&mut repo, &id),
+            Command::Verdict { verdict, model } => {
+                let verdict = match verdict {
+                    VerdictArg::Approve => Verdict::Approve,
+                    VerdictArg::Changes => Verdict::Changes,
+                };
+                review::verdict(&mut repo, verdict, model)
+            }
+            Command::Decide {
+                id,
+                answer,
+                defer,
+                no_action,
+            } => {
+                let settled = match (defer, no_action) {
+                    (true, _) => Some(atelier_core::Outcome::Defer),
+                    (_, true) => Some(atelier_core::Outcome::NoAction),
+                    _ => None,
+                };
+                atelier_app::decide(&mut repo, &id, &answer, settled).map(Outcome::from)
+            }
+            Command::Lead { mission } => views::lead(&mut repo, &mission),
+            Command::Merge { trivial } => {
+                merge::merge(&repo.root, repo.caller.clone(), trivial, &skip)
+            }
+        });
+    exit(result, &skip)
 }
 
-#[cfg(test)]
-mod transaction_tests {
-    use super::{
-        canonical_transaction_mode, command_uses_canonical_transaction, CanonicalTransactionMode,
-        Cli,
+/// Prints the outcome, after each rule `skip` passed. Every refusal of a
+/// rule was passed or offered the skip, so a refusal or an error while a
+/// reason is given is of something that cannot be skipped.
+fn exit(result: anyhow::Result<Outcome>, skip: &Skip) -> ExitCode {
+    let (out, err, code) = match result {
+        Ok(Outcome::Done(text)) => (text, String::new(), 0),
+        Ok(Outcome::Refused(text)) => (String::new(), text, 1),
+        Ok(Outcome::NotYet(text)) => (text, String::new(), 3),
+        Err(error) => (String::new(), format!("atelier: {error:#}\n"), 2),
     };
-    use clap::Parser;
-
-    #[test]
-    fn command_backed_evidence_defers_association_transaction_until_after_child() {
-        let capture = Cli::try_parse_from([
-            "atelier", "evidence", "record", "--kind", "test", "--", "atelier", "status",
-        ])
-        .expect("command-backed evidence CLI");
-        assert!(!command_uses_canonical_transaction(&capture.command));
-
-        let manual = Cli::try_parse_from([
-            "atelier",
-            "evidence",
-            "record",
-            "--kind",
-            "test",
-            "manual proof",
-        ])
-        .expect("manual evidence CLI");
-        assert!(command_uses_canonical_transaction(&manual.command));
+    let mut err = err;
+    if code == 1 || code == 2 {
+        err += &skip
+            .reason()
+            .map_or(String::new(), |_| output::not_skippable());
     }
-
-    #[test]
-    fn doctor_takes_no_transaction_like_land() {
-        // A passing land fences its result with an exclusive transaction,
-        // which a shared one held around it cannot upgrade to (atelier-37uq).
-        for command in [["atelier", "land"], ["atelier", "doctor"]] {
-            let cli = Cli::try_parse_from(command).expect("landing CLI");
-            assert!(!command_uses_canonical_transaction(&cli.command));
-        }
-    }
-
-    #[test]
-    fn canonical_transaction_lock_precedes_repository_dispatch() {
-        let main = include_str!("main.rs");
-        let production = main
-            .split("mod transaction_tests")
-            .next()
-            .expect("production dispatch source");
-        let lock = production
-            .find("let _canonical_transaction_lock")
-            .expect("canonical association lock");
-        let dispatch = production
-            .find("    match cli.command {")
-            .expect("central command dispatch");
-
-        assert!(lock < dispatch, "association lock must precede dispatch");
-        assert!(
-            production[dispatch..].contains("commands::bundle::apply"),
-            "missing bulk canonical mutation surface commands::bundle::apply"
-        );
-        let prune = Cli::try_parse_from(["atelier", "prune", "--apply"]).expect("prune");
-        assert_eq!(
-            canonical_transaction_mode(&prune.command),
-            CanonicalTransactionMode::Exclusive
-        );
-    }
-
-    #[test]
-    fn bulk_snapshot_swap_commands_take_exclusive_canonical_transactions() {
-        let apply = Cli::try_parse_from(["atelier", "bundle", "apply", "bundle.json", "--yes"])
-            .expect("bundle apply");
-        assert_eq!(
-            canonical_transaction_mode(&apply.command),
-            CanonicalTransactionMode::Exclusive
-        );
-
-        let preview = Cli::try_parse_from(["atelier", "bundle", "preview", "bundle.json"])
-            .expect("bundle preview");
-        assert_eq!(
-            canonical_transaction_mode(&preview.command),
-            CanonicalTransactionMode::Shared
-        );
-    }
+    // A closed stdout, as under `| head`, is no failure of the command.
+    let out = output::skipped(&skip.passed()) + &out;
+    let _ = std::io::stdout().write_all(out.as_bytes());
+    let _ = std::io::stderr().write_all(err.as_bytes());
+    ExitCode::from(code)
 }

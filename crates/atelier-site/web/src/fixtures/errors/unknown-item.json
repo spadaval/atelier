@@ -1,7 +1,0 @@
-{
-  "body": {
-    "error": "no item alpha-zzzz in alpha"
-  },
-  "route": "/api/alpha/item/alpha-zzzz",
-  "status": 404
-}

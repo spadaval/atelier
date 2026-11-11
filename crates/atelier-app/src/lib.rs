@@ -1,47 +1,29 @@
-//! Application use-case boundary.
-//!
-//! Command orchestration uses typed request and view APIs
-//! that do not write directly to stdout or stderr.
+//! Atelier's use cases: who is calling, the act table, which record of an
+//! item counts, what `status` shows, and the acts a program such as the
+//! Desk calls as functions, `ready` and `decide`, over a repository opened
+//! by path ([`Repo::open`]). Each returns what it did, or a refusal, as
+//! data; a [`Skip`] made for the invocation passes the rules its reason
+//! covers.
 
-pub mod after_merge;
-pub mod base_policy;
-pub mod board;
-pub mod branch_work;
-pub mod ci_passed;
-pub mod commit_records;
-pub mod committed_snapshot;
-pub mod criteria;
-pub mod decisions;
-pub mod done_when;
-pub mod epic_migration;
-pub mod evidence_freshness;
-pub mod forge;
-pub mod git_freshness;
-pub mod inbox;
-pub mod init;
-pub mod issue_inventory;
-pub mod issue_read;
-pub mod item_view;
-pub mod light_path;
-pub mod lint;
-pub mod mission_overview;
-pub mod mission_readiness;
-pub mod mission_review;
-pub mod objective_graph;
-pub(crate) mod path_log;
-pub mod plan_checks;
-pub mod project_config;
-pub mod record_guard;
-pub mod record_history;
-pub mod record_index;
-pub mod record_ref;
-pub mod review_gate;
-pub mod storage_layout;
-pub mod use_cases;
-pub mod work_classification;
-pub mod work_order;
-pub mod workflow_policy;
-pub mod workflow_validation;
+pub mod acts;
+mod decide;
+pub mod git;
+mod identity;
+pub mod plan;
+pub mod repo;
+mod review;
+pub mod say;
+mod show;
+mod skip;
+mod view;
+mod work;
 
-#[cfg(test)]
-pub(crate) mod test_records;
+pub use decide::{decide, decider, one_line};
+pub use identity::identity;
+pub use plan::{ready, Done};
+pub use repo::{Links, Repo};
+pub use review::{carried, carried_plan, Carried};
+pub use show::{annotate, annotate_all, item_view, mission_view, ItemView, MissionView};
+pub use skip::{refused, Refused, Skip, VARIABLE as SKIP_VARIABLE};
+pub use view::{entries, entry, overview, Branch, Entry, Located, Overview, ReadFrom};
+pub use work::{in_progress, items_of, list, Filter, Group, LIFECYCLE, NEEDS_HUMAN};

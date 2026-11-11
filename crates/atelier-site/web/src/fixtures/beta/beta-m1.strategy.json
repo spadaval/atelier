@@ -1,7 +1,0 @@
-{
-  "body": {
-    "error": "mission beta-m1 links no strategy"
-  },
-  "route": "/api/beta/mission/beta-m1/strategy",
-  "status": 404
-}

@@ -1,27 +1,17 @@
 [package]
 name = "atelier-records"
-description = "Canonical Markdown record storage for Atelier"
+description = "Reading, writing and validating Atelier's records"
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
 repository.workspace = true
-version.workspace = true
-
-[lib]
-path = "src/lib.rs"
+publish.workspace = true
 
 [dependencies]
 atelier-core = { path = "../atelier-core" }
-atelier-workflow = { path = "../atelier-workflow" }
-anyhow.workspace = true
 chrono.workspace = true
-fs2.workspace = true
-icu_normalizer.workspace = true
-icu_properties.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 serde_yaml.workspace = true
-sha2.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true

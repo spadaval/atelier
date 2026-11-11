@@ -1,8 +1,0 @@
-//! Atelier issue tracker library
-//!
-//! This module exposes the core functionality for use in fuzzing and testing.
-
-pub mod commands;
-pub(crate) mod gate_report;
-pub(crate) mod human_output;
-pub mod utils;

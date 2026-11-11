@@ -1,29 +1,16 @@
 [package]
 name = "atelier-app"
-description = "Application use-case orchestration for Atelier"
+description = "Atelier's use cases: the act table, thread identity, the status view, and the acts and repository access a caller links"
 edition.workspace = true
-homepage.workspace = true
 license.workspace = true
 repository.workspace = true
-version.workspace = true
-
-[lib]
-path = "src/lib.rs"
+publish.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
-atelier-workflow = { path = "../atelier-workflow" }
-anyhow.workspace = true
 chrono.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-ts-rs.workspace = true
-serde_yaml.workspace = true
-sha1-checked.workspace = true
-sha2.workspace = true
-tempfile = "3"
-toml.workspace = true
 
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,7 +1,0 @@
-{
-  "body": {
-    "error": "no Atelier repository named nowhere; known: alpha, beta"
-  },
-  "route": "/api/nowhere/mission/x",
-  "status": 404
-}

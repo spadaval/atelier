@@ -1,53 +1,21 @@
 [package]
 name = "atelier-cli"
-description = "Atelier CLI shell and binary owner"
-categories = ["command-line-utilities", "development-tools"]
+description = "The atelier command"
 edition.workspace = true
-homepage.workspace = true
-keywords = ["issue-tracker", "cli", "ai-development", "session-management", "developer-tools"]
 license.workspace = true
-readme = "../../README.md"
 repository.workspace = true
-version.workspace = true
-include = [
-    "src/**/*",
-    "!**/__pycache__/**",
-    "build.rs",
-    "../../LICENSE",
-]
-
-[lib]
-name = "atelier"
-path = "src/lib.rs"
+publish.workspace = true
 
 [[bin]]
 name = "atelier"
 path = "src/main.rs"
 
-[features]
-# Explicit opt-in for integration-test fault injection; never enabled by default.
-test-hooks = []
-
 [dependencies]
+anyhow.workspace = true
+chrono.workspace = true
 atelier-app = { path = "../atelier-app" }
 atelier-core = { path = "../atelier-core" }
 atelier-records = { path = "../atelier-records" }
-atelier-site = { path = "../atelier-site" }
-atelier-workflow = { path = "../atelier-workflow" }
-anyhow.workspace = true
-chrono.workspace = true
 clap.workspace = true
-dotenvy.workspace = true
-serde.workspace = true
 serde_json.workspace = true
-serde_yaml.workspace = true
-sha2.workspace = true
-fs2.workspace = true
-tempfile = "3"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
-[dev-dependencies]
-arbitrary = "1"
-proptest = "1"
+tempfile.workspace = true
