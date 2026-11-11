@@ -11,6 +11,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-1oel"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-5zre"
     type: "blocked_by"
   - kind: "issue"
@@ -27,6 +30,9 @@ relationships:
     type: "advances"
   - kind: "issue"
     id: "atelier-t747"
+    type: "blocked_by"
+  - kind: "issue"
+    id: "atelier-yudj"
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2

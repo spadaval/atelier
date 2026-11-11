@@ -11,6 +11,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-1oel"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-orb2"
     type: "blocked_by"
   - kind: "issue"

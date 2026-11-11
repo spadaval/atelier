@@ -16,9 +16,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-11-11T02:51:32.929529308+00:00"
+status: "superseded"
 title: "Decide six points the core loop rewrite left to Sumeet: Review rules the binary does not enforce, Done when with no checkbox, and thread identity"
-updated_at: "2026-11-11T02:20:42.636381587+00:00"
+updated_at: "2026-11-11T02:51:32.929529308+00:00"
 ---
 
 ## Goal
@@ -34,5 +35,9 @@ Decide six points the core loop rewrite (mission atelier-fcb7) could not settle,
 
 ## Done when
 
-- [ ] Each of the six has Sumeet's answer in this item's Report.
-- [ ] Each answer that changes a specification or the binary is filed as an item.
+- [x] Each of the six has Sumeet's answer in this item's Report.
+- [x] Each answer that changes a specification or the binary is filed as an item.
+
+## Report
+
+Answered by Sumeet on 2026-11-11: the six answers are in this item's Report, and the work they need is atelier-1oel (points 1, 3 and 5) and atelier-yudj (point 4)

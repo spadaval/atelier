@@ -37,7 +37,7 @@ Only this repository is sorted. The other four repositories' records are convert
 - [ ] A record is rewritten when its need survives and its Goal or Done when names a removed command, flag or record path. The rewrite changes only those names and the sentences that depend on them, to the commands the specifications give, and keeps the need as stated. The Report lists each rewritten record with what changed.
 - [ ] Missions are not dropped or rewritten by this item. Each open mission has a proposal in the Report for Sumeet: keep, drop, or fold into another, with the count of its open items by fate and whether its ready items could start under the new tool (an item of a draft mission cannot).
 - [ ] Nothing in the protected set (Scope) is changed. Each protected record still has its line, with fate `left for Sumeet` and the fate this sort would propose for it.
-- [ ] The Report gives three counts for this repository, as facts for the cutover, and changes nothing for them: ready items that belong to a draft mission; ready items whose Done when has no checkbox line (atelier-t6o6, point 4, which Sumeet has not answered); and deferred findings on done records that have no follow-up item, which the conversion will not carry over.
+- [ ] The Report gives three counts for this repository, as facts for the cutover, and changes nothing for them: ready items that belong to a draft mission; ready items whose Done when has no checkbox line, which the converter will write as one unticked line (atelier-yudj); and deferred findings on done records that have no follow-up item, which the conversion will not carry over.
 - [ ] After the changes, `atelier check` passes on the branch, and no open record is blocked by, or is a child of, a dropped one unless the Report says why that is right.
 - [ ] The sorted records still convert: in a scratch clone of this branch, `scripts/cutover/convert_records.py` converts, `--verify` passes and the new binary's `check` passes. The Report gives the commands and the item and mission counts the converter prints.
 
@@ -51,7 +51,7 @@ The protected set, which this item reads and does not change, because other thre
 - any record labelled `needs-human`;
 - mission atelier-z4cr (the Desk) and every item that advances it, and mission atelier-295u and every item that advances it;
 - atelier-8ep4, atelier-y0qe, atelier-t6o6, atelier-pwhn, atelier-c1z3 and atelier-7w9s;
-- mission atelier-qr5s and its nine items, which are this mission's own work.
+- mission atelier-qr5s and every item that advances it, which are this mission's own work.
 
 If `master` changes a record this branch also changed, master's version wins when the branch is brought up to date (`atelier merge --sync`), and the record joins the protected set.
 
