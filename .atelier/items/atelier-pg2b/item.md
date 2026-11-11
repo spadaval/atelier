@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-pg2b
 title: Tell Agent Factory's install procedure how to get the atelier CLI
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -33,3 +33,7 @@ Found in review of atelier-5tl2 (R2). Skill wording changes behavior, so it need
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-5tl2 (Name the release installer wherever Atelier tells users how to install or upgrade)
+
+## Report
+
+Dropped: Done by atelier-nz6a, and `procedures/install.md` has since been deleted (atelier-orb2).
