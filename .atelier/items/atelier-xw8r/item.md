@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xw8r
 title: Point start hints at atelier start, not the record-only transition
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -33,3 +33,7 @@ Following them moves the item to in_progress without a branch or `workflow_branc
 - [ ] `issue transition <id> start` run outside the item's owner branch prints a warning that no branch was recorded, and names `atelier start <id>`.
 - [ ] `atelier start <mission>` lists the mission's ready items (ID and title, up to 5), or says none is ready.
 - [ ] CLI tests cover the show hint, the warning and the mission error.
+
+## Report
+
+Dropped: Transitions were removed in 0.5; `start` is the only way to begin work, and `status` names it.
