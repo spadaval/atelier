@@ -287,9 +287,10 @@ with the harness's own tool, using a line the tool prints:
   threads under both harnesses stopped: Codex threads waited for their user's
   word before starting a subagent (atelier-t747), and a Claude Code thread
   that T3 Code had started as a child, told to start no agent unless its
-  task said so, stopped for its lead (the first real item under the new tool, mission atelier-qr5s). The line and its
-  task have no backticks, which an agent pasting the task into a
-  double-quoted shell argument would run as a command.
+  task said so, stopped for its lead (the first real item under the new
+  tool, mission atelier-qr5s). The line and its task have no backticks,
+  which an agent pasting the task into a double-quoted shell argument would
+  run as a command.
 - `escalate` prints the same for a decider, with `show` and `decide`.
 - `lead` prints one, with a `start` task for each item that can start now,
   and the lead's `status` repeats it.

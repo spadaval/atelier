@@ -497,7 +497,7 @@ fresh context, not as a fork, and that starting it is the reader's own job
 and part of its task, even as a child or subagent, so it starts it without
 waiting to be asked. Told less, a Codex thread waited for its user's word
 (atelier-t747), and a Claude Code thread started as a T3 Code child stopped
-for its lead (atelier-2mlh).
+for its lead (the first real item under the new tool, mission atelier-qr5s).
 
 That rule is the command's. A program that links `atelier-app`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
