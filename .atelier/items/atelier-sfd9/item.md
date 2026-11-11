@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-sfd9
 title: Give a repair route for links to missing records that arrive by merge or hand edit
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - check
@@ -32,3 +32,7 @@ Since atelier-ilba a command refuses to write a link to a record that does not e
 ## Context
 
 Narrowed in decision atelier-mzpn to links that reach the records without a command. atelier-kset owns the one-line finding format; share it.
+
+## Report
+
+Dropped: Fixed by the 0.5 rewrite: `check` names the file and field of a `blocked_by` that names no item, and the record still loads so it can be edited.
