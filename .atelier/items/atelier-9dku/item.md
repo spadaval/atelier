@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9dku
 title: Rewrite the gardener around the scorecard, three tiers of fix and a one-page report, and fold audit into it
-status: ready
+status: building
 mission: atelier-295u
 labels:
 - redesign
@@ -11,7 +11,8 @@ priority: medium
 blocked_by:
 - atelier-8b0a
 - atelier-vl5n
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3Ab88e5ac4-cc78-4fea-add2-d618a1992e35
 ready:
   by: sumeet, relayed by the task that started the lead
   at: 2026-11-11T17:41:08.552141251Z
