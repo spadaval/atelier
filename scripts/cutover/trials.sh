@@ -329,8 +329,8 @@ stop_trial() {
     set -e
     [ $rc -eq 1 ] || { say "$name: FAILED: the cutover exited $rc, not 1 (stop: $what); see $S/cutover.log"; exit 1; }
     say "$name: stopped: $what"
-    grep -m1 '^STOPPED' "$S/cutover.log" | sed 's/^/    /'
-    grep -m1 'cutover: ' "$S/cutover.log" | sed 's/^/    /'
+    awk '/^STOPPED/ { print "    " $0; exit }' "$S/cutover.log"
+    awk '/^STOPPED/ { print "    why: " last; exit } NF { last = $0 }' "$S/cutover.log"
     run_rollback "$S" > "$S/rollback.log" 2>&1 || { say "    FAILED: rollback exited non-zero; see $S/rollback.log"; exit 1; }
     grep -E 'published|reverted|reset away|installed|skill checkout|atelier-serve:' "$S/rollback.log" | sed 's/^/    rollback: /'
     run_rollback "$S" > "$S/rollback2.log" 2>&1 || { say "    FAILED: a second rollback exited non-zero; see $S/rollback2.log"; exit 1; }
@@ -389,7 +389,7 @@ trial_full() {
       git commit -q --no-edit
       atelier check > /dev/null
     ) || { say "    FAILED: the README's way did not bring the old-layout worktree onto the base"; exit 1; }
-    say "    the README's way brought astromech-other onto the converted base: atelier check passes there, and its own commit is kept ($(git -C "$o" log --oneline -3 | wc -l) commits shown)"
+    say "    the README's way brought astromech-other onto the converted base: atelier check passes there, and its own commit is kept"
     rm -rf "$W/full-remotes"; cp -r "$S/remotes" "$W/full-remotes"
     "$S/bin/systemctl" stop atelier-serve || true
   ) && say "full: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
