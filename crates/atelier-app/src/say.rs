@@ -250,17 +250,19 @@ pub fn start_reviewer(id: &str) -> String {
 /// `tasks`, then says what to do meanwhile. A Codex subagent has an
 /// identity of its own and a Claude Code one has its parent's
 /// (`atelier_app::identity`), so the line says which may be used. It says
-/// the caller starts it unasked, since a Codex thread otherwise waits for
-/// its user's word to start a subagent. A task has no backticks: pasted
-/// into a double-quoted shell argument, they would run the command as the
-/// caller.
+/// starting it is the caller's own job and part of its task, so the caller
+/// starts it unasked: told less, a Codex thread waited for its user's word,
+/// and a Claude Code thread started as T3's child, told to start no agent
+/// unless its task said so, stopped for its lead. A task has no backticks:
+/// pasted into a double-quoted shell argument, they would run the command
+/// as the caller.
 pub fn handoff(who: &str, tasks: &[String], then: &str) -> String {
     let (start, give) = match tasks.len() {
         1 => ("one", "this task"),
         _ => ("one for each task", "its task"),
     };
     let mut text = format!(
-        "{who} must be a thread other than yours. Starting it is part of the work you were given, so start {start} yourself now, without waiting to be asked. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Give it fresh context, not a fork of yours, and give it {give}:\n"
+        "{who} must be a thread other than yours, and starting it is your job: it is part of the task you were given, even as another thread's child or subagent, and nobody else will start it. So start {start} yourself now, without waiting to be asked. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Give it fresh context, not a fork of yours, and give it {give}:\n"
     );
     for task in tasks {
         text += &format!("  {task}\n");
@@ -269,7 +271,8 @@ pub fn handoff(who: &str, tasks: &[String], then: &str) -> String {
 }
 
 /// What a thread that holds nothing on item `id` is told on its branch,
-/// before `offer`, the offer to take it over: each of `questions`, which
+/// before `offer`, what it is told otherwise (to take it over, or, for a
+/// reviewer whose review is done, to stop): each of `questions`, which
 /// wait unanswered, and how the oldest is answered, by the caller when
 /// `decides`. The lead of its mission, `leads`, is not offered the item.
 pub fn visiting(
@@ -886,12 +889,15 @@ mod tests {
         let tasks = ["Run atelier review demo-ab12 and follow what it prints.".to_string()];
         let line = handoff("A reviewer", &tasks, "Then wait.");
         let first = line.lines().next().unwrap();
-        // Codex waits for its user's word to start a subagent unless told
-        // the start is its own to make.
-        assert!(
-            first.contains("start one yourself now, without waiting to be asked"),
-            "{first}"
-        );
+        // A thread waits for its user's or its lead's word to start
+        // another unless told the start is its own job, in its task.
+        for said in [
+            "starting it is your job: it is part of the task you were given",
+            "even as another thread's child or subagent, and nobody else will start it",
+            "start one yourself now, without waiting to be asked",
+        ] {
+            assert!(first.contains(said), "{first}");
+        }
         // True under either harness.
         assert!(first.contains("Under Codex a subagent you start is one"));
         assert!(first.contains("under Claude Code a subagent runs as your thread"));

@@ -1092,7 +1092,7 @@ fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it
     );
     assert!(
         run.stdout.contains(
-            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be a thread other than yours. "
+            "The item is in review all the same; `atelier merge` will push the branch.\nA reviewer must be a thread other than yours, and starting it is your job: "
         ),
         "{}",
         run.stdout

@@ -84,14 +84,14 @@ fn status_shows_a_done_when_line_wrapped_over_several_lines_whole() {
     let path = root.join(item_path(ID));
     let wrapped = fs::read_to_string(&path).unwrap().replace(
         "- [ ] A test covers it.\n",
-        "- [ ] A test covers it,\n  and CI runs\n  that test.\n",
+        "- [ ] A test covers it,\n  and CI runs\n  #12 for it.\n",
     );
     fs::write(&path, wrapped).unwrap();
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.contains(
             "  [ ] Done when: `hello` prints hello.\n  [ ] Done when: A test covers it, and CI runs \
-             that test.\n  [ ] Report"
+             #12 for it.\n  [ ] Report"
         ),
         "{status}"
     );

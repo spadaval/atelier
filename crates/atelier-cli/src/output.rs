@@ -74,7 +74,14 @@ pub fn item(
         )
     };
     let mut next = next(entry, dropped, decider.filter(|_| entry.holds));
-    if entry.next == Some(Act::TakeOver) {
+    // A thread holding nothing on it, a reviewer whose review is done
+    // among them, is told of its questions, which it may decide.
+    let done = entry.next.is_none() && entry.reviewed.is_some() && !entry.holds;
+    if entry.next == Some(Act::TakeOver) || done {
+        // A done reviewer told to decide is not also told to stop.
+        if done && decides && !entry.questions.is_empty() {
+            next.clear();
+        }
         next = visiting(id, &entry.questions, decides, leads, &next);
     }
     // Before `merge`, what it will run and wait for; a stale approval is

@@ -150,7 +150,9 @@ fn decide_writes_the_answer_by_the_caller_named_or_returns_its_refusal() {
     );
     let next = refused.next.unwrap();
     assert!(
-        next.starts_with("A decider must be a thread other than yours."),
+        next.starts_with(
+            "A decider must be a thread other than yours, and starting it is your job:"
+        ),
         "{next}"
     );
     assert!(

@@ -326,7 +326,7 @@ pub(crate) fn done_when(body: &str) -> Vec<(bool, String)> {
             continue;
         }
         let text = line.trim();
-        wrapping &= follows && !text.is_empty() && !listed(text) && !text.starts_with('#');
+        wrapping &= follows && !text.is_empty() && !listed(text) && !heading(text);
         if let (true, Some((_, last))) = (wrapping, checks.last_mut()) {
             if !last.is_empty() {
                 last.push(' ');
@@ -335,6 +335,13 @@ pub(crate) fn done_when(body: &str) -> Vec<(bool, String)> {
         }
     }
     checks
+}
+
+/// Whether `text`, trimmed, is a heading: one to six `#`, then a space or
+/// nothing, as in `document.rs`. `#123` is text.
+fn heading(text: &str) -> bool {
+    let hashes = text.len() - text.trim_start_matches('#').len();
+    (1..=6).contains(&hashes) && (text.len() == hashes || text[hashes..].starts_with(' '))
 }
 
 /// Whether `text`, trimmed, starts a list line: `-`, `*` or `+`, or a number
@@ -442,7 +449,8 @@ mod tests {
     fn a_done_when_line_wrapped_over_several_lines_is_read_whole() {
         let body = "## Done when\n\n- [ ] `slugify(\"a,  b\")` returns `a-b`,\n  and `slugify(\"--\")`\nreturns an empty slug.\n\
                     - [x] Next\n\n  after a blank line\n- [ ] Before a fence\n```\nfenced\n```\n  after it\n\
-                    - [ ] Above a list\n  1. numbered\n- [ ] Above a heading\n### Notes\n";
+                    - [ ] Above a list\n  1. numbered\n- [ ] The output links to\n  #123 and explains the fix.\n\
+                    - [ ] Above a heading\n### Notes\n";
         assert_eq!(
             done_when(body),
             [
@@ -454,6 +462,10 @@ mod tests {
                 (true, "Next".to_string()),
                 (false, "Before a fence".to_string()),
                 (false, "Above a list".to_string()),
+                (
+                    false,
+                    "The output links to #123 and explains the fix.".to_string()
+                ),
                 (false, "Above a heading".to_string()),
             ]
         );
