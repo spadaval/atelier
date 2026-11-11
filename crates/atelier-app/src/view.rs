@@ -3,8 +3,9 @@
 use crate::acts::{
     mission_of, next, unmet, Act, Condition, Facts, ESCALATE_AFTER, PLANNED, STARTED,
 };
+use crate::review::chain;
 use crate::work::{in_progress, items_of};
-use atelier_core::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
+use atelier_core::{FindingName, MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use atelier_records::{ItemDir, MissionDir, Problem};
 use std::collections::HashMap;
 
@@ -97,8 +98,10 @@ pub struct Entry {
     pub round: Option<u32>,
     /// For its implementer, while it is in review or changes are
     /// requested: how many rounds have ended with no approve verdict, once
-    /// that is enough to require escalation.
-    pub unapproved: Option<usize>,
+    /// that is enough to require escalation, with the open fix-now finding
+    /// to escalate when changes are requested. `None` once a question has
+    /// been asked about each open finding, since that is the escalation.
+    pub unapproved: Option<(usize, Option<FindingName>)>,
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
@@ -136,8 +139,16 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
         _ => None,
     };
-    let unapproved = Some(facts.unapproved_rounds())
+    let rounds = Some(facts.unapproved_rounds())
         .filter(|rounds| facts.holds() && round.is_some() && *rounds >= ESCALATE_AFTER);
+    let unapproved = match (rounds, item.status) {
+        (Some(rounds), Status::ChangesRequested) => {
+            unasked(facts.item)?.map(|finding| (rounds, Some(finding)))
+        }
+        // In review, which finding stands waits for the round's verdict.
+        (Some(rounds), _) => Some((rounds, None)),
+        (None, _) => None,
+    };
     Ok(Entry {
         id: item.id.clone(),
         title: item.title.clone(),
@@ -175,6 +186,21 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         unmet,
         needs: needs(facts)?,
     })
+}
+
+/// The first open fix-now finding of `item` that no question is about, in
+/// its round or any it was carried from.
+fn unasked(item: &ItemDir) -> Result<Option<FindingName>, Problem> {
+    let (findings, decisions) = (item.findings()?, item.decisions()?);
+    let asked = |name: &FindingName| {
+        chain(name, &findings).iter().any(|f| {
+            decisions
+                .iter()
+                .any(|d| d.finding.as_ref() == Some(&f.name))
+        })
+    };
+    let open = item.open_findings()?.into_iter();
+    Ok(open.map(|f| f.name).find(|name| !asked(name)))
 }
 
 /// For a started item another thread holds: the conditions its holder's

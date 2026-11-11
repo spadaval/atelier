@@ -67,6 +67,14 @@ impl<'s> Repo<'s> {
             bail!("the caller's identity `{caller}` cannot be written into a record and read back as it is: it needs to be one line with no `: ` in it");
         }
         let root = git::root(dir)?;
+        // Said plainly, so a thread outside Atelier sets it aside rather
+        // than taking a missing file for a broken one.
+        if !committed && !root.join(".atelier").exists() {
+            bail!(
+                "this is not an Atelier repository: {} has no .atelier/ directory",
+                root.display()
+            );
+        }
         let mut reader = CommitReader::new(&root);
         let config = match committed {
             false => Store::new(root.join(".atelier"))

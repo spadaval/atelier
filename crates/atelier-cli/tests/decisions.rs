@@ -47,10 +47,7 @@ fn escalate(root: &Path, finding: Option<&str>) -> Run {
 fn decider_handoff(finding: &str) -> String {
     let stem = finding.rsplit_once('.').unwrap().0;
     format!(
-        "A decider must be a thread other than yours. Under Codex a subagent you start is one; \
-         under Claude Code a subagent runs as your thread and is refused, so use your harness's \
-         tool for a new agent thread. Start one with fresh context, not as a fork of yours, and \
-         give it this task:\n  Run atelier show {ID}, and read the question waiting under its Decisions and \
+        "A decider {START_ONE}  Run atelier show {ID}, and read the question waiting under its Decisions and \
          finding {finding} in {REVIEWS}/{stem}.md. Answer it with atelier decide {ID} '<your \
          answer>', adding --defer to defer the finding or --no-action to close it without a fix, \
          or neither to leave it to be fixed.\nThen wait for its answer, and run `atelier status`.\n"
