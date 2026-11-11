@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Sort the 147 open items and five open missions for the new tool"
-updated_at: "2026-11-11T05:16:37.409905625+00:00"
+updated_at: "2026-11-11T05:40:06.736500316+00:00"
 ---
 
 ## Goal
@@ -81,6 +81,9 @@ The branch changes only records, so it needs no CI run of its own, and its revie
   Rejected: Have Sumeet review the list directly
 - 2026-11-11 [decision] Run a sixth review round with a fresh GPT-6.1 Sol reviewer (xhigh) at the branch head, after rechecking each of the 27 rewrites' Done when against its text at fc0fe395. If round 6 finds one more record wrong in the same way (a drop that should be a keep, or a rewrite that lost a requirement), fix it and run one more round, the last authorised; anything else stops for the orchestrator.
   Reason: Orchestrator's decision after round 5: rounds 4 and 5 each found one real problem and nothing else, and round 5's was a rewrite that lost requirements, so the rewrites get the same line-by-line recheck the drops had after round 2.
+- 2026-11-11 [decision] Rescope class (b): each of the 26 remaining (b) drops stays dropped only if the Report shows every Done when line at fc0fe395 met, by a specification line or a command run on atelier-next-7b06ed12 in a scratch repository; otherwise the record is restored byte for byte from fc0fe395 with fate as is and a note of what was not shown, never narrowed into a rewrite. Then round 8 with a fresh GPT-6.1 Sol reviewer (xhigh). If it finds another (b) drop wrong, restore every remaining (b) drop without further checking and run one last round; if that does not approve, or a finding is of another kind, stop.
+  Reason: Orchestrator's decision after round 7: rounds 4 to 7 each found one record dropped or narrowed as already done by the new binary where it does only part; that judgment is not safe to apply on a reading, the item applies only what is safe, and a wrong keep costs one atelier drop later.
+  Rejected: Narrowing such records into rewrites
 
 ## Report
 
