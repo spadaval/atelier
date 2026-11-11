@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Write the Desk's API as a document first: each page's fields against the new core's views, and the views it lacks"
-updated_at: "2026-11-11T05:06:23.755378448+00:00"
+updated_at: "2026-11-11T05:18:58.445358053+00:00"
 ---
 
 ## Goal
@@ -43,6 +43,10 @@ A document and a scratch clone. No crate, no app code. The Health, Insights and 
 ## Context
 
 Strategy: `docs/strategies/desk.md`. Decisions: ADR 0032. Target design of the records and commands: `docs/strategies/redesign-product.md` and `redesign-architecture.md`. The T3 Code interface is described in the 2026-11-10 note on atelier-aab1.
+
+## Notes
+
+- 2026-11-11 [handoff] Approved by gpt-6.1-sol (atelier-95xf) at 74b9b0d2 in round 1 with no findings. Outcome, clone commands, spike page list, missing views M1-M7 and surprises are in the Report. Not merged; the orchestrator merges.
 
 ## Report
 
