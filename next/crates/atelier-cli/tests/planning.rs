@@ -1640,6 +1640,27 @@ fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_com
     );
     git(&root, &["checkout", "HEAD", "--", &item_path(ID)]);
 
+    // An item of the plan whose record here does not parse is named, and the
+    // brief still reads the commit.
+    let broken = read(&root, &item_path(ID)).replace("status: draft", "status: broken");
+    fs::write(root.join(item_path(ID)), broken).unwrap();
+    let unread = atelier(&root, "r1", &["review", MISSION]);
+    assert_eq!(unread.code, 0, "{}", unread.stderr);
+    for shown in [
+        format!("  {} (draft): Say hello\n", item_path(ID)),
+        format!(
+            "this review does not cover those changes: {}\n",
+            item_path(ID)
+        ),
+    ] {
+        assert!(
+            unread.stdout.contains(&shown),
+            "{shown}\n---\n{}",
+            unread.stdout
+        );
+    }
+    git(&root, &["checkout", "HEAD", "--", &item_path(ID)]);
+
     // A mission no commit holds has no plan to review.
     let other = "demo-m2ss";
     write_mission(&root, other, "draft");
