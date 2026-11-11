@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Sort the 147 open items and five open missions for the new tool"
-updated_at: "2026-11-11T05:40:06.736500316+00:00"
+updated_at: "2026-11-11T06:02:50.082309200+00:00"
 ---
 
 ## Goal
@@ -84,6 +84,8 @@ The branch changes only records, so it needs no CI run of its own, and its revie
 - 2026-11-11 [decision] Rescope class (b): each of the 26 remaining (b) drops stays dropped only if the Report shows every Done when line at fc0fe395 met, by a specification line or a command run on atelier-next-7b06ed12 in a scratch repository; otherwise the record is restored byte for byte from fc0fe395 with fate as is and a note of what was not shown, never narrowed into a rewrite. Then round 8 with a fresh GPT-6.1 Sol reviewer (xhigh). If it finds another (b) drop wrong, restore every remaining (b) drop without further checking and run one last round; if that does not approve, or a finding is of another kind, stop.
   Reason: Orchestrator's decision after round 7: rounds 4 to 7 each found one record dropped or narrowed as already done by the new binary where it does only part; that judgment is not safe to apply on a reading, the item applies only what is safe, and a wrong keep costs one atelier drop later.
   Rejected: Narrowing such records into rewrites
+- 2026-11-11 [decision] Second rescope: no record is rewritten by this item; every rewritten record is restored byte for byte from fc0fe395 as is, its Report line naming what it names that the new tool removed. The orchestrator changes the item's Done when to match. atelier-abdp stays dropped only if atelier-1oel as merged meets each of its Done when lines, shown. Each class (a) drop is reread, and restored where its need would survive the removal in another form. Then round 10; a wrong (a) drop gets one last round, anything else stops.
+  Reason: Orchestrator's decision after round 9: rounds 5, 6, 8 and 9 each found a rewrite that had lost a requirement; rewriting backlog items for a tool nobody uses yet is not safe on a reading and buys little, since an item is rewritten when it is planned.
 
 ## Report
 
