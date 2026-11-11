@@ -1,6 +1,6 @@
 # The Desk: product intent
 
-Status: proposed with mission atelier-z4cr (2026-11-11). The decisions it
+Status: accepted with mission atelier-z4cr (2026-11-11). The decisions it
 rests on are in [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md).
 
 ## Why it exists
