@@ -3,7 +3,7 @@
 ## Status
 
 Decisions 2 to 5 are replaced, and Decision 6 widened, by
-[ADR 0032](0032-the-desk-is-the-humans-product.md) once it is accepted.
+[ADR 0032](0032-the-desk-is-the-humans-product.md), accepted 2026-11-11.
 
 Accepted (2026-11-08, human-directed: Sumeet decided atelier-7bs1 in a design
 discussion; missions atelier-yfqu, `docs/strategies/fleet-dashboard.md`, and

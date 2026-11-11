@@ -2,10 +2,9 @@
 
 ## Status
 
-Proposed (2026-11-11, drafted at Sumeet's direction in a design discussion
-over the dashboard spike on branch `spike/mission-control`; mission
-atelier-z4cr, docs/strategies/desk.md). It takes effect when he approves
-that mission's brief.
+Accepted (2026-11-11, human-directed: Sumeet set the direction in a design
+discussion over the dashboard spike on branch `spike/mission-control` and
+approved the brief of mission atelier-z4cr, docs/strategies/desk.md).
 
 Replaces Decisions 2 to 5 of
 [ADR 0030](0030-a-read-only-site-a-session-database-and-t3-code.md) and
