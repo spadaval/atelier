@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ivbq
 title: 'Fix what the new skill and the eval fixtures showed status gets wrong: six small gaps in what a thread is told'
-status: building
+status: in_review
 mission: atelier-qr5s
 labels:
 - redesign
@@ -25,12 +25,12 @@ Close the gaps in what the new binary tells a thread that writing the skill, the
 
 ## Done when
 
-- [ ] In a Git checkout with no `.atelier/`, `status` says this is not an Atelier repository and exits as it does today for that case, where it now says only that it cannot read the repository's Atelier config. A checkout whose config exists and does not parse still gets the parse error.
-- [ ] A thread that holds nothing on an item with an unanswered question is told of the question and of `atelier decide`, before any offer to take the item over. A thread that leads the item's mission is not offered the take-over as its next step on that item's branch.
-- [ ] After three rounds without an approval, the line that names `atelier escalate` includes `--finding <name>` when a kept finding is open, and is not shown once a question about it has been asked.
-- [ ] `status` shows the whole of a Done when line that wraps over several lines of the record, not its first line.
-- [ ] The handoff line a Codex thread reads tells it to start the other thread itself, without waiting to be asked. The line still has no backticks, and is still true under Claude Code.
-- [ ] Each line above has a test that fails before the change, and `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings` and `cargo nextest run` pass, each with `-j 4` where it builds. The product page's `status` example and Handoff lines passage, and the design record's Threads and roles, match what the binary now prints.
+- [x] In a Git checkout with no `.atelier/`, `status` says this is not an Atelier repository and exits as it does today for that case, where it now says only that it cannot read the repository's Atelier config. A checkout whose config exists and does not parse still gets the parse error.
+- [x] A thread that holds nothing on an item with an unanswered question is told of the question and of `atelier decide`, before any offer to take the item over. A thread that leads the item's mission is not offered the take-over as its next step on that item's branch.
+- [x] After three rounds without an approval, the line that names `atelier escalate` includes `--finding <name>` when a kept finding is open, and is not shown once a question about it has been asked.
+- [x] `status` shows the whole of a Done when line that wraps over several lines of the record, not its first line.
+- [x] The handoff line a Codex thread reads tells it to start the other thread itself, without waiting to be asked. The line still has no backticks, and is still true under Claude Code.
+- [x] Each line above has a test that fails before the change, and `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings` and `cargo nextest run` pass, each with `-j 4` where it builds. The product page's `status` example and Handoff lines passage, and the design record's Threads and roles, match what the binary now prints.
 
 ## Scope
 
@@ -45,3 +45,25 @@ Mission atelier-qr5s, step H ("fix what first use breaks"). Where each was seen:
 This host runs a service its owner depends on: one cargo command at a time, with `-j 4`; set `TMPDIR` to a directory under `$HOME` outside any repository, since `/tmp` is a small quota'd tmpfs.
 
 Expected size: about 120 lines of Rust outside tests.
+
+## Report
+
+All six Done when lines hold. Two commits: 1d08908bd (code and tests) and aa81e3641 (the two specification pages). `cargo fmt -- --check` and `cargo clippy -j 4 --all-targets -- -D warnings` are clean, and `cargo nextest run -j 4` passes 291 of 291.
+
+### What changed, by line
+
+- **Not an Atelier repository** (`atelier-app/src/repo.rs`, `Repo::opened`). A checkout with no `.atelier/` now gets `atelier: this is not an Atelier repository: <root> has no .atelier/ directory`, exit 2 as before. A config that is there and does not parse still gets `cannot read this repository's Atelier config: ...` with the parse error. The check is skipped for `Repo::open_committed`, so the Desk's commit-only reads are unchanged. `check` is a separate path and still reports the missing `config.toml`. Test: `status_outside_an_atelier_repository_says_so_and_a_config_that_does_not_parse_says_why`.
+- **A visitor's question, and the lead** (`say::visiting`, called from `output::item`; `commands.rs` works out whether the caller may decide and whether it leads the item's mission). On the item's branch, a thread holding nothing gets `A question waits on a decider: <question>` for each one. If it may decide, it then gets `Then: atelier decide <id> "<answer>"`; if not, it is told who may. The take-over offer comes after both. The mission's lead gets `You lead mission <m>, which <id> is in: its implementer builds it, so you do not take it over.` and no offer, with a question waiting or not. Test: `on_an_items_branch_a_thread_holding_nothing_is_told_of_its_question_before_the_take_over` (a thread that may decide, a former implementer that may not, and the lead before and after it answers).
+- **Escalation line** (`view.rs`, `Entry::unapproved` now carries the finding; `output::escalate`). With changes requested after three rounds, the line reads `atelier escalate --finding <name> "<question>"` for the first open fix-now finding with no question about it, in its own round or any round it was carried from. Once each open finding has a question, answered or not, the line is gone. In review the line is unchanged, since which finding stands waits for the verdict. Tests: `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` (now expects `--finding`) and `the_escalation_line_goes_once_a_question_is_asked_about_the_kept_finding` (asked, then answered "fix it", on the branch and away from it).
+- **Wrapped Done when lines** (`atelier-records/src/body.rs`, `done_when`). A line directly under a check is joined to its text with a space, unless it is blank, a list line, a heading, or comes after a fence. Tests: `a_done_when_line_wrapped_over_several_lines_is_read_whole` (unit) and `status_shows_a_done_when_line_wrapped_over_several_lines_whole`. The existing unit test's `- [ ] One` plus `wrapped` now reads `One wrapped`.
+- **Handoff line** (`say::handoff`). It now reads: "<Who> must be a thread other than yours. Starting it is part of the work you were given, so start one yourself now, without waiting to be asked. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Give it fresh context, not a fork of yours, and give it this task:". It has no backticks and is true under both harnesses. Test: unit `a_handoff_says_to_start_the_thread_unasked_and_holds_no_backtick`. The four CLI tests that pin the whole line now share `START_ONE` in `tests/common/mod.rs`.
+- **Specifications.** In `docs/strategies/redesign-product.md`, the paragraph under the `status` example now covers wrapped lines, `--finding`, the visitor and the lead, and the not-an-Atelier-repository case. The Handoff lines passage quotes the new line. The example itself, at round 2, prints no escalation line and still matches. In `docs/strategies/redesign-architecture.md`, Threads and roles says the same.
+
+### Tests fail before the change
+
+With master's `crates/*/src` checked out over the new tests (then restored), these eight failed: the outside-Atelier, wrapped-line, visitor and both escalation tests, plus three pinned handoff tests (`submit_refuses_with_the_status_list_and_then_commits_the_report_in_review`, `an_escalation_decided_as_defer_is_carried_as_decided_and_the_item_merges`, `lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thread`). The two unit tests live in `src`, so they were checked by reading: the old `done_when` returns only a check's first line, and the old handoff has no "without waiting to be asked".
+
+### Deviations
+
+- `crates/atelier-records/src/body.rs` is outside the stated Scope. The Done when parser lives there, and fixing it there also fixes the Desk, which reads the same list.
+- About 140 lines of Rust outside tests, against about 120 expected.
