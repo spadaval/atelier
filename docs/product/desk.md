@@ -68,13 +68,13 @@ In order of importance:
 
 | Source | What the Desk takes from it |
 | --- | --- |
-| Records, through the core's read and view layer | Missions, their documents, items, reviews and the history of acts |
+| Records, through the core | Missions, their documents, items, reviews and the history of acts |
 | T3 Code, through its MCP server | Threads, their models and state; a way to start a session |
 | A daily feed | Numbers, worst spots and candidate causes, read from history and transcripts by an unattended run |
 | A host-wide SQLite database | Trends, findings, and what the human last saw. Nothing a record holds. |
 
-The Desk writes no record itself. It runs `atelier` commands under the
-human's name, where each command is written to run. The tracker can be rebuilt without the Desk changing its
+The Desk writes no record itself. It calls the core's own functions for
+the human's acts, the ones the `atelier` command calls, under his name. The tracker can be rebuilt without the Desk changing its
 purpose, and no agent, check or merge depends on the Desk.
 
 ## What it is built from

@@ -38,8 +38,8 @@ records.
 
 1. **Two products.** The tracker is for agents: the `atelier` command and
    its records. The Desk is for the human: where he plans missions, tends
-   repositories and reads results. They share a vocabulary and the core's
-   read and view layer, and nothing else.
+   repositories and reads results. They share a vocabulary and the core,
+   which reads records, computes views and performs acts for both.
 
 2. **`atelier` has no site.** `atelier serve` and the `atelier-site` crate
    are deleted with the old workspace and are not rebuilt. The Desk shows a
@@ -53,18 +53,22 @@ records.
    not part of the `atelier` release or its installer until a second host
    needs it.
 
-4. **One direction of dependency.** `atelier-desk` depends on the core's
-   read and view layer. No tracker crate depends on `atelier-desk`, and no
+4. **One direction of dependency.** `atelier-desk` depends on the core
+   (`atelier-app` and `atelier-records`). No tracker crate depends on `atelier-desk`, and no
    check, merge or hook consults the Desk or its database (ADR 0030,
    Decision 1).
 
-5. **The Desk acts only through `atelier`.** It offers the acts that are
-   the human's, such as `ready` and `decide`. It performs each by running
-   the `atelier` command under the human's name, in the checkout where that
-   command is written to run. Where a command leaves the commit to its
-   caller, the Desk makes exactly the commit the command asks for and no
-   other. The Desk writes no record itself and holds no decision the
-   records lack. It is not a record editor.
+5. **The Desk acts only through the core.** It offers the acts that are
+   the human's, such as `ready` and `decide`. It performs each by calling
+   the same function in the core that the `atelier` command calls, naming
+   the person acting, and it gets the result as data. It runs no `atelier`
+   binary and reads no command output. The Desk writes no record itself
+   and holds no decision the records lack. It is not a record editor.
+
+   Where the Desk needs something the core lacks, a view or an act, it is
+   added to the core, where the command line uses it too. The Desk keeps no
+   copy of the tracker's logic, and the command line gets no output format
+   for the Desk's sake.
 
 6. **One host-wide SQLite database for what Git never held.** ADR 0030's
    session database is also the Desk's, and it is one SQLite file on the
@@ -94,8 +98,10 @@ records.
   files.
 - The Desk can change daily without a tracker release, and a tracker user
   who wants no Desk installs none.
-- The Desk is tied to the core's view layer. A change there can break the
-  Desk's build, which is where such a break should show.
+- The Desk is tied to the core. A change there can break the Desk's
+  build, which is where such a break should show.
+- The tracker changes for the Desk's sake: its acts move out of the
+  command-line crate into the core, and `ready` commits its own write.
 - A second service runs on the host, with a token that can read, and where
   the human starts a session, operate, T3 Code.
 
