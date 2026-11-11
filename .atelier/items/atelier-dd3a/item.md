@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-dd3a
 title: Deferred review findings on atelier-8myy
-status: draft
+status: dropped
 mission: null
 labels:
 - deferred-findings
@@ -29,3 +29,7 @@ Collect the follow-ups deferred from review findings on atelier-8myy, one per fi
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-8myy (Fix what the validator found: a plan review of text it does not record, a broken branch that hides a drop, and nine smaller gaps)
+
+## Report
+
+Dropped: A container of the old tool's deferred findings on atelier-8myy. Its children atelier-lkf5 and atelier-m2v1 stay as items of their own; 0.5 has no parent items.
