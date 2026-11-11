@@ -3,6 +3,9 @@ created_at: "2026-11-11T02:17:27.158256540+00:00"
 id: "atelier-va99"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-va99
 priority: "P2"
 relationships:
   blocks: []
@@ -23,9 +26,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Install the Desk as a service on this host over converted clones of the five repositories, with one command for each success criterion"
-updated_at: "2026-11-11T07:07:35.774232494+00:00"
+updated_at: "2026-11-11T08:11:03.082167875+00:00"
 ---
 
 ## Goal
