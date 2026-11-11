@@ -1,6 +1,6 @@
-# The rewritten tool (docs/strategies/redesign-architecture.md). It is a
-# workspace of its own and reads nothing outside next/: CI deletes the root
-# crates/ directory before it builds this one.
+# Atelier (docs/strategies/redesign-architecture.md). `atelier-cli` builds
+# the one binary the release ships, `atelier`; the Desk's server,
+# `atelier-desk`, is built and tested here and not released.
 [workspace]
 members = [
     "crates/atelier-app",
@@ -15,7 +15,9 @@ resolver = "2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/spadaval/atelier"
+homepage = "https://github.com/spadaval/atelier"
 publish = false
+version = "0.5.0"
 
 [workspace.dependencies]
 anyhow = "1"
@@ -26,3 +28,8 @@ serde_json = "1"
 serde_yaml = "0.9"
 tempfile = "3"
 toml = "0.8"
+
+# The profile `dist` builds the release with.
+[profile.dist]
+inherits = "release"
+lto = "thin"

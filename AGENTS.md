@@ -3,6 +3,23 @@
 This file is a map to the repository's durable guidance. Keep process and
 product policy in the linked sources instead of duplicating it here.
 
+## Between the switch and the cutover
+
+The tree now holds only the rewritten tool: `crates/` is the new workspace,
+and the old one is gone. This repository's records are still in the old
+layout, which only the old tool reads, so until the cutover (atelier-wd1i)
+has run:
+
+- The installed binary, 0.4.0, stays the tracker. Every `atelier` command
+  below is that binary's.
+- Nobody installs from the tree or runs `cargo install`. A binary built
+  here cannot read any repository's records yet, and installing it would
+  stop work in every repository on the host.
+- The tree's binary, `target/debug/atelier`, is run only in scratch clones
+  whose records are converted, never in a checkout of a real repository.
+- The next step is the runbook: `scripts/cutover/README.md` says how it is
+  run. The cutover replaces this file with `scripts/cutover/agents/atelier.md`.
+
 ## Missions
 
 Open missions are listed by `atelier work missions`, and `atelier work mission
@@ -37,9 +54,7 @@ rebuilt model.
   `docs/product/work-model.md` have the detail; `CONTEXT.md` defines check,
   review, land, done and close.
 - `.claude/settings.json` runs these through the installed CLI's Claude Code
-  hooks (`atelier setup claude`). To try a local build, use `target/debug/atelier`
-  directly, or `setup claude --binary target/debug/atelier` without committing
-  the result.
+  hooks (`atelier setup claude`). Do not point them at the tree's binary.
 
 ## Merge Policy
 
@@ -88,28 +103,22 @@ rebuilt model.
 
 ## Command References
 
-- Installed CLI: `atelier` (`cargo install --path crates/atelier-cli --locked`
-  in this checkout, which needs pnpm to build the site's app; elsewhere the
-  release installer in `README.md`)
-- Site app: `crates/atelier-site/web/` (`pnpm test`, `pnpm e2e`, `pnpm dev`;
-  see `docs/architecture/site.md`)
-- Local debug binary: `target/debug/atelier`
-- Cross-repository smoke test: `scripts/smoke-repos.sh` builds this tree and
-  runs read-only commands with it and with the installed `atelier` in scratch
-  clones of every local Atelier repository, failing when the new binary
-  refuses where the installed one does not. Run it before requesting review
-  of a change to atelier's commands or records, and before installing a new
-  binary.
+- Installed CLI: `atelier` 0.4.0, the old tool, until the cutover. Do not
+  reinstall it from this tree; the release installer in `README.md` installs
+  the latest release, and the pinned fallback is in `scripts/cutover/README.md`.
+- The tree's binary: `target/debug/atelier` (`cargo build -j 4 -p
+  atelier-cli`), for scratch clones only.
+- The Desk's app: `desk/` (`pnpm test`, `pnpm e2e`; see `desk/README.md`).
+- The cutover kit: `scripts/cutover/` (`README.md` first).
 - Formatting: `cargo fmt -- --check`
+- Lints: `cargo clippy --all-targets -- -D warnings`
 - Rust tests: `cargo nextest run`
-- Failure-path tests: `cargo nextest run --features test-hooks`
 - Whitespace: `git diff --check`
 - Locally, run formatting and the tests that cover your change
-  (`cargo nextest run -p <crate>` or a filter). The full suite, with and
-  without `test-hooks`, runs on Linux in CI on the pull request
-  (`.github/workflows/ci.yml`), and that run gates the merge. CI skips the
-  Rust jobs when a change touches only tracker records and Markdown outside
-  `crates/` and `docs/strategies/`, since no Rust test reads those; the run
-  still passes, so such a branch still needs its pull request
-  (`scripts/ci-jobs.sh` holds the rule, and its test is
+  (`cargo nextest run -p <crate>` or a filter). The full suite runs on Linux
+  in CI on the pull request (`.github/workflows/ci.yml`), and that run gates
+  the merge. CI skips the Rust jobs when a change touches only tracker
+  records, Markdown outside `crates/`, and the Desk's app outside
+  `desk/src/api/`; the run still passes, so such a branch still needs its
+  pull request (`scripts/ci-jobs.sh` holds the rule, and its test is
   `scripts/ci-jobs.test.sh`).

@@ -127,14 +127,6 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
-      - name: "Install pnpm"
-        uses: "pnpm/action-setup@v4"
-        with:
-          "package_json_file": "crates/atelier-site/web/package.json"
-      - name: "Install Node"
-        uses: "actions/setup-node@v6"
-        with:
-          "node-version": "lts/*"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

@@ -14,7 +14,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "convert_records.py"
-NEW_BINARY = HERE.parent.parent / "next/target/debug/atelier"
+NEW_BINARY = HERE.parent.parent / "target/debug/atelier"
 sys.path.insert(0, str(HERE))
 import convert_records  # noqa: E402
 

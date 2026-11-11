@@ -4,7 +4,7 @@
 #
 #   scripts/cutover/rehearse.sh <a new or empty work directory>
 #
-# Build next/target/debug/atelier first. Each clone's pushes go to a local
+# Build target/debug/atelier first. Each clone's pushes go to a local
 # bare repository, Git may use only local files, and `gh` is a double, so
 # nothing reaches the network and no real repository is changed. Each clone
 # is converted, verified, checked and given Atelier's Git hooks; one item is
@@ -17,8 +17,8 @@ set -euo pipefail
 [ $# -eq 1 ] || { echo "usage: $0 <work directory>" >&2; exit 2; }
 [ ! -e "$1" ] || [ -z "$(ls -A "$1")" ] || { echo "$1 is not empty: give a new directory" >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
-new=$here/../../next/target/debug/atelier
-[ -x "$new" ] || { echo "Build $new first: cargo build -j 4 --manifest-path next/Cargo.toml" >&2; exit 2; }
+new=$here/../../target/debug/atelier
+[ -x "$new" ] || { echo "Build $new first: cargo build -j 4 -p atelier-cli" >&2; exit 2; }
 mkdir -p "$1/bin" "$1/new" "$1/gh" "$1/tmp"
 W=$(cd "$1" && pwd)
 cp "$new" "$W/new/atelier"

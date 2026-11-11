@@ -38,6 +38,7 @@ pub(crate) fn open<'s>(dir: &Path, skip: &'s Skip) -> anyhow::Result<Repo<'s>> {
 #[derive(Parser)]
 #[command(
     name = "atelier",
+    version,
     about = "Tracks work in this repository. Start with `atelier status`."
 )]
 struct Cli {

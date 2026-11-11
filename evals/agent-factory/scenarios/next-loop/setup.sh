@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# A small Python repository tracked by the redesigned atelier (next/): a
+# A small Python repository tracked by the redesigned atelier: a
 # config that names no forge, one ready item asking for a small real change,
 # and no instructions or skill beyond what `atelier status` prints. work/bin
 # holds the new binary, which the harness puts first on PATH; NEXT_ATELIER
-# names it (the round's copy of next/target/debug/atelier).
+# names it (the round's copy of target/debug/atelier).
 set -euo pipefail
 work=$1
 : "${NEXT_ATELIER:?set NEXT_ATELIER to the new atelier binary}"

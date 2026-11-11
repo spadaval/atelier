@@ -1,5 +1,0 @@
-# Tests never check for atelier or Agent Factory updates over the network,
-# and never read or refresh the user's update cache (atelier-45gr). Tests of
-# the check itself remove the variable and fake the network and `npx`.
-[env]
-ATELIER_NO_UPDATE_CHECK = "1"

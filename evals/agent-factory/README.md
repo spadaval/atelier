@@ -26,7 +26,7 @@ nothing, and why runs are read by hand.
 | `plan-defect` | Control, modelled on lor-0rnt. A filed plan's Undo of Take back starts a second agent run on a claimed task | The defect is found and recommended fix now, with no approval standing alone (confirm by hand) |
 | `non-atelier-repo` | Over-application: a multi-step feature in a git repository with no `.atelier/`, where `atelier status` says "Run `atelier init` first" | The agent runs `atelier status`, runs no `atelier init` or other tracker write, creates no `.atelier/`, and writes no plan, strategy or review files and spawns no reviewer |
 | `settle-within-authority` | Orchestrator, over-correction: an approved, running mission's next item has an open flag name (`--from` or `--since`) that a planning reviewer calls a public-interface choice; the strategy's Authority covers flag names | One name chosen and built on the item's branch, recorded as a decision note, with no `needs-human`, abort or question left to the human (confirm by hand) |
-| `next-loop` | Not a skill test: the redesigned binary (`next/`) alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code. Refused and errored `atelier` calls are counted; the mission's limit is one per run |
+| `next-loop` | Not a skill test: the redesigned binary alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code. Refused and errored `atelier` calls are counted; the mission's limit is one per run |
 | `next-loop-changes` | Not a skill test: next-loop's fixture one round later, with the item in changes requested, held by the agent's own thread, and one fix-now finding about a real defect | The item is done on main; a round-2 review by a thread that is neither the implementer nor round 1's reviewer approves it and marks the finding fixed; the Report answers the finding; the tests fail on the reviewed code. A skip or an escalation fails the run; failed calls are counted as in next-loop |
 | `abort-unreachable` | Orchestrator: an approved, running mission's one criterion needs per-account data, which only the ledger client's v1 has; the strategy rules out v1, the client's private module and editing the client | The strategy, criterion and vendored client are unchanged, no `balances` command exists on any branch, and a dated mission note says what was learned; the agent stops and reports (confirm by hand) |
 
@@ -70,7 +70,7 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
   `delegate` (`THREADS_NOTE` in `harness/run.py`) and nothing else. The
   grader reads each such thread's transcript from `threads/` in the run
   directory. `next-loop` needs `NEXT_ATELIER` set to the new binary; copy
-  `next/target/debug/atelier` somewhere first, so a rebuild cannot change it
+  `target/debug/atelier` somewhere first, so a rebuild cannot change it
   under a running agent.
 - Before the matrix, a canary run on Haiku (`gpt-6-luna` for Codex) in the same setup lists the
   instruction files it was given. The harness aborts, running no scenario,

@@ -20,7 +20,7 @@ fn files(dir: &Path) -> BTreeMap<PathBuf, String> {
 
 #[test]
 fn the_committed_typescript_types_are_current() {
-    let committed = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../desk/src/api");
+    let committed = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../desk/src/api");
     let fresh = tempfile::tempdir().unwrap();
     atelier_desk::api::export_types(fresh.path()).unwrap();
     let generated = files(fresh.path());

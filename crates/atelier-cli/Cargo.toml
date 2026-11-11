@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+version.workspace = true
+
+# The release ships this package's binary; `dist` builds a package with
+# `publish = false` only when told to.
+[package.metadata.dist]
+dist = true
 
 [[bin]]
 name = "atelier"
