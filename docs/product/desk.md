@@ -49,7 +49,7 @@ In order of importance:
   done with an agent in conversation. The Desk starts that session and shows
   its state. It does not leave a list to be answered later.
 - **Everything decided becomes a record.** A go or an answer is written by
-  an `atelier` command under the human's name. The Desk holds no decision
+  the tracker's own code under the human's name. The Desk holds no decision
   the tracker does not.
 - **Derived figures say where they come from.** A number estimated from git
   or from T3 is marked as one.
