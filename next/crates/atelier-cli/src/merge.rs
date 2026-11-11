@@ -135,9 +135,9 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     };
     let mut commit = commit_merge()?;
 
+    let mut skipped = false;
     if !config.merge_checks.is_empty() {
         let checkout = MergedCheckout::add(&root, &commit)?;
-        let mut skipped = false;
         for check in &config.merge_checks {
             if let Some((code, tail)) = run_check(&checkout.path, &check.run)? {
                 let text = output::check_failed(&id, &base, &check.run, code, &tail);
@@ -184,7 +184,12 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         ),
     }
     .with_context(|| output::not_merged(&base))?;
-    let mut said = output::merged(&id, &base, &commit);
+    // A check a skip passed failed, and its skip's line says so.
+    let mut said = match skipped {
+        true => String::new(),
+        false => output::checks_passed(&base, config.merge_checks.len()),
+    };
+    said += &output::merged(&id, &base, &commit);
     if let Some(forge) = &config.forge {
         if let Err(error) = push(&root, &forge.remote, &commit, &base) {
             return Ok(Outcome::Refused(

@@ -359,8 +359,8 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         status,
         format!(
             "{NO_HOOKS}You are thread t1, on the base branch main.\nReady to start:\n  \
-             demo-b10c (high): Say hello\n  {ID} (high): Say hello\n    \
-             [ ] demo-b10c is done (it is ready)\nThen: atelier start demo-b10c\n"
+             demo-b10c (high): Say hello\n1 other ready item cannot start yet: 1 waits on a \
+             blocker that is not done. See it with: atelier list\nThen: atelier start demo-b10c\n"
         )
     );
     let run = atelier(&root, "t1", &["start", ID]);
@@ -384,6 +384,13 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         run.stderr
     );
     assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+    // `status` counts it with the others that cannot start.
+    assert!(
+        atelier(&root, "t1", &["status"]).stdout.ends_with(
+            "2 ready items cannot start yet: 1 waits on a blocker that is not done, 1 has a \
+             branch of its name already. See them with: atelier list\nNo ready item can start now.\n"
+        )
+    );
 }
 
 #[test]

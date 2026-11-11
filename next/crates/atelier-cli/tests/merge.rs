@@ -176,7 +176,8 @@ fn an_approved_item_merges_in_one_commit_that_marks_it_done() {
     assert_eq!(
         run.stdout,
         format!(
-            "Merged {ID} into main with merge commit {}, which marks it done.\n",
+            "Ran 1 merge check from main's config.toml on the merged tree; it passed.\n\
+             Merged {ID} into main with merge commit {}, which marks it done.\n",
             &merged[..7]
         )
     );
@@ -223,6 +224,33 @@ fn an_approved_item_merges_in_one_commit_that_marks_it_done() {
         format!("{ID} is already merged into main; nothing is left to do on it.\n")
     );
     assert_eq!(head(&root, "main"), merged);
+}
+
+#[test]
+fn merge_says_how_many_merge_checks_passed_or_that_none_is_configured() {
+    let two = "\n[[merge_check]]\nrun = \"true\"\n\n[[merge_check]]\nrun = \"test -f hello.txt\"\n";
+    for (config, said) in [
+        (
+            two,
+            "Ran 2 merge checks from main's config.toml on the merged tree; each passed.\n",
+        ),
+        (
+            "",
+            "main's config.toml names no merge check, so none ran.\n",
+        ),
+    ] {
+        let scratch = approved_with(config, |_| {});
+        let root = scratch.root();
+        let run = merge(&root, "t1", &[]);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert_eq!(
+            run.stdout,
+            format!(
+                "{said}Merged {ID} into main with merge commit {}, which marks it done.\n",
+                &head(&root, "main")[..7]
+            )
+        );
+    }
 }
 
 /// Changes the approved item with `change`, commits it, and checks that
@@ -994,7 +1022,7 @@ fn waiting_for(wait: &str) -> String {
 
 fn merged_and_pushed(root: &Path) -> String {
     format!(
-        "Merged {ID} into main with merge commit {}, which marks it done.\nPushed main to origin.\n",
+        "main's config.toml names no merge check, so none ran.\nMerged {ID} into main with merge commit {}, which marks it done.\nPushed main to origin.\n",
         &head(root, "main")[..7]
     )
 }
@@ -1781,11 +1809,15 @@ fn with_a_skip_a_failing_merge_check_or_uncommitted_change_does_not_stop_the_mer
         "Every change to a tracked file or to this item's directory is committed (these are not: hello.txt)".to_string(),
         "The merge check `echo broken exit 3` passes (it failed: exit 3)".to_string(),
     ];
-    assert!(
-        run.stdout
-            .starts_with(&(skipped(&rules[0]) + &skipped(&rules[1]))),
-        "{}",
-        run.stdout
+    // The skip's line stands, and nothing says the checks passed.
+    assert_eq!(
+        run.stdout,
+        format!(
+            "{}{}Merged {ID} into main with merge commit {}, which marks it done.\n",
+            skipped(&rules[0]),
+            skipped(&rules[1]),
+            &head(&root, "main")[..7]
+        )
     );
     assert_eq!(field(&root, "main", "status"), "done");
     // The merge commit was made again once the check was skipped, so its
