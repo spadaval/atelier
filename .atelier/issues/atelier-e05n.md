@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Read T3 Code's threads in the Desk's server and tie them to missions and items by the identities in the records"
-updated_at: "2026-11-11T06:21:52.241084473+00:00"
+updated_at: "2026-11-11T06:25:27.322868+00:00"
 ---
 
 ## Goal
@@ -30,7 +30,7 @@ Make the Desk's server a client of T3 Code, so a page can show which agents are 
 
 - [ ] `atelier-desk` gets a read-only token by running the configured `t3` command (`auth session issue --subject mcp-client --scope orchestration:read` with a time to live) and calls T3 Code's MCP server over HTTP with it. It gets a new token when the old one expires or is refused. The command's path and the server's address come from the configuration file; with neither set, the Desk makes no call and reports threads as unavailable. The token is never logged, never in a response and never written to disk.
 - [ ] `GET /api/threads` serves T3 Code's live, unsettled threads with the fields `docs/architecture/desk.md` gives, and for each, `holds[]`: what its identity holds in the records of every repository served (`implementer`, `reviewer`, `lead` or `decider`), found by comparing whole strings.
-- [ ] The mission and item responses gain `threads[]`: one entry per identity the records name on that mission or item, with its role, and the thread's title, state, model and link when T3 Code knows it as a live thread. An identity T3 Code does not know is listed with the identity as text and no link. A test covers an identity holding `/`, `:` and `%`, stored and returned whole.
+- [ ] The mission and item responses gain `threads[]`. An item's has one entry per identity its record names: its implementers, the reviewers of its reviews and the deciders of its answers. A mission's has its lead, the reviewers of its plan reviews, and every entry of each of its items, each naming the item it is on, so a mission with no lead still shows the agents working on its items; a test covers a mission with no lead and two items held by different threads. Each entry has its role, and the thread's title, state, model and link when T3 Code knows it as a live thread. An identity T3 Code does not know is listed with the identity as text and no link. A test covers an identity holding `/`, `:` and `%`, stored and returned whole.
 - [ ] The inbox gains, per repository, the live threads that are waiting on a person and hold something in that repository's records.
 - [ ] Every response that carries threads says whether T3 Code could be reached. With T3 Code stopped or the token refused, every route still answers 200 with its records, threads marked unavailable, and a test shows it with a stand-in that refuses connections.
 - [ ] The thread list is polled on an interval and kept in memory, so a page request never waits on T3 Code, and one failed poll does not empty the pages: the last good list is served with its age.
