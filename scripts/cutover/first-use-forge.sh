@@ -14,6 +14,7 @@
 # GitHub. `merge`'s wait is shortened (ATELIER_TEST_CI_WAIT, debug builds
 # only): it stops with exit status 3 and says what the last answer said.
 set -euo pipefail
+shopt -s inherit_errexit
 [ $# -eq 3 ] || { echo "usage: $0 <work directory> <debug atelier> <branch>" >&2; exit 2; }
 mkdir -p "$1"; W=$(cd "$1" && pwd); BIN=$2 BRANCH=$3
 [ -z "$(ls -A "$W")" ] || { echo "$W is not empty" >&2; exit 2; }
@@ -22,7 +23,9 @@ REAL_GH=$(command -v gh)
 mkdir -p "$W/bin" "$W/tmp"
 cp "$BIN" "$W/bin/atelier"
 cat > "$W/bin/gh" <<EOF
-#!/bin/sh
+#!/bin/bash
+# The answer is kept as well as passed on; a failed question fails the call.
+set -o pipefail
 echo "\$*" >> $W/gh.calls
 case "\$*" in
   "auth status "*) exec $REAL_GH "\$@" ;;
@@ -48,12 +51,15 @@ f=.atelier/items/$BRANCH/item.md
 [ -f "$f" ] || { echo "$BRANCH is not an item in master's converted records" >&2; exit 1; }
 T3CODE_THREAD_ID=first-use-implementer atelier start "$BRANCH" > "$W/start.log"
 sed -i 's/^- \[ \] /- [x] /' "$f"
+# No Report yet is the usual case: write one.
 grep -q '^## Report' "$f" || printf '\n## Report\n\nThe forge'"'"'s first use: nothing here is real work.\n' >> "$f"
 git commit -qam "Tick the lines, for the forge's first use"
 echo "== submit"; T3CODE_THREAD_ID=first-use-implementer atelier submit 2>&1 | tee "$W/submit.log"
 echo "== review"; T3CODE_THREAD_ID=first-use-reviewer atelier review "$BRANCH" > "$W/review.log" 2>&1
-grep -i -E 'pull request|github.com' "$W/review.log" | head -3
-review=$(ls -t .atelier/items/"$BRANCH"/reviews/*.md | head -1)
+grep -E 'Pull request #[0-9]+' "$W/review.log" || { echo "review's brief names no pull request" >&2; exit 1; }
+# The one round's review file.
+set -- .atelier/items/"$BRANCH"/reviews/*.md
+review=$1
 sed -i '/^## Summary$/a The forge'"'"'s first use.' "$review"
 T3CODE_THREAD_ID=first-use-reviewer atelier verdict approve > "$W/verdict.log" 2>&1
 echo "== merge"

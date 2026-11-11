@@ -48,11 +48,24 @@ CONVERTED_PATHS=".atelier AGENTS.md skills .claude .codex .github/workflows"
 SKIP_REASON="cutover conversion"
 
 export ATELIER_NO_UPDATE_CHECK=1
+# A failure inside $(...) stops the script as it does outside, so that a
+# function whose output is captured cannot fail silently.
+shopt -s inherit_errexit
 JOURNAL=$STATE/journal
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'cutover: %s\n' "$*" >&2; exit 1; }
+
+# The settings are checked once, here, so that the helpers below cannot
+# fail on them: each repository has a name, an absolute clone path and a
+# base, atelier among them. A helper's empty answer would otherwise turn
+# `git -C "$(clone_of r)"` into a command in the current directory.
+for s in $REPOS; do
+  case $s in [a-z]*:/*:?*) ;; *) die "CUTOVER_REPOS has \"$s\", not <name>:<absolute clone path>:<base>" ;; esac
+done
+case " $REPOS " in *" atelier:"*) ;; *) die "CUTOVER_REPOS names no atelier" ;; esac
+[ -n "$STATE" ] && [ -n "$REMOTE" ] || die "CUTOVER_STATE and CUTOVER_REMOTE must not be empty"
 
 # The repositories' fields: name, main clone, base.
 repo_names() { local s; for s in $REPOS; do echo "${s%%:*}"; done; }
@@ -90,7 +103,11 @@ hooks_dir() { # <clone>
   git -C "$1" rev-parse --path-format=absolute --git-path hooks
 }
 
-# The journal: one line per event, tab-separated. `start <key> <fields>`
+# The journal: one line per event, tab-separated. Its readers are used in
+# tests such as [ "$(jstate k)" = done ], where a failed read would be
+# masked: an unreadable journal gives an empty answer, which every test
+# here reads as "not done", so a step is redone, not skipped, and a rollback
+# looks at the remote and the clones itself. `start <key> <fields>`
 # is written before the act it describes and `done <key> <result>` after.
 # Keys are unique; a key started and not done is settled by looking at the
 # state itself.
@@ -106,5 +123,8 @@ jstate() {
 }
 jfields() { awk -F'\t' -v k="$1" '$1 == "start" && $2 == k { sub(/^[^\t]*\t[^\t]*\t/, ""); print; exit }' "$JOURNAL"; }
 jresult() { awk -F'\t' -v k="$1" '$1 == "done" && $2 == k { print $3; exit }' "$JOURNAL"; }
-# Keys started with a prefix, oldest first.
-jkeys() { [ -f "$JOURNAL" ] && awk -F'\t' -v p="$1" '$1 == "start" && index($2, p) == 1 { print $2 }' "$JOURNAL" || true; }
+# Keys started with a prefix, oldest first. No journal yet means no keys.
+jkeys() {
+  [ -f "$JOURNAL" ] || return 0
+  awk -F'\t' -v p="$1" '$1 == "start" && index($2, p) == 1 { print $2 }' "$JOURNAL"
+}

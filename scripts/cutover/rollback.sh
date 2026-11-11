@@ -16,6 +16,12 @@
 #      service enabled, started and checked to answer.
 #
 # It is safe to run twice. Settings come from common.sh, as for cutover.sh.
+#
+# Each repository's steps 2 and 3 run as `( set -e; ... )` in their own
+# subshell, never in a condition, so that any command failing in them stops
+# that repository with its error said and its recovery clone kept. If any
+# repository is not restored, step 4 installs nothing and the exit status is
+# 1: run it again once the cause is fixed.
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 [ -f "$JOURNAL" ] || die "no journal at $JOURNAL: nothing to roll back"
@@ -51,6 +57,7 @@ undo_conversion() { # <name>
     if [ "$r" = atelier ]; then
       local W; W=$(jfields convert:atelier | cut -f1)
       git -C "$W" reset -q --hard "$B"
+      # shellcheck disable=SC2086 # CONVERTED_PATHS is a list of paths
       git -C "$W" clean -fdq -- $CONVERTED_PATHS
     else
       rm -rf "$STATE/convert/$r"
@@ -73,7 +80,10 @@ undo_conversion() { # <name>
   list=$(git -C "$rb" rev-list --first-parent "$B..$T")
   for sha in $list; do
     if grep -qx "$sha" <<< "$known"; then
+      # A failed log reads as "not reverted": the commit is reverted again and
+      # the tree check below then refuses to push.
       if git -C "$rb" log --format=%B "$B..$T" | grep -qx "$REVERT_TRAILER: $sha"; then reverted=$((reverted + 1)); else todo="$todo $sha"; fi
+    # A failed log reads as "not the runbook's", which stops this repository.
     elif ! git -C "$rb" log -1 --format=%B "$sha" | grep -q "^$REVERT_TRAILER: "; then
       say "$r: the remote's $b holds ${sha:0:8} \"$(git -C "$rb" log -1 --format=%s "$sha")\", which the runbook did not make; left as it is" >&2
       return 1
@@ -86,14 +96,21 @@ undo_conversion() { # <name>
   done
   [ "$(git -C "$rb" rev-parse "HEAD^{tree}")" = "$(git -C "$rb" rev-parse "$B^{tree}")" ] \
     || { say "$r: the reverts do not give back the recorded tree; nothing pushed" >&2; return 1; }
+  local mine
+  mine=$(git -C "$rb" rev-parse HEAD)
   if [ -n "$todo" ]; then
-    git -C "$rb" push -q origin "refs/heads/$b"
+    if ! git -C "$rb" push -q origin "refs/heads/$b"; then
+      # A push can be accepted and still report failure: the remote decides.
+      [ "$(remote_tip "$r")" = "$mine" ] \
+        || { say "$r: the push of the reverts failed; nothing is reset, and the reverts are kept in $rb" >&2; return 1; }
+    fi
     say "$r: reverted $(wc -w <<< "$todo") published commits and pushed the reverts" >&2
   else
     say "$r: every published commit is reverted already ($reverted)" >&2
   fi
+  [ "$(remote_tip "$r")" = "$mine" ] || { say "$r: the remote's $b is not the reverts' tip; the reverts are kept in $rb" >&2; return 1; }
   rm -rf "$STATE/convert/$r"
-  git -C "$rb" rev-parse HEAD
+  echo "$mine"
   rm -rf "$rb"
 }
 
@@ -122,15 +139,19 @@ restore_clone() { # <name> <target>
           || { say "$r: $b holds ${sha:0:8}, which the runbook did not make; left as it is"; return 1; }
       done <<< "$extra"
       if [ -n "$bw" ]; then
-        [ -z "$(git -C "$bw" status --porcelain)" ] || { say "$r: $bw has uncommitted changes; left as it is"; return 1; }
+        local dirty; dirty=$(git -C "$bw" status --porcelain)
+        [ -z "$dirty" ] || { say "$r: $bw has uncommitted changes; left as it is"; return 1; }
         git -C "$bw" reset -q --hard "$target"
       else
         git -C "$c" update-ref "refs/heads/$b" "$target"
       fi
     fi
   fi
-  for k in $(jkeys "pre:wt:$r:"); do
-    wt=${k#pre:wt:$r:} was=$(jfields "$k")
+  local keys
+  keys=$(jkeys "pre:wt:$r:")
+  for k in $keys; do
+    wt=${k#"pre:wt:$r:"} was=$(jfields "$k")
+    # A worktree removed since the preflight has nothing to put back.
     [ -d "$wt" ] || continue
     now=$(worktrees "$c" | awk -v w="$wt" '$1 == w { print $2 }')
     [ "$now" != "$was" ] || continue
@@ -145,13 +166,22 @@ restore_clone() { # <name> <target>
       [ -e "$W/$p" ] || { mkdir -p "$(dirname "$W/$p")"; mv "$STATE/aside/atelier/$p" "$W/$p"; }
     done
   fi
+  # What was asked for, read back.
+  [ "$(git -C "$c" rev-parse "refs/heads/$b")" = "$target" ] || { say "$r: $b is not at ${target:0:8} after restoring"; return 1; }
+  for k in $keys; do
+    wt=${k#"pre:wt:$r:"} was=$(jfields "$k")
+    [ -d "$wt" ] || continue
+    now=$(worktrees "$c" | awk -v w="$wt" '$1 == w { print $2 }')
+    [ "$now" = "$was" ] || { say "$r: $wt has $now checked out, not $was"; return 1; }
+  done
   say "$r: $b at $(git -C "$c" rev-parse --short "refs/heads/$b"); worktrees as recorded"
 }
 
 say "Rolling back the $MODE recorded in $JOURNAL"
 
 say "1. Hooks directories"
-for k in $(jkeys pre:hooks:); do
+keys=$(jkeys pre:hooks:)
+for k in $keys; do
   # A copy the preflight did not finish is no copy; that hooks directory was
   # not changed after it, since nothing runs past an unfinished preflight.
   [ "$(jstate "$k")" = done ] || continue
@@ -168,16 +198,37 @@ for r in $(repo_names); do
   [ -n "$B" ] || continue
   if [ "$MODE" = adopt ]; then target[$r]=$B; continue; fi
   if [ "$(jstate "convert:$r")" = none ] && [ "$(jstate "commit:$r")" = none ]; then
-    target[$r]=$(remote_tip "$r"); continue
+    target[$r]=$(remote_tip "$r")
+    [ -n "${target[$r]}" ] || die "$r: cannot read the remote's $(base_of "$r")"
+    continue
   fi
-  if t=$(undo_conversion "$r"); then target[$r]=$t; else failed="$failed $r"; fi
+  set +e
+  ( set -e; undo_conversion "$r" > "$STATE/rollback-$r.target" )
+  rc=$?
+  set -e
+  if [ $rc -eq 0 ]; then
+    target[$r]=$(cat "$STATE/rollback-$r.target")
+  else
+    say "$r: not rolled back: its step 2 stopped (exit $rc), as said above"
+    failed="$failed $r"
+  fi
 done
 
 say "3. Clones and worktrees"
 for r in $(repo_names); do
   [ -n "${target[$r]:-}" ] || continue
-  restore_clone "$r" "${target[$r]}" || failed="$failed $r"
+  set +e
+  ( set -e; restore_clone "$r" "${target[$r]}" )
+  rc=$?
+  set -e
+  [ $rc -eq 0 ] || { say "$r: not restored: its step 3 stopped (exit $rc), as said above"; failed="$failed $r"; }
 done
+
+if [ -n "$failed" ]; then
+  say "Not rolled back:$failed. Each is said above; nothing more was changed there, and the old tool was not installed,"
+  say "since it cannot read a repository left converted. Fix the cause and run rollback.sh again."
+  exit 1
+fi
 
 if [ "$(jstate install)" != none ] || [ "$(jstate skill)" != none ] || [ "$(jstate skill-dir)" != none ] || [ "$(jstate service)" != none ]; then
   say "4. The old tool"
@@ -194,9 +245,11 @@ if [ "$(jstate install)" != none ] || [ "$(jstate skill)" != none ] || [ "$(jsta
     # the reverts gave back, so nothing may change.
     for r in $(repo_names); do
       c=$(clone_of "$r")
+      # No settings file, or none of the old setup's hooks: nothing to set up.
       grep -qs atelier-managed "$c/.claude/settings.json" || continue
-      (cd "$c" && "$INSTALL_ROOT/bin/atelier" setup claude >/dev/null)
-      [ -z "$(git -C "$c" status --porcelain -- .claude)" ] || { say "$r: the old setup claude changed .claude/; left for a look"; failed="$failed $r"; }
+      (cd "$c"; "$INSTALL_ROOT/bin/atelier" setup claude > /dev/null)
+      changed=$(git -C "$c" status --porcelain -- .claude)
+      [ -z "$changed" ] || { say "$r: the old setup claude changed .claude/; left for a look"; failed="$failed $r"; }
     done
   fi
   if [ "$(jstate skill)" != none ]; then
@@ -211,11 +264,12 @@ if [ "$(jstate install)" != none ] || [ "$(jstate skill)" != none ] || [ "$(jsta
   fi
   if [ "$(jstate service)" != none ]; then
     was=$(jfields pre:service)
-    case $was in enabled*) $SYSTEMCTL enable "$SERVICE" >/dev/null 2>&1 ;; esac
+    case $was in enabled*) $SYSTEMCTL enable "$SERVICE" > /dev/null ;; esac
     case $was in *" active") $SYSTEMCTL start "$SERVICE" ;; esac
     case $was in
       *" active")
         ok=no
+        # Asked until it answers, for 20 s; no answer is a failure, said below.
         for _ in $(seq 20); do if eval "$SERVICE_CHECK" >/dev/null 2>&1; then ok=yes; break; fi; sleep 1; done
         [ "$ok" = yes ] || { say "$SERVICE does not answer"; failed="$failed service"; }
         say "$SERVICE: $($SYSTEMCTL is-enabled "$SERVICE" 2>/dev/null) $($SYSTEMCTL is-active "$SERVICE" 2>/dev/null), answering: $ok" ;;
