@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Port the eval scenarios to the new binary, with a no-skill arm and a Codex skill arm, before any matrix runs"
-updated_at: "2026-11-11T06:16:24.255610438+00:00"
+updated_at: "2026-11-11T06:17:22.619414222+00:00"
 ---
 
 ## Goal
@@ -88,6 +88,8 @@ Expected size: 1,500 to 2,200 lines, nearly all fixtures and graders. The old sc
 - 2026-11-10 [decision] The orchestrator of atelier-qr5s sends this plan to a fourth planning round after three that each found a further way a run could exceed two agents. The limit is now stated per launch path with no fallback: where Codex cannot be bounded the item escalates. If round 4 finds another gap in the same rule, the Codex arm of threads scenarios is run with native subagents off and that is reported, instead of a fifth round.
   Reason: Each round's finding was real and narrower than the last; the alternative, dropping the limit to an instruction, would leave token cost unbounded.
 - 2026-11-11 [handoff] Escalated after three review rounds without an approval (rounds at d7a45eef, c8812c67, 17f6947d; 9 FIX NOW findings, all false passes in graders). Round 3's four findings are fixed but unreviewed. See the Report.
+- 2026-11-11 [decision] The orchestrator of atelier-qr5s runs round 4 after three without approval. If round 4 finds another hole in a check that reads shell commands out of a transcript, that check becomes a hand read (named in the README and the grader's notes, so a run it cannot judge is graded as needing a hand read, not as a pass), other in-Scope findings are fixed, and one last round runs; if that does not approve, or a finding leaves evals/agent-factory/, stop and report. Before round 4, every setup and suite is proved on atelier-next-7b06ed12, built after atelier-psjw.
+  Reason: Every finding so far was a grader false pass, each narrower than the last; a fourth round is one reviewer run, and the fallback stops the class of shell-reading findings from costing a fifth.
 
 ## Report
 
