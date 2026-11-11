@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vl5n
 title: Write the readiness checklist, mapped to the three codebase properties
-status: building
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
