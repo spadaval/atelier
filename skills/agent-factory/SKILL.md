@@ -29,13 +29,15 @@ you start:
 
 Holding nothing else, read the file of the role your task gives you: a task
 to start an item makes you its implementer, and one to lead a mission its
-lead. A garden, groom or audit task also reads its procedure in
-`procedures/`.
+lead. A garden or audit task also reads
+[procedures/garden.md](procedures/garden.md), and a groom task
+[procedures/groom.md](procedures/groom.md).
 
 ## Who Works With Sumeet
 
-The planner works with Sumeet in conversation. Every other role runs
-unattended: it never waits on him, and takes a question to `atelier
+The planner works with Sumeet in conversation, and a gardener settles its
+run's page with him in a session once the run is approved. Every other role
+runs unattended: it never waits on him, and takes a question to `atelier
 escalate`, the mission's lead or an item labelled `needs-human`, as its role
 file says.
 
