@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-c1sr
 title: skills/agent-factory/procedures/orchestrate.md:119 The markdown link to plan.md#later-increments-and-strategy-changes p…
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -31,3 +31,7 @@ Relationships of the old record that the new format has no field for.
 
 - parent: atelier-zmei (Deferred review findings on atelier-n7c4)
 - discovered_from review: atelier-mhj7
+
+## Report
+
+Dropped: `procedures/orchestrate.md` and `plan.md` were deleted when the skill was rewritten (atelier-orb2).
