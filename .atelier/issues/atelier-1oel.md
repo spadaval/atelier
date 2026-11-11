@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Give a Codex subagent its own identity, show the round and the three-round rule in status, and name the pull request in the review brief"
-updated_at: "2026-11-11T04:24:23.447090284+00:00"
+updated_at: "2026-11-11T04:29:11.040151146+00:00"
 ---
 
 ## Goal
@@ -70,6 +70,8 @@ Expected size: about 150 lines of Rust outside tests, and 40 changed lines acros
 - 2026-11-10 [note] Escalated after review round 2 at 7c77c47a: atelier-h4x4 (again as atelier-cy97) needs a scope decision, since the Done when line asks for log, which atelier-8b0a builds. atelier-yul7 is fixed and verified; atelier-s6xa is fixed at 658c783d and not yet reviewed. See the Report.
 - 2026-11-10 [decision] The orchestrator of atelier-qr5s narrowed the second Done when line on 2026-11-11 from '`log` and `show` print the identity whole' to '`show` prints the identity whole', because next/ has no `log` command (atelier-8b0a builds it). The reader tests already prove an identity with / survives every record line it is parsed from (Answer by, Taken, Dropped by, implementers, reviewers, lead). `log`'s own check is left to the item that builds `log`.
   Reason: next/ has no log command; atelier-8b0a builds it, and building it here is another mission's item
+- 2026-11-10 [decision] The orchestrator of atelier-qr5s authorized a fourth review round on 2026-11-11, past the three-round escalation rule, to review the fixes as they stand.
+  Reason: the three rounds converged: one finding was the plan's error, one a real gap, one a stale Report
 
 ## Report
 
