@@ -390,7 +390,7 @@ trial_full() {
       atelier check > /dev/null
     ) || { say "    FAILED: the README's way did not bring the old-layout worktree onto the base"; exit 1; }
     say "    the README's way brought astromech-other onto the converted base: atelier check passes there, and its own commit is kept ($(git -C "$o" log --oneline -3 | wc -l) commits shown)"
-    cp -r "$S/remotes" "$W/full-remotes"
+    rm -rf "$W/full-remotes"; cp -r "$S/remotes" "$W/full-remotes"
     "$S/bin/systemctl" stop atelier-serve || true
   ) && say "full: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
 }
