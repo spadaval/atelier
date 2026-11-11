@@ -165,6 +165,18 @@ Where each line's proof is:
 - `status` shows only the first line of a wrapped Done when line.
 - A lead's `status` before it commits what `lead` wrote does not say it leads the mission, and ends `Then: atelier start <item>`. atelier-psjw's commit should close this.
 
+### Review fixes
+
+- **Round 1** recorded three false passes, each fixed in its own commit with a failing walk:
+  - atelier-lnt4: a second rebuttal under the kept finding's round-2 name;
+  - atelier-6shr: a lead that writes code through its shell;
+  - atelier-o6x7: a decider's code change committed and then reverted.
+- **Round 2** recorded two more:
+  - atelier-8ttw: a quoted redirect target;
+  - atelier-4w44: a decider's uncommitted change after switching off the branch.
+- **The same class elsewhere.** `next-vacuous-test-review` and `next-costly-hardening` had the tip-only, on-branch-only check of o6x7 and 4w44. They now use the shared `touched()` and `body_changed()`, with two walks each.
+- **Two settle checks now go to a hand read** rather than a pass: a lead's `cp`, `mv`, `patch` or Git restore naming a code file. The README names them.
+
 ### Open items
 
 - The smoke run of `next-rebuttal-kept` found a grader error: a Responses line written after the decider's answer counted as a second rebuttal. It was fixed in a later commit with two new walks, and the run regraded from its kept work directory to a pass.
