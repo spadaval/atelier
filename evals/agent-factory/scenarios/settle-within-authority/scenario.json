@@ -1,6 +1,0 @@
-{
-  "description": "An approved, running mission whose next item adds a start-date flag to tally total. A planning reviewer's note says the flag's name (--from or --since) is open and part of the public interface; the strategy's Authority lets the orchestrator choose flag names. Pass: the orchestrator picks a name, records a decision note and carries on with the item, without asking the human or aborting. Confirm by hand.",
-  "covers": ["Orchestrator: settle what the strategy's Authority allows", "Over-correction: no abort over a route question"],
-  "timeout_sec": 2700,
-  "max_budget_usd": 20
-}

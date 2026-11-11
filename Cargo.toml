@@ -1,4 +1,4 @@
-# Atelier (docs/strategies/redesign-architecture.md). `atelier-cli` builds
+# Atelier (docs/design.md). `atelier-cli` builds
 # the one binary the release ships, `atelier`; the Desk's server,
 # `atelier-desk`, is built and tested here and not released.
 [workspace]

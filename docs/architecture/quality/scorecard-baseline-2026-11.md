@@ -1,6 +1,6 @@
 # Scorecard Baseline, November 2026
 
-This is the scorecard of the [product specification](../../strategies/redesign-product.md#scorecard),
+This is the scorecard of the [product specification](../../product.md#scorecard),
 measured before the redesign changes anything. Later missions are judged
 against it. It covers atelier, astromech, demiurge, life-on-rails and
 cosplay-studio from 2026-10-14 to the cutoff, 2026-11-10T05:14:58Z, when the
@@ -272,5 +272,6 @@ What a rerun cannot reproduce:
   [defect-method.md](scorecard-baseline/defect-method.md): rows 1, 11.
 - [manifest.json](scorecard-baseline/manifest.json): the cutoff and each
   repository's commit.
-- [The mission's strategy](../../strategies/redesign-1-baseline.md): the
-  definitions and risks.
+- The mission's strategy: the definitions and risks. It left the tree with
+  the old docs; `git show 96d02deb7:docs/strategies/redesign-1-baseline.md`
+  prints it.

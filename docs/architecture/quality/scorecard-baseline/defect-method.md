@@ -1,7 +1,7 @@
 # Defects After Merge: The Method
 
 The scorecard's outcome row is "defects found after merge, traced to the item
-that caused them" ([redesign-product.md](../../../strategies/redesign-product.md#scorecard)).
+that caused them" ([product.md](../../../product.md#scorecard)).
 This document fixes how the baseline counts it. It was tested on a seeded
 sample of 30 bug fixes in astromech (atelier-z5bp): 27 of the 30 were traced
 to the merge that introduced the defect, so **tracing is the measure**, not

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# costly-hardening's flag store (its files/), tracked by the new binary. Item
-# flags-c0mp kept v1 deployments working on a temporary read path, which draft
-# flags-rm1x removes once the last v1 deployment migrates, two weeks from the
-# run. Its reviewer approved it with one low finding recommended defer: a hand
+# The flag store in files/, from the old costly-hardening scenario, tracked
+# by the new binary. Item flags-c0mp kept v1 deployments working on a
+# temporary read path, which draft flags-rm1x removes once the last v1
+# deployment migrates, two weeks from the run. Its reviewer approved it with one low finding recommended defer: a hand
 # deletion in a v1 flags.d is not refused. The finding was taken into
 # flags-l3dg, which closes it with a hash-chained ledger (a new module, a CLI
 # command, docs and nine tests, about 200 added lines) that also misses the
@@ -11,7 +11,7 @@
 set -euo pipefail
 work=$1
 here=$(cd "$(dirname "$0")" && pwd)
-files=$here/../costly-hardening/files
+files=$here/files
 source "$here/../next-loop/lib.sh"
 next_repo "$work" flags
 release=$(date -u -d '+14 days' +%F)

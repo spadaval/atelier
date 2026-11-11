@@ -1,5 +1,5 @@
 //! Reading, writing and validating Atelier's records: missions, items,
-//! their reviews and `config.toml` (docs/strategies/redesign-architecture.md,
+//! their reviews and `config.toml` (docs/design.md,
 //! Records).
 
 mod at_commit;

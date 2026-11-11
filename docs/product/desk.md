@@ -1,14 +1,14 @@
 # The Desk: product intent
 
 Status: accepted with mission atelier-z4cr (2026-11-11). The decisions it
-rests on are in [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md).
+rests on are in [the design record](../design.md#decisions).
 
 ## Why it exists
 
 Atelier has two kinds of user. Agents do the work, and they use the `atelier`
 command and its records. One human decides what is worth doing, keeps the
 ground such that agents can do it, and judges the result. He has no tool of
-his own. The site `atelier serve` showed mirrored the tracker: it listed
+his own. The old tool's site mirrored the tracker: it listed
 records, and every problem with it came from that. The human does not need
 to see records. He needs to make a small number of decisions well.
 

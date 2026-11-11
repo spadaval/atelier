@@ -2,8 +2,10 @@
 
 This directory moves atelier, astromech, demiurge, life-on-rails and
 cosplay-studio onto the new tool on this host, in one sitting, and can put
-everything back. The protocol is the Transition section of
-`docs/strategies/redesign-architecture.md`. Read this page first on the day.
+everything back. The protocol is the Transition section of the
+[design record](../../docs/design.md#transition), which says what is still to
+come: another host adopting ([below](#another-host-adopts)), then deleting
+this directory. Read this page first on the day.
 
 | File | What it is |
 | --- | --- |

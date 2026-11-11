@@ -6,39 +6,34 @@
 - Use `cargo nextest run` as the default Rust test runner. Use `cargo test` for
   libtest-specific behavior, `--no-run`, reproduction, or unavailable nextest;
   state the reason in the handoff.
-- Default tests exclude injected failure hooks. Use
-  `cargo nextest run --features test-hooks` for rollback, cleanup-failure, and
-  concurrency checks. Normal release builds omit fault-injection environment
-  hooks.
 - Run checks appropriate to the changed claim; add focused CLI integration
   coverage for user-visible commands and invariant rejection paths.
-- Use [Rust hazard scans](rust-quality-hazard-scans.md) for debt markers,
-  dead code, large functions, and unused dependencies when applicable.
 - Use `anyhow::Context` on fallible IO and external-command boundaries.
 - Keep documented authored input and deterministic rendering stable unless a
   reviewed migration deliberately changes their contract.
-- Follow the [human output contract](../../product/human-cli-output.md) for
-  normal command views and actionable errors.
+- Follow the [product specification](../../product.md) for command output
+  and refusals: dense Markdown, and a refusal that names the way out.
 
 ## State and boundaries
 
 - Treat Markdown records as durable repository state. Parse them directly.
-- Validate graph and policy before mutating records; coordinate canonical
-  writers with the mutation lock.
-- Use typed links for semantic relationships and blockers for sequencing.
-- Keep read-only checks separate from explicit Git mutation commands.
-- Never create commits in Atelier. Commit records with related implementation.
+- Validate records before writing them; `merge` alone takes the merge lock.
+- Use blockers for sequencing.
+- Keep read-only checks separate from Git mutation commands.
+- Atelier commits only what its acts write, as the
+  [design record](../../design.md) lists; other records are committed with
+  Git, with the related implementation.
 - Derive integration from Git; do not persist a competing merge state.
-- Keep evidence honest and commit-bound, reviews append-only once on the base
-  (a finding's disposition is the one field set in place, ADR 0025; before the
-  base findings can be corrected, ADR 0028), every record write checked before
-  it lands, and merge gates governed by the base branch's reviewed policy.
+- Keep reviews unchanged once they have a verdict, except for settling a
+  deferred finding, and keep merge checks governed by the base branch's
+  reviewed `config.toml`.
 
 ## Documentation and process
 
-Update Product Intent for direction, Context for terminology, and the owning
-product or architecture page for behavior. Add ADRs for consequential choices.
-Keep dated historical material distinct from current guidance.
+Update the [product specification](../../product.md) for what Atelier does
+and the [design record](../../design.md) for how it is built and for each
+consequential choice, edited in place. Keep dated historical material
+distinct from current guidance.
 
 Use [Agent Factory](../../../skills/agent-factory/SKILL.md) for planning,
 review, validation, and handoff. Non-trivial executable changes require

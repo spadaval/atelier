@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The cutover runbook (docs/strategies/redesign-architecture.md, Transition,
+# The cutover runbook (docs/design.md, Transition,
 # part 4). Read scripts/cutover/README.md first.
 #
 #   cutover.sh preflight   check that the five repositories are quiet; changes nothing

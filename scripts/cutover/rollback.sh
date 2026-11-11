@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Undoes what cutover.sh's journal says was started, cutover or adopt, in
-# this order (docs/strategies/redesign-architecture.md, Transition):
+# this order (docs/design.md, Transition):
 #
 #   1. Every hooks directory goes back from its copy.
 #   2. For each repository the runbook converted, the remote's base tip

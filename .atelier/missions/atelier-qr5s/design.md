@@ -44,7 +44,7 @@ another lab before its work starts. Steps F and G get a second planning
 reviewer, because they are the two that cannot be quietly undone. Steps A, C
 and D depend on nothing in this mission and start together. The protocol is
 the Transition section of the
-[architecture specification](../../../docs/strategies/redesign-architecture.md#transition).
+[architecture specification](../../../docs/design.md#transition).
 
 | Step | Does |
 | --- | --- |
@@ -52,7 +52,7 @@ the Transition section of the
 | B. Evals | Port the scenarios to the new binary. Add a no-skill arm and a Codex arm. Cut each procedure no scenario supports. |
 | C. Backlog sort | Sort the 147 open items and five open missions: converted as they are, rewritten for the new tool, or dropped as obsolete, with the list in the report. |
 | D. Fallback release | Fix the old tool's fallback release: 0.4.0 if it checks this repository's records and serves the site, otherwise a new 0.4.1. |
-| E. Site | Take the tracker's site out: the `atelier` binary built from `next/` has no site crate and no `serve`, its build and release need no Node, and the old site's web jobs leave CI. The Desk's own crate, app and CI jobs are not touched. The old site goes with the old workspace at the switch. The Desk replaces it in its own mission (atelier-z4cr, [ADR 0032](../../../docs/adr/0032-the-desk-is-the-humans-product.md)), which this mission does not wait for. |
+| E. Site | Take the tracker's site out: the `atelier` binary built from `next/` has no site crate and no `serve`, its build and release need no Node, and the old site's web jobs leave CI. The Desk's own crate, app and CI jobs are not touched. The old site goes with the old workspace at the switch. The Desk replaces it in its own mission (atelier-z4cr, [ADR 0032](../../../docs/design.md#decisions)), which this mission does not wait for. |
 | F. Switch | Delete the old workspace, `crates/`, with all its tests, and move the new one from `next/` to the repository root. Add the runbook, the new `AGENTS.md` texts, the replacement CI workflows and CI's two-way `check` step. Try the rollback on scratch clones at each stopping point. |
 | G. Cutover | Run the runbook on this host. The item is never started; it is closed on the base at the end. |
 | H. First work | Run one item in atelier and one in a product repository. Fix what first use breaks. Remove the fallback branch of CI's `check` step. |

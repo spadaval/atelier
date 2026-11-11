@@ -55,9 +55,11 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 
 ## Sources
 
-- Design record: `docs/strategies/redesign-architecture.md` (the tool) and
-  `docs/strategies/redesign-product.md` (what it is for).
-- The Desk, the human's web tool: `docs/architecture/desk.md`.
+- What it is for and what it does: `docs/product.md`. How it is built, what
+  was tried and removed, and the decisions that govern it: `docs/design.md`,
+  the one design record.
+- The Desk, the human's web tool: `docs/product/desk.md` and
+  `docs/architecture/desk.md`.
 - Agent Factory's evals: `evals/agent-factory`.
 
 ## Command References
