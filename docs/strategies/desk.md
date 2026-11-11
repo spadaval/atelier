@@ -221,7 +221,9 @@ it is called done.
 The orchestrator may choose the API's routes and fields, the crate's module
 layout, which views and act functions to add to `atelier-app` and how, and
 how pages are arranged within the spike's design. It may change the tracker's
-crates for item atelier-psjw and for the views the pages need. It may add a dependency the Design does
+crates for the views the pages need. Item atelier-psjw is the cutover
+orchestrator's to plan and implement; this mission's orchestrator takes it
+only if the redesign's planner hands it back after the cutover. It may add a dependency the Design does
 not name when a step needs it and say why in the item.
 
 It may not expose the service beyond the tailnet, add an act other than
