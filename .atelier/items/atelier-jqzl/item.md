@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jqzl
 title: 'Stop telling agents to run merge-ci-passed.sh where it cannot run: 76 runs failed with ''HEAD is not a merge commit'''
-status: ready
+status: dropped
 mission: atelier-icv4
 labels:
 - merge
@@ -45,3 +45,7 @@ Evidence: transcripts 2026-11-04 to 2026-11-09. Failed script runs: Claude revie
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-fad5 (Let merge push the base it integrated, and stop recommending piped gates)
+
+## Report
+
+Dropped: `scripts/merge-ci-passed.sh` was deleted in 0.5; `atelier merge` waits for CI itself and names no script.
