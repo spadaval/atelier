@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Move the acts and repository access into atelier-app as functions that return data, make ready commit its own write, and name the human caller"
-updated_at: "2026-11-11T05:04:13.882190290+00:00"
+updated_at: "2026-11-11T05:17:32.810200459+00:00"
 ---
 
 ## Goal
@@ -67,6 +67,23 @@ Expected size: 1,000 to 1,500 lines move between the two crates, and about 200 a
 ## Unknowns
 
 - Whether a planning act could commit straight onto the base branch through Git objects, from any directory, as `start` builds its commit. That would remove the base-checkout rule for `ready`. It is a separate question and not this item's to answer.
+
+## Notes
+
+- 2026-11-11 [decision] drop, close and lead stay in atelier-cli; only their commit (plan::save with commit) and their refusal policy are in atelier-app
+  Reason: The item asks only ready and decide to be functions; the Desk calls only those two, and moving three more commands would grow the move without a caller
+  Rejected: Move drop, close and lead into atelier-app as functions too
+- 2026-11-11 [decision] A refusal's way out is its own field (Refused::next) for the refusals ready and decide give; for other acts, and for a refusal of unmet conditions, the text carries it as before and next is None
+  Reason: The Done when asks the field where today's text ends with one, for the acts that live in atelier-app; the producers of those refusals now return text and way out apart, and the CLI prints text, way out and skip offer as before
+  Rejected: Split every refusal's last line by a rule, which misreads texts that end in a fact rather than a step
+- 2026-11-11 [decision] The skip is a Skip value with interior mutability, which Repo borrows (Repo<'s> holds &'s Skip); every gate is a method of Skip
+  Reason: Facts borrow the Repo while a gate records a passed rule; a shared borrow with a RefCell lets both happen without changing every call that builds Facts, and the Skip outlives each Repo as merge needs
+  Rejected: Repo owning the Skip and handing it on, which needs moving it between merge's Repos
+- 2026-11-11 [decision] start's refusal for planning not committed (not_committed, not_committed_ready) is removed with its text and its test
+  Reason: ready now commits its write on the base checkout's branch, so an item or mission it readies is ready at the tip at once; the refusal could only catch a status hand-edited into front matter, which agents never do, or a commit that failed, after which ready puts the file back
+- 2026-11-11 [decision] Repo::open refuses a caller identity with a line break or a ': ', the two things that stop Answer by <thread>: and Dropped by <thread>: reading back; Repo keeps the directory it was opened from, and git_at compares it with the root instead of reading the process's working directory
+  Reason: One check at the one entry point is before anything is written; and atelier-app then reads no process state to decide where a printed Git command runs
+- 2026-11-11 [handoff] Approved by GPT-6.1 Sol (atelier-vst8) at 23b4e51d after two rounds; round 1's two fix-now findings (atelier-wwxe, atelier-t53b) fixed in 91bd5db3 and 98f9f9a3. See the Report.
 
 ## Report
 
@@ -119,19 +136,3 @@ None. The rehearsal (`all steps passed in 36 s; 14 gh calls, all to the double`,
 
 - atelier-wwxe (fix now): `ready` given no ID reached `git commit --` with no path, which commits whatever is staged. Fixed in 91bd5db3: `ready` refuses an empty list, and `git::commit_paths` refuses no path. Test: `library::ready_given_no_id_refuses_and_commits_nothing`.
 - atelier-t53b (fix now): the hooks a commit ran read the process's `ATELIER_SKIP`, not the library caller's `Skip`. Fixed in 98f9f9a3: `git::relayed`, which runs the commit and `merge`'s and `submit`'s push, sets the variable from the `Skip`, or clears it. Test: `library::the_hooks_a_commit_runs_are_given_the_invocations_reason_and_not_the_processs`, seen failing without the fix.
-
-## Notes
-
-- 2026-11-11 [decision] drop, close and lead stay in atelier-cli; only their commit (plan::save with commit) and their refusal policy are in atelier-app
-  Reason: The item asks only ready and decide to be functions; the Desk calls only those two, and moving three more commands would grow the move without a caller
-  Rejected: Move drop, close and lead into atelier-app as functions too
-- 2026-11-11 [decision] A refusal's way out is its own field (Refused::next) for the refusals ready and decide give; for other acts, and for a refusal of unmet conditions, the text carries it as before and next is None
-  Reason: The Done when asks the field where today's text ends with one, for the acts that live in atelier-app; the producers of those refusals now return text and way out apart, and the CLI prints text, way out and skip offer as before
-  Rejected: Split every refusal's last line by a rule, which misreads texts that end in a fact rather than a step
-- 2026-11-11 [decision] The skip is a Skip value with interior mutability, which Repo borrows (Repo<'s> holds &'s Skip); every gate is a method of Skip
-  Reason: Facts borrow the Repo while a gate records a passed rule; a shared borrow with a RefCell lets both happen without changing every call that builds Facts, and the Skip outlives each Repo as merge needs
-  Rejected: Repo owning the Skip and handing it on, which needs moving it between merge's Repos
-- 2026-11-11 [decision] start's refusal for planning not committed (not_committed, not_committed_ready) is removed with its text and its test
-  Reason: ready now commits its write on the base checkout's branch, so an item or mission it readies is ready at the tip at once; the refusal could only catch a status hand-edited into front matter, which agents never do, or a commit that failed, after which ready puts the file back
-- 2026-11-11 [decision] Repo::open refuses a caller identity with a line break or a ': ', the two things that stop Answer by <thread>: and Dropped by <thread>: reading back; Repo keeps the directory it was opened from, and git_at compares it with the root instead of reading the process's working directory
-  Reason: One check at the one entry point is before anything is written; and atelier-app then reads no process state to decide where a printed Git command runs
