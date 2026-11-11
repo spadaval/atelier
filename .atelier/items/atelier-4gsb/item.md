@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-4gsb
 title: Drop severity from the review request brief to match Agent Factory's review output
-status: draft
+status: dropped
 mission: null
 labels:
 - bug
@@ -31,3 +31,7 @@ created_at: 2026-10-30T06:49:44.817530340Z
 ## Context
 
 Skill output format: `skills/agent-factory/procedures/review.md`, Output, in spadaval/.agents (ADR 0023). Related atelier-abdp also changes this brief (round number); whichever lands second merges the other's text.
+
+## Report
+
+Dropped: `review_request.rs` was deleted in 0.5; the new brief asks for Complexity, Value and Risk, as the skill does.
