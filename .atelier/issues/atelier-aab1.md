@@ -16,19 +16,19 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
-title: "Find how atelier serve can read T3 thread status, models and token usage"
+title: "Find how a process outside a thread, such as the Desk, can read T3 thread status, models and token usage"
 updated_at: "2026-11-11T02:06:10.652212169+00:00"
 ---
 
 ## Goal
 
-Find how a process outside a T3 thread, such as `atelier serve`, can read T3 Code's thread status, each thread's provider, model and effort, the mapping from a provider session ID to its thread, and per-request token usage. The live-status and metrics work depends on the answer.
+Find how a process outside a T3 thread, such as the Desk (ADR 0032; `atelier serve` when this was filed), can read T3 Code's thread status, each thread's provider, model and effort, the mapping from a provider session ID to its thread, and per-request token usage. The live-status and metrics work depends on the answer.
 
 ## Done when
 
 - [ ] The Report says, for each of thread status, model and effort, session-to-thread mapping and token usage, which T3 interface gives it (its MCP HTTP server, another API, or none), how a caller authenticates, and an example request and response run on this host.
 - [ ] Where no interface gives it, the Report proposes the smallest upstream change to T3 Code that would, and names the T3 files involved (MCP toolkits live in `apps/server/src/mcp/toolkits/` in `~/projects/t3code`).
-- [ ] The Report says whether T3's thread links (`t3-thread://` URLs) open the thread on Sumeet's phone and on the web client.
+- [ ] The Report says whether T3's thread links open the thread on Sumeet's phone and on the web client: both the `t3-thread://` form and the `https://app.t3.codes/threads/...` form the MCP server returns as each thread's `link`.
 
 ## Scope
 

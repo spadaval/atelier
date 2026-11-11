@@ -31,7 +31,7 @@ updated_at: "2026-11-10T04:45:25.381737978+00:00"
 
 ## Goal
 
-Take the site off the cutover's path. The human's pages become a product of their own, the Desk (ADR 0032, mission atelier-z4cr), so the new workspace neither builds nor serves a site and the old one is deleted with the old workspace instead of being ported.
+Take the tracker's site off the cutover's path. The human's pages become a product of their own, the Desk (ADR 0032, mission atelier-z4cr), so the `atelier` binary built from the new workspace has no site and no `serve`, and the old site is deleted with the old workspace instead of being ported. The Desk's own crate, app and CI jobs in the new workspace are not this item's to remove.
 
 ## Done when
 

@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: planning review fixes: acts run where the new commands run, reads take work branches, the mission finishes on converted clones, the database and feed are named"
+last_changed: "2026-11-11: planning review fixes: acts run where the new commands run and the Desk makes the commit the command asks for, reads take work branches, the mission finishes on converted clones, the database and feed are named"
 ---
 
 # Why
@@ -25,8 +25,9 @@ host's cutover, and the live repositories after it. A mission has one page with 
 for, its documents, its items and what happened to them, and the agents
 working on it. An inbox lists what waits on Sumeet. From a page he can say go
 on a mission, answer an open question, and start a planning session with an
-agent. Each act is made by the `atelier` command itself, under his name,
-where that command writes. `atelier` itself has no site.
+agent. Each act is made by the `atelier` command, under his name, where
+that command writes, and saying go ends in the one commit the command asks
+its caller to make. `atelier` itself has no site.
 
 # Success Criteria
 
@@ -112,16 +113,29 @@ crate depends on it, and a test in the workspace fails if one does.
    that command is written to run, with no thread variable set, so the
    caller is `human`:
    - `ready <mission> --by <name>` in the checkout that has the base branch
-     out. The command refuses anywhere else (`plan.rs`, `off_base`) and
-     commits only the paths it wrote.
+     out. The command refuses anywhere else (`plan.rs`, `off_base`). It
+     writes the record and does not commit: it prints the commit for its
+     caller to make, `git add -- <paths> && git commit -m "<message>" --
+     <paths>` (`output.rs`, `commit_line`). The server makes that commit,
+     as an agent following the line would. Before it runs the command it
+     refuses if the mission's directory has an uncommitted change in that
+     checkout, so the commit holds only what `ready` wrote. Afterwards it
+     compares the paths that changed under `.atelier/` with the paths in
+     the printed line. If they match it commits exactly those paths with
+     the printed message, which leaves every other staged or changed file
+     in the checkout alone. If they do not match, or there is not exactly
+     one such line, it commits nothing, shows the output, and gives the
+     line to run by hand.
    - `decide <id> "<answer>"` in the checkout that has the item's branch
-     out, which is where the implementer works and whose `submit` commits
-     the answer (`questions.rs`, `decide`).
+     out, which is where the implementer works (`questions.rs`, `decide`).
+     The command writes the answer and the implementer's `submit` commits
+     it, so the server commits nothing. Pages are read from commits, so
+     until that commit exists the server shows the question as answered
+     from the Desk and not yet committed, from its own memory of the act.
    The server finds the checkout from `git worktree list`. If no checkout
    has the branch out, it refuses and says so. It never makes a scratch
-   worktree, moves a ref, or commits on the command's behalf: the spike's
-   server did, because the old commands left that to the caller. A refused
-   command's output is shown as it is.
+   worktree or moves a ref: the spike's server did both, for the old
+   commands. A refused command's output is shown as it is.
 4. **Sessions.** Starting a planning session calls `t3_thread_launch` with a
    second token that may operate, the repository's T3 project, and a first
    message naming the mission. The page then links to the thread.
@@ -221,6 +235,11 @@ or Review sections.
 - **An act needs a checkout.** `ready` needs some checkout with the base
   out, and `decide` one with the item's branch out. Where none exists the
   Desk refuses and names the command to run by hand.
+- **The Desk reads a commit line the tool prints for people.** If the
+  tracker rewords that line, saying go stops committing and shows the
+  output instead; the act-is-a-record test fails first. A `ready` that
+  commits on request would remove the reading, and is a change to the
+  tracker that needs its own decision.
 - **No sign-in.** Anyone on the tailnet can act as Sumeet. Accepted for one
   user on a private tailnet; a second user needs a decision first.
 - **Whether T3 Code's thread links open on the phone** is the one question
