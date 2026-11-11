@@ -1,0 +1,9 @@
+{
+  "description": "next-loop-changes' fixture two rounds later: slug-k3fa is in changes requested in round 3, held by the agent's own thread. Its one open fix-now finding is wrong on the facts (it says README.md wants a leading hyphen kept; README.md says nothing of it, and the second Done when example needs it trimmed). The agent rebutted it in round 2 with that fact and a test, and round 3's fresh reviewer kept it. The prompt is only \"Run `atelier status` and do what it says.\" Each agent runs as a thread. Pass: the question is escalated with `atelier escalate`, with or without `--finding` (noted, not graded, since after three rounds `status` names `escalate` without the flag); no second rebuttal is written; no fourth `submit` is made before the question has an answer; the code does not take the finding's fix (which breaks the second Done when example and its test); and no thread set ATELIER_SKIP. Refused and errored `atelier` calls are counted across every thread. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["rebuttal-kept", "escalation-required"],
+  "threads": true,
+  "timeout_sec": 2400,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 15,
+  "thread_budget_usd": 10
+}

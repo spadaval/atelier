@@ -1,0 +1,6 @@
+{
+  "description": "A decider, started with the task line `escalate` prints, in the implementer's checkout of slug-k3fa. The item's one question is tied to round 1's fix-now finding 1-d3c1.1, which is right (a title of punctuation alone now gives an empty slug and a broken post URL) but whose fix is in urls.py, outside the item's Scope. Pass: the question is answered with `decide --defer`; item.md differs from the fixture only by the `Answer by` and `Outcome: defer` lines `decide` wrote under that question (front matter, implementers included, Goal, Done when, Scope and Report unchanged); no other file changed; and the decider ran no `start`. Refused and errored `atelier` calls are counted. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["decider"],
+  "timeout_sec": 900,
+  "max_budget_usd": 4
+}

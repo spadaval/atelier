@@ -50,9 +50,14 @@ class Fixture(unittest.TestCase):
         shutil.rmtree(self.work, ignore_errors=True)
 
     def atelier(self, thread, *args, skip=None):
-        env = {k: v for k, v in os.environ.items()
-               if k not in ("CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "ATELIER_SKIP")}
-        env.update(T3CODE_THREAD_ID=thread, PATH=f"{self.work / 'bin'}:{env['PATH']}")
+        """Run atelier as `thread`; `<parent>/<id>` runs it as a Codex subagent
+        of <parent>, whose identity the binary makes that."""
+        env = {k: v for k, v in os.environ.items() if k not in (
+            "CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID", "ATELIER_SKIP")}
+        parent, _, child = thread.partition("/")
+        env.update(T3CODE_THREAD_ID=parent, PATH=f"{self.work / 'bin'}:{env['PATH']}")
+        if child:
+            env.update(CODEX_SESSION_ID="session-1", CODEX_THREAD_ID=child)
         if skip:
             env["ATELIER_SKIP"] = skip
         return subprocess.run(["atelier", *args], cwd=self.repo, env=env, check=True,
@@ -91,6 +96,14 @@ class GradeTest(Fixture):
         self.atelier("impl", "merge")
         grade = self.grade()
         self.assertTrue(grade["pass"], grade["notes"])
+
+    def test_a_codex_subagent_of_the_implementer_reviews_as_another_thread(self):
+        self.build()
+        self.approve("impl/019a7c")
+        self.atelier("impl", "merge")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+        self.assertEqual(grade["checks"]["reviews_on_main"][0]["reviewers"], ["impl/019a7c"])
 
     def test_a_skip_fails_the_run(self):
         # Merged past a rule, a change left uncommitted, with the variable.
