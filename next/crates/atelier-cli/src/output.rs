@@ -1518,6 +1518,8 @@ pub struct PlanBrief<'a> {
     pub documents: Vec<String>,
     /// Each item of the mission: its path, status and title.
     pub items: Vec<(String, Status, String)>,
+    /// The paths of the plan that differ in this checkout from `commit`.
+    pub changed: Vec<String>,
     pub carried: &'a [Carried],
     pub path: &'a str,
     pub base: &'a str,
@@ -1550,6 +1552,13 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
     if brief.items.is_empty() {
         text += "  (none)\n";
     }
+    if !brief.changed.is_empty() {
+        text += &format!(
+            "This checkout changes the plan from commit {}, and this review does not cover those changes: {}\n",
+            short(brief.commit),
+            brief.changed.join(", ")
+        );
+    }
     text += &carried_findings(brief.carried, true, false);
     text + &review_file(
         brief.path,
@@ -1559,6 +1568,13 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
     ) + &format!(
         "Then tell whoever started you the commit it prints, which the planner cherry-picks onto {}. Your review is then done.\n",
         brief.base
+    )
+}
+
+pub fn plan_not_committed(id: &str, commit: &str, commit_line: &str) -> String {
+    format!(
+        "`atelier review {id}` reviews the plan as a commit holds it, and commit {} holds no mission {id}. Nothing changed.\nCommit the plan first: {commit_line}\nThen: atelier review {id}\n",
+        short(commit)
     )
 }
 

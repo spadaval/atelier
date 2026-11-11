@@ -1563,6 +1563,71 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
 }
 
 #[test]
+fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_committed() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "draft");
+    join_mission(&root, ID, MISSION);
+    let design = format!(".atelier/missions/{MISSION}/design.md");
+    fs::write(root.join(&design), "Shape\n").unwrap();
+    commit_all(&root, "Plan");
+    let head = tip(&root, "HEAD");
+
+    // Edited and not committed: the Outcome, an item's title and a new
+    // document.
+    let mission = read(&root, &mission_path(MISSION)).replace("Greetings.", "Farewells.");
+    fs::write(root.join(mission_path(MISSION)), mission).unwrap();
+    let item = read(&root, &item_path(ID)).replace("title: Say hello", "title: Say goodbye");
+    fs::write(root.join(item_path(ID)), item).unwrap();
+    let sizing = format!(".atelier/missions/{MISSION}/sizing.md");
+    fs::write(root.join(&sizing), "Small\n").unwrap();
+
+    let run = atelier(&root, "r1", &["review", MISSION]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let brief = run.stdout;
+    for shown in [
+        format!("Review the plan as commit {} holds it", &head[..7]),
+        "\n## Outcome\n\nGreetings.\n".to_string(),
+        format!(
+            "Its other documents:\n  {design}\nIts items:\n  {} (draft): Say hello\n",
+            item_path(ID)
+        ),
+        format!(
+            "This checkout changes the plan from commit {}, and this review does not cover those \
+             changes: {}, {}, {sizing}\n",
+            &head[..7],
+            item_path(ID),
+            mission_path(MISSION)
+        ),
+    ] {
+        assert!(brief.contains(&shown), "{shown}\n---\n{brief}");
+    }
+    assert!(
+        !brief.contains("Farewells") && !brief.contains("Say goodbye"),
+        "{brief}"
+    );
+    let files = files_in(&root, &plan_reviews(MISSION));
+    assert_eq!(front(&read(&root, &files[0]), "commit"), head);
+
+    // A mission no commit holds has no plan to review.
+    let other = "demo-m2ss";
+    write_mission(&root, other, "draft");
+    let refused = atelier(&root, "r1", &["review", other]);
+    assert_eq!(refused.code, 1);
+    assert_eq!(
+        refused.stderr,
+        format!(
+            "`atelier review {other}` reviews the plan as a commit holds it, and commit {} holds \
+             no mission {other}. Nothing changed.\nCommit the plan first: git add -- \
+             .atelier/missions/{other} && git commit -m \"Plan {other}\" -- .atelier/missions/{other}\n\
+             Then: atelier review {other}\n",
+            &head[..7]
+        )
+    );
+    assert!(files_in(&root, &plan_reviews(other)).is_empty());
+}
+
+#[test]
 fn two_blind_plan_reviews_cherry_pick_onto_the_base_and_ready_says_what_they_found() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();

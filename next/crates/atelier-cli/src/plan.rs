@@ -315,7 +315,7 @@ fn plan_reviewed(repo: &mut Repo, dir: &MissionDir) -> Result<String> {
 /// The paths of mission `id`'s plan, its directory less its reviews and
 /// the directories of its items then or now, that differ in this checkout
 /// from `commit`; `None` when this clone lacks that commit.
-fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Vec<String>>> {
+pub(crate) fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Vec<String>>> {
     if !git::has_commit(&repo.root, commit)? {
         return Ok(None);
     }

@@ -188,6 +188,20 @@ impl Repo {
         })
     }
 
+    /// The mission `id` as `commit` holds it.
+    pub fn mission_at(&mut self, commit: &str, id: &str) -> Result<Option<MissionDir>> {
+        Ok(self.reader.mission(commit, id)?)
+    }
+
+    /// Every item `commit` holds.
+    pub fn items_at(&mut self, commit: &str) -> Result<Vec<ItemDir>> {
+        let mut items = Vec::new();
+        for id in self.reader.item_ids(commit)? {
+            items.extend(self.reader.item(commit, &id)?);
+        }
+        Ok(items)
+    }
+
     /// The item `id` as `commit` holds it.
     pub fn item_at(&mut self, commit: &str, id: &str) -> Result<Option<ItemDir>> {
         Ok(self.reader.item(commit, id)?)

@@ -355,17 +355,10 @@ pub fn untracked(repo: &Path, dir: &str) -> Result<Vec<String>> {
     Ok(names(&listed))
 }
 
-/// The files under `dir` that are tracked, or untracked and not ignored.
-pub fn files(repo: &Path, dir: &str) -> Result<Vec<String>> {
-    let args = [
-        "ls-files",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-        "-z",
-    ];
-    let listed = listing(repo, &[&args[..], &["--", dir]].concat())?;
-    Ok(names(&listed))
+/// The files under `dir` in the commit `commit`.
+pub fn files_at(repo: &Path, commit: &str, dir: &str) -> Result<Vec<String>> {
+    let args = ["ls-tree", "-r", "-z", "--name-only", "--full-tree", commit];
+    Ok(names(&listing(repo, &[&args[..], &["--", dir]].concat())?))
 }
 
 /// The paths under `dirs` whose files in the checkout differ from the
