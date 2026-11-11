@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-x3ru
 title: Name bundle entries by client_ref in graph errors, and the issues in a cycle
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - bundle
@@ -37,3 +37,7 @@ Error: Bundle apply rejected the staged canonical state: workflow_mission_depend
 ## Context
 
 Error wrapping in crates/atelier-cli/src/commands/bundle.rs; ID allocation in apply_bundle_to_state. The record_index cycle message joined this item from atelier-t18i in decision atelier-mzpn.
+
+## Report
+
+Dropped: `bundle` was removed in 0.5 (docs/design.md, Tried and removed).
