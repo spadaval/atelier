@@ -76,12 +76,12 @@ The branch changes only records, so it needs no CI run of its own, and its revie
 
 ## Report
 
-Every Done when line holds. The branch started from `master` at fc0fe395, where 181 records were open: 173 items and 8 missions (the title's 147 and five are older counts). Each has one line below. 96 were dropped on this branch with `atelier issue transition` (52 superseded, 44 declined), 6 were rewritten, 10 stay as they are, and 69 are left for Sumeet: the 65 protected records, 3 missions and atelier-w0su. 96 + 6 + 10 + 69 = 181. No protected record changed: the changed paths in `git diff --name-only fc0fe395..HEAD -- .atelier` are the 102 dropped or rewritten records and this record, none of them protected. `atelier check` passes at the head. In a scratch clone of the branch, `scripts/cutover/convert_records.py` converts 77 items and 8 missions, `--verify` passes and the new binary's `check` passes (Conversion check below).
+Every Done when line holds. The branch started from `master` at fc0fe395, where 181 records were open: 173 items and 8 missions (the title's 147 and five are older counts). Each has one line below. 87 were dropped on this branch with `atelier issue transition` (43 superseded, 44 declined), 15 were rewritten, 10 stay as they are, and 69 are left for Sumeet: the 65 protected records, 3 missions and atelier-w0su. 87 + 15 + 10 + 69 = 181. No protected record changed: the changed paths in `git diff --name-only fc0fe395..HEAD -- .atelier` are the 102 dropped or rewritten records and this record, none of them protected. `atelier check` passes at the head. In a scratch clone of the branch, `scripts/cutover/convert_records.py` converts 86 items and 8 missions, `--verify` passes and the new binary's `check` passes (Conversion check below).
 
 ### Counts
 
-- drop: 96
-- rewrite: 6
+- drop: 87
+- rewrite: 15
 - as is: 10
 - left for Sumeet: 69
 - total: 181, the open records at fc0fe395
@@ -144,36 +144,28 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 - atelier-wu7t: drop (a), declined. It changes evidence freshness reasons, and the What is removed table removes evidence records.
 - atelier-ztuq: drop (a), superseded. It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
 
-#### (b) the new binary already does it: 44
+#### (b) the new binary already does it: 35
 
 - atelier-w4j2: drop (b), declined. It changes how `check <id>` treats review and evidence IDs, and the new `check` takes no ID and validates every record (`atelier check --help` on the new binary), while evidence records are removed by the What is removed table.
 - atelier-fb1i: drop (b), superseded. The new binary's `check` already reports a record that does not parse and the other records' missing references in one run (run in a scratch clone: one unparseable item, one unknown mission and one unknown blocker gave three problems in one report).
-- atelier-kset: drop (b), superseded. The new binary's `check` already prints each fault once, on one line, against its file, and a pass names the counts (`Every record is valid: 173 items, 8 missions and config.toml.`), run in a scratch clone.
 - atelier-sfd9: drop (b), superseded. The new binary's `check` already names the file and field of a link to a missing record (`blocked_by: \`atelier-zzzz\` names no item`) and says to fix it in the file named, run in a scratch clone; `issue unlink` does not exist in the new tool.
 - atelier-1ci8: drop (b), superseded. The new `status` lists what the thread holds once with its status (product specification, Commands: `status`), shown in a scratch clone.
 - atelier-8g9d: drop (b), superseded. The new `status` on the base lists the missions in progress by name (product specification, Commands: `status`).
-- atelier-9bm2: drop (b), superseded. The new `show <mission>` prints the outcome and criteria and each item's status and blockers on one page (product specification, Commands: `show`; run on atelier-4pzj in a scratch clone).
 - atelier-efnf: drop (b), superseded. The new `status` lists only what is not met on an item, open fix-now findings included, and `verdict approve` is refused while a fix-now finding is open (product specification, What status prints and Reviewer).
 - atelier-hugc: drop (b), superseded. The new `start` already refuses a draft item before any Git operation and names `atelier ready` (run in a scratch clone: `atelier-1a5k is draft, and atelier start runs on an item that is ready. Nothing changed.`).
 - atelier-mfyd: drop (b), superseded. The new `status` lists only the ready items `start` would accept now and counts the others by what stops them (run in a scratch clone: `14 other ready items cannot start yet: 5 wait on a blocker that is not done, 11 are in a mission that is not ready`).
 - atelier-mi3x: drop (b), superseded. The new `status` prints the one next command for what the thread holds (product specification, Commands: `status`; `Then: atelier start atelier-1oel` in a scratch clone).
 - atelier-n831: drop (b), superseded. The new `status` states the branch in words (`on branch atelier-x, which is no item's`, `on the base branch master`) and prints no Git porcelain, run in a scratch clone.
-- atelier-om6l: drop (b), superseded. The new `list` and `show <mission>` name each item's blockers with their status and whether they wait on a human (`blocked by atelier-2mlh, which is draft, waits on a human`, run in a scratch clone), and the `work` views it extends are removed.
 - atelier-oxnw: drop (b), superseded. The new `start` already reports a refusal one line per unmet condition with no repeated error (run in a scratch clone on atelier-5kwk).
 - atelier-pu2i: drop (b), superseded. The new `list` with no flags shows only open work and `list --done` the finished (product specification, Commands: `list`).
 - atelier-pvo0: drop (b), superseded. The truncations it names are in `issue show`, the old `status` owner block, `evidence list` and the old not-found hint, none of which the new binary has; its not-found error names `atelier list` (run in a scratch clone).
-- atelier-tf9n: drop (b), superseded. The new `list` names each row's direct blockers with their status (run in a scratch clone), and parents and the `work` views are removed.
-- atelier-xw8r: drop (b), superseded. The new tool has no record-only `issue transition`; `status` names `atelier start <id>`, and `start` on a mission points at `atelier status` (run in a scratch clone).
 - atelier-yzuv: drop (b), superseded. The new `show <mission>` prints the mission once on one page with its items by status, with no Relationships or Evidence Gates lines (run on atelier-4pzj in a scratch clone).
-- atelier-501y: drop (b), superseded. The new `start` creates branch `<id>` and `status` on that branch names the item, its status and what it still needs (product specification, Commands: `start` and What status prints).
-- atelier-5qep: drop (b), superseded. The new `list` shows all open work by default and narrows by `--ready`, `--blocked`, `--needs-human`, `--mission` and `--label` (`atelier list --help`), so no status filter is needed.
 - atelier-dmh5: drop (b), declined. The new records hold no directional link roles, only `blocked_by` and `caused_by` (product specification, Records), so there is no reversed link to misread.
 - atelier-jcki: drop (b), superseded. The new `show <id>` prints the item's status, mission, blockers and each review's round and verdict (product specification, Commands: `show`; run on atelier-1oel in a scratch clone), and the branch is named for the item.
 - atelier-l9ty: drop (b), superseded. The new `list` marks each blocked and needs-human row (`blocked by ...`, `waits on a human`), run in a scratch clone.
 - atelier-lehs: drop (b), superseded. The new `show` prints no Impact section (run on atelier-1oel in a scratch clone).
 - atelier-o1bv: drop (b), superseded. The new binary does not wrap redirected output (`COLUMNS=30 atelier list | cat` printed full rows in a scratch clone).
 - atelier-6gpl: drop (b), superseded. The new tool has no transition options view: each status is set by the command that performs the act (product specification, Words: Status), and `status` names the next command.
-- atelier-8bve: drop (b), superseded. The new `new` already confirms the record's status and path and names the next step (`Created draft item atelier-4d3x ... A planner makes it ready with: atelier ready ...`, run in a scratch clone).
 - atelier-cj54: drop (b), declined. The product specification has agents edit a record's Markdown body directly (Commands: "Agents edit the Markdown body of a record directly"), so no command splices a section and the quoting problem it solves does not arise.
 - atelier-e6fl: drop (b), declined. The new tool has no transitions that take `--reason` besides `drop`, which records it (`atelier drop --help`).
 - atelier-rh0d: drop (b), declined. The new tool has no `issue link` or `unlink` and no link roles; `set --blocked-by` sets the only sequencing link (`atelier set --help`).
@@ -185,7 +177,6 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 - atelier-b99t: drop (b), declined. The new workspace's `atelier-cli` has no `build.rs` (`ls next/crates/atelier-cli`), so no stale commit is stamped; the old one goes with `crates/` at the switch.
 - atelier-eb71: drop (b), superseded. The new binary prints no backtrace with `RUST_BACKTRACE=1` set (run in a scratch clone: an unknown ID and an invalid `--priority` each printed only their message).
 - atelier-gg0m: drop (b), superseded. The new `status` outside an Atelier repository prints one line naming the missing `.atelier/config.toml` with no `check` advice, and the new `setup claude` writes its hooks into the repository's own settings (run in a scratch directory).
-- atelier-h90a: drop (b), superseded. The new `setup claude` already says `nothing changed` on a re-run, keeps every other hook and says to commit `.claude/settings.json` (run in a scratch clone).
 - atelier-hfme: drop (b), declined. The new records hold no branch field: an item's branch is named for its ID (product specification, Records), and the new `start` has no `--base`.
 - atelier-jjvc: drop (b), superseded. The new binary has no `prime` (`atelier --help`).
 - atelier-taxm: drop (b), declined. The new binary has no `setup --link` and no update check (`atelier setup --help`), so there is no second copy of the rule.
@@ -198,6 +189,15 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 
 ### Rewritten on this branch
 
+- atelier-kset: rewrite. It two of its faults survive in the new `check`: YAML line numbers one less than the file line, and a last line that names no problem (run in a scratch clone). What changed: Goal and Done when: narrowed to the two faults the new `check` still has, file-relative YAML line numbers and a last line that names the first problem, stated against `.atelier/items/<id>/item.md` and the new binary's output; the parts the new `check` already does left.
+- atelier-9bm2: rewrite. Its need survives in part: the new `show <mission>` names no next step for the mission itself (run in a scratch clone). What changed: Goal and Done when: `work mission` became `show <mission>`; narrowed to the mission's own next step, since `show` already prints the Outcome and criteria and missions have no blockers in the new records; a todo mission's `start` became `lead`.
+- atelier-om6l: rewrite. Its need to see the end of each blocker chain and what it holds survives: the new `list` and `show <mission>` name only the direct blocker and its status (run in a scratch clone). What changed: Goal, Done when and Scope: `work mission`, `work human`, `work ready` and `work missions` became `show <mission>`, `list --needs-human`, `status` and `list`; superseded became dropped; the decision type, the `+3 children` count and the parent-inherited blocker test went with types and parents; the Goal quotes the new binary; Scope names the new commands instead of old source files. The Waiting on section, what blockers hold and the mission's Waiting on line stay.
+- atelier-tf9n: rewrite. Its need survives in part: the new `list` names each row's direct blockers but not where a longer chain ends (run in a scratch clone). What changed: Goal and Done when: narrowed to naming a longer chain's far end on `list` and `show` rows, since the new `list` already names direct blockers and prints no count or "readiness gate"; `work mission`, `work blocked` and `issue show` became `list` and `show`; parents went.
+- atelier-xw8r: rewrite. Its need survives in part: the new `start <mission>` points at `status` without saying it is a mission or naming its items (run in a scratch clone). What changed: Goal and Done when: narrowed to `start <mission>` saying it is a mission and naming the items that can start; the `issue transition` hint and warning lines went with that command.
+- atelier-501y: rewrite. Its need survives in part: the new `start` prints the title and Done when but not the mission (run in a scratch clone). What changed: Goal and Done when: narrowed to naming the mission, since the new `start` already prints the title and Done when; `-q` and the parent case went, since the new tool has no quiet form and no parents.
+- atelier-5qep: rewrite. Its need for several values in one filter survives: the new `list --label` takes one value, and a comma list matches nothing (run in a scratch clone). What changed: Goal and Done when: `issue list` became `list`; the Goal quotes the new binary; repeated or comma-separated `--label` values ORed and an empty result that names the filters stay; `--open`, `--status`, `--category` and `--issue-type` and their errors went, since `list` shows open work by default and has none of those flags.
+- atelier-8bve: rewrite. Its need survives in part: the new `new` names the status and next step but not the title or priority it wrote (run in a scratch clone). What changed: Goal and Done when: `issue create` became `new`; narrowed to naming the title and priority in the confirmation, since `new` already names the status and next step; `--parent`, the type and the unpersisted-ID error went with parents, types and the old command.
+- atelier-h90a: rewrite. Its need survives in part: the new `setup claude` says it keeps other hooks but not which, and gives no commit command (run in a scratch clone). What changed: Goal and Done when: narrowed to listing the kept handlers and ending with the commit command; the unchanged-run line left, since the new `setup claude` already says `nothing changed`; `prime` and `land` became the new hooks' `status` and `check`.
 - atelier-k55o: rewrite. Its need survives: the new `new` writes empty Goal and Done when sections and `ready` and `check` accept them (run in a scratch clone), so the refusal moves from `issue create` to `ready`. What changed: Goal and Done when: `issue create` became `atelier ready`, which must refuse an item with empty Goal or Done when, since `new` writes empty sections by design (shown in a scratch clone: `new`, then `ready`, then `check` all pass on an empty item); the decision type and `--body` example went with the removed command. A sentence in Context says so.
 - atelier-7ebi: rewrite. Its need survives for `set`, which confirms `Set the fields of item <id>` without the values (run in a scratch clone); `issue note` and `issue link` do not exist in the new tool. What changed: Goal and Done when: `issue update` became `set`, with the observed output of `set` as the new evidence; the `issue note` and `issue link` bullets and lines went, since the new tool has neither; removing a label that is not set became giving a field its current value, since `--labels` replaces the set. A new Context says so.
 - atelier-bp3s: rewrite. Its need, a merge check that runs each repository's suite, survives; `workflow.yaml`'s `merge_checks` becomes `config.toml`'s merge checks. What changed: Goal, Done when and Context: `.atelier/workflow.yaml`'s `merge_checks` `shell.check` became a merge check named in `.atelier/config.toml`; the sentence about `merge --sync` rerunning suite receipts went; its pick-up point became the cutover (atelier-wd1i).
@@ -318,15 +318,15 @@ Each line gives the fate this sort proposes. The 65 protected records come first
 
 ### Missions
 
-Missions are not dropped or rewritten here. Open items are counted at fc0fe395 by this sort's fate; protected items are counted by the fate proposed for them. An item of a draft mission cannot start under the new tool.
+Missions are not dropped or rewritten here. Open items are counted at fc0fe395 by this sort's fate at the head; protected items are counted by the fate proposed for them. An item of a draft mission cannot start under the new tool.
 
-- atelier-qr5s (todo, converts as ready): keep. 11 open items, all protected and proposed as is. Its 5 ready items (atelier-1oel, atelier-mlwx, atelier-oci2, atelier-orb2, atelier-yudj) could start under the new tool.
+- atelier-qr5s (todo, converts as ready): keep. 11 open items, all protected and proposed as is. At fc0fe395, 6 were ready (todo): atelier-1oel, atelier-5zre, atelier-mlwx, atelier-oci2, atelier-orb2 and atelier-yudj. Under the new tool, 4 of them could start (atelier-1oel, atelier-mlwx, atelier-orb2, atelier-yudj); atelier-oci2 waits on its blocker atelier-mlwx, and atelier-5zre is this item, now in progress. A ready mission is needed for its items to start, not enough.
 - atelier-295u (draft): keep. 4 open items, all protected and proposed as is; none is ready.
 - atelier-z4cr (draft): keep, and take in atelier-aab1, atelier-73vx and atelier-wo22 from atelier-bnek. 7 open items, all protected and proposed as is. Its 2 ready items (atelier-1ie1, atelier-psjw) cannot start until the mission is made ready.
 - atelier-bnek (draft): fold into atelier-z4cr. 6 open items, all protected: 3 proposed to move to atelier-z4cr (atelier-aab1 as is; atelier-73vx and atelier-wo22 rewritten for the Desk) and 3 proposed to drop (atelier-7yy9, atelier-00hl, atelier-5kwk). Its 4 ready items (atelier-00hl, atelier-5kwk, atelier-7yy9, atelier-aab1) cannot start while it is a draft.
 - atelier-icv4 (draft): drop. 5 open items, all protected and proposed to drop: each is met by the new commands or names removed ones. Its 5 ready items cannot start while it is a draft. Its loose end atelier-zno7 is proposed to drop with it.
-- atelier-4pzj (draft): drop. 33 open items, all dropped on this branch; none was ready. It would convert as an empty draft mission.
-- atelier-uf97 (draft): drop. 27 open items: 24 dropped on this branch, 2 rewritten (atelier-k55o, atelier-7ebi) and 1 protected (atelier-w4ef, proposed to drop as a duplicate of atelier-k55o). None is ready. If it is dropped, take atelier-k55o and atelier-7ebi out of it first (`set --mission ""` after the cutover), or they stay drafts in a dropped mission.
+- atelier-4pzj (draft): drop. 33 open items: 27 dropped on this branch and 6 rewritten (atelier-5qep, atelier-om6l, atelier-501y, atelier-xw8r, atelier-9bm2, atelier-tf9n). None is ready. If it is dropped, take the 6 rewritten items out of it first (`set --mission ""` after the cutover), or they stay drafts in a dropped mission.
+- atelier-uf97 (draft): drop. 27 open items: 22 dropped on this branch, 4 rewritten (atelier-k55o, atelier-7ebi, atelier-kset, atelier-8bve) and 1 protected (atelier-w4ef, proposed to drop as a duplicate of atelier-k55o). None is ready. If it is dropped, take the 4 rewritten items out of it first (`set --mission ""` after the cutover), or they stay drafts in a dropped mission.
 - atelier-g6rp (todo, converts as ready): keep only to close it. It has no open items: all 8 are done and its last wait, atelier-tee8, is done. Close it with a Result before the cutover; if it is still open then, drop it.
 
 ### Counts for the cutover
@@ -356,22 +356,7 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-Output at 847bfccf, the commit that wrote this Report (later commits change only this record's Report text):
-
-```text
-Records converted, by kind and new status:
-  item draft: 49
-  item from decision ready: 2
-  item ready: 26
-  mission draft: 6
-  mission ready: 2
-Made ready from in_progress; each branch's work is not converted:
-  atelier-5zre
-This tree's .atelier/ and moved files match a fresh conversion of 847bfccfccdd6f92784740846b8feb9db9e5d531: 99 files.
-Every record is valid: 77 items, 8 missions and config.toml.
-```
-
-The converter printed 77 items (49 draft, 26 ready, 2 ready from decisions) and 8 missions (6 draft, 2 ready); `--verify` and `check` each exited 0. 77 items and 8 missions are the 181 open records less the 96 dropped. The full output is in `~/.cache/atelier-qr5s/5zre/convout.txt`; it also lists 16 `blocked_by` entries naming a closed or missing record, which the converter leaves out.
+CONVOUT
 
 ### Deviations
 
@@ -388,3 +373,14 @@ The converter printed 77 items (49 draft, 26 ready, 2 ready from decisions) and 
 
 - Proposals for the 65 protected records, the three unprotected missions and atelier-w0su are Sumeet's to decide.
 - Master moved after fc0fe395; records created there since are not in this list.
+
+### Review
+
+Round 1 (GPT-6.1 Sol, at 2393521a) recorded four `fix_now` findings, each fixed in its own commit:
+
+- atelier-ax6k: atelier-5qep was dropped under (b) though the new `list` takes one `--label`. Fixed: restored from fc0fe395 and rewritten to the part that survives.
+- atelier-zs8v: atelier-om6l was dropped under (b) though the new views name only direct blockers. Fixed: restored and rewritten for `show <mission>` and `list`.
+- atelier-h72a: atelier-kset was dropped under (b) though two of its faults remain. Fixed: restored and rewritten to those two.
+- atelier-shpk: the qr5s proposal said all five ready items could start, though atelier-oci2 waits on atelier-mlwx. Fixed in Missions above, which now counts at fc0fe395.
+
+The same flaw, a (b) drop of a record the new binary meets only in part, was looked for in the other (b) drops by running each claim again. Six more were found and restored the same way: atelier-8bve, atelier-h90a, atelier-501y, atelier-xw8r, atelier-9bm2 and atelier-tf9n. Restoring a record is the recovery the item's Context names: its file is checked out from fc0fe395 on this branch, then its Goal and Done when are rewritten.
