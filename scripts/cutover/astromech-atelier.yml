@@ -1,0 +1,50 @@
+name: Atelier
+
+# Validates the Atelier records with `atelier check` on every pull request
+# and every push to main. Written by Atelier's cutover runbook, which pins
+# ATELIER_REV to the commit of Atelier's master it converted.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atelier-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The commit of spadaval/atelier that is installed.
+  ATELIER_REV: @ATELIER_REV@
+  # The toolchain Atelier's rust-toolchain.toml names. `cargo install --git`
+  # does not read that file, so it is given here.
+  ATELIER_TOOLCHAIN: 1.95.0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: atelier check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: ~/.cargo/bin/atelier
+          key: atelier-${{ runner.os }}-${{ env.ATELIER_REV }}-${{ env.ATELIER_TOOLCHAIN }}
+      - name: Install Atelier
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          rustup toolchain install "$ATELIER_TOOLCHAIN" --profile minimal
+          cargo "+$ATELIER_TOOLCHAIN" install --locked \
+            --git https://github.com/spadaval/atelier --rev "$ATELIER_REV" atelier-cli
+      - name: atelier check
+        run: atelier check
