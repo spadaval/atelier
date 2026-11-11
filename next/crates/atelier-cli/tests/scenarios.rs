@@ -1120,9 +1120,20 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
         )),
         "{status}"
     );
-    // Only its implementer is told.
+    // Only its implementer is told, on the item's branch and away from it.
     let status = atelier(&root, "t4", &["status"]).stdout;
     assert!(!status.contains(ESCALATE_NOW), "{status}");
+    let base = scratch.worktree("base");
+    let away = atelier(&base, "t1", &["status"]).stdout;
+    assert!(
+        away.contains(&format!(
+            "You hold:\n  {ID} (changes requested in round 3): Say hello\n    3 {ESCALATE_NOW}"
+        )),
+        "{away}"
+    );
+    assert!(!atelier(&base, "t4", &["status"])
+        .stdout
+        .contains(ESCALATE_NOW));
 
     // Nothing is refused: submit opens round 4, whose reviewer and
     // implementer see its number.
@@ -1138,6 +1149,11 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
     assert!(
         status.contains("Status: in review, round 4\nNo reviewer has opened"),
         "{status}"
+    );
+    let away = atelier(&base, "t1", &["status"]).stdout;
+    assert!(
+        away.contains(&format!("  {ID} (in review, round 4): Say hello\n")),
+        "{away}"
     );
     assert_eq!(atelier(&root, "t5", &["review", ID]).code, 0);
     let status = atelier(&root, "t5", &["status"]).stdout;

@@ -418,21 +418,32 @@ pub fn item(
         ),
         None => String::new(),
     };
-    let since = match (&entry.approved, entry.round) {
+    format!(
+        "{who}Title: {}\nStatus: {}{}\n{}{undefined}{next}",
+        entry.title,
+        status_name(entry.status),
+        since(entry),
+        escalate(entry, ""),
+    )
+}
+
+/// What follows the status of an item its implementer holds: since when
+/// it is approved, or which round it is in.
+fn since(entry: &Entry) -> String {
+    match (&entry.approved, entry.round) {
         (Some(time), _) => format!(" since {time}"),
         (None, Some(round)) if entry.status == Status::InReview => format!(", round {round}"),
         (None, Some(round)) => format!(" in round {round}"),
         (None, None) => String::new(),
-    };
-    // The Review section's rule; nothing refuses a fourth round.
-    let escalate = entry.unapproved.map_or(String::new(), |rounds| {
-        format!("{rounds} rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate \"<question>\"\n")
-    });
-    format!(
-        "{who}Title: {}\nStatus: {}{since}\n{escalate}{undefined}{next}",
-        entry.title,
-        status_name(entry.status),
-    )
+    }
+}
+
+/// The Review section's rule after three rounds without an approval, for
+/// the implementer, indented by `indent`; nothing refuses a fourth round.
+fn escalate(entry: &Entry, indent: &str) -> String {
+    entry.unapproved.map_or(String::new(), |rounds| {
+        format!("{indent}{rounds} rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate \"<question>\"\n")
+    })
 }
 
 /// What `merge` runs and waits for, from the base's config.
@@ -482,14 +493,14 @@ pub fn overview(
     if !overview.held.is_empty() {
         text += "You hold:\n";
         for entry in &overview.held {
-            let since = entry.approved.as_ref();
             text += &format!(
                 "  {} ({}{}): {}\n",
                 entry.id,
                 status_name(entry.status),
-                since.map_or(String::new(), |time| format!(" since {time}")),
+                since(entry),
                 entry.title
             );
+            text += &escalate(entry, "    ");
             for question in &entry.questions {
                 text += &format!("    A question waits on a decider: {question}\n");
             }

@@ -542,7 +542,9 @@ since when, in the implementer's and the lead's `status` and in `show`:
 the time of the commit on its branch that set the approving review's
 verdict, which `git log -S` finds; nothing stores it. Away from the item's
 branch, the implementer's list of what it holds gives the same: each
-item's unanswered questions, and since when an approved one is approved.
+item's unanswered questions, since when an approved one is approved, the
+round of one in review or with changes requested, and the line that
+escalation is required after three rounds without an approval.
 Missions join
 with their commands.
 
