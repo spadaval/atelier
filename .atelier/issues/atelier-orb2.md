@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Write the new Agent Factory beside the live one, one file per role"
-updated_at: "2026-11-11T03:36:01.543116999+00:00"
+updated_at: "2026-11-11T03:53:50.743192261+00:00"
 ---
 
 ## Goal
@@ -70,6 +70,10 @@ Expected size: 150 to 300 lines of new text, plus about 175 carried lines in the
 ## Unknowns
 
 - Whether the garden, groom and audit procedures can work at all on the new records before mission 4, since they lean on digests, labels and views the new tool renames. The Report says what breaks.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved in round 1 by GPT-6.1 Sol (atelier-jcf4 @ ee9f98e0), no findings. Outcome, proof, decisions, surprises and the step B table are in the Report.
 
 ## Report
 
