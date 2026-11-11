@@ -1044,7 +1044,9 @@ and items from open records and the strategy files they link, and
 `config.toml` from `workflow.yaml`, with no CI workflow where the repository
 has no Actions. Done and superseded records leave the tree, and Git keeps
 them; deferred findings on them are not carried over, and the backlog sort is
-where any worth keeping become items. Run twice on the same input it writes
+where any worth keeping become items. A Done when with text and no checkbox
+line, which the new tool would count as ticked, becomes one unticked line of
+its prose, ahead of any fenced block or table, which follow unchanged. Run twice on the same input it writes
 the same bytes, and `--verify` checks a converted tree against a fresh run.
 The rehearsal converts a scratch clone of each of the five repositories and
 runs the new binary's `check` and `status` on each. It runs one full item in the

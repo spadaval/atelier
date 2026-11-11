@@ -537,6 +537,59 @@ ci_workflow = "ci.yml"
             "  still present, though moved: docs/strategies/plan.md",
         ])
 
+    def test_a_done_when_with_no_checkbox_becomes_one_unticked_line(self):
+        sketch = "```text\n  a\n    b\n\n- [ ] not a box\n```\n\nThen   more\nprose.\n"
+        bodies = {
+            "demo-p1pg": "One paragraph\nwrapped   twice.\n",
+            "demo-p2pg": "First paragraph.\n\n\tSecond\nparagraph.\n",
+            "demo-p3li": "It holds:\n\n- one\n- two\n  wrapped\n1. three\n",
+            "demo-p4cb": "Prose before.\n\n- [ ] It is round.\n\nProse beside it.\n",
+            "demo-p5fn": "Sketch:\n\n" + sketch,
+            "demo-p6tb": "Rows:\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+        }
+        self.write({f".atelier/issues/{rid}.md": record(rid, "task", "todo", rid, f"\n## Goal\n\ng\n\n## Done when\n\n{b}")
+                    for rid, b in bodies.items()})
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "prose Done whens")
+        self.old = git(self.repo, "rev-parse", "HEAD")
+        self.convert()
+        done_when = {rid: self.body(f".atelier/items/{rid}/item.md").split("## Done when\n\n", 1)[1]
+                     for rid in bodies}
+        self.assertEqual(done_when, {
+            "demo-p1pg": "- [ ] One paragraph wrapped twice.\n",
+            "demo-p2pg": "- [ ] First paragraph. Second paragraph.\n",
+            "demo-p3li": "- [ ] It holds: - one - two wrapped 1. three\n",
+            "demo-p4cb": "Prose before.\n\n- [ ] It is round.\n\nProse beside it.\n",
+            "demo-p5fn": "- [ ] Sketch:\n\n" + sketch,
+            "demo-p6tb": "- [ ] Rows:\n\n| a | b |\n|---|---|\n| 1 | 2 |\n",
+        })
+        self.assertIn("## Done when\n\n- [ ] d\n", self.read(".atelier/items/demo-b2bu/item.md"))
+        # A section the converter fills in itself is unchanged.
+        self.assertIn(f"## Done when\n\n{convert_records.UNSPECIFIED}\n", self.read(".atelier/items/demo-c3fe/item.md"))
+        self.assertIn(f"## Done when\n\n{convert_records.DECISION_DONE_WHEN}\n",
+                      self.read(".atelier/items/demo-h7de/item.md"))
+
+        # A second run of the same commit gives the same bytes, and --verify passes.
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "convert")
+        converted = git(self.repo, "rev-parse", "HEAD")
+        git(self.repo, "checkout", "-q", "--detach", self.old)
+        self.convert()
+        git(self.repo, "add", "-A")
+        self.assertEqual(git(self.repo, "diff", "--cached", "--stat", converted), "")
+        git(self.repo, "reset", "-q", "--hard")
+        git(self.repo, "checkout", "-q", "main")
+        result = self.run_script("--verify", self.old)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_checkbox_done_when_reads_checkbox_lines_as_the_new_binary_does(self):
+        same = ["- [x] Ticked.\n", "Prose.\n  * [X] Nested, ticked.\n", "+ [ ]\n", "", "\n\n",
+                "```\nonly a fence\n```\n", "| only | a table |\n"]
+        for content in same:
+            self.assertEqual(convert_records.checkbox_done_when(content), content, content)
+        for content in ["- [-] Not a box.\n", "- [ ]x glued.\n", "Prose.\n```\n- [ ] In a fence.\n```\n"]:
+            self.assertTrue(convert_records.checkbox_done_when(content).startswith("- [ ] "), content)
+
     @unittest.skipUnless(NEW_BINARY.exists(), "the new binary is not built")
     def test_the_new_binary_reads_what_it_writes(self):
         self.convert()
