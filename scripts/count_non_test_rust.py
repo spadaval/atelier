@@ -6,7 +6,7 @@ cfg(test) app test_records helper, and full cfg(test) item spans. It masks Rust
 comments and literals before balancing item braces; unrelated blank/comment
 lines remain included. This is a source-budget count, not an executable-SLOC
 metric. Run from the repository: scripts/count_non_test_rust.py REVISION
-[DIRECTORY]; a DIRECTORY such as crates or next counts that workspace alone.
+[DIRECTORY]; a DIRECTORY such as crates counts that directory alone.
 """
 import argparse
 import collections

@@ -16,17 +16,17 @@
 # directory the Desk serves, and moved into place only when every step
 # passed, so a failure leaves the clone the Desk serves as it was. Each
 # repository's log is <clones directory>.work/<name>.log. It replaces only a directory that is already a scratch clone with
-# pushes disabled. The new binary defaults to next/target/debug/atelier.
+# pushes disabled. The new binary defaults to target/debug/atelier.
 # It prints one line per step and exits non-zero when any repository failed.
 set -euo pipefail
 [ $# -ge 1 ] && [ $# -le 2 ] || { echo "usage: $0 <clones directory> [<new atelier binary>]" >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
 top=$(cd "$here/../.." && pwd)
 convert=$top/scripts/cutover/convert_records.py
-atelier=${2:-$top/next/target/debug/atelier}
+atelier=${2:-$top/target/debug/atelier}
 projects=$(realpath -e -- "${DESK_PROJECTS:-$HOME/projects}")
 NO_PUSH=/nonexistent/atelier-desk-scratch-clone
-[ -x "$atelier" ] || { echo "No new atelier binary at $atelier: build it with cargo build -j 4 --manifest-path next/Cargo.toml" >&2; exit 2; }
+[ -x "$atelier" ] || { echo "No new atelier binary at $atelier: build it with cargo build -j 4 -p atelier-cli" >&2; exit 2; }
 [ -f "$convert" ] || { echo "No converter at $convert" >&2; exit 2; }
 atelier=$(cd "$(dirname "$atelier")" && pwd)/$(basename "$atelier")
 # Before anything is written: the clones and their work directory, with

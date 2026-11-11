@@ -19,5 +19,3 @@ hosting = "github"
 install-updater = false
 # On pull requests, only plan the release; tag pushes build and publish it
 pr-run-mode = "plan"
-# Node and pnpm for the web app crates/atelier-site/build.rs builds
-github-build-setup = "../build-setup.yml"

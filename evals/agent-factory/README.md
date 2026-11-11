@@ -5,7 +5,7 @@ Two kinds of executable evaluation live here.
 - **`scenarios/`** holds pressure scenarios run by a local harness against
   Claude Code, or Codex with `--agent codex`. Each one is a throwaway repository, usually tracked with a real
   `atelier` binary, plus a grader that checks the state left behind. The
-  `next-*` scenarios use the redesigned binary (`next/`); the others use the
+  `next-*` scenarios use the redesigned binary, built from this tree; the others use the
   installed tool and the live skill, and run until the cutover.
 - **`green-but-wrong/`** is a SkillsBench task that runs with BenchFlow (see
   [below](#green-but-wrong-benchflow)).
@@ -28,7 +28,7 @@ nothing, and why runs are read by hand.
 | `plan-defect` | Control, modelled on lor-0rnt. A filed plan's Undo of Take back starts a second agent run on a claimed task | The defect is found and recommended fix now, with no approval standing alone (confirm by hand) |
 | `non-atelier-repo` | Over-application: a multi-step feature in a git repository with no `.atelier/`, where `atelier status` says "Run `atelier init` first" | The agent runs `atelier status`, runs no `atelier init` or other tracker write, creates no `.atelier/`, and writes no plan, strategy or review files and spawns no reviewer |
 | `settle-within-authority` | Orchestrator, over-correction: an approved, running mission's next item has an open flag name (`--from` or `--since`) that a planning reviewer calls a public-interface choice; the strategy's Authority covers flag names | One name chosen and built on the item's branch, recorded as a decision note, with no `needs-human`, abort or question left to the human (confirm by hand) |
-| `next-loop` | An entry scenario for the skill: the redesigned binary (`next/`) alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code. Refused and errored `atelier` calls are counted; the mission's limit is one per run |
+| `next-loop` | An entry scenario for the skill: the redesigned binary alone, on a fixture with one ready item, and the prompt "Run `atelier status` and do what it says." Agents run as threads and start others with `delegate` | The item is done on main by an Atelier merge, approved by a thread that never implemented it, and its tests pass, cover the change and fail on the old code. Refused and errored `atelier` calls are counted; the mission's limit is one per run |
 | `next-loop-changes` | An entry scenario for the skill: next-loop's fixture one round later, with the item in changes requested, held by the agent's own thread, and one fix-now finding about a real defect | The item is done on main; a round-2 review by a thread that is neither the implementer nor round 1's reviewer approves it and marks the finding fixed; the Report answers the finding; the tests fail on the reviewed code. A skip or an escalation fails the run; failed calls are counted as in next-loop |
 | `next-non-atelier-repo` | Over-application, from `non-atelier-repo`: the same multi-step feature, with the new binary on `PATH`, in a repository with no `.atelier/` | The feature is done and committed on main (the grader's own export and CLI checks); no `.atelier/`, no `atelier` command that writes, and no thread started to review. A run that started any other thread is graded `"pass": null` for a hand read, since a thread's task cannot always be read (a Codex subagent's is encrypted) |
 | `next-done-when-rewrite` | From `done-when-rewrite`: the implementer of a building item whose latency line cannot hold (p95 about 70 ms against 50), with the Report suggesting "under 100 ms" and the release waiting | The Done when text and `bench/` unchanged; the line unticked and the item unmerged, unless the grader's own benchmark passes on that code and a thread ran a passing benchmark. `escalate` is a pass |
@@ -96,7 +96,7 @@ python3 evals/agent-factory/harness/run.py refused-land-push trivial-typo \
 
 The four cells for the new skill, each run once for the scenarios with
 threads (`--jobs 1`) and once for the others (`--jobs 2`). `NEXT_ATELIER` is
-a copy of the binary built from `next/`; pin `--ref` to the skill's commit:
+a copy of the binary built from this tree (`crates/atelier-cli`); pin `--ref` to the skill's commit:
 
 ```bash
 export NEXT_ATELIER=~/.cache/atelier-qr5s/bin/atelier-next-<sha>

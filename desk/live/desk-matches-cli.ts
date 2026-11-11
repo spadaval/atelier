@@ -9,7 +9,7 @@
 // `atelier show <mission>` prints in that clone. For every clone it compares
 // the inbox's needs-human items with `atelier list --needs-human` there. It
 // prints one line per mission and per inbox and exits 1 on any difference.
-// The binary defaults to next/target/debug/atelier in this checkout.
+// The binary defaults to target/debug/atelier in this checkout.
 //
 // It reads only: the Desk's pages, and `show` and `list` in the clones.
 
@@ -36,7 +36,7 @@ function parseArgs(argv: string[]) {
   }
   if (positional.length !== 2) fail(usage);
   const top = path.resolve(import.meta.dirname, "../..");
-  atelier ??= [path.join(top, "next/target/debug/atelier"), path.join(top, "target/debug/atelier")].find(existsSync);
+  atelier ??= [path.join(top, "target/debug/atelier")].find(existsSync);
   if (!atelier || !existsSync(atelier)) fail(`No new atelier binary${atelier ? ` at ${atelier}` : ""}: build it, or give --atelier <binary>`);
   return { address: positional[0].replace(/\/+$/, ""), clones: path.resolve(positional[1]), atelier: path.resolve(atelier) };
 }

@@ -5,7 +5,7 @@ written by item atelier-1ie1 before any server code, and corrected by items
 atelier-uwxy, atelier-e05n and atelier-h3hl where the server as built
 differs. It says what each page
 of the Desk is sent, and for every field, which function of the redesigned
-core in `next/` gives it, or that none does yet. The decisions are in
+core in `crates/` gives it, or that none does yet. The decisions are in
 [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md); what the Desk is
 for is in [its product intent](../product/desk.md).
 
@@ -73,10 +73,10 @@ blocking task that uses them.
 
 ## Running the server
 
-The crate is `next/crates/atelier-desk` (`crates/atelier-desk` after the
-switch), and its binary is `atelier-desk`. It is not part of the tracker's
-release: its manifest sets `[package.metadata.dist] dist = false`, and no
-other crate depends on it, which its `dependencies` test checks.
+The crate is `crates/atelier-desk`, and its binary is `atelier-desk`. It
+is not part of the tracker's release: its manifest sets
+`[package.metadata.dist] dist = false`, and no other crate depends on it,
+which its `dependencies` test checks.
 
 It takes one argument, the configuration file:
 
@@ -197,7 +197,7 @@ the new version with no step of ours. `~/.local/share/atelier-desk/t3
 Once, from a clean checkout of the branch to install:
 
 ```console
-$ cargo build -j 4 --manifest-path next/Cargo.toml -p atelier-cli
+$ cargo build -j 4 -p atelier-cli
 $ desk/service/make-clones.sh ~/.cache/atelier-desk/clones
 $ desk/service/install.sh --caller sumeet
 ```
@@ -229,7 +229,7 @@ $ desk/service/install.sh
 To refresh the clones as well, which the service needs no restart for:
 
 ```console
-$ cargo build -j 4 --manifest-path next/Cargo.toml -p atelier-cli
+$ cargo build -j 4 -p atelier-cli
 $ desk/service/make-clones.sh ~/.cache/atelier-desk/clones
 ```
 
@@ -647,7 +647,7 @@ of its own: `ready` commits only the paths it wrote, so a file staged in
 that checkout before stays staged.
 
 The test `saying_go_from_the_desk_leaves_the_commit_the_cli_leaves`
-(`next/crates/atelier-desk/tests/acts.rs`) checks the strategy's
+(`crates/atelier-desk/tests/acts.rs`) checks the strategy's
 act-is-a-record criterion: it says go through `POST /api/act` in one clone
 and calls `atelier_app::ready` as the command does in another clone of the
 same commit, and finds one new commit in each with the same message and

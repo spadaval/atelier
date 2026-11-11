@@ -26,7 +26,7 @@ describe("resolveLink", () => {
   });
 
   it("names a file that is not Markdown without opening it", () => {
-    expect(resolveLink(design, "../../../next/crates/atelier-desk/src/api.rs")).toEqual({ kind: "file", path: "next/crates/atelier-desk/src/api.rs" });
+    expect(resolveLink(design, "../../../crates/atelier-desk/src/api.rs")).toEqual({ kind: "file", path: "crates/atelier-desk/src/api.rs" });
   });
 
   it("refuses a path that leaves the repository", () => {

@@ -1,5 +1,5 @@
 """Fixtures for grade.py. Run with `python3 -m unittest` from this directory,
-with NEXT_ATELIER naming the new binary (next/target/debug/atelier).
+with NEXT_ATELIER naming the new binary (target/debug/atelier).
 
 Each case runs setup.sh, drives the binary as two threads to the state an
 agent might leave, and checks the grade; a last case checks the counting of

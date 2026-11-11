@@ -1,7 +1,0 @@
-{
-  "body": {
-    "error": "no mission alpha-zzzz in alpha"
-  },
-  "route": "/api/alpha/mission/alpha-zzzz",
-  "status": 404
-}

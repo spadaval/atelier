@@ -1,7 +1,0 @@
-{
-  "body": {
-    "error": "mission alpha-m2 links no strategy"
-  },
-  "route": "/api/alpha/mission/alpha-m2/strategy",
-  "status": 404
-}
