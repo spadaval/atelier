@@ -1,14 +1,15 @@
 //! `show`, `list` and `lead`. They read items and missions as `status`
 //! does: the base's record from its last commit, a started item's from its
 //! branch. `lead` writes planning, so it reads and writes its mission in the
-//! checkout of the base.
+//! checkout of the base, and commits it.
 
-use crate::commands::{annotate, annotate_all, facts, gate, Outcome};
-use crate::repo::{mission_path, Repo};
-use crate::{plan, view_output};
+use crate::commands::{annotate, annotate_all, Outcome};
+use crate::view_output;
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
-use atelier_app::{entries, entry, in_progress, items_of, list as groups, Filter};
+use atelier_app::plan::{off_base, save};
+use atelier_app::repo::{facts, mission_path};
+use atelier_app::{entries, entry, in_progress, items_of, list as groups, Filter, Repo};
 use atelier_core::Status;
 use atelier_records::validate_id;
 
@@ -94,8 +95,8 @@ pub fn deferred(repo: &mut Repo) -> Result<Outcome> {
 /// Makes the caller the lead of a ready mission in the checkout of the
 /// base, and says where each of its items stands.
 pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
-    if let Some(refused) = plan::off_base(repo, "lead")? {
-        return Ok(refused);
+    if let Some(refused) = off_base(repo, "lead")? {
+        return Ok(refused.into());
     }
     validate_id(id).map_err(|message| anyhow!(message))?;
     if !repo.root.join(mission_path(id)).exists() {
@@ -112,8 +113,8 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
             unreachable!("lead has no conditions: {refusal:?}")
         };
         let text = view_output::lead_not_ready(id, status);
-        if let Some(refused) = gate(Act::Lead, id, &[refusal], text) {
-            return Ok(refused);
+        if let Some(refused) = repo.skip.gate(Act::Lead, id, &[refusal], text) {
+            return Ok(refused.into());
         }
     }
     let before = dir.mission.lead.replace(repo.caller.clone());
@@ -132,5 +133,14 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(Outcome::Done(said));
     }
     let message = format!("Lead {id}");
-    plan::save(repo, "lead", Vec::new(), vec![dir.mission], &said, &message)
+    Ok(save(
+        repo,
+        "lead",
+        Vec::new(),
+        vec![dir.mission],
+        &said,
+        &message,
+        true,
+    )?
+    .into())
 }

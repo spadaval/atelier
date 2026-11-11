@@ -200,9 +200,9 @@ A lead or a planner loses none of today's nine `work` views; they become
 | --- | --- |
 | `new "<title>"` | Creates a draft item and prints its path. `--mission` creates a mission directory instead. `--in <mission>` sets membership. `--from <finding>` makes the item from an unsettled deferred finding of a done item, and marks the finding taken. |
 | `set <id> ...` | Changes front-matter fields: title, priority, labels, mission, blocked-by, and, on a bug, `--caused-by <item>` for the item that introduced it. |
-| `ready <id>... --by <name>` | Marks each named item or mission ready and records who said so and when. |
-| `drop <id> --reason` | Ends work that will not be done. Given an unsettled deferred finding of a done item, it marks the finding dropped. |
-| `close <id>` | Ends a mission whose items are all done or dropped and whose Result is written. With a result text, ends a draft or ready item that has no files to change. |
+| `ready <id>... --by <name>` | Marks each named item or mission ready and records who said so and when, and commits that. |
+| `drop <id> --reason` | Ends work that will not be done, and commits that. Given an unsettled deferred finding of a done item, it marks the finding dropped, and leaves the commit to Git. |
+| `close <id>` | Ends a mission whose items are all done or dropped and whose Result is written. With a result text, ends a draft or ready item that has no files to change. It commits that. |
 
 Agents edit the Markdown body of a record directly. They never hand-edit front
 matter; `set` and the status commands write it.
@@ -228,7 +228,7 @@ matter; `set` and the status commands write it.
 | Command | Behaviour |
 | --- | --- |
 | `decide <id> "<answer>"` | Records the answer to the open question, with this thread's ID. On a question tied to a finding, `--defer` or `--no-action` settles that finding without a fix. No past or present implementer of the item, and no reviewer of the review that raised the finding, can decide it. |
-| `lead <mission>` | Binds this thread as lead of a ready mission and prints where each item stands and which need a thread. |
+| `lead <mission>` | Binds this thread as lead of a ready mission, commits that, and prints where each item stands and which need a thread. |
 
 ### What `status` prints
 
@@ -316,8 +316,11 @@ Rules:
 ### Where records change
 
 - Planning happens on the base: creating and editing drafts, `set`, `ready`,
-  `drop`, `close`, `lead`, and plan reviews. It is committed and pushed with
-  Git.
+  `drop`, `close`, `lead`, and plan reviews. `ready`, `drop`, `close` and
+  `lead`, whose write other threads act on at the base's tip, commit it
+  themselves, holding only what they wrote. Drafts, `set` and a settled
+  finding are committed with Git, since a draft is edited several times.
+  Planning is pushed with Git.
 - Once an item is started, its directory changes only on its branch, and those
   changes reach the base in the merge.
 - Once an item is done, its directory changes only when one of its deferred

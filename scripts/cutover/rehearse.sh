@@ -165,8 +165,6 @@ full_item() {
     -e '/^## Done when$/a - [ ] README.md ends with a line saying so.' \
     -e '/^## Scope$/a README.md.' "$f"
   T3CODE_THREAD_ID=$P atelier ready "$id" --by sumeet
-  git add "$f"
-  git commit -qm "Plan $id"
   git push -q origin "$base"
   T3CODE_THREAD_ID=$I atelier start "$id"
   echo "This clone rehearsed the Atelier cutover." >> README.md

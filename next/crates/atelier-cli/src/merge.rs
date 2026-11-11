@@ -17,15 +17,15 @@
 //! carried over. The wait for CI before the lock, and which runs count for
 //! the head, are new.
 
-use crate::commands::{facts, gate, hold, refusal, refused, Outcome};
+use crate::commands::{hold, Outcome};
 use crate::forge::{CiRun, ForgeError, Github, PullRequest};
 use crate::git;
-use crate::repo::{item_dir, item_path, Repo};
-use crate::{output, skip};
+use crate::output;
 use anyhow::{Context, Result};
 use atelier_app::acts::{check, Act, Refusal};
-use atelier_app::Located;
-use atelier_core::{Config, Forge, Status};
+use atelier_app::repo::{facts, item_dir, item_path};
+use atelier_app::{refused, Located, Repo, Skip};
+use atelier_core::{Config, Forge, Status, Thread};
 use atelier_records::{parse_item, render_item};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, TryLockError};
@@ -53,22 +53,23 @@ const LOCKED: Duration = Duration::from_secs(60);
 /// Merges the item of the checked-out branch into the base, in one merge
 /// commit that marks it done, once its checks pass. With `trivial`, an
 /// item nobody reviewed merges on that reason. Run again, it picks up
-/// where the facts now stand.
-pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
+/// where the facts now stand. `caller` is who merges, and `skip` the
+/// invocation's, whose rules it prints after the last repository it opens.
+pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) -> Result<Outcome> {
     if trivial.as_ref().is_some_and(|why| why.trim().is_empty()) {
         return Ok(Outcome::Refused(output::no_reason()));
     }
     // Until CI passes nothing is locked and nothing in the clone written,
     // so a merge interrupted then leaves it as it was; everything read
     // before is read again under the lock.
-    let judged = match before_lock(trivial.is_some())? {
+    let judged = match before_lock(root, caller.clone(), trivial.is_some(), skip)? {
         Ok(id) => id,
         Err(outcome) => return Ok(outcome),
     };
     // Everything is read under the lock, so a merge that waited for
     // another reads the base that one left.
     let _lock = lock(root)?;
-    let repo = &mut Repo::open()?;
+    let repo = &mut Repo::open(root, caller, skip)?;
     // The item it waited for is the one it merges.
     if repo.branch.as_deref() != Some(&judged) {
         let moved = Moved::Checkout(repo.root.clone());
@@ -102,8 +103,8 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
         if !dirty.is_empty() {
             let text = output::base_dirty(&base, path, &dirty);
             let rule = output::rule_base_dirty(&base, path, &dirty);
-            if let Some(refused) = skip::refuse([rule], text) {
-                return Ok(refused);
+            if let Some(refused) = skip.refuse([rule], text) {
+                return Ok(refused.into());
             }
         }
         base_dirt = Some(Dirt::read(path, dirty)?);
@@ -122,7 +123,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
             };
             let mut known = HashMap::new();
             let now = ci(&github, workflow, &root, &id, &head, &mut known)?;
-            if let Some(stopped) = ci_stops(now, workflow, &head) {
+            if let Some(stopped) = ci_stops(now, workflow, &head, skip) {
                 return Ok(stopped);
             }
         }
@@ -139,7 +140,15 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     // Its message carries each rule skipped so far.
     let commit_merge = || {
         let item = render_item(&item);
-        git::commit_file(&root, &tree, &[&base_tip, &head], &path, &item, &message)
+        git::commit_file(
+            &root,
+            &tree,
+            &[&base_tip, &head],
+            &path,
+            &item,
+            &message,
+            skip,
+        )
     };
     let mut commit = commit_merge()?;
 
@@ -150,8 +159,8 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
             if let Some((code, tail)) = run_check(&checkout.path, &check.run)? {
                 let text = output::check_failed(&id, &base, &check.run, code, &tail);
                 let rule = output::rule_check(&check.run, code);
-                if let Some(refused) = skip::refuse([rule], text) {
-                    return Ok(refused);
+                if let Some(refused) = skip.refuse([rule], text) {
+                    return Ok(refused.into());
                 }
                 skipped = true;
             }
@@ -199,7 +208,7 @@ pub fn merge(root: &Path, trivial: Option<String>) -> Result<Outcome> {
     };
     said += &output::merged(&id, &base, &commit);
     if let Some(forge) = &config.forge {
-        if let Err(error) = push(&root, &forge.remote, &commit, &base) {
+        if let Err(error) = push(&root, &forge.remote, &commit, &base, skip) {
             return Ok(Outcome::Refused(
                 said + &output::base_push_failed(&base, &forge.remote, &error),
             ));
@@ -311,8 +320,8 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     let seen = facts(repo, &located, &links, None);
     if let Err(role @ Refusal::Role(_)) = check(act, &seen) {
         let text = refused(act, &role, &seen)?;
-        if let Some(refused) = gate(act, &located.id, &[role], text) {
-            return Ok(Err(refused));
+        if let Some(refused) = repo.skip.gate(act, &located.id, &[role], text) {
+            return Ok(Err(refused.into()));
         }
     }
     // What merges is the head, so the item is judged as it holds it, not
@@ -339,8 +348,8 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     if !merged {
         let checkout = repo.checkout(record, &head)?;
         let facts = facts(repo, &located, &links, Some(&checkout));
-        if let Some(refused) = refusal(act, &facts)? {
-            return Ok(Err(refused));
+        if let Some(refused) = repo.skip.refusal(act, &facts)? {
+            return Ok(Err(refused.into()));
         }
     }
     Ok(Ok(Judged {
@@ -357,8 +366,13 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
 /// pushed and its pull request opened, each only when missing, then the
 /// wait for CI. It prints as it goes, since the wait is long. It returns
 /// the item it judged, or the outcome when `merge` stops here.
-fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
-    let repo = &mut Repo::open()?;
+fn before_lock(
+    root: &Path,
+    caller: Thread,
+    trivial: bool,
+    skip: &Skip,
+) -> Result<Result<String, Outcome>> {
+    let repo = &mut Repo::open(root, caller, skip)?;
     let judged = match read(repo, trivial)? {
         Ok(judged) => judged,
         Err(outcome) => return Ok(Err(outcome)),
@@ -384,7 +398,7 @@ fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
     let pushed = match git::remote_tip(root, &forge.remote, id)? {
         Some(tip) if counts(root, id, head, &tip, &mut known)? => false,
         _ => {
-            if let Err(error) = push(root, &forge.remote, head, id) {
+            if let Err(error) = push(root, &forge.remote, head, id, skip) {
                 let failed = output::branch_push_failed(id, &forge.remote, &error);
                 return Ok(Err(Outcome::Refused(failed)));
             }
@@ -409,9 +423,9 @@ fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
         let now = match ci(&github, workflow, root, id, head, &mut known)? {
             // A skip passes a run that has not finished without waiting
             // for it; a forge that does not answer is waited for.
-            Ci::Pending(now) if now.is_err() || skip::reason().is_none() => now,
+            Ci::Pending(now) if now.is_err() || skip.reason().is_none() => now,
             now => {
-                return Ok(match ci_stops(now, workflow, head) {
+                return Ok(match ci_stops(now, workflow, head, skip) {
                     Some(stopped) => Err(stopped),
                     None => Ok(judged.id.clone()),
                 })
@@ -438,15 +452,16 @@ fn before_lock(trivial: bool) -> Result<Result<String, Outcome>> {
 /// once `ATELIER_SKIP` passed the rule that it pass; else a refusal when it
 /// failed, and "not yet" when it has not finished or the forge did not
 /// answer, which is no rule.
-fn ci_stops(now: Ci, workflow: &str, head: &str) -> Option<Outcome> {
+fn ci_stops(now: Ci, workflow: &str, head: &str, skip: &Skip) -> Option<Outcome> {
     let pending = |now| Some(Outcome::NotYet(output::ci_pending(workflow, head, &now)));
     match now {
         Ci::Passed => None,
         Ci::Failed(run) => {
             let rule = output::rule_ci(workflow, Some(&run));
-            skip::refuse([rule], output::ci_failed(workflow, &run))
+            skip.refuse([rule], output::ci_failed(workflow, &run))
+                .map(Outcome::from)
         }
-        Ci::Pending(Ok(run)) if skip::pass([output::rule_ci(workflow, run.as_ref())]) => None,
+        Ci::Pending(Ok(run)) if skip.pass([output::rule_ci(workflow, run.as_ref())]) => None,
         Ci::Pending(now) => pending(now),
     }
 }
@@ -547,7 +562,7 @@ fn publish(repo: &Repo, config: &Config, id: &str) -> Result<Outcome> {
     let base = &repo.base;
     let mut said = output::already_merged(id, base);
     if let Some(Forge { remote, .. }) = &config.forge {
-        if let Err(error) = push(&repo.root, remote, &repo.base_tip, base) {
+        if let Err(error) = push(&repo.root, remote, &repo.base_tip, base, repo.skip) {
             return Ok(Outcome::Refused(
                 said + &output::base_push_failed(base, remote, &error),
             ));
@@ -604,10 +619,17 @@ fn moved(
     }
 }
 
-/// Pushes `commit` to the branch `branch` of `remote`, never forcing.
-pub(crate) fn push(root: &Path, remote: &str, commit: &str, branch: &str) -> Result<()> {
+/// Pushes `commit` to the branch `branch` of `remote`, never forcing, with
+/// the pre-push hook given `skip`'s reason.
+pub(crate) fn push(
+    root: &Path,
+    remote: &str,
+    commit: &str,
+    branch: &str,
+    skip: &Skip,
+) -> Result<()> {
     let to = format!("{commit}:refs/heads/{branch}");
-    git::relayed(root, &["push", "--quiet", remote, &to])
+    git::relayed(root, &["push", "--quiet", remote, &to], skip)
 }
 
 /// The open pull request from `branch` into `base`, opened when there is
