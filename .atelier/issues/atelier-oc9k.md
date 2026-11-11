@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Validate the Desk's two success criteria on this host, independently"
-updated_at: "2026-11-11T07:02:47.170648626+00:00"
+updated_at: "2026-11-11T07:06:02.255706073+00:00"
 ---
 
 ## Goal
@@ -35,4 +35,4 @@ Show, by someone who built none of it, that the mission's two success criteria h
 
 ## Context
 
-Run on the base once atelier-va99 has merged and the service is installed. Use the `validate` procedure. The commands and how to run them are in `desk/README.md` and `docs/architecture/desk.md`. Act only on scratch repositories under `~/.cache/atelier-desk/scratch/`, never on a live repository or the served clones, and start no T3 thread.
+Run on the base once atelier-va99 has merged and the orchestrator has updated the service from `master` by the document's steps. First check that the commit the service reports is `master`'s merge of atelier-va99 or later, and record it; if it is not, stop and tell the orchestrator. Use the `validate` procedure. The commands and how to run them are in `desk/README.md` and `docs/architecture/desk.md`. Act only on scratch repositories under `~/.cache/atelier-desk/scratch/`, never on a live repository or the served clones, and start no T3 thread.
