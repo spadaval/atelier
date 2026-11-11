@@ -4,6 +4,9 @@ id: "atelier-5zre"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-5zre
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Sort the 147 open items and five open missions for the new tool"
-updated_at: "2026-11-11T02:46:33.362163646+00:00"
+updated_at: "2026-11-11T03:36:04.252553652+00:00"
 ---
 
 ## Goal
