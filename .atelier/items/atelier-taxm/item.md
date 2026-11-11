@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-taxm
 title: Use one function to detect a skill linked to a checkout, in setup --link and the update check
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -24,3 +24,7 @@ created_at: 2026-11-08T07:07:49.807640842Z
 ## Done when
 
 - [ ] One function decides whether `~/.agents/skills/agent-factory` or `~/.claude/skills/agent-factory` is linked to a checkout and which one, and both `setup --link`/`--unlink` and the update check call it. Existing tests for both still pass.
+
+## Report
+
+Dropped: `setup --link` and the update check's `linked_checkout` were removed in 0.5.
