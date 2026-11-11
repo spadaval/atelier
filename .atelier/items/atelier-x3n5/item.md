@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-x3n5
 title: Take merged items and thread ties in the scorecard scripts from `atelier log`, and delete their own history walks and title matching
-status: ready
+status: building
 mission: atelier-295u
 labels:
 - redesign
 priority: medium
 blocked_by:
 - atelier-8b0a
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3Ac0bf3903-20c0-4459-bc9e-8bb9a1af8d59
 ready:
   by: sumeet, relayed by the task that started the lead
   at: 2026-11-11T17:10:10.404909184Z
