@@ -130,7 +130,8 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos/{repo}/items/{id}", get(item))
         .route("/api/inbox", get(inbox))
         .route("/api", any(no_route))
-        .route("/api/{*rest}", any(no_route));
+        .route("/api/{*rest}", any(no_route))
+        .layer(middleware::from_fn(json_errors));
     let routes = match &desk.config.app {
         Some(app) => {
             let index = ServeFile::new(app.join("index.html"));
@@ -145,6 +146,38 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
 
 async fn no_route() -> Failure {
     Failure::NotFound("No such route.".into())
+}
+
+/// Gives an error from the API's routes that is not JSON, such as axum's
+/// own for a query that does not parse or a method a route does not take,
+/// the `{error}` body every other error has, keeping its status and its
+/// `Allow` header.
+async fn json_errors(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    let content = response.headers().get(header::CONTENT_TYPE);
+    let json = content.is_some_and(|c| c.as_bytes().starts_with(b"application/json"));
+    if response.status().is_success() || json {
+        return response;
+    }
+    let (parts, body) = response.into_parts();
+    let text = axum::body::to_bytes(body, 64 * 1024)
+        .await
+        .unwrap_or_default();
+    let error = match String::from_utf8_lossy(&text).trim() {
+        "" => format!(
+            "{}.",
+            parts
+                .status
+                .canonical_reason()
+                .unwrap_or("The request failed")
+        ),
+        text => text.to_string(),
+    };
+    let mut answer = (parts.status, Json(ApiError { error })).into_response();
+    if let Some(allow) = parts.headers.get(header::ALLOW) {
+        answer.headers_mut().insert(header::ALLOW, allow.clone());
+    }
+    answer
 }
 
 /// Refuses a request whose `Host` is not one the Desk answers to.

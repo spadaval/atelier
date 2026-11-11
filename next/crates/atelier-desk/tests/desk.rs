@@ -132,7 +132,14 @@ fn serve() -> Served {
 }
 
 async fn get_from(app: &Router, uri: &str, host: &str) -> (StatusCode, Vec<u8>) {
-    let request = Request::builder().uri(uri).header("host", host);
+    send(app, "GET", uri, host).await
+}
+
+async fn send(app: &Router, method: &str, uri: &str, host: &str) -> (StatusCode, Vec<u8>) {
+    let request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("host", host);
     let response = app
         .clone()
         .oneshot(request.body(Body::empty()).unwrap())
@@ -332,10 +339,30 @@ async fn the_item_and_document_routes() {
         ),
         ("/api/threads", StatusCode::NOT_FOUND),
         ("/api/act", StatusCode::NOT_FOUND),
+        // Rejected by axum's extractors.
+        ("/api/repos/demo/doc", StatusCode::BAD_REQUEST),
+        (
+            "/api/repos/demo/missions?done=maybe",
+            StatusCode::BAD_REQUEST,
+        ),
     ] {
         let (got, body) = get(&served.app, uri).await;
         assert_eq!(got, status, "{uri}: {body}");
         assert!(body["error"].is_string(), "{uri}: {body}");
+    }
+    for (method, uri, status) in [
+        ("POST", "/api/repos", StatusCode::METHOD_NOT_ALLOWED),
+        (
+            "DELETE",
+            "/api/repos/demo/items/demo-a004",
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        ("POST", "/api/act", StatusCode::NOT_FOUND),
+    ] {
+        let (got, body) = send(&served.app, method, uri, "localhost").await;
+        let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+        assert_eq!(got, status, "{method} {uri}: {body}");
+        assert!(body["error"].is_string(), "{method} {uri}: {body}");
     }
 }
 
