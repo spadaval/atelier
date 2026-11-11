@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Have the converter write a Done when with no checkbox as one unticked line"
-updated_at: "2026-11-11T03:36:06.744811601+00:00"
+updated_at: "2026-11-11T04:06:19.896218328+00:00"
 ---
 
 ## Goal
@@ -47,6 +47,10 @@ Stop the cutover from producing ready items that `submit` would send to review w
 Mission atelier-qr5s. The converter and its `--verify` mode are described in `docs/strategies/redesign-architecture.md`, Transition, part 2; the rehearsal is `scripts/cutover/rehearse.sh`, which makes the clones, converts them and runs the new binary on each in about 36 seconds, and needs `next/` built first (`cargo build -j 4` in `next/`). The step F rollback trials and the cutover run the converter this item changes.
 
 Expected size: about 30 lines of Python and 60 of tests.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved by GPT-6.1 Sol (atelier-pgpn) at 4cd92436 in one round with no findings; proof and shape counts are in the Report. No escalations.
 
 ## Report
 
