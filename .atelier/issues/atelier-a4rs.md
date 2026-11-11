@@ -175,6 +175,11 @@ Where each line's proof is:
   - atelier-8ttw: a quoted redirect target;
   - atelier-4w44: a decider's uncommitted change after switching off the branch.
 - **The same class elsewhere.** `next-vacuous-test-review` and `next-costly-hardening` had the tip-only, on-branch-only check of o6x7 and 4w44. They now use the shared `touched()` and `body_changed()`, with two walks each.
+- **Round 3** recorded four, each fixed with walks that fail on the old grader. Its fixes have not been reviewed: three rounds ended without an approval, so the item is escalated rather than sent to a fourth reviewer.
+  - atelier-txum: answer lines written under the Report;
+  - atelier-icpp: an item edit left after switching off the branch;
+  - atelier-gse7: a quoted task for another thread read as the lead's write; the shell is now split with `shlex`;
+  - atelier-23nc: reading the hooks read as going around them.
 - **Two settle checks now go to a hand read** rather than a pass: a lead's `cp`, `mv`, `patch` or Git restore naming a code file. The README names them.
 
 ### Open items
