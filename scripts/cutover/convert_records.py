@@ -557,6 +557,27 @@ def mission_files(rid, r, sections, preamble, strategy, links, front):
     return files
 
 
+# A checkbox line, as the new binary reads one outside a fenced code block, and a table row.
+CHECKBOX = re.compile(r"\s*[-*+] \[[ xX]\](?: |$)")
+TABLE_ROW = re.compile(r" {0,3}\|")
+
+
+def checkbox_done_when(content):
+    """A Done when with text and no checkbox line, which the new binary would
+    count as ticked, given one unticked line: its prose before any fenced code
+    block or table, each run of whitespace made one space, with everything
+    from that block on following unchanged. Other content is returned as it is."""
+    lines = unfenced(content)
+    if any(outside and CHECKBOX.match(line) for _, line, outside in lines):
+        return content
+    cut = next((off for off, line, outside in lines if not outside or TABLE_ROW.match(line)), len(content))
+    prose = " ".join(content[:cut].split())
+    if not prose:
+        return content
+    rest = content[cut:]
+    return f"- [ ] {prose}\n" + (f"\n{rest}" if rest else "")
+
+
 def item_file(rid, r, sections, preamble, graph, links, front):
     if r["issue_type"] == "decision":
         sections = [("Goal" if t == "Question" else t, c) for t, c in sections]
@@ -566,6 +587,8 @@ def item_file(rid, r, sections, preamble, graph, links, front):
             first[title] = content
         else:
             others.append((title, content))
+    if "Done when" in first:
+        first["Done when"] = checkbox_done_when(first["Done when"])
     if r["issue_type"] == "decision":
         first.setdefault("Done when", DECISION_DONE_WHEN)
     ordered = [(t, first.get(t, UNSPECIFIED)) for t in ("Goal", "Done when")]
