@@ -219,6 +219,8 @@ if [ -e $S/git-fails-push ] && [[ " \$* " == *" push "* ]]; then
     exit 128
   fi
 fi
+# Each push, logged with the skip it ran under.
+if [[ " \$* " == *" push "* ]]; then echo "push \$* skip=\${ATELIER_SKIP-unset}" >> $S/pushes.log; fi
 # A subcommand that fails, every time, while git-fails-cmd names it.
 if [ -s $S/git-fails-cmd ] && [[ " \$* " == *" \$(cat $S/git-fails-cmd) "* ]]; then
   echo "fatal: \$(cat $S/git-fails-cmd) failed (a double)" >&2
@@ -385,6 +387,10 @@ trial_full() {
   sandbox "$S" 17320
   (
     sandbox_env "$S"
+    # The hooks call `atelier` from PATH: log the hook calls, then run the
+    # installed one.
+    printf '#!/bin/sh\ncase "$*" in *"--hook"*) echo "$*" >> %s/hook-calls.log ;; esac\nexec %s/root/bin/atelier "$@"\n' "$S" "$S" > "$S/bin/atelier"
+    chmod +x "$S/bin/atelier"
     run_cutover "$S" preflight > "$S/preflight.log" 2>&1 || { say "full: FAILED: preflight; see $S/preflight.log"; exit 1; }
     set +e
     /usr/bin/time -f "%e" -o "$S/time" "$S/worktrees/atelier-master/scripts/cutover/cutover.sh" > "$S/cutover.log" 2>&1; rc=$?
@@ -397,6 +403,12 @@ trial_full() {
     local wd; wd=$(git --git-dir="$S/remotes/atelier.git" show master:.atelier/items/atelier-wd1i/item.md | sed -n 's/^status: //p')
     [ "$wd" = done ] || { say "    FAILED: atelier-wd1i is $wd on the remote"; exit 1; }
     say "    atelier-wd1i is done on the remote's master, closed by $(git --git-dir="$S/remotes/atelier.git" log -1 --format=%s master)"
+    # The closing push is the last push of the run: it must have run with
+    # ATELIER_SKIP unset, through the pre-push hook step 3 installed.
+    local last; last=$(tail -1 "$S/pushes.log")
+    [ "${last##* }" = skip=unset ] || { say "    FAILED: the closing push ran with ${last##* }"; exit 1; }
+    grep -q 'check --hook pre-push' "$S/hook-calls.log" || { say "    FAILED: no pre-push hook ran"; exit 1; }
+    say "    the closing push ran with ATELIER_SKIP unset, through the pre-push hook, and the remote took it"
     grep -q "old-layout branch" "$S/cutover.log" && grep "old-layout branch" "$S/cutover.log" | sed "s|$S|<sandbox>|g; s/^/   /"
     # The README's way for a worktree left on an old-layout branch.
     local o=$S/worktrees/astromech-other
@@ -513,6 +525,49 @@ refuse_pushes() { printf '#!/bin/sh\necho "push declined (a double)" >&2\nexit 1
 accept_pushes() { rm -f "$S/remotes/atelier.git/hooks/pre-receive"; }
 fail_git() { echo "$1" > "$S/git-fails-cmd"; }
 mend_git() { rm -f "$S/git-fails-cmd"; }
+
+# The ignored files the conversion sets aside come back whole: a symlink,
+# an empty directory and a file of an unusual mode, under an ignored
+# directory and as an ignored path of its own. A destination in the way
+# stops the rollback, with nothing installed; cleared, it restores.
+aside_listing() { # <worktree>
+  (cd "$1" && find .atelier/agent.json .atelier/runtime/sandbox-link .atelier/runtime/sandbox-empty .atelier/runtime/sandbox-odd \
+     -printf '%p %y %m %l\n' 2>&1; sha256sum .atelier/runtime/sandbox-odd 2>&1)
+}
+trial_aside() {
+  local S=$W/aside rc wt
+  sandbox "$S" 17335
+  (
+    sandbox_env "$S"
+    wt=$S/worktrees/atelier-master
+    ln -s ../README.md "$wt/.atelier/agent.json"
+    ln -s ../../AGENTS.md "$wt/.atelier/runtime/sandbox-link"
+    mkdir "$wt/.atelier/runtime/sandbox-empty"
+    printf 'odd\n' > "$wt/.atelier/runtime/sandbox-odd"; chmod 0604 "$wt/.atelier/runtime/sandbox-odd"
+    aside_listing "$wt" > "$S/aside.before"
+    snapshot "$S" > "$S/before.snapshot"; bases "$S" > "$S/before.bases"
+    export CUTOVER_FAIL_AT=step4-done
+    set +e; run_cutover "$S" > "$S/cutover.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 1 ] || { say "aside: FAILED: the cutover exited $rc"; exit 1; }
+    unset CUTOVER_FAIL_AT
+    [ ! -e "$wt/.atelier/runtime" ] || { say "aside: FAILED: the ignored runtime directory was not set aside"; exit 1; }
+    say "aside: the cutover set aside a symlink, an empty directory and a mode-0604 file, then stopped after step 4's push"
+    # Something in the way: the rollback stops there and installs nothing.
+    mkdir -p "$wt/.atelier/runtime"; echo "in the way" > "$wt/.atelier/runtime/new"
+    set +e; run_rollback "$S" > "$S/rollback.log" 2>&1; rc=$?; set -e
+    [ $rc -ne 0 ] || { say "    FAILED: with .atelier/runtime in the way, the rollback exited 0"; exit 1; }
+    grep -q 'in the way' "$S/rollback.log" || { say "    FAILED: the rollback did not say what was in the way"; exit 1; }
+    [ "$(sha256sum "$S/root/bin/atelier" | cut -d' ' -f1)" != "$FALLBACK_BIN_SHA256" ] || { say "    FAILED: the fallback was installed"; exit 1; }
+    say "    with .atelier/runtime recreated in the way: rollback exited $rc, saying: $(grep -m1 'in the way' "$S/rollback.log" | sed "s|$S|<sandbox>|g; s/^ *//" | cut -c1-110); nothing installed"
+    rm -rf "$wt/.atelier/runtime"
+    run_rollback "$S" > "$S/rollback2.log" 2>&1 || { say "    FAILED: run again, the rollback failed; see $S/rollback2.log"; exit 1; }
+    aside_listing "$wt" > "$S/aside.after"
+    diff "$S/aside.before" "$S/aside.after" > /dev/null || { say "    FAILED: what was set aside came back different:"; diff "$S/aside.before" "$S/aside.after" | sed 's/^/      /'; exit 1; }
+    say "    run again once cleared: the link (and its target), the empty directory, the file's mode 0604 and content are as before"
+    restored "$S" "$S/before.snapshot" "$S/before.bases" || { say "    FAILED"; exit 1; }
+    "$S/bin/systemctl" stop atelier-serve || true
+  ) && say "aside: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
+}
 
 # A preflight whose old-tracker query fails must stop, before anything is
 # converted.
@@ -705,6 +760,7 @@ run_trial() {
     preflight) trial_preflight ;;
     adopt) trial_adopt ;;
     service-queries-fail) trial_service_queries ;;
+    aside) trial_aside ;;
     rollback-push-refused) rollback_fails_trial rollback-push-refused 17329 "the remote declines the rollback's push" step5-astromech-pushed refuse_pushes accept_pushes rollback/atelier ;;
     rollback-fetch-fails) rollback_fails_trial rollback-fetch-fails 17330 "every fetch fails" step6-astromech-moved "fail_git fetch" mend_git "" ;;
     rollback-checkout-fails) rollback_fails_trial rollback-checkout-fails 17331 "a worktree's switch back fails" step6-astromech-moved "fail_git switch" mend_git "" ;;
@@ -716,7 +772,7 @@ run_trial() {
 
 fingerprint > "$W/real.before"
 prepare
-trials=${*:-preflight preflight-work-fails preflight-status-fails 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push service-queries-fail rollback-push-refused rollback-fetch-fails rollback-checkout-fails adopt}
+trials=${*:-preflight preflight-work-fails preflight-status-fails 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push service-queries-fail aside rollback-push-refused rollback-fetch-fails rollback-checkout-fails adopt}
 failed=""
 for t in $trials; do
   t0=$(date +%s)
