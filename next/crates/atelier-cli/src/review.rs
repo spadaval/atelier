@@ -4,7 +4,7 @@
 use crate::commands::{facts, gated, mission_gate, refusal, refused, write_and_commit, Outcome};
 use crate::git;
 use crate::output::{self, Brief, PlanBrief};
-use crate::repo::{item_dir, item_path, mission_dir, mission_path, Repo};
+use crate::repo::{git_at, item_dir, item_path, mission_dir, mission_path, Repo};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
 use atelier_app::{carried, carried_plan};
@@ -36,12 +36,10 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         return Ok(refused);
     }
     if repo.branch.as_deref() != Some(id) {
-        return Ok(Outcome::Refused(output::elsewhere(
-            "review",
-            id,
-            repo.branch.as_deref(),
-            None,
-        )));
+        let checkout = git::checkout_of(&repo.root, id)?;
+        let branch = repo.branch.as_deref();
+        let refused = output::elsewhere("review", id, branch, checkout.as_deref());
+        return Ok(Outcome::Refused(refused));
     }
     let round = facts.round();
     let (said, name) = open(repo, id, &item_dir(id), round.review, || {
@@ -120,8 +118,9 @@ const MISSION_SECTIONS: [&str; 6] = [
 
 /// `review` on a mission: opens the caller's review of its plan as this
 /// checkout holds it at HEAD, or takes over one with no verdict, and prints
-/// the plan's brief. It runs in any checkout, so two reviewers can each
-/// work blind in a detached worktree of their own, and commits nothing.
+/// the plan's brief, read from the commit the review records. It runs in
+/// any checkout, so two reviewers can each work blind in a detached
+/// worktree of their own, and commits nothing.
 fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     // There `verdict` records the item's review, not this one.
     if repo.current()?.is_some() {
@@ -132,6 +131,19 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let mission = store.mission(id)?;
     let round = plan_round(&mission, &repo.caller);
     let commit = git::head(&repo.root)?;
+    // The plan as the commit the review records holds it: this checkout's
+    // HEAD for a new review.
+    let reviewed = round.review.map_or(&commit, |file| &file.review.commit);
+    let Some(plan) = repo.mission_at(reviewed, id)? else {
+        let line = output::commit_line(
+            git_at(&repo.root),
+            &[mission_dir(id)],
+            &format!("Plan {id}"),
+        );
+        return Ok(Outcome::Refused(output::plan_not_committed(
+            id, reviewed, &line,
+        )));
+    };
     let (said, name) = open(repo, id, &mission_dir(id), round.review, || {
         let carried = carried_plan(&mission, round.number)?;
         Ok(new_review(
@@ -149,14 +161,15 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         .iter()
         .find(|r| r.name == name)
         .expect("it was just written");
-    let documents = git::files(&repo.root, &mission_dir(id))?
+    let commit = &file.review.commit;
+    let documents = git::files_at(&repo.root, commit, &mission_dir(id))?
         .into_iter()
         .filter(|path| {
             *path != mission_path(id) && !path.starts_with(&format!("{}/reviews/", mission_dir(id)))
         })
         .collect();
-    let items = store
-        .items()?
+    let items = repo
+        .items_at(commit)?
         .into_iter()
         .filter(|dir| dir.item.mission.as_deref() == Some(id))
         .map(|dir| (item_path(&dir.item.id), dir.item.status, dir.item.title))
@@ -166,19 +179,21 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         .filter_map(|heading| {
             Some((
                 heading,
-                mission.section(heading).filter(|c| !c.trim().is_empty())?,
+                plan.section(heading).filter(|c| !c.trim().is_empty())?,
             ))
         })
         .collect();
+    let changed = crate::plan::plan_changed(repo, id, commit)?.unwrap_or_default();
     let brief = output::plan_brief(&PlanBrief {
         id,
-        title: &mission.mission.title,
+        title: &plan.mission.title,
         caller: &repo.caller,
         round: file.name.round,
         sections,
-        commit: &file.review.commit,
+        commit,
         documents,
         items,
+        changed,
         carried: &carried_plan(&mission, file.name.round)?,
         path: &format!("{}/reviews/{name}.md", mission_dir(id)),
         base: &repo.base,

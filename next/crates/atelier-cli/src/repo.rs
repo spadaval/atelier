@@ -85,7 +85,11 @@ impl Repo {
             None => None,
             Some(tip) => {
                 let merged = git::is_ancestor(&self.root, &tip, &self.base_tip)?;
-                let record = if self.branch.as_deref() == Some(id) {
+                // A terminal status on the base wins, so the branch's record
+                // is not read, and one that does not parse cannot hide it.
+                let record = if base.as_ref().is_some_and(Located::terminal) {
+                    None
+                } else if self.branch.as_deref() == Some(id) {
                     self.checkout_item(id)?
                 } else {
                     self.reader.item(&tip, id)?
@@ -184,6 +188,20 @@ impl Repo {
         })
     }
 
+    /// The mission `id` as `commit` holds it.
+    pub fn mission_at(&mut self, commit: &str, id: &str) -> Result<Option<MissionDir>> {
+        Ok(self.reader.mission(commit, id)?)
+    }
+
+    /// Every item `commit` holds.
+    pub fn items_at(&mut self, commit: &str) -> Result<Vec<ItemDir>> {
+        let mut items = Vec::new();
+        for id in self.reader.item_ids(commit)? {
+            items.extend(self.reader.item(commit, &id)?);
+        }
+        Ok(items)
+    }
+
     /// The item `id` as `commit` holds it.
     pub fn item_at(&mut self, commit: &str, id: &str) -> Result<Option<ItemDir>> {
         Ok(self.reader.item(commit, id)?)
@@ -192,22 +210,29 @@ impl Repo {
     /// What `merge` reads from this checkout, on the branch of `record`,
     /// whose HEAD is the commit `head`.
     pub fn checkout(&mut self, record: &ItemDir, head: &str) -> Result<Checkout> {
-        let approved = approval(record).filter(|_| record.item.status == Status::Approved);
-        let since_approval = match approved {
-            None => None,
-            Some(review) => {
-                let commit = &review.review.commit;
-                Some(SinceApproval {
-                    changed: git::changed(&self.root, commit, head)?,
-                    reviewed: self.reader.item(commit, &record.item.id)?,
-                    head: self.reader.item(head, &record.item.id)?,
-                })
-            }
-        };
         Ok(Checkout {
             uncommitted: self.uncommitted(&record.item.id)?,
-            since_approval,
+            since_approval: self.since_approval(record, head)?,
         })
+    }
+
+    /// On an approved `record`: what differs between the commit its
+    /// approval reviewed and the commit `head`.
+    pub fn since_approval(
+        &mut self,
+        record: &ItemDir,
+        head: &str,
+    ) -> Result<Option<SinceApproval>> {
+        let approved = approval(record).filter(|_| record.item.status == Status::Approved);
+        let Some(review) = approved else {
+            return Ok(None);
+        };
+        let commit = &review.review.commit;
+        Ok(Some(SinceApproval {
+            changed: git::changed(&self.root, commit, head)?,
+            reviewed: self.reader.item(commit, &record.item.id)?,
+            head: self.reader.item(head, &record.item.id)?,
+        }))
     }
 
     /// What the checkout holds that no commit does and `merge` would leave

@@ -27,7 +27,7 @@ impl Located {
     /// the record on its unmerged branch, else the base's.
     pub fn record(&self) -> Option<&ItemDir> {
         let base = self.base.as_ref();
-        if base.is_some_and(|dir| matches!(dir.item.status, Status::Done | Status::Dropped)) {
+        if base.is_some_and(Located::terminal) {
             return base;
         }
         let started = self.branch.as_ref().filter(|branch| !branch.merged);
@@ -36,6 +36,12 @@ impl Located {
 
     pub fn status(&self) -> Option<Status> {
         self.record().map(|dir| dir.item.status)
+    }
+
+    /// Whether the base's record `base` ends the item whatever its branch
+    /// holds: done or dropped.
+    pub fn terminal(base: &ItemDir) -> bool {
+        matches!(base.item.status, Status::Done | Status::Dropped)
     }
 }
 
@@ -77,6 +83,9 @@ pub struct Entry {
     /// hold.
     pub next: Option<Act>,
     pub unmet: Vec<Condition>,
+    /// For a started item another thread holds: what its holder's next act
+    /// needs, the conditions the holder's `status` lists as unmet.
+    pub needs: Vec<Condition>,
 }
 
 pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
@@ -124,6 +133,25 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         questions: Vec::new(),
         next,
         unmet,
+        needs: needs(facts)?,
+    })
+}
+
+/// For a started item another thread holds: the conditions its holder's
+/// next act lists as unmet.
+fn needs(facts: &Facts) -> Result<Vec<Condition>, Problem> {
+    let holder = match facts.holder() {
+        Some(holder) if !facts.holds() && STARTED.contains(&facts.status()) => holder,
+        _ => return Ok(Vec::new()),
+    };
+    let theirs = Facts {
+        caller: holder,
+        mission: facts.mission.clone(),
+        ..*facts
+    };
+    Ok(match next(&theirs)? {
+        Some(act) => unmet(act, &theirs)?,
+        None => Vec::new(),
     })
 }
 

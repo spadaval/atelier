@@ -1130,6 +1130,113 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
 }
 
 #[test]
+fn a_terminal_status_on_the_base_wins_over_a_branch_record_that_does_not_parse() {
+    for terminal in ["dropped", "done"] {
+        let scratch = Scratch::new(&[(ID, "ready")]);
+        let root = scratch.root();
+        let work = scratch.worktree("work");
+        assert_eq!(atelier(&work, "t1", &["start", ID]).code, 0);
+        let reason = "The site greets instead";
+        if terminal == "dropped" {
+            let run = atelier(&root, "p1", &["drop", ID, "--reason", reason]);
+            assert_eq!(run.code, 0, "{}", run.stderr);
+        } else {
+            write_item(&root, ID, "done", &[], &[], "");
+        }
+        commit_all(&root, terminal);
+        // The branch then holds a record that does not parse.
+        let path = work.join(item_path(ID));
+        let broken = read(&work, &item_path(ID)).replace("status: building", "status: broken");
+        fs::write(&path, broken).unwrap();
+        git(&work, &["commit", "-qam", "Broken"]);
+
+        let why = match terminal {
+            "dropped" => {
+                format!("It was dropped on the base: {reason}\nNothing is left to do on it.\n")
+            }
+            _ => "Nothing is left to do on it.\n".to_string(),
+        };
+        let status = atelier(&work, "t1", &["status"]);
+        assert_eq!(status.code, 0, "{}", status.stderr);
+        assert!(
+            status
+                .stdout
+                .ends_with(&format!("Status: {terminal}\n{why}")),
+            "{}",
+            status.stdout
+        );
+        let shown = atelier(&work, "t1", &["show", ID]);
+        assert_eq!(shown.code, 0, "{}", shown.stderr);
+        assert!(
+            shown.stdout.contains(&format!("Status: {terminal}\n")),
+            "{}",
+            shown.stdout
+        );
+        if terminal == "dropped" {
+            assert!(
+                shown.stdout.contains(&format!("Dropped: {reason}\n")),
+                "{}",
+                shown.stdout
+            );
+        }
+        for (at, thread, command) in [
+            (&work, "t1", "submit"),
+            (&work, "t1", "merge"),
+            (&root, "t2", "start"),
+        ] {
+            let args: Vec<&str> = match command {
+                "start" => vec!["start", ID],
+                _ => vec![command],
+            };
+            let run = atelier(at, thread, &args);
+            assert_eq!(run.code, 1, "{command}: {}", run.stderr);
+            assert!(
+                run.stderr.starts_with(&format!(
+                    "{ID} is {terminal}, and `atelier {command}` runs on"
+                )) && run.stderr.contains(&format!("Nothing changed.\n{why}")),
+                "{command}: {}",
+                run.stderr
+            );
+        }
+
+        let listed = atelier(&root, "t3", &["status"]);
+        assert_eq!(listed.code, 0, "{}", listed.stderr);
+        let named = listed.stdout.contains(&format!(
+            "Dropped on the base while started; nothing is left to do on them:\n  {ID}: {reason}\n"
+        ));
+        assert_eq!(named, terminal == "dropped", "{}", listed.stdout);
+        let open = atelier(&root, "t3", &["list"]);
+        assert_eq!(open.code, 0, "{}", open.stderr);
+        assert!(!open.stdout.contains(ID), "{}", open.stdout);
+        let done = atelier(&root, "t3", &["list", "--done"]);
+        assert_eq!(done.code, 0, "{}", done.stderr);
+        assert!(
+            done.stdout
+                .contains(&format!("    {ID} ({terminal}, high): Say hello\n")),
+            "{}",
+            done.stdout
+        );
+        // `check` on the branch still reports the record it cannot read.
+        let check = atelier(&work, "t1", &["check"]);
+        let said = check.stdout + &check.stderr;
+        assert_eq!(check.code, 1, "{said}");
+        assert!(said.contains("unknown variant `broken`"), "{said}");
+
+        // Once the branch is merged, its checkout still holds the broken
+        // record, and `show` there still reads the base's.
+        if terminal == "done" {
+            git(
+                &root,
+                &["merge", "-q", "--no-ff", "-s", "ours", "-m", "Merge", ID],
+            );
+            let shown = atelier(&work, "t1", &["show", ID]);
+            assert_eq!(shown.code, 0, "{}", shown.stderr);
+            assert!(shown.stdout.contains("Status: done\n"), "{}", shown.stdout);
+        }
+    }
+}
+
+#[test]
 fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
@@ -1465,6 +1572,111 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
     assert!(next
         .stdout
         .contains(&format!("\n{stem}.1, carried as Finding 1: No sizing\n")));
+}
+
+#[test]
+fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_committed() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "draft");
+    join_mission(&root, ID, MISSION);
+    let design = format!(".atelier/missions/{MISSION}/design.md");
+    fs::write(root.join(&design), "Shape\n").unwrap();
+    commit_all(&root, "Plan");
+    let head = tip(&root, "HEAD");
+
+    // Edited and not committed: the Outcome, an item's title and a new
+    // document.
+    let mission = read(&root, &mission_path(MISSION)).replace("Greetings.", "Farewells.");
+    fs::write(root.join(mission_path(MISSION)), mission).unwrap();
+    let item = read(&root, &item_path(ID)).replace("title: Say hello", "title: Say goodbye");
+    fs::write(root.join(item_path(ID)), item).unwrap();
+    let sizing = format!(".atelier/missions/{MISSION}/sizing.md");
+    fs::write(root.join(&sizing), "Small\n").unwrap();
+
+    let run = atelier(&root, "r1", &["review", MISSION]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let brief = run.stdout;
+    for shown in [
+        format!("Review the plan as commit {} holds it", &head[..7]),
+        "\n## Outcome\n\nGreetings.\n".to_string(),
+        format!(
+            "Its other documents:\n  {design}\nIts items:\n  {} (draft): Say hello\n",
+            item_path(ID)
+        ),
+        format!(
+            "This checkout changes the plan from commit {}, and this review does not cover those \
+             changes: {}, {}, {sizing}\n",
+            &head[..7],
+            item_path(ID),
+            mission_path(MISSION)
+        ),
+    ] {
+        assert!(brief.contains(&shown), "{shown}\n---\n{brief}");
+    }
+    assert!(
+        !brief.contains("Farewells") && !brief.contains("Say goodbye"),
+        "{brief}"
+    );
+    let files = files_in(&root, &plan_reviews(MISSION));
+    assert_eq!(front(&read(&root, &files[0]), "commit"), head);
+
+    // A change only the index holds, with the file in the checkout put back
+    // as committed, is named too.
+    git(&root, &["checkout", "HEAD", "--", &mission_path(MISSION)]);
+    fs::remove_file(root.join(&sizing)).unwrap();
+    git(&root, &["add", "--", &item_path(ID)]);
+    let committed = git_output(&root, &["show", &format!("HEAD:{}", item_path(ID))]).stdout;
+    fs::write(root.join(item_path(ID)), committed).unwrap();
+    let staged = atelier(&root, "r1", &["review", MISSION]);
+    assert_eq!(staged.code, 0, "{}", staged.stderr);
+    assert!(
+        staged.stdout.contains(&format!(
+            "this review does not cover those changes: {}\n",
+            item_path(ID)
+        )),
+        "{}",
+        staged.stdout
+    );
+    git(&root, &["checkout", "HEAD", "--", &item_path(ID)]);
+
+    // An item of the plan whose record here does not parse is named, and the
+    // brief still reads the commit.
+    let broken = read(&root, &item_path(ID)).replace("status: draft", "status: broken");
+    fs::write(root.join(item_path(ID)), broken).unwrap();
+    let unread = atelier(&root, "r1", &["review", MISSION]);
+    assert_eq!(unread.code, 0, "{}", unread.stderr);
+    for shown in [
+        format!("  {} (draft): Say hello\n", item_path(ID)),
+        format!(
+            "this review does not cover those changes: {}\n",
+            item_path(ID)
+        ),
+    ] {
+        assert!(
+            unread.stdout.contains(&shown),
+            "{shown}\n---\n{}",
+            unread.stdout
+        );
+    }
+    git(&root, &["checkout", "HEAD", "--", &item_path(ID)]);
+
+    // A mission no commit holds has no plan to review.
+    let other = "demo-m2ss";
+    write_mission(&root, other, "draft");
+    let refused = atelier(&root, "r1", &["review", other]);
+    assert_eq!(refused.code, 1);
+    assert_eq!(
+        refused.stderr,
+        format!(
+            "`atelier review {other}` reviews the plan as a commit holds it, and commit {} holds \
+             no mission {other}. Nothing changed.\nCommit the plan first: git add -- \
+             .atelier/missions/{other} && git commit -m \"Plan {other}\" -- .atelier/missions/{other}\n\
+             Then: atelier review {other}\n",
+            &head[..7]
+        )
+    );
+    assert!(files_in(&root, &plan_reviews(other)).is_empty());
 }
 
 #[test]

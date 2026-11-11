@@ -635,6 +635,7 @@ fn review_runs_on_an_item_in_review_in_the_checkout_on_its_branch() {
         &root,
         &["worktree", "add", "-q", base.to_str().unwrap(), "main"],
     );
+    // It names the checkout that has the branch, as `decide` does.
     let elsewhere = atelier(&base, "t2", &["review", ID]);
     assert_eq!(elsewhere.code, 1);
     assert_eq!(
@@ -642,8 +643,19 @@ fn review_runs_on_an_item_in_review_in_the_checkout_on_its_branch() {
         format!(
             "`atelier review {ID}` runs in the checkout on branch {ID}, where its implementer works, \
              and this checkout is on branch main. Nothing changed.\n\
-             Run it there, or `git switch {ID}` here if no other checkout has that branch.\n"
+             Run it in {}, which has branch {ID} checked out.\n",
+            root.display()
         )
+    );
+    // No checkout has the branch: switch to it there, or here.
+    git(&root, &["switch", "-q", "--detach"]);
+    let nowhere = atelier(&base, "t2", &["review", ID]);
+    assert!(
+        nowhere.stderr.ends_with(&format!(
+            "Run it there, or `git switch {ID}` here if no other checkout has that branch.\n"
+        )),
+        "{}",
+        nowhere.stderr
     );
     assert!(reviews(&root).is_empty() && reviews(&base).is_empty());
 }

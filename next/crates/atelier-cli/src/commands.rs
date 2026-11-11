@@ -5,8 +5,8 @@ use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
 use crate::{git, merge, output, plan, setup, skip};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{
-    approval, check, mission_refusals, refusals, row, Act, Checkout, Facts, MissionFacts, Refusal,
-    STARTED,
+    approval, check, mission_refusals, refusals, row, unmet, Act, Checkout, Facts, MissionFacts,
+    Refusal, STARTED,
 };
 use atelier_app::{entry, overview, Entry, Located};
 use atelier_core::{Forge, Item, MissionStatus, Status};
@@ -49,7 +49,8 @@ fn orientation(repo: &mut Repo) -> Result<String> {
     let mut overview = overview(&items, &missions, &repo.caller)?;
     annotate_all(repo, &mut overview.held, &items)?;
     for (_, entries) in &mut overview.led {
-        annotate_all(repo, entries, &items)?;
+        annotate_all(repo, entries.iter_mut(), &items)?;
+        approved_needs(repo, entries, &items)?;
     }
     // An item dropped on the base while its branch is there.
     let dropped: Vec<(String, Option<String>)> = items
@@ -323,6 +324,40 @@ pub(crate) fn annotate_all<'a>(
         if let Some(record) = found.and_then(Located::record) {
             annotate(repo, entry, record)?;
         }
+    }
+    Ok(())
+}
+
+/// What the holder of each approved item of `entries`, which a lead is
+/// shown, still needs before `merge`, read from the branch's last commit,
+/// so a lead sees an approval gone stale as the holder's `status` does.
+fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> Result<()> {
+    let approved = entries
+        .iter_mut()
+        .filter(|e| e.status == Status::Approved && !e.holds);
+    for entry in approved {
+        let found = items.iter().find(|located| located.id == entry.id);
+        let Some(record) = found.and_then(Located::record) else {
+            continue;
+        };
+        let holder = record.item.implementers.holder();
+        let tip = git::branch_tip(&repo.root, &entry.id)?;
+        let (Some(holder), Some(tip)) = (holder, tip) else {
+            continue;
+        };
+        let checkout = Checkout {
+            uncommitted: Vec::new(),
+            since_approval: repo.since_approval(record, &tip)?,
+        };
+        let facts = Facts {
+            item: record,
+            branch: true,
+            blockers: &[],
+            mission: None,
+            caller: holder,
+            checkout: Some(&checkout),
+        };
+        entry.needs = unmet(Act::Merge, &facts)?;
     }
     Ok(())
 }

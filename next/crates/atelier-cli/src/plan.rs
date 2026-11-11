@@ -315,18 +315,22 @@ fn plan_reviewed(repo: &mut Repo, dir: &MissionDir) -> Result<String> {
 /// The paths of mission `id`'s plan, its directory less its reviews and
 /// the directories of its items then or now, that differ in this checkout
 /// from `commit`; `None` when this clone lacks that commit.
-fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Vec<String>>> {
+pub(crate) fn plan_changed(repo: &mut Repo, id: &str, commit: &str) -> Result<Option<Vec<String>>> {
     if !git::has_commit(&repo.root, commit)? {
         return Ok(None);
     }
     let own = format!("{}/", mission_dir(id));
     let reviews = format!("{own}reviews/");
-    let now: Vec<String> = repo
-        .store()
-        .items()?
+    // An item whose record here does not read is judged by the commit.
+    let store = repo.store();
+    let now: Vec<String> = store
+        .ids("items")?
         .into_iter()
-        .filter(|dir| dir.item.mission.as_deref() == Some(id))
-        .map(|dir| dir.item.id)
+        .filter(|item| {
+            store
+                .item(item)
+                .is_ok_and(|dir| dir.item.mission.as_deref() == Some(id))
+        })
         .collect();
     let mut changed = Vec::new();
     for path in git::changed_since(&repo.root, commit, &[".atelier/missions", ".atelier/items"])? {

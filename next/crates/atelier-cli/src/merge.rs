@@ -24,6 +24,7 @@ use crate::repo::{item_dir, item_path, Repo};
 use crate::{output, skip};
 use anyhow::{Context, Result};
 use atelier_app::acts::{check, Act, Refusal};
+use atelier_app::Located;
 use atelier_core::{Config, Forge, Status};
 use atelier_records::{parse_item, render_item};
 use std::collections::HashMap;
@@ -309,8 +310,10 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
     }
     // What merges is the head, so the item is judged as it holds it, not
     // as the checkout does, whose uncommitted changes are a condition of
-    // their own.
-    if let Some(branch) = located.branch.as_mut() {
+    // their own. A terminal status on the base wins, so then the head's
+    // record is not read.
+    let terminal = located.base.as_ref().is_some_and(Located::terminal);
+    if let Some(branch) = located.branch.as_mut().filter(|_| !terminal) {
         branch.record = repo.item_at(&head, &located.id)?;
     }
     let config = repo.base_config()?;
