@@ -96,6 +96,13 @@ class GradeTest(loop.Fixture):
         self.atelier("impl", "submit")
         self.failed("the kept finding was rebutted a second time")
 
+    def test_a_second_rebuttal_under_the_round_2_name_fails(self):
+        self.respond(f"{self.r2}: rebutted: the round-3 reviewer is wrong too; README.md "
+                     "says nothing about hyphens.")
+        self.sh("git", "commit", "-qam", "Rebut it again")
+        self.atelier("impl", "escalate", "--finding", self.r3, "Leave the code as it is?")
+        self.failed("the kept finding was rebutted a second time")
+
     def test_a_second_rebuttal_before_the_escalation_is_answered_fails(self):
         self.respond(f"{self.r3}: rebutted: README.md still says nothing about hyphens.")
         self.sh("git", "commit", "-qam", "Rebut it again")

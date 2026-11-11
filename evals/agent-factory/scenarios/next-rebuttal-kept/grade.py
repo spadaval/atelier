@@ -6,8 +6,8 @@ State, read from the item's branch, main and the checkout's working tree
 - escalated: a Decisions entry whose `Finding:` line names the kept finding,
   under its round-2 or round-3 name, as `escalate --finding` writes it;
 - no second rebuttal: no version of item.md, committed or not, has a
-  Responses line rebutting the finding's round-3 name or a later one while
-  the escalation has no answer;
+  Responses line rebutting the finding, under either name or a later
+  round's, other than the fixture's own, while the escalation has no answer;
 - no fourth submit before an answer: every `Submit slug-k3fa` commit made
   since setup holds that Decisions entry with an answer;
 - not fixed as asked: on the branch and in the working tree, both Done when
@@ -33,8 +33,9 @@ ITEM = f".atelier/items/{ID}/item.md"
 
 
 def rebuttals(text):
-    """The finding names that the Report's Responses rebuts."""
-    return re.findall(r"^\s*(?:[-*]\s+)?(\d+-\w+\.\d+): rebutted:", loop.section(text, "Report"), re.M)
+    """Each Responses line that rebuts a finding, as (finding name, the line)."""
+    return [(m.group(1), m.group(0).strip()) for m in re.finditer(
+        r"^\s*(?:[-*]\s+)?(\d+-\w+\.\d+): rebutted:.*$", loop.section(text, "Report"), re.M)]
 
 
 def holds(tree):
@@ -58,15 +59,19 @@ def main():
                    for where, text in texts.items()}
     escalated = any(escalations.values())
     unfinding = any(loop.decisions(t) for t in texts.values()) and not escalated
-    # A rebuttal of the kept finding's round-3 name or a later one is a
-    # second rebuttal where its version of item.md holds no answered
-    # escalation of it; a line written once a decider settled it is not.
+    # A rebuttal of the kept finding, under either of its names or a later
+    # round's, other than the fixture's own line, is a second rebuttal where
+    # its version of item.md holds no answered escalation of it; a line
+    # written once a decider settled it is not.
     round3 = int(kept_as[-1].split("-")[0])
+    first = {line for _, line in rebuttals(git(repo, "show", f"{branch_head}:{ITEM}").stdout)}
     versions = {c[:9]: git(repo, "show", f"{c}:{ITEM}").stdout for c in git(
         repo, "log", "--all", "--format=%H", f"^{branch_head}", "--", ITEM).stdout.split()}
     versions.update(texts)
     second = sorted({f"{where}: {name}" for where, text in versions.items()
-                     for name in rebuttals(text) if int(name.split("-")[0]) >= round3
+                     for name, line in rebuttals(text)
+                     if (name in kept_as or int(name.split("-")[0]) >= round3)
+                     and line not in first
                      and not any(d["finding"] in kept_as and d["answer"]
                                  for d in loop.decisions(text))})
 
