@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-eb71
 title: Keep backtraces out of user-facing errors when RUST_BACKTRACE is set
-status: draft
+status: dropped
 mission: null
 labels:
 - bug
@@ -33,3 +33,7 @@ Found in review of atelier-lnwf (CI run 40609860117, `record_refs.rs:383`). Fix 
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lnwf (Run the repository's validation commands in GitHub Actions on Linux and macOS)
+
+## Report
+
+Dropped: Fixed by the 0.5 rewrite: `main` returns an exit code and prints its own errors, and a refusal under RUST_BACKTRACE=1 prints no backtrace (checked 2026-11-11). CI's `RUST_BACKTRACE: 0` line is left as it is.
