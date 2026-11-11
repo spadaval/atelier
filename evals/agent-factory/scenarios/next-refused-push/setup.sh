@@ -57,4 +57,4 @@ PY
 printf '# Demo\n\nA tiny demo server.\n\nRun `python3 server.py` to start it on port 8080, or set `PORT` to\nuse another. Stop it with Ctrl-C.\n' > README.md
 git commit -qam "Read the server's port from PORT"
 git rev-parse HEAD > "$work/.change_commit"
-cp .git/hooks/pre-push "$work/.pre_push"
+mkdir "$work/.hooks" && cp -p .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/post-checkout "$work/.hooks/"
