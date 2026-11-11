@@ -24,9 +24,9 @@ updated_at: "2026-11-11T02:17:26.850729926+00:00"
 
 ## Goal
 
-Preliminary. The acts `ready` and `decide`, each run as the installed `atelier` command in a scratch worktree and committed, and a button that starts a planning session in T3 Code for a mission.
+Preliminary. The acts `ready` and `decide`, each run as the new `atelier` command in the checkout where that command is written to run, as the strategy's Design says under Acts, and a button that starts a planning session in T3 Code for a mission.
 
 ## Done when
 
-- [ ] Provisional: the strategy's act-is-a-record criterion holds in the Desk's suite; `decide` run from a page writes the answer in the checkout that has the item's branch out, as `atelier decide` does there; a refused command's output is shown as it is; an act from another origin or without the app's header is refused.
+- [ ] Provisional: the strategy's act-is-a-record criterion holds in the Desk's suite; saying go commits exactly the paths `ready` printed, with its message, and leaves an unrelated staged file in that checkout staged and uncommitted; `decide` run from a page writes the answer in the checkout that has the item's branch out, as `atelier decide` does there, and until the implementer's `submit` commits it the page shows the question as answered and not yet committed; a refused command's output is shown as it is; an act from another origin or without the app's header is refused.
 - [ ] Provisional: starting a session is proved against the running T3 Code on this host, not a stand-in: one thread is created in a scratch project with `t3_thread_launch` under a token that may operate, its link opens, and the Report gives the thread's ID. The 2026-11-10 probe on atelier-aab1 only read; it never started a thread.
