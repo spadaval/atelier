@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-gg0m
 title: Give SessionStart one line of correct advice outside an Atelier repository
-status: draft
+status: dropped
 mission: null
 labels:
 - bug
@@ -33,3 +33,7 @@ atelier-md0v took the Stop half: `atelier land --hook claude` outside a reposito
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-1o56 (Validate atelier-rc8j acceptance (S1-S6))
+
+## Report
+
+Dropped: Fixed by the 0.5 rewrite: `atelier status` outside a Git checkout prints one line saying so (checked 2026-11-11).
