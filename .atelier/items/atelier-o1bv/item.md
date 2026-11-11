@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-o1bv
 title: Ignore COLUMNS when output is redirected
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -31,3 +31,7 @@ created_at: 2026-10-17T09:26:58.654226601Z
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-je55
+
+## Report
+
+Dropped: The 0.5 rewrite removed the width handling this describes: no code under crates/ reads COLUMNS, and output is never wrapped.
