@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-0019
 title: Garden atelier, 2026-11-11
-status: changes_requested
+status: in_review
 mission: null
 labels:
 - garden
@@ -85,5 +85,9 @@ atelier-j86z: the rewrite made R1, R2, R3, R4, R7 and R10 moot; R5, R6, R8 and R
 - 94bbfa149: upkeep. Four lines in `desk/README.md` and `docs/architecture/desk.md` named the deleted `next/` directory and `redesign-architecture.md`.
 - atelier-6w8d/3-kvll.1: dropped, because 94bbfa149 fixed it.
 - atelier-x3n5/1-c6ma.3: taken into atelier-qf7u. It needs `bug` and `--caused-by atelier-x3n5` after this run merges, since `atelier set` runs only on the base.
+
+### Responses
+
+- 1-2bol.1: fixed in 8d7160ece
 
 ### Session
