@@ -22,6 +22,11 @@
 # web (the site's app: typecheck, Vitest, build and Playwright) runs whenever
 # rust does, since the API it shows is the shared view models any Rust change
 # can change, and whenever crates/atelier-site/web/ changes.
+#
+# desk (the Desk's app: typecheck, Vitest, build and Playwright on fixture
+# responses) runs when a change touches desk/, and only then: it builds no
+# Rust, and a change to atelier-desk's types reaches it as a change to
+# desk/src/api/.
 set -euo pipefail
 
 base=${1:-}
@@ -48,6 +53,7 @@ if [[ -z $base || $base =~ ^0+$ ]] || ! git rev-parse -q --verify "$base^{commit
   echo "rust=true"
   echo "web=true"
   echo "next=true"
+  echo "desk=true"
   exit 0
 fi
 
@@ -56,6 +62,7 @@ fi
 rust=false
 web=false
 next=false
+desk=false
 while IFS= read -r path; do
   if [ "$rust" = false ] && needs_rust "$path"; then
     echo "ci-jobs: rust runs for $path." >&2
@@ -69,6 +76,10 @@ while IFS= read -r path; do
     echo "ci-jobs: next runs for $path." >&2
     next=true
   fi
+  if [ "$desk" = false ] && [[ $path == desk/* ]]; then
+    echo "ci-jobs: desk runs for $path." >&2
+    desk=true
+  fi
 done < <(git diff --no-renames --name-only "$base" "$head")
 [ "$rust" = true ] || echo "ci-jobs: rust skipped; the change touches nothing it tests." >&2
 if [ "$rust" = true ]; then
@@ -76,6 +87,8 @@ if [ "$rust" = true ]; then
 fi
 [ "$web" = true ] || echo "ci-jobs: web skipped; the change touches neither Rust nor the app." >&2
 [ "$next" = true ] || echo "ci-jobs: next skipped; the change touches nothing it builds." >&2
+[ "$desk" = true ] || echo "ci-jobs: desk skipped; the change touches nothing in desk/." >&2
 echo "rust=$rust"
 echo "web=$web"
 echo "next=$next"
+echo "desk=$desk"

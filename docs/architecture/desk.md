@@ -118,6 +118,27 @@ writes them again when run with `ATELIER_UPDATE_TYPES=1`:
 $ cd next && ATELIER_UPDATE_TYPES=1 cargo nextest run -p atelier-desk --test types
 ```
 
+## The app
+
+The app is `desk/` (item atelier-94pv; `desk/README.md` has its commands).
+Its routes are `/` (repositories), `/inbox`, `/r/{repo}` and
+`/r/{repo}/mission/{id}` (the rail and one mission, with its Overview,
+Work and Documents tabs as `?tab=`, and a document as `?doc=<path>`), and
+`/r/{repo}/item/{id}`. Where it reads the API differently from what the
+tables below suggest:
+
+- A document is listed under its file name, with its first heading
+  beneath, since the converted `design.md` files begin with `# Sizing`. Its
+  YAML front matter is shown as fields, not as Markdown.
+- A relative link to a Markdown file, in a document, a mission's section or
+  an item's text, opens that file in the mission's Documents tab, so any
+  Markdown file of the repository can be shown there, listed or not. A link
+  from an item in no mission, or to a file that is not Markdown, is shown as
+  text.
+- A done item's Report and its findings fixed in review are read from
+  `/items/{id}` when the human opens them on the Work tab; the item row has
+  only `report_written`.
+
 ## Routes
 
 All responses are JSON, typed for the app with `ts-rs`. Times are RFC 3339
