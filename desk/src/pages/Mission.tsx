@@ -147,8 +147,9 @@ function Overview({ repo, page }: { repo: string; page: MissionPage }) {
             Waiting on you <span className="tally">{waiting.questions.length + waiting.items.length}</span>
           </h2>
           <div className="list">
-            {waiting.questions.map((q, at) => (
-              <QuestionLine key={`${q.item}${at}`} repo={repo} question={q} answerable={oldest.has(q)} />
+            {waiting.questions.map((q) => (
+              // Keyed by its place among the mission's questions, which answering another does not move.
+              <QuestionLine key={page.questions.indexOf(q)} repo={repo} question={q} answerable={oldest.has(q)} />
             ))}
             {waiting.items.map((row) => (
               <ItemLine key={row.id} repo={repo} row={row} />

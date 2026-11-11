@@ -6,7 +6,7 @@ import type { InboxResponse } from "../api/InboxResponse";
 import { LiveThreadRow, T3Notice } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";
-import { PendingMark, QuestionLine } from "../components/Questions";
+import { PendingMark, QuestionLine, questionKey } from "../components/Questions";
 import { inboxCount } from "../components/Shell";
 import { Empty, ErrorBanner, ScopeBar, Skeleton } from "../components/ui";
 import { api, to, useData } from "../lib/api";
@@ -83,17 +83,15 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
           <div className="list">
             {repo.questions.map((q) => (
               <QuestionLine
-                key={q.item}
+                key={questionKey(q)}
                 repo={name}
                 question={q}
                 answerable
-                onAnswered={(text) => setAnswered((was) => [...was.filter((a) => a.item !== q.item), { item: q.item, question: q.question, text }])}
+                onAnswered={(text) => setAnswered((was) => [...was, { item: q.item, question: q.question, text }])}
               />
             ))}
-            {answered
-              .filter((a) => !repo.questions.some((q) => q.item === a.item))
-              .map((a) => (
-                <div key={a.item} className="qline" data-testid="answered">
+            {answered.map((a, at) => (
+                <div key={at} className="qline" data-testid="answered">
                   <span className="glyph ok">
                     <CircleCheck size={15} aria-hidden />
                   </span>
@@ -107,7 +105,7 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
                     <p className="act-text">{a.text}</p>
                   </span>
                 </div>
-              ))}
+            ))}
           </div>
         </div>
       ) : null}

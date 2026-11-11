@@ -118,7 +118,7 @@ function ItemDetail({ repo, page }: { repo: string; page: ItemPage }) {
                     </div>
                     {at === answerable ? (
                       page.can_decide ? (
-                        <AnswerForm repo={repo} item={row.id} finding={q.finding} />
+                        <AnswerForm key={at} repo={repo} item={row.id} finding={q.finding} />
                       ) : (
                         <p className="sub">
                           {page.decide_at === null

@@ -4,8 +4,13 @@ import type { Question } from "../api/Question";
 import { to } from "../lib/api";
 import { AnswerForm } from "./Acts";
 
+/** What tells one question from another, so a form never carries over to a question that took its place. */
+export function questionKey(q: Pick<Question, "item" | "question" | "finding">): string {
+  return JSON.stringify([q.item, q.question, q.finding]);
+}
+
 /** An open question, linking to its item, with the form to answer it when it is its item's oldest. */
-export function QuestionLine({ repo, question, answerable, onAnswered }: { repo: string; question: Pick<Question, "item" | "question" | "finding">; answerable: boolean; onAnswered?: (text: string) => void }) {
+export function QuestionLine({ repo, question, answerable, onAnswered }: { repo: string; question: Pick<Question, "item" | "question" | "finding">; answerable: boolean; onAnswered?: (text: string, answer: string) => void }) {
   return (
     <div className="qline" data-testid="question">
       <span className="glyph you">
@@ -19,7 +24,7 @@ export function QuestionLine({ repo, question, answerable, onAnswered }: { repo:
           <span className="mono">{question.item}</span>
           {question.finding ? <> · about finding {question.finding}</> : null}
         </span>
-        {answerable ? <AnswerForm repo={repo} item={question.item} finding={question.finding} onAnswered={onAnswered} /> : null}
+        {answerable ? <AnswerForm key={questionKey(question)} repo={repo} item={question.item} finding={question.finding} onAnswered={onAnswered} /> : null}
       </span>
     </div>
   );

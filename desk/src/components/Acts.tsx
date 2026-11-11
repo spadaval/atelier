@@ -135,9 +135,12 @@ export function SayGo({ repo, page }: { repo: string; page: MissionPage }) {
 /**
  * The answer to an item's oldest open question, with the settlement of the
  * finding it is about when it names one: `decide`. After it is done every
- * page is read again, and `onAnswered` runs with the act's text.
+ * page is read again, `onAnswered` runs with the act's text and the answer
+ * sent, and the form
+ * closes empty: the page shows the answer as pending, and the next question
+ * of the item, which may be shown in the same place, starts with none.
  */
-export function AnswerForm({ repo, item, finding, onAnswered }: { repo: string; item: string; finding: string | null; onAnswered?: (text: string) => void }) {
+export function AnswerForm({ repo, item, finding, onAnswered }: { repo: string; item: string; finding: string | null; onAnswered?: (text: string, answer: string) => void }) {
   const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState("");
   const [settle, setSettle] = useState<Outcome | null>(null);
@@ -158,7 +161,12 @@ export function AnswerForm({ repo, item, finding, onAnswered }: { repo: string; 
     const result = await act(decideRequest(repo, item, answer.trim(), finding ? settle : null));
     if (succeeded(result)) {
       await reloadAll();
-      if (result.state === "answered" && result.response.result === "done") onAnswered?.(result.response.text);
+      if (result.state === "answered" && result.response.result === "done") onAnswered?.(result.response.text, answer.trim());
+      setOpen(false);
+      setAnswer("");
+      setSettle(null);
+      setSent({ state: "idle" });
+      return;
     }
     setSent(result);
   };

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { answers, codexChild, live, type World } from "./fixtures";
+import { answers, codexChild, live, secondQuestion, type World } from "./fixtures";
 import { expectFits, expectOnlyTheActs, load, serve } from "./helpers";
 
 let world: World;
@@ -165,7 +165,55 @@ test("an answer on an item's page is sent with its settlement and then shows as 
   const decided = page.locator(".prose-sect").filter({ has: page.getByRole("heading", { name: /^Decided on the way/ }) });
   await expect(decided).toContainText("Yes, key it by HEAD too.");
   await expect(decided.getByTestId("pending")).toBeVisible();
-  await expect(page.getByTestId("question")).toHaveCount(0);
+  await expect(page.getByTestId("question")).toHaveCount(1);
+  await expect(page.getByTestId("question")).toContainText(secondQuestion);
+});
+
+/** Reads the pages on screen again, as the app does when the page becomes visible. */
+async function poll(page: Page) {
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+}
+
+test("after an answer the item's next question gets an empty, closed form", async ({ page }) => {
+  await load(page, "/r/atelier/mission/atelier-z4cr");
+  const waiting = page.getByTestId("question");
+  await waiting.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
+  const form = page.getByRole("form", { name: "Answer on atelier-uwxy" });
+  await form.getByLabel("Your answer, in one line").fill("Yes, key it by HEAD too.");
+  await form.getByLabel("Defer it").check();
+  await form.getByRole("button", { name: "Send the answer" }).click();
+  await expect(waiting).toHaveCount(1);
+  await expect(waiting).toContainText(secondQuestion);
+  await expect(page.getByRole("form")).toHaveCount(0);
+  await expect(page.getByTestId("done")).toHaveCount(0);
+  await waiting.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
+  await expect(form.getByLabel("Your answer, in one line")).toHaveValue("");
+  await expect(form.getByRole("radio")).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Send the answer" })).toBeDisabled();
+  await form.getByLabel("Your answer, in one line").fill("No.");
+  await form.getByRole("button", { name: "Send the answer" }).click();
+  await expect(waiting).toHaveCount(0);
+  expect(world.sent.map((s) => s.body)).toEqual([
+    { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "Yes, key it by HEAD too.", settle: "defer" },
+    { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "No.", settle: null },
+  ]);
+  await load(page, "/r/atelier/item/atelier-uwxy");
+  await expect(page.getByTestId("decision").getByTestId("pending")).toHaveCount(2);
+});
+
+test("an open answer form does not carry over to a question a poll put in its place", async ({ page }) => {
+  await load(page, "/inbox");
+  const atelier = page.getByRole("region", { name: "atelier" });
+  await atelier.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
+  await atelier.getByRole("form", { name: "Answer on atelier-uwxy" }).getByLabel("Your answer, in one line").fill("Delete it.");
+  world.answerElsewhere("atelier-uwxy", "Yes.");
+  await poll(page);
+  const line = atelier.getByTestId("question").filter({ hasText: "atelier-uwxy" });
+  await expect(line).toContainText(secondQuestion);
+  await expect(atelier.getByRole("form")).toHaveCount(0);
+  await line.getByRole("button", { name: "Answer the question on atelier-uwxy" }).click();
+  await expect(atelier.getByLabel("Your answer, in one line")).toHaveValue("");
+  expect(world.sent).toEqual([]);
 });
 
 test("an answer from the inbox shows as answered and not committed, and a refused one as given", async ({ page }) => {
@@ -187,7 +235,10 @@ test("an answer from the inbox shows as answered and not committed, and a refuse
   const answered = atelier.getByTestId("answered");
   await expect(answered.getByTestId("pending")).toHaveText("Answered from the Desk, not committed yet");
   await expect(answered.getByRole("link", { name: /Should the cache key/ })).toHaveAttribute("href", "/r/atelier/item/atelier-uwxy");
-  await expect(atelier.getByTestId("question")).toHaveCount(1);
+  // The item's next question takes its place, with a closed form.
+  await expect(atelier.getByTestId("question")).toHaveCount(2);
+  await expect(atelier.getByTestId("question").filter({ hasText: "atelier-uwxy" })).toContainText(secondQuestion);
+  await expect(atelier.getByRole("form", { name: "Answer on atelier-uwxy" })).toHaveCount(0);
   expect(world.sent.at(-1)).toEqual({ path: "/api/act", header: "1", body: { act: "decide", repo: "atelier", id: "atelier-uwxy", answer: "Yes.", settle: null } });
   await expectFits(page);
 });

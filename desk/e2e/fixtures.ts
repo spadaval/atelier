@@ -27,6 +27,8 @@ const at = "2026-11-11T03:50:46+00:00";
 const t3: T3State = { reachable: true, age_seconds: 4, error: null };
 /** T3 Code never read: these pages say threads are unavailable. */
 export const unreachable: T3State = { reachable: false, age_seconds: null, error: "T3 Code did not answer: connection refused" };
+/** atelier-uwxy's second open question, asked after the one about the cache key. */
+export const secondQuestion = "Should the cache be dropped instead?";
 const thread = "thread:delegated-task:command%3Amcp%3Ad4040a34-c28b-4672-8918-87b1ffbc9fe0%3Adelegate-task%3A4e47a5ad";
 /** A Codex subagent's identity: a slash, and no T3 thread of its own. */
 export const codexChild = "019a6d2e-codex-parent/review-child:7";
@@ -186,6 +188,7 @@ export const z4cr: MissionPage = {
   pending_answers: [],
   questions: [
     { item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null },
+    { item: "atelier-uwxy", question: secondQuestion, finding: null, answer: null, outcome: null },
     { item: "atelier-1ie1", question: "Is the history of acts in this mission?", finding: null, answer: { by: "sumeet", text: "No: it waits for M5." }, outcome: "defer" },
   ],
   plan_reviews: [
@@ -425,7 +428,10 @@ export const items: Record<string, ItemPage> = {
       { ticked: true, text: "`GET /api/repos` answers." },
       { ticked: false, text: "`GET /api/inbox` answers." },
     ],
-    decisions: [{ item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null }],
+    decisions: [
+      { item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null },
+      { item: "atelier-uwxy", question: secondQuestion, finding: null, answer: null, outcome: null },
+    ],
   }),
 };
 
@@ -566,12 +572,48 @@ export class World {
       return answers.go;
     }
     if (request.id !== "atelier-uwxy") return answers.answerRefused;
-    const asked = this.items["atelier-uwxy"].decisions[0];
+    const item = this.items["atelier-uwxy"];
+    // decide answers the oldest question the item's checkout still has open.
+    const asked = item.decisions.filter((d) => d.answer === null)[item.pending_answers.length];
+    if (!asked) return answers.answerRefused;
     const pending: Question = { ...asked, answer: { by: "sumeet", text: request.answer }, outcome: request.settle };
-    this.items["atelier-uwxy"].pending_answers.push(pending);
+    item.pending_answers.push(pending);
     this.missionPages["atelier-z4cr"].pending_answers.push(pending);
-    for (const r of this.inbox.repos) r.questions = r.questions.filter((q) => q.item !== "atelier-uwxy");
+    this.askNext("atelier-uwxy");
     return answers.answered;
+  }
+
+  /** Lists in the inbox the item's oldest question with no answer, committed or pending, as the server does. */
+  private askNext(id: string) {
+    const item = this.items[id];
+    const next = item.decisions.filter((d) => d.answer === null)[item.pending_answers.length];
+    for (const r of this.inbox.repos) {
+      r.questions = r.questions.filter((q) => q.item !== id);
+      if (next) r.questions.push({ item: id, mission: item.mission, question: next.question, finding: next.finding });
+    }
+  }
+
+  /** The implementer's submit: a commit now holds every pending answer of the item, so none is pending. */
+  commitAnswers(id: string) {
+    const item = this.items[id];
+    const mission = this.missionPages[item.mission!];
+    for (const pending of item.pending_answers) {
+      const at = item.decisions.findIndex((d) => d.answer === null && d.question === pending.question);
+      item.decisions[at] = pending;
+      const inMission = mission.questions.findIndex((q) => q.item === id && q.answer === null && q.question === pending.question);
+      mission.questions[inMission] = pending;
+    }
+    item.pending_answers = [];
+    mission.pending_answers = mission.pending_answers.filter((p) => p.item !== id);
+    this.askNext(id);
+  }
+
+  /** Someone answers the item's oldest question elsewhere, as with the CLI, and commits it. */
+  answerElsewhere(id: string, text: string) {
+    const item = this.items[id];
+    const at = item.decisions.findIndex((d) => d.answer === null);
+    item.decisions[at] = { ...item.decisions[at], answer: { by: "codex-lead", text } };
+    this.askNext(id);
   }
 
   private session(request: SessionRequest): SessionResponse {
