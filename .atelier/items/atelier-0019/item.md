@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-0019
 title: Garden atelier, 2026-11-11
-status: ready
+status: building
 mission: null
 labels:
 - garden
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A1e4a355d-d905-4146-a4d8-89e6984f49f1%3Adelegate-task%3A1c7e22f2-4ce0-40e1-a447-156f728619a3
 ready:
   by: sumeet, through mission atelier-295u
   at: 2026-11-11T17:56:34.466554928Z
