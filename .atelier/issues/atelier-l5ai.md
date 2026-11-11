@@ -3,6 +3,9 @@ created_at: "2026-11-11T05:22:58.125720072+00:00"
 id: "atelier-l5ai"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-l5ai
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add the six small views the Desk needs to atelier-app: read-only opening from commits, the mission and item views, documents, approval time and plan changes"
-updated_at: "2026-11-11T05:28:24.250813075+00:00"
+updated_at: "2026-11-11T05:28:35.802609354+00:00"
 ---
 
 ## Goal
