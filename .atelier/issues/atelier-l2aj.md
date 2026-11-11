@@ -87,4 +87,3 @@ Two refusals came back from the real server and match the fixtures' shape: `deci
 
 - Size: net growth is about 1,720 lines against the 900 expected. 370 of them are CSS, because the app had no button, field or form styles yet. Tests and fixtures are about 690 lines.
 - The real refusal texts speak in CLI terms, such as "Run it there, or `git switch atelier-psjw` here". They are shown as given.
-
