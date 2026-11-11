@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered"
+last_changed: "2026-11-11: steps A and B planned in full after the cutover; step A is two items, the command and the scripts that read it; plan review 1-c27c answered; step C planned"
 ---
 
 # Sizing
@@ -58,7 +58,7 @@ mission 1 and never again, and the redesign's effect stays an impression.
 Four steps. The cutover ran on 2026-11-11, so the mission can start. Each
 step is planned in full at its boundary, with one plan review, before its
 work starts. Steps A and B do not depend on each other and are planned
-first; C and D are still provisional.
+first, then C; D is still provisional.
 
 | Step | Item | Does |
 | --- | --- | --- |
@@ -100,6 +100,26 @@ Decided while planning A and B:
 - **No scorecard number from T3 or the transcripts is new in this
   mission.** Those need a frozen snapshot, about 7.5 GB, which a routine run
   does not take. What a run does about them is settled in step C.
+
+Decided while planning C, after atelier-8b0a (pull request 145) and
+atelier-vl5n (pull request 144) merged:
+
+- **The session comes before the merge.** A run is submitted and reviewed
+  like any change, then waits approved for the session, which records what
+  was agreed in the page and merges the run. A done item's directory cannot
+  change, so the page has to be settled before the merge.
+- **A run takes no snapshot.** It takes its numbers from `atelier log`,
+  `atelier list` and the checklist, and carries the measures that need T3's
+  events, the transcripts or a rater from the last time they were measured,
+  with that date. atelier-pwhn refreshes them.
+- **Navigation's worst spots come from reading at most three threads** the
+  log names, since no script counts the files an agent reads. The page says
+  it is a sample.
+- **A page is at most 60 lines,** with the workings in the run item's
+  `artifacts/`.
+- **The trial is the first run.** atelier-9dku shows its arithmetic on
+  atelier's real log, and atelier's run in step D goes first, as the
+  procedure's trial, before the other four.
 
 The three properties and what the report shows for each:
 
