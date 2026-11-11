@@ -179,7 +179,9 @@ doubles() {
 d=$S/service
 [ "\$1" != --user ] || shift
 verb=\$1; shift; now=no; [ "\${1:-}" != --now ] || { now=yes; shift; }
-[ "\$1" = atelier-serve ] || { echo "Unit \$1 not found." >&2; exit 4; }
+# While service-queries-fail exists, the queries fail as on a lost user bus.
+case \$verb in is-enabled|is-active) [ ! -e $S/service-queries-fail ] || { echo "Failed to connect to bus: No medium found" >&2; exit 1; } ;; esac
+[ "\$1" = atelier-serve ] || { case \$verb in is-enabled) echo not-found ;; is-active) echo inactive ;; esac; exit 4; }
 running() { [ -f \$d/pid ] && kill -0 "\$(cat \$d/pid)" 2>/dev/null; }
 start() { running || { setsid $S/root/bin/atelier serve --bind 127.0.0.1:$port --root $S/projects > \$d/log 2>&1 < /dev/null & echo \$! > \$d/pid; sleep 0.5; running; }; }
 stop() { if running; then kill "\$(cat \$d/pid)"; fi; rm -f \$d/pid; }
@@ -538,6 +540,35 @@ WRAPPER
   ) && say "$name: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
 }
 
+# The service's queries fail after the preflight's snapshot: the run must
+# stop before it calls the service absent or stopped, and run again once
+# they answer, it must stop the service and finish.
+trial_service_queries() {
+  local S=$W/service-queries-fail rc
+  sandbox "$S" 17334
+  (
+    sandbox_env "$S"
+    export CUTOVER_FAIL_AT=step2-committed
+    set +e; run_cutover "$S" > "$S/cutover.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 1 ] || { say "service-queries-fail: FAILED: the first run exited $rc"; exit 1; }
+    unset CUTOVER_FAIL_AT
+    touch "$S/service-queries-fail"
+    set +e; run_cutover "$S" > "$S/cutover2.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 1 ] || { say "service-queries-fail: FAILED: with the service's queries failing, the run exited $rc"; exit 1; }
+    if grep -q '^done	service' "$S/state/journal"; then say "service-queries-fail: FAILED: the service step was marked done"; exit 1; fi
+    say "service-queries-fail: stopped in $(grep -m1 -o '^STOPPED in step [0-9]*' "$S/cutover2.log" | sed 's/STOPPED in //'): $(grep -m1 'systemctl is-enabled' "$S/cutover2.log" | sed 's/^cutover: //' | cut -c1-100)"
+    [ "$("$S/bin/systemctl" is-enabled atelier-serve 2>/dev/null || true)" = "" ] # still failing
+    rm -f "$S/service-queries-fail"
+    [ "$("$S/bin/systemctl" is-active atelier-serve)" = active ] || { say "    FAILED: the service was stopped meanwhile"; exit 1; }
+    set +e; run_cutover "$S" > "$S/cutover3.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 0 ] || { say "    FAILED: run again once the queries answer, it exited $rc; see $S/cutover3.log"; exit 1; }
+    [ "$("$S/bin/systemctl" is-enabled atelier-serve || true) $("$S/bin/systemctl" is-active atelier-serve || true)" = "disabled inactive" ] \
+      || { say "    FAILED: the service is not stopped and disabled"; exit 1; }
+    say "    run again once the queries answer, it stopped and disabled the service and ran to its end"
+    "$S/bin/systemctl" stop atelier-serve || true
+  ) && say "service-queries-fail: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
+}
+
 trial_preflight() {
   local S=$W/preflight-pre rc out
   sandbox "$S" 17322 pre
@@ -673,6 +704,7 @@ run_trial() {
     retry-close-push) retry_trial retry-close-push 17328 "step 8's push accepted by the remote, then reported failed" close_push_fails : "eval ran_to_end_with_one_close; push_found" ;;
     preflight) trial_preflight ;;
     adopt) trial_adopt ;;
+    service-queries-fail) trial_service_queries ;;
     rollback-push-refused) rollback_fails_trial rollback-push-refused 17329 "the remote declines the rollback's push" step5-astromech-pushed refuse_pushes accept_pushes rollback/atelier ;;
     rollback-fetch-fails) rollback_fails_trial rollback-fetch-fails 17330 "every fetch fails" step6-astromech-moved "fail_git fetch" mend_git "" ;;
     rollback-checkout-fails) rollback_fails_trial rollback-checkout-fails 17331 "a worktree's switch back fails" step6-astromech-moved "fail_git switch" mend_git "" ;;
@@ -684,7 +716,7 @@ run_trial() {
 
 fingerprint > "$W/real.before"
 prepare
-trials=${*:-preflight preflight-work-fails preflight-status-fails 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push rollback-push-refused rollback-fetch-fails rollback-checkout-fails adopt}
+trials=${*:-preflight preflight-work-fails preflight-status-fails 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push service-queries-fail rollback-push-refused rollback-fetch-fails rollback-checkout-fails adopt}
 failed=""
 for t in $trials; do
   t0=$(date +%s)
