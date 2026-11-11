@@ -28,7 +28,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Show agents on the Desk's pages and add Say go, the answer form and Start a planning session"
-updated_at: "2026-11-11T07:21:06.400699702+00:00"
+updated_at: "2026-11-11T07:55:56.263803568+00:00"
 ---
 
 ## Goal
@@ -60,6 +60,10 @@ Expected size: about 900 lines in `desk/` with tests and fixtures.
 - atelier-aab1 leaves open whether T3 Code's thread links open on the phone. Use the `link` the API gives; if the validation (atelier-va99) finds they do not open, the Desk links to the host's own T3 Code address instead.
 - The real end-to-end proof, a browser saying go against the installed service and the commit compared with the CLI's, is atelier-va99's.
 - Sizes: complexity medium, value high, risk low.
+
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by gpt-6.1-sol-l2aj-r3 (atelier-rnip) at 9f33d5e6, after three review rounds; the last code commit is 1befc0f8. Fix-now findings atelier-obgr, atelier-bicv and atelier-pxrv are fixed, each with a regression test that failed before its fix, and none was deferred or left undisposed. Proof and screenshots are in the Report. Not merged and not pushed: the orchestrator merges.
 
 ## Report
 
