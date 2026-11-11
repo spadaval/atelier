@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-dmh5
 title: Treat a reversed directional link as a different link
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -46,3 +46,7 @@ Relationships of the old record that the new format has no field for.
 
 - related: atelier-ihss (Store each link only on the record that declares it)
 - discovered_from review: atelier-3ewf
+
+## Report
+
+Dropped: Typed links between records were removed in 0.5; an item has `blocked_by` and a mission only.
