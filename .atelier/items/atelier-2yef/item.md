@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2yef
 title: skills/agent-factory/references/atelier.md:15-16 vs :66-67, and procedures/orchestrate.md:89 (eb14a31). Declining a sta…
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -32,3 +32,7 @@ Relationships of the old record that the new format has no field for.
 
 - parent: atelier-rqzu (Deferred review findings on atelier-l58v)
 - discovered_from review: atelier-41xn
+
+## Report
+
+Dropped: `references/atelier.md` and `procedures/orchestrate.md` were deleted when the skill was rewritten (atelier-orb2); ending a started item is now `atelier drop` on the base.
