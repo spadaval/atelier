@@ -40,4 +40,15 @@ Decide six points the core loop rewrite (mission atelier-fcb7) could not settle,
 
 ## Report
 
-Answered by Sumeet on 2026-11-11: the six answers are in this item's Report, and the work they need is atelier-1oel (points 1, 3 and 5) and atelier-yudj (point 4)
+Answered by Sumeet on 2026-11-11: the six answers are in this item's Report, and the work they need is atelier-1oel (points 1, 3 and 5) and atelier-yudj (point 4).
+
+Sumeet answered all six on 2026-11-11, in conversation with the mission's planner, who relayed them to the orchestrator of atelier-qr5s.
+
+1. **Review rules the binary does not enforce:** as recommended. They stay with the skill, the Review section is reworded to say so, and `status` shows the round number and the three-round rule. He authorised that rewording of the product specification's Review section. Filed as atelier-1oel.
+2. **Any independent thread may decide:** as recommended. Kept; nothing changes.
+3. **Merge check results in the review brief:** as recommended. The promise is dropped and the brief names the pull request. He authorised that rewording of the Review section. Filed as atelier-1oel.
+4. **Done when with no checkbox:** as recommended. The converter writes the prose as one unticked line. Filed as atelier-yudj.
+5. **Thread identity:** changed from the recommendation. A Codex subagent gets an identity of its own: when `CODEX_THREAD_ID` is set and differs from `CODEX_SESSION_ID`, the identity is the one today's rule gives, then `/`, then `CODEX_THREAD_ID`. His work host runs Codex only, and T3's guidance there is to start a same-provider child with the native tool, so the old rule would have refused every reviewer. Claude Code is unchanged: its subagent is still its parent. Measured on this host on 2026-11-11 with Codex 0.167 (`/home/supadava/.cache/atelier-identity-probe/`). Filed as atelier-1oel. Identity inside Codex's session-start hook is not part of it; atelier-1oel reports what that would take.
+6. **`init`:** as recommended. Not built until a sixth repository needs it.
+
+Nothing else in the specifications' Words, Lifecycle or Review sections changes. The new skill (atelier-orb2) is written against these answers.
