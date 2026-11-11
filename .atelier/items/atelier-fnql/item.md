@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fnql
 title: Let a review disposition record a finding as fixed, so a deferred finding fixed in passing needs no follow-up
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -30,3 +30,7 @@ Sumeet directed on 2026-11-08 that a deferred finding fixed in passing "stays de
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-3qze
+
+## Report
+
+Dropped: Done by the 0.5 record format: a reviewer marks a carried finding `Now: fixed`, and `review disposition` is gone.
