@@ -70,7 +70,7 @@ Expected size: 1,000 to 1,500 lines move between the two crates, and about 200 a
 
 ## Report
 
-Every Done when line holds. A program now opens a repository by path with `atelier_app::Repo::open(dir, caller, &skip)` and calls `atelier_app::ready` and `atelier_app::decide`, which return `Done { text, paths, commit }` or `Refused { rules, text, next }`; `atelier-app`'s `tests/library.rs` shows it from a working directory outside the repository (`ready_returns_what_it_wrote_and_committed_or_its_refusal`, `decide_writes_the_answer_by_the_caller_named_or_returns_its_refusal`: pass). The skip is a `Skip` per invocation, and `a_skip_reaches_its_own_acts_commit_and_result_and_no_other_acts` shows two acts in one process keep theirs apart (pass). `ready`, `drop`, `close` and `lead` commit through one function, `atelier_app::plan::save` with `commit`, which uses the `write_and_commit` that `submit`, the take-over and `verdict` use; `planning::ready_commits_only_what_it_wrote_and_leaves_every_other_change_as_it_was` and `planning::a_refused_commit_leaves_the_files_and_the_index_as_they_were_before_ready` show the commit's contents and the rollback, `skip::ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_trailed_in_its_commit` the trailer, and `a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_written` the name check (all pass). `start`'s refusal for planning not committed is removed with its text (`not_committed_ready`) and its test: `ready` commits on the base checkout's branch, so what it readies is ready at the tip at once, and the refusal could only catch a status hand-edited into front matter, which agents never do. In `next/`, `cargo fmt -- --check`, `cargo clippy -j 4 --all-targets -- -D warnings` and `cargo nextest run -j 4` pass: 245 tests, 0 failed (238 before the new ones; one old test was deleted). `scripts/cutover/rehearse.sh` passed on fresh clones of all five repositories, and both `next-loop` fixtures' `setup.sh` ran to their end, each with the debug binary built from this branch.
+Every Done when line holds. A program now opens a repository by path with `atelier_app::Repo::open(dir, caller, &skip)` and calls `atelier_app::ready` and `atelier_app::decide`, which return `Done { text, paths, commit }` or `Refused { rules, text, next }`; `atelier-app`'s `tests/library.rs` shows it from a working directory outside the repository (`ready_returns_what_it_wrote_and_committed_or_its_refusal`, `decide_writes_the_answer_by_the_caller_named_or_returns_its_refusal`: pass). The skip is a `Skip` per invocation, and `a_skip_reaches_its_own_acts_commit_and_result_and_no_other_acts` shows two acts in one process keep theirs apart (pass). `ready`, `drop`, `close` and `lead` commit through one function, `atelier_app::plan::save` with `commit`, which uses the `write_and_commit` that `submit`, the take-over and `verdict` use; `planning::ready_commits_only_what_it_wrote_and_leaves_every_other_change_as_it_was` and `planning::a_refused_commit_leaves_the_files_and_the_index_as_they_were_before_ready` show the commit's contents and the rollback, `skip::ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_trailed_in_its_commit` the trailer, and `a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_written` the name check (all pass). `start`'s refusal for planning not committed is removed with its text (`not_committed_ready`) and its test: `ready` commits on the base checkout's branch, so what it readies is ready at the tip at once, and the refusal could only catch a status hand-edited into front matter, which agents never do. In `next/`, `cargo fmt -- --check`, `cargo clippy -j 4 --all-targets -- -D warnings` and `cargo nextest run -j 4` pass: 247 tests, 0 failed (238 before the new ones; one old test was deleted). `scripts/cutover/rehearse.sh` passed on fresh clones of all five repositories, and both `next-loop` fixtures' `setup.sh` ran to their end, each with the debug binary built from this branch.
 
 ### What moved, and what stayed
 
@@ -79,15 +79,15 @@ Every Done when line holds. A program now opens a repository by path with `ateli
 
 ### Non-test lines (`scripts/count_non_test_rust.py`)
 
-| Crate | 399fca6a | 15766f56 |
+| Crate | 399fca6a | 98f9f9a3 |
 | --- | --- | --- |
-| atelier-app | 1,720 | 3,942 |
-| atelier-cli | 7,581 | 5,675 |
+| atelier-app | 1,720 | 3,971 |
+| atelier-cli | 7,581 | 5,678 |
 | atelier-core | 494 | 494 |
 | atelier-records | 1,667 | 1,667 |
-| Total | 11,462 | 11,778 |
+| Total | 11,462 | 11,810 |
 
-The total grew by 316. About 2,000 lines moved; what is new is the `Refused`, `Done` and `Skip` types and their conversions, the refusal producers that now return their way out apart, `save`'s split into a checked and a committing path, `write_and_commit` handling a file no commit held, the identity check and the CLI's helpers that open a repository and read the variables. Removed: `start`'s uncommitted-planning refusal and its text.
+The total grew by 348, 32 of them round 1's fixes. About 2,000 lines moved; what is new is the `Refused`, `Done` and `Skip` types and their conversions, the refusal producers that now return their way out apart, `save`'s split into a checked and a committing path, `write_and_commit` handling a file no commit held, the identity check and the CLI's helpers that open a repository and read the variables. Removed: `start`'s uncommitted-planning refusal and its text.
 
 ### Existing tests whose expected output changed
 
@@ -113,7 +113,12 @@ All by "One rule for who commits" and "The commit holds only the paths the comma
 
 ### Open items
 
-None. The rehearsal (`all steps passed in 35 s; 14 gh calls, all to the double`, 40 steps ok over atelier, astromech, demiurge, life-on-rails and cosplay-studio) and both fixtures' `setup.sh` were run on the binary built from 15766f56.
+None. The rehearsal (`all steps passed in 36 s; 14 gh calls, all to the double`, 40 steps ok over atelier, astromech, demiurge, life-on-rails and cosplay-studio) and both fixtures' `setup.sh` were run again on the binary built from 98f9f9a3, after round 1's fixes.
+
+### Review round 1
+
+- atelier-wwxe (fix now): `ready` given no ID reached `git commit --` with no path, which commits whatever is staged. Fixed in 91bd5db3: `ready` refuses an empty list, and `git::commit_paths` refuses no path. Test: `library::ready_given_no_id_refuses_and_commits_nothing`.
+- atelier-t53b (fix now): the hooks a commit ran read the process's `ATELIER_SKIP`, not the library caller's `Skip`. Fixed in 98f9f9a3: `git::relayed`, which runs the commit and `merge`'s and `submit`'s push, sets the variable from the `Skip`, or clears it. Test: `library::the_hooks_a_commit_runs_are_given_the_invocations_reason_and_not_the_processs`, seen failing without the fix.
 
 ## Notes
 
