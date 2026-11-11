@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-g21n
 title: Leave out a report Decisions part that only points at the item's decision notes
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -29,3 +29,7 @@ Since atelier-mgl0 the debrief shows each report's Decisions part, so a part tha
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-mgl0 (Fix the debrief defects the S4 and S7 reviews found)
+
+## Report
+
+Dropped: The `debrief` command was deleted in 0.5.
