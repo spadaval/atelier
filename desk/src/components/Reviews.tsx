@@ -1,27 +1,16 @@
 import { CircleCheck, MessageSquareWarning, RotateCcw } from "lucide-react";
 import type { FindingRow } from "../api/FindingRow";
 import type { Review } from "../api/Review";
+import { findingFates, type Fate } from "../lib/findings";
 import { dateTime, plural, recommendationWords, shortCommit, who } from "../lib/words";
 import { Markdown } from "./ui";
 
-/** What became of a finding, in words: fixed, deferred and taken as an item, and so on. */
-export function findingState(f: FindingRow): { words: string; tone: string } {
-  if (f.open) return { words: "Open", tone: "bad" };
-  if (f.settlement?.kind === "taken") return { words: `Deferred, taken as ${f.settlement.item}`, tone: "" };
-  if (f.settlement?.kind === "dropped") return { words: `Deferred, then dropped: ${f.settlement.reason}`, tone: "" };
-  if (f.decided === "defer" || f.deferred) return { words: "Deferred", tone: "review" };
-  if (f.decided === "no_action") return { words: "No action, by decision", tone: "" };
-  if (f.now === "withdrawn") return { words: "Withdrawn", tone: "" };
-  if (f.now === "fixed" || f.recommendation === "fix_now") return { words: "Fixed", tone: "ok" };
-  if (f.now === "kept") return { words: "Kept", tone: "" };
-  return { words: recommendationWords[f.recommendation], tone: "" };
-}
-
-export function Findings({ findings }: { findings: FindingRow[] }) {
+/** Findings, each with what became of it, given the fates of every finding of the same reviews. */
+export function Findings({ findings, fates }: { findings: FindingRow[]; fates: Map<string, Fate> }) {
   return (
     <ul className="findings">
       {findings.map((f) => {
-        const state = findingState(f);
+        const state = fates.get(f.name) ?? { words: recommendationWords[f.recommendation], tone: "" };
         return (
           <li key={f.name}>
             <details>
@@ -65,6 +54,7 @@ function ChangedSince({ paths }: { paths: string[] | null }) {
 
 /** Review rounds, oldest first, each with its verdict and findings; a plan review also says what changed since. */
 export function ReviewList({ reviews, plan }: { reviews: Review[]; plan?: boolean }) {
+  const fates = findingFates(reviews);
   return (
     <ol className="timeline">
       {reviews.map((r) => (
@@ -88,7 +78,7 @@ export function ReviewList({ reviews, plan }: { reviews: Review[]; plan?: boolea
             {r.findings.length > 0 ? (
               <>
                 <p className="sub">{plural(r.findings.length, "finding")}</p>
-                <Findings findings={r.findings} />
+                <Findings findings={r.findings} fates={fates} />
               </>
             ) : (
               <p className="sub">No findings.</p>

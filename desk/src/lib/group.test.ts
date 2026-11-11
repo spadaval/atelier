@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { FindingRow } from "../api/FindingRow";
 import type { ItemRow } from "../api/ItemRow";
 import type { Question } from "../api/Question";
-import type { Review } from "../api/Review";
-import { fixedInReview, groupByStatus, waitingOnYou } from "./group";
+import { groupByStatus, waitingOnYou } from "./group";
 
 function row(id: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
   return {
@@ -27,14 +25,6 @@ function row(id: string, status: ItemRow["status"], more: Partial<ItemRow> = {})
     approved_at: null,
     ...more,
   };
-}
-
-function finding(name: string, more: Partial<FindingRow> = {}): FindingRow {
-  return { name, title: name, recommendation: "fix_now", was: null, now: null, decided: null, settlement: null, text: null, open: false, deferred: false, ...more };
-}
-
-function review(findings: FindingRow[]): Review {
-  return { name: "r1", round: 1, commit: "abc", reviewers: [], model: null, verdict: "approve", created_at: "2026-11-11T00:00:00Z", findings, changed_since: null };
 }
 
 describe("groupByStatus", () => {
@@ -64,19 +54,5 @@ describe("waitingOnYou", () => {
     const waiting = waitingOnYou(items, questions);
     expect(waiting.questions.map((q) => q.item)).toEqual(["a"]);
     expect(waiting.items.map((i) => i.id)).toEqual(["c"]);
-  });
-});
-
-describe("fixedInReview", () => {
-  it("keeps closed fix-now findings and leaves out open, withdrawn, decided and deferred ones", () => {
-    const r = review([
-      finding("fixed"),
-      finding("marked", { now: "fixed" }),
-      finding("open", { open: true }),
-      finding("withdrawn", { now: "withdrawn" }),
-      finding("decided", { decided: "no_action" }),
-      finding("later", { recommendation: "defer", deferred: true }),
-    ]);
-    expect(fixedInReview([r]).map((f) => f.finding.name)).toEqual(["fixed", "marked"]);
   });
 });

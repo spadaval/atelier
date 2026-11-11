@@ -13,7 +13,8 @@ import { ItemLine } from "../components/ItemLine";
 import { Findings, ReviewList } from "../components/Reviews";
 import { Card, Counts, Empty, ErrorBanner, Markdown, ScopeBar, Skeleton, StatusGlyph, Tabs, useTab } from "../components/ui";
 import { api, to, useData } from "../lib/api";
-import { fixedInReview, groupByStatus, waitingOnYou } from "../lib/group";
+import { findingFates, fixedInReview } from "../lib/findings";
+import { groupByStatus, waitingOnYou } from "../lib/group";
 import { fileName, recordPath, splitFrontMatter } from "../lib/links";
 import { countsLine, dateTime, finished, missionState, plural, shortCommit, shortDate, statusTitle, total, who } from "../lib/words";
 
@@ -197,7 +198,7 @@ function DoneDetail({ repo, id }: { repo: string; id: string }) {
       {fixed.length > 0 ? (
         <>
           <h4>Fixed in review</h4>
-          <Findings findings={fixed.map((f) => f.finding)} />
+          <Findings findings={fixed.map((f) => f.finding)} fates={findingFates(loaded.data.reviews)} />
         </>
       ) : null}
     </div>

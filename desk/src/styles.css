@@ -1946,3 +1946,12 @@ button.pane-label:hover {
 .front .kv {
   font-size: 12.5px;
 }
+@media (max-width: 600px) {
+  .findings summary {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+  .findings summary > .tag {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

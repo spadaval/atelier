@@ -87,6 +87,8 @@ test("the Work tab groups items by status in lifecycle order, and a done item sh
   await expect(report).toContainText("All Done when lines hold.");
   await expect(report).toContainText("The inbox route omits draft missions");
   await expect(report).not.toContainText("The history route has no owner");
+  await expect(report).not.toContainText("The thread join splits identities on slashes");
+  await expect(report.locator(".findings > li")).toHaveCount(1);
   await expectFits(page);
 });
 
@@ -143,6 +145,10 @@ test("the item page shows its goal, Done when ticks, report, reviews and blocker
   await expect(page.locator(".issue-main")).toContainText("All Done when lines hold.");
   await expect(page.locator(".issue-main")).toContainText("Round 1: changes asked");
   await expect(page.locator(".issue-main")).toContainText("Deferred, taken as atelier-e05n");
+  const finding = (title: string) => page.locator(".findings > li").filter({ hasText: title });
+  await expect(finding("The inbox route omits draft missions")).toContainText("Fixed, confirmed in round 2");
+  await expect(finding("The thread join splits identities on slashes")).toContainText("Withdrawn in round 2");
+  await expect(finding("Drafts are in the inbox now")).toContainText("Confirms 1-aaaa.1 fixed");
   await expect(page.locator(".issue-main")).toContainText("fixed in 3333cccc");
   await expectReadableFinding(page, ".issue-main");
   await expectNoActs(page);
