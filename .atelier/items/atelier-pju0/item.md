@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-pju0
 title: Rebuild the rare-edge-chain eval fixture so its fix carries only the two planted findings
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -35,3 +35,7 @@ Relationships of the old record that the new format has no field for.
 
 - parent: atelier-jxce (Eval the skill for over-correction, so saying no never means skipping real fixes)
 - discovered_from review: atelier-fq99
+
+## Report
+
+Dropped: The `rare-edge-chain` scenario was deleted at the cutover with the old tool's fixtures.
