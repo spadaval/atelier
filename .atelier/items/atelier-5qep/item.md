@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5qep
 title: Accept several values and --open in issue list filters
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -29,3 +29,7 @@ created_at: 2026-10-17T01:10:57.964262389Z
 - [ ] Invalid status or category errors list the policy's valid values. `--help` names them, or says where they come from.
 - [ ] The empty result repeats the active filters, e.g. `No issues with status=done and category=todo.`
 - [ ] CLI tests cover repeats, `--open`, an invalid value and the empty message.
+
+## Report
+
+Dropped: `issue list` and its filters were removed in 0.5; `atelier list` shows open work only and takes --ready, --blocked, --label and --mission.
