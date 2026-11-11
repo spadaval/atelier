@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-yzuv
 title: Stop mission issue show restating scope three times
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -36,3 +36,7 @@ created_at: 2026-10-17T01:10:57.964882526Z
 ## Context
 
 Extends atelier-7u4o (brief `issue show`) and atelier-deyy (dense work rows). atelier-t18i's link count goes with the Relationships line; its cycle message moved to atelier-x3ru (decision atelier-mzpn).
+
+## Report
+
+Dropped: `issue show` and its rollup panels were removed in 0.5.
