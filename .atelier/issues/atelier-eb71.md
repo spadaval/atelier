@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:50.618196257+00:00"
+status: "superseded"
 title: "Keep backtraces out of user-facing errors when RUST_BACKTRACE is set"
-updated_at: "2026-10-28T01:22:01.510371883+00:00"
+updated_at: "2026-11-11T03:55:50.618196257+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ With `RUST_BACKTRACE=1` exported, `cargo nextest run` passes and an invalid-valu
 ## Context
 
 Found in review of atelier-lnwf (CI run 40609860117, `record_refs.rs:383`). Fix in the CLI's error printing, not by clearing the variable in tests only.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new binary prints no backtrace with `RUST_BACKTRACE=1` set (run in a scratch clone: an unknown ID and an invalid `--priority` each printed only their message).

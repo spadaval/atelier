@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:53.477691943+00:00"
+status: "superseded"
 title: "Keep an item's Open items in the debrief when review filed follow-ups"
-updated_at: "2026-11-05T06:03:04.102700+00:00"
+updated_at: "2026-11-11T03:55:53.477691943+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Open items are dropped whenever review filed follow-ups for the entry, but the t
 ## Context
 
 Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.

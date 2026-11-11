@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:32.825816728+00:00"
+status: "declined"
 title: "Stop atelier check reporting other record kinds as corrupt records"
-updated_at: "2026-10-17T01:10:57.972018696+00:00"
+updated_at: "2026-11-11T03:55:32.825816728+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ updated_at: "2026-10-17T01:10:57.972018696+00:00"
 ## Context
 
 Entry point: crates/atelier-cli/src/main.rs:920-923 → commands::issue::lint (crates/atelier-cli/src/commands/issue.rs:1026) → atelier_app::lint.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). It changes how `check <id>` treats review and evidence IDs, and the new `check` takes no ID and validates every record (`atelier check --help` on the new binary), while evidence records are removed by the What is removed table.

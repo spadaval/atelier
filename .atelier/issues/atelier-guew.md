@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:30.285844366+00:00"
+status: "declined"
 title: "Make bundle preview run the same staged-graph validation as apply"
-updated_at: "2026-11-07T21:03:34.053303420+00:00"
+updated_at: "2026-11-11T03:55:30.285844366+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ Preview stays non-mutating: validate the staged records with the guard (`atelier
 ## Context
 
 docs/spec/bundle/schema.md (preview and apply report the same normalized plan); docs/product/cli-surface.md. Decision atelier-mzpn meant this to build on atelier-ilba, now merged.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `bundle preview` validation, and the What is removed table removes `bundle`.

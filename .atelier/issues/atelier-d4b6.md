@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:37.272993561+00:00"
+status: "superseded"
 title: "Classify draft missions consistently and drop empty context panels"
-updated_at: "2026-10-17T01:10:57.984605781+00:00"
+updated_at: "2026-11-11T03:55:37.272993561+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ A `todo` mission is classified Context and listed under "Parents and Missions (c
 - [ ] Open missions of every status appear in one place with their status word, or `work all` leaves missions to `work missions`.
 - [ ] Empty context panels are omitted in `work ready` and `work all`.
 - [ ] Tests cover a draft and a todo mission.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes how `work all` and `work ready` classify missions, and the What is removed table removes the `work` views; the new `list` heads each open mission with its status.

@@ -19,9 +19,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:38.544785940+00:00"
+status: "superseded"
 title: "Rewrite the Mission Overview entry in plain terms"
-updated_at: "2026-11-07T21:03:27.787222355+00:00"
+updated_at: "2026-11-11T03:55:38.544785940+00:00"
 ---
 
 ## Goal
@@ -47,3 +48,7 @@ crates/atelier-cli/src/commands/work.rs `missions()` and crates/atelier-app/src/
 ## Context
 
 Carries the part of atelier-1w8c's S3 that its validation found unmet.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It rewrites the `work missions` entry, and the What is removed table removes the `work` views; `list` heads each mission with its status and lead.

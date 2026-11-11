@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:42.041813521+00:00"
+status: "superseded"
 title: "Stop mission issue show restating scope three times"
-updated_at: "2026-11-07T21:03:28.586467482+00:00"
+updated_at: "2026-11-11T03:55:42.041813521+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,7 @@ updated_at: "2026-11-07T21:03:28.586467482+00:00"
 ## Context
 
 Extends atelier-7u4o (brief `issue show`) and atelier-deyy (dense work rows). atelier-t18i's link count goes with the Relationships line; its cycle message moved to atelier-x3ru (decision atelier-mzpn).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `show <mission>` prints the mission once on one page with its items by status, with no Relationships or Evidence Gates lines (run on atelier-4pzj in a scratch clone).

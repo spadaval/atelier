@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:52.209811037+00:00"
+status: "superseded"
 title: "Make setup claude report unchanged runs, foreign hooks and the commit step"
-updated_at: "2026-10-17T01:10:57.981495535+00:00"
+updated_at: "2026-11-11T03:55:52.209811037+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ updated_at: "2026-10-17T01:10:57.981495535+00:00"
 ## Context
 
 atelier-sdb0 switches the hook to `status` and adds the CLAUDE.md `@AGENTS.md` warning. Keep the message changes compatible with that.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `setup claude` already says `nothing changed` on a re-run, keeps every other hook and says to commit `.claude/settings.json` (run in a scratch clone).

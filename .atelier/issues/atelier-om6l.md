@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:39.813871813+00:00"
+status: "superseded"
 title: "Show what holds a mission up: a Waiting on section, what Needs a Human items hold, and the overview's Waiting on line"
-updated_at: "2026-11-07T21:03:27.350492537+00:00"
+updated_at: "2026-11-11T03:55:39.813871813+00:00"
 ---
 
 ## Goal
@@ -58,3 +59,7 @@ Merged in decision atelier-mzpn: atelier-46nq's "holds N" (its "shown for contex
 - 2026-11-04 [decision] Show what holds a mission up as a Waiting on section of work mission, with per-chain detail under --blocked; no new command
   Reason: It is the view people already open, and a separate command or per-item tree would repeat shared blockers
   Rejected: A dedicated 'what do I do to get this mission moving' command
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `list` and `show <mission>` name each item's blockers with their status and whether they wait on a human (`blocked by atelier-2mlh, which is draft, waits on a human`, run in a scratch clone), and the `work` views it extends are removed.

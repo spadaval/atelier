@@ -15,9 +15,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:54.751776435+00:00"
+status: "superseded"
 title: "Credit a criterion to work whose Done when names it"
-updated_at: "2026-11-05T06:07:19.198719+00:00"
+updated_at: "2026-11-11T03:55:54.751776435+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ A CLI fixture that reproduces the case in a scratch repository shows the problem
 ## Context
 
 Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes the debrief, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.

@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:29.270459018+00:00"
+status: "declined"
 title: "Put the bundle contract in bundle --help for repos without Atelier's docs"
-updated_at: "2026-10-17T01:10:57.969557562+00:00"
+updated_at: "2026-11-11T03:55:29.270459018+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ updated_at: "2026-10-17T01:10:57.969557562+00:00"
 - [ ] `atelier bundle --help` shows a minimal valid bundle (a mission, a parent, a child, an update entry) and one line per issue field (client_ref, title, body, issue_type, priority, status, labels, parent, blocked_by, blocks, advances, notes, operation, id), plus the evidence fields.
 - [ ] `bundle apply --help` describes `--yes` and says apply does not commit.
 - [ ] A test runs `bundle preview` on the help example in a fresh `atelier init` repo and it succeeds.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It documents `bundle` in its help, and the What is removed table removes `bundle`.

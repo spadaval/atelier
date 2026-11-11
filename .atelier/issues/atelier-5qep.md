@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:42.674826750+00:00"
+status: "superseded"
 title: "Accept several values and --open in issue list filters"
-updated_at: "2026-10-17T01:10:57.964262389+00:00"
+updated_at: "2026-11-11T03:55:42.674826750+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ updated_at: "2026-10-17T01:10:57.964262389+00:00"
 - [ ] Invalid status or category errors list the policy's valid values. `--help` names them, or says where they come from.
 - [ ] The empty result repeats the active filters, e.g. `No issues with status=done and category=todo.`
 - [ ] CLI tests cover repeats, `--open`, an invalid value and the empty message.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `list` shows all open work by default and narrows by `--ready`, `--blocked`, `--needs-human`, `--mission` and `--label` (`atelier list --help`), so no status filter is needed.

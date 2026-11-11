@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:40.131754218+00:00"
+status: "superseded"
 title: "Make the refused start report one line per blocker"
-updated_at: "2026-10-17T01:10:57.966699407+00:00"
+updated_at: "2026-11-11T03:55:40.131754218+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ A refused `atelier start sdb0` prints 17 lines (`ensure_transition_allowed` and 
 ## Context
 
 atelier-7n5u computes in-flight branches for ready work; reuse it if it has landed.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `start` already reports a refusal one line per unmet condition with no repeated error (run in a scratch clone on atelier-5kwk).

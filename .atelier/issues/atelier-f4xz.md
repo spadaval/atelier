@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:50.936929387+00:00"
+status: "declined"
 title: "Judge a work branch's records against the merged result, not the base's policy alone"
-updated_at: "2026-11-07T15:11:37.638954318+00:00"
+updated_at: "2026-11-11T03:55:50.936929387+00:00"
 ---
 
 ## Goal
@@ -28,3 +29,7 @@ On a work branch, `atelier merge --check` and `atelier land` validate the branch
 ## Context
 
 atelier-nn67 avoided this by keeping `backlog` on the on-base workflow. crates/atelier-cli/src/commands/merge.rs, session.rs.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). Its case is a base policy dropping a status, and the What is removed table removes `workflow.yaml`; the new lifecycle is fixed in the binary.

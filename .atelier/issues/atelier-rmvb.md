@@ -13,9 +13,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:56.699406184+00:00"
+status: "declined"
 title: "Make prune's output one line per record, grouped by the root that keeps it, ending with a step that works"
-updated_at: "2026-11-07T21:03:25.934579588+00:00"
+updated_at: "2026-11-11T03:55:56.699406184+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,7 @@ updated_at: "2026-11-07T21:03:25.934579588+00:00"
 ## Context
 
 Applies the one-line rule from ADR 0022 and atelier-deyy to prune. docs/product/retention-and-prune.md (protection follows links in both directions; atelier-r7cd). Merged from four prune items in decision atelier-mzpn; low priority, outside any mission.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `prune`, which the What is removed table removes.

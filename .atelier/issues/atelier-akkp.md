@@ -14,9 +14,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:49.658813670+00:00"
+status: "declined"
 title: "Re-measure record bookkeeping in adopting repositories after the lighter workflow ships"
-updated_at: "2026-11-06T22:08:25.310487900+00:00"
+updated_at: "2026-11-11T03:55:49.658813670+00:00"
 ---
 
 ## Goal
@@ -29,4 +30,8 @@ A note on this issue gives those measures, from records, git history and agent t
 
 ## Context
 
-Pick this up three or more weeks after the release containing atelier-n4mj's changes has been adopted in atelier, astromech, demiurge, cosplay-studio or life-on-rails. life-on-rails adopted Atelier on 2026-11-06 and follows the evidence rule voluntarily, so it is also a comparison point from before the release. It is outside the mission because it waits on calendar time and adoption. The original counts came from a temporary script; atelier-5fus's and atelier-rkxm's receipts record reusable methods. 
+Pick this up three or more weeks after the release containing atelier-n4mj's changes has been adopted in atelier, astromech, demiurge, cosplay-studio or life-on-rails. life-on-rails adopted Atelier on 2026-11-06 and follows the evidence rule voluntarily, so it is also a comparison point from before the release. It is outside the mission because it waits on calendar time and adoption. The original counts came from a temporary script; atelier-5fus's and atelier-rkxm's receipts record reusable methods.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It measures the evidence receipts and refusals of the old lighter workflow, and the What is removed table removes evidence records; the redesign's scorecard (atelier-c1z3, atelier-pwhn) measures the cost from here.

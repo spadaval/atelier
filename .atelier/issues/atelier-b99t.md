@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:49.975303238+00:00"
+status: "declined"
 title: "Point build.rs rerun-if-changed at the repository's .git, not crates/.git"
-updated_at: "2026-10-28T01:52:31.022126706+00:00"
+updated_at: "2026-11-11T03:55:49.975303238+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ After a commit, `cargo build -p atelier-cli` with no other change reports the ne
 ## Context
 
 Found in review of atelier-7v9q (finding R6).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new workspace's `atelier-cli` has no `build.rs` (`ls next/crates/atelier-cli`), so no stale commit is stamped; the old one goes with `crates/` at the switch.

@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:46.168703646+00:00"
+status: "declined"
 title: "Fix link role defaults and role errors in issue link and unlink"
-updated_at: "2026-10-17T01:10:57.963639867+00:00"
+updated_at: "2026-11-11T03:55:46.168703646+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ The invalid-role error (`validate_issue_link_role`, `crates/atelier-cli/src/comm
 - [ ] `unlink` without `--role` removes the only link between the two records, or lists the roles that exist and exits non-zero. Unlinking a link that doesn't exist exits non-zero.
 - [ ] The role error groups roles: `readiness: blocked_by, blocks · mission: advances · context: related, … · custom: …`, with no proof roles.
 - [ ] CLI tests cover each case.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new tool has no `issue link` or `unlink` and no link roles; `set --blocked-by` sets the only sequencing link (`atelier set --help`).

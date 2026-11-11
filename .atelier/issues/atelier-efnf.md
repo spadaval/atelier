@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:37.590147328+00:00"
+status: "superseded"
 title: "Show an open finding in branch readiness, so the approval mark agrees with merge"
-updated_at: "2026-11-07T21:04:13.230058758+00:00"
+updated_at: "2026-11-11T03:55:37.590147328+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ The status Branches row's `✓ approved` reflects the approval alone (`review_ga
 ## Context
 
 Decision atelier-mzpn meant this agreement for atelier-md0v, which merged without it. Dropped there: assertions for a self-approved row, a trivial exemption, readiness unknown, superseded children exempt from proof and the Shared files cap (finding atelier-eqyw), which tested rules mmpv removed. The readiness facts still print `⚠ failing evidence <id>`, and the code still calls it a merge blocker, though receipts gate nothing since md0v; say in the Report whether that fact stays. atelier-abdp adds a review-round count to the same facts.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` lists only what is not met on an item, open fix-now findings included, and `verdict approve` is refused while a fix-now finding is open (product specification, What status prints and Reviewer).

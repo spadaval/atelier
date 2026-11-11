@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:32.190025129+00:00"
+status: "declined"
 title: "Use a decision's Decision section as its close reason"
-updated_at: "2026-10-17T19:00:36.341930232+00:00"
+updated_at: "2026-11-11T03:55:32.190025129+00:00"
 ---
 
 ## Goal
@@ -32,3 +33,7 @@ updated_at: "2026-10-17T19:00:36.341930232+00:00"
 ## Context
 
 Found in the 2026-10-17 retrospective of the 10-15..10-17 atelier runs (sessions b32c39e6, 9a04974d, d483b55c, bf433168).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes the close reason of decision records, and the What is removed table removes decision records.

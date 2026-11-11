@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:36.641455292+00:00"
+status: "declined"
 title: "Remove or justify work ready's second readiness gate"
-updated_at: "2026-10-17T08:54:22.045186811+00:00"
+updated_at: "2026-11-11T03:55:36.641455292+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ updated_at: "2026-10-17T08:54:22.045186811+00:00"
 ## Done when
 
 - [ ] The gate is removed, or a comment and test record the case it catches that classification does not.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It removes a gate inside `work ready`, and the What is removed table removes the nine `work` views.

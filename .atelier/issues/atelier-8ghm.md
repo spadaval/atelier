@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:49.343023005+00:00"
+status: "declined"
 title: "Make the stale-pass land test assert that land passes"
-updated_at: "2026-11-07T03:36:54.344195431+00:00"
+updated_at: "2026-11-11T03:55:49.343023005+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ The test asserts the outcome land should have once a later pass cleared the fail
 ## Context
 
 Noted by the atelier-n4mj validation (receipt atelier-htux). Low priority; test quality only.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It restores an assertion in a `land` test, and the What is removed table removes `land`.

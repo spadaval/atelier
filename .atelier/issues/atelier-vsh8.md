@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:30.921869230+00:00"
+status: "declined"
 title: "List every record bundle apply writes in its quiet output"
-updated_at: "2026-10-17T08:28:57.961331205+00:00"
+updated_at: "2026-11-11T03:55:30.921869230+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ updated_at: "2026-10-17T08:28:57.961331205+00:00"
 
 - [ ] `bundle apply -q` lists every record it writes, or the Quiet Tokens row says exactly which it lists.
 - [ ] A test applies a bundle that adds a child under an existing parent and checks the quiet output.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes `bundle apply -q` output, and the What is removed table removes `bundle`.

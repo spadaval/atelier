@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:48.708038009+00:00"
+status: "declined"
 title: "Give evidence gates and evidence views one supersession rule"
-updated_at: "2026-10-23T16:21:00.005772626+00:00"
+updated_at: "2026-11-11T03:55:48.708038009+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ The gates and the evidence views call one function for supersession and freshnes
 ## Context
 
 Review finding atelier-l82f on atelier-l7nz.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes evidence gates and views, and the What is removed table removes evidence records and commands.

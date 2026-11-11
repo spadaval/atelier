@@ -18,9 +18,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:44.261036924+00:00"
+status: "superseded"
 title: "Ignore COLUMNS when output is redirected"
-updated_at: "2026-10-17T09:26:58.654226601+00:00"
+updated_at: "2026-11-11T03:55:44.261036924+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ updated_at: "2026-10-17T09:26:58.654226601+00:00"
 
 - [ ] Redirected output has no width limit whatever `COLUMNS` says; a terminal still uses it.
 - [ ] A test runs a view with `COLUMNS` set and stdout redirected and finds no wrapped rows.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new binary does not wrap redirected output (`COLUMNS=30 atelier list | cat` printed full rows in a scratch clone).

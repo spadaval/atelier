@@ -15,9 +15,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:55.066801623+00:00"
+status: "superseded"
 title: "Make debrief chips and cards fully accessible beyond contrast"
-updated_at: "2026-11-05T06:07:19.198719+00:00"
+updated_at: "2026-11-11T03:55:55.066801623+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ A CLI fixture that reproduces the case in a scratch repository shows the problem
 ## Context
 
 Found by the S7 agent review of atelier-vt8q's debrief at c73d55e8 (FOLLOW-UP).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes the site's debrief page, which the What is removed table removes with `serve`; the Desk (mission atelier-z4cr) shows the debrief.

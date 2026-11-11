@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:39.496731001+00:00"
+status: "superseded"
 title: "Report branch and checkout facts in status in words, not git porcelain"
-updated_at: "2026-10-17T01:10:57.982115462+00:00"
+updated_at: "2026-11-11T03:55:39.496731001+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ Records and code are not separated, although they need different actions. On a w
 ## Context
 
 The behind-base computation is in crates/atelier-cli/src/commands/session.rs:338-360 (`land_text`).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` states the branch in words (`on branch atelier-x, which is no item's`, `on the base branch master`) and prints no Git porcelain, run in a scratch clone.

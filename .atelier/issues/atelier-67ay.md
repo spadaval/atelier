@@ -16,9 +16,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:49.024826725+00:00"
+status: "declined"
 title: "Move a replaced skill copy aside in setup --link instead of deleting it"
-updated_at: "2026-11-08T06:14:31.018984919+00:00"
+updated_at: "2026-11-11T03:55:49.024826725+00:00"
 ---
 
 ## Goal
@@ -28,3 +29,7 @@ updated_at: "2026-11-08T06:14:31.018984919+00:00"
 ## Done when
 
 - [ ] `setup --link` renames a replaced real directory to `<path>.bak` (or `.bak.<n>` if taken) instead of deleting it, and prints where it went. A test puts a file in a lock-tracked copy, links, and finds the file under the backup path.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new binary has no `setup --link` (`atelier setup --help` takes only a harness), so it never replaces a skill copy.

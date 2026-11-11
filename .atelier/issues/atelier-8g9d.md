@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:35.374867557+00:00"
+status: "superseded"
 title: "Name the missions behind status's mission count"
-updated_at: "2026-10-17T01:10:57.983055076+00:00"
+updated_at: "2026-11-11T03:55:35.374867557+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,7 @@ Current missions: 2
 ## Context
 
 atelier-ihns covers the between-missions state, and atelier-sdb0 adds the owner's mission. Coordinate so a mission appears once.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` on the base lists the missions in progress by name (product specification, Commands: `status`).

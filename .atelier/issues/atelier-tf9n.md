@@ -19,9 +19,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:41.087593058+00:00"
+status: "superseded"
 title: "Show direct blockers on work rows, mark inherited ones, drop the count"
-updated_at: "2026-10-17T01:10:57.984299499+00:00"
+updated_at: "2026-11-11T03:55:41.087593058+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ Work-view rows show the whole transitive blocker closure plus blockers inherited
 ## Context
 
 Reworks the same row rendering as atelier-deyy. Fixture: scratch clone with mission atelier-j76w; parent atelier-qhnh (children s47h active, 9t9q blocked_by s47h, 1gc5 blocked_by 9vdd); qhnh blocked_by decision atelier-spvd (needs a human); chain 5hp9 <- fhep <- il31 <- ubti (ubti ready, low, no mission); 9vdd advances superseded mission atelier-ba3h.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `list` names each row's direct blockers with their status (run in a scratch clone), and parents and the `work` views are removed.

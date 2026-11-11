@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:34.417647622+00:00"
+status: "superseded"
 title: "Show active work once in status, with its configured status"
-updated_at: "2026-10-17T01:10:57.981811445+00:00"
+updated_at: "2026-11-11T03:55:34.417647622+00:00"
 ---
 
 ## Goal
@@ -44,3 +45,7 @@ The panel row prints the category twice (`active … [active]`) and hides the co
 ## Context
 
 The row comes from the shared `IssueListPanel` in crates/atelier-cli/src/human_output.rs, so this extends atelier-deyy's dense-row rule to status. atelier-sdb0 reshapes the owner block.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` lists what the thread holds once with its status (product specification, Commands: `status`), shown in a scratch clone.

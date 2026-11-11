@@ -19,9 +19,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:33.462804197+00:00"
+status: "superseded"
 title: "Print each check finding once, on one line, against its record, and say what check checked"
-updated_at: "2026-11-07T21:03:25.446176563+00:00"
+updated_at: "2026-11-11T03:55:33.462804197+00:00"
 ---
 
 ## Goal
@@ -46,3 +47,7 @@ A passing check says only `Check passed.`, the same for the whole repository and
 ## Context
 
 The diagnostic block also appears in status and transition output, so fix it at the shared formatter. The `Lint found N issue(s)` header the audit reported is now `Check found N findings:`. atelier-sfd9 adds the file and field to a missing-reference finding; share the format.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new binary's `check` already prints each fault once, on one line, against its file, and a pass names the counts (`Every record is valid: 173 items, 8 missions and config.toml.`), run in a scratch clone.

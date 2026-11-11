@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:43.941829749+00:00"
+status: "superseded"
 title: "Remove the Impact section from issue show"
-updated_at: "2026-11-07T21:03:30.322307719+00:00"
+updated_at: "2026-11-11T03:55:43.941829749+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ updated_at: "2026-11-07T21:03:30.322307719+00:00"
 ## Context
 
 Decision atelier-mzpn chose option (a) of the original two: delete the section rather than narrow it to non-child dependents.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `show` prints no Impact section (run on atelier-1oel in a scratch clone).

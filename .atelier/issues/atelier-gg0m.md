@@ -14,9 +14,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:51.892647743+00:00"
+status: "superseded"
 title: "Give SessionStart one line of correct advice outside an Atelier repository"
-updated_at: "2026-11-07T21:03:23.755608551+00:00"
+updated_at: "2026-11-11T03:55:51.892647743+00:00"
 ---
 
 ## Goal
@@ -30,3 +31,7 @@ A SessionStart hook whose cwd is not inside an Atelier repository prints `Atelie
 ## Context
 
 atelier-md0v took the Stop half: `atelier land --hook claude` outside a repository now says there is nothing to land and exits 0. This item keeps the SessionStart half (decision atelier-mzpn). crates/atelier-cli/src/commands/status.rs (`--hook`). Found by acceptance validation atelier-1o56 (S5 scope gap; atelier-ft88 covered only a cwd that cannot be entered).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `status` outside an Atelier repository prints one line naming the missing `.atelier/config.toml` with no `check` advice, and the new `setup claude` writes its hooks into the repository's own settings (run in a scratch directory).

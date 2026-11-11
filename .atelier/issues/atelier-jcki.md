@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:43.308915324+00:00"
+status: "superseded"
 title: "Show the branch, review state and mission in issue show"
-updated_at: "2026-11-07T21:03:28.142255576+00:00"
+updated_at: "2026-11-11T03:55:43.308915324+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ Agents run `review list`, `git branch` or the parent's show to fill the gaps.
 ## Context
 
 Dropped in decision atelier-mzpn: the `(base master)` suffix, since the base is the policy's (atelier-md0v), and a Proof line, since receipts gate nothing (atelier-md0v). Builds on the brief `issue show` (atelier-7u4o, done). Review freshness and findings logic exists for `merge --check` (`atelier_app::review_gate`).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `show <id>` prints the item's status, mission, blockers and each review's round and verdict (product specification, Commands: `show`; run on atelier-1oel in a scratch clone), and the branch is named for the item.

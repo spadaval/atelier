@@ -24,9 +24,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:40.770159490+00:00"
+status: "superseded"
 title: "Name the command for the remaining silent or bare truncations"
-updated_at: "2026-11-07T21:03:29.640338083+00:00"
+updated_at: "2026-11-11T03:55:40.770159490+00:00"
 ---
 
 ## Goal
@@ -44,3 +45,7 @@ atelier-ytxg made the work-view lists name the command that shows the rest. Its 
 ## Context
 
 Dropped in decision atelier-mzpn: `land`'s path lists (finding atelier-wslw), which atelier-md0v reshaped when `land` became report-only on work branches.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The truncations it names are in `issue show`, the old `status` owner block, `evidence list` and the old not-found hint, none of which the new binary has; its not-found error names `atelier list` (run in a scratch clone).

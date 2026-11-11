@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:35.690492853+00:00"
+status: "superseded"
 title: "Show the outcome, own blockers and next step in the work mission header"
-updated_at: "2026-11-07T21:03:27.041551199+00:00"
+updated_at: "2026-11-11T03:55:35.690492853+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ The `work mission` header shows the mission, its Scope, Strategy and Criteria, b
 ## Context
 
 The close rule is described, not enforced (atelier-jnrh). The separate Status line the original reported is gone, and Strategy and Criteria are shown (atelier-stsa).
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new `show <mission>` prints the outcome and criteria and each item's status and blockers on one page (product specification, Commands: `show`; run on atelier-4pzj in a scratch clone).

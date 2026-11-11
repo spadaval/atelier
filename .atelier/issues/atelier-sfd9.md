@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:33.784679617+00:00"
+status: "superseded"
 title: "Give a repair route for links to missing records that arrive by merge or hand edit"
-updated_at: "2026-11-07T21:03:24.979790291+00:00"
+updated_at: "2026-11-11T03:55:33.784679617+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Since atelier-ilba a command refuses to write a link to a record that does not e
 ## Context
 
 Narrowed in decision atelier-mzpn to links that reach the records without a command. atelier-kset owns the one-line finding format; share it.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new binary's `check` already names the file and field of a link to a missing record (`blocked_by: \`atelier-zzzz\` names no item`) and says to fix it in the file named, run in a scratch clone; `issue unlink` does not exist in the new tool.

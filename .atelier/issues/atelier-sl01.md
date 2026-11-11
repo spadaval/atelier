@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:46.488172789+00:00"
+status: "declined"
 title: "Say a transition needing an argument the same way when it runs and when it is shown"
-updated_at: "2026-10-17T10:00:37.726457567+00:00"
+updated_at: "2026-11-11T03:55:46.488172789+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Mission atelier-o3lm validation (evidence atelier-ba8q) found two wording gaps:
 - [ ] A transition run without its required argument refuses with wording that matches "allowed, needs --reason" (for example "needs --reason") and one recovery step.
 - [ ] The doc sentence says exactly when the report is printed.
 - [ ] Tests cover both.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new tool has no transitions; `drop` takes `--reason` as a required argument (`atelier drop --help`), so a view and a run cannot disagree on it.

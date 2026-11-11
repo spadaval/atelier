@@ -16,9 +16,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:33.148267581+00:00"
+status: "superseded"
 title: "Show graph errors in atelier check even when a record fails to parse"
-updated_at: "2026-11-05T06:03:04.102700+00:00"
+updated_at: "2026-11-11T03:55:33.148267581+00:00"
 ---
 
 ## Goal
@@ -33,3 +34,7 @@ With a YAML error in one record (atelier-wtnp, `status: todo: bad`) and an `adva
 ## Context
 
 Extends atelier-idae.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (b). The new binary's `check` already reports a record that does not parse and the other records' missing references in one run (run in a scratch clone: one unparseable item, one unknown mission and one unknown blocker gave three problems in one report).

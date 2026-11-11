@@ -15,9 +15,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:51.573930592+00:00"
+status: "superseded"
 title: "Leave out a report Decisions part that only points at the item's decision notes"
-updated_at: "2026-11-05T04:47:42.479935642+00:00"
+updated_at: "2026-11-11T03:55:51.573930592+00:00"
 ---
 
 ## Goal
@@ -27,3 +28,7 @@ Since atelier-mgl0 the debrief shows each report's Decisions part, so a part tha
 ## Done when
 
 A Decisions part that only points at the entry's decision notes is left out when the entry has notes, with a fixture test; parts with their own content still show.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes the debrief, and the What is removed table removes the `debrief` command and decision notes; the Desk (mission atelier-z4cr) shows the debrief.

@@ -17,9 +17,10 @@ relationships:
     type: "related"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:36.008623441+00:00"
+status: "superseded"
 title: "Count review rounds in branch readiness and the review request brief"
-updated_at: "2026-11-07T21:04:12.983006832+00:00"
+updated_at: "2026-11-11T03:55:36.008623441+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,7 @@ Branch readiness facts (status Branches) and the review request brief. No warnin
 - The brief's round number is one more than the rounds so far, unless the head already has review events, in which case it is that head's round.
 - atelier-efnf adds open findings to the same facts; whichever lands second joins them in one fact (`3 review rounds, 1 open finding`). Neither waits on the other.
 - Kept in decision atelier-mzpn from the superseded atelier-ll3p.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (c). It duplicates atelier-1oel, whose Done when makes `status` show the round of an item in review; the new `show` already names each review's round.

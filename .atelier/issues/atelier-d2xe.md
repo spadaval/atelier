@@ -19,9 +19,10 @@ relationships:
     type: "discovered_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T03:55:36.957640893+00:00"
+status: "declined"
 title: "Show every scope item, in plain review and evidence words, in status's owner block"
-updated_at: "2026-11-07T21:03:29.961841720+00:00"
+updated_at: "2026-11-11T03:55:36.957640893+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ status's owner block (crates/atelier-cli/src/commands/status.rs, `Owner`), which
 ## Context
 
 The empty `blockers:` suffix the original reported is gone. Decision atelier-mzpn pointed this at status instead of `prime` (retired by atelier-sdb0); review words follow atelier-md0v's smaller vocabulary, where a `fix_now` finding has no disposition and only `defer` and `no_action` record a decision.
+
+## Report
+
+Dropped in the cutover sort (atelier-5zre), reason (a). It changes evidence and review rows in the old `status` owner block, and the What is removed table removes evidence records.
