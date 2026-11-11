@@ -93,9 +93,9 @@ Both run read only on 2026-11-11, in scratch clones of each base under `~/.cache
 
 | Line | atelier | demiurge |
 | --- | --- | --- |
-| 1. Harness loads the map, starts with `status` | Met. `CLAUDE.md` is `@AGENTS.md`; both hook files run `atelier status`. | Met. No `CLAUDE.md`, so Claude Code 2.1.322 reads `AGENTS.md`; both hook files run `atelier status`. |
+| 1. Harness loads the map, starts with `status` | Met. `CLAUDE.md` is `@AGENTS.md`; both hook files run `atelier status`. | Met. No `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the checkout or above it (only `~/.claude/CLAUDE.md`, which does not count), and Claude Code is 2.1.322, so it reads `AGENTS.md`; both hook files run `atelier status`. |
 | 2. `AGENTS.md` names build, test, lint, launch | Met. The install, `cargo nextest run`, clippy and fmt for `crates/`; the Desk's through `desk/README.md`. | Not met. It gives the old root app's build and no test command, and never names `app/`, where 756 of the last month's file changes landed. |
-| 3. What `AGENTS.md` points to exists | Met. The script printed nothing over 17 paths and 6 linked docs. | Not met. It names `/src/docs/editor`, which does not exist. |
+| 3. What `AGENTS.md` points to exists | Met. The script printed nothing over 17 named paths and the links in the 6 Markdown files among them. | Not met. It names `/src/docs/editor`, which does not exist. |
 | 4. Fresh clone builds from the docs alone | Met. `cargo install --path crates/atelier-cli --locked` to a scratch root in 13 s; the Desk's `pnpm install` and `pnpm build` passed. | Not met. `bun run build` fails with `Script not found "vite"`. The `bun install` it needs is only in `README.md`, which `AGENTS.md` does not link, and `app/` has no documented build. |
 | 5. Format, lint, type check documented and passing | Not met. `cargo fmt -- --check` and `cargo clippy --all-targets -- -D warnings` pass (10 s), and the Desk's `pnpm typecheck` passes, but the Desk has no format or lint command. | Not met. The documented format and lint commands write (`--write`, `--fix`) and are the root app's. In `app/`, `tsc --noEmit` and `biome check` pass (8 warnings) but are not documented. |
 | 6. Tests run from one documented command and pass | Met. `cargo nextest run`: 292 passed in 27 s. The Desk: `pnpm test` 43 and `pnpm e2e` 52 passed. | Not met. No documented test command. `bun test` in `app/` passes 1,154 tests in 43 s. |
@@ -106,7 +106,8 @@ Both run read only on 2026-11-11, in scratch clones of each base under `~/.cache
 No line was left could not test. Changed after the trial:
 
 - Line 1 first failed demiurge for having no `CLAUDE.md`. Claude Code's docs (`code.claude.com/docs/en/memory`) say it reads `AGENTS.md` when there is no `CLAUDE.md` since v2.1.277, and that a `CLAUDE.md` which does not import it hides it. The line now fails only that case.
-- Line 3's script skipped package names such as `@legendapp/state`, reads a leading `/` as the repository's root, and follows the `.md` paths `AGENTS.md` names in backticks as well as its links.
+- Line 3's script skipped package names such as `@legendapp/state`, reads a leading `/` as the repository's root, and follows the `.md` paths `AGENTS.md` names in backticks as well as its links. After review round 1 it also checks and follows Markdown files named at the root, such as `GUIDE.md`, skips URLs and anchors, and no longer takes the slash command `/agent-factory` for a path. On a fixture it reported a missing `MISSING.md`, a broken link inside a root `GUIDE.md`, and a broken relative link beside a valid `https` link, which it did not report. Its results on atelier and demiurge did not change.
+- Line 1, after review round 1, states Claude Code's loading rule in full: a `CLAUDE.md` symlinked to `AGENTS.md` counts, `CLAUDE.local.md` and files in directories above the checkout suppress `AGENTS.md`, and `~/.claude/CLAUDE.md` does not. Its results did not change.
 - How to Check gained "install into a scratch root": atelier's documented `cargo install` would have replaced the host's shared `atelier` binary.
 
 ### Validation

@@ -23,20 +23,24 @@ line whose failure shows in no measure is cut.
 ## Easy to Navigate
 
 1. **Each harness loads `AGENTS.md` and starts with `atelier status`.**
-   Test: `AGENTS.md` exists. Claude Code reads it unless a `CLAUDE.md` or
-   `.claude/CLAUDE.md` exists without `@AGENTS.md` in it. Where `.claude/`
-   or `.codex/` exists, its `settings.json` or `hooks.json` runs `atelier
-   status` at `SessionStart`. Shows in: tool calls before an agent's first
-   edit; Confusion (commands run by the wrong role).
+   Test: `AGENTS.md` exists, and Claude Code reads it. It does when
+   `CLAUDE.md` is a symlink to `AGENTS.md` or imports it with `@AGENTS.md`.
+   Otherwise it does only when no `CLAUDE.md`, `.claude/CLAUDE.md` or
+   `CLAUDE.local.md` exists in the checkout's root or a directory above it,
+   leaving out `~/.claude/CLAUDE.md`, and `claude --version` is 2.1.277 or
+   later. Where `.claude/` or `.codex/` exists, its `settings.json` or
+   `hooks.json` runs `atelier status` at `SessionStart`. Shows in: tool
+   calls before an agent's first edit; Confusion (commands run by the wrong
+   role).
 2. **`AGENTS.md` names the commands that build, test, lint and launch the
    code agents are changing now,** or says which of them do not exist. Test:
    read it beside where the last month's work landed, `git log
    --since=30.days --name-only --format= -- . ':!.atelier' | cut -d/ -f1 |
    sort | uniq -c | sort -rn | head`. Shows in: tool calls before an agent's
    first edit; Confusion (errored calls).
-3. **What `AGENTS.md` points to exists.** Every path it names in backticks,
-   and every relative link in it and in the Markdown files it names,
-   resolves. Test: the script below prints nothing. Shows in: tool calls
+3. **What `AGENTS.md` points to exists.** Every path and Markdown file it
+   names in backticks, and every relative link in it and in the Markdown
+   files it names or links, resolves. Test: the script below prints nothing. Shows in: tool calls
    before an agent's first edit.
 
 ## Easy and Reliable to Change
@@ -79,12 +83,13 @@ line whose failure shows in no measure is cut.
 Line 3's script, run from the repository's root:
 
 ```sh
-names=$(grep -oE '`[^` <>:*@]+/[^` <>:*]*`' AGENTS.md | tr -d '`' | sed 's|^/||')
+names=$(grep -oE '`[^` <>:*@]+`' AGENTS.md | tr -d '`' | sed 's|^/||' | grep -E '/|\.md$')
 for p in $names; do test -e "$p" || echo "AGENTS.md names missing $p"; done
-for f in AGENTS.md $(grep -oE '\]\([^)#:]+\.md' AGENTS.md | cut -c3-) $(printf '%s\n' $names | grep '\.md$'); do
+links() { grep -oE '\]\([^) ]+' "$1" | cut -c3- | grep -v : | sed 's/#.*//' | grep .; }
+for f in AGENTS.md $(links AGENTS.md | grep '\.md$') $(printf '%s\n' $names | grep '\.md$'); do
   test -f "$f" || continue
-  grep -oE '\]\([^)#: ]+' "$f" | cut -c3- | while read -r p; do
-    test -e "$(dirname "$f")/$p" || echo "$f links to missing $p"; done; done
+  links "$f" | while read -r p; do test -e "$(dirname "$f")/$p" || echo "$f links to missing $p"; done
+done
 ```
 
 Line 9's command:
