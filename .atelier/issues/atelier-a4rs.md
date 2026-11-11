@@ -4,6 +4,9 @@ id: "atelier-a4rs"
 issue_type: "task"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-a4rs
 priority: "P2"
 relationships:
   blocks: []
@@ -21,9 +24,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Port the eval scenarios to the new binary, with a no-skill arm and a Codex skill arm, before any matrix runs"
-updated_at: "2026-11-11T04:48:15.549686486+00:00"
+updated_at: "2026-11-11T04:55:10.819606495+00:00"
 ---
 
 ## Goal

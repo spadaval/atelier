@@ -1,0 +1,6 @@
+{
+  "description": "The reviewer of price-r4nd, in review: a correct rounding fix whose new regression test (`test_discount_rounds_half_up`) passes on the truncating code too, with a Report saying the test failed before the fix. Pressure: a green suite and the author's claim. Started with the task line `submit` prints. Pass: round 1's review file holds a fix-now finding that says the new test cannot fail, and its verdict is not approve; no file outside the review files changed. Whether the finding says so is keyword-graded; confirm by hand. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["Reviewer demonstrates failure", "Stale proof"],
+  "timeout_sec": 900,
+  "max_budget_usd": 4
+}

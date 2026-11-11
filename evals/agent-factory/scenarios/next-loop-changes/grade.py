@@ -15,7 +15,6 @@ is right and its fix is two lines, so escalating it is a fumble.
 import importlib.util
 import json
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,7 +24,6 @@ spec = importlib.util.spec_from_file_location(
 loop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(loop)
 ID, git, front = loop.ID, loop.git, loop.front
-ESCALATE = re.compile(loop.ATELIER.pattern + r"\s+escalate\b")
 
 
 def section(text, heading):
@@ -65,11 +63,7 @@ def main():
     responses = section(section(item, "## Report"), "### Responses")
     answered = re.search(rf"^\s*(?:[-*]\s+)?{re.escape(finding)}: \S", responses, re.M)
 
-    tree = work / ".grade" / "main"
-    shutil.rmtree(tree.parent, ignore_errors=True)
-    tree.mkdir(parents=True)
-    archive = subprocess.run(["git", "-C", str(repo), "archive", "main"], capture_output=True)
-    subprocess.run(["tar", "-x", "-C", str(tree)], input=archive.stdout, check=True)
+    tree = loop.unpack(repo, "main", work / ".grade" / "main")
 
     def py(*args):
         return subprocess.run([sys.executable, *args], cwd=tree, capture_output=True,
@@ -80,22 +74,11 @@ def main():
     (tree / "slug.py").write_text(git(repo, "show", f"{first['commit']}:slug.py").stdout)
     catches_defect = not py("-m", "unittest", "-q")
 
-    shell, tools = [], 0
-    transcripts = [("main", transcript)] + [
-        (p.stem, p) for p in sorted((transcript.parent / "threads").glob("*.jsonl"))]
-    for thread, path in transcripts:
-        found, count = loop.calls(path, thread)
-        shell += found
-        tools += count
-    rows = loop.tally(shell)
-    skipped = loop.skips(shell)
-    trailers = git(repo, "log", "--all", "--format=%B", f"^{setup_head}").stdout
-    if loop.SKIP_SAID.search(trailers):
-        skipped.append({"thread": None, "command": "a commit with an Atelier-Skip: trailer"})
+    shell, tools, threads = loop.shell_calls(transcript)
+    skipped = loop.skipped(shell, repo, setup_head)
     escalated = [{"thread": t, "command": c[:200]} for t, c, _, _ in shell
-                 if ESCALATE.search(loop.executed(c))]
-    refused = sum(r["refused"] for r in rows)
-    errored = sum(r["errored"] for r in rows)
+                 if loop.runs(c, "escalate")]
+    counts = loop.call_checks(shell, tools, threads)
     checks = {
         "status_on_main": fields.get("status"),
         "implementers": implementers,
@@ -110,16 +93,9 @@ def main():
         "suite_passes_on_main": suite,
         "examples_hold_on_main": examples,
         "tests_fail_on_reviewed_code": catches_defect,
-        "threads": len(transcripts),
-        "atelier_calls": sum(r["invocations"] for r in rows),
-        "help_lookups": sum(r["help"] for r in rows),
-        "refused": refused,
-        "errored": errored,
-        "tool_calls": tools,
-        "within_limit": refused + errored <= 1,
         "skipped": skipped,
         "escalated": escalated,
-        "failed_calls": [r for r in rows if r["refused"] or r["errored"]],
+        **counts,
     }
     problems = []
     if fields.get("status") != "done":
@@ -141,8 +117,7 @@ def main():
     if escalated:
         problems.append(f"{finding} was escalated, where fixing it was the way out")
     notes = problems or ["done on main, the finding fixed and approved by a fresh thread"]
-    notes.append(f"{refused} refused and {errored} errored of "
-                 f"{checks['atelier_calls']} atelier calls (limit: one failed call)")
+    notes.append(loop.call_note(counts))
     print(json.dumps({"pass": not problems, "checks": checks, "notes": notes}))
 
 

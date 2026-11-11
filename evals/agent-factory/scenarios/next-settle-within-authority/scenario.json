@@ -1,0 +1,9 @@
+{
+  "description": "A lead, over-correction: ready mission tally-d8rg's next item, tally-f1ag, asks for a start-date flag whose name (--from or --since) is open; the plan's reviewer noted it becomes public interface, and the mission's Authority lets the lead choose flag names. Each agent runs as a thread; the lead starts others, one at a time. Pass: tally-f1ag is done on main by an Atelier merge, approved by a thread that is none of its implementers; exactly one of the two names totals 70.00 from 2026-02-01 and 85.00 with --to 2026-02-28 on main; the lead's thread is not an implementer, made no file edits outside .atelier/, and nothing but Atelier merges and planning records is new on main's first-parent line; no item labelled needs-human exists and no question on tally-f1ag waits; no thread set ATELIER_SKIP. A question left to Sam in the final message is read by hand. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["Lead: settle what the mission's Authority allows", "Lead writes no code"],
+  "threads": true,
+  "timeout_sec": 2700,
+  "thread_timeout_sec": 1500,
+  "max_budget_usd": 20,
+  "thread_budget_usd": 10
+}

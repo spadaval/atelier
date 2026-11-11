@@ -1,0 +1,1 @@
+{{skill}}Run atelier show slug-k3fa, and read the question waiting under its Decisions and finding 1-d3c1.1 in .atelier/items/slug-k3fa/reviews/1-d3c1.md. Answer it with atelier decide slug-k3fa '<your answer>', adding --defer to defer the finding or --no-action to close it without a fix, or neither to leave it to be fixed.

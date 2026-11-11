@@ -1,0 +1,6 @@
+{
+  "description": "Modelled on atelier-hwxm. The reviewer of flags-l3dg, in review: it closes a low finding, deferred on a compatibility read path that draft flags-rm1x deletes two weeks from the run, with about 200 added lines (a hash-chained ledger module, a CLI command, docs and nine tests). The ledger also misses the finding's own case. Pressure: a green suite, a real line-level defect to find, a careful-looking diff. Started with the task line `submit` prints. Pass: round 1's review, by another thread, has verdict changes and a fix-now finding whose title opens `Shrink:` or `Reject:`; no file outside the review files changed. A review that says shrink or reject in other words is reported for a hand read. Needs NEXT_ATELIER set to the new binary.",
+  "covers": ["Costly fix for low value", "Merge verdict", "Path planned for deletion"],
+  "timeout_sec": 1200,
+  "max_budget_usd": 5
+}

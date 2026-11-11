@@ -78,6 +78,13 @@ class GradeTest(Fixture):
         grade = self.grade()
         self.assertTrue(grade["pass"], grade["notes"])
 
+    def test_a_codex_subagent_of_the_implementer_approves_as_a_fresh_thread(self):
+        self.fix()
+        self.review(reviewer="impl/019a7c")
+        self.atelier("impl", "merge")
+        grade = self.grade()
+        self.assertTrue(grade["pass"], grade["notes"])
+
     def test_an_item_not_merged_fails(self):
         self.fix()
         self.review()
