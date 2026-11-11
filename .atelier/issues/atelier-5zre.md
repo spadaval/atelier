@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Sort the 147 open items and five open missions for the new tool"
-updated_at: "2026-11-11T03:36:04.252553652+00:00"
+updated_at: "2026-11-11T04:59:51.155087334+00:00"
 ---
 
 ## Goal
@@ -73,6 +73,12 @@ The branch changes only records, so it needs no CI run of its own, and its revie
 ## Unknowns
 
 - How many of the `cli-output` items the new commands make moot.
+
+## Notes
+
+- 2026-11-10 [decision] Run a fourth review round with a fresh GPT-6.1 Sol reviewer (xhigh) after three rounds without an approval. If it finds only more partial (b) drops, restore each as a narrowed rewrite or as it is, fix, and run one further round; if that round does not approve, or a finding asks for anything beyond Scope, stop and report. Master is not brought in.
+  Reason: Orchestrator's decision on the escalation: the rounds converged (4, then 5, then 1 wrongly dropped record, all of one kind), and a wrong keep costs one atelier drop while a wrong drop costs digging in Git.
+  Rejected: Have Sumeet review the list directly
 
 ## Report
 
