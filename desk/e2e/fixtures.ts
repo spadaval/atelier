@@ -11,9 +11,12 @@ import type { MissionRow } from "../src/api/MissionRow";
 import type { MissionsResponse } from "../src/api/MissionsResponse";
 import type { ReposResponse } from "../src/api/ReposResponse";
 import type { StatusCount } from "../src/api/StatusCount";
+import type { T3State } from "../src/api/T3State";
 
 const commit = "2116defdde63afdadad2dddead0945cb50c21c42";
 const at = "2026-11-11T03:50:46+00:00";
+/** T3 Code not reached: the pages here show no threads. */
+const t3: T3State = { reachable: false, age_seconds: null, error: null };
 const thread = "thread:delegated-task:command%3Amcp%3Ad4040a34-c28b-4672-8918-87b1ffbc9fe0%3Adelegate-task%3A4e47a5ad";
 
 function row(id: string, title: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
@@ -104,6 +107,8 @@ export const z4cr: MissionPage = {
     { path: ".atelier/missions/atelier-z4cr/notes.md", title: "Notes of atelier-z4cr" },
   ],
   items: z4crItems,
+  threads: [],
+  t3,
   questions: [
     { item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null },
     { item: "atelier-1ie1", question: "Is the history of acts in this mission?", finding: null, answer: { by: "sumeet", text: "No: it waits for M5." }, outcome: "defer" },
@@ -181,6 +186,8 @@ for (const [id, title, status, items, more] of otherMissions) {
     can_ready: status === "draft",
     documents: [],
     items,
+    threads: [],
+    t3,
     questions: [],
     plan_reviews: [],
   };
@@ -216,6 +223,8 @@ function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
     responses: [],
     reviews: [],
     unsettled: [],
+    threads: [],
+    t3,
     ...more,
   };
 }
@@ -369,9 +378,11 @@ export const inbox: InboxResponse = {
       ],
       drafts: [missionPages["atelier-295u"].mission],
       questions: [{ item: "atelier-uwxy", mission: "atelier-z4cr", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2" }],
+      threads: [],
     },
-    { repo: "broken", commit: null, error: "`.atelier/items/x/item.md` does not read: missing field `status`", needs_human: [], drafts: [], questions: [] },
+    { repo: "broken", commit: null, error: "`.atelier/items/x/item.md` does not read: missing field `status`", needs_human: [], drafts: [], questions: [], threads: [] },
   ],
+  t3,
 };
 
 /** The response for one API request, as atelier-desk would give it. */
