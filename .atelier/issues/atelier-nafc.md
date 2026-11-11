@@ -35,7 +35,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Rehearse the converter and the new binary on all five repositories, with one item taken to done in two"
-updated_at: "2026-11-10T23:55:48.959628027+00:00"
+updated_at: "2026-11-11T00:17:39.804090382+00:00"
 ---
 
 ## Goal
@@ -59,6 +59,12 @@ The rehearsal, and small fixes to `scripts/cutover/convert_records.py` or `next/
 Design: `docs/strategies/redesign-architecture.md`, Transition ("2. Rehearse") and Testing. The converter is atelier-1sbw; `check` and the hooks are atelier-pz1y, `setup` is atelier-ym3z. The strategy's Risks name the one performance question: reading started items from their branches on every `status` may be slow in the repository with the most branches, and if it is, the fix is a cache inside one command's run, not a stored index.
 
 This is the second of step E's two items in `docs/strategies/redesign-2-core.md`, and the mission's last.
+
+## Notes
+
+- 2026-11-10 [decision] The rehearsal starts beside atelier-zrss and before atelier-t2jo, not after them
+  Reason: It needs the converter, check and setup, which are merged, and nothing of the bypass or the second fresh-agent scenario. Its proof is rerun from fresh clones on the final master before the mission closes, so nothing built later escapes it. The orchestrator of atelier-fcb7 changed the order, which the strategy's Authority leaves to it.
+- 2026-11-10 [note] Handoff: approved by gpt-6.1-sol (atelier-uwtm) at 7c339a85 in round 1 with no findings; the outcome, proof and open items are in the Report. Scratch clones removed; the five real repositories match the snapshot taken before the first run.
 
 ## Report
 
@@ -171,8 +177,3 @@ No step needed `ATELIER_SKIP`. The script pushes each converted base to its bare
 
 - The rehearsal ran with the debug binary. The release build's times are not measured.
 - The orchestrator files the `merge` output gap and the Done when question above if it wants them. They are not items yet.
-
-## Notes
-
-- 2026-11-10 [decision] The rehearsal starts beside atelier-zrss and before atelier-t2jo, not after them
-  Reason: It needs the converter, check and setup, which are merged, and nothing of the bypass or the second fresh-agent scenario. Its proof is rerun from fresh clones on the final master before the mission closes, so nothing built later escapes it. The orchestrator of atelier-fcb7 changed the order, which the strategy's Authority leaves to it.
