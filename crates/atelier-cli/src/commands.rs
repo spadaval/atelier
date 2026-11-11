@@ -62,9 +62,22 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         let mut entry = entry(&facts)?;
         annotate(repo, &mut entry, record)?;
         let decider = decider(repo, &facts, &links)?;
+        let decides = unmet(Act::Decide, &facts)?.is_empty();
         let config = repo.base_config()?;
         let dropped = record.dropped();
-        let said = output::item(&repo.caller, &entry, &config, dropped, decider.as_deref());
+        let leads = match (&links.mission, &links.lead) {
+            (Some((mission, _)), Some(lead)) if *lead == repo.caller => Some(mission.as_str()),
+            _ => None,
+        };
+        let said = output::item(
+            &repo.caller,
+            &entry,
+            &config,
+            dropped,
+            decider.as_deref(),
+            decides,
+            leads,
+        );
         return Ok(said);
     }
     let items = repo.everything()?;

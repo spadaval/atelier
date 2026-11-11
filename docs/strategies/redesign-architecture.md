@@ -492,8 +492,12 @@ has the same `CODEX_SESSION_ID` and inherited `T3CODE_THREAD_ID` and a
 and not run its parent's `submit` or `merge`. A thread the harness starts
 as a thread, such as T3 Code's `delegate_task`, has an identity of its own
 under any harness. `submit`'s handoff and the refusal of an author's
-`review` and `decide` say which subagents may be used, and to start one with
-fresh context, not as a fork.
+`review` and `decide` say which subagents may be used, to start one with
+fresh context, not as a fork, and that starting it is the reader's own job
+and part of its task, even as a child or subagent, so it starts it without
+waiting to be asked. Told less, a Codex thread waited for its user's word
+(atelier-t747), and a Claude Code thread started as a T3 Code child stopped
+for its lead (the first real item under the new tool, mission atelier-qr5s).
 
 That rule is the command's. A program that links `atelier-app`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
@@ -513,10 +517,16 @@ implemented an item can never review it.
 There is no local state file. A command works out who is calling by looking
 for the caller's identity in the records it can see: the item of the current
 branch, an open review of that item, and missions on the base. A thread may
-hold several things, and `status` lists each. Built so far: on a branch named
-for an item, `status` speaks to the item's holder as its implementer, to a
+hold several things, and `status` lists each. In a Git checkout with no
+`.atelier/`, every command but `check`, which reports the missing
+`config.toml`, says this is not an Atelier repository. Built so far: on a
+branch named for an item, `status` speaks to the item's holder as its implementer, to a
 thread that reviewed an earlier round as done with it, and to anyone else as
-a visitor, naming the holder; anywhere else it lists the
+a visitor, naming the holder. A visitor, or a reviewer whose review is
+done, is told, before any offer to take
+the item over, each unanswered question and `decide`, as its next command
+when it may decide them and naming who may when it may not; the lead of the
+item's mission is told so and offered no take-over. Anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
 ready items `start` would accept now (`Entry::startable`, as `list --ready`
 reads it), one line counting the other ready items by what stops them (a
@@ -557,7 +567,10 @@ verdict, which `git log -S` finds; nothing stores it. Away from the item's
 branch, the implementer's list of what it holds gives the same: each
 item's unanswered questions, since when an approved one is approved, the
 round of one in review or with changes requested, and the line that
-escalation is required after three rounds without an approval.
+escalation is required after three rounds without an approval. With
+changes requested, that line names `escalate --finding` with the first open
+fix-now finding that no question is about, in its round or any it was
+carried from, and it is gone once a question is about each.
 Missions join
 with their commands.
 

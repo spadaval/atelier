@@ -307,15 +307,53 @@ fn set<T>(slot: &mut Option<T>, key: &str, value: T) -> Result<(), String> {
 
 /// The checklist of an item's `## Done when`: each list line outside a
 /// fenced code block that starts `[ ]` or `[x]`, as whether it is ticked and
-/// its text. Other lines, such as a wrapped line's continuation, are text.
+/// its text. A line that wraps it, right under it, not blank and neither a
+/// list line nor a heading, is part of its text, joined by a space.
 pub(crate) fn done_when(body: &str) -> Vec<(bool, String)> {
     let Some(content) = section(body, 2, "Done when") else {
         return Vec::new();
     };
-    unfenced_lines(content)
-        .into_iter()
-        .filter_map(|(_, line)| check(line))
-        .collect()
+    let mut checks: Vec<(bool, String)> = Vec::new();
+    // Whether the line read last is a check's or wraps one, and where the
+    // line right under it starts; a fence between them ends the check.
+    let (mut wrapping, mut under) = (false, None);
+    for (start, line) in unfenced_lines(content) {
+        let follows = under == Some(start);
+        under = Some(start + line.len() + 1);
+        if let Some(found) = check(line) {
+            checks.push(found);
+            wrapping = true;
+            continue;
+        }
+        let text = line.trim();
+        wrapping &= follows && !text.is_empty() && !listed(text) && !heading(text);
+        if let (true, Some((_, last))) = (wrapping, checks.last_mut()) {
+            if !last.is_empty() {
+                last.push(' ');
+            }
+            last.push_str(text);
+        }
+    }
+    checks
+}
+
+/// Whether `text`, trimmed, is a heading: one to six `#`, then a space or
+/// nothing, as in `document.rs`. `#123` is text.
+fn heading(text: &str) -> bool {
+    let hashes = text.len() - text.trim_start_matches('#').len();
+    (1..=6).contains(&hashes) && (text.len() == hashes || text[hashes..].starts_with(' '))
+}
+
+/// Whether `text`, trimmed, starts a list line: `-`, `*` or `+`, or a number
+/// with `.` or `)`, each followed by a space.
+fn listed(text: &str) -> bool {
+    let numbered = text.trim_start_matches(|c: char| c.is_ascii_digit());
+    let ordered =
+        numbered.len() < text.len() && [". ", ") "].iter().any(|m| numbered.starts_with(m));
+    ordered
+        || ["- ", "* ", "+ "]
+            .iter()
+            .any(|marker| text.starts_with(marker))
 }
 
 fn check(line: &str) -> Option<(bool, String)> {
@@ -398,13 +436,39 @@ mod tests {
         assert_eq!(
             done_when(body),
             [
-                (false, "One".to_string()),
+                (false, "One wrapped".to_string()),
                 (true, "Two".to_string()),
                 (true, "Nested".to_string()),
                 (false, String::new()),
             ]
         );
         assert!(done_when("## Goal\n- [ ] x\n").is_empty());
+    }
+
+    #[test]
+    fn a_done_when_line_wrapped_over_several_lines_is_read_whole() {
+        let body = "## Done when\n\n- [ ] `slugify(\"a,  b\")` returns `a-b`,\n  and `slugify(\"--\")`\nreturns an empty slug.\n\
+                    - [x] Next\n\n  after a blank line\n- [ ] Before a fence\n```\nfenced\n```\n  after it\n\
+                    - [ ] Above a list\n  1. numbered\n- [ ] The output links to\n  #123 and explains the fix.\n\
+                    - [ ] Above a heading\n### Notes\n";
+        assert_eq!(
+            done_when(body),
+            [
+                (
+                    false,
+                    "`slugify(\"a,  b\")` returns `a-b`, and `slugify(\"--\")` returns an empty slug."
+                        .to_string()
+                ),
+                (true, "Next".to_string()),
+                (false, "Before a fence".to_string()),
+                (false, "Above a list".to_string()),
+                (
+                    false,
+                    "The output links to #123 and explains the fix.".to_string()
+                ),
+                (false, "Above a heading".to_string()),
+            ]
+        );
     }
 
     #[test]

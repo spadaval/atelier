@@ -283,9 +283,10 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
                  demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
                  Building:\n    demo-d4dd (medium, held by t1): Wave\n      \
                  [ ] Done when: It is done.\n      [ ] Report: written under `## Report`\n";
-    let handoff = "An implementer must be a thread other than yours. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Start one with fresh context, not as a fork of yours, and give it this task:\n  \
-                   Run atelier start demo-a1aa and follow what it prints.\n\
-                   Then wait for it to finish, and run `atelier status`.\n";
+    let handoff = format!(
+        "An implementer {START_ONE}  Run atelier start demo-a1aa and follow what it prints.\n\
+         Then wait for it to finish, and run `atelier status`.\n"
+    );
     let led = stdout(&root, "lead1", &["lead", "demo-m1ss"]);
     // It commits the mission alone.
     let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
@@ -330,6 +331,47 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     );
     assert!(!again.contains("Wrote"), "{again}");
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
+}
+
+#[test]
+fn on_an_items_branch_a_thread_holding_nothing_is_told_of_its_question_before_the_take_over() {
+    let (scratch, second) = fixture();
+    let root = scratch.root();
+    let question = "A question waits on a decider: 2026-11-10: Should waving be animated?\n";
+    let decide = "Then: atelier decide demo-d4dd \"<answer>\"\n";
+    let offer = "Only if you mean to take it over from its holder: atelier start demo-d4dd\n";
+    let status = stdout(&second, "d1", &["status"]);
+    assert!(
+        status.ends_with(&format!("Status: building\n{question}{decide}{offer}")),
+        "{status}"
+    );
+    // A thread that may not decide it is told who may.
+    assert_eq!(atelier(&second, "t2", &["start", "demo-d4dd"]).code, 0);
+    let status = stdout(&second, "t1", &["status"]);
+    assert!(
+        status.ends_with(&format!(
+            "Status: building\n{question}You may not decide it. A decider answers it with \
+             `atelier decide demo-d4dd`: a thread that never implemented this item nor reviewed \
+             the finding a question is about.\n{offer}"
+        )),
+        "{status}"
+    );
+    // The mission's lead decides it, and is not offered the item, with a
+    // question waiting or not.
+    assert_eq!(atelier(&root, "lead1", &["lead", "demo-m1ss"]).code, 0);
+    let leads = "You lead mission demo-m1ss, which demo-d4dd is in: its implementer builds it, \
+                 so you do not take it over.\n";
+    let status = stdout(&second, "lead1", &["status"]);
+    assert!(
+        status.ends_with(&format!("Status: building\n{leads}{question}{decide}")),
+        "{status}"
+    );
+    stdout(&second, "lead1", &["decide", "demo-d4dd", "No."]);
+    let status = stdout(&second, "lead1", &["status"]);
+    assert!(
+        status.ends_with(&format!("Status: building\n{leads}")),
+        "{status}"
+    );
 }
 
 #[test]
