@@ -364,7 +364,7 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-Output at 11564984, the commit that last changed a record other than this one (later commits change only this record's Report):
+Output at 64506273. Its parent 9fa05f03 is the last commit that changes a record other than this one; later commits change only this record:
 
 ```text
 Records converted, by kind and new status:
@@ -375,7 +375,7 @@ Records converted, by kind and new status:
   mission ready: 2
 Made ready from in_progress; each branch's work is not converted:
   atelier-5zre
-This tree's .atelier/ and moved files match a fresh conversion of 11564984da971a43749b890ad70ccc2737880337: 127 files.
+This tree's .atelier/ and moved files match a fresh conversion of 645062732d7ebaccb213f51a86c831e8da820403: 127 files.
 Every record is valid: 105 items, 8 missions and config.toml.
 ```
 
@@ -435,4 +435,3 @@ Round 5 (GPT-6.1 Sol, at 24b518dd) recorded one `fix_now` finding:
 Round 5 did not approve, so under the orchestrator's decision this fix goes back to the orchestrator unreviewed.
 
 Before round 6, each of the 27 rewrites' Done when was compared line by line with its text at fc0fe395, as the drops were after round 2: every requirement had to be kept, met by the new binary, or about something the new tool does not have. Seven had lost one, now put back: atelier-8bve (a next step that puts an item with no mission into one), atelier-9bm2 (noting items already started), atelier-n831 (the `git merge` that catches up), atelier-5qes (the tests from atelier-31l2 and atelier-8zxh), atelier-5zta (counts on `show <mission>`'s status groups), atelier-lkuy (the pointer to `show <mission>`, and the design record describing the heading) and atelier-jjvc (the CHANGELOG line). The other 20 keep every requirement the new tool does not meet.
-
