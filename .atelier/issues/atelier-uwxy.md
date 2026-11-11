@@ -110,6 +110,10 @@ The inbox's `needs_human` IDs there equal `atelier list --needs-human`'s (atelie
 - A root's child is served when it is a Git checkout whose `HEAD` holds `.atelier/config.toml`, looked up with `git cat-file`; other directories are skipped, not listed as errors, so a root such as `~/projects` does not list every non-Atelier repository.
 - Default port 3780, next to T3 Code's 3773.
 
+### Review fixes
+
+- atelier-xxwm (round 1, fix now): error responses from axum's extractors and method routing were not JSON. Fixed in d69a8bd6 with a middleware on the API's routes; `desk::the_item_and_document_routes` now sends a missing and a malformed query and two wrong methods, and fails without the middleware.
+
 ### Open items
 
 - A mission document's title is its first `# ` heading, as the document says; the converted `design.md` files begin under `# Sizing`, so the Documents tab shows "Sizing" for them. The app item (atelier-94pv) may prefer the file name.
