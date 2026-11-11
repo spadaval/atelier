@@ -1003,11 +1003,9 @@ pub fn settle_refusals(facts: &Facts, name: &FindingName) -> Result<Vec<Refusal>
     let mut found = refusals(Act::Settle, facts)?;
     let findings = facts.item.findings()?;
     let decisions = facts.item.decisions()?;
+    // Settled comes first: it is no rule, so a skip never settles twice.
     let unmet = match findings.iter().find(|f| f.name == *name) {
         None => vec![Condition::NoFinding(name.clone())],
-        Some(finding) if !is_deferred(finding, &findings, &decisions) => {
-            vec![Condition::NotDeferred(name.clone())]
-        }
         Some(Finding {
             settlement: Some(settlement),
             ..
@@ -1015,6 +1013,9 @@ pub fn settle_refusals(facts: &Facts, name: &FindingName) -> Result<Vec<Refusal>
             finding: name.clone(),
             settlement: settlement.clone(),
         }],
+        Some(finding) if !is_deferred(finding, &findings, &decisions) => {
+            vec![Condition::NotDeferred(name.clone())]
+        }
         Some(_) => Vec::new(),
     };
     if !unmet.is_empty() {

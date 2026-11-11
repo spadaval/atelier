@@ -268,6 +268,34 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
     assert_eq!(run.code, 1);
     assert!(run.stderr.contains("`demo-d0ne` is not a finding's name"));
     assert_eq!((changes(&root), read(&root, REVIEW)), before);
+
+    // A finding that is not deferred is settled with a skip, once: settled,
+    // it is no rule's to skip again.
+    let skipping = |args: &[&str]| {
+        let output = atelier_command(&root, "t9", args)
+            .env("ATELIER_SKIP", "Sumeet said so")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        (output.status.code(), stderr)
+    };
+    let name = "demo-d0ne/1-aaaa.3";
+    let (code, stderr) = skipping(&["drop", name, "--reason", "first"]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let once = read(&root, REVIEW);
+    for args in [
+        &["drop", name, "--reason", "second"][..],
+        &["new", "Title", "--from", name][..],
+    ] {
+        let (code, stderr) = skipping(args);
+        assert_eq!(code, Some(1), "{args:?}");
+        assert!(
+            stderr.contains("is not settled yet (it was dropped by t9: first)")
+                && stderr.ends_with(NOT_SKIPPABLE),
+            "{stderr}"
+        );
+        assert_eq!(read(&root, REVIEW), once);
+    }
 }
 
 #[test]
