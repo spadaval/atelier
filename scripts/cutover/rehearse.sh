@@ -115,7 +115,7 @@ convert() {
   git add -A
   git commit -qm "Convert Atelier records to the new layout"
   python3 "$here/convert_records.py" --verify "$pre"
-  note "$(ls .atelier/items | wc -l) items, $(ls .atelier/missions 2>/dev/null | wc -l) missions"
+  note "items: $(ls .atelier/items | wc -l), missions: $(ls .atelier/missions 2>/dev/null | wc -l)"
 }
 
 # The product clone gets the forge its real repository does not name, so the
