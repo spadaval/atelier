@@ -4,6 +4,9 @@ id: "atelier-t2jo"
 issue_type: "spike"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-t2jo
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Run fresh agents through a round of changes requested, the path most items take"
-updated_at: "2026-11-10T21:30:48.251549219+00:00"
+updated_at: "2026-11-11T00:51:31.584904962+00:00"
 ---
 
 ## Goal

@@ -17,6 +17,8 @@ as T3 Code does: it gets its own T3CODE_THREAD_ID, and work/bin/delegate
 new thread in the caller's directory, waits for it and prints its final
 reply. The system prompt describes `delegate` in THREADS_NOTE, and nothing
 else. Each such thread's transcript goes to threads/ in the run directory.
+setup.sh is given the first agent's thread ID in T3CODE_THREAD_ID, so a
+fixture can leave work that thread already holds.
 
 --agent codex runs `codex exec` instead of Claude Code (the none arm only),
 with HOME and CODEX_HOME in the work directory, so the host's ~/.codex
@@ -316,9 +318,9 @@ def check_isolation(work_root: Path, effort: str, out_root: Path,
 
 
 def threads(work: Path, run_dir: Path, env: dict, agent: str, model: str,
-            effort: str, meta: dict) -> dict:
+            effort: str, meta: dict, thread: str) -> dict:
     """Install `delegate` and what it needs; return the env with this run's
-    own thread ID."""
+    own thread ID, `thread`."""
     shutil.copy(Path(__file__).with_name("delegate.py"), work / "bin" / "delegate")
     (work / "bin" / "delegate").chmod(0o755)
     budget = meta.get("thread_budget_usd", meta.get("max_budget_usd", 5))
@@ -328,7 +330,7 @@ def threads(work: Path, run_dir: Path, env: dict, agent: str, model: str,
         "argv": agent_command(agent, "{task}", model, effort, budget, work / "repo",
                               THREADS_NOTE),
     }))
-    return {**env, "T3CODE_THREAD_ID": f"thread-{secrets.token_hex(4)}"}
+    return {**env, "T3CODE_THREAD_ID": thread}
 
 
 def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
@@ -343,8 +345,10 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
     work.mkdir(parents=True)
     (run_dir / "work").symlink_to(work)
 
+    thread = f"thread-{secrets.token_hex(4)}"
+    setup_env = {**os.environ, "T3CODE_THREAD_ID": thread} if meta.get("threads") else None
     setup = subprocess.run(["bash", str(sdir / "setup.sh"), str(work)],
-                           capture_output=True, text=True)
+                           env=setup_env, capture_output=True, text=True)
     if setup.returncode != 0:
         return {"scenario": scenario, "arm": arm, "model": model, "index": index,
                 "pass": None, "invalid": "setup failed: " + setup.stderr[-500:],
@@ -357,7 +361,8 @@ def run_one(scenario: str, arm: str, ref: str, model: str, effort: str,
     transcript = run_dir / "transcript.jsonl"
     env, system = agent_env(work, agent), None
     if meta.get("threads"):
-        env, system = threads(work, run_dir, env, agent, model, effort, meta), THREADS_NOTE
+        env, system = threads(work, run_dir, env, agent, model, effort, meta,
+                              thread), THREADS_NOTE
     cmd = agent_command(agent, prompt, model, effort, meta.get("max_budget_usd", 5),
                         repo_dir, system)
     started = datetime.datetime.now()
