@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Port the eval scenarios to the new binary, with a no-skill arm and a Codex skill arm, before any matrix runs"
-updated_at: "2026-11-11T06:47:23.585555303+00:00"
+updated_at: "2026-11-11T07:06:05.149561948+00:00"
 ---
 
 ## Goal
@@ -95,6 +95,7 @@ Expected size: 1,500 to 2,200 lines, nearly all fixtures and graders. The old sc
 - 2026-11-11 [handoff] Stopped unapproved after round 5 (five rounds; the round-4 decision allowed one more after round 4). Round 5's finding atelier-wpu3 is fixed in an unreviewed commit. Final proofs on atelier-next-7b06ed12. See the Report.
 - 2026-11-11 [decision] The orchestrator of atelier-qr5s runs round 6 at the head. If it finds another grader passing a run it should fail, the fix is the conservative one where a precise check is not quick: the grader returns pass null with needs_hand_grade for runs it cannot judge, named in the README, and one more round runs. If that does not approve, or a finding leaves evals/agent-factory/, stop and report. The benchmark walk that flipped once under load is made independent of wall time if that is a few lines, else the README says it can flip.
   Reason: Findings narrowed each round, and atelier-t747 reads every run's final.md by hand whatever the grader says, so a grader that errs toward needing a hand read is acceptable and one that errs toward a wrong pass is not.
+- 2026-11-11 [handoff] Stopped unapproved after round 7 (seven rounds). Round 7's finding atelier-1cw0 is fixed in an unreviewed commit; round 6's atelier-auvl fix was reviewed in round 7. Final proofs on atelier-next-7b06ed12. See the Report.
 
 ## Report
 
