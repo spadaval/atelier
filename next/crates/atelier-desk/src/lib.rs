@@ -16,3 +16,6 @@ pub mod threads;
 
 pub use config::Config;
 pub use server::{router, router_for, Desk};
+
+/// The commit this binary was built from, or `unknown` (`build.rs`).
+pub const BUILT_FROM: &str = env!("ATELIER_DESK_BUILT_FROM");

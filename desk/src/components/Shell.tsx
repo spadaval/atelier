@@ -74,6 +74,11 @@ function Sidebar({ open }: { open: boolean }) {
       ))}
       <div className="side-foot">
         <ThemeToggle />
+        {repos.data ? (
+          <span className="built" data-testid="built-from" title={`The Desk's server was built from commit ${repos.data.built_from}`}>
+            Built from {repos.data.built_from.slice(0, 9)}
+          </span>
+        ) : null}
       </div>
     </aside>
   );

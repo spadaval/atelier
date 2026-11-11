@@ -9,6 +9,8 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ReposResponse {
     pub repos: Vec<RepoSummary>,
+    /// The commit the server was built from (`crate::BUILT_FROM`).
+    pub built_from: String,
 }
 
 /// One repository and its counts, or why it cannot be read: then `error`

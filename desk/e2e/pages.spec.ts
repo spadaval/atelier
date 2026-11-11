@@ -29,6 +29,14 @@ test("the repositories page shows each repository's counts and missions, and a r
   await expectOnlyTheActs(page);
 });
 
+test("the sidebar's footer names the commit the server was built from", async ({ page }) => {
+  await load(page, "/");
+  if (phone(page)) await page.getByRole("button", { name: "Menu" }).click();
+  const built = page.getByTestId("built-from");
+  await expect(built).toHaveText("Built from 5e1f0c2d9");
+  await expect(built).toHaveAttribute("title", /5e1f0c2d9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d$/);
+});
+
 test("the mission page shows the title, status and counts atelier show prints", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-z4cr");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(z4cr.mission.title);

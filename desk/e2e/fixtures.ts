@@ -281,6 +281,7 @@ export const repos: ReposResponse = {
     { name: "atelier", path: "/clones/atelier", base: "master", base_tip: commit, in_progress: 2, drafts: 1, waiting: 1, error: null },
     { name: "broken", path: "/clones/broken", base: null, base_tip: null, in_progress: 0, drafts: 0, waiting: 0, error: "`.atelier/items/x/item.md` does not read: missing field `status`" },
   ],
+  built_from: "5e1f0c2d9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
 };
 
 function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {

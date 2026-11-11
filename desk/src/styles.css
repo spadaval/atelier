@@ -273,6 +273,12 @@ code {
   gap: 4px;
 }
 
+.side-foot .built {
+  margin-left: auto;
+  font: 11px var(--mono);
+  color: var(--ink-3);
+}
+
 .main {
   min-width: 0;
   display: flex;
