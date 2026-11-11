@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Perform ready and decide from the Desk's server through the core's functions, and start a planning session in T3 Code"
-updated_at: "2026-11-11T06:49:59.596222414+00:00"
+updated_at: "2026-11-11T07:13:07.344907249+00:00"
 ---
 
 ## Goal
@@ -60,6 +60,10 @@ Expected size: 500 to 700 lines of Rust with tests.
 - Tests of acts use scratch repositories made in the test. To try an act by hand, clone `~/.cache/atelier-desk/clones/atelier` under `~/.cache/atelier-desk/scratch/`; never act on a live repository or on the shared converted clone.
 - The switch (atelier-u1ko) moves `next/crates/` to `crates/`. Once it is started nothing merges into `next/` until atelier-wd1i has run; work may go on in the branch, and the orchestrator checks before merging. If the cutover runs while the branch is open, stop and report.
 - Sizes: complexity medium, value high, risk medium. This is the one path that writes: a wrong checkout or a wrong caller would put a record under the wrong name. The act-is-a-record test and the function's own refusals guard it, and saying go is one commit to revert.
+
+## Notes
+
+- 2026-11-11 [note] Escalated to the orchestrator after review round 1: atelier-h6zc fixed in 6aa9fc86; atelier-j8f8 (master's desk/e2e/fixtures.ts needs pending_answers, can_decide and decide_at) needs a merge from master and an edit outside this item's Scope. See the Report.
 
 ## Report
 
