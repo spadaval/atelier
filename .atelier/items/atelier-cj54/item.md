@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-cj54
 title: Let issue update replace one body section
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - issue-commands
@@ -41,3 +41,7 @@ From the 2026-10-16 transcript retrospective. Pairs with atelier-sxcj (`--body-f
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-sxcj (Accept --body-file in issue create and issue update)
+
+## Report
+
+Dropped: `issue update --body` was removed in 0.5; a record's body is edited in its file, so one section is changed directly.
