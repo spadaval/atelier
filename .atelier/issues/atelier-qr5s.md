@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Move all five repositories and Agent Factory onto the new loop, one cutover per host"
-updated_at: "2026-11-10T04:55:19.844011012+00:00"
+updated_at: "2026-11-11T02:40:18.549084653+00:00"
 ---
 
 ## Outcome
