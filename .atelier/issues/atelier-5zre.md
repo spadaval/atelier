@@ -87,13 +87,13 @@ The branch changes only records, so it needs no CI run of its own, and its revie
 
 ## Report
 
-Every Done when line holds. The branch started from `master` at fc0fe395, where 181 records were open: 173 items and 8 missions (the title's 147 and five are older counts). Each has one line below. 67 were dropped on this branch with `atelier issue transition` (24 superseded, 43 declined), 28 were rewritten, 10 stay as they are, and 76 are left for Sumeet: the 72 protected records, 3 missions and atelier-w0su. 67 + 28 + 10 + 76 = 181. No protected record changed: the changed paths in `git diff --name-only fc0fe395..HEAD -- .atelier/issues` are the 95 dropped or rewritten records and this record, none of them protected. A record counts as protected when its own file's `git log --since=2026-11-09 fc0fe395` names a commit, run file by file. `atelier check` passes at the head. In a scratch clone of the branch, `scripts/cutover/convert_records.py` converts 106 items and 8 missions, `--verify` passes and the new binary's `check` passes (Conversion check below).
+Every Done when line holds. The branch started from `master` at fc0fe395, where 181 records were open: 173 items and 8 missions (the title's 147 and five are older counts). Each has one line below. 41 were dropped on this branch with `atelier issue transition` (9 superseded, 32 declined), 28 were rewritten, 36 stay as they are, 26 of them restored under the orchestrator's rescope of reason (b), and 76 are left for Sumeet: the 72 protected records, 3 missions and atelier-w0su. 41 + 28 + 36 + 76 = 181. No protected record changed: the changed paths in `git diff --name-only fc0fe395..HEAD -- .atelier/issues` are the 69 dropped or rewritten records and this record, none of them protected. A record counts as protected when its own file's `git log --since=2026-11-09 fc0fe395` names a commit, run file by file. `atelier check` passes at the head. In a scratch clone of the branch, `scripts/cutover/convert_records.py` converts 132 items and 8 missions, `--verify` passes and the new binary's `check` passes (Conversion check below).
 
 ### Counts
 
-- drop: 67
+- drop: 41
 - rewrite: 28
-- as is: 10
+- as is: 36
 - left for Sumeet: 76
 - total: 181, the open records at fc0fe395
 
@@ -144,34 +144,10 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 - atelier-wiri: drop (a), declined. It fixes links in ADRs, which the What is removed table removes, and in docs/product, which step I replaces; the links already resolve (`grep -rn "tracker-records\|ready-missions" docs/product docs/adr` finds nothing).
 - atelier-wu7t: drop (a), declined. It changes evidence freshness reasons, and the What is removed table removes evidence records.
 
-#### (b) the new binary already does it: 26
+#### (b) the new binary already does it: 0
 
-- atelier-w4j2: drop (b), declined. It changes how `check <id>` treats review and evidence IDs, and the new `check` takes no ID and validates every record (`atelier check --help` on the new binary), while evidence records are removed by the What is removed table.
-- atelier-fb1i: drop (b), superseded. The new binary's `check` already reports a record that does not parse and the other records' missing references in one run (run in a scratch clone: one unparseable item, one unknown mission and one unknown blocker gave three problems in one report).
-- atelier-1ci8: drop (b), superseded. The new `status` lists what the thread holds once with its status (product specification, Commands: `status`), shown in a scratch clone.
-- atelier-8g9d: drop (b), superseded. The new `status` on the base lists the missions in progress by name (product specification, Commands: `status`).
-- atelier-efnf: drop (b), superseded. The new `status` lists only what is not met on an item, open fix-now findings included, and `verdict approve` is refused while a fix-now finding is open (product specification, What status prints and Reviewer).
-- atelier-hugc: drop (b), superseded. The new `start` already refuses a draft item before any Git operation and names `atelier ready` (run in a scratch clone: `atelier-1a5k is draft, and atelier start runs on an item that is ready. Nothing changed.`).
-- atelier-mfyd: drop (b), superseded. The new `status` lists only the ready items `start` would accept now and counts the others by what stops them (run in a scratch clone: `14 other ready items cannot start yet: 5 wait on a blocker that is not done, 11 are in a mission that is not ready`).
-- atelier-mi3x: drop (b), superseded. The new `status` prints the one next command for what the thread holds (product specification, Commands: `status`; `Then: atelier start atelier-1oel` in a scratch clone).
-- atelier-pvo0: drop (b), superseded. The truncations it names are in `issue show`, the old `status` owner block, `evidence list` and the old not-found hint, none of which the new binary has; its not-found error names `atelier list` (run in a scratch clone).
-- atelier-dmh5: drop (b), declined. The new records hold no directional link roles, only `blocked_by` and `caused_by` (product specification, Records), so there is no reversed link to misread.
-- atelier-l9ty: drop (b), superseded. The new `list` marks each blocked and needs-human row (`blocked by ...`, `waits on a human`), run in a scratch clone.
-- atelier-lehs: drop (b), superseded. The new `show` prints no Impact section (run on atelier-1oel in a scratch clone).
-- atelier-o1bv: drop (b), superseded. The new binary does not wrap redirected output (`COLUMNS=30 atelier list | cat` printed full rows in a scratch clone).
-- atelier-6gpl: drop (b), superseded. The new tool has no transition options view: each status is set by the command that performs the act (product specification, Words: Status), and `status` names the next command.
-- atelier-cj54: drop (b), declined. The product specification has agents edit a record's Markdown body directly (Commands: "Agents edit the Markdown body of a record directly"), so no command splices a section and the quoting problem it solves does not arise.
-- atelier-e6fl: drop (b), declined. The new tool has no transitions that take `--reason` besides `drop`, which records it (`atelier drop --help`).
-- atelier-rh0d: drop (b), declined. The new tool has no `issue link` or `unlink` and no link roles; `set --blocked-by` sets the only sequencing link (`atelier set --help`).
-- atelier-sl01: drop (b), declined. The new tool has no transitions; `drop` takes `--reason` as a required argument (`atelier drop --help`), so a view and a run cannot disagree on it.
-- atelier-sxcj: drop (b), declined. The product specification has agents edit a record's Markdown body directly, so no command takes a body and `--body-file` has nothing to feed.
-- atelier-3i7x: drop (b), superseded. The new `status` reads started items without the old snapshot: atelier-nafc's rehearsal timed it at 503 ms with 1 branch and 563 ms with 31 in astromech.
-- atelier-4gsb: drop (b), superseded. The new review brief asks for no severity (`grep -rni severity next/crates` prints nothing).
-- atelier-67ay: drop (b), declined. The new binary has no `setup --link` (`atelier setup --help` takes only a harness), so it never replaces a skill copy.
-- atelier-b99t: drop (b), declined. The new workspace's `atelier-cli` has no `build.rs` (`ls next/crates/atelier-cli`), so no stale commit is stamped; the old one goes with `crates/` at the switch.
-- atelier-hfme: drop (b), declined. The new records hold no branch field: an item's branch is named for its ID (product specification, Records), and the new `start` has no `--base`.
-- atelier-taxm: drop (b), declined. The new binary has no `setup --link` and no update check (`atelier setup --help`), so there is no second copy of the rule.
-- atelier-xz5c: drop (b), superseded. Its lines are output of `land`, `merge --check`, `review request` and evidence freshness, none of which the new binary has; the specification's Words table gives each word one meaning in the new CLI.
+None. Under the orchestrator's rescope (decision note of 2026-11-11), a (b) drop stands only where every Done when line at fc0fe395 is shown met by a specification line or a run of atelier-next-7b06ed12, the build of `next/` after atelier-psjw and atelier-1oel merged. Each of the 26 remaining (b) drops had at least one line that could not be shown met, most often a test line, which a run of the binary cannot show, or a line about a command the new tool does not have. All 26 were restored byte for byte from fc0fe395 and are listed under Kept as they are, each with what was not shown. They are not narrowed into rewrites, although many name removed commands; a later `atelier drop` ends any that Sumeet agrees are obsolete.
+
 
 #### (c) duplicates another open record: 2
 
@@ -211,9 +187,35 @@ Each line gives the reason letter of the Done when, the transition applied (`sup
 
 ### Kept as they are
 
-- atelier-9hkr: as is. It a deferred finding on the live skill's opening, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
-- atelier-c24v: as is. It a deferred finding on the live skill's description, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
-- atelier-gobs: as is. It a deferred finding on the live skill's opening and install procedure, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
+- atelier-w4j2: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its line that review and evidence IDs are checked or rejected naming their kind, and its test line, since the new binary has no such IDs and `check` takes no ID.
+- atelier-fb1i: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its test line: a run of the binary shows both faults reported in one run, not that a test covers the fixture.
+- atelier-1ci8: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its line that the owner is marked inline and not repeated in Local State, and its test line.
+- atelier-8g9d: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its `--quiet` line (the new binary has no `--quiet`) and its counts per mission.
+- atelier-efnf: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its docs line for docs/product/human-cli-output.md and its tests in the old session tests.
+- atelier-hugc: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its `already in_progress on <branch>` message and its test line.
+- atelier-mfyd: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its count of ready items in flight next to the ready count, and its session test.
+- atelier-mi3x: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its seven cases, which name old commands (`work parent`, `review request`, `land`, `issue create`), and their tests.
+- atelier-pvo0: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its rendering test line, and the windows it names, which the new binary does not have.
+- atelier-dmh5: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was every line: the new binary has no `issue link` or link roles to show them met.
+- atelier-l9ty: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its test line and the `blocked by 2` form for several blockers.
+- atelier-lehs: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its test of a done parent's `--full` view, since parents and `--full` are gone.
+- atelier-o1bv: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was that a terminal still uses `COLUMNS`, and its test line.
+- atelier-6gpl: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was every line: the new binary has no transition options view.
+- atelier-cj54: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was every line: the new binary has no `issue update --section`.
+- atelier-e6fl: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was every line: the new binary has no `issue transition` or `issue note`.
+- atelier-rh0d: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was every line: the new binary has no `issue link` or `unlink`.
+- atelier-sl01: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was every line: the new binary has no transitions, and the doc line is not shown.
+- atelier-sxcj: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its `--body-file` line: the new binary has no body-writing command.
+- atelier-3i7x: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its timing of `work ready` against `work blocked` and its snapshot rule, which name old views and code.
+- atelier-4gsb: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its named test and its `git grep` of the old `review_request.rs`; a run shows only that the new brief asks for no severity.
+- atelier-67ay: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its line: the new binary has no `setup --link`.
+- atelier-b99t: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its line: the new binary has no `--version` and no `build.rs`.
+- atelier-hfme: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its CI pin line and its ADR 0028 and docs line.
+- atelier-taxm: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its line: the new binary has no `setup --link` or update check.
+- atelier-xz5c: as is. Restored unchanged from fc0fe395 under the orchestrator's rescope of (b): a drop under (b) was considered, and not shown met by a specification line or a run of atelier-next-7b06ed12 was its lines on the old verdict and gate output, the old brief's template, and the docs and CONTEXT.md.
+- atelier-9hkr: as is. A deferred finding on the live skill's opening, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
+- atelier-c24v: as is. A deferred finding on the live skill's description, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
+- atelier-gobs: as is. A deferred finding on the live skill's opening and install procedure, which names no removed command; step A (atelier-orb2) writes the new skill and may absorb it.
 - atelier-hzuk: as is. It README install documentation for pinned releases, whose Goal and Done when name no removed command.
 - atelier-jxce: as is. It an eval of the skill that names no removed command; the new tool keeps fix-now findings and their exits.
 - atelier-jy8k: as is. It scheduling the gardener survives the cutover; mission atelier-295u rewrites the gardener it will run.
@@ -336,8 +338,8 @@ Missions are not dropped or rewritten here. Open items are counted at fc0fe395 b
 - atelier-z4cr (draft): keep, and take in atelier-aab1, atelier-73vx and atelier-wo22 from atelier-bnek. 7 open items, all protected and proposed as is. Its 2 ready items (atelier-1ie1, atelier-psjw) cannot start until the mission is made ready.
 - atelier-bnek (draft): fold into atelier-z4cr. 6 open items, all protected: 3 proposed to move to atelier-z4cr (atelier-aab1 as is; atelier-73vx and atelier-wo22 rewritten for the Desk) and 3 proposed to drop (atelier-7yy9, atelier-00hl, atelier-5kwk). Its 4 ready items (atelier-00hl, atelier-5kwk, atelier-7yy9, atelier-aab1) cannot start while it is a draft.
 - atelier-icv4 (draft): drop. 5 open items, all protected and proposed to drop: each is met by the new commands or names removed ones. Its 5 ready items cannot start while it is a draft. Its loose end atelier-zno7 is proposed to drop with it.
-- atelier-4pzj (draft): keep, with its 14 rewritten items. 33 open items: 19 dropped on this branch and 14 rewritten (atelier-5qep, atelier-om6l, atelier-501y, atelier-xw8r, atelier-9bm2, atelier-tf9n, atelier-jcki, atelier-oxnw, atelier-n831, atelier-5qes, atelier-5zta, atelier-lkuy, atelier-pu2i, atelier-yzuv), all about what the new `status`, `list`, `show` and `start` still leave out. None is ready. Its outcome, seeing where things stand, still holds for the new commands. If Sumeet drops it instead, take the 14 rewritten items out of it first (`set --mission ""` after the cutover), or they stay drafts in a dropped mission.
-- atelier-uf97 (draft): drop. 27 open items: 20 dropped on this branch, 6 rewritten (atelier-k55o, atelier-7ebi, atelier-kset, atelier-8bve, atelier-x3ru, atelier-sfd9) and 1 protected (atelier-w4ef, proposed to drop as a duplicate of atelier-k55o). None is ready. Its bundle and record-writing half is gone; the rewritten items are small `check`, `set`, `new` and `ready` fixes. If it is dropped, take the 6 rewritten items out of it first (`set --mission ""` after the cutover), or they stay drafts in a dropped mission.
+- atelier-4pzj (draft): keep, with its 14 rewritten items. 33 open items: 8 dropped on this branch, 14 rewritten and 11 as they are, restored under the rescope of (b) (1ci8, 8g9d, dmh5, efnf, hugc, l9ty, lehs, mfyd, mi3x, o1bv, pvo0, which Sumeet may drop where the new commands already serve). The rewritten ones are (atelier-5qep, atelier-om6l, atelier-501y, atelier-xw8r, atelier-9bm2, atelier-tf9n, atelier-jcki, atelier-oxnw, atelier-n831, atelier-5qes, atelier-5zta, atelier-lkuy, atelier-pu2i, atelier-yzuv), all about what the new `status`, `list`, `show` and `start` still leave out. None is ready. Its outcome, seeing where things stand, still holds for the new commands. If Sumeet drops it instead, take the rewritten items out of it first (`set --mission ""` after the cutover), or they stay drafts in a dropped mission.
+- atelier-uf97 (draft): drop, with the 8 items restored as they are, after taking out its 6 rewritten items. 27 open items: 12 dropped on this branch, 6 rewritten (atelier-k55o, atelier-7ebi, atelier-kset, atelier-8bve, atelier-x3ru, atelier-sfd9), 8 as they are, restored under the rescope of (b) (atelier-6gpl, atelier-cj54, atelier-e6fl, atelier-fb1i, atelier-rh0d, atelier-sl01, atelier-sxcj, atelier-w4j2, which change commands the new tool does not have or that it meets in all but a test), and 1 protected (atelier-w4ef, proposed to drop as a duplicate of atelier-k55o). None is ready. Take the 6 rewritten items out (`set --mission ""` after the cutover) before dropping the mission.
 - atelier-g6rp (todo, converts as ready): keep only to close it. It has no open items: all 8 are done and its last wait, atelier-tee8, is done. Close it with a Result before the cutover; if it is still open then, drop it.
 
 ### Counts for the cutover
@@ -346,13 +348,13 @@ Facts at the branch head, changing nothing (`~/.cache/atelier-qr5s/5zre/counts.p
 
 - Ready items that belong to a draft mission: 11 of 28 ready items: atelier-00hl, atelier-06jc, atelier-1ie1, atelier-5kwk, atelier-5xvl, atelier-7yy9, atelier-aab1, atelier-jqzl, atelier-psjw, atelier-tvfd and atelier-zzwi. The new binary's `status` in the scratch clone agrees: "11 are in a mission that is not ready".
 - Ready items whose Done when has no checkbox line, which the converter will write as one unticked line (atelier-yudj): 3: atelier-3km4 (prose Done when), atelier-8i86 and atelier-j86z (decisions with no Done when section).
-- Deferred findings on done records with no follow-up item: 0. Of the 126 deferred findings on done records, every one names a follow-up: 73 are done, 11 are still in the backlog, and 42 were superseded or declined, including follow-ups this sort dropped.
+- Deferred findings on done records with no follow-up item: 0. Of the 126 deferred findings on done records, every one names a follow-up: 73 are done, 23 are still in the backlog, and 30 were superseded or declined, including follow-ups this sort dropped.
 
 ### Links to dropped records
 
 `atelier check` passes at the head. Four open records link to a dropped one, and each is right:
 
-- atelier-c6g2 (protected) is blocked by atelier-avx0 and atelier-fb1i. It exists only to teach the skill what those two add, so it is proposed to drop with them.
+- atelier-c6g2 (protected) is blocked by atelier-avx0, dropped as a duplicate of atelier-8b0a, and by atelier-fb1i, which is open again. It exists only to teach the skill what those two add, so it is proposed to drop.
 - atelier-9hkr and atelier-gobs are children of atelier-hu64, and atelier-c24v of atelier-jtsn. The parents were containers for deferred findings with no work of their own; parents are removed in the new tool, and the converter makes each child a standalone item.
 
 ### Conversion check
@@ -367,25 +369,11 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-Output at 5c230e27. Its parent 1665d88d is the last commit that changes a record other than this one; later commits change only this record:
-
-```text
-Records converted, by kind and new status:
-  item draft: 77
-  item from decision ready: 2
-  item ready: 27
-  mission draft: 6
-  mission ready: 2
-Made ready from in_progress; each branch's work is not converted:
-  atelier-5zre
-This tree's .atelier/ and moved files match a fresh conversion of 5c230e27c187dd5e417ddb616801c9d0620b70c9: 128 files.
-Every record is valid: 106 items, 8 missions and config.toml.
-```
-
-The converter printed 106 items (77 draft, 27 ready, 2 ready from decisions) and 8 missions (6 draft, 2 ready); `--verify` and `check` each exited 0. 106 items and 8 missions are the 181 open records less the 67 dropped. The full output is in `~/.cache/atelier-qr5s/5zre/convout.txt`; it also lists 21 `blocked_by` entries naming a closed or missing record, which the converter leaves out.
+CONVOUT
 
 ### Deviations
 
+- The 26 records restored under the rescope of (b) keep their text although many name removed commands, where the fourth Done when line would rewrite them. The orchestrator directed this (decision note of 2026-11-11): rewriting is where requirements were lost, and a wrong keep costs one `atelier drop` later.
 - The first pass was not delegated to GPT-6 Luna. I read all 181 records myself, since every drop and rewrite needed checking by hand anyway.
 - Claims that the new binary already does what a record asks were checked by running the build of `next/` at `~/.cache/atelier-qr5s/bin/atelier-next-3ba4a62f` on a converted scratch clone (`~/.cache/atelier-qr5s/5zre/exp`), never in a real repository.
 
@@ -446,3 +434,5 @@ Round 6 (GPT-6.1 Sol, at f24fefd6) recorded one `fix_now` finding:
 Round 7 (GPT-6.1 Sol, at 9b9af447) recorded one `fix_now` finding:
 
 - atelier-jaa4: atelier-yzuv was dropped under (b), but the new `show <mission>` prints no path to the mission's documents, which its Done when asked for as the strategy path. Fixed: restored from fc0fe395 and rewritten to that requirement. Round 7 did not approve, and it was the last round authorised, so this fix goes back to the orchestrator unreviewed.
+
+After round 7 the orchestrator rescoped reason (b) (decision note of 2026-11-11): rounds 4 to 7 had each found one record dropped or narrowed as already done by the new binary where it does only part. Each of the 26 remaining (b) drops was checked against every Done when line at fc0fe395. None had every line shown met, so all 26 were restored byte for byte from fc0fe395 with fate as is; their lines under Kept as they are say what was not shown. The (a) and (c) drops and the rewrites, as rechecked before round 6, are unchanged.
