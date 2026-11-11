@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-lehs
 title: Remove the Impact section from issue show
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -29,3 +29,7 @@ created_at: 2026-10-17T01:10:57.962696285Z
 ## Context
 
 Decision atelier-mzpn chose option (a) of the original two: delete the section rather than narrow it to non-child dependents.
+
+## Report
+
+Dropped: `issue show` and its Impact section were removed in 0.5.
