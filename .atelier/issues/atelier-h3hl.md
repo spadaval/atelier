@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Perform ready and decide from the Desk's server through the core's functions, and start a planning session in T3 Code"
-updated_at: "2026-11-11T07:14:02.238557847+00:00"
+updated_at: "2026-11-11T07:18:59.649368663+00:00"
 ---
 
 ## Goal
@@ -66,6 +66,7 @@ Expected size: 500 to 700 lines of Rust with tests.
 - 2026-11-11 [note] Escalated to the orchestrator after review round 1: atelier-h6zc fixed in 6aa9fc86; atelier-j8f8 (master's desk/e2e/fixtures.ts needs pending_answers, can_decide and decide_at) needs a merge from master and an edit outside this item's Scope. See the Report.
 - 2026-11-11 [decision] The new response fields stay required in the generated types, and desk/e2e/fixtures.ts and any other desk/ fixture typed as a changed response gets them with neutral values (pending_answers: [], can_decide: false, decide_at: null), after one atelier merge --sync from master. Option A of the atelier-j8f8 escalation, on the orchestrator's direction; no page, component or behaviour of the app changes.
   Reason: The app is built from the generated types, so optional fields would weaken its contract, and the fixture edit is the smallest change that keeps the desk CI job's typecheck green.
+- 2026-11-11 [note] Handoff: approved by gpt-6.1-sol-h3hl-r2 (atelier-2hm1) at 0372efe1 after two review rounds; atelier-h6zc and atelier-j8f8 fixed. Ready to merge; see the Report.
 
 ## Report
 
