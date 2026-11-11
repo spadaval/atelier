@@ -206,6 +206,11 @@ if [ -e $S/git-fails-push ] && [[ " \$* " == *" push "* ]]; then
     exit 128
   fi
 fi
+# A subcommand that fails, every time, while git-fails-cmd names it.
+if [ -s $S/git-fails-cmd ] && [[ " \$* " == *" \$(cat $S/git-fails-cmd) "* ]]; then
+  echo "fatal: \$(cat $S/git-fails-cmd) failed (a double)" >&2
+  exit 128
+fi
 exec /usr/bin/git "\$@"
 EOF
   chmod +x "$S/bin/systemctl" "$S/bin/gh" "$S/bin/git"
@@ -463,6 +468,65 @@ recorded_whole_then_rolled_back() {
 snapshot_first() { snapshot "$S" > "$S/before.snapshot"; bases "$S" > "$S/before.bases"; export CUTOVER_FAIL_AT=record-atelier; }
 close_push_fails() { echo 6 > "$S/git-fails-push"; }
 
+# A rollback whose own command fails: it must say what failed, keep its
+# recovery state, install nothing and exit non-zero; run again once the
+# cause is gone, it restores.
+rollback_fails_trial() { # <name> <port> <what> <stop point> <break> <mend> <kept recovery state, or "">
+  local name=$1 S=$W/$1 rc
+  sandbox "$S" "$2"
+  (
+    sandbox_env "$S"
+    snapshot "$S" > "$S/before.snapshot"; bases "$S" > "$S/before.bases"
+    export CUTOVER_FAIL_AT=$4
+    set +e; run_cutover "$S" > "$S/cutover.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 1 ] || { say "$name: FAILED: the cutover exited $rc"; exit 1; }
+    unset CUTOVER_FAIL_AT
+    say "$name: the cutover stopped at $4; then $3"
+    $5
+    set +e; run_rollback "$S" > "$S/rollback.log" 2>&1; rc=$?; set -e
+    [ $rc -ne 0 ] || { say "    FAILED: the rollback exited 0 although $3"; tail -5 "$S/rollback.log" | sed 's/^/      /'; exit 1; }
+    grep -q '(a double)' "$S/rollback.log" || { say "    FAILED: the rollback did not say what failed"; exit 1; }
+    [ "$(sha256sum "$S/root/bin/atelier" | cut -d' ' -f1)" != "$FALLBACK_BIN_SHA256" ] || { say "    FAILED: the fallback was installed over repositories not restored"; exit 1; }
+    [ -z "$7" ] || [ -d "$S/state/$7" ] || { say "    FAILED: the recovery state $7 is gone"; exit 1; }
+    say "    rollback exited $rc, saying: $(grep -m1 '(a double)' "$S/rollback.log" | sed 's/^ *//' | cut -c1-110)"
+    say "    it installed nothing$( [ -z "$7" ] || echo ", and kept $7")"
+    $6
+    run_rollback "$S" > "$S/rollback2.log" 2>&1 || { say "    FAILED: run again once mended, the rollback failed; see $S/rollback2.log"; exit 1; }
+    restored "$S" "$S/before.snapshot" "$S/before.bases" || { say "    FAILED"; exit 1; }
+    "$S/bin/systemctl" stop atelier-serve || true
+  ) && say "$name: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
+}
+refuse_pushes() { printf '#!/bin/sh\necho "push declined (a double)" >&2\nexit 1\n' > "$S/remotes/atelier.git/hooks/pre-receive"; chmod +x "$S/remotes/atelier.git/hooks/pre-receive"; }
+accept_pushes() { rm -f "$S/remotes/atelier.git/hooks/pre-receive"; }
+fail_git() { echo "$1" > "$S/git-fails-cmd"; }
+mend_git() { rm -f "$S/git-fails-cmd"; }
+
+# A preflight whose old-tracker query fails must stop, before anything is
+# converted.
+preflight_query_trial() { # <name> <port> <what> <which query fails>
+  local name=$1 S=$W/$1 rc
+  sandbox "$S" "$2"
+  (
+    sandbox_env "$S"
+    cat > "$S/bin/atelier" <<WRAPPER
+#!/bin/bash
+case "$4" in
+  work) if [ "\$PWD" = "$S/projects/astromech" ] && [ "\$1 \$2" = "work active" ]; then echo "Error: cannot read the records (a double)" >&2; exit 1; fi ;;
+  status) if [ "\$1" = status ]; then echo "Error: status failed (a double)" >&2; exit 1; fi ;;
+esac
+exec $S/root/bin/atelier "\$@"
+WRAPPER
+    chmod +x "$S/bin/atelier"
+    set +e; run_cutover "$S" > "$S/cutover.log" 2>&1; rc=$?; set -e
+    [ $rc -eq 1 ] || { say "$name: FAILED: the cutover exited $rc although $3"; exit 1; }
+    if grep -q '^== Step 2' "$S/cutover.log"; then say "$name: FAILED: it went on to step 2 although $3"; exit 1; fi
+    if grep -q 'convert:' "$S/state/journal" 2>/dev/null; then say "$name: FAILED: it converted something"; exit 1; fi
+    grep -q '(a double)' "$S/cutover.log" || { say "$name: FAILED: it did not say what failed"; exit 1; }
+    say "$name: stopped in step 1 when $3: $(grep -m1 '(a double)' "$S/cutover.log" | sed "s|$S|<sandbox>|g; s/^ *//" | cut -c1-120)"
+    "$S/bin/systemctl" stop atelier-serve || true
+  ) && say "$name: passed" || { "$S/bin/systemctl" stop atelier-serve 2>/dev/null || true; return 1; }
+}
+
 trial_preflight() {
   local S=$W/preflight-pre rc out
   sandbox "$S" 17322 pre
@@ -591,13 +655,18 @@ run_trial() {
     retry-close-push) retry_trial retry-close-push 17328 "step 8's push accepted by the remote, then reported failed" close_push_fails : "eval ran_to_end_with_one_close; push_found" ;;
     preflight) trial_preflight ;;
     adopt) trial_adopt ;;
+    rollback-push-refused) rollback_fails_trial rollback-push-refused 17329 "the remote declines the rollback's push" step5-astromech-pushed refuse_pushes accept_pushes rollback/atelier ;;
+    rollback-fetch-fails) rollback_fails_trial rollback-fetch-fails 17330 "every fetch fails" step6-astromech-moved "fail_git fetch" mend_git "" ;;
+    rollback-checkout-fails) rollback_fails_trial rollback-checkout-fails 17331 "a worktree's switch back fails" step6-astromech-moved "fail_git switch" mend_git "" ;;
+    preflight-work-fails) preflight_query_trial preflight-work-fails 17332 "the old atelier work active fails in astromech's feature worktree" work ;;
+    preflight-status-fails) preflight_query_trial preflight-status-fails 17333 "the old atelier status fails" status ;;
     *) say "no trial $1"; return 1 ;;
   esac
 }
 
 fingerprint > "$W/real.before"
 prepare
-trials=${*:-preflight 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push adopt}
+trials=${*:-preflight preflight-work-fails preflight-status-fails 1 1b 2 3 4 5 6 7 8 9 10 11 12 full resume retry-record retry-close retry-close-push rollback-push-refused rollback-fetch-fails rollback-checkout-fails adopt}
 failed=""
 for t in $trials; do
   t0=$(date +%s)
