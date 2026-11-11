@@ -10,6 +10,9 @@ relationships:
   attachments: []
   relates:
   - kind: "issue"
+    id: "atelier-oc9k"
+    type: "blocked_by"
+  - kind: "issue"
     id: "atelier-va99"
     type: "blocked_by"
   - kind: "issue"
