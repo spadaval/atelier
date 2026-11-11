@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vl5n
 title: Write the readiness checklist, mapped to the three codebase properties
-status: changes_requested
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
@@ -118,3 +118,4 @@ The trial above is the validation: every line was run as written, in both reposi
 
 1-pv9w.1: fixed in a453d7061
 1-pv9w.2: fixed in a453d7061
+2-cmz4.2: fixed in b744cb04d
