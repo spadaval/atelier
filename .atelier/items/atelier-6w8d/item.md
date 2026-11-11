@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6w8d
 title: Replace the product docs, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record
-status: in_review
+status: changes_requested
 mission: atelier-qr5s
 labels:
 - redesign
