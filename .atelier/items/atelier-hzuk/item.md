@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-hzuk
 title: Document installing a pinned Atelier release into a chosen directory
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -36,3 +36,7 @@ Checked 2026-10-30: fixture setup takes 0.1 to 0.2 s per scenario with the debug
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-vt8q (Distribute Atelier as GitHub Release binaries with a one-command install and upgrade)
+
+## Report
+
+Dropped: Its reason is gone: the eval harness now runs a binary built from this tree (`NEXT_ATELIER`), not whatever `atelier` is on PATH.
