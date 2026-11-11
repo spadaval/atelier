@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-f6dv
 title: Fix what atelier's first gardener run showed wrong or unclear in `garden.md` and `readiness.md`
-status: draft
+status: ready
 mission: atelier-295u
 labels:
 - redesign
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: sumeet, relayed by the task that started the lead
+  at: 2026-11-11T18:14:51.208602129Z
 trivial: null
 caused_by: null
 created_at: 2026-11-11T18:14:33.439768852Z
