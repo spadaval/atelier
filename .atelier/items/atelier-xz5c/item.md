@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xz5c
 title: Make CLI output use check, close and done as CONTEXT.md defines them
-status: draft
+status: dropped
 mission: null
 labels:
 - size-m
@@ -36,3 +36,7 @@ CONTEXT.md (Check, Gate, Done, Close); docs/product/human-cli-output.md (verdict
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-ml3r (Say the lifecycle once, plainly, in the skill and Atelier's own docs)
+
+## Report
+
+Dropped: `CONTEXT.md`, `land` and the gate lines it names were deleted in 0.5.
