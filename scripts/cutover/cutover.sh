@@ -204,7 +204,9 @@ record() { # <mode>
     # Each value is read into a variable first, so that a failed read stops
     # the script rather than recording an empty value.
     v=$(git -C "$c" rev-parse "refs/heads/$b"); fact "pre:base:$r" "$v"
-    # A clone without a remote-tracking ref for the base has none to restore.
+    # A clone without a remote-tracking ref for the base has none to
+    # restore; the line above has just read this clone, so a failure here
+    # means the ref is missing.
     v=$(git -C "$c" rev-parse -q --verify "refs/remotes/$REMOTE/$b" || echo none); fact "pre:tracking:$r" "$v"
     wts=$(worktrees "$c")
     while read -r wt head; do [ -z "$wt" ] || fact "pre:wt:$r:$wt" "$head"; done <<< "$wts"
