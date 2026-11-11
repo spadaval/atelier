@@ -25,7 +25,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Serve the Desk's reading routes from commits: the atelier-desk crate, its generated API types and the app's files"
-updated_at: "2026-11-11T05:41:13.371923139+00:00"
+updated_at: "2026-11-11T06:13:48.727423814+00:00"
 ---
 
 ## Goal
@@ -65,6 +65,10 @@ Expected size: 800 to 1,100 lines of Rust with tests, plus generated types, in o
 - The switch (atelier-u1ko) moves `next/crates/` to `crates/`. The redesign's planner set the rule on 2026-11-11: once atelier-u1ko is started, nothing merges into `next/`, the root `Cargo.toml` or the CI and release workflows until atelier-wd1i has run; work may go on in the branch. The orchestrator checks both before the merge. If the cutover runs while this branch is open, stop and report to the orchestrator: the old `atelier merge --sync` no longer exists then, and the branch is brought up to date as the cutover's runbook says for an open branch.
 - Build with `cargo build -j 4` and a target directory inside the item's own worktree. Converted clones live under `~/.cache/atelier-desk/`; never run against a live repository, and put nothing in `/tmp`.
 - Sizes: complexity medium, value high, risk low. Reads that are wrong show as a difference from `show`, which the fourth line tests.
+
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by reviewer-r3 (atelier-iax9) at 55d18f46 after three rounds; round-1 and round-2 fix-now findings (atelier-xxwm, atelier-2t1h) fixed in d69a8bd6 and d70f94f0. Outcome, proof and open items are in the Report.
 
 ## Report
 
