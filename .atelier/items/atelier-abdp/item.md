@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-abdp
 title: Count review rounds in branch readiness and the review request brief
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - feature
@@ -41,3 +41,7 @@ Branch readiness facts (status Branches) and the review request brief. No warnin
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-efnf (Show an open finding in branch readiness, so the approval mark agrees with merge)
+
+## Report
+
+Dropped: Done by the 0.5 record format: each review file carries its round, and `show` and the review brief print it.
