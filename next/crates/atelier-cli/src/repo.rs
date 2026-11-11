@@ -85,7 +85,11 @@ impl Repo {
             None => None,
             Some(tip) => {
                 let merged = git::is_ancestor(&self.root, &tip, &self.base_tip)?;
-                let record = if self.branch.as_deref() == Some(id) {
+                // A terminal status on the base wins, so the branch's record
+                // is not read, and one that does not parse cannot hide it.
+                let record = if base.as_ref().is_some_and(Located::terminal) {
+                    None
+                } else if self.branch.as_deref() == Some(id) {
                     self.checkout_item(id)?
                 } else {
                     self.reader.item(&tip, id)?

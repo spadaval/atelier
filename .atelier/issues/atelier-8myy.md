@@ -4,6 +4,9 @@ id: "atelier-8myy"
 issue_type: "bug"
 labels:
 - "redesign"
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-8myy
 priority: "P1"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Fix what the validator found: a plan review of text it does not record, a broken branch that hides a drop, and nine smaller gaps"
-updated_at: "2026-11-11T01:39:45.504060362+00:00"
+updated_at: "2026-11-11T01:42:57.160475815+00:00"
 ---
 
 ## Goal

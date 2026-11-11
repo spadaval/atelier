@@ -27,7 +27,7 @@ impl Located {
     /// the record on its unmerged branch, else the base's.
     pub fn record(&self) -> Option<&ItemDir> {
         let base = self.base.as_ref();
-        if base.is_some_and(|dir| matches!(dir.item.status, Status::Done | Status::Dropped)) {
+        if base.is_some_and(Located::terminal) {
             return base;
         }
         let started = self.branch.as_ref().filter(|branch| !branch.merged);
@@ -36,6 +36,12 @@ impl Located {
 
     pub fn status(&self) -> Option<Status> {
         self.record().map(|dir| dir.item.status)
+    }
+
+    /// Whether the base's record `base` ends the item whatever its branch
+    /// holds: done or dropped.
+    pub fn terminal(base: &ItemDir) -> bool {
+        matches!(base.item.status, Status::Done | Status::Dropped)
     }
 }
 

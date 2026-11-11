@@ -1130,6 +1130,101 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
 }
 
 #[test]
+fn a_terminal_status_on_the_base_wins_over_a_branch_record_that_does_not_parse() {
+    for terminal in ["dropped", "done"] {
+        let scratch = Scratch::new(&[(ID, "ready")]);
+        let root = scratch.root();
+        let work = scratch.worktree("work");
+        assert_eq!(atelier(&work, "t1", &["start", ID]).code, 0);
+        let reason = "The site greets instead";
+        if terminal == "dropped" {
+            let run = atelier(&root, "p1", &["drop", ID, "--reason", reason]);
+            assert_eq!(run.code, 0, "{}", run.stderr);
+        } else {
+            write_item(&root, ID, "done", &[], &[], "");
+        }
+        commit_all(&root, terminal);
+        // The branch then holds a record that does not parse.
+        let path = work.join(item_path(ID));
+        let broken = read(&work, &item_path(ID)).replace("status: building", "status: broken");
+        fs::write(&path, broken).unwrap();
+        git(&work, &["commit", "-qam", "Broken"]);
+
+        let why = match terminal {
+            "dropped" => {
+                format!("It was dropped on the base: {reason}\nNothing is left to do on it.\n")
+            }
+            _ => "Nothing is left to do on it.\n".to_string(),
+        };
+        let status = atelier(&work, "t1", &["status"]);
+        assert_eq!(status.code, 0, "{}", status.stderr);
+        assert!(
+            status
+                .stdout
+                .ends_with(&format!("Status: {terminal}\n{why}")),
+            "{}",
+            status.stdout
+        );
+        let shown = atelier(&work, "t1", &["show", ID]);
+        assert_eq!(shown.code, 0, "{}", shown.stderr);
+        assert!(
+            shown.stdout.contains(&format!("Status: {terminal}\n")),
+            "{}",
+            shown.stdout
+        );
+        if terminal == "dropped" {
+            assert!(
+                shown.stdout.contains(&format!("Dropped: {reason}\n")),
+                "{}",
+                shown.stdout
+            );
+        }
+        for (at, thread, command) in [
+            (&work, "t1", "submit"),
+            (&work, "t1", "merge"),
+            (&root, "t2", "start"),
+        ] {
+            let args: Vec<&str> = match command {
+                "start" => vec!["start", ID],
+                _ => vec![command],
+            };
+            let run = atelier(at, thread, &args);
+            assert_eq!(run.code, 1, "{command}: {}", run.stderr);
+            assert!(
+                run.stderr.starts_with(&format!(
+                    "{ID} is {terminal}, and `atelier {command}` runs on"
+                )) && run.stderr.contains(&format!("Nothing changed.\n{why}")),
+                "{command}: {}",
+                run.stderr
+            );
+        }
+
+        let listed = atelier(&root, "t3", &["status"]);
+        assert_eq!(listed.code, 0, "{}", listed.stderr);
+        let named = listed.stdout.contains(&format!(
+            "Dropped on the base while started; nothing is left to do on them:\n  {ID}: {reason}\n"
+        ));
+        assert_eq!(named, terminal == "dropped", "{}", listed.stdout);
+        let open = atelier(&root, "t3", &["list"]);
+        assert_eq!(open.code, 0, "{}", open.stderr);
+        assert!(!open.stdout.contains(ID), "{}", open.stdout);
+        let done = atelier(&root, "t3", &["list", "--done"]);
+        assert_eq!(done.code, 0, "{}", done.stderr);
+        assert!(
+            done.stdout
+                .contains(&format!("    {ID} ({terminal}, high): Say hello\n")),
+            "{}",
+            done.stdout
+        );
+        // `check` on the branch still reports the record it cannot read.
+        let check = atelier(&work, "t1", &["check"]);
+        let said = check.stdout + &check.stderr;
+        assert_eq!(check.code, 1, "{said}");
+        assert!(said.contains("unknown variant `broken`"), "{said}");
+    }
+}
+
+#[test]
 fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
