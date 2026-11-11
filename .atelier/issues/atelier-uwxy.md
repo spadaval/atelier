@@ -3,6 +3,9 @@ created_at: "2026-11-11T02:17:25.926248278+00:00"
 id: "atelier-uwxy"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-uwxy
 priority: "P1"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Serve the Desk's reading routes from commits: the atelier-desk crate, its generated API types and the app's files"
-updated_at: "2026-11-11T05:30:41.252051039+00:00"
+updated_at: "2026-11-11T05:41:13.371923139+00:00"
 ---
 
 ## Goal
