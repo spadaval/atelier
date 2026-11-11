@@ -111,6 +111,12 @@ impl<'s> Repo<'s> {
         (dir.is_none() || dir != std::fs::canonicalize(&self.root).ok()).then_some(&self.root)
     }
 
+    /// The reader of the repository's commits, whose one `git cat-file`
+    /// process every read shares.
+    pub(crate) fn reader(&mut self) -> &mut CommitReader {
+        &mut self.reader
+    }
+
     pub fn store(&self) -> Store {
         Store::new(self.root.join(".atelier"))
     }

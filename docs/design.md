@@ -79,7 +79,7 @@ crate beside them:
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
 | `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
 
 The dependency direction is `cli` to `app` to `records` to `core`. The
@@ -839,15 +839,20 @@ is merged, so the base's record is the item's record from then on.
 
 ## The log
 
-Not built yet: atelier-8b0a, in the gardener's mission atelier-295u, adds
-`log`, and nothing in this section is in the binary until it does. This is
-its design.
-
 `atelier log` prints the history of acts. Nothing stores it. It is derived
 from Git history, by finding the commits where a record changed in one of
 the ways below. Each is one line, and each carries the commit it was found
-in. `atelier-app` returns the same history as data, which is how the Desk
-reads it.
+in. `atelier-app` returns the same history as data (`history`, in
+`crates/atelier-app/src/log.rs`), which is how the Desk reads it, and the
+command only formats it (`crates/atelier-cli/src/history.rs`).
+
+`atelier log` prints everything; `atelier log <item>` that item's acts;
+`atelier log <mission>` the acts on the mission, its plan reviews and its
+items, an item being the mission's when its record on the base's tip, or
+else on its branch, names it. `--since <time>` keeps the acts committed at
+or after an RFC 3339 time or a `YYYY-MM-DD` date, which is that day's start
+in UTC. An ID no record has on the base's tip or on a branch named for it is
+refused as `show` refuses it.
 
 | Line | Found where | Thread shown |
 | --- | --- | --- |
@@ -865,7 +870,84 @@ reads it.
 
 A skip is shown on the line of the act whose commit carries its trailer,
 which is every act where Atelier makes the commit. Those are `start`,
-`submit`, `verdict`, `merge`, `ready`, `drop`, `close` and `lead`.
+`submit`, `verdict`, `merge`, `ready`, `drop`, `close` and `lead`, and a
+take-over of an implementer, which `start` commits. The other lines of that
+commit, such as the `review` line of a verdict's commit, do not repeat it.
+
+### A line
+
+```
+2026-11-11T16:18:29Z 0a772ac96 atelier-6w8d verdict thread:r1 3-kvll approve; in_review -> approved
+```
+
+Each line holds, in this order: the commit's committer time in UTC, to the
+second; the commit, as Git abbreviates it; the record's ID; the act; the
+thread the table gives, or `-` where it gives none; then what changed, and
+last each skip as `skip <rule>: <reason>`. The first five are separated by
+single spaces and hold no space. What changed and the skips are the rest of
+the line, in parts separated by `; `, with any line break in them made a
+space. A thread's identity is printed whole, as the record holds it, so a
+Codex subagent reads `<parent>/<child>`.
+
+A status move reads `<from> -> <to>`, each spelled as a record spells it,
+and `new` stands for the status of a record the commit added. What changed
+holds:
+
+| Act | What changed |
+| --- | --- |
+| start | The status move, when the commit made the item `building` |
+| take-over, of an implementer | `from <former implementer>`, then the status move as for start |
+| submit | The status move, as `building -> in_review` |
+| review | The review's name, as `1-c27c` |
+| take-over, of a reviewer | The review's name, then `from <former reviewer>` |
+| verdict | The review's name and `approve` or `changes`, then the item's status move when the commit made it `approved` or `changes_requested` |
+| escalate | The finding it is about, when there is one, then the question as its heading reads, with its date |
+| decide | The outcome, `defer` or `no action`, when there is one, then the answer |
+| merge | The status move, as `approved -> done`, then `trivial: <why>` for a trivial merge |
+| settle | `<finding> taken into <item>`, or `<finding> dropped: <reason>` |
+| lead | `from <former lead>`, when the lead changed |
+| ready | The status move, then `by <name>` |
+| drop | The status move, then the reason the record's `Dropped:` line gives |
+| close | The status move |
+
+### The walk
+
+One `git log` lists every commit that changed a file under
+`.atelier/items` or `.atelier/missions`, from the base's tip and the tip of
+every local branch named for an item, parents before children, with its
+parents, committer time, trailers, and the old and new blob of each record
+it changed. The repository's one `git cat-file --batch` process reads those
+versions. An act is found by comparing a record's two versions across one
+commit, so no record's history is read on its own, and `log` starts the
+same few Git processes however many records and commits there are. Git
+lists each commit once, so each act is printed once.
+
+- **Both sides of every merge.** Given paths, `git log` simplifies history:
+  it follows only the side a merge matches on those paths, and the other
+  side's commits are lost once no branch names them. `log` passes
+  `--full-history`, so it follows both. An Atelier merge never matches
+  either side, since it marks its item done, so the loss shows on a plain
+  merge whose branch's record changes were undone; the scenario test of
+  that case fails without the flag.
+- **Merges.** A commit with one parent is compared with that parent. An
+  Atelier merge, known by its `Atelier-Merge:` trailer, gives only its
+  item's `merge` line, from the item on the merged branch's tip against the
+  item in the merge: what its branch brought is found on the second-parent
+  side. Any other merge commit gives no line.
+- **The cutover's conversion commit is read like any other.** Each record
+  it added shows its acts at that commit's time, as `new -> <status>` and
+  every thread its record names. Nothing special-cases it; a reader who
+  wants the time after it uses `--since`.
+- **A version that does not parse.** History can hold a record that was
+  invalid at one commit. `log` passes that version over, compares the
+  versions on each side of it, and says on standard error which commit and
+  path it passed over.
+- **Time and order.** A line's time is its commit's committer time. Lines
+  are ordered by it, lines of one commit keep the order of the table above,
+  and commits of one time keep Git's order, parents first.
+
+In astromech on 2026-11-11, `atelier log` from a debug build printed 88
+lines in 0.06 to 0.07 seconds, starting six Git processes.
 
 What `log` does not show: `new`, `set` and edits to a record's text, which
 Git's own log has, so an item's time as a draft is read from its
@@ -882,9 +964,7 @@ not appear.
 The walk covers the base's history, the second-parent side of each Atelier
 merge, and the tips of started items' branches, so an item's acts stay
 visible after its branch is merged and deleted. The old tool's history
-reader for the debrief followed first parents only and would lose them; how
-to walk both sides without reading each record's history separately is
-settled when atelier-8b0a is planned.
+reader for the debrief followed first parents only and lost them.
 
 `log` adds nothing up. Time in each status from `ready` on, rounds per item,
 roles taken over, escalations and skips are counts over its lines, and the
@@ -1137,9 +1217,16 @@ What is still to come:
   starting one item from separate checkouts; a started item dropped on the
   base, then refused at merge.
 - Unit tests on the act table: every act from every status.
-- Once `log` is built (atelier-8b0a): `log` on the plain-path scenario
-  prints its acts in order with the right threads, and still does after the item's branch is merged and deleted; on
-  the take-over scenario it shows both holders.
+- `log` (`crates/atelier-cli/tests/log.rs`): the plain path prints its acts
+  in order with the right threads, and the same lines after the item's
+  branch is merged and deleted; a take-over shows both implementers, and a
+  review taken over both reviewers; an escalation and its answer; a deferred
+  finding settled on a gardener's branch and merged; a mission's `ready`,
+  `lead`, plan review and `close`, with its item dropped; a skip on its
+  act's line; `--since`; two acts on one record in one commit as their net
+  change; a version that does not parse passed over; a branch's acts after
+  a plain merge that matches the base, which fails without
+  `--full-history`.
 - `new --from` on a deferred finding of a done item writes `Taken:` with the
   thread, and `list --deferred` no longer shows it; settling it again is
   refused; settling a finding of an item that is not done is refused.

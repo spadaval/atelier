@@ -215,6 +215,31 @@ impl CommitReader {
         })
     }
 
+    /// The text of the blob `object` names, such as a blob's ID, whole or
+    /// abbreviated as Git printed it, or `<commit>:<path>`; `None` when it
+    /// names nothing.
+    pub fn blob(&mut self, object: &str) -> Result<Option<String>, ReadError> {
+        let result = self.read(object);
+        if result.is_err() {
+            // The batch stream may be out of step; start a new one next time.
+            self.batch = None;
+        }
+        let data = match result? {
+            None => return Ok(None),
+            Some(found) if found.kind == "blob" => found.data,
+            Some(found) => {
+                return Err(ReadError::Git(format!(
+                    "{object} is a {}, not a blob",
+                    found.kind
+                )))
+            }
+        };
+        let text = String::from_utf8(data).map_err(|_| {
+            ReadError::Record(Problem::new(Path::new(object), "", "the file is not UTF-8"))
+        })?;
+        Ok(Some(text))
+    }
+
     /// The content of the file staged at `path`, from the index Git names
     /// in `GIT_INDEX_FILE` when it sets that for a hook, else the
     /// checkout's.

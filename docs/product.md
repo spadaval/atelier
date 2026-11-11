@@ -154,8 +154,7 @@ was dropped and why.
 
 ## Commands
 
-Seventeen commands are built, plus `setup`. An eighteenth, `log`, is not
-built yet: atelier-8b0a, in the gardener's mission atelier-295u, adds it. The
+Eighteen commands are built, plus `setup`. The
 tool has no site: the human's pages are the Desk's
 ([the Desk](product/desk.md)).
 
@@ -166,7 +165,7 @@ tool has no site: the human's pages are the Desk's
 | `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
 | `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews. |
 | `list` | With no flags, all open work, grouped by mission and then by label. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. |
-| `log` | Not built yet (atelier-8b0a). The history of acts, one line each: when, which item, the act, what changed, and the thread, where the record holds one. For one item, one mission, or everything `--since` a time. It adds nothing up. |
+| `log` | The history of acts, read from Git, one line each and oldest first: when, the commit, which item or mission, the act, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only acts `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
 A lead or a planner reads where things stand with `show`, `list` and
@@ -488,7 +487,7 @@ coverage and limits are in
 The codebase health rows are trends for one repository against its own past.
 Agents are not scored on them, and none is a limit.
 
-The tool computes none of this. Its part is facts: `log`, once built, says
+The tool computes none of this. Its part is facts: `log` says
 what happened to each item, `list` says how things stand, and the records hold the
 findings and each bug's `caused-by`. Rework and line counts come from Git.
 Tool calls, tokens and interventions come from T3's events and the
@@ -505,8 +504,8 @@ them, is the gardener's procedure in the skill.
   the Desk's.
 - A view of what changed between a mission's go-ahead and its result. It is
   a derived view and the Desk's to build later. The tool gives it the
-  data: records readable at any commit, and, once `log` is built, every act
-  with the commit it happened in.
+  data: records readable at any commit, and, from `log`, every act with the
+  commit it happened in.
 - Coordinating two clones of one repository. Atelier coordinates the threads
   working in one clone and its worktrees. Work on another host is visible
   only after a fetch, and nothing stops the same item being started on both.
