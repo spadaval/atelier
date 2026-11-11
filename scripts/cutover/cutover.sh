@@ -322,7 +322,7 @@ print(f"{ok} of {all_}")')
 # ---------------------------------------------------------------- the steps
 
 convert_atelier() {
-  local W=$1 B=$2 bin=$1/target/release/atelier p aside
+  local W=$1 B=$2 bin=$STATE/target/release/atelier p aside
   if [ "$(jstate build)" != done ]; then
     jstart build "$BUILD"
     (cd "$W" && eval "$BUILD")
@@ -481,7 +481,7 @@ cutover() {
   [ -n "$W" ] || die "no worktree of atelier has $(base_of atelier) checked out"
   [ "$(git -C "$here" rev-parse --show-toplevel)" = "$W" ] || die "run this from $W, the worktree that has $(base_of atelier)"
   [ "$(jstate mode)" != done ] || [ "$(jfields mode)" = cutover ] || die "the journal in $STATE is an adopt's; give another CUTOVER_STATE"
-  export TREE_BIN=$W/target/release/atelier
+  export TREE_BIN=$STATE/target/release/atelier
 
   step 1 "Preflight"
   if [ "$(jstate mode)" = done ]; then

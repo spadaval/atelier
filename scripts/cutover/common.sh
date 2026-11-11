@@ -14,11 +14,12 @@ REMOTE=${CUTOVER_REMOTE:-origin}
 SECTIONS=${CUTOVER_SECTIONS:-"astromech:1 demiurge:1 life-on-rails:1 cosplay-studio:2"}
 # Workflows that run Atelier, replaced by the reviewed one: <repo>:<path>.
 WORKFLOWS=${CUTOVER_WORKFLOWS:-"astromech:.github/workflows/atelier.yml"}
-# The tree's binary, built in step 2 for its `check`, and the install of
-# step 3, which reuses that build. Both run in atelier's base worktree.
+# The tree's binary, built in step 2 for its `check` into the state
+# directory, and the install of step 3, which reuses that build. Both run
+# in atelier's base worktree; the build leaves $STATE/target/release/atelier.
 INSTALL_ROOT=${CUTOVER_INSTALL_ROOT:-$HOME/.cargo}
-BUILD=${CUTOVER_BUILD:-'cargo build --release --locked -j 4 -p atelier-cli'}
-INSTALL=${CUTOVER_INSTALL:-'cargo install --path crates/atelier-cli --locked -j 4 --root "$INSTALL_ROOT"'}
+BUILD=${CUTOVER_BUILD:-'cargo build --release --locked -j 4 -p atelier-cli --target-dir "$STATE/target"'}
+INSTALL=${CUTOVER_INSTALL:-'cargo install --path crates/atelier-cli --locked -j 4 --root "$INSTALL_ROOT" --target-dir "$STATE/target"'}
 # The skill checkout every session loads Agent Factory from, and, for
 # `adopt` on a host that installs the skill another way, the command that
 # installs it and the directory it installs into.

@@ -232,7 +232,7 @@ sandbox_env() {
   export CUTOVER_PROJECTS=$S/projects
   export CUTOVER_REPOS="atelier:$S/projects/atelier:master astromech:$S/projects/astromech:main demiurge:$S/projects/demiurge:master life-on-rails:$S/projects/life-on-rails:main cosplay-studio:$S/projects/cosplay-studio:main"
   export CUTOVER_INSTALL_ROOT=$S/root
-  export CUTOVER_BUILD="mkdir -p target/release && cp '$NEW' target/release/atelier"
+  export CUTOVER_BUILD="mkdir -p \"\$STATE/target/release\" && cp '$NEW' \"\$STATE/target/release/atelier\""
   export CUTOVER_INSTALL="install -m 755 '$NEW' \"\$INSTALL_ROOT/bin/atelier\""
   export CUTOVER_SKILL=$S/skill CUTOVER_SKILL_INSTALL="" CUTOVER_SKILL_DIR=""
   export CUTOVER_SYSTEMCTL="$S/bin/systemctl --user"
@@ -258,7 +258,9 @@ snapshot() { # <sandbox>
     r=${s%%:*} c=$S/projects/$r
     git -C "$c" worktree list --porcelain | grep -E '^(worktree|branch|detached)'
     for wt in $(git -C "$c" worktree list --porcelain | sed -n 's/^worktree //p'); do
-      echo "status $wt"; git -C "$wt" status --porcelain --ignored
+      # The old tool writes its runtime cache wherever it runs, as the
+      # preflight's reads do; it is not the conversion's.
+      echo "status $wt"; git -C "$wt" status --porcelain --ignored | grep -vx '!! .atelier/runtime/' || true
     done
     echo "hooks $r"; (cd "$(git -C "$c" rev-parse --path-format=absolute --git-path hooks)" && find . -type f -exec sha256sum {} + | sort)
   done
