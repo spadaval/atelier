@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jcki
 title: Show the branch, review state and mission in issue show
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -36,3 +36,7 @@ Agents run `review list`, `git branch` or the parent's show to fill the gaps.
 ## Context
 
 Dropped in decision atelier-mzpn: the `(base master)` suffix, since the base is the policy's (atelier-md0v), and a Proof line, since receipts gate nothing (atelier-md0v). Builds on the brief `issue show` (atelier-7u4o, done). Review freshness and findings logic exists for `merge --check` (`atelier_app::review_gate`).
+
+## Report
+
+Dropped: Done by the 0.5 rewrite: `atelier show <item>` prints its status and holder, mission and reviews by round.
