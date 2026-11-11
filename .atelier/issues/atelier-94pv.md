@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Move the spike's app to desk/ on the new API: the repositories, mission, item and inbox pages"
-updated_at: "2026-11-11T06:19:58.813793189+00:00"
+updated_at: "2026-11-11T06:57:02.242809744+00:00"
 ---
 
 ## Goal
@@ -56,6 +56,10 @@ Expected size: about 4,500 lines in `desk/`, of which about 2,900 are the spike'
 - The old site's `web` CI job in `.github/workflows/ci.yml` shows how pnpm, Node and Playwright are set up in CI. The switch (atelier-u1ko) removes that job and the old site; this item adds a separate job and leaves the old one alone. Check before starting that neither atelier-u1ko nor atelier-wd1i is in progress, and if the switch merges while this branch is open, bring master in with `atelier merge --sync`.
 - Converted clones live under `~/.cache/atelier-desk/`. Put nothing in `/tmp`.
 - Sizes: complexity medium, value high, risk low. The risk is taste, which Sumeet judges after the merge, not before.
+
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by gpt-6.1-sol-94pv-r2 (atelier-s24t) at f5121a96 after two review rounds; round 1's three fix_now findings fixed and confirmed. Synced master (666a3545) once on the orchestrator's instruction. Only ci.passed is outstanding; merge with atelier merge atelier-94pv --push --wait. See the Report.
 
 ## Report
 
