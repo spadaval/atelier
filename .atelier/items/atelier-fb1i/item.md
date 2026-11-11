@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-fb1i
 title: Show graph errors in atelier check even when a record fails to parse
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - check
@@ -30,3 +30,7 @@ With a YAML error in one record (atelier-wtnp, `status: todo: bad`) and an `adva
 ## Context
 
 Extends atelier-idae.
+
+## Report
+
+Dropped: Fixed by the 0.5 rewrite: `atelier check` reports records that do not parse and rule failures on the others in one run (checked in a scratch clone, 2026-11-11).
