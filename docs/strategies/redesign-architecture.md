@@ -493,8 +493,11 @@ and not run its parent's `submit` or `merge`. A thread the harness starts
 as a thread, such as T3 Code's `delegate_task`, has an identity of its own
 under any harness. `submit`'s handoff and the refusal of an author's
 `review` and `decide` say which subagents may be used, to start one with
-fresh context, not as a fork, and to start it without waiting to be asked,
-since a Codex thread otherwise waits for its user's word (atelier-t747).
+fresh context, not as a fork, and that starting it is the reader's own job
+and part of its task, even as a child or subagent, so it starts it without
+waiting to be asked. Told less, a Codex thread waited for its user's word
+(atelier-t747), and a Claude Code thread started as a T3 Code child stopped
+for its lead (atelier-2mlh).
 
 That rule is the command's. A program that links `atelier-app`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
@@ -519,7 +522,8 @@ hold several things, and `status` lists each. In a Git checkout with no
 `config.toml`, says this is not an Atelier repository. Built so far: on a
 branch named for an item, `status` speaks to the item's holder as its implementer, to a
 thread that reviewed an earlier round as done with it, and to anyone else as
-a visitor, naming the holder. A visitor is told, before any offer to take
+a visitor, naming the holder. A visitor, or a reviewer whose review is
+done, is told, before any offer to take
 the item over, each unanswered question and `decide`, as its next command
 when it may decide them and naming who may when it may not; the lead of the
 item's mission is told so and offered no take-over. Anywhere else it lists the
