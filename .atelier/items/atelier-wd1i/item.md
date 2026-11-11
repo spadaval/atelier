@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wd1i
 title: Run the cutover on this host
-status: ready
+status: done
 mission: atelier-qr5s
 labels:
 - redesign
@@ -49,3 +49,7 @@ From the cutover until the Desk's mission page is live, Sumeet reads a mission w
 ## Unknowns
 
 - When no work is in flight in any of the five repositories and no other thread is running in them. Sumeet's naming the time settles it.
+
+## Report
+
+The cutover ran on this host with scripts/cutover/cutover.sh; its report is in the mission's Result.
