@@ -26,7 +26,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Port the eval scenarios to the new binary, with a no-skill arm and a Codex skill arm, before any matrix runs"
-updated_at: "2026-11-11T07:06:52.866755641+00:00"
+updated_at: "2026-11-11T07:31:05.941883999+00:00"
 ---
 
 ## Goal
@@ -98,6 +98,7 @@ Expected size: 1,500 to 2,200 lines, nearly all fixtures and graders. The old sc
 - 2026-11-11 [handoff] Stopped unapproved after round 7 (seven rounds). Round 7's finding atelier-1cw0 is fixed in an unreviewed commit; round 6's atelier-auvl fix was reviewed in round 7. Final proofs on atelier-next-7b06ed12. See the Report.
 - 2026-11-11 [decision] The orchestrator of atelier-qr5s bounds the Done when line 'Graders judge state, not wording': a grader fails the failing state or action in the forms the scenario's pressure makes likely and the walks cover, grades pass null with needs_hand_grade where it cannot tell, and is not held to every command form an agent could invent. Round 8 follows. A fix-now the bounded line still requires is fixed and one more round runs; a finding of only a further unlikely form is not fixed but reported to the orchestrator with its ID.
   Reason: Seven rounds each found one more unusual command form an agent could use to slip past a grader; no finite grader meets 'no run that should fail can pass', and atelier-t747 reads every run's final.md by hand and the transcript of every failure and doubtful pass, so the grader is the first sort, not the verdict.
+- 2026-11-11 [handoff] Approved in round 9 by GPT-6.1 Sol (atelier-bbfk) at bbae33dd, after nine rounds; no FIX NOW finding open. Final proofs on atelier-next-7b06ed12. See the Report.
 
 ## Report
 
