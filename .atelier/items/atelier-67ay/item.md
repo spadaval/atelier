@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-67ay
 title: Move a replaced skill copy aside in setup --link instead of deleting it
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -31,3 +31,7 @@ created_at: 2026-11-08T06:14:31.018984919Z
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-pak1
+
+## Report
+
+Dropped: `setup --link` was removed in 0.5; `atelier setup` installs hooks only.
