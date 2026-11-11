@@ -431,4 +431,3 @@ Round 5 (GPT-6.1 Sol, at 24b518dd) recorded one `fix_now` finding:
 - atelier-864b: the rewrite of atelier-n831 lost two of its surviving requirements, the base's ahead-of-upstream count and a detached HEAD's commit ID, which the new `status` does not show. Fixed: both are back in its Done when, with their test cases. Counts are unchanged.
 
 Round 5 did not approve, so under the orchestrator's decision this fix goes back to the orchestrator unreviewed.
-
