@@ -13,9 +13,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Build the Desk: the human's place to plan missions and read results, on the redesigned records"
-updated_at: "2026-11-11T02:17:25.300286627+00:00"
+updated_at: "2026-11-11T03:50:46.624347147+00:00"
 ---
 
 ## Outcome
