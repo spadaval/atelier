@@ -179,7 +179,11 @@ python3 $run $single $skill --model claude-opus-5-5 --runs 3 --jobs 2 --out <out
   so read `final.md` for every run before you count it. The method says to
   judge behaviour, not vocabulary. `done-when-rewrite` has fixtures for its
   grader: `python3 -m unittest` in its directory, with `atelier` on `PATH`;
-  every `next-*` scenario has them too, with `NEXT_ATELIER` set.
+  every `next-*` scenario has them too, with `NEXT_ATELIER` set. `next-done-when-rewrite`'s
+  setup and walks run its real benchmark, so they depend on wall time: its
+  setup refuses on a host fast enough to meet 50 ms with the linear scan, and
+  `test_making_it_fast_with_proof_passes` (an indexed search, p95 about 18 ms)
+  can fail on a heavily loaded host. Rerun it before suspecting the grader.
 
 Recorded runs are in [results/](results/).
 
