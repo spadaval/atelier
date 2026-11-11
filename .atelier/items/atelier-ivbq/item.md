@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ivbq
 title: 'Fix what the new skill and the eval fixtures showed status gets wrong: six small gaps in what a thread is told'
-status: ready
+status: building
 mission: atelier-qr5s
 labels:
 - redesign
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A2074a88e-920b-49f9-bd17-caf5903cc60f%3Adelegate-task%3Ae81e5c93-fcde-468f-a99a-334005140e39
 ready:
   by: sumeet
   at: 2026-11-11T15:43:38.001833021Z
