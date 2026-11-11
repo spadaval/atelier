@@ -6,7 +6,7 @@ title: Move all five repositories and Agent Factory onto the new loop, one cutov
 status: ready
 labels:
 - redesign
-lead: null
+lead: thread:delegated-task:command%3Amcp%3A4dfc2b56-ef24-49e1-a2d6-030165a03e35%3Adelegate-task%3A8c89f937-6fe8-496a-8f35-8d051ef99e7f
 ready:
   by: conversion
   at: 2026-11-11T15:17:33.448605463Z
