@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-bg7w
 title: Cap each role's instructions in words and flag long sentences, then rewrite the skill to pass
-status: ready
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -39,3 +39,7 @@ The skill's instructions should be as clear and concise as they can be. The 300-
 ## Context
 
 On master 470e59ec, file averages read at grade 8 to 13, which looks fine, but about 70 sentences run over 30 words; the longest are plan.md's ready-mission definition (93 words), atelier.md's Words section (89) and garden.md's digest rule (62). File averages hide them, so the check scores each sentence, as the Hemingway Editor does. Readability formulas use sentence length and syllables; they do not see stacked conditions directly, but those sentences are always long.
+
+## Report
+
+Dropped: The files it would measure are gone. The rewritten skill is 319 lines, cut by eval to the passages a scenario supports (evals/agent-factory/results/2026-11-11-next-skill.md).
