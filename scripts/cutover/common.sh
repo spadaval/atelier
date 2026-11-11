@@ -103,7 +103,7 @@ jstate() {
   [ -f "$JOURNAL" ] || { echo none; return; }
   awk -F'\t' -v k="$1" '$2 == k { s = $1 } END { print (s == "" ? "none" : s == "done" ? "done" : "started") }' "$JOURNAL"
 }
-jfields() { awk -F'\t' -v k="$1" '$1 == "start" && $2 == k { print $3; exit }' "$JOURNAL"; }
+jfields() { awk -F'\t' -v k="$1" '$1 == "start" && $2 == k { sub(/^[^\t]*\t[^\t]*\t/, ""); print; exit }' "$JOURNAL"; }
 jresult() { awk -F'\t' -v k="$1" '$1 == "done" && $2 == k { print $3; exit }' "$JOURNAL"; }
 # Keys started with a prefix, oldest first.
 jkeys() { [ -f "$JOURNAL" ] && awk -F'\t' -v p="$1" '$1 == "start" && index($2, p) == 1 { print $2 }' "$JOURNAL" || true; }
