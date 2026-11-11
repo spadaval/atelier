@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-zzwi
 title: 'Tell reviewers every command they run and that they run nothing else: Sol reviews spend 3 of 14 turns on status, land and syntax lookups'
-status: ready
+status: dropped
 mission: atelier-icv4
 labels:
 - agent-factory
@@ -51,3 +51,7 @@ Claude reviewers run `status` far less (0.09 per review) because the SessionStar
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-4gsb (Drop severity from the review request brief to match Agent Factory's review output)
+
+## Report
+
+Dropped: `land`, `doctor` and the old review brief were removed in 0.5, and the new skill has each role start from `atelier status`, which names the reviewer's commands.
