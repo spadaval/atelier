@@ -566,6 +566,14 @@ pub fn ready_refused(unknown_ids: &[&str], refused: &[(&str, Status)]) -> Refuse
     )
 }
 
+/// `ready` given no ID, which only a program calling it can do.
+pub fn ready_nothing() -> Refused {
+    Refused::then(
+        "`atelier ready` names no item or mission to make ready; nothing changed.\n".into(),
+        "Then: atelier ready <id>... --by <name>".into(),
+    )
+}
+
 pub fn readied(ids: &[&str], by: &str) -> String {
     format!("Made ready, as {by} said: {}.\n", ids.join(", "))
 }

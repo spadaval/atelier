@@ -171,6 +171,10 @@ pub fn with_skips(repo: &Path, message: &str, skip: &Skip) -> Result<String> {
 /// with a trailer for each rule `skip` passed. When the commit fails, as
 /// when a hook refuses it, the index under `paths` is put back as it was.
 pub fn commit_paths(repo: &Path, paths: &[&str], message: &str, skip: &Skip) -> Result<()> {
+    // With no path, `git commit --` would commit whatever is staged.
+    if paths.is_empty() {
+        bail!("there is nothing of this command's to commit");
+    }
     let on_paths = |args: &[&'static str]| -> Vec<&str> {
         args.iter().chain(&["--"]).chain(paths).copied().collect()
     };

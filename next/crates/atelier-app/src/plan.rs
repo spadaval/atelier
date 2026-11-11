@@ -31,6 +31,9 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
     if let Some(refused) = off_base(repo, "ready")? {
         return Ok(Err(refused));
     }
+    if ids.is_empty() {
+        return Ok(Err(say::ready_nothing()));
+    }
     let ready = Ready {
         by: by.to_string(),
         at: chrono::Utc::now().into(),

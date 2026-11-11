@@ -231,3 +231,27 @@ fn a_skip_reaches_its_own_acts_commit_and_result_and_no_other_acts() {
         .unwrap_err();
     assert_eq!(refused.rules, [rule]);
 }
+
+#[test]
+fn ready_given_no_id_refuses_and_commits_nothing() {
+    let (_dir, root) = scratch("draft");
+    fs::write(root.join("unrelated.txt"), "staged\n").unwrap();
+    git(&root, &["add", "unrelated.txt"]);
+    let before = (
+        git(&root, &["rev-parse", "HEAD"]),
+        git(&root, &["status", "--porcelain", "-uall"]),
+    );
+    let skip = Skip::new(None);
+    let mut repo = Repo::open(&root, Thread("p1".into()), &skip).unwrap();
+    let refused = ready(&mut repo, &[], "sumeet").unwrap().unwrap_err();
+    assert!(refused.rules.is_empty());
+    assert_eq!(
+        refused.next.as_deref(),
+        Some("Then: atelier ready <id>... --by <name>")
+    );
+    let after = (
+        git(&root, &["rev-parse", "HEAD"]),
+        git(&root, &["status", "--porcelain", "-uall"]),
+    );
+    assert_eq!(after, before);
+}
