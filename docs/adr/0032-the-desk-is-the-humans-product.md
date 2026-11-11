@@ -60,14 +60,16 @@ records.
 
 5. **The Desk acts only through `atelier`.** It offers the acts that are
    the human's, such as `ready` and `decide`. It performs each by running
-   the installed `atelier` command under the human's name, so every act is a
-   commit and the Desk holds no decision the records lack. It is not a
-   record editor.
+   the `atelier` command under the human's name, in the checkout where that
+   command is written to run, and the command writes and commits as it does
+   for anyone. The Desk writes no record itself and holds no decision the
+   records lack. It is not a record editor.
 
-6. **One host-wide database for what Git never held.** ADR 0030's session
-   database is also the Desk's. It may hold which thread, model and role ran
-   each command (written by `atelier`), measurements and findings about how
-   work went (written by a scheduled feed), and what the human has seen
+6. **One host-wide SQLite database for what Git never held.** ADR 0030's
+   session database is also the Desk's, and it is one SQLite file on the
+   host. It may hold which thread, model and role ran each command (written
+   by `atelier`), measurements and findings about how work went (written by
+   a feed that runs daily, unattended), and what the human has seen
    (written by the Desk). It holds no copy of a record. Agents read findings
    through a command, never from the file.
 
@@ -84,7 +86,8 @@ records.
 ## Consequences
 
 - The cutover gets smaller: it deletes the site instead of porting it, and
-  the new binary needs neither Node nor a web build.
+  the `atelier` binary needs neither Node nor a web build. The Desk has its
+  own build and its own CI jobs, which run only for changes that touch it.
 - From the cutover until the Desk's mission page is live, the human has no
   brief or debrief page. He reads `atelier show <mission>` and the mission's
   files.

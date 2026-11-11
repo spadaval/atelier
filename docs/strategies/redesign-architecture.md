@@ -1010,15 +1010,18 @@ as `merge`.
 ## Site
 
 The tool has no site. The old workspace's site is deleted with it at the
-switch, and nothing in the new workspace builds or serves one: no
-`atelier-site` crate, no `serve` command, no web jobs in CI and no Node step
-in the build. The installed binary keeps serving the old-layout repositories
+switch, and the `atelier` binary built from the new workspace has none: no
+`atelier-site` crate, no `serve` command, and no Node step in its build or
+release. The workflows the switch puts in place have no job for the old
+site's app. The installed binary keeps serving the old-layout repositories
 until the cutover.
 
 The human's pages are the Desk, a separate binary and web app
 ([ADR 0032](../adr/0032-the-desk-is-the-humans-product.md), mission
-atelier-z4cr). It reads records through `atelier-records` and
-`atelier-app`, and what it needs from this work is already here: every act
+atelier-z4cr). Its crate, `atelier-desk`, and its app, `desk/`, are built
+in this workspace with their own CI jobs, which the switch keeps. It reads
+records through `atelier-records` and `atelier-app`, and what it needs from
+this work is already here: every act
 with the commit it happened in, and records readable at any commit. So it
 can load a mission's directory and items as they stood at the commit of its
 `ready` act and compare them with how they stand now.
@@ -1231,7 +1234,7 @@ dated 2026-11-10.
 | The line count is an indication, not a limit | See Tried and removed |
 | The ADRs are replaced by one design record | They carry history that agents read as current |
 | The tool is rewritten in full, in a fresh workspace | A gradual rewrite has no benefit once the record layout changes under every command |
-| A view of what changed since his go-ahead is the dashboard's to derive | It is a derived view; this work supplies the acts with their commits and records readable at any commit |
+| A view of what changed since his go-ahead is the Desk's to derive | It is a derived view; this work supplies the acts with their commits and records readable at any commit |
 | Hooks guard, commands act | A rule in a command applies only when the agent remembers the command |
 | The tool gives facts and the skill does the arithmetic: `log` and `list`, and no scorecard command | A fixed report in the binary would change every time the measures do, as the debrief did |
 | The gardener is a role, and its needs shape the records now | A bug's cause and a deferred finding's settlement are cheap in the first format and costly to add later |

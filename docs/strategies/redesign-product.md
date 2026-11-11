@@ -508,7 +508,7 @@ them, is the gardener's procedure in the skill.
 - A command that computes the scorecard, and a scorecard page. The page is
   the Desk's.
 - A view of what changed between a mission's go-ahead and its result. It is
-  a derived view and the dashboard's to build later. This work gives it the
+  a derived view and the Desk's to build later. This work gives it the
   data: every act with the commit it happened in, and records readable at
   any commit.
 - Coordinating two clones of one repository. Atelier coordinates the threads
