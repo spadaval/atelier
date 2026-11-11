@@ -307,7 +307,7 @@ Each line gives the fate this sort proposes. The 72 protected records come first
 - atelier-w4ef: left for Sumeet; proposed drop (c). `check <id>` is gone, and its placeholder rule duplicates the rewritten atelier-k55o, which makes `ready` refuse empty sections.
 - atelier-2yef: left for Sumeet; proposed drop (b). Where a declined started item's record goes is settled by the specification: dropping is final and happens on the base, and every command reads the base's record first (product specification, Lifecycle: When a thread dies).
 - atelier-pg2b: left for Sumeet; proposed drop. Already done: atelier-nz6a made install.md give the install lines (atelier-8i86, G14), and the skill no longer lives in spadaval/.agents; none of (a) to (c) names this case.
-- atelier-c6g2: left for Sumeet; proposed drop (a). It teaches the skill `work mission --since` and the old references/atelier.md Administration section, and its blockers atelier-avx0 and atelier-fb1i were dropped in this sort.
+- atelier-c6g2: left for Sumeet; proposed drop (a). It teaches the skill `work mission --since` and the old references/atelier.md Administration section, both gone in the new tool; its blockers atelier-avx0 and atelier-fb1i stay open as they are.
 - atelier-5lv9: left for Sumeet; proposed drop (a). It changes the light-path review brief, and the What is removed table removes the light path.
 - atelier-ayrg: left for Sumeet; proposed drop (a). It changes the debrief's counts, and the What is removed table removes the `debrief` command and the site; the Desk (mission atelier-z4cr) shows the debrief.
 - atelier-lr08: left for Sumeet; proposed drop (a). It speeds up the `debrief` command, which the What is removed table removes.
@@ -368,7 +368,22 @@ python3 scripts/cutover/convert_records.py --verify <pre-conversion head>
 atelier-next-3ba4a62f check
 ```
 
-CONVOUT
+Output at d42c1c7f. Its parent 5a1a2fa9 is the last commit that changes a record other than this one; later commits change only this record:
+
+```text
+Records converted, by kind and new status:
+  item draft: 104
+  item from decision ready: 2
+  item ready: 27
+  mission draft: 6
+  mission ready: 2
+Made ready from in_progress; each branch's work is not converted:
+  atelier-5zre
+This tree's .atelier/ and moved files match a fresh conversion of d42c1c7f8f8a61f2ace7c9aa55bd25be05982f42: 155 files.
+Every record is valid: 133 items, 8 missions and config.toml.
+```
+
+The converter printed 133 items (104 draft, 27 ready, 2 ready from decisions) and 8 missions (6 draft, 2 ready); `--verify` and `check` each exited 0, `check` on both atelier-next-3ba4a62f and atelier-next-7b06ed12. 133 items and 8 missions are the 181 open records less the 40 dropped. The full output is in `~/.cache/atelier-qr5s/5zre/convout.txt`; it also lists 22 `blocked_by` entries naming a closed or missing record, which the converter leaves out.
 
 ### Deviations
 
