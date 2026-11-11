@@ -41,7 +41,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Delete the old workspace and put the new one in its place, with the cutover runbook"
-updated_at: "2026-11-11T07:06:55.416319698+00:00"
+updated_at: "2026-11-11T08:35:28.724880696+00:00"
 ---
 
 ## Goal
@@ -134,6 +134,7 @@ Expected size: the move is about 50 renames and 290 deletions with a dozen files
 
 - 2026-11-11 [decision] The orchestrator of atelier-qr5s starts this item before atelier-t747 and atelier-a4rs have merged, and removes atelier-t747 as its blocker; atelier-wd1i still waits for both. The branch brings master in with atelier merge --sync before its final review round, and applies its lines to what they added.
   Reason: This item is not merged until Sumeet names a time, by which both will have merged. They change evals/ and skills/agent-factory-next/, which this item touches only for the binary's path, and waiting for the eval matrix would add hours with nothing gained.
+- 2026-11-11 [note] [handoff] Approved by GPT-6.1 Sol independent reviewer at 1d8bd099 (atelier-7z4v) after two rounds; round 1's fix_now findings atelier-1fod and atelier-cf70 were fixed in 3f460f94 and verified. CI and the release plan passed on 3f460f94, the head's code (pull request #135). Not merged: it waits for Sumeet's time. atelier-t747's sync is still to come. The Report has the proof.
 
 ## Report
 
