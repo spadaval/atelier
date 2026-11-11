@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-9bm2
 title: Show the outcome, own blockers and next step in the work mission header
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -34,3 +34,7 @@ The `work mission` header shows the mission, its Scope, Strategy and Criteria, b
 ## Context
 
 The close rule is described, not enforced (atelier-jnrh). The separate Status line the original reported is gone, and Strategy and Criteria are shown (atelier-stsa).
+
+## Report
+
+Dropped: `work mission` was removed in 0.5; `atelier show <mission>` prints the Outcome, criteria, items with their blockers, and questions.
