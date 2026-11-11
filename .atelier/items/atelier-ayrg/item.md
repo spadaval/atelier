@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ayrg
 title: 'Count fix_now findings resolved by a later approval as fixed in the debrief: atelier-1gb3''s shows 16 of 16 awaiting a decision'
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -31,3 +31,7 @@ The debrief of mission atelier-1gb3 says "16 findings: 16 awaiting a decision", 
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-1gb3 (Take approved work to the published base in one command, through a forge)
+
+## Report
+
+Dropped: The `debrief` command and `mission_review.rs` were deleted in 0.5.
