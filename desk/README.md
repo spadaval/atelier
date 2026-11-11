@@ -30,7 +30,7 @@ address. `DESK_DEV_PORT` sets the dev server's port (default 5173).
 
 ```console
 $ pnpm build
-$ cd ../next && cargo build -p atelier-desk
+$ cd .. && cargo build -p atelier-desk
 $ target/debug/atelier-desk --config ~/.config/atelier-desk/config.toml
 ```
 
