@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ivbq
 title: 'Fix what the new skill and the eval fixtures showed status gets wrong: six small gaps in what a thread is told'
-status: in_review
+status: approved
 mission: atelier-qr5s
 labels:
 - redesign
