@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-vl5n
 title: Write the readiness checklist, mapped to the three codebase properties
-status: changes_requested
+status: in_review
 mission: atelier-295u
 labels:
 - redesign
@@ -113,3 +113,8 @@ No line was left could not test. Changed after the trial:
 ### Validation
 
 The trial above is the validation: every line was run as written, in both repositories, and the commands in the file were copied from the ones that ran. `atelier check` in a scratch clone with a staged `.atelier/readiness.md` printed "Every record is valid", so the file's claim that `check` accepts it holds.
+
+### Responses
+
+1-pv9w.1: fixed in a453d7061
+1-pv9w.2: fixed in a453d7061
