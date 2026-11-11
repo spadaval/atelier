@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-mi3x
 title: Choose status Next Actions from the checkout's state, in lifecycle order
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -37,3 +37,7 @@ created_at: 2026-10-17T01:10:57.983373200Z
 ## Context
 
 The order is atelier-jnrh's: `review request` refuses while a line is unticked or the Report is empty, and `merge` marks the work done, so there is no done-owner or land-handoff step (decision atelier-mzpn). status is the SessionStart view (atelier-sdb0).
+
+## Report
+
+Dropped: Done by the 0.5 rewrite, which is built around this: `status` prints the one next command for what the thread holds.
