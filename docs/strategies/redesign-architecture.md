@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: brought up to date with what mission atelier-fcb7 built in next/, including Sumeet's decisions of 2026-11-10 that submit starts CI and merge waits for it; what the binary enforces of the Review section, and the fixes the validator's check found (atelier-8myy)"
+last_changed: "2026-11-11: amended at Sumeet's direction: no site crate and no `serve`; the Desk (ADR 0032) reads the core. Before that: brought up to date with what mission atelier-fcb7 built in next/, including Sumeet's decisions of 2026-11-10 that submit starts CI and merge waits for it; what the binary enforces of the Review section, and the fixes the validator's check found (atelier-8myy)"
 ---
 
 # Atelier redesign: architecture specification
@@ -56,9 +56,9 @@ edited by this work. It is deleted whole at the switch.
 | Record parsing, validation and index | 7,930 | Written new. Front-matter splitting is copied with one change, so that it keeps a record's body byte for byte where today it strips a newline at each end. ID generation is copied from `record_id.rs`. |
 | Merge, gates, freshness, light path | 6,190 | Written new. Copied and put on the new types: the merged-tree checkout, the merge commit and the push from `merge.rs` and `merge_push.rs`, and the protection around them described under The forge. |
 | Issue and work views and output | 5,304 | Written new, as `status`, `show` and `list` |
-| Missions, brief, debrief, criteria | 4,753 | Only what the site's pages need, at the site step |
+| Missions, brief, debrief, criteria | 4,753 | Not carried over. The Desk adds the views its pages need (atelier-z4cr) |
 | Review and findings | 4,669 | Written new, as `review` and `verdict` over one file per review |
-| Site, Rust and web | 4,926 | Copied at the site step, with its loader written new |
+| Site, Rust and web | 4,926 | Not carried over. Deleted with the old workspace; the Desk replaces it (ADR 0032) |
 | Workflow policy | 3,418 | Not carried over; a short config section replaces it |
 | Status, land and hooks | 2,438 | Written new. The harness hook installer is copied. |
 | Prune and history | 2,410 | Not carried over |
@@ -82,13 +82,13 @@ lock file, built to `next/target/`. It has the crates the old one has, less
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the history of acts, the site's views |
-| `atelier-site` | `atelier serve` |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the history of acts, the views the Desk reads |
 | `atelier-cli` | Arguments, dispatch, Git and shell adapters, output |
 
 The crates sit at `next/crates/<name>/`, so the switch can move them to the
 root `crates/` without changing a path inside them. The dependency direction
-is `cli` to `site` to `app` to `records` to `core`.
+is `cli` to `app` to `records` to `core`. The Desk's crate, `atelier-desk`,
+depends on `app` and `records`, and nothing depends on it.
 
 Nothing in the new workspace builds from the old one, and CI proves it the
 direct way: the job that builds and tests `next/` deletes the root `crates/`
@@ -625,7 +625,7 @@ branch switch.
   and then does not read the branch's record, so one that does not parse
   cannot hide the drop. `check` still reports it.
 - **Who reads this way:** `status` on the base, `lead`, `list`, `show` and
-  the site. `show` reads a mission and its plan reviews at the base's tip.
+  the Desk. `show` reads a mission and its plan reviews at the base's tip.
   `lead` reads its items and the missions this way, so what it says can
   start now is what `start` will start, and reads and writes its own
   mission in the checkout of the base, as `set` does: it runs only on the
@@ -646,7 +646,7 @@ branch switch.
   `--deferred`, which takes no other flag, lists instead each unsettled
   deferred finding of a done item, by its name and title; it reads the
   items of the checkout it runs in, committed or not, as `new --from` and
-  `drop` do, so it lists what they would settle there. The site already enumerates local branches for work in flight.
+  `drop` do, so it lists what they would settle there.
   Every command also reads its item, and each blocker of a ready item, this
   way.
 - **Starting is one atomic step.** `start` writes the commit that sets
@@ -703,7 +703,7 @@ branch switch.
 - Records can be read at any commit, without a checkout, through
   `atelier-records`' `CommitReader`: one `git cat-file --batch` process
   serves every read, and it tells a path the commit lacks, an entry that is
-  not a regular file and a failing Git apart. The site reads this way, and
+  not a regular file and a failing Git apart. The Desk reads this way, and
   so does anything that compares a record now with the same record at the
   commit of an earlier act.
 - **A plan review is written where its reviewer works.** `review <mission>`
@@ -796,7 +796,7 @@ is merged, so the base's record is the item's record from then on.
 `atelier log` prints the history of acts. Nothing stores it. It is derived
 from Git history, by finding the commits where a record changed in one of
 the ways below. Each is one line, and each carries the commit it was found
-in. `atelier-app` returns the same history as data, which is how the site
+in. `atelier-app` returns the same history as data, which is how the Desk
 reads it.
 
 | Line | Found where | Thread shown |
@@ -1009,23 +1009,19 @@ as `merge`.
 
 ## Site
 
-The site is rebuilt on the new records in mission 3, in the new workspace:
-the site crate and its web app are copied across, the loader is written to
-read the three record kinds, the responses drop what the new model does not
-have, and the fixtures are generated in the new layout. The new binary's
-`serve` serves it, and the web typecheck, unit and Playwright jobs run
-against it. How much of the brief and debrief view code is copied is settled
-when that step is planned, by reading the site's code.
+The tool has no site. The old workspace's site is deleted with it at the
+switch, and nothing in the new workspace builds or serves one: no
+`atelier-site` crate, no `serve` command, no web jobs in CI and no Node step
+in the build. The installed binary keeps serving the old-layout repositories
+until the cutover.
 
-The old workspace's site is not touched, and the installed binary keeps
-serving the old-layout repositories until the cutover.
-
-The site can derive more than this work builds. A view of what changed
-between a mission's go-ahead and its result is the dashboard's to compute,
-and the tool gives it what that needs: every act with the commit it happened
-in, and records readable at any commit. So the site can load a mission's
-directory and items as they stood at the commit of its `ready` act and
-compare them with how they stand now.
+The human's pages are the Desk, a separate binary and web app
+([ADR 0032](../adr/0032-the-desk-is-the-humans-product.md), mission
+atelier-z4cr). It reads records through `atelier-records` and
+`atelier-app`, and what it needs from this work is already here: every act
+with the commit it happened in, and records readable at any commit. So it
+can load a mission's directory and items as they stood at the commit of its
+`ready` act and compare them with how they stand now.
 
 ## Transition
 
@@ -1065,7 +1061,8 @@ old tool:
   and those commits changed only the wording of the review brief, so the
   0.4.0 release is tried first. A 0.4.1 is cut only if 0.4.0 fails that
   test.
-- The site is rebuilt, as above.
+- The site is taken out, as above: the new workspace builds and serves
+  none.
 - The switch: `crates/`, the old workspace with all its tests, and
   `scripts/smoke-repos.sh` are deleted, and the tracked contents of `next/`
   move to the repository root, so the root workspace, the release build and
@@ -1098,8 +1095,8 @@ ready, the runbook runs on the base, and the item is closed at the end.
    `skills/agent-factory/`. Commit. Run `--verify`, and the tree's
    `atelier check`.
 3. Install the binary from master, run `atelier setup` for each harness and
-   for Git hooks, move the skill checkout forward, and restart the
-   `atelier-serve` service. Check the site answers for atelier.
+   for Git hooks, move the skill checkout forward, and stop and disable the
+   `atelier-serve` service, since the new binary has no `serve`.
 4. Push master, with `ATELIER_SKIP="cutover conversion"`, since the hook
    just installed would refuse a commit that is not a merge and changes
    `AGENTS.md` and the skill. CI now runs the tree's binary on the converted
@@ -1132,8 +1129,8 @@ thing that does it.
    | Converted and pushed | Reverting its conversion commit and pushing |
 
 3. If step 3 had started, reinstall the fallback release, run its `setup`, move
-   the skill checkout back to the commit it was on, restart `atelier-serve`,
-   and check the site answers.
+   the skill checkout back to the commit it was on, enable and start
+   `atelier-serve` again, and check the site answers.
 
 The rollback is tried on scratch clones before the real cutover, stopping
 after each of these: a conversion that fails `--verify` before its commit;
@@ -1267,4 +1264,3 @@ reaches it.
 - Whether T3's pull request watch wakes a thread when a repository marks no
   check as required.
 - Where video artifacts go when a project needs them.
-- How much of the brief and debrief view code the site keeps.
