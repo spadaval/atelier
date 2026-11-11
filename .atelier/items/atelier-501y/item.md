@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-501y
 title: Show the item's title, Done when and mission when start succeeds
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - cli-output
@@ -31,3 +31,7 @@ A successful `atelier start` (crates/atelier-cli/src/commands/start.rs) prints t
 ## Context
 
 Dropped in decision atelier-mzpn: a warning when the recorded base differs from the policy base, since atelier-md0v reads the base from the policy everywhere and `start --base` is hidden and ignored.
+
+## Report
+
+Dropped: Describes the old `start` output and rests on counts from the old tool. Refile from the scorecard rerun (atelier-pwhn) if agents still cut `start` output.
