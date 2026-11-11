@@ -16,9 +16,10 @@
 #
 # It prints one line per trial and checks "restored" the same way after
 # every rollback. Logs and sandboxes hold the private repositories' records:
-# read them there, and delete the work directory afterwards. The fingerprint
-# of the real repositories, the installed binary, the skill checkout and the
-# service is taken before and after, and must match.
+# read them there, and delete the work directory afterwards. A fingerprint
+# of what a cutover would change on the real host (each repository's hooks
+# and remote config, the installed binary, the skill checkout and its links,
+# and the service) is taken before and after, and must match.
 set -euo pipefail
 [ $# -ge 2 ] || { echo "usage: $0 <work directory> <new binary> [trial...]" >&2; exit 2; }
 mkdir -p "$1"
@@ -44,9 +45,9 @@ fingerprint() {
   local s r c
   for s in $SPECS; do
     r=${s%%:*} c=$REAL/$r
-    echo "$r base $(git -C "$c" rev-parse "refs/heads/${s#*:}")"
-    git -C "$c" worktree list --porcelain | grep -E '^(worktree|HEAD|branch|detached)'
-    git -C "$c" for-each-ref --format='%(refname) %(objectname)' refs/heads
+    # Not branches or worktree heads, which other threads move while the
+    # trials run: only what a cutover would change.
+    echo "$r remote $(git -C "$c" config --get-regexp '^(remote|url)\.' | tr '\n' ' ')"
     echo "hooks $(cd "$(git -C "$c" rev-parse --path-format=absolute --git-common-dir)/hooks" && ls -A | sort | tr '\n' ' ')"
     echo "hooksPath $(git -C "$c" config core.hooksPath || true)"
   done
