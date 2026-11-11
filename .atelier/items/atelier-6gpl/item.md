@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6gpl
 title: Render issue transition options one line per option
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -38,3 +38,7 @@ atelier-jnrh removed the work item's `close`, so work items now have at most fou
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-763x
+
+## Report
+
+Dropped: Transitions and `issue transition` were removed in 0.5.
