@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ceu3
 title: Make issue create and update body and type errors readable
-status: draft
+status: dropped
 mission: atelier-uf97
 labels:
 - cli-output
@@ -34,3 +34,7 @@ Several `issue create`/`update` errors name internal locations or blame the wron
 ## Context
 
 Placeholder IDs in hints (e.g. `<issue-id> <mission-id>`) are handled by a separate cross-cutting item.
+
+## Report
+
+Dropped: `issue create` and `update --body` were removed in 0.5; a body is edited in its file and `check` validates it.
