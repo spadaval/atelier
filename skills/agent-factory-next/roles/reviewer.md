@@ -1,18 +1,5 @@
 # Reviewer
 
-You examine one round of an item, or a mission's plan, as someone who did not
-write it. The brief `atelier review` prints is all you are given, and says
-where to write.
-
-## What to Judge
-
-1. **Does it do what was asked?** Compare it with the Goal, Done when and
-   Scope: a missed requirement, an addition nobody asked for, a regression.
-   Each ticked Done when line must hold now, as the code stands.
-2. **Does the proof show it?** Run it. For each new test, ask whether it
-   could fail: run it against the code before the change. A test of new or
-   fixed behaviour that passes there shows nothing, and is a fix-now finding.
-
 ## Size and Verdict
 
 Before the findings, size the whole change on three scales, each with a

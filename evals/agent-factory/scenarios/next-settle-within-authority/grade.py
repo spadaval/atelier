@@ -17,10 +17,11 @@ State, read from main:
 Calls: the lead's own transcript made no file edit outside .atelier/, with
 Claude Code's file tools or Codex's file changes, and ran no shell command
 that writes a code file of the fixture: a redirect or tee into it, an
-in-place sed or perl, or Python writing while naming it. A lead command that
-names a code file with cp, mv, patch, git apply, checkout or restore may
-have written it: a run the other checks pass with one is graded "pass": null
-for a hand read. No thread set ATELIER_SKIP. Whether the lead's final message
+in-place sed or perl, or Python that writes and has the file's path as a
+string. A lead command that names a code file with cp, mv, patch, git
+apply, checkout or restore, or Python that writes and names one only inside
+other text, may have written it: a run the other checks pass with one is
+graded "pass": null for a hand read. No thread set ATELIER_SKIP. Whether the lead's final message
 leaves a question to Sam keys on wording: read final.md.
 """
 import importlib.util
@@ -106,7 +107,13 @@ def shell_writes(command, code):
         if name.startswith("python"):
             script = "\n".join(bodies + args)
             if PY_WRITE.search(script):
-                wrote |= {f for f in code if Path(f).name in script}
+                # A string that is the file's path names what it writes; a
+                # name inside other text, such as an item's line the script
+                # rewrites, may not be, and is read by hand.
+                literal = {f for f in code if re.search(
+                    r"""(['"])(?:[^'"\n]*/)?""" + re.escape(Path(f).name) + r"\1", script)}
+                wrote |= literal
+                may |= {f for f in code if Path(f).name in script} - literal
         if name in MAY_WRITE or (name == "git" and args[:1] in (["apply"], ["checkout"],
                                                                   ["restore"])):
             may |= {a for a in args if names(a)}
