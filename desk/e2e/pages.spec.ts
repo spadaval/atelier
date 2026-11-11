@@ -1,24 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { missions, respond, z4cr } from "./fixtures";
+import { missions, z4cr } from "./fixtures";
+import { expectFits, expectOnlyTheActs, load, phone, serve } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
-  await page.route("**/api/**", (route) => {
-    const { status, body } = respond(new URL(route.request().url()));
-    return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-  });
+  await serve(page);
 });
-
-const phone = (page: Page) => (page.viewportSize()?.width ?? 1000) < 600;
-
-/** Loads a page and fails on an uncaught error or a page wider than the screen. */
-async function load(page: Page, path: string) {
-  const errors: string[] = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
-  await page.goto(path);
-  await page.waitForLoadState("networkidle");
-  await expectFits(page);
-  expect(errors).toEqual([]);
-}
 
 /** Opens the first finding in `scope` and checks it is laid out as wide as its list, not squeezed into a column. */
 async function expectReadableFinding(page: Page, scope: string) {
@@ -34,24 +20,13 @@ async function expectReadableFinding(page: Page, scope: string) {
   await expect(finding.locator("details > .md")).toBeVisible();
 }
 
-async function expectFits(page: Page) {
-  const wider = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(wider, "the page is wider than the screen").toBeLessThanOrEqual(0);
-}
-
-/** The Desk shows no control for an act, a thread or the history yet. */
-async function expectNoActs(page: Page) {
-  await expect(page.locator("form, input, textarea, select")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /say go|answer|decide|start|planning|thread|history|activity/i })).toHaveCount(0);
-}
-
 test("the repositories page shows each repository's counts and missions, and a repository's error", async ({ page }) => {
   await load(page, "/");
   const atelier = page.getByRole("region", { name: "atelier" });
   await expect(atelier.getByTestId("repo-counts")).toHaveText("2 in progress1 draft waiting for your go1 item needs you");
   await expect(atelier.getByRole("link", { name: z4cr.mission.title })).toHaveAttribute("href", "/r/atelier/mission/atelier-z4cr");
   await expect(page.getByRole("region", { name: "broken" })).toContainText("missing field `status`");
-  await expectNoActs(page);
+  await expectOnlyTheActs(page);
 });
 
 test("the mission page shows the title, status and counts atelier show prints", async ({ page }) => {
@@ -71,7 +46,7 @@ test("the mission page shows the title, status and counts atelier show prints", 
   await expect(overview).toContainText("this clone lacks the commit reviewed");
   await expect(overview).toContainText("The strategy does not say where the app's types come from");
   await expectReadableFinding(page, ".paper-body");
-  await expectNoActs(page);
+  await expectOnlyTheActs(page);
 });
 
 test("the Work tab groups items by status in lifecycle order, and a done item shows its Report and fixes", async ({ page }) => {
@@ -116,7 +91,8 @@ test("every mission in the rail opens a page that renders, and the loose count l
   const rail = page.getByRole("navigation", { name: "Missions of atelier" });
   await expect(rail.getByTestId("loose")).toHaveText("80 open items are in no mission.");
   await expect(rail.getByTestId("loose").locator("a")).toHaveCount(0);
-  const hrefs = await rail.locator("a").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
+  await expect(rail.getByRole("link", { name: "Agents" })).toHaveAttribute("href", "/r/atelier/agents");
+  const hrefs = await rail.locator("a.mcard").evaluateAll((links) => links.map((a) => a.getAttribute("href")));
   expect(hrefs.sort()).toEqual(missions.missions.map((m) => `/r/atelier/mission/${m.id}`).sort());
   for (const href of hrefs) {
     await load(page, href!);
@@ -151,7 +127,7 @@ test("the item page shows its goal, Done when ticks, report, reviews and blocker
   await expect(finding("Drafts are in the inbox now")).toContainText("Confirms 1-aaaa.1 fixed");
   await expect(page.locator(".issue-main")).toContainText("fixed in 3333cccc");
   await expectReadableFinding(page, ".issue-main");
-  await expectNoActs(page);
+  await expectOnlyTheActs(page);
 
   await load(page, "/r/atelier/item/atelier-uwxy");
   await expect(page.getByText("Read from its branch")).toBeVisible();
@@ -175,8 +151,8 @@ test("the inbox lists every repository's needs-human items by mission, its draft
   await expect(atelier.getByRole("heading", { name: "In no mission" })).toBeVisible();
   await expect(atelier.getByRole("link", { name: /Read the fleet site/ })).toBeVisible();
   await expect(page.getByRole("region", { name: "broken" })).toContainText("missing field `status`");
-  await expect(page.getByRole("link", { name: "Inbox" })).toContainText("4");
-  await expectNoActs(page);
+  await expect(page.getByRole("link", { name: "Inbox" })).toContainText("6");
+  await expectOnlyTheActs(page);
 });
 
 test("a repository that cannot be read says so in the rail, where a phone shows it", async ({ page }) => {

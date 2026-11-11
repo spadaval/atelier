@@ -2,9 +2,11 @@
 
 The web app of the Desk, the human's tool for planning missions and reading
 their results ([product intent](../docs/product/desk.md)). It shows the
-repositories, each mission's page, each item's page and the inbox, and it
-reads everything from the API that `atelier-desk` serves
-([the API](../docs/architecture/desk.md)). It runs no server of its own.
+repositories, each mission's page, each item's page, the inbox and T3
+Code's live threads. It reads everything from the API that `atelier-desk`
+serves ([the API](../docs/architecture/desk.md)), and sends the human's
+three acts there: Say go, an answer, and a planning session. It runs no
+server of its own.
 
 It is React with Vite and react-router, Markdown through react-markdown,
 lucide icons and one plain stylesheet with tokens, carried over from the
@@ -48,5 +50,7 @@ $ pnpm e2e         # Playwright, on the built app
 
 `pnpm e2e` serves `dist/` with Vite's preview server and answers every
 `/api` request in the browser from `e2e/fixtures.ts`, so it needs no
-`atelier-desk`. It loads each page at a desktop and a phone width. CI runs
+`atelier-desk`. Its `World` performs `ready`, `decide` and sessions on a
+fresh copy of the fixtures for each test, and records each request it was
+sent. It loads each page at a desktop and a phone width. CI runs
 all four in the `desk` job when a change touches `desk/`.

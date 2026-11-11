@@ -139,9 +139,11 @@ $ cd next && ATELIER_UPDATE_TYPES=1 cargo nextest run -p atelier-desk --test typ
 The app is `desk/` (item atelier-94pv; `desk/README.md` has its commands).
 Its routes are `/` (repositories), `/inbox`, `/r/{repo}` and
 `/r/{repo}/mission/{id}` (the rail and one mission, with its Overview,
-Work and Documents tabs as `?tab=`, and a document as `?doc=<path>`), and
-`/r/{repo}/item/{id}`. Where it reads the API differently from what the
-tables below suggest:
+Work and Documents tabs as `?tab=`, and a document as `?doc=<path>`),
+`/r/{repo}/item/{id}`, and `/agents` and `/r/{repo}/agents` (T3 Code's live
+threads from `GET /api/threads`; the second shows only the threads, and the
+holds, of that repository). Where it reads the API differently from what
+the tables below suggest:
 
 - A document is listed under its file name, with its first heading
   beneath, since the converted `design.md` files begin with `# Sizing`. Its
@@ -154,6 +156,25 @@ tables below suggest:
 - A done item's Report and its findings fixed in review are read from
   `/items/{id}` when the human opens them on the Work tab; the item row has
   only `report_written`.
+- An agent with no `thread` is shown with "not running in T3 Code" only
+  when `t3` has a list to judge by (`reachable`, or an `age_seconds` from
+  before a failed poll). With no list read, the page says threads are
+  unavailable and names the identities without that claim.
+- An identity is shown whole, cut short on screen only, with the whole
+  value in its text and title. No link holds one.
+- Say go, the answer form and Start a planning session are the app's only
+  act controls. Say go and a session each ask once before they send. The
+  answer form answers an item's oldest open question only, as `decide`
+  does, and offers a settlement only when the question names a finding.
+  After a `done`, the app reads every page on screen again before showing
+  the act's text.
+- `pending_answers` carries no place among the item's decisions, so the
+  app matches each to the first unanswered question of the same item with
+  the same text and finding, in order. The inbox has no
+  `pending_answers`: it drops an answered question. The app keeps an
+  answer given on that visit beneath the questions, marked as not
+  committed yet, for as long as the item's own `pending_answers` (read
+  from `/items/{id}`) lists it.
 
 ## Routes
 
