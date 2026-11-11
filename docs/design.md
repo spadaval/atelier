@@ -938,10 +938,14 @@ lists each commit once, so each act is printed once.
   it added shows its acts at that commit's time, as `new -> <status>` and
   every thread its record names. Nothing special-cases it; a reader who
   wants the time after it uses `--since`.
-- **A version that does not parse.** History can hold a record that was
-  invalid at one commit. `log` passes that version over, compares the
-  versions on each side of it, and says on standard error which commit and
-  path it passed over.
+- **A version that does not read.** History can hold a record that was
+  invalid at one commit, or not UTF-8. `log` passes that version over,
+  compares the versions on each side of it, and says on standard error
+  which commit and path it passed over. `git log --parents` gives each
+  commit the nearest listed commits as its parents, so what a commit passed
+  over is carried to the next commit on its line of history: the same
+  broken blob after two different versions stands each time for the one
+  before it there.
 - **Time and order.** A line's time is its commit's committer time. Lines
   are ordered by it, lines of one commit keep the order of the table above,
   and commits of one time keep Git's order, parents first.

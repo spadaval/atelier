@@ -509,3 +509,84 @@ fn acts_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
     );
     assert_eq!(commit_of(&lines[1]), started);
 }
+
+#[test]
+fn a_version_that_is_not_utf8_is_passed_over_like_one_that_does_not_parse() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    let path = root.join(item_path(ID));
+    let draft = fs::read_to_string(&path).unwrap();
+    let mut bytes = draft.clone().into_bytes();
+    bytes.push(0xff);
+    fs::write(&path, bytes).unwrap();
+    git(&root, &["commit", "-qam", "Break its encoding"]);
+    let broken = short(&root, "HEAD");
+    fs::write(&path, draft.replace("status: draft", "status: ready")).unwrap();
+    git(&root, &["commit", "-qam", "Mend it"]);
+
+    for args in [&["log"][..], &["log", ID]] {
+        let run = atelier(&root, "t9", args);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert!(
+            run.stderr.starts_with(&format!(
+                "atelier log: passed over {} in commit {broken}, which does not read: ",
+                item_path(ID)
+            )) && run.stderr.contains("not UTF-8"),
+            "{}",
+            run.stderr
+        );
+        let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
+        assert_eq!(
+            acts(&root, &lines),
+            [format!("{ID} ready - draft -> ready")]
+        );
+    }
+}
+
+#[test]
+fn a_version_that_does_not_read_twice_stands_each_time_for_the_version_before_it() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    let path = root.join(item_path(ID));
+    let draft = fs::read_to_string(&path).unwrap();
+    // The two broken versions are one blob, after different versions.
+    for status in ["bogus", "ready", "bogus", "ready"] {
+        fs::write(
+            &path,
+            draft.replace("status: draft", &format!("status: {status}")),
+        )
+        .unwrap();
+        git(&root, &["commit", "-qam", status]);
+    }
+    let run = atelier(&root, "t9", &["log"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.stderr.lines().count(), 1, "{}", run.stderr);
+    let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
+    assert_eq!(
+        acts(&root, &lines),
+        [format!("{ID} ready - draft -> ready")]
+    );
+    assert_eq!(commit_of(&lines[0]), short(&root, "HEAD~2"));
+
+    // On two branches, each broken version stands for its own branch's.
+    git(&root, &["switch", "-q", "-c", "demo-b2b2", "HEAD~4"]);
+    fs::write(&path, draft.replace("status: draft", "status: done")).unwrap();
+    git(&root, &["commit", "-qam", "done"]);
+    fs::write(&path, draft.replace("status: draft", "status: bogus")).unwrap();
+    git(&root, &["commit", "-qam", "bogus"]);
+    fs::write(&path, draft.replace("status: draft", "status: dropped")).unwrap();
+    git(&root, &["commit", "-qam", "dropped"]);
+    let run = atelier(&root, "t9", &["log"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let lines: Vec<String> = run.stdout.lines().map(str::to_string).collect();
+    let acts = acts(&root, &lines);
+    assert!(
+        acts.contains(&format!("{ID} close - draft -> done")),
+        "{acts:?}"
+    );
+    assert!(
+        acts.contains(&format!("{ID} drop - done -> dropped")),
+        "{acts:?}"
+    );
+    assert_eq!(acts.len(), 3, "{acts:?}");
+}

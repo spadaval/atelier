@@ -13,7 +13,8 @@ use atelier_core::{
     Settlement, Status, Thread, Threads, Verdict,
 };
 use atelier_records::{
-    parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir, ReviewFile,
+    parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir, ReadError,
+    ReviewFile,
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use std::collections::{BTreeSet, HashMap};
@@ -242,6 +243,8 @@ pub fn history(
     let mut walker = Walker {
         repo,
         versions: HashMap::new(),
+        pending: HashMap::new(),
+        said: BTreeSet::new(),
         history: History::default(),
     };
     for commit in &commits {
@@ -333,6 +336,9 @@ fn walk(root: &Path, revisions: &[String]) -> Result<Vec<Commit>> {
         "--topo-order",
         "--reverse",
         "--full-history",
+        // Each commit's parents are the nearest commits listed, so what one
+        // passed over reaches the next on its line of history.
+        "--parents",
         "--root",
         "--no-renames",
         "--raw",
@@ -448,28 +454,20 @@ enum Version {
     },
 }
 
-/// A version as the walk read it: one that reads, or one that does not,
-/// with the last version before it that does.
-#[derive(Clone)]
-enum Read {
-    Good(Rc<Version>),
-    PassedOver(Option<Rc<Version>>),
-}
-
-impl Read {
-    /// The version acts are compared with.
-    fn usable(&self) -> Option<Rc<Version>> {
-        match self {
-            Read::Good(version) => Some(version.clone()),
-            Read::PassedOver(before) => before.clone(),
-        }
-    }
-}
+/// What a version that does not read stands for on one line of history:
+/// its blob, and the last version before it there that reads.
+type Pending = HashMap<String, (String, Option<Rc<Version>>)>;
 
 struct Walker<'r, 's> {
     repo: &'r mut Repo<'s>,
-    /// Each version read, by its path and blob.
-    versions: HashMap<(String, String), Read>,
+    /// Each version read, or what is wrong with it, by its path and blob.
+    versions: HashMap<(String, String), Result<Rc<Version>, String>>,
+    /// After each commit that has one, the records whose version there does
+    /// not read, by path. A version's blob says whether it reads; which
+    /// version stands for it depends on where in history it is.
+    pending: HashMap<String, Pending>,
+    /// Each version passed over and said so, by its path and blob.
+    said: BTreeSet<(String, String)>,
     history: History,
 }
 
@@ -478,6 +476,13 @@ impl Walker<'_, '_> {
         let mut found: Vec<(String, Option<Thread>, Happened)> = Vec::new();
         // The status moves the item acts leave to a verdict.
         let mut verdicts: Vec<(String, Move)> = Vec::new();
+        // What its parents passed over, the first parent's first.
+        let mut pending = Pending::new();
+        for parent in &commit.parents {
+            for (path, entry) in self.pending.get(parent).into_iter().flatten() {
+                pending.entry(path.clone()).or_insert_with(|| entry.clone());
+            }
+        }
         if commit.parents.len() > 1 {
             // An Atelier merge gives its item's merge line alone; what its
             // branch brought is found on that side. Another merge gives
@@ -492,18 +497,36 @@ impl Walker<'_, '_> {
                 let Some(record) = Record::of(&change.path) else {
                     continue;
                 };
-                let old = match &change.old {
-                    None => None,
-                    Some(blob) => {
-                        let parent = commit.parents.first().map(String::as_str);
-                        self.read(&change.path, blob, parent, commit, record.id())?
-                            .usable()
+                let path = &change.path;
+                let parent = commit.parents.first();
+                let old = match (&change.old, parent) {
+                    (Some(blob), Some(parent)) => match self.read(path, blob, parent)? {
+                        Ok(version) => Some(version),
+                        // Passed over where it was committed, it stands for
+                        // the version before it there.
+                        Err(problem) => match pending.get(path) {
+                            Some((bad, before)) if bad == blob => before.clone(),
+                            _ => {
+                                self.passed_over(commit, path, blob, record.id(), problem);
+                                None
+                            }
+                        },
+                    },
+                    _ => None,
+                };
+                let Some(blob) = &change.new else {
+                    pending.remove(path);
+                    continue;
+                };
+                let new = match self.read(path, blob, &commit.hash)? {
+                    Ok(version) => version,
+                    Err(problem) => {
+                        self.passed_over(commit, path, blob, record.id(), problem);
+                        pending.insert(path.clone(), (blob.clone(), old));
+                        continue;
                     }
                 };
-                let Some(blob) = &change.new else { continue };
-                let read =
-                    self.read(&change.path, blob, Some(&commit.hash), commit, record.id())?;
-                let Read::Good(new) = read else { continue };
+                pending.remove(path);
                 match record {
                     Record::Item(id) => items.push((id, old, new)),
                     _ => others.push((record, old, new)),
@@ -541,6 +564,9 @@ impl Walker<'_, '_> {
             if let Some(status) = last {
                 *status = Some(moved);
             }
+        }
+        if !pending.is_empty() {
+            self.pending.insert(commit.hash.clone(), pending);
         }
         found.sort_by_key(|(_, _, act)| act.row());
         let carries = found.iter().any(|(_, _, act)| act.commits());
@@ -596,51 +622,35 @@ impl Walker<'_, '_> {
     }
 
     /// The version of the record at `path` whose blob is `blob`, read from
-    /// `at`, a commit that holds it; one passed over is said once, as of
-    /// `commit`, where it is first read.
-    fn read(
-        &mut self,
-        path: &str,
-        blob: &str,
-        at: Option<&str>,
-        commit: &Commit,
-        id: &str,
-    ) -> Result<Read> {
+    /// `at`, a commit that holds it, or what is wrong with it.
+    fn read(&mut self, path: &str, blob: &str, at: &str) -> Result<Result<Rc<Version>, String>> {
         if let Some(read) = self.versions.get(&key(path, blob)) {
             return Ok(read.clone());
         }
-        let text = match at {
-            Some(at) => self.repo.reader().blob(&format!("{at}:{path}"))?,
-            None => None,
-        };
-        let read = match text.map(|text| version(path, &text)) {
-            Some(Ok(version)) => Read::Good(Rc::new(version)),
-            problem => {
-                let problem = match problem {
-                    Some(Err(problem)) => problem,
-                    _ => "Git has no such file".to_string(),
-                };
-                self.history.passed_over.push(PassedOver {
-                    time: commit.time,
-                    commit: commit.short.clone(),
-                    path: path.to_string(),
-                    id: id.to_string(),
-                    problem,
-                });
-                // Read as the new version, it stands for the last that
-                // read; as an old one never read before, there is none.
-                let before = commit
-                    .changes
-                    .iter()
-                    .find(|change| change.path == path && change.new.as_deref() == Some(blob))
-                    .and_then(|change| change.old.as_ref())
-                    .and_then(|old| self.versions.get(&key(path, old)))
-                    .and_then(Read::usable);
-                Read::PassedOver(before)
-            }
+        let read = match self.repo.reader().blob(&format!("{at}:{path}")) {
+            Ok(Some(text)) => version(path, &text).map(Rc::new),
+            Ok(None) => Err(format!("{at} has no {path}")),
+            // The file's content, such as bytes that are not UTF-8, and not
+            // Git, is at fault.
+            Err(ReadError::Record(problem)) => Err(problem.to_string()),
+            Err(error) => return Err(error.into()),
         };
         self.versions.insert(key(path, blob), read.clone());
         Ok(read)
+    }
+
+    /// Says once that the version of `path` whose blob is `blob` does not
+    /// read, as of `commit`, where the walk first meets it.
+    fn passed_over(&mut self, commit: &Commit, path: &str, blob: &str, id: &str, problem: String) {
+        if self.said.insert(key(path, blob)) {
+            self.history.passed_over.push(PassedOver {
+                time: commit.time,
+                commit: commit.short.clone(),
+                path: path.to_string(),
+                id: id.to_string(),
+                problem,
+            });
+        }
     }
 }
 
