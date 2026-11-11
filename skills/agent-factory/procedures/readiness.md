@@ -23,14 +23,15 @@ line whose failure shows in no measure is cut.
 ## Easy to Navigate
 
 1. **Each harness loads `AGENTS.md` and starts with `atelier status`.**
-   Test: `AGENTS.md` exists, and Claude Code reads it. It does when
-   `CLAUDE.md` is a symlink to `AGENTS.md` or imports it with `@AGENTS.md`.
-   Otherwise it does only when no `CLAUDE.md`, `.claude/CLAUDE.md` or
-   `CLAUDE.local.md` exists in the checkout's root or a directory above it,
-   leaving out `~/.claude/CLAUDE.md`, and `claude --version` is 2.1.277 or
-   later. Where `.claude/` or `.codex/` exists, its `settings.json` or
-   `hooks.json` runs `atelier status` at `SessionStart`. Shows in: tool
-   calls before an agent's first edit; Confusion (commands run by the wrong
+   Test: `AGENTS.md` exists. Where `.claude/` exists, `CLAUDE.md` beside it
+   imports it with `@AGENTS.md` or is a symlink to it, and
+   `.claude/settings.json` runs `atelier status` at `SessionStart`. Claude
+   Code then reads the map whatever its version and Project instructions
+   setting, except `managed-only`, which leaves out every project file.
+   Without that `CLAUDE.md`, whether it reads `AGENTS.md` depends on the
+   host's settings and on files above the checkout. Where `.codex/` exists,
+   `.codex/hooks.json` runs `atelier status` too. Shows in: tool calls
+   before an agent's first edit; Confusion (commands run by the wrong
    role).
 2. **`AGENTS.md` names the commands that build, test, lint and launch the
    code agents are changing now,** or says which of them do not exist. Test:

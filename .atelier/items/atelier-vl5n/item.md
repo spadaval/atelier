@@ -60,7 +60,7 @@ The trial is read only: use each repository's base checkout or a detached worktr
 
 The gardener now has nine readiness lines in `skills/agent-factory/procedures/readiness.md`: three to navigate, two to change, four to validate. Each gives the precondition, its test, and the Scorecard measure or log number that would show its failure. Every test runs in a scratch clone of the base, so the repository is never changed, and each command in the trial finished in under 45 seconds at `-j 4`. The file says where a repository's own lines live, `.atelier/readiness.md`, and adds that file nowhere.
 
-The trial found real gaps in both repositories. atelier fails four lines: `cargo clippy` is its documented lint but runs in neither its merge checks nor CI, the Desk has no format or lint command, there is no verify skill, and none of its 39 bug items names its cause. demiurge fails seven, mostly because `AGENTS.md` describes the old root app: 756 of the last month's file changes are in `app/`, which it never names.
+The trial found real gaps in both repositories. atelier fails four lines: `cargo clippy` is its documented lint but runs in neither its merge checks nor CI, the Desk has no format or lint command, there is no verify skill, and none of its 39 bug items names its cause. demiurge fails eight, mostly because `AGENTS.md` describes the old root app: 756 of the last month's file changes are in `app/`, which it never names.
 
 ### Lines cut or folded from the starting candidates
 
@@ -93,7 +93,7 @@ Both run read only on 2026-11-11, in scratch clones of each base under `~/.cache
 
 | Line | atelier | demiurge |
 | --- | --- | --- |
-| 1. Harness loads the map, starts with `status` | Met. `CLAUDE.md` is `@AGENTS.md`; both hook files run `atelier status`. | Met. No `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the checkout or above it (only `~/.claude/CLAUDE.md`, which does not count), and Claude Code is 2.1.322, so it reads `AGENTS.md`; both hook files run `atelier status`. |
+| 1. Harness loads the map, starts with `status` | Met. `CLAUDE.md` is `@AGENTS.md`; both hook files run `atelier status`. | Not met. There is no `CLAUDE.md`. Claude Code 2.1.322 does read `AGENTS.md` on this host today, under its default Project instructions setting with nothing above the checkout, but a host setting can turn that off. Both hook files run `atelier status`. |
 | 2. `AGENTS.md` names build, test, lint, launch | Met. The install, `cargo nextest run`, clippy and fmt for `crates/`; the Desk's through `desk/README.md`. | Not met. It gives the old root app's build and no test command, and never names `app/`, where 756 of the last month's file changes landed. |
 | 3. What `AGENTS.md` points to exists | Met. The script printed nothing over 17 named paths and the links in the 6 Markdown files among them. | Not met. It names `/src/docs/editor`, which does not exist. |
 | 4. Fresh clone builds from the docs alone | Met. `cargo install --path crates/atelier-cli --locked` to a scratch root in 13 s; the Desk's `pnpm install` and `pnpm build` passed. | Not met. `bun run build` fails with `Script not found "vite"`. The `bun install` it needs is only in `README.md`, which `AGENTS.md` does not link, and `app/` has no documented build. |
@@ -105,9 +105,9 @@ Both run read only on 2026-11-11, in scratch clones of each base under `~/.cache
 
 No line was left could not test. Changed after the trial:
 
-- Line 1 first failed demiurge for having no `CLAUDE.md`. Claude Code's docs (`code.claude.com/docs/en/memory`) say it reads `AGENTS.md` when there is no `CLAUDE.md` since v2.1.277, and that a `CLAUDE.md` which does not import it hides it. The line now fails only that case.
+- Line 1 first failed demiurge for having no `CLAUDE.md`. Before submitting, I loosened it to Claude Code's rule for reading `AGENTS.md` directly, from `code.claude.com/docs/en/memory`, which made demiurge met.
 - Line 3's script skipped package names such as `@legendapp/state`, reads a leading `/` as the repository's root, and follows the `.md` paths `AGENTS.md` names in backticks as well as its links. After review round 1 it also checks and follows Markdown files named at the root, such as `GUIDE.md`, skips URLs and anchors, and no longer takes the slash command `/agent-factory` for a path. On a fixture it reported a missing `MISSING.md`, a broken link inside a root `GUIDE.md`, and a broken relative link beside a valid `https` link, which it did not report. Its results on atelier and demiurge did not change.
-- Line 1, after review round 1, states Claude Code's loading rule in full: a `CLAUDE.md` symlinked to `AGENTS.md` counts, `CLAUDE.local.md` and files in directories above the checkout suppress `AGENTS.md`, and `~/.claude/CLAUDE.md` does not. Its results did not change.
+- Line 1, after review rounds 1 and 2, no longer infers whether Claude Code reads `AGENTS.md` directly, which turns on its version, its Project instructions setting, its built-in AGENTS.md plugin and files above the checkout. It asks for what the repository controls: a `CLAUDE.md` that imports `@AGENTS.md` or is a symlink to it, which Claude Code reads under every setting but `managed-only`. That changed demiurge's result from met to not met.
 - How to Check gained "install into a scratch root": atelier's documented `cargo install` would have replaced the host's shared `atelier` binary.
 
 ### Validation
