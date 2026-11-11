@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nl9a
 title: Check base commits that reached the upstream without review, in CI
-status: draft
+status: dropped
 mission: null
 labels:
 - feature
@@ -39,3 +39,7 @@ Kept in decision atelier-mzpn from the superseded atelier-ll3p: a CI notice that
 - Base rules run only when the branch is the base, and an unowned branch without the base ref stops at `land_work_untraceable`, so `--since` must bypass that checkout rule for the scratch-branch proof.
 - CI checks out a detached HEAD; `land --since` may need to accept one on the base commit.
 - A first push or force push has no usable previous head (`github.event.before` is all zeros or unreachable); decide whether CI then checks from the last merge commit or skips with a visible note.
+
+## Report
+
+Dropped: `land --since` names a removed command. The pre-push hook now refuses the push itself, so a pipe cannot hide the refusal as in incident 1620b534. Refile with evidence if an unreviewed commit reaches master.
