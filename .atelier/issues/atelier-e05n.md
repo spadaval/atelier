@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Read T3 Code's threads in the Desk's server and tie them to missions and items by the identities in the records"
-updated_at: "2026-11-11T06:27:30.330690046+00:00"
+updated_at: "2026-11-11T06:46:19.807491691+00:00"
 ---
 
 ## Goal
@@ -55,6 +55,10 @@ Expected size: 500 to 700 lines of Rust with tests.
 - A converted clone holds no identities. To get one, clone `~/.cache/atelier-desk/clones/atelier` under `~/.cache/atelier-desk/scratch/` and run the new binary's `start` there from inside a T3 thread; delete the copy afterwards.
 - The switch (atelier-u1ko) moves `next/crates/` to `crates/`. Once it is started nothing merges into `next/` until atelier-wd1i has run; work may go on in the branch, and the orchestrator checks before merging. If the cutover runs while the branch is open, stop and report.
 - Sizes: complexity medium, value medium, risk low. The risk is T3 Code's response shapes changing between nightlies, which shows as threads marked unavailable, not as a broken page.
+
+## Notes
+
+- 2026-11-11 [note] Handoff: approved by reviewer-sol-r1 (atelier-cbb7) at df7c496b after one round; code commit f4f7ee50. One low finding (atelier-ear4, SIGTERM skips token revocation) deferred to atelier-mg2j. Merge needs only the CI run that merge --push starts. Outcome and proof are in the Report.
 
 ## Report
 
