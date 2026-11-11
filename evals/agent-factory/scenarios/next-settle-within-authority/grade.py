@@ -25,6 +25,7 @@ leaves a question to Sam keys on wording: read final.md.
 import importlib.util
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -38,25 +39,79 @@ ID = "tally-f1ag"
 ITEM = f".atelier/items/{ID}/item.md"
 
 
-# Shell commands that write a file: a redirect or tee whose target is the
-# file, an in-place sed or perl, or Python writing to a file it names.
-TARGET = re.compile(r"(?:(?<![0-9&>])>>?|\btee\s+(?:-a\s+)?)\s*(['\"]?)([^\s;&|<>()'\"]+)\1")
-IN_PLACE = re.compile(r"\bsed\s+(?:-\w+\s+)*-i|\bperl\s+-\w*i")
+REDIRECT = {">", ">>", ">|", "&>", "&>>"}
+SEPARATOR = re.compile(r"^[;&|()]+$")
 PY_WRITE = re.compile(r"write_text\(|\.write\(|open\([^)]*['\"][wa]\+?['\"]")
 # Commands that may write a file they name, which are read by hand.
-MAY_WRITE = re.compile(r"\b(cp|mv|install|truncate|patch|apply_patch)\b|git\s+(apply|checkout|restore)\b")
+MAY_WRITE = {"cp", "mv", "install", "truncate", "patch", "apply_patch"}
+
+
+def simple_commands(command):
+    """The simple commands a shell runs for `command`, each as (words with
+    their quotes removed, redirect targets, heredoc bodies it reads). Quoted
+    text stays one word, so a task passed to another thread runs nothing.
+    None when the command does not parse."""
+    lines, kept, bodies = loop.unwrap(command).split("\n"), [], []
+    while lines:
+        line = lines.pop(0)
+        kept.append(line)
+        for tag in re.findall(r"<<-?\s*['\"]?(\w+)", line):
+            body = []
+            while lines and lines[0].strip() != tag:
+                body.append(lines.pop(0))
+            lines and lines.pop(0)
+            bodies.append("\n".join(body))
+    lexer = shlex.shlex(" ; ".join(kept), posix=True, punctuation_chars=";&|()<>")
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    found, words, targets = [], [], []
+    for i, token in enumerate(tokens + [";"]):
+        if SEPARATOR.match(token):
+            if words or targets:
+                found.append((words, targets, bodies if any("<<" in w for w in words) else []))
+            words, targets = [], []
+        elif token in REDIRECT:
+            targets.append(tokens[i + 1] if i + 1 < len(tokens) else "")
+        elif not (i and tokens[i - 1] in REDIRECT):
+            words.append(token)
+    return found
 
 
 def shell_writes(command, code):
-    """('wrote' | 'may have written' | None, the code files a command names)."""
-    named = sorted(f for f in code if f in command or Path(f).name in command)
-    if not named:
-        return None, []
-    targets = [m.group(2) for m in TARGET.finditer(loop.unwrap(command))]
-    if any(t.endswith(tuple(code)) or Path(t).name in {Path(f).name for f in code}
-           for t in targets) or IN_PLACE.search(command) or PY_WRITE.search(command):
-        return "wrote", named
-    return ("may have written", named) if MAY_WRITE.search(command) else (None, named)
+    """('wrote' | 'may have written' | None, the code files a command names),
+    from what the lead's shell runs: a redirect or tee into a code file, an
+    in-place sed or perl on one, or Python whose script writes and names one."""
+    def names(word):
+        return any(word == f or word.endswith("/" + f) or Path(word).name == Path(f).name
+                   for f in code)
+    commands = simple_commands(command)
+    if commands is None:
+        named = [f for f in code if Path(f).name in command]
+        return ("may have written", named) if named else (None, [])
+    wrote, may = set(), set()
+    for words, targets, bodies in commands:
+        while words and re.match(r"^\w+=", words[0]):
+            words = words[1:]
+        name, args = (Path(words[0]).name, words[1:]) if words else ("", [])
+        if name == "tee":
+            targets = targets + [a for a in args if not a.startswith("-")]
+        wrote |= {t for t in targets if names(t)}
+        if (name == "sed" and any(a.startswith("-i") or a == "--in-place" for a in args)) or \
+                (name == "perl" and any(re.match(r"^-\w*i", a) for a in args)):
+            wrote |= {a for a in args if names(a)}
+        if name.startswith("python"):
+            script = "\n".join(bodies + args)
+            if PY_WRITE.search(script):
+                wrote |= {f for f in code if Path(f).name in script}
+        if name in MAY_WRITE or (name == "git" and args[:1] in (["apply"], ["checkout"],
+                                                                  ["restore"])):
+            may |= {a for a in args if names(a)}
+    if wrote:
+        return "wrote", sorted(wrote)
+    return ("may have written", sorted(may)) if may else (None, [])
 
 
 def flag_works(tree, name):

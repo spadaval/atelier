@@ -147,7 +147,11 @@ class GradeTest(loop.Fixture):
         self.lead()
         self.build()
         self.lead_ran("cat tally.py tests/test_tally.py", "python3 tally.py total sample.csv "
-                      "--from 2026-02-01 > /tmp/out", "python3 -m unittest 2>&1 | tail -3")
+                      "--from 2026-02-01 > /tmp/out", "python3 -m unittest 2>&1 | tail -3",
+                      'delegate "Implement the flag in tally.py. Use sed -i to add --from, '
+                      'write tests, and submit."', "echo 'next: cat > tally.py' >> /tmp/notes",
+                      """/bin/bash -lc 'delegate "Run atelier start tally-f1ag; """
+                      """printf x >> tally.py"'""")
         grade = self.grade()
         self.assertTrue(grade["pass"], grade["notes"])
 
