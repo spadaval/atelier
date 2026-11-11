@@ -237,6 +237,10 @@ report replaced them.
 
 ## Rerunning
 
+The scripts at commit `df9c84a43` reproduce these numbers. Later scripts
+read `atelier log` and the record layout of Atelier 0.5, which this
+snapshot and these repositories' manifest commits do not have.
+
 - **Counted measures** (rows 3, 4, 5, 9, 10, 12): run `counted.py` as
   [scripts/scorecard/README.md](../../../scripts/scorecard/README.md) says,
   and compare the SHA-256 of `counted.json`; `freeze.py verify` checks the

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Freeze the scorecard baseline's inputs into a private snapshot, once.
 
-  freeze.py copy    take the cutoff and base commits, back up T3's database,
-                    copy transcripts and sessions, write the manifest's header
+  freeze.py copy    take the cutoff and base commits, write each repository's
+                    `atelier log`, back up T3's database, copy transcripts and
+                    sessions, write the manifest's header
   freeze.py hash    add every snapshot file's size and SHA-256 to the manifest
   freeze.py verify  check the snapshot against the manifest, and its modes
 
@@ -99,6 +100,11 @@ def copy():
         "cutoff, up to its part's finished time; readers needing a strict window drop records time-stamped after "
         "the cutoff. Sizes and hashes describe the copies, not the sources.")
     parts = m["parts"] = {}
+    started = now()
+    (SNAP / "logs").mkdir(mode=0o700)
+    for r in REPOS:  # each repository's whole log; readers drop lines committed after the cutoff
+        (SNAP / "logs" / f"{r}.txt").write_text(subprocess.run(["atelier", "log"], cwd=PROJECTS / r, check=True, capture_output=True, text=True).stdout)
+    parts["logs"] = {"command": "atelier log", "path": "logs/<repository>.txt", "started": started, "finished": now()}
     (SNAP / DB_COPY).parent.mkdir(mode=0o700)
     started = now()
     backup_db(SNAP / DB_COPY)
