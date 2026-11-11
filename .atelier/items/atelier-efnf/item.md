@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-efnf
 title: Show an open finding in branch readiness, so the approval mark agrees with merge
-status: draft
+status: dropped
 mission: atelier-4pzj
 labels:
 - orientation
@@ -34,3 +34,7 @@ Decision atelier-mzpn meant this agreement for atelier-md0v, which merged withou
 Relationships of the old record that the new format has no field for.
 
 - discovered_from review: atelier-77lm
+
+## Report
+
+Dropped: Describes the old `status` Branches row and review gate. In 0.5 an approval is a verdict on the round, and `verdict approve` refuses while a finding is kept.
