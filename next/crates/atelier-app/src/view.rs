@@ -54,8 +54,10 @@ pub struct Entry {
     pub holder: Option<Thread>,
     pub holds: bool,
     /// The caller holds it building, and its Goal or its Done when lines
-    /// are not written yet, as after `start --new`.
-    pub undefined: bool,
+    /// are not written yet, as after `start --new`, or as in a record
+    /// whose Done when is prose: whether the Goal is unwritten, and
+    /// whether the Done when lines are.
+    pub undefined: Option<(bool, bool)>,
     /// This round's review, when the caller holds it.
     pub review: Option<ReviewName>,
     /// While it is in review, the thread holding this round's review file,
@@ -85,9 +87,10 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
     };
     let item = &facts.item.item;
     let goal = facts.item.section("Goal").unwrap_or_default();
-    let undefined = facts.holds()
-        && item.status == Status::Building
-        && (goal.trim().is_empty() || facts.item.done_when().is_empty());
+    let unwritten = (goal.trim().is_empty(), facts.item.done_when().is_empty());
+    let undefined =
+        (facts.holds() && item.status == Status::Building && unwritten != (false, false))
+            .then_some(unwritten);
     Ok(Entry {
         id: item.id.clone(),
         title: item.title.clone(),
