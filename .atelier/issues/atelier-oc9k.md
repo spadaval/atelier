@@ -17,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Validate the Desk's two success criteria on this host, independently"
-updated_at: "2026-11-11T07:06:02.255706073+00:00"
+updated_at: "2026-11-11T07:07:36.184602260+00:00"
 ---
 
 ## Goal

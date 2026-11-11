@@ -25,4 +25,9 @@ can_ready: boolean, documents: Array<Document>, items: Array<ItemRow>, questions
  * Its lead, the reviewers of its plan reviews, and every agent of
  * each of its items, naming the item.
  */
-threads: Array<Agent>, t3: T3State, };
+threads: Array<Agent>, t3: T3State,
+/**
+ * Answers given from this Desk to its items' questions that no commit
+ * holds yet.
+ */
+pending_answers: Array<Question>, };

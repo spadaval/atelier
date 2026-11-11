@@ -23,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+status: "todo"
 title: "Install the Desk as a service on this host over converted clones of the five repositories, with one command for each success criterion"
-updated_at: "2026-11-11T07:06:01.921311101+00:00"
+updated_at: "2026-11-11T07:07:35.774232494+00:00"
 ---
 
 ## Goal

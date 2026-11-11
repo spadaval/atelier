@@ -215,6 +215,7 @@ impl World {
         config.t3 = configured.then(|| T3Config {
             command,
             url: url.unwrap_or(format!("http://{address}/mcp")),
+            session_message: atelier_desk::config::SESSION_MESSAGE.into(),
         });
         let desk = Desk::new(config);
         World {

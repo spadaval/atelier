@@ -21,4 +21,18 @@ unsettled: Array<string>,
  * Its implementers, the reviewers of its reviews and the deciders of
  * its answers.
  */
-threads: Array<Agent>, t3: T3State, };
+threads: Array<Agent>, t3: T3State,
+/**
+ * Whether the human may answer its oldest question now.
+ */
+can_decide: boolean,
+/**
+ * The checkout with the item's branch out, where `decide` writes;
+ * `null` when none has it out, and then `decide` is refused.
+ */
+decide_at: string | null,
+/**
+ * Answers given from this Desk to its questions that no commit holds
+ * yet.
+ */
+pending_answers: Array<Question>, };

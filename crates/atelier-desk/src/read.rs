@@ -4,7 +4,7 @@
 
 use crate::api::*;
 use anyhow::Result;
-use atelier_app::acts::{check_mission, question, unsettled, Act, MissionFacts, STARTED};
+use atelier_app::acts::{check, check_mission, question, unsettled, Act, MissionFacts, STARTED};
 use atelier_app::plan::plan_changed_at;
 use atelier_app::say::condition_text;
 use atelier_app::{
@@ -192,6 +192,7 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
         plan_reviews,
         threads,
         t3: T3State::default(),
+        pending_answers: Vec::new(),
     }))
 }
 
@@ -391,7 +392,7 @@ fn item_row(entry: &Entry, located: &[Located]) -> Result<ItemRow> {
     })
 }
 
-fn question_of(item: &str, decision: &Decision) -> Question {
+pub(crate) fn question_of(item: &str, decision: &Decision) -> Question {
     Question {
         item: item.to_string(),
         question: decision.question.clone(),
@@ -454,6 +455,8 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
         return Ok(None);
     };
     let record = view.record();
+    let facts = atelier_app::repo::facts(repo, &view.located, &view.links, None);
+    let can_decide = check(Act::Decide, &facts).is_ok();
     let item = &record.item;
     let decisions = record.decisions()?;
     let section = |heading| record.section(heading).map(|s| s.trim().to_string());
@@ -503,6 +506,9 @@ pub fn item(repo: &mut Repo, id: &str) -> Result<Option<ItemPage>> {
             .collect(),
         threads: agents(named_in_item(record)?, None),
         t3: T3State::default(),
+        can_decide,
+        decide_at: None,
+        pending_answers: Vec::new(),
     }))
 }
 
@@ -553,12 +559,13 @@ pub fn inbox(repo: &mut Repo, name: &str) -> Result<Option<InboxRepo>> {
         if !STARTED.contains(&record.item.status) {
             continue;
         }
-        if let Some((_, decision)) = question(record)? {
+        if let Some((index, decision)) = question(record)? {
             questions.push(InboxQuestion {
                 item: record.item.id.clone(),
                 mission: record.item.mission.clone(),
                 question: decision.question,
                 finding: decision.finding.as_ref().map(ToString::to_string),
+                index,
             });
         }
     }
