@@ -106,3 +106,42 @@ fn is_repository(dir: &Path) -> bool {
         && atelier_app::git::output(dir, &["cat-file", "-e", "HEAD:.atelier/config.toml"], None)
             .is_ok_and(|output| output.status.success())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_configuration_listens_on_loopback_unless_told_otherwise() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("desk.toml");
+        std::fs::write(
+            &path,
+            "caller = \"sumeet\"\nroots = [\"repos\", \"/srv\"]\n",
+        )
+        .unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(
+            config.listen,
+            [SocketAddr::from(([127, 0, 0, 1], DEFAULT_PORT))]
+        );
+        assert_eq!(config.hosts, ["localhost", "127.0.0.1", "[::1]"]);
+        assert_eq!(
+            config.roots,
+            [dir.path().join("repos"), PathBuf::from("/srv")]
+        );
+        assert_eq!(config.app, None);
+
+        let given =
+            "caller = \"s\"\nroots = [\"~/r\"]\nlisten = [\"100.64.0.1:80\"]\nhosts = [\"desk\"]\n";
+        std::fs::write(&path, given).unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config.listen, [SocketAddr::from(([100, 64, 0, 1], 80))]);
+        assert_eq!(config.hosts, ["desk"]);
+        let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+        assert_eq!(config.roots, [home.join("r")]);
+
+        std::fs::write(&path, "caller = \"s\"\nroots = []\n").unwrap();
+        assert!(Config::load(&path).is_err());
+    }
+}
