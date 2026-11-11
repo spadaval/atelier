@@ -455,7 +455,9 @@ them but the fresh reviewer: an open finding whose rebuttal a reviewer kept says
 had its one try; the implementer is shown the round, and once three rounds
 have ended without an approve verdict (`Facts::unapproved_rounds`, counted
 from the review files and stored nowhere) it is told on one line that
-escalation is required now, though `submit` still opens a fourth; and a
+escalation is required now, though `submit` still opens a fourth, and in
+review that it escalates once the round's verdict is in if that asks for
+changes too; and a
 question names the lead as its decider when the lead may decide it.
 Nothing stops one thread reviewing every round, and any thread that is
 neither an implementer of the item nor a reviewer of the finding may

@@ -75,9 +75,9 @@ pub struct Entry {
     /// requested: the round under review, or the round that asked for
     /// the changes.
     pub round: Option<u32>,
-    /// For its implementer, with changes requested: how many rounds have
-    /// ended with no approve verdict, once that is enough to require
-    /// escalation.
+    /// For its implementer, while it is in review or changes are
+    /// requested: how many rounds have ended with no approve verdict, once
+    /// that is enough to require escalation.
     pub unapproved: Option<usize>,
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
@@ -116,9 +116,8 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
         _ => None,
     };
-    let unapproved = Some(facts.unapproved_rounds()).filter(|rounds| {
-        facts.holds() && item.status == Status::ChangesRequested && *rounds >= ESCALATE_AFTER
-    });
+    let unapproved = Some(facts.unapproved_rounds())
+        .filter(|rounds| facts.holds() && round.is_some() && *rounds >= ESCALATE_AFTER);
     Ok(Entry {
         id: item.id.clone(),
         title: item.title.clone(),

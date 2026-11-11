@@ -1145,14 +1145,22 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
     );
     let submit = atelier(&root, "t1", &["submit"]);
     assert_eq!(submit.code, 0, "{}", submit.stderr);
+    // The rule is still shown, with when `escalate` can run.
+    let in_review = "3 rounds have ended without an approval, and the Review section requires \
+                     escalation after three, if this round asks for changes too, escalate once \
+                     its verdict is in: atelier escalate \"<question>\"\n";
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains("Status: in review, round 4\nNo reviewer has opened"),
+        status.contains(&format!(
+            "Status: in review, round 4\n{in_review}No reviewer has opened"
+        )),
         "{status}"
     );
     let away = atelier(&base, "t1", &["status"]).stdout;
     assert!(
-        away.contains(&format!("  {ID} (in review, round 4): Say hello\n")),
+        away.contains(&format!(
+            "  {ID} (in review, round 4): Say hello\n    {in_review}"
+        )),
         "{away}"
     );
     assert_eq!(atelier(&root, "t5", &["review", ID]).code, 0);

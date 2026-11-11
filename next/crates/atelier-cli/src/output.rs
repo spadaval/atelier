@@ -440,9 +440,14 @@ fn since(entry: &Entry) -> String {
 
 /// The Review section's rule after three rounds without an approval, for
 /// the implementer, indented by `indent`; nothing refuses a fourth round.
+/// In review, `escalate` waits for the round's verdict.
 fn escalate(entry: &Entry, indent: &str) -> String {
+    let when = match entry.status {
+        Status::InReview => "if this round asks for changes too, escalate once its verdict is in",
+        _ => "so escalate now",
+    };
     entry.unapproved.map_or(String::new(), |rounds| {
-        format!("{indent}{rounds} rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate \"<question>\"\n")
+        format!("{indent}{rounds} rounds have ended without an approval, and the Review section requires escalation after three, {when}: atelier escalate \"<question>\"\n")
     })
 }
 
