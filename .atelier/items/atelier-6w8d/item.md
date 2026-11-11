@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6w8d
 title: Replace the product docs, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record
-status: ready
+status: building
 mission: atelier-qr5s
 labels:
 - redesign
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A2074a88e-920b-49f9-bd17-caf5903cc60f%3Adelegate-task%3A9ecd8d63-8fcc-407b-8c2c-a18464f2529d
 ready:
   by: sumeet
   at: 2026-11-11T15:43:38.001833021Z
