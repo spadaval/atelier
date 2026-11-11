@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-11: planning review fixes: acts run where the new commands run and the Desk makes the commit the command asks for, reads take work branches, the mission finishes on converted clones, the database and feed are named"
+last_changed: "2026-11-11: amended at Sumeet's direction: the mission may change the tracker, so the Desk calls the core's own act functions and `ready` commits its own write (item atelier-psjw)"
 ---
 
 # Why
@@ -25,9 +25,9 @@ host's cutover, and the live repositories after it. A mission has one page with 
 for, its documents, its items and what happened to them, and the agents
 working on it. An inbox lists what waits on Sumeet. From a page he can say go
 on a mission, answer an open question, and start a planning session with an
-agent. Each act is made by the `atelier` command, under his name, where
-that command writes, and saying go ends in the one commit the command asks
-its caller to make. `atelier` itself has no site.
+agent. Each act is made by the core's own function, the one the `atelier`
+command calls, under his name, and saying go ends in one commit that
+`ready` makes itself. `atelier` itself has no site.
 
 # Success Criteria
 
@@ -40,10 +40,10 @@ its caller to make. `atelier` itself has no site.
   --needs-human` there. Shown by a validation item filed with the last
   increment. It does not need the cutover to have run.
 - act-is-a-record: in a converted scratch clone, saying go on a draft
-  mission from its page leaves the same record change as the new `atelier
-  ready <mission> --by <name>` run in a second clone of the same commit, in
-  one commit, and the page then shows the mission ready. Shown by a test in
-  the Desk's suite.
+  mission from its page leaves the same commit, by tree and message, as the
+  new `atelier ready <mission> --by <name>` run in a second clone of the
+  same commit, and the page then shows the mission ready. Shown by a test
+  in the Desk's suite.
 
 # Sizing
 
@@ -52,10 +52,12 @@ its caller to make. `atelier` itself has no site.
 - Value: high. After the cutover it is the only place a brief or debrief can
   be read, and "where are we?" is asked in nearly every session.
 - Risk: medium. Reads can be wrong and show it: the first criterion checks
-  them against the CLI. An act writes a record, but only by running the
-  `atelier` command in the checkout where that command is written to run.
-  Saying go adds one commit of the paths `ready` wrote, which is one commit
-  to revert; an answer stays uncommitted until the implementer's `submit`.
+  them against the CLI. An act writes a record, but only through the same
+  function the `atelier` command calls. Saying go adds one commit of the
+  paths `ready` wrote, which is one commit to revert; an answer stays
+  uncommitted until the implementer's `submit`. Item atelier-psjw changes the
+  tracker itself, in code the cutover switches on, so it is kept clear of
+  the switch.
 
 It is worth its cost because the cheaper path, porting the old site at the
 cutover, spends that time on pages Sumeet has already rejected, and doing
@@ -64,7 +66,13 @@ nothing leaves him reading `atelier show` for every mission.
 # Shape
 
 - **Decisions are in ADR 0032.** Two products, one direction of dependency,
-  acts only through `atelier`, T3 Code through its MCP server.
+  acts only through the core's own functions, T3 Code through its MCP
+  server.
+- **The tracker changes where the Desk needs it to.** The rewrite is nearly
+  done, so the Desk does not work around the core. A view or an act the
+  Desk needs is added to `atelier-app`, where the command line uses it too.
+  The Desk never gets a private copy of the tracker's logic, and the
+  command line never gets a `--json` output for the Desk's sake.
 - **The spike is the design reference, not the code base.** Its pages,
   layout and styles are carried over. Its Node server is not: each route is
   rebuilt on the core.
@@ -86,7 +94,7 @@ nothing leaves him reading `atelier show` for every mission.
 | --- | --- | --- |
 | `atelier-desk` | `next/crates/atelier-desk/`, moved to `crates/` by the switch | The HTTP server, the API's response types, the T3 Code client, and running acts |
 | The app | `desk/` at the repository root | Pages, components and styles; its unit and browser tests |
-| The core | `atelier-app` (`view.rs`), `atelier-records` (`at_commit.rs`) | Reading records at a commit and computing views. The Desk adds views here when one is missing; it never re-derives one. |
+| The core | `atelier-app` (`view.rs`, `acts.rs`), `atelier-records` (`at_commit.rs`) | Reading records at a commit, computing views, and performing acts. The Desk adds a view or an act here when one is missing; it never re-derives one. |
 
 `atelier-desk` depends on `atelier-app` and `atelier-records`. No other
 crate depends on it, and a test in the workspace fails if one does.
@@ -108,35 +116,24 @@ crate depends on it, and a test in the workspace fails if one does.
    live and unsettled threads, and reads one thread's runs on demand. A
    thread is tied to an item by the thread IDs the records hold
    (`redesign-architecture.md`, The log), not by its title.
-3. **Acts.** The server runs the new `atelier`, the binary built from the
-   same workspace commit as itself and named in its configuration; before
-   the cutover that is not the installed one. It runs each command where
-   that command is written to run, with no thread variable set, so the
-   caller is `human`:
-   - `ready <mission> --by <name>` in the checkout that has the base branch
-     out. The command refuses anywhere else (`plan.rs`, `off_base`). It
-     writes the record and does not commit: it prints the commit for its
-     caller to make, `git add -- <paths> && git commit -m "<message>" --
-     <paths>` (`output.rs`, `commit_line`). The server makes that commit,
-     as an agent following the line would. Before it runs the command it
-     refuses if the mission's directory has an uncommitted change in that
-     checkout, so the commit holds only what `ready` wrote. Afterwards it
-     compares the paths that changed under `.atelier/` with the paths in
-     the printed line. If they match it commits exactly those paths with
-     the printed message, which leaves every other staged or changed file
-     in the checkout alone. If they do not match, or there is not exactly
-     one such line, it commits nothing, shows the output, and gives the
-     line to run by hand.
-   - `decide <id> "<answer>"` in the checkout that has the item's branch
-     out, which is where the implementer works (`questions.rs`, `decide`).
-     The command writes the answer and the implementer's `submit` commits
-     it, so the server commits nothing. Pages are read from commits, so
+3. **Acts.** The server calls the core's own functions for `ready` and
+   `decide`, the ones the `atelier` command calls, and gets the result as
+   data: what was written, or a refusal with its rule, text and next step.
+   It names the person acting. It runs no binary and reads no command
+   output. Those functions do not exist yet: the acts live in the CLI crate
+   today, and `ready` leaves its commit to its caller. Item atelier-psjw moves them
+   into `atelier-app` and makes `ready` commit its own write.
+   - `ready` runs for the checkout that has the base branch out, which is
+     where the tool lets planning happen, and commits only the paths it
+     wrote.
+   - `decide` runs for the checkout that has the item's branch out, which
+     is where the implementer works. It writes the answer and the
+     implementer's `submit` commits it. Pages are read from commits, so
      until that commit exists the server shows the question as answered
      from the Desk and not yet committed, from its own memory of the act.
    The server finds the checkout from `git worktree list`. If no checkout
    has the branch out, it refuses and says so. It never makes a scratch
-   worktree or moves a ref: the spike's server did both, for the old
-   commands. A refused command's output is shown as it is.
+   worktree or moves a ref. A refusal is shown with its text and next step.
 4. **Sessions.** Starting a planning session calls `t3_thread_launch` with a
    second token that may operate, the repository's T3 project, and a first
    message naming the mission. The page then links to the thread.
@@ -199,7 +196,8 @@ it is called done.
 # Scope
 
 - In: the `atelier-desk` crate; the app; the mission, item, inbox and agents
-  pages; the acts `ready` and `decide`; starting a planning session;
+  pages; the acts `ready` and `decide`; the tracker change that gives the
+  core those acts as functions (atelier-psjw); starting a planning session;
   installing the service on this host over converted clones; the Desk's own
   CI jobs; `docs/architecture/desk.md`.
 - Out: health, the feed and any database (the next mission); sessions for
@@ -215,14 +213,16 @@ it is called done.
 # Authority
 
 The orchestrator may choose the API's routes and fields, the crate's module
-layout, which views to add to `atelier-app` and how, and how pages are
-arranged within the spike's design. It may add a dependency the Design does
+layout, which views and act functions to add to `atelier-app` and how, and
+how pages are arranged within the spike's design. It may change the tracker's
+crates for item atelier-psjw and for the views the pages need. It may add a dependency the Design does
 not name when a step needs it and say why in the item.
 
 It may not expose the service beyond the tailnet, add an act other than
-`ready` and `decide`, add a database, read T3 Code's own database, change a
-tracker command's behaviour, or change the specifications' Words, Lifecycle
-or Review sections.
+`ready` and `decide`, add a database, read T3 Code's own database, change
+what a tracker command does beyond what item atelier-psjw names, touch `next/`
+while the switch (atelier-u1ko) or this host's cutover (atelier-wd1i) is
+running, or change the specifications' Words, Lifecycle or Review sections.
 
 # Risks and Unknowns
 
@@ -236,11 +236,11 @@ or Review sections.
 - **An act needs a checkout.** `ready` needs some checkout with the base
   out, and `decide` one with the item's branch out. Where none exists the
   Desk refuses and names the command to run by hand.
-- **The Desk reads a commit line the tool prints for people.** If the
-  tracker rewords that line, saying go stops committing and shows the
-  output instead; the act-is-a-record test fails first. A `ready` that
-  commits on request would remove the reading, and is a change to the
-  tracker that needs its own decision.
+- **The tracker change meets the cutover.** Item atelier-psjw edits code the
+  switch moves. It is done by the cutover's orchestrator before the switch,
+  or by this mission after this host's cutover; which is settled with the
+  thread that runs the redesign. Until it lands, the increment that adds
+  acts cannot start, and the reading pages are not held up.
 - **No sign-in.** Anyone on the tailnet can act as Sumeet. Accepted for one
   user on a private tailnet; a second user needs a decision first.
 - **Whether T3 Code's thread links open on the phone** is the one question

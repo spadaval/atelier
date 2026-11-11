@@ -20,7 +20,7 @@ updated_at: "2026-11-11T02:17:25.300286627+00:00"
 
 ## Outcome
 
-On this host, a service reached over the tailnet shows Atelier repositories on the redesigned records: converted scratch clones of all five until this host's cutover, and the live repositories after it. A mission has one page with what it is for, its documents, its items and what happened to them, and the agents working on it. An inbox lists what waits on Sumeet. From a page he can say go on a mission, answer an open question, and start a planning session with an agent. Each act is made by the `atelier` command, under his name, in an existing checkout: saying go ends in the one commit `ready` asks its caller to make, which the Desk makes, and an answer is written by `decide` in the item's checkout and committed by the implementer's next `submit`. `atelier` itself has no site.
+On this host, a service reached over the tailnet shows Atelier repositories on the redesigned records: converted scratch clones of all five until this host's cutover, and the live repositories after it. A mission has one page with what it is for, its documents, its items and what happened to them, and the agents working on it. An inbox lists what waits on Sumeet. From a page he can say go on a mission, answer an open question, and start a planning session with an agent. Each act is made by the core's own function, the one the `atelier` command calls, under his name: saying go ends in one commit that `ready` makes itself, and an answer is written by `decide` in the item's checkout and committed by the implementer's next `submit`. `atelier` itself has no site.
 
 ## Background
 
