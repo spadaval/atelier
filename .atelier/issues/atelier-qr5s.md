@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Move all five repositories and Agent Factory onto the new loop, one cutover per host"
-updated_at: "2026-11-11T02:40:18.549084653+00:00"
+updated_at: "2026-11-11T02:46:41.651348543+00:00"
 ---
 
 ## Outcome
@@ -26,3 +26,7 @@ On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio run
 ## Background
 
 One of four missions that redesign Atelier, in order: baseline, core loop, cutover, gardener. Sumeet set the direction in conversation on 2026-11-09, after an assessment of the project. The target design is in the [product specification](docs/strategies/redesign-product.md) and the [architecture specification](docs/strategies/redesign-architecture.md); this mission's own design is in its strategy. Other Atelier work is paused while the four run.
+
+## Notes
+
+- 2026-11-10 [note] 2026-11-10: orchestration started, unattended, on Sumeet's go-ahead of 2026-11-10. This run prepares the cutover and does not perform it: steps A to E go to their merges, steps F and G are planned, and the switch (atelier-u1ko) stops at an approval on its branch until Sumeet names the time. Steps A (atelier-orb2), C (atelier-5zre), D (atelier-mlwx) and E (atelier-oci2) are planned and go to their planning reviews. Found while planning E: mission 2 never copied the site into next/, so the new binary already has no serve, and step E only proves that and corrects the two specifications. Implementers are Claude Opus 5.5, reviewers GPT-6.1 Sol; each item has its own worktree under ~/.t3/worktrees/atelier/<id>.
