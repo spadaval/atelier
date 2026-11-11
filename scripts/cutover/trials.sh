@@ -79,7 +79,20 @@ prepare() {
     echo "$r $url" >> "$W/cache/urls"
     git clone -q --bare --single-branch -b "$b" "$REAL/$r" "$W/cache/remotes/$r.git"
   done
-  git clone -q --bare --single-branch -b master "$REAL/atelier" "$W/cache/remotes/atelier-pre.git"
+  # The day's condition: no item in progress on any base. An item a real
+  # base holds in progress today goes back to todo, in the sandbox only.
+  for s in $SPECS; do
+    r=${s%%:*} b=${s#*:} tmp=$W/tmp/quiet-$r
+    rm -rf "$tmp"; git clone -q -b "$b" "$W/cache/remotes/$r.git" "$tmp"
+    if grep -lq '^status: "in_progress"$' "$tmp"/.atelier/issues/*.md 2>/dev/null; then
+      say "prepared: $r's base holds $(grep -l '^status: "in_progress"$' "$tmp"/.atelier/issues/*.md | wc -l) item(s) in progress today; the sandbox sets them back to todo"
+      sed -i 's/^status: "in_progress"$/status: "todo"/' "$tmp"/.atelier/issues/*.md
+      git -C "$tmp" -c user.name=trials -c user.email=trials@example.invalid commit -q -am "Nothing in progress, as on the day of the cutover"
+      git -C "$tmp" push -q origin "$b"
+    fi
+    rm -rf "$tmp"
+  done
+  git clone -q --bare --single-branch -b master "$W/cache/remotes/atelier.git" "$W/cache/remotes/atelier-pre.git"
   tmp=$W/tmp/switch
   rm -rf "$tmp"
   git clone -q -b master "$W/cache/remotes/atelier.git" "$tmp"
