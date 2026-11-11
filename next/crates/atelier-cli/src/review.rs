@@ -1,14 +1,15 @@
 //! `review` and `verdict`: the reviewer's side of the loop, on an item
 //! and on a mission's plan.
 
-use crate::commands::{facts, gated, mission_gate, refusal, refused, write_and_commit, Outcome};
+use crate::commands::Outcome;
 use crate::forge::Github;
 use crate::output::{self, Brief, PlanBrief};
-use crate::repo::{git_at, item_dir, item_path, mission_dir, mission_path, Repo};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
-use atelier_app::{carried, carried_plan};
+use atelier_app::plan::plan_changed;
+use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path, write_and_commit};
+use atelier_app::{carried, carried_plan, refused, Repo};
 use atelier_core::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };
@@ -23,7 +24,7 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     }
     let located = repo.locate(id)?;
     let Some(record) = located.record() else {
-        return Ok(Outcome::Refused(output::no_item(id, &repo.base)));
+        return Ok(output::no_item(id, &repo.base).into());
     };
     let links = repo.links(record)?;
     let forge = repo.base_config()?.forge;
@@ -32,18 +33,20 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         Ok(_) => None,
         // Its one condition: the caller never implemented the item.
         Err(Refusal::Unmet(_)) => {
-            Some(output::author(id, &repo.caller) + &brief(repo, &facts, None, forge.as_ref())?)
+            let text =
+                output::author(id, &repo.caller) + &brief(repo, &facts, None, forge.as_ref())?;
+            Some(text.into())
         }
         Err(refusal) => Some(refused(Act::Review, &refusal, &facts)?),
     };
-    if let Some(refused) = text.and_then(|text| gated(Act::Review, &facts, text)) {
-        return Ok(refused);
+    if let Some(refused) = text.and_then(|text| repo.skip.gated(Act::Review, &facts, text)) {
+        return Ok(refused.into());
     }
     if repo.branch.as_deref() != Some(id) {
         let checkout = git::checkout_of(&repo.root, id)?;
         let branch = repo.branch.as_deref();
         let refused = output::elsewhere("review", id, branch, checkout.as_deref());
-        return Ok(Outcome::Refused(refused));
+        return Ok(refused.into());
     }
     let round = facts.round();
     let (said, name) = open(repo, id, &item_dir(id), round.review, || {
@@ -141,11 +144,7 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     // HEAD for a new review.
     let reviewed = round.review.map_or(&commit, |file| &file.review.commit);
     let Some(plan) = repo.mission_at(reviewed, id)? else {
-        let line = output::commit_line(
-            git_at(&repo.root),
-            &[mission_dir(id)],
-            &format!("Plan {id}"),
-        );
+        let line = output::commit_line(repo.git_at(), &[mission_dir(id)], &format!("Plan {id}"));
         return Ok(Outcome::Refused(output::plan_not_committed(
             id, reviewed, &line,
         )));
@@ -189,7 +188,7 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
             ))
         })
         .collect();
-    let changed = crate::plan::plan_changed(repo, id, commit)?.unwrap_or_default();
+    let changed = plan_changed(repo, id, commit)?.unwrap_or_default();
     let brief = output::plan_brief(&PlanBrief {
         id,
         title: &plan.mission.title,
@@ -248,8 +247,8 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         items: &[],
         review: Some(file),
     };
-    if let Some(refused) = mission_gate(act, &id, &facts)? {
-        return Ok(refused);
+    if let Some(refused) = repo.skip.mission_gate(act, &id, &facts)? {
+        return Ok(refused.into());
     }
     let mut review = file.review.clone();
     review.verdict = Some(verdict);
@@ -290,8 +289,8 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
         Verdict::Approve => Act::VerdictApprove,
         Verdict::Changes => Act::VerdictChanges,
     };
-    if let Some(refused) = refusal(act, &facts)? {
-        return Ok(refused);
+    if let Some(refused) = repo.skip.refusal(act, &facts)? {
+        return Ok(refused.into());
     }
     let file = facts.reviewing().expect("check found the caller's review");
     let mut review = file.review.clone();

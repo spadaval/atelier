@@ -143,6 +143,24 @@ fn set_with_a_skip_changes_a_started_items_base_record() {
 }
 
 #[test]
+fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_trailed_in_its_commit() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    let rule = format!("{ID} is draft (it is ready)");
+    let run = atelier(&root, "p1", &["ready", ID, "--by", "s"]);
+    assert_eq!(run.code, 1);
+    assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
+    let run = skipping(&root, "p1", REASON, &["ready", ID, "--by", "sumeet"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(run.stdout.starts_with(&skipped(&[&rule])), "{}", run.stdout);
+    assert_eq!(
+        message(&root, "HEAD"),
+        format!("Ready {ID}\n\n{}", trailers(&[&rule]))
+    );
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+}
+
+#[test]
 fn a_command_with_nothing_to_skip_runs_as_without_the_variable() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();

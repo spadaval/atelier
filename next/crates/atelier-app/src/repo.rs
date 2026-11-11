@@ -1,10 +1,9 @@
-//! The repository a command runs in, and how it finds items: on the base
+//! The repository an act runs in, and how it finds items: on the base
 //! branch's tip, and on the local branch named for each.
 
-use crate::git;
-use anyhow::{Context, Result};
-use atelier_app::acts::{approval, mission_of, Checkout, SinceApproval};
-use atelier_app::{identity, Branch, Located};
+use crate::acts::{approval, mission_of, Checkout, Facts, SinceApproval};
+use crate::{git, say, Branch, Located, Skip};
+use anyhow::{bail, Context, Result};
 use atelier_core::{Config, Status, Thread};
 use atelier_records::{
     allocate_id, parse_config, validate_id, CommitReader, ItemDir, MissionDir, Store,
@@ -20,21 +19,33 @@ pub struct Links {
     pub lead: Option<Thread>,
 }
 
-pub struct Repo {
+/// A repository opened for one invocation, by its caller.
+pub struct Repo<'s> {
     pub root: PathBuf,
+    /// The directory it was opened from, which may be under `root`.
+    pub dir: PathBuf,
     pub base: String,
     pub base_tip: String,
     /// The prefix of every ID, from the checkout's config.
     pub slug: String,
     /// The branch checked out, if any.
     pub branch: Option<String>,
+    /// Who acts, as the records name them.
     pub caller: Thread,
+    /// The invocation's skip, which its refusals and its commit go through.
+    pub skip: &'s Skip,
     reader: CommitReader,
 }
 
-impl Repo {
-    pub fn open() -> Result<Repo> {
-        let root = git::root()?;
+impl<'s> Repo<'s> {
+    /// The repository of the checkout `dir` is in, for `caller`, whose
+    /// identity the records are given; `skip` is the invocation's. A caller
+    /// the records could not name and read back is refused.
+    pub fn open(dir: &Path, caller: Thread, skip: &'s Skip) -> Result<Repo<'s>> {
+        if !readable(&caller) {
+            bail!("the caller's identity `{caller}` cannot be written into a record and read back as it is: it needs to be one line with no `: ` in it");
+        }
+        let root = git::root(dir)?;
         let config = Store::new(root.join(".atelier"))
             .config()
             .context("cannot read this repository's Atelier config")?;
@@ -47,12 +58,22 @@ impl Repo {
         Ok(Repo {
             branch: git::current_branch(&root)?,
             reader: CommitReader::new(&root),
-            caller: identity(|name| std::env::var(name).ok()),
+            caller,
+            skip,
             base: config.base_branch,
             slug: config.slug,
             base_tip,
             root,
+            dir: dir.to_path_buf(),
         })
+    }
+
+    /// The root when the directory it was opened from is not the root, so
+    /// that a printed Git command naming paths from the root needs `git -C
+    /// <root>`.
+    pub fn git_at(&self) -> Option<&Path> {
+        let dir = std::fs::canonicalize(&self.dir).ok();
+        (dir.is_none() || dir != std::fs::canonicalize(&self.root).ok()).then_some(&self.root)
     }
 
     pub fn store(&self) -> Store {
@@ -263,11 +284,81 @@ impl Repo {
     }
 }
 
-/// `root` when the caller's directory is not that checkout's root, so that
-/// a printed Git command naming paths from the root needs `git -C <root>`.
-pub fn git_at(root: &Path) -> Option<&Path> {
-    let here = std::env::current_dir().and_then(std::fs::canonicalize).ok();
-    (here.is_none() || here != std::fs::canonicalize(root).ok()).then_some(root)
+/// Whether the records can name `thread` and read it back as it is. Front
+/// matter quotes any text, but a record's line ends at a line break, and
+/// `Answer by <thread>: <answer>` and `Dropped by <thread>: <reason>` end
+/// the name at its first `: `.
+fn readable(thread: &Thread) -> bool {
+    !thread.0.contains(['\n', '\r']) && !thread.0.contains(": ")
+}
+
+/// What `act`s on the item `located`, whose links are `links`, are checked
+/// against, for `repo`'s caller.
+pub fn facts<'a>(
+    repo: &'a Repo,
+    located: &'a Located,
+    links: &'a Links,
+    checkout: Option<&'a Checkout>,
+) -> Facts<'a> {
+    Facts {
+        item: located.record().expect("a located item with a record"),
+        branch: located.branch.is_some(),
+        blockers: &links.blockers,
+        mission: links.mission.clone(),
+        caller: &repo.caller,
+        checkout,
+    }
+}
+
+/// Writes each of `files`, a path in the checkout and its text, creating
+/// its directory where there is none, and commits `paths`. When the commit
+/// fails, each file is put back as it was, or removed with the directories
+/// made for it where there was none, so the act can be run again.
+pub fn write_and_commit(
+    repo: &Repo,
+    files: &[(String, String)],
+    paths: &[&str],
+    message: &str,
+) -> Result<()> {
+    let mut before = Vec::new();
+    let mut made = Vec::new();
+    for (path, _) in files {
+        let path = repo.root.join(path);
+        before.push(match std::fs::read(&path) {
+            Ok(text) => Some(text),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        });
+        let missing = path.ancestors().skip(1).take_while(|dir| !dir.exists());
+        made.extend(missing.map(Path::to_path_buf));
+    }
+    made.sort_by_key(|dir| std::cmp::Reverse(dir.components().count()));
+    made.dedup();
+    let put_back = || {
+        for ((path, _), text) in files.iter().zip(&before) {
+            let path = repo.root.join(path);
+            let _ = match text {
+                Some(text) => std::fs::write(path, text),
+                None => std::fs::remove_file(path),
+            };
+        }
+        for dir in &made {
+            let _ = std::fs::remove_dir(dir);
+        }
+    };
+    let written = files.iter().try_for_each(|(path, text)| {
+        let path = repo.root.join(path);
+        std::fs::create_dir_all(path.parent().expect("a record is in a directory"))?;
+        std::fs::write(path, text)
+    });
+    if let Err(error) = written {
+        put_back();
+        return Err(error.into());
+    }
+    git::commit_paths(&repo.root, paths, message, repo.skip).map_err(|error| {
+        put_back();
+        error.context(say::not_committed())
+    })
 }
 
 /// The directories planning is written in.

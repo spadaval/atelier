@@ -3,6 +3,9 @@ created_at: "2026-11-11T03:21:50.136807966+00:00"
 id: "atelier-psjw"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-psjw
 priority: "P1"
 relationships:
   blocks: []
@@ -17,9 +20,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Move the acts and repository access into atelier-app as functions that return data, make ready commit its own write, and name the human caller"
-updated_at: "2026-11-11T03:26:03.986574166+00:00"
+updated_at: "2026-11-11T04:41:38.400670625+00:00"
 ---
 
 ## Goal

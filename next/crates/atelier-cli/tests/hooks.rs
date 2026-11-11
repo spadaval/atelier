@@ -683,7 +683,6 @@ fn planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_ba
     let root = scratch.root();
     let run = atelier(&root, "t1", &["ready", ID, "--by", "sumeet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(commit_all(&root, "Ready it").code, 0);
     let run = atelier(&root, "t1", &["new", "Say goodbye"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(commit_all(&root, "Plan goodbye").code, 0);

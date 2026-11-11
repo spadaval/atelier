@@ -1,16 +1,13 @@
 //! `status`, `start` and `submit`, and what the commands share.
 
 use crate::forge::Github;
-use crate::repo::{git_at, item_dir, item_path, planning, Links, Repo};
-use crate::{git, merge, output, plan, setup, skip};
+use crate::{git, merge, output, plan, setup};
 use anyhow::{anyhow, Context, Result};
-use atelier_app::acts::{
-    approval, check, mission_refusals, refusals, row, unmet, Act, Checkout, Facts, MissionFacts,
-    Refusal, STARTED,
-};
-use atelier_app::{entry, overview, Entry, Located};
-use atelier_core::{Forge, Item, MissionStatus, Status};
-use atelier_records::{render_item, validate_id, ItemDir, Store};
+use atelier_app::acts::{approval, check, row, unmet, Act, Checkout, Facts, STARTED};
+use atelier_app::repo::{facts, item_dir, item_path, planning, write_and_commit};
+use atelier_app::{decider, entry, overview, refused, Done, Entry, Located, Refused, Repo};
+use atelier_core::{Forge, Item, Status};
+use atelier_records::{render_item, validate_id, ItemDir};
 
 pub enum Outcome {
     Done(String),
@@ -18,6 +15,30 @@ pub enum Outcome {
     /// Nothing is wrong and the act cannot finish yet, as when CI has not
     /// finished; the same command run later goes on.
     NotYet(String),
+}
+
+/// A refusal as the command prints it: its text, its way out, and, when it
+/// is a rule's, the skip after the way out.
+impl From<Refused> for Outcome {
+    fn from(refused: Refused) -> Outcome {
+        let mut text = refused.text;
+        if let Some(next) = refused.next {
+            text += &format!("{next}\n");
+        }
+        if !refused.rules.is_empty() {
+            text += &output::skip_offer();
+        }
+        Outcome::Refused(text)
+    }
+}
+
+impl From<Result<Done, Refused>> for Outcome {
+    fn from(acted: Result<Done, Refused>) -> Outcome {
+        match acted {
+            Ok(done) => Outcome::Done(done.text),
+            Err(refused) => refused.into(),
+        }
+    }
 }
 
 pub fn status(repo: &mut Repo) -> Result<String> {
@@ -38,7 +59,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         let facts = facts(repo, &located, &links, Some(&checkout));
         let mut entry = entry(&facts)?;
         annotate(repo, &mut entry, record)?;
-        let decider = crate::questions::decider(repo, &facts, &links)?;
+        let decider = decider(repo, &facts, &links)?;
         let config = repo.base_config()?;
         let dropped = record.dropped();
         let said = output::item(&repo.caller, &entry, &config, dropped, decider.as_deref());
@@ -72,7 +93,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         &overview,
         &dropped,
         &uncommitted,
-        git_at(&repo.root),
+        repo.git_at(),
     ))
 }
 
@@ -80,10 +101,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     validate_id(id).map_err(|message| anyhow!(message))?;
     let located = repo.locate(id)?;
     let Some(record) = located.record() else {
-        let refused = not_committed(repo, id, None, None)?;
-        return Ok(Outcome::Refused(
-            refused.unwrap_or_else(|| output::no_item(id, &repo.base)),
-        ));
+        return Ok(output::no_item(id, &repo.base).into());
     };
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
@@ -95,17 +113,13 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
     };
     let to = match check(act, &facts) {
         Ok(to) => to,
-        Err(refusal) => {
-            let base = located.base.as_ref().map(|dir| dir.item.status);
-            let text = match not_committed(repo, id, base, links.mission.as_ref())? {
-                Some(pending) => pending,
-                None => refused(act, &refusal, &facts)?,
-            };
-            match gated(act, &facts, text) {
-                Some(refused) => return Ok(refused),
-                None => row(act).to,
-            }
-        }
+        Err(refusal) => match repo
+            .skip
+            .gated(act, &facts, refused(act, &refusal, &facts)?)
+        {
+            Some(refused) => return Ok(refused.into()),
+            None => row(act).to,
+        },
     };
     if act == Act::Start {
         let mut item = record.item.clone();
@@ -134,7 +148,7 @@ pub fn start(repo: &mut Repo, id: &str) -> Result<Outcome> {
             output::taken_over(id, before.as_ref())
         }
     };
-    let mut repo = Repo::open()?;
+    let mut repo = crate::open(&repo.dir, repo.skip)?;
     Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
 }
 
@@ -160,6 +174,7 @@ fn begin(repo: &mut Repo, item: &Item, said: String) -> Result<Outcome> {
         &item_path(id),
         &render_item(item),
         &format!("Start {id}"),
+        repo.skip,
     )?;
     hold("ATELIER_TEST_HOLD_BEFORE_BRANCH");
     if !git::create_branch(&repo.root, id, &commit)? {
@@ -170,54 +185,8 @@ fn begin(repo: &mut Repo, item: &Item, said: String) -> Result<Outcome> {
         return Ok(Outcome::Refused(output::lost_race(id, holder.as_ref())));
     }
     git::switch(&repo.root, id).with_context(|| output::not_switched(id))?;
-    let mut repo = Repo::open()?;
+    let mut repo = crate::open(&repo.dir, repo.skip)?;
     Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
-}
-
-/// What a refused `start` says instead when the item, or its mission, is
-/// ready in the base's checkout and not at the base's tip, which is what
-/// `start` reads. `base` is the item's status at the tip, and `mission`
-/// the mission the tip's record names, with its status there.
-fn not_committed(
-    repo: &Repo,
-    id: &str,
-    base: Option<Status>,
-    mission: Option<&(String, Option<Status>)>,
-) -> Result<Option<String>> {
-    let Some(checkout) = git::checkout_of(&repo.root, &repo.base)? else {
-        return Ok(None);
-    };
-    // A record there that does not read is no planning to commit.
-    let store = Store::new(checkout.join(".atelier"));
-    let mut ready = Vec::new();
-    if base != Some(Status::Ready)
-        && store
-            .item(id)
-            .is_ok_and(|dir| dir.item.status == Status::Ready)
-    {
-        ready.push(id.to_string());
-    }
-    if let Some((mission, status)) = mission {
-        if *status != Some(Status::Ready)
-            && store
-                .mission(mission)
-                .is_ok_and(|dir| dir.mission.status == MissionStatus::Ready)
-        {
-            ready.push(format!("mission {mission}"));
-        }
-    }
-    if ready.is_empty() {
-        return Ok(None);
-    }
-    let other = (checkout != repo.root).then_some(checkout.as_path());
-    Ok(Some(output::not_committed_ready(
-        id,
-        &ready,
-        &repo.base,
-        other,
-        git_at(&checkout),
-        &planning(&checkout)?,
-    )))
 }
 
 pub fn submit(repo: &mut Repo) -> Result<Outcome> {
@@ -230,8 +199,8 @@ pub fn submit(repo: &mut Repo) -> Result<Outcome> {
     let record = located.record().expect("the current item has a record");
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
-    if let Some(refused) = refusal(Act::Submit, &facts)? {
-        return Ok(refused);
+    if let Some(refused) = repo.skip.refusal(Act::Submit, &facts)? {
+        return Ok(refused.into());
     }
     let config = repo.base_config()?;
     let mut item = record.item.clone();
@@ -262,37 +231,6 @@ fn share(repo: &Repo, forge: &Forge, id: &str, title: &str) -> Result<String> {
     Ok(match merge::pull_request(&github, id, title, &repo.base) {
         Ok(pull) => output::pull_request(id, &forge.remote, &pull, true),
         Err(error) => output::submit_no_pull_request(id, &error, true),
-    })
-}
-
-/// Writes each of `files`, a path in the checkout and its text, and
-/// commits `paths`. When the commit fails, each file is put back as it was,
-/// so the act can be run again.
-pub(crate) fn write_and_commit(
-    repo: &Repo,
-    files: &[(String, String)],
-    paths: &[&str],
-    message: &str,
-) -> Result<()> {
-    let before = files
-        .iter()
-        .map(|(path, _)| std::fs::read(repo.root.join(path)))
-        .collect::<std::io::Result<Vec<_>>>()?;
-    let put_back = || {
-        for ((path, _), text) in files.iter().zip(&before) {
-            let _ = std::fs::write(repo.root.join(path), text);
-        }
-    };
-    let written = files
-        .iter()
-        .try_for_each(|(path, text)| std::fs::write(repo.root.join(path), text));
-    if let Err(error) = written {
-        put_back();
-        return Err(error.into());
-    }
-    git::commit_paths(&repo.root, paths, message).map_err(|error| {
-        put_back();
-        error.context(output::not_committed())
     })
 }
 
@@ -360,81 +298,6 @@ fn approved_needs(repo: &mut Repo, entries: &mut [Entry], items: &[Located]) -> 
         entry.needs = unmet(Act::Merge, &facts)?;
     }
     Ok(())
-}
-
-pub(crate) fn facts<'a>(
-    repo: &'a Repo,
-    located: &'a Located,
-    links: &'a Links,
-    checkout: Option<&'a Checkout>,
-) -> Facts<'a> {
-    Facts {
-        item: located.record().expect("a located item with a record"),
-        branch: located.branch.is_some(),
-        blockers: &links.blockers,
-        mission: links.mission.clone(),
-        caller: &repo.caller,
-        checkout,
-    }
-}
-
-/// What the caller is told when `act` is refused, or `None` when it may
-/// run, as when `ATELIER_SKIP` passed every refusal.
-pub(crate) fn refusal(act: Act, facts: &Facts) -> Result<Option<Outcome>> {
-    match check(act, facts) {
-        Ok(_) => Ok(None),
-        Err(refusal) => {
-            let text = refused(act, &refusal, facts)?;
-            Ok(gated(act, facts, text))
-        }
-    }
-}
-
-/// `text`, which refuses `act` and names the way out, as the caller gets
-/// it: `None` when `ATELIER_SKIP` passes every refusal of the act.
-pub(crate) fn gated(act: Act, facts: &Facts, text: String) -> Option<Outcome> {
-    let all = refusals(act, facts).unwrap_or_else(|problem| vec![Refusal::Record(problem)]);
-    gate(act, &facts.item.item.id, &all, text)
-}
-
-/// [`gated`] for the refusals `all` of `act` on `id`: only when every one
-/// is a rule can they be skipped.
-pub(crate) fn gate(act: Act, id: &str, all: &[Refusal], text: String) -> Option<Outcome> {
-    if !all.iter().all(|refusal| refusal.is_rule(act)) {
-        return Some(Outcome::Refused(text));
-    }
-    skip::refuse(all.iter().flat_map(|r| output::rules(act, id, r)), text)
-}
-
-/// What the caller is told when `act`, a mission's, is refused, or `None`
-/// when it may run, as when `ATELIER_SKIP` passed every refusal. A record
-/// that does not read is an error.
-pub(crate) fn mission_gate(act: Act, id: &str, facts: &MissionFacts) -> Result<Option<Outcome>> {
-    let all = mission_refusals(act, facts)?;
-    Ok(match all.first() {
-        None => None,
-        Some(first) => gate(act, id, &all, output::mission_refused(act, id, first)),
-    })
-}
-
-/// What the caller is told when `act` is refused for `refusal`. Only a
-/// refusal that says what comes next reads the item's findings, so a
-/// reviewer's draft that does not parse yet cannot hide its role line.
-pub(crate) fn refused(act: Act, refusal: &Refusal, facts: &Facts) -> Result<String> {
-    let entry = match refusal {
-        Refusal::Record(problem) => return Err(problem.clone().into()),
-        Refusal::From { .. } | Refusal::Unmet(_) => Some(entry(facts)?),
-        Refusal::Role(_) | Refusal::NotHolder { .. } => None,
-    };
-    let id = &facts.item.item.id;
-    Ok(output::refusal(
-        act,
-        refusal,
-        facts.caller,
-        id,
-        entry.as_ref(),
-        facts.item.dropped(),
-    ))
 }
 
 /// Tests stop a command at a point between two of its steps by naming a

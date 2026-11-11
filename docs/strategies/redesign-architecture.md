@@ -82,8 +82,8 @@ lock file, built to `next/target/`. It has the crates the old one has, less
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the history of acts, the views the Desk reads |
-| `atelier-cli` | Arguments, dispatch, Git and shell adapters, output |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the history of acts, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
 
 The crates sit at `next/crates/<name>/`, so the switch can move them to the
 root `crates/` without changing a path inside them. The dependency direction
@@ -355,7 +355,9 @@ will check.
 
 Each act writes the status in the commit the act already makes: `submit`
 commits the Report, `verdict` commits the review file, `merge` writes `done`
-in the merge commit. No act makes a commit only to change a status.
+in the merge commit. The planning acts that change a stored status,
+`ready`, `drop` and `close`, commit it themselves, in a commit holding only
+the records they wrote, since other threads read a status at the base's tip.
 
 How the table is built:
 
@@ -429,8 +431,8 @@ Two facts are checked live and never stored:
   and Scope are unchanged. So a Report, a response or a review file never
   makes an approval stale, while code, `config.toml`, a mission's documents,
   another item or the item's own requirements do. If it is stale, `status`
-  and `merge` say to run `submit`. `atelier-cli` gathers what this reads, as
-  `acts::Checkout`: the paths that differ between the reviewed commit and
+  and `merge` say to run `submit`. `atelier-app`'s `Repo::checkout`
+  gathers what this reads, as `acts::Checkout`: the paths that differ between the reviewed commit and
   the head, the item's record at the reviewed commit and at the head, and
   what the checkout has not committed; `acts::unmet` applies the rule. `status` gathers
   it on the item's branch, so it lists what `merge` will check.
@@ -492,6 +494,15 @@ as a thread, such as T3 Code's `delegate_task`, has an identity of its own
 under any harness. `submit`'s handoff and the refusal of an author's
 `review` and `decide` say which subagents may be used, and to start one with
 fresh context, not as a fork.
+
+That rule is the command's. A program that links `atelier-app`, such as the
+Desk, names the caller itself when it opens a repository (`Repo::open`),
+and that name is the identity the records get: an answer it writes for
+`sumeet` reads `Answer by sumeet:`, where the command run by a person with
+no harness variable set is `human`. `ready`'s `by`, the person who said go,
+is a parameter of the function, which `ready --by` fills. A name the records
+cannot write and read back as it is, one with a line break or a `: `, is
+refused when the repository is opened, before anything is written.
 
 Entry commands store the identity in the record: `start` appends it to the
 item's `implementers`, `review` to the review file's `reviewers`, and `lead`
@@ -584,10 +595,9 @@ branch switch.
 - **The base's record is the one at the base branch's tip** (`base_branch`
   in the checkout's `config.toml`), read through the commit reader, never the
   base checkout's working tree. A planning edit counts once it is committed.
-  `start` reads its item, the item's blockers and its mission this way. When
-  it is refused while the item or its mission is `ready` in the base's
-  checkout and not at the tip, it says the change is not committed yet and
-  prints the Git command that commits the checkout's planning.
+  `start` reads its item, the item's blockers and its mission this way.
+  `ready` commits what it writes, so an item or mission it made ready is
+  ready at the tip at once.
 - **Planning is read and written in the checkout of the base.** `new`,
   `set`, `ready`, `drop` and `close` run only on the base branch, and are
   refused elsewhere, naming the checkout that has the base. `new --from`
@@ -598,9 +608,17 @@ branch switch.
   item's branch found as above, so uncommitted planning counts and a started
   item is still seen as started. Each validates the records it writes against
   every record of the checkout and writes nothing when one of them has a
-  problem; the pre-commit hook validates them again as they are committed. Each
-  commits nothing, prints the paths it wrote, and ends with a `Then:` line
-  giving the Git command that commits those paths alone. `new` picks an ID
+  problem; the pre-commit hook validates them again as they are committed.
+  `ready`, `drop` and `close`, which change a stored status that other
+  threads act on at the base's tip, and `lead` (below), commit what they
+  write themselves, with one shared piece of code: one commit holding only
+  the paths they wrote, each as it stands in the checkout, which leaves
+  every other staged, changed or untracked file as it was, and they say the
+  commit they made. `new`, `set` and settling a finding commit nothing,
+  since a draft is edited several times and a settlement on a gardener's
+  branch is committed with its run; each prints the paths it wrote and ends
+  with a `Then:` line giving the Git command that commits those paths
+  alone. `new` picks an ID
   that no item or mission has in the checkout, at the base's tip, or as a
   local branch, and writes a draft with its section headings and nothing
   under them; an item's priority starts as `medium`.
@@ -633,9 +651,12 @@ branch switch.
   unknown or not a draft, naming each.
 - **Who decides what.** `atelier-app` holds the rule, as `Located::record`:
   the base's record when it says done or dropped, else the unmerged branch's,
-  else the base's. `atelier-cli` gathers what the rule reads: the base's tip,
-  each local branch whose name is an item ID, whether it is merged, and its
-  record. `atelier-app` runs no Git.
+  else the base's. `atelier-app`'s `Repo` gathers what the rule reads: the
+  base's tip, each local branch whose name is an item ID, whether it is
+  merged, and its record. A program that links `atelier-app`, such as the
+  Desk, opens a `Repo` by path; `atelier-app` reads no environment variable
+  to find the directory, the caller or a skip's reason, which its caller
+  gives it.
 - **A terminal status on the base wins.** If the base's record is `dropped`
   or `done`, that is the item's status whatever its branch holds. This is how
   a started item is cancelled. Every command checks the base's record of its
@@ -648,9 +669,9 @@ branch switch.
   start now is what `start` will start, and reads and writes its own
   mission in the checkout of the base, as `set` does: it runs only on the
   base branch, refuses a mission that is not ready there, sets the caller
-  as `lead`, commits nothing, and ends with the Git command that commits
-  `mission.md`. A thread that already leads the mission is shown it and
-  writes nothing.
+  as `lead`, and commits `mission.md` alone, since `status`, a question's
+  handoff and `log` read the lead from the base's tip. A thread that already
+  leads the mission is shown it and writes nothing.
 - **`list`'s flags.** With none, every item that is not done or dropped,
   under its mission and then under its sorted labels, and every such
   mission, even with no item. `--ready` keeps items whose `start` has no
@@ -703,9 +724,10 @@ branch switch.
   `item.md`, with its new status, in one commit, and nothing else in the
   checkout.
 - **A refused commit changes nothing.** When `git commit` fails, as when a
-  hook refuses it, `submit`, the take-over and `verdict` put the files they
-  wrote and the index under the paths they staged back as they were, so the
-  act can be run again.
+  hook refuses it, `submit`, the take-over, `verdict`, `ready`, `drop`,
+  `close` and `lead` put the files they wrote and the index under the paths
+  they staged back as they were, removing a file no commit held, so the act
+  can be run again.
 - **One clone.** All of this coordinates the threads in one clone and its
   worktrees. Two clones on different hosts are not coordinated.
 - Apart from that check, a command on a work branch reads and writes that
@@ -833,7 +855,7 @@ reads it.
 
 A skip is shown on the line of the act whose commit carries its trailer,
 which is every act where Atelier makes the commit. Today those are `start`,
-`submit`, `verdict` and `merge`.
+`submit`, `verdict`, `merge`, `ready`, `drop`, `close` and `lead`.
 
 What `log` does not show: `new`, `set` and edits to a record's text, which
 Git's own log has, so an item's time as a draft is read from its
@@ -932,20 +954,29 @@ pass. A rule is a refusal that depends on the state of the work or on who
 asks. The variable is the whole interface: no flag, no config, no list of
 rule names.
 
-- **One place.** Every refusal of a rule goes through `atelier-cli`'s
-  `skip::refuse`, given the rules it breaks, each said in one line, and its
-  text, which ends with the way out. Without a reason the refusal ends with
-  the skip, after the way out. With one, each rule passes: the command
+- **One place.** Every refusal of a rule goes through `atelier-app`'s
+  `Skip::refuse`, given the rules it breaks, each said in one line, and its
+  text, which ends with the way out. A refusal is data (`Refused`): its
+  rules, its text and its way out. Without a reason the command's refusal
+  ends with the skip, after the way out. With one, each rule passes: the command
   prints `Skipped with ATELIER_SKIP: <rule>: <reason>` for each and goes
   on, and where Atelier makes the commit (`start` and a take-over, `submit`,
-  `verdict` and `merge`), `git interpret-trailers` adds a trailer
+  `verdict`, `merge`, `ready`, `drop`, `close` and `lead`), `git
+  interpret-trailers` adds a trailer
   `Atelier-Skip: <rule>: <reason>` for each to its message, after `merge`'s
   `Atelier-Merge:`. Whitespace in the reason and in each rule is made one
   line. A skip in a hook, or on a command that makes no commit, writes
   nothing; it shows in the transcript as the variable on the command, which
   is where the scorecard counts it. Atelier's own `git commit` and `git
   push` pass on what the hooks printed, so a rule a hook skips there is
-  printed too.
+  printed too. The reason and the rules passed are one value per
+  invocation, a `Skip`, which its caller makes: the command once per
+  process, from `ATELIER_SKIP`, and a program that links `atelier-app` once
+  per act it calls. It needs no repository, since `check` and the hooks
+  pass rules before one is opened, and it outlives any one, since `merge`
+  opens several and prints its skips after the last. Whatever opens a
+  repository, makes a commit or prints the outcome is given it, so a rule
+  passed reaches that invocation's trailers and output and no other's.
 - **All or nothing.** The skip passes an act's refusals, and is offered,
   only when every one is a rule: `acts::refusals` gives them all, where
   `check` gives the first. Otherwise the first is refused as before, with
@@ -1017,8 +1048,8 @@ of that code that guard against tampering with file modes and index flags
 are not carried over. A merge killed during its checks leaves its temporary
 worktree behind; the next merge, holding the lock, removes it.
 
-`forge.rs` and the merge code live in `atelier-cli`, which owns the Git and
-shell adapters; `atelier-app` runs neither.
+`forge.rs` and the merge code live in `atelier-cli`, with the Git calls
+only they make; `atelier-app` runs no forge command and no merge.
 
 Nothing else from today's merge is carried over: not the gate code, the
 polling in `merge_wait.rs`, nor `merge_sync.rs`. The wait for CI is written

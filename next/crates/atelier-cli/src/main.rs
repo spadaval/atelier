@@ -8,19 +8,36 @@ mod merge;
 mod output;
 mod plan;
 mod questions;
-mod repo;
 mod review;
 mod setup;
-mod skip;
 mod view_output;
 mod views;
 
+use atelier_app::{identity, Repo, Skip};
 use atelier_core::{Priority, Verdict};
 use clap::builder::NonEmptyStringValueParser;
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use commands::Outcome;
 use std::io::Write;
+use std::path::Path;
 use std::process::ExitCode;
+
+/// The variable that names the reason of a skip
+/// (docs/strategies/redesign-architecture.md, Hooks and the bypass).
+const SKIP: &str = "ATELIER_SKIP";
+
+/// `ATELIER_SKIP`'s value, if it is set; blank when it is set to nothing
+/// but whitespace, which every command refuses.
+fn skip_variable() -> Option<String> {
+    let value = std::env::var_os(SKIP)?;
+    Some(value.to_str().unwrap_or("?").to_string())
+}
+
+/// The repository of the checkout this command runs in, opened for the
+/// calling thread with this invocation's skip.
+pub(crate) fn open<'s>(dir: &Path, skip: &'s Skip) -> anyhow::Result<Repo<'s>> {
+    Repo::open(dir, identity(|name| std::env::var(name).ok()), skip)
+}
 
 #[derive(Parser)]
 #[command(
@@ -116,7 +133,7 @@ enum Command {
         #[arg(long, group = "fields", value_name = "CAUSE")]
         caused_by: Option<String>,
     },
-    /// Mark each named draft item or mission ready, recording who said so, without committing it.
+    /// Mark each named draft item or mission ready, recording who said so, and commit that alone.
     Ready {
         #[arg(required = true)]
         ids: Vec<String>,
@@ -124,7 +141,7 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
-    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base and without committing it. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped; also on the branch of an item you implement.
+    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base, and commit that alone. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped without committing it; also on the branch of an item you implement.
     Drop {
         /// An item, a mission, or a finding.
         id: String,
@@ -132,7 +149,7 @@ enum Command {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; on the base and without committing it.
+    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; on the base, and commit that alone.
     Close {
         id: String,
         /// The item's result, written into its Report. A mission's is written in its file.
@@ -179,7 +196,7 @@ enum Command {
         #[arg(long)]
         no_action: bool,
     },
-    /// Lead a ready mission, in this checkout of the base without committing it, and see what each of its items needs.
+    /// Lead a ready mission, in this checkout of the base, commit that alone, and see what each of its items needs.
     Lead { mission: String },
     /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done.
     Merge {
@@ -211,7 +228,8 @@ fn main() -> ExitCode {
         // A usage error, or the help asked for.
         Err(error) => {
             let _ = error.print();
-            if error.use_stderr() && skip::reason().is_some() {
+            let skip = Skip::new(skip_variable().as_deref());
+            if error.use_stderr() && skip.reason().is_some() {
                 eprint!("{}", output::not_skippable());
             }
             return ExitCode::from(error.exit_code() as u8);
@@ -219,7 +237,11 @@ fn main() -> ExitCode {
     };
     // A skip needs its reason. A checkout cannot be refused, so the
     // post-checkout hook only says so.
-    if skip::variable().is_some_and(|reason| reason.is_empty()) {
+    let variable = skip_variable();
+    if variable
+        .as_deref()
+        .is_some_and(|reason| reason.trim().is_empty())
+    {
         let hook = match &cli.command {
             Command::Check { hook, .. } => *hook,
             _ => None,
@@ -230,34 +252,30 @@ fn main() -> ExitCode {
         }
         print!("{}", output::blank_skip(false));
     }
+    let skip = Skip::new(variable.as_deref());
     // `check` reads the records itself, and reports a config that does not
     // read rather than stopping at it.
     if let Command::Check { hook, args } = &cli.command {
-        return exit(match hook {
-            None => check::check(),
-            Some(hook) => check::hook(*hook, args),
-        });
+        let checked = match hook {
+            None => check::check(&skip),
+            Some(hook) => check::hook(*hook, args, &skip),
+        };
+        return exit(checked, &skip);
     }
-    let result = repo::Repo::open().and_then(|mut repo| match cli.command {
-        Command::Status => commands::status(&mut repo).map(Outcome::Done),
-        Command::Check { .. } => unreachable!("check runs before the repository is opened"),
-        Command::Setup { harness: None } => setup::git_hooks(&repo.root),
-        Command::Setup {
-            harness: Some(harness),
-        } => setup::harness(&repo.root, harness),
-        Command::Show { id } => views::show(&mut repo, &id),
-        Command::List { deferred: true, .. } => views::deferred(&mut repo),
-        Command::List {
-            ready,
-            blocked,
-            needs_human,
-            mission,
-            label,
-            mine,
-            done,
-            deferred: false,
-        } => {
-            let filter = atelier_app::Filter {
+    let here = std::env::current_dir();
+    let result = here
+        .map_err(anyhow::Error::from)
+        .and_then(|here| open(&here, &skip))
+        .and_then(|mut repo| match cli.command {
+            Command::Status => commands::status(&mut repo).map(Outcome::Done),
+            Command::Check { .. } => unreachable!("check runs before the repository is opened"),
+            Command::Setup { harness: None } => setup::git_hooks(&repo.root),
+            Command::Setup {
+                harness: Some(harness),
+            } => setup::harness(&repo.root, harness),
+            Command::Show { id } => views::show(&mut repo, &id),
+            Command::List { deferred: true, .. } => views::deferred(&mut repo),
+            Command::List {
                 ready,
                 blocked,
                 needs_human,
@@ -265,83 +283,97 @@ fn main() -> ExitCode {
                 label,
                 mine,
                 done,
-            };
-            views::list(&mut repo, &filter)
-        }
-        Command::New {
-            title,
-            into,
-            mission,
-            from,
-        } => plan::new(&mut repo, &title, into, mission, from.as_deref()),
-        Command::Set {
-            id,
-            title,
-            priority,
-            labels,
-            mission,
-            blocked_by,
-            caused_by,
-        } => {
-            let priority = priority.map(|priority| match priority {
-                PriorityArg::Critical => Priority::Critical,
-                PriorityArg::High => Priority::High,
-                PriorityArg::Medium => Priority::Medium,
-                PriorityArg::Low => Priority::Low,
-            });
-            let fields = plan::Fields {
+                deferred: false,
+            } => {
+                let filter = atelier_app::Filter {
+                    ready,
+                    blocked,
+                    needs_human,
+                    mission,
+                    label,
+                    mine,
+                    done,
+                };
+                views::list(&mut repo, &filter)
+            }
+            Command::New {
+                title,
+                into,
+                mission,
+                from,
+            } => plan::new(&mut repo, &title, into, mission, from.as_deref()),
+            Command::Set {
+                id,
                 title,
                 priority,
                 labels,
                 mission,
                 blocked_by,
                 caused_by,
-            };
-            plan::set(&mut repo, &id, fields)
-        }
-        Command::Ready { ids, by } => plan::ready(&mut repo, &ids, &by),
-        Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
-        Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
-        Command::Start { id: Some(id), .. } => commands::start(&mut repo, &id),
-        Command::Start {
-            new: Some(title), ..
-        } => commands::start_new(&mut repo, &title),
-        Command::Start { .. } => unreachable!("clap requires an ID or --new"),
-        Command::Submit => commands::submit(&mut repo),
-        Command::Escalate { question, finding } => {
-            questions::escalate(&mut repo, &question, finding.as_deref())
-        }
-        Command::Review { id } => review::review(&mut repo, &id),
-        Command::Verdict { verdict, model } => {
-            let verdict = match verdict {
-                VerdictArg::Approve => Verdict::Approve,
-                VerdictArg::Changes => Verdict::Changes,
-            };
-            review::verdict(&mut repo, verdict, model)
-        }
-        Command::Decide {
-            id,
-            answer,
-            defer,
-            no_action,
-        } => {
-            let settled = match (defer, no_action) {
-                (true, _) => Some(atelier_core::Outcome::Defer),
-                (_, true) => Some(atelier_core::Outcome::NoAction),
-                _ => None,
-            };
-            questions::decide(&mut repo, &id, &answer, settled)
-        }
-        Command::Lead { mission } => views::lead(&mut repo, &mission),
-        Command::Merge { trivial } => merge::merge(&repo.root, trivial),
-    });
-    exit(result)
+            } => {
+                let priority = priority.map(|priority| match priority {
+                    PriorityArg::Critical => Priority::Critical,
+                    PriorityArg::High => Priority::High,
+                    PriorityArg::Medium => Priority::Medium,
+                    PriorityArg::Low => Priority::Low,
+                });
+                let fields = plan::Fields {
+                    title,
+                    priority,
+                    labels,
+                    mission,
+                    blocked_by,
+                    caused_by,
+                };
+                plan::set(&mut repo, &id, fields)
+            }
+            Command::Ready { ids, by } => {
+                atelier_app::ready(&mut repo, &ids, &by).map(Outcome::from)
+            }
+            Command::Drop { id, reason } => plan::drop(&mut repo, &id, reason.as_deref()),
+            Command::Close { id, result } => plan::close(&mut repo, &id, result.as_deref()),
+            Command::Start { id: Some(id), .. } => commands::start(&mut repo, &id),
+            Command::Start {
+                new: Some(title), ..
+            } => commands::start_new(&mut repo, &title),
+            Command::Start { .. } => unreachable!("clap requires an ID or --new"),
+            Command::Submit => commands::submit(&mut repo),
+            Command::Escalate { question, finding } => {
+                questions::escalate(&mut repo, &question, finding.as_deref())
+            }
+            Command::Review { id } => review::review(&mut repo, &id),
+            Command::Verdict { verdict, model } => {
+                let verdict = match verdict {
+                    VerdictArg::Approve => Verdict::Approve,
+                    VerdictArg::Changes => Verdict::Changes,
+                };
+                review::verdict(&mut repo, verdict, model)
+            }
+            Command::Decide {
+                id,
+                answer,
+                defer,
+                no_action,
+            } => {
+                let settled = match (defer, no_action) {
+                    (true, _) => Some(atelier_core::Outcome::Defer),
+                    (_, true) => Some(atelier_core::Outcome::NoAction),
+                    _ => None,
+                };
+                atelier_app::decide(&mut repo, &id, &answer, settled).map(Outcome::from)
+            }
+            Command::Lead { mission } => views::lead(&mut repo, &mission),
+            Command::Merge { trivial } => {
+                merge::merge(&repo.root, repo.caller.clone(), trivial, &skip)
+            }
+        });
+    exit(result, &skip)
 }
 
-/// Prints the outcome, after each rule `ATELIER_SKIP` passed. Every refusal
-/// of a rule was passed or offered the skip, so a refusal or an error
-/// while a reason is given is of something that cannot be skipped.
-fn exit(result: anyhow::Result<Outcome>) -> ExitCode {
+/// Prints the outcome, after each rule `skip` passed. Every refusal of a
+/// rule was passed or offered the skip, so a refusal or an error while a
+/// reason is given is of something that cannot be skipped.
+fn exit(result: anyhow::Result<Outcome>, skip: &Skip) -> ExitCode {
     let (out, err, code) = match result {
         Ok(Outcome::Done(text)) => (text, String::new(), 0),
         Ok(Outcome::Refused(text)) => (String::new(), text, 1),
@@ -350,10 +382,12 @@ fn exit(result: anyhow::Result<Outcome>) -> ExitCode {
     };
     let mut err = err;
     if code == 1 || code == 2 {
-        err += &skip::reason().map_or(String::new(), |_| output::not_skippable());
+        err += &skip
+            .reason()
+            .map_or(String::new(), |_| output::not_skippable());
     }
     // A closed stdout, as under `| head`, is no failure of the command.
-    let out = output::skipped(&skip::passed()) + &out;
+    let out = output::skipped(&skip.passed()) + &out;
     let _ = std::io::stdout().write_all(out.as_bytes());
     let _ = std::io::stderr().write_all(err.as_bytes());
     ExitCode::from(code)

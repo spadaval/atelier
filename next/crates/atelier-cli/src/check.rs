@@ -4,10 +4,11 @@
 //! a rule about a push by the push.
 
 use crate::commands::{self, Outcome};
-use crate::repo::{self, Repo};
-use crate::{git, output, setup, skip};
+use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
 use atelier_app::acts::changes;
+use atelier_app::repo::{is_planning, planning};
+use atelier_app::Skip;
 use atelier_core::Status;
 use atelier_records::{
     is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store, CONFIG,
@@ -27,8 +28,8 @@ pub enum Hook {
 
 /// `atelier check`: every record in the checkout, and the record changes
 /// not committed yet, which change nothing about its outcome.
-pub fn check() -> Result<Outcome> {
-    let root = git::root()?;
+pub fn check(skip: &Skip) -> Result<Outcome> {
+    let root = git::root(Path::new("."))?;
     // Tracked, and untracked whether Git ignores them or not: the commands
     // read every file there.
     let mut paths = git::staged_files(&root, ".atelier")?;
@@ -49,7 +50,7 @@ pub fn check() -> Result<Outcome> {
     }
     let loaded = load(files);
     let counts = (loaded.items.len(), loaded.missions.len());
-    let mut uncommitted = repo::planning(&root)?;
+    let mut uncommitted = planning(&root)?;
     let config = git::uncommitted(&root)?.iter().any(|path| path == CONFIG)
         || !git::untracked(&root, CONFIG)?.is_empty();
     if config {
@@ -61,21 +62,25 @@ pub fn check() -> Result<Outcome> {
     }
     let text = output::check_found(counts, unread, invalid, &uncommitted);
     // What a skip passes is still reported.
-    Ok(
-        rules(unread, invalid.iter().map(output::valid), text.clone())
-            .unwrap_or(Outcome::Done(text)),
+    Ok(rules(
+        skip,
+        unread,
+        invalid.iter().map(output::valid),
+        text.clone(),
     )
+    .unwrap_or(Outcome::Done(text)))
 }
 
 /// A refusal `text` of the rules `rules`, which `ATELIER_SKIP` passes when
 /// every record read: `None` when it does.
 fn rules(
+    skip: &Skip,
     unread: &[Problem],
     rules: impl IntoIterator<Item = String>,
     text: String,
 ) -> Option<Outcome> {
     match unread.is_empty() {
-        true => skip::refuse(rules, text),
+        true => skip.refuse(rules, text).map(Outcome::from),
         false => Some(Outcome::Refused(text)),
     }
 }
@@ -83,20 +88,23 @@ fn rules(
 /// `atelier check --hook <hook>`, which the hook's script runs with the
 /// arguments and input Git gave it. Once its own rule passes, the clone's
 /// own hook, which `setup` kept as `<hook>.local`, runs with the same.
-pub fn hook(hook: Hook, args: &[String]) -> Result<Outcome> {
+pub fn hook(hook: Hook, args: &[String], skip: &Skip) -> Result<Outcome> {
     let name = hook.to_possible_value().expect("hooks are named");
     let name = name.get_name();
     let (outcome, input) = match hook {
-        Hook::PreCommit => (pre_commit(&git::root()?)?, None),
+        Hook::PreCommit => (pre_commit(&git::root(Path::new("."))?, skip)?, None),
         Hook::PrePush => {
             let mut input = String::new();
             std::io::stdin().read_to_string(&mut input)?;
-            (pre_push(&git::root()?, &input)?, Some(input))
+            (
+                pre_push(&git::root(Path::new("."))?, &input, skip)?,
+                Some(input),
+            )
         }
         // Nothing this hook runs or finds may fail the checkout, so it
         // ends in success whatever happens, a panic included.
         Hook::PostCheckout => {
-            let said = catch_unwind(AssertUnwindSafe(|| post_checkout(args)));
+            let said = catch_unwind(AssertUnwindSafe(|| post_checkout(args, skip)));
             print!("{}", said.unwrap_or_default());
             let _ = std::io::stdout().flush();
             let failed = match catch_unwind(AssertUnwindSafe(|| kept(name, args, None))) {
@@ -121,7 +129,7 @@ pub fn hook(hook: Hook, args: &[String]) -> Result<Outcome> {
 /// arguments and input, and says how it failed, if it did. One that is
 /// absent or not executable is not run, as Git would not run it.
 fn kept(name: &str, args: &[String], input: Option<&str>) -> Result<Option<String>> {
-    let path = git::hooks_dir(&git::root()?)?.join(format!("{name}.local"));
+    let path = git::hooks_dir(&git::root(Path::new("."))?)?.join(format!("{name}.local"));
     if !setup::runs(&path) {
         return Ok(None);
     }
@@ -162,7 +170,7 @@ fn kept(name: &str, args: &[String], input: Option<&str>) -> Result<Option<Strin
 
 /// Every staged record reads and validates, as staged, and each status a
 /// record changes from `HEAD`'s is a change some act makes.
-fn pre_commit(root: &Path) -> Result<Outcome> {
+fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
     let mut reader = CommitReader::new(root);
     let mut files = Vec::new();
     for path in git::staged_files(root, ".atelier")? {
@@ -209,14 +217,14 @@ fn pre_commit(root: &Path) -> Result<Outcome> {
         acts.iter()
             .map(|(path, from, to)| output::rule_status(path, *from, *to)),
     );
-    Ok(rules(&unread, broken, text).unwrap_or(Outcome::Done(String::new())))
+    Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
 /// When the push updates the base branch, each new commit on its
 /// first-parent line is an Atelier merge or touches only planning, and
 /// none but a merge sets an item done while its branch exists. `input` is
 /// what Git gives the hook: a line per ref pushed.
-fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
+fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     let base = match Store::new(root.join(".atelier")).config() {
         Ok(config) => config.base_branch,
         Err(mut problem) => {
@@ -252,7 +260,7 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
             let outside: Vec<String> = commit
                 .paths
                 .iter()
-                .filter(|path| !repo::is_planning(path))
+                .filter(|path| !is_planning(path))
                 .cloned()
                 .collect();
             if !outside.is_empty() {
@@ -302,17 +310,20 @@ fn pre_push(root: &Path, input: &str) -> Result<Outcome> {
         done.iter()
             .map(|(commit, _, id)| output::rule_done(&base, commit, id)),
     );
-    Ok(rules(&unread, broken, text).unwrap_or(Outcome::Done(String::new())))
+    Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
 /// On a branch switch, what `status` prints; else nothing. A failure is
 /// printed, never returned.
-fn post_checkout(args: &[String]) -> String {
+fn post_checkout(args: &[String], skip: &Skip) -> String {
     // Git's third argument is 1 for a switch of branches, 0 for files.
     if args.get(2).map(String::as_str) != Some("1") {
         return String::new();
     }
-    match Repo::open().and_then(|mut repo| commands::status(&mut repo)) {
+    let opened = std::env::current_dir()
+        .map_err(anyhow::Error::from)
+        .and_then(|here| crate::open(&here, skip));
+    match opened.and_then(|mut repo| commands::status(&mut repo)) {
         Ok(said) => said,
         Err(error) => output::no_status(&error),
     }

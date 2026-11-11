@@ -142,15 +142,6 @@ fn fixture() -> (Scratch, PathBuf) {
     (scratch, second)
 }
 
-/// What Git prints, without trimming its first line's leading spaces.
-fn git_output_text(at: &Path, args: &[&str]) -> String {
-    let output = git_output(at, args);
-    String::from_utf8(output.stdout)
-        .unwrap()
-        .trim_end()
-        .to_string()
-}
-
 fn stdout(at: &Path, thread: &str, args: &[&str]) -> String {
     let run = atelier(at, thread, args);
     assert_eq!(run.code, 0, "{args:?}: {}", run.stderr);
@@ -219,7 +210,6 @@ fn list_shows_open_work_by_mission_and_label_and_each_flag_narrows_it() {
     assert_eq!(list(&["--mine"]), "No open work matches.\n");
     let run = atelier(&root, "lead1", &["lead", "demo-m1ss"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    git(&root, &["commit", "-qam", "Lead demo-m1ss"]);
     let led = M1.replace("in progress)", "in progress, led by lead1)");
     assert_eq!(
         stdout(&root, "lead1", &["list", "--mine"]),
@@ -287,10 +277,6 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     );
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
 
-    // An item made ready and not committed is not handed out: `start`
-    // reads the base's last commit, and would refuse it.
-    let run = atelier(&root, "p1", &["ready", "demo-c3cc", "--by", "sumeet"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
     // A started item says what its holder's `status` lists as unmet.
     let items = "Its items:\n  Draft:\n    demo-c3cc (medium): Say hi\n  Ready:\n    \
                  demo-a1aa (high, can start now): Say hello\n    \
@@ -300,20 +286,20 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
     let handoff = "An implementer must be a thread other than yours. Under Codex a subagent you start is one; under Claude Code a subagent runs as your thread and is refused, so use your harness's tool for a new agent thread. Start one with fresh context, not as a fork of yours, and give it this task:\n  \
                    Run atelier start demo-a1aa and follow what it prints.\n\
                    Then wait for it to finish, and run `atelier status`.\n";
-    let then = format!(
-        "Wrote, and did not commit:\n  {path}\nPlanning counts once it is committed on the base.\n\
-         Then: git add -- {path} && git commit -m \"Lead demo-m1ss\" -- {path}\n"
-    );
+    let led = stdout(&root, "lead1", &["lead", "demo-m1ss"]);
+    // It commits the mission alone.
+    let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
+    let then = format!("Committed {commit}, \"Lead demo-m1ss\":\n  {path}\n");
     assert_eq!(
-        stdout(&root, "lead1", &["lead", "demo-m1ss"]),
+        led,
         format!("You now lead mission demo-m1ss: Greet everyone\nNobody led it before.\n{items}{handoff}{then}")
     );
     assert_eq!(front(&read(&root, path), "lead"), "lead1");
-    // It commits nothing.
-    let changed = format!(" M {}\n M {path}", item_path("demo-c3cc"));
-    assert_eq!(git_output_text(&root, &["status", "--porcelain"]), changed);
-    git(&root, &["commit", "-qm", "Lead demo-m1ss", "--", path]);
-    git(&root, &["checkout", "--", &item_path("demo-c3cc")]);
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    assert_eq!(
+        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
+        format!("Lead demo-m1ss\n\n{path}")
+    );
 
     // The lead's status: its mission, what each item needs, and the
     // questions waiting on a decider, with the command that answers each.
@@ -337,7 +323,6 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
         "{taken}"
     );
     // The lead running it again changes nothing, so has nothing to commit.
-    git(&root, &["commit", "-qam", "Lead demo-m1ss"]);
     let again = stdout(&root, "lead2", &["lead", "demo-m1ss"]);
     assert!(
         again.starts_with("You already lead mission demo-m1ss: Greet everyone\n"),
