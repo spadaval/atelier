@@ -23,7 +23,7 @@ schema_version: 2
 closed_at: "2026-11-11T05:27:13.519734186+00:00"
 status: "done"
 title: "Move the acts and repository access into atelier-app as functions that return data, make ready commit its own write, and name the human caller"
-updated_at: "2026-11-11T05:27:13.519734186+00:00"
+updated_at: "2026-11-11T05:28:46.386095927+00:00"
 ---
 
 ## Goal
@@ -85,6 +85,7 @@ Expected size: 1,000 to 1,500 lines move between the two crates, and about 200 a
 - 2026-11-11 [decision] Repo::open refuses a caller identity with a line break or a ': ', the two things that stop Answer by <thread>: and Dropped by <thread>: reading back; Repo keeps the directory it was opened from, and git_at compares it with the root instead of reading the process's working directory
   Reason: One check at the one entry point is before anything is written; and atelier-app then reads no process state to decide where a printed Git command runs
 - 2026-11-11 [handoff] Approved by GPT-6.1 Sol (atelier-vst8) at 23b4e51d after two rounds; round 1's two fix-now findings (atelier-wwxe, atelier-t53b) fixed in 91bd5db3 and 98f9f9a3. See the Report.
+- 2026-11-11 [note] 2026-11-11: after the merge (036f51fa, pull request 128), scripts/cutover/rehearse.sh was run from master 7b06ed12 on fresh clones of all five repositories and every step passed in 37 s: convert, check, setup and the pre-commit refusal on each, and one item from ready to done in atelier and in life-on-rails.
 
 ## Report
 
