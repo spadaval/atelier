@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-akkp
 title: Re-measure record bookkeeping in adopting repositories after the lighter workflow ships
-status: draft
+status: dropped
 mission: null
 labels: []
 priority: low
@@ -32,3 +32,7 @@ Pick this up three or more weeks after the release containing atelier-n4mj's cha
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-n4mj (Record what proves work, when it can be proven, and nothing more)
+
+## Report
+
+Dropped: It measures mission atelier-n4mj's lighter workflow, which the 0.5 redesign replaced before the three weeks ran. The scorecard rerun (atelier-pwhn) is the measurement.
