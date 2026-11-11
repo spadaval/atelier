@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-6w8d
 title: Replace the product docs, `CONTEXT.md`, `PRODUCT_INTENT.md` and the ADRs with the design record
-status: changes_requested
+status: in_review
 mission: atelier-qr5s
 labels:
 - redesign
@@ -73,7 +73,7 @@ The repository now describes one tool. `docs/product.md` and `docs/design.md` ar
   - The Forge and Site sections now describe what was copied in the past tense. The Site section names no command.
 - Transition is cut to three parts. First, one paragraph on 2026-11-11: the switch merged; one run of `cutover.sh` converted the five repositories within four minutes, with no stop and no rollback; `--verify` matched in each; and the counts were 133/7, 240/4, 19/1, 47/3 and 37/7. These come from `~/.cache/atelier-cutover/journal`, with 85 starts and 85 dones and no restart, and from `report/*.counts` and `*.verify`. Then two parts still to come: the work host's adoption, rewritten to stand alone and pointing at `scripts/cutover/README.md#another-host-adopts`, and deleting `scripts/cutover/` afterwards. The line about CI's fallback is gone, because atelier-2mlh merged the change that removed it (d0f75b44).
 - Tried and removed keeps its table, and gains the product page's "What is removed" table and the old-views table. The `serve` row now says "(see Decisions)" in place of the ADR link.
-- Decisions keeps every line. Its header now says how ADR lines are marked, and it gains eleven lines carried from the ADRs, listed below.
+- Decisions keeps every line. Its header now says how ADR lines are marked, and it gains twelve lines carried from the ADRs, listed below.
 
 ### Where each ADR's decision now lives
 
@@ -107,9 +107,9 @@ The repository now describes one tool. `docs/product.md` and `docs/design.md` ar
 | 0027 proof has a time | Superseded by 0028 before this item; after-merge checks are gone |
 | 0028 simpler lifecycle | Its approval rule is "The approval covers the head" (Status). Its one meaning per word is the product Words. Two new lines: no regrowth, and one binary per host reading the old form until every repository moves. Loose ends and the light path are under Tried and removed |
 | 0029 Agent Factory lives in Atelier | New line: one copy in `skills/agent-factory` with its evals, installed with `npx skills add`, nothing in `crates/` reads it, and it steps aside outside Atelier. `doctor` and `setup --link` are not carried, since both commands are gone |
-| 0030 site, session database, T3 | Two new lines, merged with 0032: records are the only truth, guards consult only Git, records and CI; and the host's SQLite database. Its site is under Tried and removed |
+| 0030 site, session database, T3 | Three new lines, merged with 0032: records are the only truth, and guards consult only Git, the records and CI; the host's SQLite database, with each kind's one writer and each command writing its own attribution row from its session's environment, not through an MCP server (decision 7); and what live pages and the feed may read. Its site is under Tried and removed |
 | 0031 forge carries branches and CI | New line: a forge carries branches and reports CI, review stays in the repository, and GitHub works through `gh`. The mechanics are in Merge and The forge |
-| 0032 the Desk is the human's product | Two new lines: two products and a separate build; and the Desk acts only through the core. With 0030: one direction of dependency, the database, and T3 through MCP |
+| 0032 the Desk is the human's product | Two new lines: two products and a separate build; and the Desk acts only through the core. With 0030: one direction of dependency; the database and its writers (decision 6); live pages reading only records, T3 Code's MCP server and the database, never T3 Code's own database, with only the feed reading other sources, one adapter per source, with provenance (decision 7); and conversations staying in T3 Code (decision 8) |
 
 ### Deleted
 
@@ -195,4 +195,9 @@ So the history hits are 20 in the design record's lists and 118 in the baseline,
 For the reviewer:
 
 - Two Decisions lines carry ADR 0028 rules that only `PRODUCT_INTENT.md` and the ADR held: no regrowth, and one binary per host. Check that their wording does not go beyond the ADR.
-- The "Reason" column of the eleven new lines is drawn from each ADR's Context.
+- The "Reason" column of the twelve new lines is drawn from each ADR's Context.
+
+### Responses
+
+- 1-rzbt.1: fixed in 9e0e1d3a5
+- 1-rzbt.2: fixed in 9e0e1d3a5
