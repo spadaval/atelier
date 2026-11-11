@@ -22,6 +22,9 @@ pub struct MissionView {
     /// Each question asked on one of its items, with that item's ID, in
     /// item ID order.
     pub questions: Vec<(String, Decision)>,
+    /// The records of each of its items, base and branch, in item ID
+    /// order, for what a caller shows beside an entry.
+    pub located: Vec<Located>,
 }
 
 /// The mission `id` at the base's tip, or `None` when it has none.
@@ -41,11 +44,16 @@ pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
             questions.extend(asked.map(|d| (record.item.id.clone(), d)));
         }
     }
+    let in_progress = in_progress(dir, &entries);
+    let dir = dir.clone();
+    let of =
+        |located: &Located| located.record().and_then(|r| r.item.mission.as_deref()) == Some(id);
     Ok(Some(MissionView {
-        in_progress: in_progress(dir, &entries),
-        dir: dir.clone(),
+        in_progress,
+        dir,
         items: of_mission,
         questions,
+        located: items.into_iter().filter(of).collect(),
     }))
 }
 

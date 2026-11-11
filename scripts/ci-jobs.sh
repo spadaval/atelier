@@ -10,11 +10,14 @@
 # whose jobs are skipped concludes success.
 #
 # rust (the old workspace's build and tests) reads everything except tracker
-# records, Markdown outside crates/ and docs/strategies/, and the new workspace
-# next/: crates/ holds test fixtures, and a test parses every strategy.
+# records, Markdown outside crates/ and docs/strategies/, the new workspace
+# next/ and the Desk's app desk/: crates/ holds test fixtures, and a test
+# parses every strategy.
 #
 # next (the new workspace's build and tests) reads next/ and what configures
-# its build from outside it: the toolchain, .cargo/ and the CI workflow.
+# its build from outside it: the toolchain, .cargo/ and the CI workflow. It
+# also reads desk/src/api/, the app's types generated from atelier-desk's,
+# which a test there compares.
 #
 # web (the site's app: typecheck, Vitest, build and Playwright) runs whenever
 # rust does, since the API it shows is the shared view models any Rust change
@@ -26,7 +29,7 @@ head=${2:-HEAD}
 
 needs_rust() {
   case $1 in
-    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/* | next/*) return 1 ;;
+    .atelier/issues/* | .atelier/reviews/* | .atelier/evidence/* | .atelier/runtime/* | next/* | desk/*) return 1 ;;
     crates/* | docs/strategies/*) return 0 ;;
     *.md) return 1 ;;
     *) return 0 ;;
@@ -35,7 +38,7 @@ needs_rust() {
 
 needs_next() {
   case $1 in
-    next/* | rust-toolchain.toml | .cargo/* | .github/workflows/*) return 0 ;;
+    next/* | desk/src/api/* | rust-toolchain.toml | .cargo/* | .github/workflows/*) return 0 ;;
     *) return 1 ;;
   esac
 }

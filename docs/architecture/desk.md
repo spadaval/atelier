@@ -1,7 +1,8 @@
 # The Desk's API
 
 Status: the contract for mission atelier-z4cr (`docs/strategies/desk.md`),
-written by item atelier-1ie1 before any server code. It says what each page
+written by item atelier-1ie1 before any server code, and corrected by item
+atelier-uwxy where the server as built differs. It says what each page
 of the Desk is sent, and for every field, which function of the redesigned
 core in `next/` gives it, or that none does yet. The decisions are in
 [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md); what the Desk is
@@ -49,7 +50,11 @@ one blocking task:
 4. Pages are built from those values and the record readers below.
 
 The cache key is the base's tip and the tip of every local branch named for
-an item (`atelier_app::git::branches`, psjw). Nothing reads a working tree:
+an item (`atelier_app::git::branches`, psjw), with the checkout opened and
+its `HEAD`, whose commit holds the config read. A request opens the
+repository and reads those tips; while they are unchanged it is answered
+from the response kept for them, and a new commit on any of them builds the
+response again, with no restart. Nothing reads a working tree:
 a `Repo` opened with `open_committed` reads `.atelier/config.toml` from the
 commit `HEAD` names, and the item of the branch the opened checkout has out
 from that branch's tip, where `Repo::open` reads both from the checkout's
@@ -65,9 +70,61 @@ and the server does not call them.
 `Send`. The server makes the `Skip` and opens the `Repo` inside the
 blocking task that uses them.
 
+## Running the server
+
+The crate is `next/crates/atelier-desk` (`crates/atelier-desk` after the
+switch), and its binary is `atelier-desk`. It is not part of the tracker's
+release: its manifest sets `[package.metadata.dist] dist = false`, and no
+other crate depends on it, which its `dependencies` test checks.
+
+It takes one argument, the configuration file:
+
+```console
+$ cd next && cargo build -p atelier-desk
+$ target/debug/atelier-desk --config ~/.config/atelier-desk.toml
+atelier-desk: serving on http://127.0.0.1:3780
+```
+
+It serves until interrupted. The configuration is TOML:
+
+```toml
+# The name the human acts under; every view is computed for it.
+caller = "sumeet"
+# Each direct child of a root that is a Git checkout whose HEAD holds
+# .atelier/config.toml is served under its directory name. A child with no
+# Atelier config is skipped; one that does not open, or holds a record that
+# does not read, is listed by /api/repos with its error.
+roots = ["~/.cache/atelier-desk/clones"]
+# Addresses to listen on. Default: 127.0.0.1:3780.
+listen = ["127.0.0.1:3780"]
+# The names a request's Host header may give, without its port. Any other
+# is refused with 403. Default: localhost, 127.0.0.1 and [::1].
+hosts = ["localhost", "127.0.0.1"]
+# The built app's directory, served for every path outside /api, with its
+# index.html for a path that names no file. Without it only /api is served.
+app = "/path/to/atelier/desk/dist"
+```
+
+A path may start with `~/`, and a relative one is read from the
+configuration file's directory. When two roots have a child of the same
+name, the first is served and the second is listed with an error.
+
+The app's TypeScript types are generated from `src/api.rs` into
+`desk/src/api/`, one file per type, and committed. The test
+`the_committed_typescript_types_are_current` fails when they differ, and
+writes them again when run with `ATELIER_UPDATE_TYPES=1`:
+
+```console
+$ cd next && ATELIER_UPDATE_TYPES=1 cargo nextest run -p atelier-desk --test types
+```
+
 ## Routes
 
-All responses are JSON, typed for the app with `ts-rs`. `{repo}` is the
+All responses are JSON, typed for the app with `ts-rs`. Times are RFC 3339
+strings, and enums are their record names, such as `in_review`. A refused
+`Host` is `403`, an ID that does not validate or a document path that
+leaves the root is `400`, an unknown repository, record or route is `404`,
+and a read that fails is `500`; each has `error`. `{repo}` is the
 name the Desk's configuration gives a repository. An item or mission ID is
 checked with `atelier_records::validate_id` (master) before use. A thread
 identity never appears in a path: it can hold `/`, `:` and `%`, as
@@ -88,10 +145,15 @@ identity never appears in a path: it can hold `/`, `:` and `%`, as
 `?done=true` on `/missions` lists done and dropped missions, as
 `Filter::done` does for `list` (master).
 
+The routes for `/history`, `/api/threads` and `POST /api/act` are not served
+yet (items atelier-e05n and atelier-h3hl, and M5): they answer `404`. Nor
+are `threads`, `holds`, `pending_answers`, `can_decide` and `decide_at`.
+
 ## Responses, field by field
 
-Every response also has `commit`: the base's tip it was read at
-(`Repo::base_tip`, psjw).
+Every response for one repository also has `commit`: the base's tip it was
+read at (`Repo::base_tip`, psjw). `/api/repos` gives each repository's
+`base_tip` instead, and `/api/inbox` a `commit` for each repository.
 
 ### `GET /api/repos`
 
@@ -103,7 +165,7 @@ Every response also has `commit`: the base's tip it was read at
 | `in_progress` | Count of missions where `atelier_app::in_progress(mission, &entries)` | master |
 | `drafts` | Count of `MissionDir` with `MissionStatus::Draft` | master |
 | `waiting` | Item count of `atelier_app::list(&entries, &missions, &caller, &Filter { needs_human: true, .. })` | master |
-| `error` | The error text when the repository does not open or a record does not read (`atelier_records::ReadError`, master) | Desk |
+| `error` | The error text when the repository does not open or a record does not read (`atelier_records::ReadError`, master); then `base` and `base_tip` are `null` and the counts `0` | Desk |
 
 ### `GET /api/repos/{repo}/missions`
 
@@ -113,27 +175,29 @@ Every response also has `commit`: the base's tip it was read at
 | --- | --- | --- |
 | `id`, `title`, `status`, `labels`, `lead`, `ready {by, at}`, `created_at` | `atelier_core::Mission`, read by `CommitReader::mission` | master |
 | `in_progress` | `atelier_app::in_progress` | master |
-| `counts` | `items_of(id, &entries)` grouped by `Entry::status` in `LIFECYCLE` order, as `show <mission>` groups them | master |
-| `waiting` | Items of `items_of` with `Entry::needs_human`, plus those whose record has a question (`acts::question`) | master |
+| `counts[] {status, count}` | `items_of(id, &entries)` grouped by `Entry::status` in `LIFECYCLE` order, as `show <mission>` groups them; a status with no item is left out | master |
+| `waiting[]` | The IDs of the open items of `items_of` with `Entry::needs_human`, or whose record has an unanswered question (`acts::question`) | master |
 
 `loose`: the item count of the group with `id: None` from `list` (master),
-the spike's "work outside missions".
+the spike's "work outside missions", with the same `done` flag.
 
 ### `GET /api/repos/{repo}/missions/{id}`
 
+The page is read from `atelier_app::mission_view`, as `show <mission>` is.
+Its item rows also need each item's records, which `MissionView::located`
+gives (added by atelier-uwxy).
+
 | Field | Given by | State |
 | --- | --- | --- |
-| `id`, `title`, `status`, `labels`, `lead`, `ready`, `created_at` | `Mission` | master |
-| `in_progress` | `atelier_app::in_progress` | master |
+| `mission` | The mission's row, as on the rail: `id`, `title`, `status`, `labels`, `lead`, `ready`, `created_at`, `in_progress`, `counts`, `waiting` | master |
 | `sections[] {heading, markdown}` | `MissionDir::section` for Why, Outcome, Success criteria, Scope, Authority and Result, those present | master |
 | `dropped` | `MissionDir::dropped` | master |
 | `can_ready` | `acts::check_mission(Act::ReadyMission, &facts).is_ok()`; it shows Say go | master |
 | `documents[] {path, title}` | Every file of `.atelier/missions/<id>/` but `mission.md` and `reviews/`; `title` is its first `# ` heading, else its name | M2: `CommitReader::mission_documents(commit, id)` |
-| `counts` | As on the rail | master |
-| `items[]` | `items_of(id, &entries)`, each as an item row (below) | master |
+| `items[]` | `MissionView::items`, each as an item row (below) | master |
 | `questions[] {item, question, finding, answer {by, text}, outcome}` | `ItemDir::decisions` of each item's record | M3: `MissionView::questions` |
 | `plan_reviews[]` | `MissionDir::reviews`, each as a review (below) | master |
-| `plan_reviews[].changed_since[]` | The plan's paths that differ between the commit reviewed and the base's tip | M6: `atelier_app::plan::plan_changed_at(&mut repo, id, commit, base_tip)` |
+| `plan_reviews[].changed_since[]` | The plan's paths that differ between the commit reviewed and the base's tip; `null` when this clone lacks that commit | M6: `atelier_app::plan::plan_changed_at(&mut repo, id, commit, base_tip)` |
 | `threads[]` | The join in [Tying a thread to an item](#tying-a-thread-to-an-item) | master, T3 Code |
 | `pending_answers[]` | Answers the Desk gave with `decide` that no commit holds yet | Desk memory |
 
@@ -143,14 +207,14 @@ An **item row**, in a mission, the inbox and the rail's loose work:
 | --- | --- | --- |
 | `id`, `title`, `status`, `priority`, `labels` | `Entry` | master |
 | `needs_human`, `startable` | `Entry::needs_human`, `Entry::startable` | master |
-| `blockers[] {id, status}`, `waiting_on[]` | `Entry::blockers`, `Entry::waiting_on` | master |
+| `blockers[] {id, status}`, `waiting_on[]` | `Entry::blockers`; the IDs of `Entry::waiting_on` | master |
 | `holder`, `reviewer` | `Entry::holder`; `Entry::reviewer`, set only while in review | master |
-| `cannot_start[]` | For a ready item, `say::condition(id, c)` for each of `Entry::unmet` | master values, psjw text |
-| `needs[]` | For a started item, `say::condition` for each of `Entry::needs`, what its holder's next act lacks | master values, psjw text |
+| `cannot_start[]` | For a ready item, `say::condition_text(id, c)` for each of `Entry::unmet` | master values, psjw text |
+| `needs[]` | For a started item, `say::condition_text` for each of `Entry::needs`, what its holder's next act lacks | master values, psjw text |
 | `branch {merged}` | `Located::branch`; absent when there is no branch | psjw |
-| `question` | `acts::question(record)`, the oldest unanswered | master |
+| `question` | `acts::question(record)`, the oldest unanswered, with the date its heading gives | master |
 | `report_written`, `dropped` | `ItemDir::report_written`, `ItemDir::dropped` | master |
-| `approved_at` | `Entry::approved`, which `atelier_app::annotate` fills, from `atelier_app::git::approved_at`; `mission_view` and `item_view` annotate their entries | M4 |
+| `approved_at` | `Entry::approved`, which `atelier_app::annotate` fills, from `atelier_app::git::approved_at`; `mission_view` and `item_view` annotate their entries, and the inbox annotates its rows | M4 |
 
 A **review**, of an item or a mission's plan:
 
@@ -161,11 +225,13 @@ A **review**, of an item or a mission's plan:
 | `findings[] {name, title, recommendation, was, now, decided, settlement}` | `ReviewFile::findings` | master |
 | `findings[].text` | `ReviewFile::finding_text` | master |
 | `findings[].open`, `findings[].deferred` | `atelier_core::is_open`, `is_deferred`, over all the record's findings and its decisions (none for a mission) | master |
+| `changed_since` | On a plan review, as above; `null` on an item's | M6 |
 
 ### `GET /api/repos/{repo}/doc?path=<path>`
 
 `path` is from the repository's root. The Desk normalizes it and refuses one
-that leaves the root or does not end in `.md`. `markdown` is
+that leaves the root or does not end in `.md`. The response's `path` is the
+normalized one. `markdown` is
 `CommitReader::text(base_tip, path)` (master). Links in a mission's files
 are relative to the file (`../../../docs/adr/...` after conversion), so the
 app resolves them against `path`, as the spike's `DocReader` does.
@@ -174,15 +240,15 @@ app resolves them against `path`, as the spike's `DocReader` does.
 
 | Field | Given by | State |
 | --- | --- | --- |
-| `id`, `title`, `status`, `mission`, `labels`, `priority`, `blocked_by`, `implementers`, `ready`, `trivial`, `caused_by`, `created_at` | `atelier_core::Item` of `Located::record` | master |
-| `read_from` | Whether the record is the base's or the branch's | M7: `ItemView::read_from`, `Located::read_from` |
-| Item row fields | As above, from `entry(&repo::facts(..))` with `Repo::links` | psjw |
+| `row` | The item row, as above, from `ItemView::entry`; it holds `id`, `title`, `status`, `priority` and `labels` | psjw |
+| `mission`, `blocked_by`, `implementers`, `ready`, `trivial`, `caused_by`, `created_at` | `atelier_core::Item` of `Located::record` | master |
+| `read_from` | `base` or `branch`: whether the record is the base's or the branch's | M7: `ItemView::read_from`, `Located::read_from` |
 | `body` | `Item::body`, the whole Markdown | master |
 | `goal`, `scope`, `report` | `ItemDir::section` | master |
 | `done_when[] {ticked, text}` | `ItemDir::done_when` | master |
 | `decisions[]`, `responses[]` | `ItemDir::decisions`, `ItemDir::responses` | master |
 | `reviews[]` | `ItemDir::reviews`, each as a review | master |
-| `unsettled[]` | `acts::unsettled`, for a done item | master |
+| `unsettled[]` | The names of `acts::unsettled`, for a done item | master |
 | `decide_at` | `git::checkout_of(root, id)`: the checkout with the item's branch out, where `decide` writes | psjw |
 | `can_decide` | `acts::check(Act::Decide, &facts)` for the human caller | master values, psjw `facts` |
 | `threads[]`, `pending_answers[]` | As on the mission | master, Desk |
@@ -192,12 +258,13 @@ committed. The Desk does not, since it reads commits only.
 
 ### `GET /api/inbox`
 
-`repos[]`, each with `repo`, `commit` and:
+`repos[]`, each with `repo`, `commit`, `error` (as on `/api/repos`; the
+lists are then empty) and:
 
 | Field | Given by | State |
 | --- | --- | --- |
 | `needs_human[] {mission, mission_title, items[]}` | `list(.., &Filter { needs_human: true, .. })`: `Group::id`, `Group::mission`, `Group::items` as item rows | master |
-| `drafts[]` | Missions with `MissionStatus::Draft`, as on the rail | master |
+| `drafts[]` | Missions with `MissionStatus::Draft`, as mission rows on the rail | master |
 | `questions[] {item, mission, question, finding}` | `acts::question` of each started item's record | master |
 
 `needs_human` lists the same items as `atelier list --needs-human`, which
@@ -347,7 +414,7 @@ an `ItemView`; `show` prints each.
 | ID | What it must compute | Given by | Complexity | Value | Risk |
 | --- | --- | --- | --- | --- | --- |
 | M1 | Open a repository for reading by path and caller, with the base branch from `config.toml` at a commit (the commit `HEAD` names) and every item read from commits, never from the opened checkout's files | `atelier_app::Repo::open_committed` | Low | High: the strategy's rule | Low |
-| M3 | A mission's page as `show <mission>` prints it: the `MissionDir`, `in_progress`, its entries, its questions with the item each is on, its plan reviews | `atelier_app::mission_view`, returning `MissionView` (plan reviews in `MissionView::dir.reviews`); `show` calls it | Low | High: keeps the Desk and `show` agreeing, which desk-matches-cli checks | Low |
+| M3 | A mission's page as `show <mission>` prints it: the `MissionDir`, `in_progress`, its entries, its questions with the item each is on, its plan reviews | `atelier_app::mission_view`, returning `MissionView` (plan reviews in `MissionView::dir.reviews`, and its items' records in `MissionView::located`, which atelier-uwxy added); `show` calls it | Low | High: keeps the Desk and `show` agreeing, which desk-matches-cli checks | Low |
 | M2 | The paths of a mission's documents at a commit: the files of its directory but `mission.md` and `reviews/` | `atelier_records::CommitReader::mission_documents` | Low | High: the strategy is a document now | Low |
 | M4 | An approved item's approval time on `Entry` | `atelier_app::annotate` and `annotate_all`, with `atelier_app::git::approved_at`; the CLI calls them | Low | Medium | Low |
 | M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_app::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |

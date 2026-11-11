@@ -6,6 +6,7 @@ members = [
     "crates/atelier-app",
     "crates/atelier-cli",
     "crates/atelier-core",
+    "crates/atelier-desk",
     "crates/atelier-records",
 ]
 resolver = "2"
