@@ -29,7 +29,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "Take the site out of the new workspace: no serve, no web build, and the old site goes at the switch"
-updated_at: "2026-11-11T04:23:00.607906145+00:00"
+updated_at: "2026-11-11T04:28:52.432379999+00:00"
 ---
 
 ## Goal
@@ -62,6 +62,10 @@ Three things this item's preliminary lines named are not done here, because each
 Mission atelier-qr5s, step E of `docs/strategies/redesign-3-cutover.md`, which changed on 2026-11-11 at Sumeet's direction from "rebuild the site on the new records". Deferred planning finding atelier-4pz2 (`atelier review show atelier-4pz2`) names the Transition lines that still expect a site; this item fixes those lines, and step F's plan fixes atelier-wd1i's Done when. The `atelier-serve` unit is `~/.config/systemd/user/atelier-serve.service`.
 
 Expected size: about 60 changed lines across the two documents.
+
+## Notes
+
+- 2026-11-10 [note] Handoff: approved in round 1 (atelier-ze4k, GPT-6.1 Sol) at e1886010; no findings. Outcome, proof and open items are in the Report.
 
 ## Report
 
