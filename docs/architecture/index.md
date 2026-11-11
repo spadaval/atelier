@@ -11,6 +11,9 @@ allows a read-only site and a session database beside the records.
 - [Source layout](source-layout.md): crate responsibilities and dependency direction.
 - [Site](site.md): `atelier serve`, reading each repository's base commit
   without a checkout, discovery, the JSON API and its load limits.
+- [The Desk's API](desk.md): the routes and fields of the human's tool on
+  the redesigned records, each traced to the core function that gives it,
+  and the views the core still lacks.
 - [Quality standards](quality/standards.md): engineering requirements.
 - [Validation](quality/validation.md): proof and review boundaries.
 - [Quality vocabulary](quality/architecture-quality.md) and
