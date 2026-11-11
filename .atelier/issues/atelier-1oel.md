@@ -98,6 +98,11 @@ All ten Done when lines hold, with one deviation: `log` is not built in `next/` 
 
   The Handoff lines passage and the `status` example and the paragraph under it now match the binary. In the architecture, Threads and roles states the rule and both measurements, and says any harness-started thread and a Codex subagent have identities of their own; the Status paragraph says what `status` shows of the three skill rules and what the brief carries. Neither `last_changed` line changed.
 
+### Responses
+
+- atelier-yul7: fixed in cb648346. `status` away from the item's branch now gives the implementer the round and the escalation line in its list of what it holds; `status_shows_the_round_and_after_three_without_an_approval_says_to_escalate` checks both from a detached checkout of the base, and that the round's reviewer is not told. The architecture's Threads and roles says so. `cargo nextest run -j 4`: 239 passed; fmt and clippy clean.
+- atelier-h4x4: escalated to the orchestrator. The `log` clause of the second Done when line cannot hold until atelier-8b0a builds `log`; this item does not build it.
+
 ### Deviations
 
 - `log` does not exist in `next/` yet, so the Done when clause "`log` and `show` print the identity whole" holds only for `show`. atelier-8b0a builds `log`; its identity column needs no split, since the identity is one string.
