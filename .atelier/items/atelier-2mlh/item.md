@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2mlh
 title: Run the first real items under the new tool, and fix what first use breaks
-status: in_review
+status: approved
 mission: atelier-qr5s
 labels:
 - redesign
