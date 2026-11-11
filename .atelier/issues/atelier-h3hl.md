@@ -3,6 +3,9 @@ created_at: "2026-11-11T02:17:26.850729926+00:00"
 id: "atelier-h3hl"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: atelier-h3hl
 priority: "P2"
 relationships:
   blocks: []
@@ -20,9 +23,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Perform ready and decide from the Desk's server through the core's functions, and start a planning session in T3 Code"
-updated_at: "2026-11-11T06:27:22.151590626+00:00"
+updated_at: "2026-11-11T06:49:59.596222414+00:00"
 ---
 
 ## Goal
