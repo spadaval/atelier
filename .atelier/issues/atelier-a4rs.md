@@ -202,7 +202,13 @@ Where each line's proof is:
 
   The README lists these checks. Round 5's fix was reviewed in round 6.
 - **Round 7** (at `ad45d5ef`), the last the round-6 decision allowed, recorded atelier-1cw0: a `--help` anywhere in a shell call exempted a writing `atelier` invocation beside it. The fix is committed after that round and **has not been reviewed**: a lone `atelier <write> --help` is still a read, and a call of several invocations mixing a write and a help lookup grades `"pass": null` for a hand read. The item stops here, unapproved, for the orchestrator.
-- **A timing flake.** Once, a full run of `next-done-when-rewrite`'s walks on 7b06ed12 had one failure that two reruns did not repeat. Its setup and walks run the real benchmark through the grader. Taking wall time out would need a test hook in the grader, so the README says the fast-path walk can flip under load.
+- **Round 8** (at `6a5a9180`, after the orchestrator bounded the graders' Done when line) recorded atelier-ed5w: a passing benchmark followed by a code edit and no new benchmark passed `next-done-when-rewrite`. The bounded line still requires this, since it is a likely sequence and the line asks for fresh proof. Fixed:
+  - each thread's steps are read in order;
+  - a file tool's edit of code after its last passing run fails the run;
+  - a shell call that might have written `search.py` after it, or code touched by two threads, grades `"pass": null` for a hand read.
+
+  Three new walks cover these. The walks' stand-in search now answers the benchmark's queries at import, since on a loaded host (load average 3, indexed p95 about 30 ms) the fast-path walks flipped.
+- **A timing flake.** Once, a full run of `next-done-when-rewrite`'s walks on 7b06ed12 had one failure that two reruns did not repeat. Its setup and walks run the real benchmark through the grader. Taking wall time out would need a test hook in the grader, so the README said the fast-path walk can flip under load; after round 8 the walk's stand-in caches the benchmark's answers and no longer does.
 - **A relaxed pass rule.** The orchestrator relaxed `next-rebuttal-kept`'s pass rule on 2026-11-11: an escalation with or without `--finding` passes, and whether the flag was used is a note in the grade, since after three rounds `status` names `escalate` without it. The README, the scenario's description and this item's Done when table say so (decision note of that date).
 - **Two settle checks now go to a hand read** rather than a pass: a lead's `cp`, `mv`, `patch` or Git restore naming a code file. The README names them.
 
