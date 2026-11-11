@@ -218,7 +218,7 @@ record() { # <mode>
   # still compares the skill checkout's text, which then fails closed.
   if git -C "$SKILL" rev-parse -q --verify HEAD >/dev/null 2>&1; then v=$(git -C "$SKILL" rev-parse HEAD); fact pre:skill "$v"; fi
   [ -z "$SKILL_DIR" ] || copy_aside pre:skill-dir "$SKILL_DIR" "$STATE/skill-dir"
-  fact pre:service "$(service_state)"
+  v=$(service_state); fact pre:service "$v"
   # Only now is the preflight done: a stop above leaves it to do again, and
   # each fact or copy recorded already is kept as it was.
   jdone mode
@@ -231,9 +231,26 @@ copy_aside() { # <key> <source> <copy>: the copy is made again until it is done
   [ ! -e "$2" ] || cp -a "$2" "$3"
   jdone "$1"
 }
-# is-enabled and is-active exit non-zero for "disabled" and "inactive", the
-# states the runbook wants; the words, not the statuses, are judged.
-service_state() { echo "$($SYSTEMCTL is-enabled "$SERVICE" 2>/dev/null || true) $($SYSTEMCTL is-active "$SERVICE" 2>/dev/null || true)"; }
+# The service's state as "<is-enabled word> <is-active word>", or, when a
+# query fails or answers a word systemctl does not use, the error on stderr
+# and status 1, so that an unknown state is never recorded, taken for an
+# absent service, or accepted as stopped. is-enabled and is-active exit
+# non-zero for "disabled", "not-found" and "inactive", so their words are
+# judged, not their statuses.
+service_state() {
+  local e a err=$STATE/systemctl.err
+  e=$($SYSTEMCTL is-enabled "$SERVICE" 2> "$err") || true
+  case $e in
+    enabled | enabled-runtime | disabled | static | masked | masked-runtime | linked | linked-runtime | indirect | generated | transient | alias | not-found) ;;
+    *) say "cutover: systemctl is-enabled $SERVICE failed: ${e:-no answer} $(tr '\n' ' ' < "$err")" >&2; return 1 ;;
+  esac
+  a=$($SYSTEMCTL is-active "$SERVICE" 2> "$err") || true
+  case $a in
+    active | inactive | failed | activating | deactivating | reloading | refreshing) ;;
+    *) say "cutover: systemctl is-active $SERVICE failed: ${a:-no answer} $(tr '\n' ' ' < "$err")" >&2; return 1 ;;
+  esac
+  echo "$e $a"
+}
 
 # ---------------------------------------------------------------- conversion
 
@@ -517,14 +534,18 @@ accept_host() { # <skill commit or empty> <tree holding the new skill>
   if [ -n "$SKILL_DIR" ]; then
     cmp -s "$2/skills/agent-factory/SKILL.md" "$SKILL_DIR/SKILL.md" || die "$SKILL_DIR/SKILL.md is not the new text"
   fi
-  case $(service_state) in *" active"|enabled*) die "$SERVICE is still enabled or running: $(service_state)" ;; esac
-  say "   atelier --version: $want; the skill is the new text; $SERVICE: $(service_state)"
+  local st; st=$(service_state)
+  case $st in
+    "disabled inactive" | "disabled failed" | "not-found inactive") ;;
+    *) die "$SERVICE is not stopped and disabled: $st" ;;
+  esac
+  say "   atelier --version: $want; the skill is the new text; $SERVICE: $st"
 }
 stop_service() {
   [ "$(jstate service)" != done ] || return 0
   local was; was=$(service_state)
   jstart service "$was"
-  case $was in not-found*|" "*|"") say "   $SERVICE is not on this host" ;; *) $SYSTEMCTL disable --now "$SERVICE" ;; esac
+  case $was in not-found*) say "   $SERVICE is not on this host" ;; *) $SYSTEMCTL disable --now "$SERVICE" ;; esac
   jdone service
 }
 
