@@ -2,7 +2,7 @@
 //! The app's TypeScript types are generated from these with `ts-rs` into
 //! `desk/src/api/`, one file per type.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// `GET /api/repos`.
@@ -85,6 +85,9 @@ pub struct MissionPage {
     /// each of its items, naming the item.
     pub threads: Vec<Agent>,
     pub t3: T3State,
+    /// Answers given from this Desk to its items' questions that no commit
+    /// holds yet.
+    pub pending_answers: Vec<Question>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -230,6 +233,14 @@ pub struct ItemPage {
     /// its answers.
     pub threads: Vec<Agent>,
     pub t3: T3State,
+    /// Whether the human may answer its oldest question now.
+    pub can_decide: bool,
+    /// The checkout with the item's branch out, where `decide` writes;
+    /// `null` when none has it out, and then `decide` is refused.
+    pub decide_at: Option<String>,
+    /// Answers given from this Desk to its questions that no commit holds
+    /// yet.
+    pub pending_answers: Vec<Question>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -280,6 +291,11 @@ pub struct InboxQuestion {
     pub mission: Option<String>,
     pub question: String,
     pub finding: Option<String>,
+    /// Which of the item's decisions it is, so an answer the Desk gave and
+    /// no commit holds yet can leave it out. Not sent.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub index: usize,
 }
 
 /// An identity a record names, in one role, and the live thread it is
@@ -375,6 +391,80 @@ pub enum HoldKind {
     Mission,
 }
 
+/// `POST /api/act`, sent with the header `x-atelier-desk: 1`.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(tag = "act", rename_all = "snake_case")]
+pub enum ActRequest {
+    /// Says go on draft missions or items, as `atelier ready <ids> --by
+    /// <caller>`.
+    Ready(ReadyAct),
+    /// Answers an item's oldest question, as `atelier decide`.
+    Decide(DecideAct),
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReadyAct {
+    pub repo: String,
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DecideAct {
+    pub repo: String,
+    pub id: String,
+    pub answer: String,
+    /// Settles the finding the question is about.
+    #[serde(default)]
+    pub settle: Option<Outcome>,
+}
+
+/// What an act did, or why it was refused, as the core's function gave it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum ActResponse {
+    Done {
+        text: String,
+        paths: Vec<String>,
+        /// The commit `ready` made; `null` for `decide`, whose answer the
+        /// implementer's `submit` commits.
+        commit: Option<String>,
+    },
+    Refused {
+        /// The rules it broke, one line each; empty when no rule refused
+        /// it.
+        rules: Vec<String>,
+        text: String,
+        /// The way out, where the function names one.
+        next: Option<String>,
+    },
+}
+
+/// `POST /api/sessions`, sent with the header `x-atelier-desk: 1`: start a
+/// planning session for `mission` as a new T3 Code thread.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SessionRequest {
+    pub repo: String,
+    pub mission: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum SessionResponse {
+    /// The thread T3 Code started.
+    Started {
+        thread_id: String,
+        /// Its address in T3 Code's web app, when T3 Code gives one.
+        link: Option<String>,
+        /// The T3 project it runs in.
+        project_id: String,
+    },
+    /// Nothing was started, and why.
+    Refused { text: String },
+}
+
 /// The body of every response that is not a 200.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct ApiError {
@@ -385,10 +475,19 @@ pub struct ApiError {
 /// conversion from it, so the app gets a union of its names.
 macro_rules! named {
     ($name:ident, $core:path, $($variant:ident),+) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
         #[serde(rename_all = "snake_case")]
         pub enum $name {
             $($variant),+
+        }
+
+        impl From<$name> for $core {
+            fn from(value: $name) -> Self {
+                use $core as Core;
+                match value {
+                    $($name::$variant => Core::$variant),+
+                }
+            }
         }
 
         impl From<$core> for $name {
@@ -453,6 +552,10 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     ItemPage::export_all(&config)?;
     InboxResponse::export_all(&config)?;
     ThreadsResponse::export_all(&config)?;
+    ActRequest::export_all(&config)?;
+    ActResponse::export_all(&config)?;
+    SessionRequest::export_all(&config)?;
+    SessionResponse::export_all(&config)?;
     ApiError::export_all(&config)?;
     // ts-rs ends some lines with a space; strip them so the committed files
     // pass `git diff --check`.

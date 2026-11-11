@@ -4,7 +4,8 @@
 
 use crate::api::{Agent, Hold, LiveThread, PullRequest, T3State, ThreadMark};
 use crate::config::T3Config;
-use crate::t3::{self, Client, T3Thread};
+use crate::t3::{self, Client, T3Project, T3Thread};
+use anyhow::{bail, Result};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -98,6 +99,15 @@ impl Threads {
             },
             threads,
         }
+    }
+
+    /// T3 Code's projects, read with the token that only reads.
+    pub fn projects(&self) -> Result<Vec<T3Project>> {
+        let Some(client) = &self.client else {
+            bail!("T3 Code is not configured: the Desk's configuration has no [t3] table");
+        };
+        let projects = client.lock().unwrap().projects();
+        projects
     }
 
     /// Revokes the token held.

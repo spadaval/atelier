@@ -1,13 +1,16 @@
 //! The Desk's server (docs/architecture/desk.md): the reading routes as
 //! JSON, read from commits through `atelier-app`'s views; T3 Code's live
-//! threads, joined to the records; and the built app's files. It reads no
-//! working tree's records, and runs no binary but the configured `t3`
-//! command, for a token.
+//! threads, joined to the records; the acts `ready` and `decide`, made by
+//! `atelier-app`'s own functions; planning sessions started in T3 Code;
+//! and the built app's files. Its pages read no working tree's records, and
+//! it runs no binary but the configured `t3` command, for a token.
 
+pub mod acts;
 pub mod api;
 pub mod config;
 mod read;
 pub mod server;
+mod sessions;
 pub mod t3;
 pub mod threads;
 

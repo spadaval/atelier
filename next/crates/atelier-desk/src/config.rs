@@ -29,7 +29,7 @@ pub struct Config {
     pub t3: Option<T3Config>,
 }
 
-/// The `[t3]` table: both keys are needed.
+/// The `[t3]` table: `command` and `url` are needed.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct T3Config {
@@ -37,6 +37,18 @@ pub struct T3Config {
     pub command: PathBuf,
     /// T3 Code's MCP server, such as `http://127.0.0.1:3773/mcp`.
     pub url: String,
+    /// The first message of a planning session's thread, with `{mission}`
+    /// and `{repo}` replaced by the mission's ID and the repository's name.
+    #[serde(default = "session_message")]
+    pub session_message: String,
+}
+
+/// The first message of a planning session when the configuration gives
+/// none.
+pub const SESSION_MESSAGE: &str = "Start a planning session for mission {mission} in this repository ({repo}). Load the Agent Factory skill (/agent-factory) and use its `plan` procedure on {mission}: read the mission and its documents, then work with me on its plan until it is ready for me to say go.";
+
+fn session_message() -> String {
+    SESSION_MESSAGE.to_string()
 }
 
 pub const DEFAULT_PORT: u16 = 3780;
@@ -164,6 +176,13 @@ mod tests {
         let t3 = Config::load(&path).unwrap().t3.unwrap();
         assert_eq!(t3.command, home.join("t3"));
         assert_eq!(t3.url, "http://127.0.0.1:3773/mcp");
+        assert_eq!(t3.session_message, SESSION_MESSAGE);
+        let own = "[t3]\ncommand = \"t3\"\nurl = \"u\"\nsession_message = \"Plan {mission}.\"\n";
+        std::fs::write(&path, format!("caller = \"s\"\nroots = [\"r\"]\n{own}")).unwrap();
+        assert_eq!(
+            Config::load(&path).unwrap().t3.unwrap().session_message,
+            "Plan {mission}."
+        );
         let half = "caller = \"s\"\nroots = [\"r\"]\n[t3]\nurl = \"http://127.0.0.1:1/mcp\"\n";
         std::fs::write(&path, half).unwrap();
         assert!(

@@ -11,8 +11,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The scope that reads threads and can change nothing.
 pub const READ: &str = "orchestration:read";
+/// The scope that may start a thread, asked for only to start one.
+pub const OPERATE: &str = "orchestration:operate";
 /// The statuses of a thread that is still at work.
 pub const LIVE: [&str; 5] = ["preparing", "queued", "starting", "running", "waiting"];
+/// How long a token lasts unless [`Client::lasting`] says otherwise.
 const TTL: &str = "1h";
 /// A token this many seconds from its expiry is replaced before use.
 const MARGIN: i64 = 120;
@@ -22,6 +25,7 @@ pub struct Client {
     command: PathBuf,
     url: String,
     scope: String,
+    ttl: &'static str,
     agent: ureq::Agent,
     token: Option<Token>,
     /// The MCP session `initialize` opened with the current token.
@@ -76,6 +80,33 @@ pub struct T3PullRequest {
     pub state: Option<String>,
 }
 
+/// One project as `t3_project_list` gives it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct T3Project {
+    pub id: String,
+    pub workspace_root: String,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectPage {
+    projects: Vec<T3Project>,
+    next_cursor: Option<u64>,
+}
+
+/// What `t3_thread_launch` gives for the thread it started.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Launched {
+    pub thread_id: String,
+    #[serde(default)]
+    pub link: Option<String>,
+    pub project_id: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ListPage {
@@ -106,12 +137,58 @@ impl Client {
             command,
             url,
             scope: scope.to_string(),
+            ttl: TTL,
             agent,
             token: None,
             session: None,
             next_id: 0,
             closed: false,
         }
+    }
+
+    /// Tokens this client issues last `ttl`, such as `5m`, instead of an
+    /// hour.
+    pub fn lasting(mut self, ttl: &'static str) -> Client {
+        self.ttl = ttl;
+        self
+    }
+
+    /// Every project T3 Code has that is not deleted.
+    pub fn projects(&mut self) -> Result<Vec<T3Project>> {
+        let mut projects = Vec::new();
+        let mut cursor = 0;
+        loop {
+            let arguments = json!({ "cursor": cursor, "limit": 100 });
+            let page: ProjectPage =
+                serde_json::from_value(self.call("t3_project_list", arguments)?)
+                    .context("t3_project_list answered in a shape the Desk does not read")?;
+            let empty = page.projects.is_empty();
+            projects.extend(page.projects.into_iter().filter(|p| p.deleted_at.is_none()));
+            match page.next_cursor {
+                Some(next) if !empty => cursor = next,
+                _ => return Ok(projects),
+            }
+        }
+    }
+
+    /// Starts a thread titled `title` in the checkout of project `project`
+    /// with `message` as its first message. `request` names this launch, so
+    /// that a retry of it starts no second thread.
+    pub fn launch(
+        &mut self,
+        project: &str,
+        title: &str,
+        message: &str,
+        request: &str,
+    ) -> Result<Launched> {
+        let arguments = json!({
+            "projectId": project,
+            "title": title,
+            "message": message,
+            "clientRequestId": request,
+        });
+        serde_json::from_value(self.call("t3_thread_launch", arguments)?)
+            .context("t3_thread_launch answered in a shape the Desk does not read")
     }
 
     /// T3 Code's live threads that have not been settled, in every project
@@ -280,7 +357,7 @@ impl Client {
     fn issue(&self) -> Result<Token> {
         let output = Command::new(&self.command)
             .args(["auth", "session", "issue", "--subject", "mcp-client"])
-            .args(["--scope", &self.scope, "--ttl", TTL])
+            .args(["--scope", &self.scope, "--ttl", self.ttl])
             .args(["--label", "atelier-desk", "--json"])
             .stdin(Stdio::null())
             .output()
