@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-11-09: amended at Sumeet's direction: the switch deletes the old workspace whole and moves the new one into place"
+last_changed: "2026-11-11: amended at Sumeet's direction: the site is deleted with the old workspace and not rebuilt; the Desk (atelier-z4cr, ADR 0032) replaces it outside this mission"
 ---
 
 # Why
@@ -20,7 +20,7 @@ run since.
 On this host, atelier, astromech, demiurge, life-on-rails and cosplay-studio
 run on the new records and the new binary. Agent Factory is rewritten against
 the new tool, and each procedure it keeps has an eval scenario it changed.
-The site reads the new records. The old workspace is deleted. The old docs and the ADRs are replaced by the
+The old workspace is deleted, and the site with it. The new binary has no `serve`. The old docs and the ADRs are replaced by the
 design record. Sumeet has a runbook to convert his work host.
 
 # Success Criteria
@@ -39,8 +39,8 @@ design record. Sumeet has a runbook to convert his work host.
 
 # Sizing
 
-- Complexity: medium. The steps are known; the skill rewrite, its evals and
-  the site are the large parts.
+- Complexity: medium. The steps are known; the skill rewrite and its evals
+  are the large parts.
 - Value: high. Nothing in the redesign helps until it is in use.
 - Risk: medium. A bad cutover stops work in five repositories, shows at once,
   and has a rehearsed undo for each place it can stop.
@@ -52,7 +52,7 @@ June system again: 31% of the Rust ever written here survives.
 
 - **Prepared by ordinary items, run from a runbook.** Everything that needs
   judgment is reviewed and merged under the old tool before the cutover: the
-  skill, the site, the switch of the binary, the new `AGENTS.md` text and
+  skill, the switch of the binary, the new `AGENTS.md` text and
   the replacement CI workflows. The
   cutover itself only runs a reviewed script, so it needs no review while it
   runs and neither tool has to gate a change it cannot read.
@@ -80,7 +80,7 @@ protocol is the Transition section of the
 | B. Evals | Port the scenarios to the new binary. Add a no-skill arm and a Codex arm. Cut each procedure no scenario supports. |
 | C. Backlog sort | Sort the 147 open items and five open missions: converted as they are, rewritten for the new tool, or dropped as obsolete, with the list in the report. |
 | D. Fallback release | Fix the old tool's fallback release: 0.4.0 if it checks this repository's records and serves the site, otherwise a new 0.4.1. |
-| E. Site | Rebuild the site on the new records in the new workspace, served by the new binary's `serve`, with its web tests passing. |
+| E. Site | Take the site out: nothing in `next/` builds or serves one, the new binary has no `serve`, and the web jobs and the Node build step leave CI and the release. The old site goes with the old workspace at the switch. The Desk replaces it in its own mission (atelier-z4cr, [ADR 0032](../adr/0032-the-desk-is-the-humans-product.md)), which this mission does not wait for. |
 | F. Switch | Delete the old workspace, `crates/`, with all its tests, and move the new one from `next/` to the repository root. Add the runbook, the new `AGENTS.md` texts, the replacement CI workflows and CI's two-way `check` step. Try the rollback on scratch clones at each stopping point. |
 | G. Cutover | Run the runbook on this host. The item is never started; it is closed on the base at the end. |
 | H. First work | Run one item in atelier and one in a product repository. Fix what first use breaks. Remove the fallback branch of CI's `check` step. |
@@ -103,11 +103,13 @@ wrong in: text can be added back when a real failure shows the need.
 
 # Scope
 
-- In: the skill, its evals, the backlog sort, the fallback release, the
-  site, the switch, the cutover on this host, first use, and the docs.
+- In: the skill, its evals, the backlog sort, the fallback release, taking
+  the site out, the switch, the cutover on this host, first use, and the
+  docs.
 - Out: the work host, which Sumeet converts with the runbook; the gardener,
   groom and audit procedures, which mission 4 rewrites and which are carried
-  over unchanged except for command names; new site features; new scenarios
+  over unchanged except for command names; the Desk, which is mission
+  atelier-z4cr; new scenarios
   beyond those needed to judge the kept procedures.
 - Target environment: this host; Claude Opus and a Codex model for the evals.
 
@@ -127,6 +129,10 @@ Lifecycle or Review sections, or touch the work host.
 specifications do not name is escalated, not fixed in place.
 
 # Risks and Unknowns
+
+- **No brief or debrief page for a while.** From the cutover until the
+  Desk's mission page is live, Sumeet reads a mission with `atelier show
+  <mission>` and its files. Step H's first work runs in that gap.
 
 - **Work in flight at the cutover.** A branch not merged or abandoned before
   conversion loses its reviews. The runbook's first step stops while any

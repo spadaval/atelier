@@ -24,9 +24,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "backlog"
+closed_at: "2026-11-11T02:18:52.844475956+00:00"
+status: "superseded"
 title: "Show each item's T3 threads, roles, models and live status on the site"
-updated_at: "2026-11-09T01:04:28.942057171+00:00"
+updated_at: "2026-11-11T02:18:52.844475956+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,7 @@ Show who is working on what: the site's item, repository and inbox pages show ea
 ## Unknowns
 
 - How to read T3; settled by the T3 read spike. Make this item ready after the spike, the serve item and the attribution item land.
+
+## Report
+
+Folded into the Desk mission atelier-z4cr: its item atelier-e05n shows each item's threads from T3 Code's MCP server (ADR 0032)

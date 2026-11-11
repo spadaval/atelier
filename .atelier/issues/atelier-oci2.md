@@ -25,22 +25,19 @@ relationships:
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
-title: "Rebuild the site on the new records, in the new workspace"
+title: "Take the site out of the new workspace: no serve, no web build, and the old site goes at the switch"
 updated_at: "2026-11-10T04:45:25.381737978+00:00"
 ---
 
 ## Goal
 
-Keep the dashboard working across the layout change by rebuilding the site on the new records, in the new workspace, before the old one is deleted.
+Take the site off the cutover's path. The human's pages become a product of their own, the Desk (ADR 0032, mission atelier-z4cr), so the new workspace neither builds nor serves a site and the old one is deleted with the old workspace instead of being ported.
 
 ## Done when
 
-- [ ] Provisional: the site's loader reads the three record kinds, its responses drop what the new model lacks, and its fixtures are regenerated in the new layout. The site crate and its web app are copied into the new workspace; the new binary's `serve` serves it, and the web typecheck, unit and Playwright jobs run against it and pass. The old workspace's site is not changed.
+- [ ] Provisional: nothing in `next/` builds or serves a site: there is no `atelier-site` crate and no `serve` command, and `--help` lists neither. The web typecheck, unit and Playwright jobs and the Node build step are gone from the CI and release workflows that the switch puts in place. The old workspace's site is not changed before the switch.
+- [ ] Provisional: no instruction in the new skill or in the `AGENTS.md` texts the cutover installs tells an agent to send the human a site page; a mission is read with `atelier show <mission>` until the Desk's mission page is live.
 
 ## Context
 
-Preliminary. This step is planned in full at its boundary, with one planning review, as `docs/strategies/redesign-3-cutover.md` says. Target design: `docs/strategies/redesign-product.md` and `docs/strategies/redesign-architecture.md`, Site.
-
-## Unknowns
-
-- How much of the brief and debrief view code survives; settled by reading the site's code when this step is planned.
+Preliminary. This step is planned in full at its boundary, with one planning review, as `docs/strategies/redesign-3-cutover.md` says. Changed on 2026-11-11 at Sumeet's direction: it was "rebuild the site on the new records", and porting the old site would have spent the cutover's time on pages the Desk replaces. Target design: `docs/strategies/redesign-architecture.md`, Site.
