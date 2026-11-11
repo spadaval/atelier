@@ -23,14 +23,15 @@ updated_at: "2026-11-07T21:03:26.730432682+00:00"
 
 ## Goal
 
-A successful `atelier start` (crates/atelier-cli/src/commands/start.rs) prints the Git command, `Recorded workflow_branch on <id>: <branch> (base main)`, `Status`, `Branch`, `Base` and the static line "Commit the record changes with the work they describe." It never says what the work is: no title, Done when or mission, though implementing and ticking every Done when line is the next step. `-q` has no defined output. Agents cut out the line they need: `atelier start X 2>&1 | grep Branch` ran 29 times and `| tail -N` 43 times.
+A successful `atelier start` prints the item's title, status and unticked Done when lines, but not the mission the item belongs to (checked 2026-11-11 with the new binary in a converted scratch clone).
 
 ## Done when
 
-- [ ] Success output starts `Started atelier-f0rr "Title" on atelier-f0rr (from master)`, followed by the Done when text (up to about 6 lines), then `Mission: atelier-1w8c "…"` (direct or via parent), then the existing needs-human notes.
-- [ ] `atelier -q start <id>` prints only the branch name.
-- [ ] CLI tests cover the default output, a child of a parent, and `-q`.
+- [ ] Success output names the item's mission, `Mission: atelier-1w8c "…"`, when it has one.
+- [ ] CLI tests cover an item in a mission and one in none.
 
 ## Context
 
 Dropped in decision atelier-mzpn: a warning when the recorded base differs from the policy base, since atelier-md0v reads the base from the policy everywhere and `start --base` is hidden and ignored.
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): the new `start` already prints the title and Done when; `-q` went, since the new tool has no quiet form and the branch is named for the item, and the child-of-a-parent case went with parents.

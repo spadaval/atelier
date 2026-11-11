@@ -23,11 +23,12 @@ updated_at: "2026-10-17T01:10:57.962045771+00:00"
 
 ## Goal
 
-The `issue create` confirmation (`crates/atelier-cli/src/commands/issue.rs:667-699`) prints `Created issue atelier-xmtr - Title`, Type, Priority and the file path, and never shows status, labels, size or mission. With `--parent` it prints only `Created subissue X under Y`, without Type, Priority or the parent's title. The footer is four generic actions ("Edit issue Markdown", "Validate this issue", "Inspect this issue", "Inspect tracked work transitions"). It never suggests the actual next step: `atelier start <id>`, or linking the item to a mission. A failed `--parent <mission>` error names an ID that was allocated but never written: `issue atelier-mzcf cannot be child of mission atelier-1w8c`.
+`atelier new "Title"` confirms `Created draft item atelier-4d3x, with empty Goal, Done when and Scope sections to write.`, the file it wrote and the next steps, but never the title or priority it wrote (checked 2026-11-11 with the new binary in a converted scratch clone).
 
 ## Done when
 
-- [ ] The confirmation is one dense block: `Created atelier-xxxx task todo medium "Title"`, then labels/size when set, `Parent: <id> "<title>"` when set, and the file path.
-- [ ] Next steps come from state. Ready work suggests `atelier start <id>`. Non-mission work with no mission suggests `atelier issue link <id> <mission-id> --role advances` (with the real mission ID when exactly one mission is open). The generic four-item menu is gone.
-- [ ] Validation errors raised before the write don't name the unpersisted ID.
-- [ ] CLI tests cover plain, `--parent` and `--status backlog` output.
+- [ ] The confirmation names the item's title and priority with its ID, e.g. `Created draft item atelier-xxxx, medium: "Title"`; a CLI test covers it.
+
+## Context
+
+Rewritten for the new tool in the cutover sort (atelier-5zre): `issue create` became `new`. The new `new` already names the status and the next step (`ready`, then a commit), so those parts left; `--parent`, the type and the unpersisted-ID error went with parents, types and the old command.
