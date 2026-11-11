@@ -191,11 +191,10 @@ class. Both approved correctly, and both implementers merged.
 
 No thread set `ATELIER_SKIP`, and no thread ran `atelier escalate`. Every
 implementer read the escalate option in its first `status`; none took it.
-Only one run, ef26, saw the skip offer. Its failure was an error, not a
-refusal, and an error has no skip line, so it never saw the offer. These
-runs show that the offer and the third exit do not draw agents off a path
-that works. They do not show how an agent reads a refusal that offers the
-skip.
+No run saw the skip offer: the one failed call, in ef26, was an error, and
+an error carries no skip line. So these runs show that the third exit,
+`escalate`, did not draw agents off a path that works. They show nothing
+about how an agent reads the skip offer.
 
 ## What the commands print now
 
