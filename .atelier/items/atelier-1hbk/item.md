@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-1hbk
 title: Name every part a collapsed debrief entry hides
-status: draft
+status: dropped
 mission: null
 labels:
 - review
@@ -33,3 +33,7 @@ Found by the S7 agent re-review of atelier-vt8q's debrief at 7518f516 (FOLLOW-UP
 Relationships of the old record that the new format has no field for.
 
 - discovered_from: atelier-lfs7 (Agent-review a real mission's HTML debrief)
+
+## Report
+
+Dropped: The `debrief` command and the site page it rendered were deleted in 0.5; the Desk's mission page is a new implementation.
