@@ -1,63 +1,176 @@
 # Garden
 
-Use this subskill to tend the conditions agents work in: find where agents trip
-and fix the ground. Change how agents work here (code structure without
-behaviour change, checks, docs, error and help text, skills, tooling), not what
-the product does. A fix that would change the product (as when a repository
-builds the tools agents trip on) or the host's setup is a recommendation; send a
-product question to the plan's owner as an item. You do the bulk reading and
-routine upkeep, and bring the human, who gardens too, the rest.
+A run measures one repository, fixes what it may, and brings Sumeet one page
+with at most three proposals, which you settle with him in a session. It
+changes nothing on another item's branch.
 
-A run covers one repository and never touches a branch in flight. Its window
-starts where the last run's ended, as the latest digest (label `garden`) records
-it, or 7 days back if none does. Read agent
-transcripts except gardener runs, other
-repositories' too where they trip on the same tool, review findings, reverts,
-refused checks and failed CI runs, and the code and docs agents read: dead code,
-residue of finished migrations, docs the code contradicts, broken links, and the
-verify skill where agents tripped on it.
+## 1. Open the Run
 
-A trip is where an agent went wrong or wasted effort: a misread refusal, a rule
-broken or worked around, a retry loop, a kind of mistake review keeps catching
-(a refusal followed, or one finding fixed, is a gate working). A trip seen in
-transcripts earns a new rule, check or gate only once it has happened at least
-twice in the last 30 days; mess found by reading the code needs no repeat.
+On the base, `atelier new "Garden <repo>, <YYYY-MM-DD>"` and `atelier set <id>
+--labels garden`. In the item, give the window's start (step 2) in the Goal,
+and write these Done when lines, which the run's reviewer checks:
 
-## Fixing at the Right Level
+```markdown
+- [ ] The numbers follow garden.md's steps, and `artifacts/numbers.md` holds the log lines behind them.
+- [ ] At most three proposals, each one cause with its evidence counted; one that adds a rule or check names one considered for removal.
+- [ ] Every change on the branch is upkeep or a sign: none adds or removes a rule, check, gate, interface or default.
+- [ ] Each finding `atelier list --deferred` showed is settled.
+- [ ] The page follows garden.md's template in at most 60 lines, with Session empty.
+```
 
-Fix each trip at the highest level that works: architecture that makes it
-impossible, then a check, then a sign where the agent trips (an error message or
-help text, before a rule in a distant doc). Guardrails are nudges: a better
-default or message comes before a new gate. Removing a rule whose mistake can no
-longer happen counts as much as adding one, so look for those too.
+Commit the draft with `git commit`, then `atelier ready <id> --by "<who asked
+for the run>"`, `git push`, and `atelier start <id>`.
 
-Routine upkeep is a change whose correctness is evident from the diff, that adds
-or removes no rule, check, gate, interface or default, in at most about 100
-changed lines: deleting dead code or a finished migration's residue, fixing a
-doc line the code contradicts or a broken link. Make it on one branch, reviewed
-and merged like any change, in at most one pull request per run. Everything else
-is a recommendation, as is anything you are unsure of: a new check, a removed
-rule, reworded guidance or messages, a changed default, a restructure.
+## 2. Take the Numbers
 
-## The Digest
+**The window.** It starts at the end the last run's page gives: the newest
+item labelled `garden`, merged or still waiting for its session (`atelier
+list --label garden`, `atelier list --done --label garden`). A first run starts
+at the time on the first line `atelier log` prints. It ends when you take the
+numbers: run `date -u +%Y-%m-%dT%H:%M:%SZ` once and use that time for every
+number. Log times compare as text.
 
-File one digest per run and repository (`atelier new "Garden <repo>: <n>
-recommendations"`, then `atelier set <id> --labels needs-human,garden`), or add
-to the open one while any entry is unanswered, and record the run's window in
-its Goal; a run with no entries files one that says "no entries" and closes it
-(`atelier close <id> "no entries"`). Its Goal asks which entries go ahead, and
-gives each as `### R1 <title>`: the trip and
-how often it happened, its evidence (sessions and events, or paths and lines),
-the fix and its level (architecture, check, sign or removal), its size (lines,
-and complexity, value and risk) and the alternatives, including leaving it.
+**The items.** An item is the run's when its `merge` line is after the start
+and at or before the end: `atelier log | awk -v s=<start> -v e=<end> '$4 ==
+"merge" && $1 > s && $1 <= e {print $3}'`. For each, read all of `atelier log
+<id>`, its lines before the window too, and copy them into `numbers.md`.
 
-The human answers each entry in conversation or in the digest's body, and the
-agent writes the answer under its entry: do it, do it differently, or no. Start
-each run with those answers: file each accepted entry as an item, or point it
-at the item that already holds it, planned and reviewed as
-[roles/planner.md](../roles/planner.md) says; propose a
-declined one again only with new evidence, and name that. Once every entry is
-answered and filed, close the digest (`atelier close <id> "<outcome>"`).
-Report the window, the trips, the
-routine fixes merged, the recommendations, and the rules and checks added and
-removed.
+- **Time in each status.** A line holding `<from> -> <to>` puts the item in
+  `<to>` at its time, until the next such line. Sum the seconds in `ready`
+  (waiting to start), `building`, `in_review`, `changes_requested` and
+  `approved`, then give whole minutes, halves rounded up. A status never
+  reached is 0.
+- **Rounds** are its `submit` lines, **take-overs** its `take-over` lines and
+  **escalations** its `escalate` lines.
+- **Skips** are its `skip <rule>: <reason>` parts. The rule is the text after
+  `skip ` up to the first ` (` or `: `.
+
+Across the items, give each status's time and the rounds as a median, the
+mean of the middle two when the count is even, and take-overs, escalations
+and each rule's skips as a total. Name the item with the most beside each;
+on a tie, the one merged first.
+
+From `atelier list`, count open items by status (`atelier list | grep -oE '^
++[^ ]+ \([a-z_]+' | awk '{print $2}' | sort | uniq -c`), blocked items
+(`atelier list --blocked`, counted the same way) and unsettled deferred
+findings (the `<item>/<finding>:` lines of `atelier list --deferred`).
+
+Carry every other Scorecard measure in `docs/product.md` from the last page,
+with the date it was measured. Take no snapshot and run nothing in
+`scripts/scorecard/`. Compare with the last run's page. A first run compares
+with the November 2026 baseline where it covers the repository, and carries
+its measures dated 2026-11-10:
+`docs/architecture/quality/scorecard-baseline-2026-11.md` in atelier.
+
+Worked example, from atelier's log. atelier-ivbq's lines read `15:43:38
+ready draft -> ready`, `15:43:57 start ready -> building`, `15:56:52 submit
+building -> in_review`, `16:00:25 verdict ... in_review -> changes_requested`,
+`16:03:26 submit changes_requested -> in_review`, `16:05:39 verdict ...
+in_review -> approved` and `16:06:11 merge approved -> done`. Waiting is 19 s
+(0 minutes), building 12:55 (13), in review 3:33 + 2:13 (6), changes
+requested 3:01 (3), approved 0:32 (1), and rounds 2. A first run whose
+numbers were taken at 2026-11-11T16:30:00Z counts atelier-2mlh and
+atelier-ivbq. atelier-6w8d merged at 16:47:06 while that run waited for its
+session, so the next run, whose window starts at 16:30:00Z, counts it.
+
+## 3. Run the Checklist
+
+Check [readiness.md](readiness.md) as it says, and record each line as met,
+not met or could not test in `artifacts/checklist.md`.
+
+## 4. Read for Causes
+
+Read the window's fix-now findings, escalations and skips, the base's failed
+CI runs, and the code against its docs: a doc the code contradicts, and
+half-finished work, such as old and new paths with no clear boundary, a
+migration that reached only some call sites, tests that keep a stale
+assumption, or a done item's cleanup with no owner.
+
+Read transcripts last. Read a thread only to explain a number that moved
+since the last page, or an item named worst beside one, naming the thread by
+the ID its log line gives; under T3 Code, read it with the thread-read tool. For
+navigation, read at most three implementer threads, those of the items
+longest in `building`, up to their first edit, and list the files each read.
+
+A trip is where an agent went wrong or wasted effort: a misread refusal, a
+rule worked around, a retry loop, a mistake review keeps catching. Group the
+trips and the numbers by cause before you write anything, and bring at most
+three causes as proposals. A proposal that adds a rule or check names one
+you considered removing. Leave out a trip that fits no cause and happened
+once. Something broken today, such as a command that fails or an error that
+hides its reason, you file on the base as an item, with `atelier set <id>
+--labels bug --caused-by <item or commit>`, and it takes no room on the page.
+
+The worst spots, one or two under each property:
+
+- **Easy to navigate:** the files your three threads read most before their
+  first edit, said to be a sample. With no item merged in the window, the
+  checklist's navigation lines instead.
+- **Easy and reliable to change:** the files the window's fix-now findings
+  name most. Carry the rework share with its date and say rework by file is
+  not measured; never rank files by how much they changed.
+- **Easy to validate:** features the verify skill gives no proof command for,
+  and the window's bug items with their `caused_by`.
+
+Where a property cannot be shown yet, say why in one line.
+
+## 5. Fix What the Run May Fix
+
+On the run's branch, reviewed with the run, make two kinds of change: upkeep
+whose correctness is evident from the diff (dead code, a finished
+migration's residue, a doc line the code contradicts, a broken link), and a
+fix to a sign an agent reads where it trips (a line of `AGENTS.md`, a doc, a
+skill, a script's message). Neither adds nor removes a rule, check, gate,
+interface or default. A new or removed rule or check, a changed default, a
+restructure, or any change to what the product does is a proposal.
+
+Settle each finding `atelier list --deferred` shows, on the branch: `atelier
+new "<title>" --from <finding>` to take it into an item, or `atelier drop
+<finding> --reason "<why>"`.
+
+## 6. Write the Page
+
+The page is the run item's `## Report`, at most 60 lines, in this layout.
+Workings go in `artifacts/`, and the page names the file.
+
+```markdown
+Window: <start> to <end> UTC, <n> items merged. Workings: `artifacts/numbers.md`.
+
+| Measure | This run | Last run | Baseline |
+| --- | --- | --- | --- |
+| Waiting to start, building, in review, changes requested, approved: median minutes (worst) | | | |
+| Rounds: median (worst); take-overs; escalations; skips by rule | | | |
+| Open items by status; blocked; unsettled deferred findings | | | |
+| <each carried measure>, measured <date> | | | |
+
+Checklist: <n> met, <n> not met (<lines>), <n> could not test.
+
+### Worst Spots
+- Navigate: ...
+- Change: ...
+- Validate: ...
+
+### Proposals
+#### P1 <the change, in a few words>
+Cause: <one root cause>. Evidence: <trip or number>, <how often>; ...
+Moves: <the number>. Change: <what to do>. Considered removing: <rule or check>.
+
+### Fixed and Settled
+- <commit>: <upkeep or sign>. <finding>: taken into <item>, or dropped: <why>.
+
+### Session
+```
+
+A proposal the last page left open is brought once more, as one of the
+three, marked carried; after that it is left out. No line asks for an answer
+per trip.
+
+## 7. Submit and Hold the Session
+
+Run `atelier submit` and start the reviewer it prints. Once approved, the run
+waits for Sumeet, and `atelier status` shows since when. The session is with
+him, in whichever thread he talks to; a new thread takes the run over with
+`atelier start <id>`. Under Session write, for each proposal, what he agreed,
+changed or declined. File each agreed one as an item on the base, commit it
+and push. Editing the Report keeps the approval; any other change needs
+`atelier submit` again. Then run `atelier merge`.
