@@ -243,13 +243,23 @@ Answer each finding with one line under `### Responses` in the Report, ...
 Then: atelier submit
 ```
 
-It lists only what is not met: a finding already answered is not shown. It
+It lists only what is not met: a finding already answered is not shown. A
+Done when line that wraps over several lines of the record is shown whole. It
 gives the round of an item in review or with changes requested, and once
 three rounds have ended without an approval it says, on one line, that the
-Review section requires escalation now, naming `atelier escalate`. On
+Review section requires escalation now, naming `atelier escalate
+--finding <finding>` with an open fix-now finding no question is about yet.
+Once a question has been asked about each open finding, the line is gone. On
 an approved item it names, before `Then: atelier merge`, the merge checks the
 base's `config.toml` lists, which `merge` runs on the merged tree. It does not
 say when they last passed, since nothing records that.
+
+On an item's branch, a thread that holds nothing on the item is told each of
+its unanswered questions, and `Then: atelier decide <id> "<answer>"` when it
+may decide them, before the offer to take the item over. The lead of the
+item's mission is told it leads the mission and is offered no take-over. In
+a Git checkout with no `.atelier/`, `status` says this is not an Atelier
+repository and exits 2.
 
 A thread that runs another role's command gets one line back and no change:
 "You are the reviewer of atelier-06jc. Reviewers run `review` and `verdict`."
@@ -259,17 +269,20 @@ A thread that runs another role's command gets one line back and no change:
 Atelier never starts an agent. Whoever holds the status starts the next thread
 with the harness's own tool, using a line the tool prints:
 
-- `submit` prints: "A reviewer must be a thread other than yours. Under Codex
-  a subagent you start is one; under Claude Code a subagent runs as your
-  thread and is refused, so use your harness's tool for a new agent thread.
-  Start one with fresh context, not as a fork of yours, and give it this
-  task: Run atelier review atelier-06jc and follow what it prints. Then wait
-  for its verdict, and run `atelier status`." A Claude Code subagent carries
-  its parent's identity, so it cannot review its parent's item; a Codex
-  subagent has one of its own ([architecture, Threads and
-  roles](redesign-architecture.md#threads-and-roles)). The task has no
-  backticks, which an agent pasting it into a double-quoted shell argument
-  would run as a command.
+- `submit` prints: "A reviewer must be a thread other than yours. Starting
+  it is part of the work you were given, so start one yourself now, without
+  waiting to be asked. Under Codex a subagent you start is one; under Claude
+  Code a subagent runs as your thread and is refused, so use your harness's
+  tool for a new agent thread. Give it fresh context, not a fork of yours,
+  and give it this task: Run atelier review atelier-06jc and follow what it
+  prints. Then wait for its verdict, and run `atelier status`." A Claude Code
+  subagent carries its parent's identity, so it cannot review its parent's
+  item; a Codex subagent has one of its own ([architecture, Threads and
+  roles](redesign-architecture.md#threads-and-roles)). It says to start the
+  thread unasked because, told less, Codex threads stopped to wait for their
+  user's word before starting a subagent (atelier-t747). The line and its
+  task have no backticks, which an agent pasting the task into a
+  double-quoted shell argument would run as a command.
 - `escalate` prints the same for a decider, with `show` and `decide`.
 - `lead` prints one, with a `start` task for each item that can start now,
   and the lead's `status` repeats it.
