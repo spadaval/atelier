@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-7yy9
 title: Record which thread, harness, model and role ran each atelier command
-status: ready
+status: dropped
 mission: atelier-bnek
 labels:
 - agent-attribution
@@ -39,3 +39,7 @@ Recording only. No site pages, no T3 lookups, no token usage.
 ## Context
 
 ADR 0030 governs: guard decisions consult only Git, and the CLI only writes this database. No harness puts the model name in the environment, so the site fills it from T3's thread records; T3 links each provider's own session ID to its thread (checked for Claude, Codex and Grok on 2026-11-08). Recording read commands that name an item gives token attribution a start for a reviewer that reads before it writes anything (planning review findings atelier-b9wq and atelier-79wo).
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: dropped with mission atelier-bnek; it names commands and the site removed in 0.5, and attribution would need replanning against the Desk
