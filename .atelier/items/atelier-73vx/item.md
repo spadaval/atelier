@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-73vx
 title: Report work, review outcomes and token cost by model and role
-status: draft
+status: dropped
 mission: atelier-bnek
 labels:
 - agent-attribution
@@ -34,3 +34,7 @@ Compare models by role: a metrics page on the site reports, per provider, model 
 
 - Where usage comes from (a T3 interface or scanning transcripts); settled by spike atelier-aab1.
 - The attribution rule. Starting point: a thread's tokens before its first recorded item go to that first item and its role; after that, each recorded command opens a window that runs to the next; native subagents count toward their parent; `delegate_task` children count by their own rows, else toward the parent's item (planning review finding atelier-b9wq). Make ready after aab1, atelier-7yy9 and atelier-00hl land. May split into usage ingestion, backfill and the page.
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: dropped with mission atelier-bnek; it names commands and the site removed in 0.5, and attribution would need replanning against the Desk
