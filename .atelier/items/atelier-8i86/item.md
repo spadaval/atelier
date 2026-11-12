@@ -224,6 +224,7 @@ G16 atelier-w0su: decline; the skill no longer wants integration branches.
    note that the skill routes around it.
    Size: complexity high (new branch state, a mission-merge gate, a trust model); value low
    (no current path needs it); risk medium (merge gates).
+   Answer, Sumeet 2026-11-11: yes, drop it.
 
 G17 atelier-e95f: decline, not worth its cost. Low confidence.
    Evidence: e95f asks for an ADR and a declarative view format, with the built-in views
@@ -235,6 +236,7 @@ G17 atelier-e95f: decline, not worth its cost. Low confidence.
    Change: `atelier issue transition atelier-e95f decline --reason "..."`.
    Size: complexity high (a public config format, built-in views rebuilt on it); value low
    (no demand cited); risk medium.
+   Answer, Sumeet 2026-11-11: yes, drop it.
 ```
 
 ### Shape
