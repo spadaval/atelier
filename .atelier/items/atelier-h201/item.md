@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-h201
 title: Say in `garden.md` and `readiness.md` what four first runs each had to guess
-status: draft
+status: dropped
 mission: null
 labels:
 - redesign
@@ -42,3 +42,7 @@ Out: a command or script that takes the numbers or runs the checklist; any chang
 ## Context
 
 The gardeners' full lists are in the Report of atelier-613a. atelier-f6dv (pull request 149) fixed what atelier's own run, the trial, showed. Mission: atelier-295u.
+
+## Report
+
+Dropped: Folded into atelier-wb05, which rewrites garden.md and readiness.md and carries each of its gaps in a Done when line
