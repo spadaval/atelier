@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-y0qe
 title: Say in the skill which roles work with the human (plan, garden, groom, spike) and which run unattended
-status: draft
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -42,3 +42,7 @@ Sumeet's direction, 2026-11-10, in conversation while reviewing the deck spike (
 ## Unknowns
 
 - Whether `decide` and `install` belong with the human. Sumeet named `plan`, `garden` and `groom`; these two also end in a human's answer.
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: SKILL.md's 'Who Works With Sumeet' covers the roles; the spike procedure that was left is not wanted now
