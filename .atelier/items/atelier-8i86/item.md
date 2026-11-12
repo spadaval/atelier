@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-8i86
 title: 'Groom whole backlog: 21 proposals'
-status: ready
+status: done
 mission: null
 labels:
 - groom
@@ -289,3 +289,7 @@ G21 atelier-sl01: rewrite it to the half that remains.
 ```
 
 Entries by kind: sequence 10 (G1-G10), not doing 7 (G11-G17), shape 4 (G18-G21).
+
+## Report
+
+All 21 entries are settled: G16 and G17 dropped on Sumeet's answer of 2026-11-11, and the other 19 were applied or made moot by the 0.5 cutover and the sweep that followed it.
