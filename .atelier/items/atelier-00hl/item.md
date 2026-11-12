@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-00hl
 title: Name the reviewer's provider and model in structured fields on review records
-status: ready
+status: dropped
 mission: atelier-bnek
 labels:
 - agent-attribution
@@ -37,3 +37,7 @@ The harness variables are in the attribution item and the strategy. Independence
 ## Unknowns
 
 - Whether the model can be learned in-process for Claude and Codex at all; if not, the flag and the site's T3 lookup carry it.
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: dropped with mission atelier-bnek; it names commands and the site removed in 0.5, and attribution would need replanning against the Desk
