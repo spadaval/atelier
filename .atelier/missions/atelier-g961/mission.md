@@ -57,7 +57,8 @@ recommendation on each. The word "groom" is gone from the skill.
   its focus and records it. A thread told only "I want to do some gardening"
   can say back what it will look at and why before it measures anything.
 - transcripts-first: the procedure has a run choose threads by the numbers, in
-  a stated order up to a stated number, and read them in full, with no cap
+  a stated order up to a stated number of items, and read each one's
+  implementer and one reviewer thread in full, with no cap
   that stops at a thread's first edit. It says how cheaper agents may do the
   bulk reading with each claim checked, and that no transcript text reaches
   the page.
