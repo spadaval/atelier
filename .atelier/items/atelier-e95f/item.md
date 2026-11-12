@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-e95f
 title: Let repositories define custom work views declaratively
-status: draft
+status: dropped
 mission: null
 labels:
 - cli-output
@@ -49,3 +49,7 @@ Blocked by atelier-i2qq, which writes the shared item-line contract this format 
 Relationships of the old record that the new format has no field for.
 
 - related: atelier-o3lm (Share one output contract across every Atelier command)
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: no demand for custom work views, and the views it would rebuild were removed in 0.5
