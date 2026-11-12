@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-bnek
 title: Record which agent did what, and compare models by role
-status: draft
+status: dropped
 labels:
 - agent-attribution
 - fleet-dashboard
@@ -53,3 +53,7 @@ Environment: this host, all Atelier repositories under `~/projects`.
 The orchestrator may change items, order and design within ADR 0030 and this
 Shape, including the attribution rule. Changing the Outcome or criterion, or
 recording outside the CLI, needs Sumeet.
+
+## Result
+
+Dropped: Sumeet, 2026-11-11: not doing attribution by model and role now; its items name commands and the site removed in 0.5
