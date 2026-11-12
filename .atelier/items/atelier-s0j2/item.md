@@ -28,7 +28,9 @@ that waits for its session.
 
 - [ ] The run item exists, labelled `garden`, is approved by a reviewer from another lab, and waits for its session with Session empty and nothing merged.
 - [ ] Its page records the focus, and is at most 60 lines with at most three proposals.
-- [ ] At least one proposal rests on evidence quoted from a thread, named by its ID; at least one is about the code's structure and names files; none only restates a line of `readiness.md`.
+- [ ] Its window starts at the end atelier-0019's page gives, found by `garden.md`'s own rule and not by a hint in the task.
+- [ ] At least one proposal rests on a trip the gardener checked in a thread, given as the thread's ID and what happened; at least one is about the code's structure and names files; none only restates a line of `readiness.md`.
+- [ ] The page and the run's `artifacts/` hold no text copied from a transcript, no thread title, no home path and no personal detail.
 - [ ] This item's Report lists every place the gardener said `garden.md` or `readiness.md` made it guess, and each is fixed on this item's branch in a sentence or filed as an item.
 - [ ] The Report says how many threads the run read, how they were chosen, and what the run cost in wall-clock time.
 

@@ -56,23 +56,28 @@ recommendation on each. The word "groom" is gone from the skill.
   what it is not, lists the areas a run may focus on, and says how a run gets
   its focus and records it. A thread told only "I want to do some gardening"
   can say back what it will look at and why before it measures anything.
-- transcripts-first: the procedure has a run choose threads by the numbers and
-  read them in full, with no cap that stops at a thread's first edit, and says
-  how cheaper agents may do the bulk reading with each claim checked.
+- transcripts-first: the procedure has a run choose threads by the numbers, in
+  a stated order up to a stated number, and read them in full, with no cap
+  that stops at a thread's first edit. It says how cheaper agents may do the
+  bulk reading with each claim checked, and that no transcript text reaches
+  the page.
 - trial: one run in atelier under the new procedure, focused on structure, is
   approved and waits for its session. At least one of its proposals rests on
-  evidence quoted from a thread, at least one is about the code's structure,
-  and none only restates a line of `readiness.md`.
+  a trip the gardener checked in a thread, given as the thread's ID and what
+  happened; at least one is about the code's structure; and none only
+  restates a line of `readiness.md`.
 - one-planner: `SKILL.md` sends a request to plan, to shape, or to go over the
   backlog to `planner.md`, which names both scales. `grep -ri groom
   skills/agent-factory` finds nothing.
-- drops-without-asking: `backlog.md` lets the planner drop an item it has
-  proved stale or duplicated, says what proof is, and names what it may never
-  drop without Sumeet. The calls it brings him are a numbered list of at most
-  seven, each with a recommendation.
+- drops-without-asking: `backlog.md` lets the planner drop an item once it has
+  proved, against the item's Goal and unticked Done when lines, that the need
+  is gone, already met, or covered by a named replacement. A name the code no
+  longer has is not proof. It gives a test, readable from the records, for the
+  items it may never drop without Sumeet. The calls it brings him are a
+  numbered list of at most seven, each with a recommendation.
 - no-growth: `garden.md` and `readiness.md` together are no longer than
   today's 298 lines, and `planner.md` and `backlog.md` together are no longer
-  than today's 97 (`planner.md` 11, `groom.md` 86).
+  than today's 96 (`planner.md` 11, `groom.md` 85).
 
 ## Scope
 
@@ -91,11 +96,14 @@ recommendation on each. The word "groom" is gone from the skill.
 
 ## Authority
 
-The lead may choose the wording, the list of focus areas, the page's layout
-and how many threads a run reads. It may not give a gardener run the right to
-add or remove a rule, check, gate, interface or default; let the planner drop
-an item Sumeet directed or parked himself, a started item, or an item in a
-mission another thread leads; raise the limit of three proposals; or remove
-the session with Sumeet.
+The lead may choose the wording, the list of focus areas, the page's layout,
+and the order and number of threads a run reads. It may not give a gardener
+run the right to add or remove a rule, check, gate, interface or default; let
+the planner drop an item Sumeet asked for or set aside himself (one whose
+`ready.by` names him, or whose body says he asked for it or gives his
+condition for picking it up), a started item, or an item in a mission another
+thread leads; let transcript text, a thread's title, a home path or a
+personal detail onto a page, which reaches public Git; raise the limit of
+three proposals; or remove the session with Sumeet.
 
 ## Result
