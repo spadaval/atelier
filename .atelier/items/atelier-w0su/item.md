@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-w0su
 title: Support a mission integration branch as a merge base
-status: draft
+status: dropped
 mission: null
 labels:
 - feature
@@ -54,3 +54,7 @@ Deferred by Sumeet (2026-10-16): an advanced feature, planned now and built late
 - Can work advance more than one mission? It then needs one integration base; the simplest rule is the mission it was started from.
 - Is a mission branch kept after merging, or deleted like work branches?
 - Do two missions ever need each other's unmerged work (stacking), or is that ruled out?
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: not building mission integration branches; nothing needs them and the code the item names was removed in 0.5
