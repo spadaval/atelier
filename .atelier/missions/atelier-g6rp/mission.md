@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-g6rp
 title: Ship Agent Factory from this repository, so a command and its guidance land in one change
-status: ready
+status: dropped
 labels:
 - agent-factory
 lead: null
@@ -39,3 +39,7 @@ Target environment: Linux and macOS, Claude Code and Codex reading `~/.claude/sk
 ## Authority
 
 The orchestrator may reorder and split items, and change flag names and cache details, without asking. It asks Sumeet before any push (to either repository), before deleting anything from spadaval/.agents beyond the skills named in the Outcome, and before changing the Outcome.
+
+## Result
+
+Dropped: Sumeet, 2026-11-11: the skill already lives only in this repository and installs with npx skills add; doctor and setup --link were removed in 0.5
