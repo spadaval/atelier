@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-5kwk
 title: Remind an agent committing in a T3 thread on an unowned branch to run atelier start
-status: ready
+status: dropped
 mission: atelier-bnek
 labels:
 - agent-attribution
@@ -31,3 +31,7 @@ Nudge agents to record their work: when an agent in a T3 thread commits code on 
 ## Context
 
 A nudge, not a gate: agents are trusted, and this only improves attribution. The light path (`PRODUCT_INTENT.md`, `docs/product/reviews-and-merge.md`) lets releases, docs and mockups merge with no issue (planning review finding atelier-726p).
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: dropped with mission atelier-bnek; it names commands and the site removed in 0.5, and attribution would need replanning against the Desk
