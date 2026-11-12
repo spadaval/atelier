@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-jxce
 title: Eval the skill for over-correction, so saying no never means skipping real fixes
-status: ready
+status: dropped
 mission: null
 labels:
 - agent-factory
@@ -32,3 +32,7 @@ atelier-l58v taught Agent Factory to say no: review verdicts of shrink and rejec
 ## Context
 
 Sumeet directed this on 2026-11-08. It is not part of mission atelier-g6rp. A failing scenario at the current skill is a finding against the skill to report, not a reason to weaken the grader.
+
+## Report
+
+Dropped: Sumeet, 2026-11-11: its scenarios build on the old skill's fixtures, and the next-loop-changes eval already fails a run that skips a real fix
