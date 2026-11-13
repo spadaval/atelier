@@ -26,7 +26,7 @@ down.
 
 ## Done when
 
-- [ ] `docs/product.md` describes the model in its own terms: only a merge writes the base; the three kinds of branch and the optional prefix; what each kind of branch needs before it merges; a mission as proposed on its branch and agreed once merged, with no draft status and no go-ahead; items keeping `draft` and `ready`; `lead` as attribution.
+- [ ] `docs/product.md` describes the model in its own terms: only a merge writes the base; the four kinds of branch (an item's, a mission's, `backlog/<slug>` and a plan reviewer's `review/<mission-id>/<round>-<suffix>`) and the optional prefix; what each kind of branch needs before it merges; a mission as proposed on its branch and agreed once merged, with no draft status and no go-ahead; items keeping `draft` and `ready`; `lead` as attribution.
 - [ ] Its tables of statuses, commands and records match: no `draft` or `ready` row for a mission, no `ready` on a mission, and for each of `new`, `set`, `ready`, `drop`, `close` and `lead` where it commits.
 - [ ] `docs/design.md` says, for every act in its act table, which branch the act commits on, and replaces the base rule of the pre-push hook with the rule that the base receives only merges.
 - [ ] Its Merge section gives the steps with a forge, ending in the forge's merge of the pull request, and without one; says what `merge` does while a required human review is missing; and settles how `done` is recorded when the forge makes the merge commit, with the alternative it turned down.

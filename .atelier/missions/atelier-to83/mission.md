@@ -51,7 +51,8 @@ branch needs before it merges depends on what it holds: code needs an
 independent review, a mission's plan needs two approving plan reviews, and
 records alone need `atelier check`. A mission's plan is the Why, Outcome,
 Success criteria, Scope and Authority sections of `mission.md`, the documents
-beside it and, until the plan has merged, its items. Its lead, its notes, its
+beside it other than `notes.md` and its reviews, and, until the plan has
+merged, its items. Its lead, its notes, its
 Result section and items added to it once it is open are records.
 
 A mission is proposed while its plan is on its branch and open once that
