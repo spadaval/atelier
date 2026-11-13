@@ -110,3 +110,15 @@ personal detail onto a page, which reaches public Git; raise the limit of
 three proposals; or remove the session with Sumeet.
 
 ## Result
+
+Five criteria hold. One, no-growth, is missed by three lines on the gardener's side, and the lead closed the mission with that stated instead of spending another item on it.
+
+**purpose-and-focus, transcripts-first** (atelier-wb05, pull request 151, merged as 1fffc88). `garden.md` opens with what gardening is for and what a run is not, lists eight focus areas, and has the run record its focus in its Goal and on the page's `Focus:` line before it takes any numbers. A run picks up to six items in a set order by the numbers and reads each one's implementer thread and one reviewer thread in full; the cap of three threads read to their first edit is gone. Cheaper agents may extract trips, the gardener checks each against its thread, and no transcript text, thread title, home path or personal detail reaches the page.
+
+**one-planner, drops-without-asking** (atelier-s47q, pull request 150, merged as 617a8eb). `procedures/groom.md` is now `procedures/backlog.md`, `planner.md` names both scales, and `SKILL.md` sends a request to go over the backlog to the planner. `grep -ri groom skills/agent-factory` finds nothing. The planner drops an item itself on one of three proofs, a name the code no longer has is not one, items Sumeet asked for or set aside stay his, and it brings him at most seven numbered calls with a recommendation each.
+
+**trial** (atelier-s0j2, pull request 154, merged as 029db44). The run is atelier-qb4f, focused on structure, started with the task "Garden this repository; focus on structure" and nothing else. GPT-6.1 Sol approved it in round 2; it waits for its session with Session empty and pull request 152 unmerged. Its page is 41 lines with three proposals: move every act into `atelier-app`, name each command's file after its command, and give a document's size as a target a reviewer weighs. It read six threads in 15 minutes. Two things fall short of the letter: the page cites each trip by item and role, with the thread IDs in `artifacts/threads.md`, and the gardener read atelier-s0j2 at some point, so it knew it was being measured.
+
+**no-growth.** `planner.md` and `backlog.md` are 86 lines together against the limit of 96. `garden.md` and `readiness.md` are 301 against the limit of 298: atelier-wb05 left them at 296, and the five one-sentence fixes for the places the trial run had to guess added five lines to `garden.md`. The trial's own third proposal is that exact line counts in a criterion cost implementers many edits of reflowing, so the lead did not start an item to cut three lines. Sumeet can ask for the trim or take it up with that proposal in atelier-qb4f's session.
+
+All three items were written by Claude Opus 5.5 and reviewed by GPT-6.1 Sol.
