@@ -35,8 +35,9 @@ lead. A garden or audit task also reads
 
 ## Who Works With Sumeet
 
-The planner works with Sumeet in conversation, and a gardener settles its
-run's page with him in a session once the run is approved. Every other role
+The planner works with Sumeet in conversation. A gardener takes its focus
+from him when he names one at the start, and settles its run's page with him
+in a session once the run is approved. Every other role
 runs unattended: it never waits on him, and takes a question to `atelier
 escalate`, the mission's lead or an item labelled `needs-human`, as its role
 file says.
