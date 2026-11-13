@@ -27,7 +27,7 @@ place a record changes.
 
 ## Done when
 
-- [ ] `config.toml` takes one optional branch prefix. With it set to `x/`, every kind of branch carries it: `x/<item-id>`, `x/<mission-id>`, `x/backlog/<slug>` and `x/review/<mission-id>/<round>-<suffix>`; unset, branches are named as today. A branch name is read back into its record's ID by one function, tested both ways.
+- [ ] `config.toml` takes one optional branch prefix. With it set to `x/`, every kind of branch carries it: `x/<item-id>`, `x/<mission-id>` and `x/backlog/<slug>`; unset, branches are named as today. A branch name is read back into its record's ID by one function, tested both ways.
 - [ ] `new --mission` puts the mission's record on a branch named for the mission, and `new --in <mission>` on that same branch while the mission is not on the base.
 - [ ] A record change tied to no mission's plan and no started item (`new`, `set`, `ready` on an item, `drop`, `close`, `lead`) is committed on a `backlog/<slug>` branch, the current one when the checkout is already on one.
 - [ ] No command leaves an uncommitted record change behind: `new` and `set` commit, as `ready` and `drop` do today.

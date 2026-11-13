@@ -45,8 +45,7 @@ what was considered and turned down, is in [design.md](design.md).
 
 Only a merge writes the base. A thread's changes, code or records, live on a
 branch named by a convention the commands apply themselves: an item's ID, a
-mission's ID, `backlog/<slug>` for record changes tied to neither, and
-`review/<mission-id>/<round>-<suffix>` for one plan reviewer's verdict. What a
+mission's ID, or `backlog/<slug>` for record changes tied to neither. What a
 branch needs before it merges depends on what it holds: code needs an
 independent review, a mission's plan needs two approving plan reviews, and
 records alone need `atelier check`. A mission's plan is the Why, Outcome,
