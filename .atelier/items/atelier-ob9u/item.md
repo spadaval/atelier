@@ -19,23 +19,26 @@ created_at: 2026-11-13T06:14:32.623183548Z
 
 ## Goal
 
-Stop the commands writing to the base. Today `new`, `set`, `ready`, `drop`,
-`close` and `lead` change records in the base's checkout, and four of them
-commit there. After this item each commits on a branch the command names
-itself, so an agent never invents a branch name and the base is never the
-place a record changes.
+Stop record changes landing on the base, and draw one line between the tool
+and Git. Today `new`, `set`, `ready`, `drop`, `close` and `lead` change
+records in the base's checkout and four of them commit there. After this item
+a command that changes a record writes the file and nothing else, the agent
+commits and pushes with Git, the hooks validate, and only three commands act
+on Git: `start` makes and claims a branch, `submit` publishes it, and `merge`
+merges it.
 
 ## Done when
 
+- [ ] `new`, `set`, `ready`, `drop`, `close`, `lead`, `escalate`, `decide`, `review` and `verdict` write record files in the checkout they run in and make no commit, no branch and no push. Each prints the paths it wrote. Tests show `git status` after each has changes and `git log` has none.
+- [ ] `start` is the only command that makes a branch, and it makes all three kinds: `start <item>` as today; `start --mission "<title>"`, a new mission's record on a branch named for it; and `start --backlog <slug>`, a `backlog/<slug>` branch for record changes tied to neither. It commits the one record change that is the claim, where there is one.
 - [ ] `config.toml` takes one optional branch prefix. With it set to `x/`, every kind of branch carries it: `x/<item-id>`, `x/<mission-id>` and `x/backlog/<slug>`; unset, branches are named as today. A branch name is read back into its record's ID by one function, tested both ways.
-- [ ] `new --mission` puts the mission's record on a branch named for the mission, and `new --in <mission>` on that same branch while the mission is not on the base.
-- [ ] A record change tied to no mission's plan and no started item (`new`, `set`, `ready` on an item, `drop`, `close`, `lead`) is committed on a `backlog/<slug>` branch, the current one when the checkout is already on one.
-- [ ] No command leaves an uncommitted record change behind: `new` and `set` commit, as `ready` and `drop` do today.
-- [ ] Run in the base's own checkout, a record-writing command does what the design settled, and a test shows the base's checkout is never switched to another branch by it.
-- [ ] `submit` on a branch that changes only records opens its pull request, and `merge` merges it once `atelier check` passes on the merged tree, with no review file asked for. A branch counts as records only when every path it changes against the base is under `.atelier/`; `merge` refuses any other on this path and names the paths, with a test that a `backlog/` branch carrying a change under `crates/` is refused. A branch that adds a mission or changes a mission's plan is refused here and left to atelier-2vdq.
+- [ ] `start` never switches the base's own checkout to another branch: there it does what the design settled, and a test shows the base's checkout still has the base out afterwards.
+- [ ] The pre-commit hook refuses a commit on the base that changes a record, and says to run `start --backlog <slug>` or `start --mission`. `ATELIER_SKIP` passes it with a reason, as for any rule.
+- [ ] Where a remote is configured, `start` pushes the new branch before it reports success. When the remote already has it, `start` is refused, names the thread its record gives, and removes the local branch it made, leaving the checkout as it was; a later `start` in that clone takes the item over from the remote's branch. When the remote cannot be reached, `start` is refused and says so. With no remote it behaves as today. A test starts one item from two clones of one remote at once: exactly one succeeds, and `atelier list` in the other, after a fetch, shows the item held by the winner.
+- [ ] `submit` refuses while a record the branch changes is uncommitted, naming the paths, then pushes and opens the pull request. On a branch that changes only records, `merge` merges once `atelier check` passes on the merged tree, with no review file asked for. A branch counts as records only when every path it changes against the base is under `.atelier/`; `merge` refuses any other on this path and names the paths, with a test that a `backlog/` branch carrying a change under `crates/` is refused. A branch that adds a mission or changes a mission's plan is refused here and left to atelier-2vdq.
 - [ ] The act table has rows for `submit` and `merge` of a `backlog/` branch: any thread, in a checkout on that branch, with no status to come from; and they are not the implementer's acts on an item.
-- [ ] Where a remote is configured, `start` pushes the item's new branch before it reports success. When the remote already has that branch, `start` is refused, names the thread its record gives, and removes the local branch it made, leaving the checkout as it was; a later `start` in that clone takes the item over from the remote's branch. When the remote cannot be reached, `start` is refused and says so. With no remote it behaves as today. A test starts one item from two clones of one remote at once: exactly one succeeds, and `atelier list` in the other, after a fetch, shows the item held by the winner.
-- [ ] `drop` of a started item commits on the item's own branch and pushes it, and from then the item's `submit` and `merge` are refused. The same `drop` then lands the base's copy: it commits it on a `backlog/` branch and submits and merges that itself by the record-only path, with exit status 3 while CI has not finished, and run again it finishes. The act table has the row: any thread, from any checkout, on an item that is started and not merged; `drop` writes the item's branch through its ref, and refuses while a checkout of that branch has uncommitted changes to the item's directory. Tests: the item's branch is deleted after the drop and the base still shows the item dropped; and in a second clone, after a fetch, `start` on the dropped item is refused. `drop` of an item already merged is refused. Tests run both orders from two clones: drop then merge, and merge then drop.
+- [ ] `drop` of a started item is written on the item's own branch, by any thread in a checkout of that branch, and committed and pushed with Git; from that push the item's `submit` and `merge` are refused. The base's copy is dropped by the ordinary record-only path, and until it is, `status` and `list` say the drop has not reached the base. `drop` of an item already merged is refused. Tests run both orders from two clones, drop then merge and merge then drop, and show the base's copy dropped after the item's branch is deleted.
+- [ ] `status` names every record change in the checkout that is not committed, and every commit on the branch that is not pushed, with the Git command for each.
 - [ ] `AGENTS.md` no longer says a planning record may be committed on the base; the rest of that file waits for atelier-j5lr.
 - [ ] The act table in `docs/design.md` and each command's `--help` match what the commands now do.
 

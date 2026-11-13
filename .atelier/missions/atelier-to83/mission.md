@@ -44,8 +44,10 @@ what was considered and turned down, is in [design.md](design.md).
 ## Outcome
 
 Only a merge writes the base. A thread's changes, code or records, live on a
-branch named by a convention the commands apply themselves: an item's ID, a
-mission's ID, or `backlog/<slug>` for record changes tied to neither. What a
+branch that `start` makes and names by a convention: an item's ID, a
+mission's ID, or `backlog/<slug>` for record changes tied to neither. Three
+commands act on Git: `start`, `submit` and `merge`. Every other command that
+changes a record writes the file, and the agent commits and pushes it. What a
 branch needs before it merges depends on what it holds: code needs an
 independent review, a mission's plan needs two approving plan reviews, and
 records alone need `atelier check`. A mission's plan is the Why, Outcome,
