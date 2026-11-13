@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qxmr
 title: Point the Desk at the live repositories once this host's cutover has run
-status: draft
+status: dropped
 mission: null
 labels:
 - loose_end
@@ -28,3 +28,7 @@ After this host's cutover (atelier-wd1i), change the installed Desk service's ro
 ## Context
 
 Outside mission atelier-z4cr on purpose, so that mission can close before the cutover. Strategy: `docs/strategies/desk.md`, Derisking.
+
+## Report
+
+Dropped: Folded into atelier-v958, which points the Desk at the live repositories as its first Done when line
