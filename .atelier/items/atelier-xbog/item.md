@@ -116,7 +116,7 @@ has nothing to answer, so it cannot settle a fix-now finding in practice.
   `Decided:`. A withdrawal or a lowering with a reason lets approve pass,
   and a lowering without a reason does not read.
 - Records that exist today: I searched every branch and remote ref of the
-  ten repositories under `~/projects` that have `.atelier/`, with `git grep
+  twelve repositories under `~/projects` that have `.atelier/`, with `git grep
   -nE '^## Decisions|^Decided: |^Outcome: |^Finding: '` over
   `.atelier/items` and `.atelier/missions`. Nothing matched outside
   `missions/atelier-to83/design.md`, which only describes this change. The
