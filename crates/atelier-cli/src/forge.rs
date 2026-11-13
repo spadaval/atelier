@@ -7,7 +7,8 @@
 //! parsing `gh run list`, whose output is `gh`'s own and changes between
 //! versions.
 //!
-//! Copied from `crates/atelier-app/src/forge.rs`, with one change to its
+//! Copied from the old tool's `crates/atelier-app/src/forge.rs`, which
+//! 819024c75 deleted, with one change to its
 //! interface: `Github::open` takes the new config's forge section, whose CI
 //! workflow is optional, and the workflow is passed to `branch_runs`, which
 //! reads a branch's runs where the old code read a commit's. `until` bounds

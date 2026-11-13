@@ -1,8 +1,8 @@
 //! The Git calls a [`Repo`](crate::Repo) and the acts here make, and the
 //! helpers `atelier-cli`'s own Git calls are built on. `run` and
-//! `current_branch` are copied from `text` and `checkout_branch` in
-//! `crates/atelier-cli/src/commands/git.rs`, trimmed to plain errors; the
-//! rest is new.
+//! `current_branch` are copied from `text` and `checkout_branch` in the
+//! old tool's `crates/atelier-cli/src/commands/git.rs`, which 819024c75
+//! deleted, trimmed to plain errors; the rest is new.
 
 use crate::skip::{Skip, VARIABLE};
 use anyhow::{bail, Context, Result};

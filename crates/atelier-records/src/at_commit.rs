@@ -1,7 +1,8 @@
 //! Reading records at a commit, without a checkout.
 //!
 //! The object reader is copied from `ReadContext` and `ObjectReader` in
-//! `crates/atelier-app/src/git_freshness.rs`: one `git cat-file --batch`
+//! the old tool's `crates/atelier-app/src/git_freshness.rs`, which
+//! 819024c75 deleted: one `git cat-file --batch`
 //! process, started on first use, answers every object read, and a tree is
 //! walked one component at a time. Trimmed: the caches, the pinning of
 //! `HEAD`, the working-tree reads, the history and diff queries, and the
