@@ -11,7 +11,7 @@ mod store;
 mod validate;
 
 pub use at_commit::{CommitReader, ReadError};
-pub use body::{answer, ask, put_first};
+pub use body::{answer, put_first};
 pub use ids::{allocate_id, validate_id};
 pub use load::{is_record, load, Loaded, CONFIG};
 pub use store::{

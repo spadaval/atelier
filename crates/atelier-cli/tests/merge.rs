@@ -384,7 +384,7 @@ fn a_failing_merge_check_on_the_base_tip_stops_the_merge_with_its_command_and_ou
 }
 
 #[test]
-fn an_unanswered_question_stops_the_merge_and_is_named() {
+fn a_question_from_before_escalate_was_removed_does_not_stop_the_merge() {
     let scratch = approved();
     let root = scratch.root();
     append(
@@ -393,20 +393,8 @@ fn an_unanswered_question_stops_the_merge_and_is_named() {
         "\n## Decisions\n\n### 2026-11-10: Should hello be loud?\n",
     );
     git(&root, &["commit", "-qam", "Ask"]);
-    let before = state(&root);
     let run = merge(&root, "t1", &[]);
-    assert_eq!(run.code, 1);
-    assert!(
-        run.stderr
-            .contains("  [ ] Question answered: 2026-11-10: Should hello be loud?\n"),
-        "{}",
-        run.stderr
-    );
-    assert_eq!(state(&root), before);
-
-    append(&root, &item_path(ID), "Answer by d1: No.\n");
-    git(&root, &["commit", "-qam", "Answer"]);
-    assert_eq!(merge(&root, "t1", &[]).code, 0);
+    assert_eq!(run.code, 0, "{}", run.stderr);
 }
 
 #[test]

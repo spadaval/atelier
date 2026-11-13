@@ -115,7 +115,8 @@ pub struct Finding {
     pub was: Option<FindingName>,
     /// What became of the carried finding, as this review judged it.
     pub now: Option<Now>,
-    /// What a decision made of the carried finding; the tool writes it.
+    /// What a decision made of the carried finding, in a review written
+    /// before `decide` was removed. Nothing writes it now.
     pub decided: Option<Outcome>,
     pub settlement: Option<Settlement>,
 }
@@ -134,7 +135,8 @@ pub enum Now {
     Kept,
 }
 
-/// How a decision settled a finding without a fix.
+/// How a decision settled a finding without a fix, in a record written
+/// before `decide` was removed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     Defer,
@@ -167,8 +169,9 @@ impl Finding {
 }
 
 /// Whether `finding` is deferred, given every finding of its item's reviews
-/// and the item's decisions: its recommendation is defer, or a decision
-/// deferred it, by the `Decided: defer` line a later round carries or by a
+/// and the item's decisions: its recommendation is defer, which a reviewer
+/// that carries a finding may lower it to, or a decision written before
+/// `decide` was removed deferred it, by the `Decided: defer` line a later round carries or by a
 /// Decisions entry naming it. A finding a later round carries is not: the
 /// carrying finding is the one that stands, and the one to settle.
 pub fn is_deferred(finding: &Finding, findings: &[Finding], decisions: &[Decision]) -> bool {
@@ -191,8 +194,11 @@ pub fn is_deferred(finding: &Finding, findings: &[Finding], decisions: &[Decisio
 /// A fix-now finding is open until a later round carries it, by naming it
 /// in `Was:`, or a decision naming it has an outcome. Carrying it as fixed,
 /// withdrawn or decided closes it; carrying it as kept moves it to the
-/// carrying finding, which is then the open one. A carrying finding that
-/// says the earlier one was fixed, withdrawn or decided is not itself open.
+/// carrying finding, which is then the open one unless its reviewer lowered
+/// it to defer or no action. A carrying finding that says the earlier one
+/// was fixed, withdrawn or decided is not itself open. Decisions and the
+/// `Decided:` line are read from records written before `decide` was
+/// removed.
 pub fn is_open(finding: &Finding, findings: &[Finding], decisions: &[Decision]) -> bool {
     let closes_carried =
         matches!(finding.now, Some(Now::Fixed | Now::Withdrawn)) || finding.decided.is_some();
@@ -295,6 +301,31 @@ mod tests {
         // A carrier in the same round is no later round.
         let same_round = carrying("1-dddd.1", "1-aaaa.1", Now::Fixed);
         assert_eq!(open(&[first, same_round], &[]), ["1-aaaa.1"]);
+    }
+
+    #[test]
+    fn a_reviewer_settles_a_carried_finding_by_withdrawing_it_or_lowering_it() {
+        let first = finding("1-aaaa.1", Recommendation::FixNow);
+        let withdrawn = carrying("2-bbbb.1", "1-aaaa.1", Now::Withdrawn);
+        let findings = [first.clone(), withdrawn];
+        assert!(open(&findings, &[]).is_empty());
+        assert!(deferred(&findings, &[]).is_empty());
+
+        // Kept, but lowered: neither is open, and lowered to defer the
+        // carrier is the deferred one.
+        for (lowered, is_deferred) in [
+            (Recommendation::Defer, true),
+            (Recommendation::NoAction, false),
+        ] {
+            let carrier = Finding {
+                recommendation: lowered,
+                ..carrying("2-bbbb.1", "1-aaaa.1", Now::Kept)
+            };
+            let findings = [first.clone(), carrier];
+            assert!(open(&findings, &[]).is_empty(), "{lowered:?}");
+            let expected: &[&str] = if is_deferred { &["2-bbbb.1"] } else { &[] };
+            assert_eq!(deferred(&findings, &[]), expected, "{lowered:?}");
+        }
     }
 
     #[test]

@@ -9,8 +9,8 @@ use crate::repo::item_path;
 use crate::{git, Repo};
 use anyhow::{bail, Context, Result};
 use atelier_core::{
-    Decision, Finding, FindingName, Item, Mission, MissionStatus, Outcome, Review, ReviewName,
-    Settlement, Status, Thread, Threads, Verdict,
+    Finding, FindingName, Item, Mission, MissionStatus, Review, ReviewName, Settlement, Status,
+    Thread, Threads, Verdict,
 };
 use atelier_records::{
     parse_item, parse_mission, parse_review, validate_id, ItemDir, MissionDir, ReadError,
@@ -78,15 +78,6 @@ pub enum Happened {
         verdict: Verdict,
         status: Option<Move>,
     },
-    Escalate {
-        question: String,
-        finding: Option<FindingName>,
-    },
-    Decide {
-        question: String,
-        answer: String,
-        outcome: Option<Outcome>,
-    },
     Merge {
         status: Move,
         trivial: Option<String>,
@@ -122,8 +113,6 @@ impl Happened {
             Happened::Submit { .. } => "submit",
             Happened::Review { .. } => "review",
             Happened::Verdict { .. } => "verdict",
-            Happened::Escalate { .. } => "escalate",
-            Happened::Decide { .. } => "decide",
             Happened::Merge { .. } => "merge",
             Happened::Settle { .. } => "settle",
             Happened::Lead { .. } => "lead",
@@ -140,13 +129,11 @@ impl Happened {
             Happened::Submit { .. } => 1,
             Happened::Review { .. } | Happened::ReviewTakeOver { .. } => 2,
             Happened::Verdict { .. } => 3,
-            Happened::Escalate { .. } => 4,
-            Happened::Decide { .. } => 5,
-            Happened::Merge { .. } => 6,
-            Happened::Settle { .. } => 7,
-            Happened::Lead { .. } => 8,
-            Happened::Ready { .. } => 9,
-            Happened::Drop { .. } | Happened::Close { .. } => 10,
+            Happened::Merge { .. } => 4,
+            Happened::Settle { .. } => 5,
+            Happened::Lead { .. } => 6,
+            Happened::Ready { .. } => 7,
+            Happened::Drop { .. } | Happened::Close { .. } => 8,
         }
     }
 
@@ -440,7 +427,6 @@ impl Record {
 enum Version {
     Item {
         item: Item,
-        decisions: Vec<Decision>,
         dropped: Option<String>,
     },
     Mission {
@@ -670,11 +656,9 @@ fn version(path: &str, text: &str) -> Result<Version, String> {
                 item,
                 reviews: Vec::new(),
             };
-            let decisions = dir.decisions().map_err(|p| p.to_string())?;
             let dropped = dir.dropped().map(str::to_string);
             Ok(Version::Item {
                 item: dir.item,
-                decisions,
                 dropped,
             })
         }
@@ -727,19 +711,12 @@ fn gained<'a>(old: Option<&Threads>, new: &'a Threads) -> Vec<(Option<&'a Thread
 /// The acts across an item's versions `old` and `new`, and the status move
 /// they leave to a verdict in the same commit.
 fn item_acts(old: Option<&Version>, new: &Version) -> (Acts, Option<Move>) {
-    let Version::Item {
-        item: new,
-        decisions,
-        dropped,
-    } = new
-    else {
+    let Version::Item { item: new, dropped } = new else {
         return (Vec::new(), None);
     };
-    let (old, old_decisions) = match old {
-        Some(Version::Item {
-            item, decisions, ..
-        }) => (Some(item), decisions.as_slice()),
-        _ => (None, &[][..]),
+    let old = match old {
+        Some(Version::Item { item, .. }) => Some(item),
+        _ => None,
     };
     let from = old.map(|old| old.status);
     let moved = (from != Some(new.status)).then_some(Move {
@@ -759,25 +736,6 @@ fn item_acts(old: Option<&Version>, new: &Version) -> (Acts, Option<Move>) {
             },
         };
         acts.push((Some(thread.clone()), act));
-    }
-    for (at, decision) in decisions.iter().enumerate() {
-        let asked = old_decisions.get(at);
-        if asked.is_none() {
-            let act = Happened::Escalate {
-                question: decision.question.clone(),
-                finding: decision.finding.clone(),
-            };
-            acts.push((holder.clone(), act));
-        }
-        let answered = asked.is_some_and(|asked| asked.answer.is_some());
-        if let (Some(answer), false) = (&decision.answer, answered) {
-            let act = Happened::Decide {
-                question: decision.question.clone(),
-                answer: answer.text.clone(),
-                outcome: decision.outcome,
-            };
-            acts.push((Some(answer.by.clone()), act));
-        }
     }
     let mut verdict = None;
     if let Some(status) = moved {

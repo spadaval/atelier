@@ -49,10 +49,6 @@ fn item(root: &Path, id: &str, status: &str, title: &str, fields: [&str; 4], bod
 }
 
 /// The question waiting on `demo-d4dd`, as the lead's `status` lists it.
-const QUESTION: &str = "Questions waiting on a decider, oldest first on each item:\n  \
-                        demo-d4dd: 2026-11-10: Should waving be animated?\n    \
-                        Answer it in the checkout on branch demo-d4dd: atelier decide demo-d4dd \"<answer>\"\n";
-
 /// The fixture, with `demo-d4dd` started by t1 in the worktree `second`.
 fn fixture() -> (Scratch, PathBuf) {
     let scratch = Scratch::new(&[]);
@@ -302,11 +298,11 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
         format!("Lead demo-m1ss\n\n{path}")
     );
 
-    // The lead's status: its mission, what each item needs, and the
-    // questions waiting on a decider, with the command that answers each.
+    // The lead's status: its mission and what each item needs. A question
+    // an item holds from before `escalate` was removed waits on nothing.
     let status = stdout(&root, "lead1", &["status"]);
     let tail = format!(
-        "You lead mission demo-m1ss: Greet everyone\n{}{QUESTION}{handoff}",
+        "You lead mission demo-m1ss: Greet everyone\n{}{handoff}",
         &items[11..]
     );
     assert!(status.ends_with(&tail), "{status}");
@@ -334,39 +330,23 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
 }
 
 #[test]
-fn on_an_items_branch_a_thread_holding_nothing_is_told_of_its_question_before_the_take_over() {
+fn on_an_items_branch_a_thread_holding_nothing_is_offered_the_take_over_unless_it_leads_the_mission(
+) {
     let (scratch, second) = fixture();
     let root = scratch.root();
-    let question = "A question waits on a decider: 2026-11-10: Should waving be animated?\n";
-    let decide = "Then: atelier decide demo-d4dd \"<answer>\"\n";
+    // The item holds a question from before `escalate` was removed, which
+    // no longer waits on anyone.
     let offer = "Only if you mean to take it over from its holder: atelier start demo-d4dd\n";
     let status = stdout(&second, "d1", &["status"]);
     assert!(
-        status.ends_with(&format!("Status: building\n{question}{decide}{offer}")),
+        status.ends_with(&format!("Status: building\n{offer}")),
         "{status}"
     );
-    // A thread that may not decide it is told who may.
-    assert_eq!(atelier(&second, "t2", &["start", "demo-d4dd"]).code, 0);
-    let status = stdout(&second, "t1", &["status"]);
-    assert!(
-        status.ends_with(&format!(
-            "Status: building\n{question}You may not decide it. A decider answers it with \
-             `atelier decide demo-d4dd`: a thread that never implemented this item nor reviewed \
-             the finding a question is about.\n{offer}"
-        )),
-        "{status}"
-    );
-    // The mission's lead decides it, and is not offered the item, with a
-    // question waiting or not.
+    assert!(!status.contains("question"), "{status}");
+    // The mission's lead is not offered the item.
     assert_eq!(atelier(&root, "lead1", &["lead", "demo-m1ss"]).code, 0);
     let leads = "You lead mission demo-m1ss, which demo-d4dd is in: its implementer builds it, \
                  so you do not take it over.\n";
-    let status = stdout(&second, "lead1", &["status"]);
-    assert!(
-        status.ends_with(&format!("Status: building\n{leads}{question}{decide}")),
-        "{status}"
-    );
-    stdout(&second, "lead1", &["decide", "demo-d4dd", "No."]);
     let status = stdout(&second, "lead1", &["status"]);
     assert!(
         status.ends_with(&format!("Status: building\n{leads}")),
@@ -375,7 +355,7 @@ fn on_an_items_branch_a_thread_holding_nothing_is_told_of_its_question_before_th
 }
 
 #[test]
-fn show_prints_a_mission_on_one_page_with_its_items_questions_and_plan_reviews() {
+fn show_prints_a_mission_on_one_page_with_its_items_disputes_and_plan_reviews() {
     let (scratch, _second) = fixture();
     let root = scratch.root();
     assert_eq!(
@@ -387,20 +367,17 @@ fn show_prints_a_mission_on_one_page_with_its_items_questions_and_plan_reviews()
          demo-a1aa (high, can start now): Say hello\n    \
          demo-b2bb (medium, blocked by demo-a1aa, which is ready): Say goodbye\n  \
          Building:\n    demo-d4dd (medium, held by t1): Wave\n\n\
-         Questions:\n  demo-d4dd: 2026-11-10: Should waving be animated?\n    \
-         Answer it in the checkout on branch demo-d4dd: atelier decide demo-d4dd \"<answer>\"\n  \
-         demo-a1aa: 2026-11-08: Which greeting first? Answer by lead1: hello.\n\n\
+         Disputed:\n  None.\n\n\
          Plan reviews:\n  None.\n"
     );
-    // A done mission, with its Result, its answered question and its plan
-    // review.
+    // A done mission, with its Result and its plan review.
     assert_eq!(
         stdout(&root, "p1", &["show", "demo-m2dn"]),
         "Mission demo-m2dn: Set up the project\nStatus: done\nLead: nobody\nLabels: none\n\
          Made ready by sumeet at 2026-11-10 09:00:00 +00:00\n\n\
          ## Outcome\n\nA project exists.\n\n## Result\n\nIt exists.\n\n\
          Items:\n  Done:\n    demo-e5ee (low): Create the repository\n\n\
-         Questions:\n  demo-e5ee: 2026-11-09: Which license? Answer by lead1: MIT.\n\n\
+         Disputed:\n  None.\n\n\
          Plan reviews:\n  Round 1, review 1-k3fa by r9, gpt-6.1-sol, of commit 0123456: approved\n"
     );
     let run = atelier(&root, "p1", &["show", "demo-zz99"]);

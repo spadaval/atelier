@@ -8,7 +8,6 @@ mod history;
 mod merge;
 mod output;
 mod plan;
-mod questions;
 mod review;
 mod setup;
 mod view_output;
@@ -66,13 +65,13 @@ enum Command {
     },
     /// Install Atelier's Git hooks in this clone, keeping any hook it has as <name>.local; or with a harness, its session hooks in this repository.
     Setup { harness: Option<setup::Harness> },
-    /// One item in full with its reviews, or one mission on one page with its items and questions.
+    /// One item in full with its reviews, or one mission on one page with its items and disputed findings.
     Show { id: String },
     /// The history of acts, read from Git, one line each, oldest first: of everything, of one item, or of one mission with its plan reviews and its items.
     ///
     /// Each line is the commit's time in UTC, the commit, the item or mission, the act, the thread that acted or `-` where no record holds one, then what changed, and last each rule its commit skipped as `skip <rule>: <reason>`. The first five hold no space; what changed and the skips are parts separated by `; `.
     ///
-    /// The acts are start, take-over, submit, review, verdict, escalate, decide, merge, settle, lead, ready, drop and close. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two acts on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
+    /// The acts are start, take-over, submit, review, verdict, merge, settle, lead, ready, drop and close. A status move reads `<from> -> <to>`, and `new` is a record the commit added. `log` sees commits, not commands: two acts on one record in one commit show as their net change. It adds nothing up; narrow its lines with grep.
     Log {
         /// An item or a mission.
         id: Option<String>,
@@ -106,6 +105,9 @@ enum Command {
         /// Instead, the deferred findings of done items that nobody has taken into an item or dropped.
         #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "mission", "label", "mine", "done"])]
         deferred: bool,
+        /// Instead, each rebutted finding of an open or done item with what the next round made of it, and each plan-review round whose reviewers' verdicts differ; with --mission, only that mission's.
+        #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "label", "mine", "done", "deferred"])]
+        disputed: bool,
     },
     /// Create a draft item, or with --mission a draft mission, in this checkout of the base, without committing it.
     New {
@@ -175,15 +177,6 @@ enum Command {
     },
     /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
     Submit,
-    /// Ask a question about this branch's item that a decider answers, as when a finding is right but not worth fixing now, without committing it.
-    Escalate {
-        /// The question, on one line, with your position.
-        #[arg(value_parser = NonEmptyStringValueParser::new())]
-        question: String,
-        /// The open fix-now finding it is about, as in 2-m2bn.1.
-        #[arg(long, value_name = "FINDING")]
-        finding: Option<String>,
-    },
     /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief.
     Review { id: String },
     /// Record your verdict in your review file and commit it.
@@ -192,19 +185,6 @@ enum Command {
         /// The model you run on, such as gpt-6.1-sol; written into the review file.
         #[arg(long)]
         model: Option<String>,
-    },
-    /// Answer the oldest question waiting on an item, in the checkout on its branch, without committing it.
-    Decide {
-        id: String,
-        /// The answer, on one line.
-        #[arg(value_parser = NonEmptyStringValueParser::new())]
-        answer: String,
-        /// Settle the question's finding as deferred: real, but for later work.
-        #[arg(long, conflicts_with = "no_action")]
-        defer: bool,
-        /// Settle the question's finding with no action.
-        #[arg(long)]
-        no_action: bool,
     },
     /// Lead a ready mission, in this checkout of the base, commit that alone, and see what each of its items needs.
     Lead { mission: String },
@@ -291,6 +271,11 @@ fn main() -> ExitCode {
             Command::Log { id, since } => history::log(&mut repo, id.as_deref(), since),
             Command::List { deferred: true, .. } => views::deferred(&mut repo),
             Command::List {
+                disputed: true,
+                mission,
+                ..
+            } => views::disputed(&mut repo, mission.as_deref()),
+            Command::List {
                 ready,
                 blocked,
                 needs_human,
@@ -299,6 +284,7 @@ fn main() -> ExitCode {
                 mine,
                 done,
                 deferred: false,
+                disputed: false,
             } => {
                 let filter = atelier_app::Filter {
                     ready,
@@ -353,9 +339,6 @@ fn main() -> ExitCode {
             } => commands::start_new(&mut repo, &title),
             Command::Start { .. } => unreachable!("clap requires an ID or --new"),
             Command::Submit => commands::submit(&mut repo),
-            Command::Escalate { question, finding } => {
-                questions::escalate(&mut repo, &question, finding.as_deref())
-            }
             Command::Review { id } => review::review(&mut repo, &id),
             Command::Verdict { verdict, model } => {
                 let verdict = match verdict {
@@ -363,19 +346,6 @@ fn main() -> ExitCode {
                     VerdictArg::Changes => Verdict::Changes,
                 };
                 review::verdict(&mut repo, verdict, model)
-            }
-            Command::Decide {
-                id,
-                answer,
-                defer,
-                no_action,
-            } => {
-                let settled = match (defer, no_action) {
-                    (true, _) => Some(atelier_core::Outcome::Defer),
-                    (_, true) => Some(atelier_core::Outcome::NoAction),
-                    _ => None,
-                };
-                atelier_app::decide(&mut repo, &id, &answer, settled).map(Outcome::from)
             }
             Command::Lead { mission } => views::lead(&mut repo, &mission),
             Command::Merge { trivial } => {

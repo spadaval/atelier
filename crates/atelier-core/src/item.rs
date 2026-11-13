@@ -65,9 +65,10 @@ pub struct Ready {
     pub at: Time,
 }
 
-/// One entry of an item's Decisions section: a question, the finding it is
-/// about if any, and once answered the answer and its outcome for that
-/// finding.
+/// One entry of an item's Decisions section, which `escalate` wrote until
+/// it was removed: a question, the finding it is about if any, and once
+/// answered the answer and its outcome for that finding. The binary still
+/// reads one, so an item written then reads as it did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decision {
     pub question: String,

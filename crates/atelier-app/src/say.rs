@@ -32,7 +32,6 @@ pub fn command(act: Act, id: &str) -> String {
         Act::Drop => format!("atelier drop {id} --reason \"<why>\""),
         Act::Close => format!("atelier close {id} \"<result>\""),
         Act::CloseMission => format!("atelier close {id}"),
-        Act::Escalate => "atelier escalate \"<question>\"".into(),
         Act::Decide => format!("atelier decide {id} \"<answer>\""),
         _ => format!("atelier {}", row(act).command),
     }
@@ -47,7 +46,6 @@ pub fn goal(act: Act, status: Status) -> &'static str {
         Act::Submit => "submit it for review",
         Act::Review => "review it",
         Act::VerdictChanges | Act::VerdictApprove => "record your verdict",
-        Act::Escalate => "ask a question",
         Act::Decide => "decide its question",
         Act::Merge | Act::MergeTrivial => "merge it",
         Act::Drop => "drop it",
@@ -95,17 +93,13 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             format!("Finding {finding} (fix now): {title}")
         }
         Condition::NoResponse { finding, title, rebutted: true } => format!(
-            "Finding {finding} (fix now): {title} (its rebuttal was kept, and a rebuttal gets one try: fix it, or escalate it)"
+            "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it)"
         ),
-        Condition::Unanswered(question) => format!("Question answered: {question}"),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
         Condition::ReviewedFinding(finding) => format!("You have never reviewed finding {finding}"),
         Condition::NoQuestion => "A question waits under `## Decisions` (none does)".into(),
-        Condition::DecisionDropped { finding, outcome } => format!(
-            "Your file carries {finding} with the `Decided: {outcome}` line the tool wrote (a decision settled it; put that finding back as it was)"
-        ),
-        Condition::DecisionChanged(finding) => format!(
-            "Finding {finding} has no `Decided:` line the tool did not write, and carries no finding a decision settled (put it back as the tool wrote it, or remove it)"
+        Condition::Decided(finding) => format!(
+            "Finding {finding} has no `Decided:` line and carries no finding a decision settled (nothing decides a finding now: close a carried one with `Now: withdrawn`, or keep it at defer or no action and say why)"
         ),
         Condition::NoOpenFinding => "Your review file holds an open fix-now finding (it holds none; with nothing to fix, run `atelier verdict approve`)".into(),
         Condition::OpenFinding { finding, title } => {
@@ -210,7 +204,7 @@ pub fn rule_off_base(base: &str, branch: Option<&str>, settle: bool) -> String {
 /// What an entry needs and the command that follows, or what to do when no
 /// command of the caller's follows. `dropped` is why the item was dropped,
 /// from its record.
-pub fn next(entry: &Entry, dropped: Option<&str>, decider: Option<&str>) -> String {
+pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
     let id = &entry.id;
     let Some(act) = entry.next else {
         if entry.reviewed.is_some() && !entry.holds {
@@ -233,7 +227,7 @@ pub fn next(entry: &Entry, dropped: Option<&str>, decider: Option<&str>) -> Stri
             _ => "Nothing is left to do on it.\n".into(),
         };
     };
-    needs(act, entry.status, id, &entry.unmet, decider)
+    needs(act, entry.status, id, &entry.unmet)
 }
 
 /// How an implementer gets its item reviewed.
@@ -270,47 +264,19 @@ pub fn handoff(who: &str, tasks: &[String], then: &str) -> String {
     text + then + "\n"
 }
 
-/// What a thread that holds nothing on item `id` is told on its branch,
-/// before `offer`, what it is told otherwise (to take it over, or, for a
-/// reviewer whose review is done, to stop): each of `questions`, which
-/// wait unanswered, and how the oldest is answered, by the caller when
-/// `decides`. The lead of its mission, `leads`, is not offered the item.
-pub fn visiting(
-    id: &str,
-    questions: &[String],
-    decides: bool,
-    leads: Option<&str>,
-    offer: &str,
-) -> String {
-    let mut text = match leads {
-        Some(mission) => format!("You lead mission {mission}, which {id} is in: its implementer builds it, so you do not take it over.\n"),
-        None => String::new(),
-    };
-    for question in questions {
-        text += &format!("A question waits on a decider: {question}\n");
-    }
-    if !questions.is_empty() {
-        text += &match decides {
-            true => format!("Then: {}\n", command(Act::Decide, id)),
-            false => format!("You may not decide it. A decider answers it with `atelier decide {id}`: a thread that never implemented this item nor reviewed the finding a question is about.\n"),
-        };
-    }
+/// What a thread that holds nothing on item `id` is told on its branch:
+/// `offer`, what it is told otherwise (to take it over, or, for a reviewer
+/// whose review is done, to stop), except that the lead of its mission,
+/// `leads`, is not offered the item.
+pub fn visiting(id: &str, leads: Option<&str>, offer: &str) -> String {
     match leads {
-        Some(_) => text,
-        None => text + offer,
+        Some(mission) => format!("You lead mission {mission}, which {id} is in: its implementer builds it, so you do not take it over.\n"),
+        None => offer.to_string(),
     }
 }
 
 /// The conditions of `act` that do not hold, then its command.
-/// `decider` says who answers a question waiting on the item, where the
-/// caller knows.
-pub fn needs(
-    act: Act,
-    status: Status,
-    id: &str,
-    unmet: &[Condition],
-    decider: Option<&str>,
-) -> String {
+pub fn needs(act: Act, status: Status, id: &str, unmet: &[Condition]) -> String {
     let mut text = String::new();
     if !unmet.is_empty() {
         text += &format!("To {}:\n", goal(act, status));
@@ -325,22 +291,16 @@ pub fn needs(
             Condition::NoResponse { finding, .. } => Some(finding),
             _ => None,
         }) {
-            text += &format!("Answer each finding with one line under `### Responses` in the Report, and nothing else there, such as `{finding}: fixed in <commit>` or `{finding}: rebutted: <fact>`. Or, when it is right but not worth fixing now, or its fix leaves the item's scope, escalate it: atelier escalate --finding <finding> \"<question>\"\n");
+            text += &format!("Answer each finding with one line under `### Responses` in the Report, and nothing else there, such as `{finding}: fixed in <commit>` or `{finding}: rebutted: <fact>`. A rebuttal goes to the next round's reviewer, who keeps the finding or withdraws it.\n");
         }
         if unmet
             .iter()
             .any(|c| matches!(c, Condition::OpenFinding { .. }))
         {
-            text += "A finding that stands needs `atelier verdict changes`. A carried one closes when your file says `Now: fixed` or `Now: withdrawn` for it.\n";
+            text += "A finding that stands needs `atelier verdict changes`. A carried one closes when your file says `Now: fixed` or `Now: withdrawn` for it, or keeps it at `Recommendation: defer` or `no action` with a line that says why.\n";
         }
         if unmet.iter().any(|c| matches!(c, Condition::Uncommitted(_))) {
             text += "Commit them, or set them aside with `git stash`.\n";
-        }
-        if unmet.iter().any(|c| matches!(c, Condition::Unanswered(_))) {
-            text += &decider.map_or_else(
-                || format!("A decider answers each question with `atelier decide {id}`: a thread that never implemented this item nor reviewed the finding a question is about. `atelier status` says who.\n"),
-                str::to_string,
-            );
         }
         // A stale approval is answered by a fresh review, not by merging.
         if unmet.iter().any(|c| matches!(c, Condition::Stale { .. })) {
@@ -387,7 +347,7 @@ pub fn refusal(
             format!("You are the reviewer of {id}. Reviewers run `review` and `verdict`.\n").into()
         }
         Refusal::Role(Role::Implementer) => format!(
-            "You are the implementer of {id}. Implementers run `start`, `submit`, `escalate` and `merge`.\n"
+            "You are the implementer of {id}. Implementers run `start`, `submit` and `merge`.\n"
         ).into(),
         Refusal::Role(Role::Planner | Role::Lead | Role::Decider) => {
             unreachable!("no thread holds a planner's, a lead's or a decider's role on an item")
@@ -401,7 +361,7 @@ pub fn refusal(
                     row(*act).command,
                     from.join(", "),
                 ),
-                next(shown(), dropped, None),
+                next(shown(), dropped),
             )
         }
         Refusal::NotHolder {
@@ -431,7 +391,7 @@ pub fn refusal(
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, shown().status, id, unmet, None)
+            needs(act, shown().status, id, unmet)
         )
         .into(),
         Refusal::Record(problem) => format!("{problem}\n").into(),
@@ -669,7 +629,7 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
         Refusal::Unmet(unmet) => format!(
             "`{}` refused; nothing changed.\n{}",
             command(act, id),
-            needs(act, Status::Ready, id, unmet, None)
+            needs(act, Status::Ready, id, unmet)
         ),
         Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
             unreachable!("a mission's act is refused only for its status or conditions")
@@ -725,41 +685,6 @@ pub fn verdict_name(verdict: Verdict) -> &'static str {
         Verdict::Approve => "approved",
         Verdict::Changes => "changes requested",
     }
-}
-
-/// Who answers `question`, the oldest waiting on item `id`: `lead`, a
-/// mission and its lead, when it may decide it, else a new thread, which
-/// reads the question and, when it is about a finding, the `review` file
-/// that holds the finding. `commit` commits the question, when the lead
-/// cannot see it yet because it is not committed.
-pub fn decider(
-    id: &str,
-    question: &Decision,
-    review: Option<&str>,
-    lead: Option<(&str, &Thread)>,
-    commit: Option<&str>,
-) -> String {
-    if let Some((mission, lead)) = lead {
-        let commit = commit.map_or(String::new(), |line| {
-            format!("{lead}'s `atelier status` reads this branch's last commit, so commit the question first: {line}\n")
-        });
-        return format!(
-            "Thread {lead}, the lead of mission {mission}, decides it: {lead}'s `atelier status` lists the question.\n{commit}Tell whoever started you that it waits, and run `atelier status` once it is answered.\n"
-        );
-    }
-    let task = match (&question.finding, review) {
-        (Some(finding), Some(review)) => format!(
-            "Run atelier show {id}, and read the question waiting under its Decisions and finding {finding} in {review}. Answer it with atelier decide {id} '<your answer>', adding --defer to defer the finding or --no-action to close it without a fix, or neither to leave it to be fixed."
-        ),
-        _ => format!(
-            "Run atelier show {id}, and read the question waiting under its Decisions. Answer it with atelier decide {id} '<your answer>'."
-        ),
-    };
-    handoff(
-        "A decider",
-        &[task],
-        "Then wait for its answer, and run `atelier status`.",
-    )
 }
 
 /// `answered` is the question `decide` answered, `waiting` the next one,
@@ -830,15 +755,9 @@ pub fn not_settled(id: &str, asked: &Decision, settled: Outcome) -> Refused {
     )
 }
 
-/// `decide` refused for who the caller is, or for no question waiting;
-/// `handoff` says who decides the question that waits, which an
-/// implementer is shown.
-pub fn not_decider(
-    id: &str,
-    caller: &Thread,
-    unmet: &[Condition],
-    handoff: Option<&str>,
-) -> Refused {
+/// The Desk's `decide` refused for who the caller is, or for no question
+/// waiting.
+pub fn not_decider(id: &str, caller: &Thread, unmet: &[Condition]) -> Refused {
     let mut text = format!("`atelier decide {id}` refused; nothing changed.\n");
     for condition in unmet {
         text += &match condition {
@@ -848,19 +767,7 @@ pub fn not_decider(
             other => unreachable!("decide has no condition {other:?}"),
         };
     }
-    if unmet.contains(&Condition::FormerImplementer) {
-        return match handoff {
-            Some(handoff) => Refused::then(text, handoff.to_string()),
-            None => text.into(),
-        };
-    }
-    match unmet
-        .iter()
-        .any(|c| matches!(c, Condition::ReviewedFinding(_)))
-    {
-        true => Refused::then(text, "Say so to whoever started you, and stop.".into()),
-        false => text.into(),
-    }
+    text.into()
 }
 
 pub fn unreadable(path: &str) -> String {

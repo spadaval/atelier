@@ -85,7 +85,7 @@ crate beside them:
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; the disagreements `list --disputed` prints; `ready`, and until atelier-v958 removes the Desk's decide page `decide`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
 | `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
 
 The dependency direction is `cli` to `app` to `records` to `core`. The
@@ -143,7 +143,7 @@ created_at: <time>
 ```
 
 The item lives in a directory named for its `id`. Sections are `##`
-headings: Goal, Done when, Scope, Report, Decisions; Goal and Done when are
+headings: Goal, Done when, Scope, Report; Goal and Done when are
 required. Report has `### Validation` and `### Responses` subsections when
 they apply. Responses holds one line per open fix-now finding, optionally
 as a list item: `2-m2bn.1: fixed in <commit>` or
@@ -157,15 +157,18 @@ subsection, adding the section at the end when the item has none.
 line that is not blank, when it starts `Dropped: `. `close` writes an
 item's result first under `## Report` the same way.
 
-A Decisions entry is a `### <date>: <question>` heading under Decisions.
-Its lines may name a finding (`Finding: 2-m2bn.1`); once answered it has
-`Answer by <thread>: <answer>`, and then, for a finding, `Outcome: defer` or
-`Outcome: no action`. An `Outcome:` without a `Finding:` and an answer is
-refused. `escalate` adds an entry at the end of the section, adding the
-section at the end of the body when there is none, dated in UTC, with its
-`Finding:` line when given one. `decide` writes its lines after the last
-line of the oldest entry with no answer. The question and the answer are
-each one line.
+**What `escalate` and `decide` wrote.** Until 2026-11-13 an item could
+hold a `## Decisions` section, and a carried finding a `Decided:` line
+(atelier-xbog removed both commands). No item in the repositories on this
+host has either, but the binary still reads them, so a record written then
+reads as it did. A Decisions entry is a `### <date>: <question>` heading
+under Decisions. Its lines may name a finding (`Finding: 2-m2bn.1`); once
+answered it has `Answer by <thread>: <answer>`, and then, for a finding,
+`Outcome: defer` or `Outcome: no action`, which settles that finding: it is
+no longer open, and with `defer` it is deferred. An `Outcome:` without a
+`Finding:` and an answer is refused. An unanswered entry waits on nothing.
+No command writes an entry; the Desk's `decide` answers one until
+atelier-v958 removes it.
 
 ### `missions/<id>/mission.md`
 
@@ -238,10 +241,10 @@ first line is `Recommendation: fix now | defer | no action`. A finding's
 name is its review's file stem and its number, as in `2-m2bn.1`. A finding
 carried from an earlier round also has `Was: <finding name>`, naming a
 finding of an earlier round, and exactly one of `Now: fixed`,
-`Now: withdrawn`, `Now: kept`, or `Decided: defer | no action`, which the
-tool writes from the Decisions entry and the reviewer cannot change. Every
-finding name a record gives, in `Was:`, in Responses or in a Decisions
-entry's `Finding:`, must be a finding of the item's reviews. Other lines
+`Now: withdrawn` or `Now: kept`, or, in a review written before `decide`
+was removed, `Decided: defer | no action`. Every finding name a record
+gives, in `Was:`, in Responses or in a Decisions entry's `Finding:`, must be
+a finding of the item's reviews. Other lines
 of a finding are the reviewer's text, and an HTML comment is text.
 
 `review` writes the file's front matter: the round, the commit at the tip
@@ -260,40 +263,36 @@ Now: kept
 <!-- Set Now: to fixed, withdrawn or kept. -->
 ```
 
-`Response:` is the author's line for that finding in Responses, or `none
-in the Report`. A plan review's carried finding has no `Response:` line,
-since a mission has no Report. A carried finding starts kept, so it stays open until its
-reviewer closes it. Nobody edits the front matter: `verdict` sets the
+The comment goes on to say that a finding kept for later work instead has
+its `Recommendation:` set to `defer` or `no action` and a line that says
+why. `Response:` is the author's line for that finding in Responses, or
+`none in the Report`. A plan review's carried finding has no `Response:`
+line, since a mission has no Report. A carried finding starts kept, so it
+stays open until its reviewer closes it. Nobody edits the front matter: `verdict` sets the
 verdict, and the model when given `--model`.
 
-The template also carries each finding of an earlier round that a
-decision settled and no earlier round carries, once, in the same order:
-
-```markdown
-## Finding 2: <the settled finding's title>
-Recommendation: fix now
-Was: 1-x7qd.1
-Decided: defer
-<!-- A decision settled it, and the tool wrote `Decided:`. Leave this finding as it is. -->
-```
-
-`verdict` is refused while the file does not carry such a finding with the
-`Decided:` line the tool wrote, or while a finding of the file has a
-`Decided:` line no decision wrote, or carries a settled finding, or a
-finding carried as decided, any other way. So no later review reopens
-what a decision settled, and a reviewer cannot decide a finding itself.
+The template carries nothing a decision settled: such a finding is closed.
+`verdict` is refused while a finding of the file has a `Decided:` line, or
+carries a finding that a Decisions entry or a `Decided:` line settled. So
+no later review reopens what a decision settled, and nothing settles a
+finding that way now.
 
 A fix-now finding is open until a later round carries it as fixed,
 withdrawn or decided, or a Decisions entry naming it has an outcome.
-Carried as kept, it moves: the carrying finding is then the open one, and
-must say `Recommendation: fix now`. A
-carrying finding that says fixed, withdrawn or decided is not itself open.
+Carried as kept, it moves: the carrying finding is then the open one while
+it says `Recommendation: fix now`. Its reviewer may instead keep it at
+`defer` or `no action`, when it is right but not for this item; then the
+carrying finding needs a line of the reviewer's own, one that is no field
+the tool reads and no HTML comment, saying why, or the file does not read.
+A carrying finding that says fixed, withdrawn or decided, or kept at defer
+or no action, is not itself open. So a fix-now finding is settled without a
+fix only by a reviewer: by withdrawing it, or by lowering it.
 A review whose verdict is approve while one of its own findings is open is
 refused.
 
-A finding is deferred when its recommendation is defer or a decision
-deferred it, by a `Decided: defer` line or by a Decisions entry naming it
-with `Outcome: defer`, unless a later round carries it: then the carrying
+A finding is deferred when its recommendation is defer, a carrying
+finding's included, or a decision deferred it, by a `Decided: defer` line or
+by a Decisions entry naming it with `Outcome: defer`, unless a later round carries it: then the carrying
 finding is the one that stands (`atelier_core::is_deferred`). A deferred
 finding is unsettled until its text gains
 `Taken: <item> by <thread>`, written by `new --from`, or
@@ -374,19 +373,17 @@ will check.
 | `start --new` | Implementer | none | `building` | none; the item is created on its new branch |
 | `start --mission` | Planner | none | `open` | none; the mission is created on its new branch, with the caller in `planners` |
 | `start --backlog` | Any | none | none | no branch `backlog/<slug>` exists, local or on the remote |
-| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or an unanswered question about it; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
+| `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `submit` (mission) | Planner | proposed | unchanged | the mission is not dropped; no record the branch changes is uncommitted. A caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
 | `submit` (backlog) | Any | none | none | no record the branch changes is uncommitted. Where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
-| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; it keeps what decisions settled, as the tool wrote it |
-| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; it keeps what decisions settled |
+| `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; no finding of it has a `Decided:` line or carries a finding a decision settled |
+| `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; no finding of it has a `Decided:` line or carries a finding a decision settled |
 | `review` of a plan | Reviewer | proposed, or `open` with its plan changed on the backlog branch the checkout is on | unchanged | the caller is not in the mission's `planners` |
 | `verdict changes` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
 | `verdict approve` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
-| `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
-| `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor, for the oldest unanswered question when it names a finding, in the `reviewers` of the review that raised that finding or of any review whose finding it carries |
-| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no unanswered question; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
-| `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no unanswered question; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
+| `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
+| `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
 | `merge` (mission) | Planner | proposed | agreed, by being on the base | two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
 | `merge` (backlog) | Any | none | none | no code changed (no path outside `.atelier/`, and not `config.toml`); for each agreed mission whose plan it changes, the plan gate of a mission's merge; it adds no mission; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
@@ -414,7 +411,6 @@ command that commits them.
 | `submit` (mission, backlog) | The branch it is on | The command commits only the addition of a planner taking the plan over; it refuses while a record change is uncommitted, and pushes |
 | `review`, `verdict` (item) | The item's branch, in the implementer's checkout | The agent: the reviewer commits the review file and `item.md` |
 | `review`, `verdict` (plan) | The mission's branch, or the backlog branch that amends an agreed plan | The agent: the reviewer commits the review file and pushes it to that branch |
-| `escalate`, `decide` | The item's branch | The agent, as now; atelier-xbog removes both commands |
 | `merge`, `merge --trivial` | Merges the item's branch into the base | The forge's merge of the pull request, or, without a forge, the command's merge commit. `--trivial` first commits `trivial` on the branch |
 | `merge` (mission, backlog) | Merges the branch into the base | As for an item |
 | `close` (item, mission) | A backlog branch | The agent |
@@ -433,7 +429,7 @@ How the table is built:
 - A row joins the table with its command. The table holds the rows of
   `ready` on an item, `start`, `start --new`, `start --mission`, `start
   --backlog`, `start` taking over, `submit` on each kind of branch,
-  `review`, both verdicts, `escalate`, `decide`, `merge` on each kind of
+  `review`, both verdicts, `merge` on each kind of
   branch and with `--trivial`, `lead`, `drop` (one row, for an item and a
   mission), `close` on an item and on a mission, `review` and both
   verdicts on a plan review, and settling a finding (`Act::Settle`), whose finding's
@@ -462,14 +458,13 @@ How the table is built:
   round's reviewer while the item is in review and it holds that file.
 - `acts::check` refuses a caller that holds one role on the item and runs
   another role's act, with one line naming its role and that role's
-  commands. `review` and `decide` are the exceptions: an implementer,
-  current or past, is refused by their condition; `review` shows it the
-  brief, and `decide` the handoff that starts a decider. Then `check` refuses an
+  commands. `review` is the exception: an implementer, current or past, is
+  refused by its condition and shown the brief. Then `check` refuses an
   act whose From does not hold the item's status, then one that needs a role
   the caller does not hold, then one with an unmet condition, and otherwise
   gives the status to set. An act that binds a role (`start`, `review`)
-  needs nothing held, and `decide` binds its decider the same way;
-  `submit`, `escalate` and `merge` need the caller to be the item's last
+  needs nothing held;
+  `submit` and `merge` need the caller to be the item's last
   implementer, and a verdict needs it to be the round's reviewer. No
   thread holds the planner's role on an item, so a planner's act on one
   (`ready`) needs nothing held and is never refused for a role the caller
@@ -522,24 +517,28 @@ Two facts are checked live and never stored:
   up no CI.
 
 Of the rules in the product specification's Review section, the binary
-enforces four, through the act table: an author never reviews or decides
-its own item; a reviewer of a finding, in any round that carried it, never
-decides it; `verdict approve` is refused while a fix-now finding is open;
-and a decided finding cannot be reopened. Three it does not enforce, and
-leaves to the skill: that a rebuttal goes to a fresh reviewer and gets one
-try, that escalation is required after three rounds without an approval,
-and that a mission's lead is the one who decides. `status` shows each of
-them but the fresh reviewer: an open finding whose rebuttal a reviewer kept says the rebuttal has
-had its one try; the implementer is shown the round, and once three rounds
-have ended without an approve verdict (`Facts::unapproved_rounds`, counted
-from the review files and stored nowhere) it is told on one line that
-escalation is required now, though `submit` still opens a fourth, and in
-review that it escalates once the round's verdict is in if that asks for
-changes too; and a
-question names the lead as its decider when the lead may decide it.
-Nothing stops one thread reviewing every round, and any thread that is
-neither an implementer of the item nor a reviewer of the finding may
-decide. The review brief carries no merge check results, since nothing
+enforces three, through the act table: an author never reviews its own
+item; `verdict approve` is refused while a fix-now finding is open; and
+only a reviewer settles a fix-now finding without a fix, by withdrawing it
+or keeping it at a lower recommendation with its reason, and what a
+decision settled before `decide` was removed is not reopened. Two it does
+not enforce, and leaves to the skill: that a rebuttal goes to a fresh
+reviewer, and that it gets one try. `status` shows the second: an open
+finding whose rebuttal a reviewer kept says the rebuttal has had its one
+try, and the implementer is shown the round. Nothing stops one thread
+reviewing every round, and nothing counts rounds against a limit.
+
+A disagreement is found, not enforced (`atelier_app::disputes`). Each
+finding whose line in Responses is `rebutted` is one, with what each review
+of a later round that carries it, and has a verdict, made of it: kept,
+withdrawn, fixed, kept at defer or no action, or, in an old review, decided;
+with none, it is not yet reviewed. So is each round of a mission's plan
+review in which one reviewer approved and another asked for changes, read
+from the missions on the base. `list --disputed` lists them across every
+item, open or done, read as `status` reads it, and leaves out a dropped
+item's; `--mission <id>` narrows it to one mission's items and plan. `show
+<mission>` lists the mission's under Disputed, and a lead's `status` under
+each mission it leads. Nothing refuses or warns on any of them. The review brief carries no merge check results, since nothing
 records them. Where the base's config names a forge it names the branch's
 open pull request, where CI's result can be read, looked up with the code
 `submit` and `merge` use and bounded as `merge`'s question under its lock
@@ -564,11 +563,11 @@ reviewer of its parent's item. A Codex subagent is one. Measured on
 2026-11-11 with Codex 0.167 `codex exec` inside a T3 thread: the root has
 `CODEX_THREAD_ID` equal to `CODEX_SESSION_ID`, and its `spawn_agent` child
 has the same `CODEX_SESSION_ID` and inherited `T3CODE_THREAD_ID` and a
-`CODEX_THREAD_ID` of its own, so it may review or decide its parent's item
+`CODEX_THREAD_ID` of its own, so it may review its parent's item
 and not run its parent's `submit` or `merge`. A thread the harness starts
 as a thread, such as T3 Code's `delegate_task`, has an identity of its own
 under any harness. `submit`'s handoff and the refusal of an author's
-`review` and `decide` say which subagents may be used, to start one with
+`review` say which subagents may be used, to start one with
 fresh context, not as a fork, and that starting it is the reader's own job
 and part of its task, even as a child or subagent, so it starts it without
 waiting to be asked. Told less, a Codex thread waited for its user's word
@@ -577,8 +576,8 @@ for its lead (the first real item under the new tool, mission atelier-qr5s).
 
 That rule is the command's. A program that links `atelier-app`, such as the
 Desk, names the caller itself when it opens a repository (`Repo::open`),
-and that name is the identity the records get: an answer it writes for
-`sumeet` reads `Answer by sumeet:`, where the command run by a person with
+and that name is the identity the records get: an act it makes for
+`sumeet` records `sumeet`, where the command run by a person with
 no harness variable set is `human`. `ready`'s `by`, the person who said go,
 is a parameter of the function, which `ready --by` fills. A name the records
 cannot write and read back as it is, one with a line break or a `: `, is
@@ -587,7 +586,7 @@ refused when the repository is opened, before anything is written.
 Entry commands store the identity in the record: `start` appends it to the
 item's `implementers`, `review` to the review file's `reviewers`, `start
 --mission` and a planner's take-over to the mission's `planners`, and `lead`
-sets the mission's `lead`. `decide` stores it with the answer. The last entry
+sets the mission's `lead`. The last entry
 of a list holds the role now. The earlier entries are why a thread that once
 implemented an item can never review it.
 
@@ -602,11 +601,9 @@ for an item, `status` speaks to the item's holder as its implementer, to a
 thread that reviewed an earlier round as done with it, and to anyone else as
 a visitor, naming the holder. On a mission's branch it speaks to a planner
 as planner, with what the plan still needs to merge, and to anyone else as
-a possible reviewer of the plan. A visitor, or a reviewer whose review is
-done, is told, before any offer to take
-the item over, each unanswered question and `decide`, as its next command
-when it may decide them and naming who may when it may not; the lead of the
-item's mission is told so and offered no take-over. Anywhere else it lists the
+a possible reviewer of the plan. A visitor is offered the take-over, and a
+reviewer whose review is done is told to stop; the lead of the item's
+mission is told so and offered no take-over. Anywhere else it lists the
 started items the caller holds, with `start <id>` to return to one, the
 ready items `start` would accept now (`Entry::startable`, as `list --ready`
 reads it), one line counting the other ready items by what stops them (a
@@ -624,35 +621,23 @@ not reached the base, each with its reason. A thread that is the `lead` of an ag
 mission is told so, with each of the mission's items by
 status, what holds or blocks each, under each started item the conditions
 its holder's `status` lists as unmet, read from the branch's last commit and
-so without what the holder has not committed, other than questions, which
-are listed apart, and the handoff line that starts a thread for each item that can
+so without what the holder has not committed, what is disputed in the
+mission when anything is, and the handoff line that starts a thread for each item that can
 start now; holding nothing else, it is pointed at no item itself. On the item's branch it says a dropped item
 was dropped and why, as does the refusal of any act on it, and it
 speaks to the round's reviewer as reviewer, naming its file, tells
 the implementer of an item in review which thread holds the round's review,
 or that none does yet, and tells the implementer of a building item whose
 Goal or Done when lines are empty, as after `start --new`, to write them
-first. That line is orientation, not a condition of `submit`. The
-implementer's `status` lists each unanswered question as a condition of
-`submit` or `merge`, and says who decides the oldest: the lead of the
-item's mission, when the mission is agreed and its lead may decide it, else
-a new thread, with the handoff `escalate` printed. The lead reads the item
-from its branch's last commit, so while the question is not committed the
-lead's handoff also gives the Git command that commits it. An open finding whose
-rebuttal a reviewer kept says that a rebuttal has had its one try, so the
-exits left are a fix or `escalate`. A lead's `status` lists, under each
-mission it leads, its items' unanswered questions with the `decide` that
-answers each, and `show <mission>` lists them too. An approved item says
+first. That line is orientation, not a condition of `submit`. An open
+finding whose rebuttal a reviewer kept says that a rebuttal has had its one
+try, so the exit left is a fix. An approved item says
 since when, in the implementer's and the lead's `status` and in `show`:
 the time of the commit on its branch that set the approving review's
 verdict, which `git log -S` finds; nothing stores it. Away from the item's
-branch, the implementer's list of what it holds gives the same: each
-item's unanswered questions, since when an approved one is approved, the
-round of one in review or with changes requested, and the line that
-escalation is required after three rounds without an approval. With
-changes requested, that line names `escalate --finding` with the first open
-fix-now finding that no question is about, in its round or any it was
-carried from, and it is gone once a question is about each.
+branch, the implementer's list of what it holds gives the same: since when
+an approved one is approved, and the round of one in review or with changes
+requested.
 
 Harness hooks give orientation at session start. `atelier setup claude`
 writes Claude Code's project hooks into `.claude/settings.json`: a
@@ -799,7 +784,7 @@ reads; nothing is written there.
   backlog branch. An item that is only on its branch, as after `start
   --new`, gets its branch's front matter and its Goal, Done when and Scope
   written there, under which its Report holds the reason; its reviews, the
-  rest of its Report and its Decisions stay on the branch, so nothing on
+  rest of its Report and any Decisions stay on the branch, so nothing on
   the base names a review it lacks. `status` and `list` say a drop has not
   reached the base until it has. A drop of an item already merged is
   refused. A proposed mission is dropped on its own branch; `drop` prints
@@ -862,13 +847,6 @@ reads; nothing is written there.
   checkout, on an item's branch. On a mission's or a backlog branch it
   commits nothing but a planner taking the plan over, and refuses while a
   record the branch changes is uncommitted, naming the paths.
-- **A question and its answer are written where the implementer works.**
-  `escalate` runs on the item's branch, and `decide` only in the checkout
-  on it, refused anywhere else, naming the checkout that has the branch.
-  Each writes `item.md` there and commits nothing, so `submit` commits the
-  question and its answer with the item; an approved item's implementer
-  commits them before `merge`, which refuses anything uncommitted. A
-  refused `escalate` or `decide` writes nothing.
 - **An item's review is written where the implementer works.** `review` runs
   only in the checkout on the item's branch, and refuses anywhere else,
   naming it. It creates the round's file, or appends the caller to its
@@ -966,7 +944,7 @@ In order:
    plan is proposed.
    - **Code** needs an item's approval: on an item's branch, the approval
      covers the head, or `--trivial` was given on a building item with no
-     review file; no Decisions entry is unanswered; neither the item nor
+     review file; neither the item nor
      its mission is dropped, as the reader finds them. On a mission's or a
      backlog branch, code is refused, naming `start` for an item; it is no
      rule, and `ATELIER_SKIP` does not pass it.
@@ -1109,8 +1087,6 @@ refused as `show` refuses it.
 | submit | An item's status becomes `in_review` | The item's holder |
 | review, take-over | A review file appears, or its `reviewers` gains an entry | That entry |
 | verdict | A review's verdict is set, on an item or a mission | The review's holder |
-| escalate | A Decisions entry appears | The item's holder |
-| decide | A Decisions entry gains its answer | The thread stored with the answer |
 | merge | On the base's first-parent line, an item's copy first holds a started status, or becomes `done` in an Atelier merge made before the branch model | The item's holder |
 | settle | A finding gains `Taken` or `Dropped` | The thread in that line |
 | lead | A mission's `lead` is set or changes | That entry |
@@ -1152,8 +1128,6 @@ holds:
 | review | The review's name, as `1-c27c` |
 | take-over, of a reviewer | The review's name, then `from <former reviewer>` |
 | verdict | The review's name and `approve` or `changes`, then the item's status move when the commit made it `approved` or `changes_requested` |
-| escalate | The finding it is about, when there is one, then the question as its heading reads, with its date |
-| decide | The outcome, `defer` or `no action`, when there is one, then the answer |
 | merge | The status move, as `approved -> done`, then `trivial: <why>` for a trivial merge, and the merge commit's branch |
 | settle | `<finding> taken into <item>`, or `<finding> dropped: <reason>` |
 | lead | `from <former lead>`, when the lead changed |
@@ -1233,7 +1207,7 @@ visible after its branch is merged and deleted. The old tool's history
 reader for the debrief followed first parents only and lost them.
 
 `log` adds nothing up. Time in each status from `ready` on, rounds per item,
-roles taken over, escalations and skips are counts over its lines, and the
+roles taken over and skips are counts over its lines, and the
 gardener's procedure, not the binary, says which to take.
 
 ## Hooks and the bypass
@@ -1368,7 +1342,7 @@ rule names.
   that does not exist, and a finding settled already; a missing or
   malformed argument; a command run where it has nothing to act on: off the
   item's branch it writes, with no review file of the round to record a
-  verdict in, with no question to decide, or `review` of a plan on an
+  verdict in, or `review` of a plan on an
   item's branch, where `verdict` is the item's; `start` where branch `<id>`
   exists, and a take-over where it does not; a merge that conflicts, and inputs that
   moved while `merge` ran; a Git or forge command that failed; `setup`
@@ -1498,14 +1472,21 @@ What is still to come:
 
 - One scenario test per lifecycle path, driving the real binary in a scratch
   repository: the plain path; changes requested and fixed over two rounds; a
-  rebuttal withdrawn and one kept; an escalation decided as defer; a trivial
+  rebuttal withdrawn, and one kept and then kept at defer; a trivial
   merge; an item with no files; a mission from `start --mission` through two
   plan reviews and its merge to closed; an implementer taken over in
   `approved`; a reviewer taken over mid-round; a former implementer refused
-  as reviewer and as decider, and a planner refused as plan reviewer; two
+  as reviewer, and a planner refused as plan reviewer; two
   clones of one remote starting one item at once; a started item dropped on
   its branch from another clone, then refused at merge, in both orders; a
   record-only branch merged on `check`, and one carrying code refused.
+- Disagreements (`crates/atelier-cli/tests/disputes.rs`): a rebuttal
+  withdrawn and one kept, then lowered, each as `list --disputed` shows it
+  before and after its next round; a mission's rebuttal and split plan
+  round in `list --disputed --mission`, `show <mission>` and its lead's
+  `status`; `escalate` and `decide` refused as unknown commands; and an
+  item whose question was decided as defer before they were removed, which
+  `check`, `show`, `list --deferred` and `drop` read as they did.
 - The protected base (atelier-t5am): against a local remote whose hook
   refuses every push to the base, the item loop, a mission's plan and a
   backlog branch all merge through the forge's contract-test double; the
@@ -1514,7 +1495,7 @@ What is still to come:
 - `log` (`crates/atelier-cli/tests/log.rs`): the plain path prints its acts
   in order with the right threads, and the same lines after the item's
   branch is merged and deleted; a take-over shows both implementers, and a
-  review taken over both reviewers; an escalation and its answer; a deferred
+  review taken over both reviewers; a deferred
   finding settled on a gardener's branch and merged; a mission's plan
   reviews, its merge, `lead` and `close`, with its item dropped; an item
   merged by the forge, whose base copy stays `approved`, shown as merged; a skip on its
@@ -1612,13 +1593,13 @@ became `show`, `list` and `status`:
 
 | Old view | Replaced by |
 | --- | --- |
-| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, questions, plan reviews |
+| `work mission <id>` | `show <mission>`: status, lead, Outcome, criteria and Result, items by status with holder and blockers, what is disputed, plan reviews |
 | `work missions` | `list`, which heads each open mission's items with its status, whether it is in progress, and its lead; `status` on the base lists the missions in progress |
 | `work missions --all` | `list --done` for finished missions and items; `list` heads the open ones, and lists items in no mission |
 | `work ready` | `list --ready`, and "Ready to start" in `status` on the base |
 | `work blocked` | `list --blocked`, which names each blocker that is not done |
-| `work human` | `list --needs-human`, and "Waiting on a human" in `status`; open decisions are the unanswered questions in `show <mission>` |
-| `work decisions <id>` | The questions in `show <mission>`, unanswered first; an item's Decisions section is in `show <item>`. Decision records and notes are gone |
+| `work human` | `list --needs-human`, and "Waiting on a human" in `status` |
+| `work decisions <id>` | Gone with `escalate` and `decide` (see Decisions). What two models disagreed on is in `list --disputed --mission <id>` and `show <mission>`; an old item's Decisions section is in `show <item>` |
 | `work active` | `status`, which lists what the caller holds and what other threads hold, read from their branches; `list` shows each started item with its holder |
 | `work all` | `list` |
 | `work parent <id>` | None: parents are gone, and a mission groups its items |
@@ -1681,7 +1662,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | The two plan reviews are enforced by `merge` (2026-11-13) | They are now the only gate, and until then the rule lived only in the skill |
 | Items keep `draft` and `ready` (2026-11-13) | They record intent: agreed to exist, or agreed to start now. Readying a mission never readied its items, so a lead can hold later work until earlier work has shown what it shows |
 | `lead` stays a field on the mission, as attribution (2026-11-13) | The Desk shows who leads. It reaches the base by the record-only path once per mission. It is not a lock, and a second lead loses at merge |
-| `escalate` and `decide` are removed (2026-11-13; atelier-xbog does it) | They served two jobs. Advice needs no record: the implementer asks the thread that started it, as Claude's advisor tool lets a working model ask a stronger one and carry on. A disputed finding already has a path: a rebuttal in Responses, settled by a fresh reviewer. Nothing has used either command since the cutover |
+| `escalate` and `decide` are removed (2026-11-13, atelier-xbog) | They served two jobs. Advice needs no record: the implementer asks the thread that started it, as Claude's advisor tool lets a working model ask a stronger one and carry on. A disputed finding already has a path: a rebuttal in Responses, settled by a fresh reviewer. Nothing has used either command since the cutover |
 | A disagreement is found, not enforced (2026-11-13) | The records hold it already: a `rebutted` Response with the next round's `Now: kept` or `Now: withdrawn`, and a plan-review round whose reviewers differ. `list --disputed` prints them, `show <mission>` gives a lead its mission's, and the gardener reads them first. Nothing blocks on them. A lead steps in with the lever it owns: it moves the disputed work out of the item's Scope into an item of its own |
 | A lead's notes are ordinary record changes (2026-11-13) | Two or three per mission, in `notes.md`, through the record-only path |
 | Record-only changes take about a minute (2026-11-13) | A tracker in Git cannot be instant, and does not need to be. Each repository's CI must give records a fast path, which is a line of the readiness checklist |

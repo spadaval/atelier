@@ -137,7 +137,7 @@ fn decide_writes_the_answer_by_the_caller_named_or_returns_its_refusal() {
     outside(&root);
     let skip = Skip::new(None);
 
-    // Its implementer does not decide it, and is pointed at who does.
+    // Its implementer does not decide it.
     let mut repo = Repo::open(&root, Thread("t1".into()), &skip).unwrap();
     let refused = decide(&mut repo, ID, "Hello", None).unwrap().unwrap_err();
     assert_eq!(refused.rules, ["You have never implemented demo-ab12"]);
@@ -148,17 +148,7 @@ fn decide_writes_the_answer_by_the_caller_named_or_returns_its_refusal() {
              and none of its implementers, past or present, decides its questions.\n"
         )
     );
-    let next = refused.next.unwrap();
-    assert!(
-        next.starts_with(
-            "A decider must be a thread other than yours, and starting it is your job:"
-        ),
-        "{next}"
-    );
-    assert!(
-        next.ends_with("Then wait for its answer, and run `atelier status`."),
-        "{next}"
-    );
+    assert_eq!(refused.next, None);
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
 
     // The caller the program names is the one the record gets.

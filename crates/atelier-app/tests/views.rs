@@ -175,8 +175,8 @@ fn the_mission_view_holds_what_show_prints() {
         items,
         [(PLANNED, Status::Ready), (STARTED, Status::Building)]
     );
-    let planned = view.items.iter().find(|e| e.id == PLANNED).unwrap();
-    assert_eq!(planned.questions, ["2026-11-10: Which way?"]);
+    // A question written before `escalate` was removed is kept for the
+    // Desk, and is no part of an item's entry.
     assert_eq!(view.questions.len(), 1);
     assert_eq!(view.questions[0].0, PLANNED);
     assert_eq!(view.questions[0].1.question, "2026-11-10: Which way?");
@@ -209,7 +209,6 @@ fn the_item_view_says_which_record_it_read() {
 
     let planned = item_view(&mut repo, PLANNED).unwrap().unwrap();
     assert_eq!(planned.read_from, ReadFrom::Base);
-    assert_eq!(planned.entry.questions, ["2026-11-10: Which way?"]);
 
     assert!(item_view(&mut repo, "demo-zz99").unwrap().is_none());
 }
