@@ -3,11 +3,13 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-to83
 title: 'Write master only by merges: plans and record changes on branches, the whole picture derived, and no upfront go'
-status: draft
+status: ready
 labels:
 - redesign
 lead: null
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-13
+  at: 2026-11-13T08:27:12.090629970Z
 created_at: 2026-11-13T06:14:32.538523830Z
 ---
 

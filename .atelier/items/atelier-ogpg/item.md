@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ogpg
 title: Record the branch model in docs/product.md and docs/design.md before any code changes
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
 priority: high
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-13
+  at: 2026-11-13T08:27:12.090629970Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T06:14:32.596717477Z
