@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wb05
 title: Rewrite garden.md so a run has a stated purpose, a focus and transcripts as its main evidence
-status: ready
+status: building
 mission: atelier-g961
 labels:
 - agent-factory
 priority: high
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abe2146c6-f4c6-4217-8f3a-ee1dc9eec577%3Adelegate-task%3A5cec947d-b329-4fc8-a2a7-de5ceac8e5db
 ready:
   by: sumeet, in conversation on 2026-11-13
   at: 2026-11-13T08:27:11.885174987Z
