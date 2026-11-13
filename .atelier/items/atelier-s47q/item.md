@@ -3,13 +3,14 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s47q
 title: Fold groom into the planner as backlog.md, and let it drop provably stale items itself
-status: ready
+status: building
 mission: atelier-g961
 labels:
 - agent-factory
 priority: medium
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abe2146c6-f4c6-4217-8f3a-ee1dc9eec577%3Adelegate-task%3Aede59fb7-cf1e-46fc-bfdc-d4202d8ed2aa
 ready:
   by: sumeet, in conversation on 2026-11-13
   at: 2026-11-13T08:27:11.885174987Z
