@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ogpg
 title: Record the branch model in docs/product.md and docs/design.md before any code changes
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -107,4 +107,12 @@ text:
 Documentation only. `git diff --check` is clean. I grepped both documents for
 "planning", "on the base", "draft", "cherry" and "go-ahead" and reworded every
 place that still put planning on the base. No code or tests were touched.
+
+### Responses
+
+- 1-ep2v.1: fixed in c328a9380: `merge` step 5 and both documents now apply every gate a branch's contents need, whatever its kind. Code is allowed only on an item's branch (refused elsewhere, not skippable); a plan change needs two plan approvals on a mission's or backlog branch and is refused on an item's branch.
+- 1-ep2v.2: fixed in c328a9380: an amendment of an agreed plan goes on a backlog branch. `submit` there adds the submitter to the mission's `planners` and opens the next plan round; `review` and both plan verdicts run from `open` with the plan changed on that branch; `merge` (backlog) applies the plan gate for each mission it changes.
+- 1-ep2v.3: fixed in c328a9380: `config.toml` counts as code in the definition of a record-only change, the Branches table, `merge` step 5 and the backlog merge row.
+- 1-ep2v.4: fixed in c328a9380: the product's Merge section now pushes whenever the forge's copy is not the head, and explains the extra CI run under a protection that requires CI on the head.
+- 1-ep2v.5: fixed in c328a9380: The walk's `--full-history` bullet now explains why the flag is needed when a merge writes nothing of its own.
 
