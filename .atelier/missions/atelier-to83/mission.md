@@ -6,7 +6,7 @@ title: 'Write master only by merges: plans and record changes on branches, the w
 status: ready
 labels:
 - redesign
-lead: null
+lead: mcp:1bb2bc70-d102-4419-8ae0-631379f52f4b
 ready:
   by: sumeet, in conversation on 2026-11-13
   at: 2026-11-13T08:27:12.090629970Z
