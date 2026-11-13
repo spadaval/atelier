@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wb05
 title: Rewrite garden.md so a run has a stated purpose, a focus and transcripts as its main evidence
-status: changes_requested
+status: in_review
 mission: atelier-g961
 labels:
 - agent-factory
@@ -55,7 +55,7 @@ The first runs' full lists of guesses are in atelier-613a's Report; atelier-h201
 
 ## Report
 
-A gardener now learns from the top of `garden.md` what a run is for and what it is not, picks one of eight focus areas by a fixed rule, reads six items' threads in full before anything else, and reads the focus area's code. `garden.md` and `readiness.md` are 298 lines together, as before: `garden.md` 188 to 192, `readiness.md` 110 to 106.
+A gardener now learns from the top of `garden.md` what a run is for and what it is not, picks one of eight focus areas by a fixed rule, reads six items' threads in full before anything else, and reads the focus area's code. `garden.md` and `readiness.md` are 296 lines together, down from 298: `garden.md` 188 to 192, `readiness.md` 110 to 104.
 
 ### What changed in `garden.md`
 
@@ -83,7 +83,7 @@ A gardener now learns from the top of `garden.md` what a run is for and what it 
 | Line 7 with no forge | Only the merge checks count |
 | Line 8 with no verify skill | Not met |
 | Line 9, a cause outside the repository | Met when the bug's body says so; the command may print such items |
-| Line 3's script reporting home paths, URLs and routes | `~` paths are excluded, and a name starting with `/` or with a dotted first part counts only if its first part exists here; links starting with `/` or `~` are skipped. Checked on a sample naming `docs/gone.md`, `gone/x.rs`, `~/x/y.md`, `/home/b/z.md`, `/api/items`, `github.com/a/b` and four links: it reported only `docs/gone.md`, `gone/x.rs` and the missing relative link. It prints nothing on this repository. |
+| Line 3's script reporting home paths, URLs and routes | A name starting with `/` or `~` (a host path or an HTTP route) is not checked, and links starting with either are skipped; a URL with a scheme was already excluded by the `:` in the pattern. Checked on a sample naming `docs/gone.md`, `gone/x.rs`, `.agents/skills/verify/SKILL.md`, `.claude/settings.json`, `docs.v2/README.md`, `~/x/y.md`, `/home/b/z.md`, `/api/items` and `/docs/health` (with `api/` and `docs/` present), a URL and five links: it reported the five missing repository paths and the missing relative link, and nothing else. It prints nothing on this repository. |
 
 ### Other files
 
@@ -92,4 +92,8 @@ A gardener now learns from the top of `garden.md` what a run is for and what it 
 
 ### Trimmed to fit the budget
 
-To stay at 298 lines: `readiness.md` line 1 lost its explanation of what Claude Code reads without `CLAUDE.md`, the intro and "A Repository's Own Lines" were shortened (the latter no longer mentions `atelier check` accepting the file), and `garden.md` step 7 no longer says `status` shows how long the run has waited.
+To stay within 298 lines: `readiness.md` line 1 lost its explanation of what Claude Code reads without `CLAUDE.md`, the intro and "A Repository's Own Lines" were shortened (the latter no longer mentions `atelier check` accepting the file), and `garden.md` step 7 no longer says `status` shows how long the run has waited.
+
+### Responses
+
+- 1-net6.1: fixed in cbf025704
