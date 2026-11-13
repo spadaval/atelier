@@ -670,11 +670,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     // checkout on the base.
     let moved = run.stdout.split_whitespace().nth(1).unwrap().to_string();
     assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
-    assert!(
-        run.stdout.contains(&format!("git worktree add ")),
-        "{}",
-        run.stdout
-    );
+    assert!(run.stdout.contains("git worktree add "), "{}", run.stdout);
     git(&root, &["reset", "-q", "--keep", &pushed[..7]]);
     let run = git_as(&root, &["push", "-q", "origin", "main", &moved]);
     assert_eq!(run.code, 0, "{}", run.stderr);

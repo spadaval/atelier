@@ -210,10 +210,14 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
         None => {
             git::create_branch(&root, branch, &tip)?;
         }
-        Some(local) if found.remote && *local != tip => {
-            if repo.branch.as_deref() != Some(branch) {
-                git::move_branch(&root, branch, &tip, local)?;
-            }
+        // Only forward, and not under a checkout, which merges it below.
+        Some(local)
+            if found.remote
+                && *local != tip
+                && repo.branch.as_deref() != Some(branch)
+                && git::is_ancestor(&root, local, &tip)? =>
+        {
+            git::move_branch(&root, branch, &tip, local)?;
         }
         _ => {}
     }

@@ -193,44 +193,28 @@ fn merge_item(
     trivial: Option<String>,
     skip: &Skip,
 ) -> Result<Result<(String, bool), Outcome>> {
-    let (root, tree, base_tip, head, id, base) = (
-        root.to_path_buf(),
-        tree.to_string(),
-        base_tip.to_string(),
-        head.to_string(),
-        id.to_string(),
-        base.to_string(),
-    );
     // The item as the merged tree holds it, marked done.
-    let path = item_path(&id);
-    let text = git::run(&root, &["cat-file", "blob", &format!("{tree}:{path}")])?;
+    let path = item_path(id);
+    let text = git::run(root, &["cat-file", "blob", &format!("{tree}:{path}")])?;
     let mut item = parse_item(Path::new(&path), &text)?;
     item.status = Status::Done;
     if trivial.is_some() {
         item.trivial = trivial;
     }
-    let message = output::merge_message(&id, &item.title, &base, &config);
+    let message = output::merge_message(id, &item.title, base, config);
     // Its message carries each rule skipped so far.
     let commit_merge = || {
         let item = render_item(&item);
-        git::commit_file(
-            &root,
-            &tree,
-            &[&base_tip, &head],
-            &path,
-            &item,
-            &message,
-            skip,
-        )
+        git::commit_file(root, tree, &[base_tip, head], &path, &item, &message, skip)
     };
     let mut commit = commit_merge()?;
 
     let mut skipped = false;
     if !config.merge_checks.is_empty() {
-        let checkout = MergedCheckout::add(&root, &commit)?;
+        let checkout = MergedCheckout::add(root, &commit)?;
         for check in &config.merge_checks {
             if let Some((code, tail)) = run_check(&checkout.path, &check.run)? {
-                let text = output::check_failed(&id, &base, &check.run, code, &tail);
+                let text = output::check_failed(id, base, &check.run, code, &tail);
                 let rule = output::rule_check(&check.run, code);
                 if let Some(refused) = skip.refuse([rule], text) {
                     return Ok(Err(refused.into()));
@@ -599,9 +583,7 @@ fn records_at(root: &Path, commit: &str) -> Result<Vec<String>> {
     }
     let loaded = load(files);
     let problems = loaded.unread.iter().chain(&loaded.invalid);
-    Ok(problems
-        .map(|problem| output::problem_line(problem))
-        .collect())
+    Ok(problems.map(output::problem_line).collect())
 }
 
 /// What comes before the lock where a forge is configured: the branch

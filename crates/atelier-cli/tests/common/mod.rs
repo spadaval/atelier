@@ -310,3 +310,56 @@ pub fn submitted() -> Scratch {
     finish_and_submit(&root, "t1");
     scratch
 }
+
+/// A fake `gh` that answers from files in `$FAKE_GH`: `runs/<branch>` for
+/// the CI runs of a branch's pull requests, `pulls` for the open pull
+/// requests. A POST to the pull requests opens #7 and adds a line to
+/// `opened`. Every call is logged to `calls`. While `down` exists a runs
+/// lookup fails, and while `stall` exists it never answers, after writing
+/// its process ID to `stalled`; while `once` exists it answers and then
+/// creates `stall`, so every later one stalls; while `helper` exists it answers but leaves
+/// a process holding its output, whose ID it writes to `helped`; while
+/// `no-pulls` exists opening a pull request fails. While `pulls-down`
+/// exists looking one up fails, and while `pulls-stall` exists it never
+/// answers, after writing its process ID to `stalled`.
+pub const FAKE_GH: &str = r#"#!/bin/sh
+echo "$*" >> "$FAKE_GH/calls"
+if [ "$1" = auth ]; then exit 0; fi
+method=GET
+previous=""
+answer=""
+for arg in "$@"; do
+  if [ "$previous" = -X ]; then method="$arg"; fi
+  previous="$arg"
+  case "$arg" in
+    branch=*) answer="runs/${arg#branch=}" ;;
+    */pulls) answer=pulls ;;
+  esac
+done
+case "$answer" in
+  runs/*)
+    if [ -f "$FAKE_GH/stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
+    if [ -f "$FAKE_GH/down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [ -f "$FAKE_GH/once" ]; then touch "$FAKE_GH/stall"; fi
+    if [ -f "$FAKE_GH/helper" ]; then sleep 60 & echo $! >> "$FAKE_GH/helped"; fi
+    ;;
+esac
+if [ "$answer" = pulls ] && [ "$method" = GET ]; then
+  if [ -f "$FAKE_GH/pulls-stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
+  if [ -f "$FAKE_GH/pulls-down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+fi
+if [ "$answer" = pulls ] && [ "$method" = POST ]; then
+  if [ -f "$FAKE_GH/no-pulls" ]; then echo "HTTP 422: Validation Failed" >&2; exit 1; fi
+  echo '[{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}]' > "$FAKE_GH/pulls"
+  echo opened >> "$FAKE_GH/opened"
+  echo '{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}'
+  exit 0
+fi
+if [ -f "$FAKE_GH/$answer" ]; then
+  cat "$FAKE_GH/$answer"
+elif [ "$answer" = pulls ]; then
+  echo '[]'
+else
+  echo '{"total_count":0,"workflow_runs":[]}'
+fi
+"#;
