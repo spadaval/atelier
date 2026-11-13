@@ -67,9 +67,9 @@ fn orientation(repo: &mut Repo) -> Result<String> {
             (Some((mission, _)), Some(lead)) if *lead == repo.caller => Some(mission.as_str()),
             _ => None,
         };
-        // The implementer's own directory is committed by `submit`.
-        let own = entry.holds.then(|| item_dir(&located.id));
-        let unsaved = unsaved(repo, own.as_deref())?;
+        let unsaved = unsaved(repo)?;
+        // Dropped on this branch, with the base's copy not dropped yet.
+        let unreached = !atelier_app::unreached(std::slice::from_ref(&located)).is_empty();
         return Ok(output::item(
             &repo.caller,
             &entry,
@@ -77,6 +77,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
             dropped,
             leads,
             &unsaved,
+            unreached,
         ));
     }
     let items = repo.everything()?;
@@ -108,7 +109,7 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         }
         _ => None,
     };
-    let unsaved = unsaved(repo, None)?;
+    let unsaved = unsaved(repo)?;
     Ok(output::overview(
         &repo.caller,
         repo.branch.as_deref(),
@@ -122,13 +123,9 @@ fn orientation(repo: &mut Repo) -> Result<String> {
 }
 
 /// What `status` says the checkout has not saved: its record changes not
-/// committed, but for those in `own`, and its branch's commits not pushed
-/// to the remote.
-fn unsaved(repo: &Repo, own: Option<&str>) -> Result<String> {
-    let mut records = planning(&repo.root)?;
-    if let Some(own) = own {
-        records.retain(|path| !path.starts_with(&format!("{own}/")));
-    }
+/// committed, and its branch's commits not pushed to the remote.
+fn unsaved(repo: &Repo) -> Result<String> {
+    let records = planning(&repo.root)?;
     let remote = repo.remote();
     let unpushed = match (&repo.branch, remote) {
         (Some(branch), Some(remote)) => {
@@ -203,6 +200,15 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
         .as_ref()
         .expect("a started item has a branch");
     let tip = found.tip.clone();
+    // A branch another worktree has out is neither moved nor switched to:
+    // its checkout's index and files would no longer match it.
+    if repo.branch.as_deref() != Some(branch) {
+        if let Some(path) = git::checkout_of(&root, branch)? {
+            return Ok(Outcome::Refused(output::checked_out_elsewhere(
+                id, branch, &path,
+            )));
+        }
+    }
     let local = git::branch_tip(&root, branch)?;
     // Bring the local branch to the forge's tip where the forge is ahead,
     // so the take-over builds on what the forge has.
@@ -222,11 +228,6 @@ fn take_over(repo: &mut Repo, id: &str, branch: &str, located: &Located) -> Resu
         _ => {}
     }
     if !on_base && repo.branch.as_deref() != Some(branch) {
-        if let Some(path) = git::checkout_of(&root, branch)? {
-            return Ok(Outcome::Refused(output::checked_out_elsewhere(
-                id, branch, &path,
-            )));
-        }
         git::switch(&root, branch).with_context(|| output::switch_failed(id, branch))?;
     }
     if !on_base && found.remote && git::head(&root)? != tip {
@@ -400,7 +401,7 @@ fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
         return Ok(Outcome::Refused(output::lost_race(id, holder.as_ref())));
     }
     if let Some(remote) = repo.remote().map(str::to_string) {
-        if let Err(error) = merge::push(&root, &remote, &commit, branch, repo.skip) {
+        if let Err(error) = claim_push(&root, &remote, &commit, branch, repo.skip) {
             // The claim is the remote's branch: this clone keeps none.
             git::delete_branch(&root, branch, &commit)?;
             return Ok(Outcome::Refused(lost_claim(repo, &claim, &remote, &error)?));
@@ -418,6 +419,45 @@ fn begin(repo: &mut Repo, claim: Claim, said: String) -> Result<Outcome> {
     git::switch(&root, branch).with_context(|| output::not_switched(branch))?;
     let mut repo = crate::open(&repo.dir, repo.skip)?;
     Ok(Outcome::Done(format!("{said}\n{}", status(&mut repo)?)))
+}
+
+/// Pushes `commit` to `remote` as the new branch `branch`, which the remote
+/// must not have. Git reports a push of a commit the remote already holds
+/// there as up to date, and succeeds; only a ref the push created is a
+/// claim, so of two claims of one commit one wins.
+fn claim_push(
+    root: &std::path::Path,
+    remote: &str,
+    commit: &str,
+    branch: &str,
+    skip: &atelier_app::Skip,
+) -> Result<()> {
+    let to = format!("{commit}:refs/heads/{branch}");
+    let lease = format!("--force-with-lease=refs/heads/{branch}:");
+    let mut command = atelier_app::git::git(root);
+    command
+        .args(["push", "--porcelain", &lease, remote, &to])
+        .stdin(std::process::Stdio::null());
+    match skip.reason() {
+        Some(reason) => command.env(atelier_app::SKIP_VARIABLE, reason),
+        None => command.env_remove(atelier_app::SKIP_VARIABLE),
+    };
+    let output = command.output().context("cannot start git push")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Each ref is `<flag>\t<from>:<to>\t<summary>`; `*` is a new ref.
+    let created = stdout
+        .lines()
+        .any(|line| line.starts_with("*\t") && line.contains(&format!(":refs/heads/{branch}\t")));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        anyhow::bail!("git push failed: {}", stderr.trim());
+    }
+    if !created {
+        anyhow::bail!("{remote} already has branch {branch}");
+    }
+    // What the hooks printed, as the rules a hook skipped.
+    eprint!("{stderr}");
+    Ok(())
 }
 
 /// Why the push of `claim`'s branch to `remote` failed with `error`: the

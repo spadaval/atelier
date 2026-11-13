@@ -42,6 +42,7 @@ pub fn item(
     dropped: Option<&str>,
     leads: Option<&str>,
     unsaved: &str,
+    unreached: bool,
 ) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
@@ -71,6 +72,12 @@ pub fn item(
         )
     };
     let mut next = next(entry, dropped);
+    if unreached {
+        next = next.replace(
+            "Nothing is left to do on it.\n",
+            &format!("The drop has not reached the base: once it is committed and pushed, drop the base's copy on a backlog branch with `atelier start --backlog drop-{id}`, then there `atelier drop {id} --reason \"<why>\"`, commit, `atelier submit` and `atelier merge`.\n"),
+        );
+    }
     // A thread holding nothing on it, a reviewer whose review is done
     // among them.
     let done = entry.next.is_none() && entry.reviewed.is_some() && !entry.holds;

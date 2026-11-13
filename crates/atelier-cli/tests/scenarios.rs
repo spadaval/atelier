@@ -203,9 +203,9 @@ fn submit_refuses_with_the_status_list_and_then_commits_the_report_in_review() {
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
     let waiting = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        waiting.contains(
-            "Status: in review, round 1\nThread t2 holds this round's review. Wait for its verdict"
-        ),
+        // The reviewer's file, in this checkout, is listed as not committed.
+        waiting.contains("Status: in review, round 1\n")
+            && waiting.contains("\nThread t2 holds this round's review. Wait for its verdict"),
         "{waiting}"
     );
     let again = atelier(&root, "t1", &["submit"]);
@@ -1146,14 +1146,16 @@ fn status_shows_the_round_and_refuses_nothing_after_three_without_an_approval() 
     let root = scratch.root();
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains("Status: changes requested in round 1\nTo return it to review:\n"),
+        status.contains("Status: changes requested in round 1\n")
+            && status.contains("\nTo return it to review:\n"),
         "{status}"
     );
     let second = another_round(&root, &first, 2, "t3", "changes");
     let third = another_round(&root, &second, 3, "t4", "changes");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains("Status: changes requested in round 3\nTo return it to review:\n"),
+        status.contains("Status: changes requested in round 3\n")
+            && status.contains("\nTo return it to review:\n"),
         "{status}"
     );
     let base = scratch.worktree("base");

@@ -1129,9 +1129,12 @@ fn a_started_item_is_dropped_on_its_branch_and_then_refused_everywhere_with_its_
         "{list}"
     );
     let why = format!("It was dropped: {reason}\nNothing is left to do on it.\n");
+    // On the item's branch, `status` names the step still to come.
     let status = atelier(&work, "t1", &["status"]).stdout;
     assert!(
-        status.ends_with(&format!("Status: dropped\n{why}")),
+        status.ends_with(&format!(
+            "Status: dropped\nIt was dropped: {reason}\nThe drop has not reached the base: once it is committed and pushed, drop the base's copy on a backlog branch with `atelier start --backlog drop-{ID}`, then there `atelier drop {ID} --reason \"<why>\"`, commit, `atelier submit` and `atelier merge`.\n"
+        )),
         "{status}"
     );
     for (at, thread, command, skip) in [

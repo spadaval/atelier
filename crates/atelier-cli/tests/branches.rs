@@ -806,3 +806,101 @@ fn every_record_command_writes_its_files_prints_them_and_makes_no_commit_branch_
     );
     assert_eq!(refs(), before);
 }
+
+#[test]
+fn a_take_over_of_a_branch_another_worktree_has_out_moves_nothing() {
+    // From the base's own checkout, with no remote.
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    assert_eq!(atelier(&base, "t1", &["start", ID]).code, 0);
+    let work = scratch.dir.path().join("work");
+    git(
+        &base,
+        &["worktree", "add", "-q", work.to_str().unwrap(), ID],
+    );
+    let tip = git(&base, &["rev-parse", ID]);
+    let run = atelier(&base, "t2", &["start", ID]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert_eq!(
+        run.stderr,
+        format!(
+            "`atelier start {ID}` refused; nothing changed.\nBranch {ID} is checked out in {}, and a branch can be checked out in one worktree at a time. Run `atelier start {ID}` there.\n",
+            work.display()
+        )
+    );
+    assert_eq!(git(&base, &["rev-parse", ID]), tip);
+    assert_eq!(git(&work, &["status", "--porcelain"]), "");
+
+    // With the forge's copy ahead of a local branch another worktree has
+    // out, the local branch is not moved under it either.
+    let hub = Hub::new(&[(ID, "ready")]);
+    let a = hub.clone("a");
+    ok(hub.atelier(&a, "t1", &["start", ID]));
+    let b = hub.clone("b");
+    ok(hub.atelier(&b, "t2", &["start", ID]));
+    let held = git(&a, &["rev-parse", ID]);
+    git(&a, &["fetch", "-q", "origin"]);
+    let other = hub.dir.path().join("a-work");
+    git(&a, &["checkout", "-q", "--detach", "origin/main"]);
+    git(&a, &["worktree", "add", "-q", other.to_str().unwrap(), ID]);
+    let run = hub.atelier(&a, "t3", &["start", ID]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(run.stderr.contains("is checked out in"), "{}", run.stderr);
+    assert_eq!(git(&a, &["rev-parse", ID]), held);
+    assert_eq!(git(&other, &["status", "--porcelain"]), "");
+}
+
+#[test]
+fn of_two_claims_of_one_backlog_branch_at_the_same_commit_one_wins() {
+    let hub = Hub::new(&[]);
+    let (a, b) = (hub.clone("a"), hub.clone("b"));
+    let release = hub.dir.path().join("release");
+    let (hold_a, hold_b) = (release.with_extension("a"), release.with_extension("b"));
+    let held = |at: &Path, hold: &Path| {
+        hub.command(at, "p1", &["start", "--backlog", "same"])
+            .env("ATELIER_TEST_HOLD_BEFORE_BRANCH", hold)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    let (first, second) = (held(&a, &hold_a), held(&b, &hold_b));
+    let since = Instant::now();
+    while !(hold_a.with_extension("held").exists() && hold_b.with_extension("held").exists()) {
+        assert!(since.elapsed() < Duration::from_secs(20), "never held");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // The first pushes, then the second, the same base commit both.
+    fs::write(&hold_a, "").unwrap();
+    let first = finished(first);
+    ok(first);
+    fs::write(&hold_b, "").unwrap();
+    let second = finished(second);
+    assert_eq!(second.code, 1, "{}", second.stdout);
+    assert!(
+        second
+            .stderr
+            .contains("origin already has branch backlog/same"),
+        "{}",
+        second.stderr
+    );
+    assert!(!branch_exists(&b, "backlog/same"));
+}
+
+#[test]
+fn status_names_a_holders_uncommitted_drop_with_its_commit() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    let run = atelier(&root, "t1", &["drop", ID, "--reason", "Not needed"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let status = atelier(&root, "t1", &["status"]).stdout;
+    let path = item_path(ID);
+    assert!(
+        status.contains(&format!(
+            "Record changes not committed, which count only once committed and merged:\n  {path}\nCommit them with: git add -- {path} && git commit -m \"<what they change>\" -- {path}\n"
+        )),
+        "{status}"
+    );
+}
