@@ -28,6 +28,8 @@ pub fn command(act: Act, id: &str) -> String {
         Act::Start | Act::TakeOver | Act::Review => format!("atelier {} {id}", row(act).command),
         Act::Ready | Act::ReadyMission => format!("atelier ready {id} --by <name>"),
         Act::StartNew => "atelier start --new \"<title>\"".into(),
+        Act::StartMission => "atelier start --mission \"<title>\"".into(),
+        Act::StartBacklog => "atelier start --backlog <slug>".into(),
         Act::MergeTrivial => "atelier merge --trivial \"<why>\"".into(),
         Act::Drop => format!("atelier drop {id} --reason \"<why>\""),
         Act::Close => format!("atelier close {id} \"<result>\""),
@@ -40,7 +42,9 @@ pub fn command(act: Act, id: &str) -> String {
 pub fn goal(act: Act, status: Status) -> &'static str {
     match act {
         Act::Ready | Act::ReadyMission => "make it ready",
-        Act::Start | Act::StartNew => "start it",
+        Act::Start | Act::StartNew | Act::StartMission | Act::StartBacklog => "start it",
+        Act::SubmitBacklog => "submit it",
+        Act::MergeBacklog => "merge it",
         Act::TakeOver => "take it over",
         Act::Submit if status == Status::ChangesRequested => "return it to review",
         Act::Submit => "submit it for review",
@@ -189,18 +193,6 @@ pub fn rule_from(id: &str, from: &[Status], status: Status) -> String {
 
 /// The rule that planning, or with `settle` the settling of a finding,
 /// happens on the base `base`, not on `branch`.
-pub fn rule_off_base(base: &str, branch: Option<&str>, settle: bool) -> String {
-    let or = if settle {
-        " or an item's you implement"
-    } else {
-        ""
-    };
-    format!(
-        "This checkout is on the base branch {base}{or} (it is on {})",
-        place(branch)
-    )
-}
-
 /// What an entry needs and the command that follows, or what to do when no
 /// command of the caller's follows. `dropped` is why the item was dropped,
 /// from its record.
@@ -221,8 +213,8 @@ pub fn next(entry: &Entry, dropped: Option<&str>) -> String {
                 "It is a draft. A planner makes it ready with: atelier ready {id} --by <name>\n"
             ),
             Status::Dropped => match dropped {
-                Some(why) => format!("It was dropped on the base: {why}\nNothing is left to do on it.\n"),
-                None => "It was dropped on the base; nothing is left to do on it.\n".into(),
+                Some(why) => format!("It was dropped: {why}\nNothing is left to do on it.\n"),
+                None => "It was dropped; nothing is left to do on it.\n".into(),
             },
             _ => "Nothing is left to do on it.\n".into(),
         };
@@ -436,7 +428,7 @@ pub fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String
 /// whose branch it ran on, when it settled a finding there.
 pub fn planned(
     said: &str,
-    item: Option<&str>,
+    guidance: &Guidance,
     at: Option<&Path>,
     paths: &[String],
     message: &str,
@@ -445,27 +437,30 @@ pub fn planned(
     for path in paths {
         text += &format!("  {path}\n");
     }
-    text += &match item {
-        None => "Planning counts once it is committed on the base.\n".into(),
-        Some(id) => format!(
+    text += &match guidance {
+        Guidance::Branch => "It counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\n".into(),
+        Guidance::Settle(id) => format!(
             "Once committed, it reaches the base when {id} merges. It is outside {id}'s directory, so a review of {id} must see it: an approval from before it is stale, and `atelier merge` will say to run `atelier submit`.\n"
         ),
+        Guidance::Own => String::new(),
     };
     text + &format!("Then: {}\n", commit_line(at, paths, message))
 }
 
-pub fn not_committed() -> String {
-    "The commit failed, so the record is as it was. Fix what Git says below, then run the command again".into()
+/// What a record write says of how its change reaches the base.
+pub enum Guidance {
+    /// By the merge of the backlog or mission branch it is on.
+    Branch,
+    /// In the merge of item `0`, whose branch it is on, outside its
+    /// directory.
+    Settle(String),
+    /// It is the item's own, on its branch: what the command said already
+    /// says what follows.
+    Own,
 }
 
-/// What a planning command that commits what it writes prints once it has
-/// committed `paths` as `commit`, with `message`.
-pub fn committed(said: &str, paths: &[String], commit: &str, message: &str) -> String {
-    let mut text = format!("{said}Committed {}, \"{message}\":\n", short(commit));
-    for path in paths {
-        text += &format!("  {path}\n");
-    }
-    text
+pub fn not_committed() -> String {
+    "The commit failed, so the record is as it was. Fix what Git says below, then run the command again".into()
 }
 
 /// Where to run a command that runs on the base branch `base`, which
@@ -480,19 +475,62 @@ pub fn on_base(base: &str, checkout: Option<&Path>) -> String {
     }
 }
 
-pub fn off_base(
-    command: &str,
-    base: &str,
-    branch: Option<&str>,
-    checkout: Option<&Path>,
-) -> Refused {
+pub fn on_base_checkout(command: &str, base: &str) -> Refused {
     Refused::then(
         format!(
-            "`atelier {command}` writes planning, which happens on the base branch {base}, and this checkout is on {}. Nothing changed.\n",
-            place(branch),
+            "`atelier {command}` refused; nothing written.\nThis checkout has the base branch {base} out, and nothing is written there: only a merge writes {base}, and the pre-commit hook refuses a record change committed on it.\n"
         ),
-        on_base(base, checkout),
+        "Make the branch the change belongs on, and run this there: `atelier start --backlog <slug>` for a record change tied to no item or mission, `atelier start --mission \"<title>\"` for a new mission, or `atelier start <id>` for an item's own work. Run in this checkout, `start` makes the branch without switching it, and prints the `git worktree add` that gives the branch a checkout of its own.".to_string(),
     )
+}
+
+pub fn rule_on_base(base: &str) -> String {
+    format!("Nothing is written in the checkout of the base branch {base}")
+}
+
+/// A record change that belongs on a backlog branch, run on the branch of
+/// item `id`.
+pub fn belongs_on_backlog(command: &str, id: &str, branch: &str) -> Refused {
+    Refused::then(
+        format!(
+            "`atelier {command}` refused; nothing written.\nThis checkout is on {branch}, the branch of item {id}, and this change is not {id}'s: it would reach the base in {id}'s merge, and make a review of it stale.\n"
+        ),
+        "Run it on a backlog branch, made with `atelier start --backlog <slug>`, or on a mission's branch for that mission's plan.".to_string(),
+    )
+}
+
+pub fn rule_belongs_on_backlog(command: &str, branch: &str) -> String {
+    format!("`atelier {command}` writes on a backlog or mission branch, not on the item branch {branch}")
+}
+
+/// A drop of started item `id`, run anywhere but a checkout of its branch
+/// `branch`, which `checkout`, if any, has out.
+pub fn drop_off_branch(
+    id: &str,
+    branch: &str,
+    here: Option<&str>,
+    checkout: Option<&Path>,
+) -> Refused {
+    let there = match checkout {
+        Some(path) => format!(
+            "Run it in {}, which has {branch} checked out.",
+            path.display()
+        ),
+        None => format!(
+            "Run it in a checkout of {branch}, as after `git worktree add ../{id} {branch}`."
+        ),
+    };
+    Refused::then(
+        format!(
+            "`atelier drop {id}` refused; nothing written.\n{id} is started, and a started item's record changes only on its branch {branch}; this checkout is on {}.\n",
+            place(here)
+        ),
+        there,
+    )
+}
+
+pub fn rule_drop_off_branch(id: &str, branch: &str) -> String {
+    format!("A started item {id} is dropped in a checkout of its branch {branch}")
 }
 
 /// How a finding was settled, after "it was".

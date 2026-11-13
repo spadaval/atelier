@@ -132,7 +132,8 @@ pub fn item_view(repo: &mut Repo, id: &str) -> Result<Option<ItemView>> {
 pub fn annotate(repo: &Repo, entry: &mut Entry, record: &ItemDir) -> Result<()> {
     let id = &record.item.id;
     let approved = approval(record).filter(|_| record.item.status == Status::Approved);
-    if let (Some(review), Some(tip)) = (approved, git::branch_tip(&repo.root, id)?) {
+    if let (Some(review), Some(tip)) = (approved, git::branch_tip(&repo.root, &repo.branch_of(id))?)
+    {
         let path = format!("{}/reviews/{}.md", item_dir(id), review.name);
         entry.approved = git::approved_at(&repo.root, &tip, &path)?;
     }

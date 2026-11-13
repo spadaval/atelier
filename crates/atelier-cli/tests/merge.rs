@@ -24,7 +24,7 @@ fn submitted_with(config: &str, change: impl Fn(&Path)) -> Scratch {
     let root = scratch.root();
     if !config.is_empty() {
         append(&root, ".atelier/config.toml", config);
-        git(&root, &["commit", "-qam", "Configure"]);
+        on_base(&root, "Configure");
     }
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
@@ -40,7 +40,7 @@ fn approved_with(config: &str, change: impl Fn(&Path)) -> Scratch {
     let scratch = submitted_with(config, change);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
-    let run = atelier(&root, "t2", &["verdict", "approve"]);
+    let run = verdict(&root, "t2", &["verdict", "approve"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     scratch
 }
@@ -584,7 +584,7 @@ fn of_two_merges_at_once_the_second_waits_for_the_first() {
     let scratch = Scratch::new(&[(ID, "ready"), (OTHER, "ready")]);
     let root = scratch.root();
     append(&root, ".atelier/config.toml", &waiting_check());
-    git(&root, &["commit", "-qam", "Configure"]);
+    on_base(&root, "Configure");
     let base = head(&root, "main");
     let other = scratch.worktree("other");
     for (at, id) in [(&root, ID), (&other, OTHER)] {
@@ -597,7 +597,7 @@ fn of_two_merges_at_once_the_second_waits_for_the_first() {
         git(at, &["commit", "-qm", "Work"]);
         assert_eq!(atelier(at, "t1", &["submit"]).code, 0);
         assert_eq!(atelier(at, "t2", &["review", id]).code, 0);
-        assert_eq!(atelier(at, "t2", &["verdict", "approve"]).code, 0);
+        assert_eq!(verdict(at, "t2", &["verdict", "approve"]).code, 0);
     }
 
     let first = Waiting::start(&root, "t1", scratch.dir.path(), "first");
@@ -737,59 +737,6 @@ fn merge_takes_no_flag_but_trivial() {
     assert!(flags[0].starts_with("--trivial <WHY>") && flags[1].starts_with("-h, --help"));
 }
 
-/// A fake `gh` that answers from files in `$FAKE_GH`: `runs/<branch>` for
-/// the CI runs of a branch's pull requests, `pulls` for the open pull
-/// requests. A POST to the pull requests opens #7 and adds a line to
-/// `opened`. Every call is logged to `calls`. While `down` exists a runs
-/// lookup fails, and while `stall` exists it never answers, after writing
-/// its process ID to `stalled`; while `once` exists it answers and then
-/// creates `stall`, so every later one stalls; while `helper` exists it answers but leaves
-/// a process holding its output, whose ID it writes to `helped`; while
-/// `no-pulls` exists opening a pull request fails. While `pulls-down`
-/// exists looking one up fails, and while `pulls-stall` exists it never
-/// answers, after writing its process ID to `stalled`.
-const FAKE_GH: &str = r#"#!/bin/sh
-echo "$*" >> "$FAKE_GH/calls"
-if [ "$1" = auth ]; then exit 0; fi
-method=GET
-previous=""
-answer=""
-for arg in "$@"; do
-  if [ "$previous" = -X ]; then method="$arg"; fi
-  previous="$arg"
-  case "$arg" in
-    branch=*) answer="runs/${arg#branch=}" ;;
-    */pulls) answer=pulls ;;
-  esac
-done
-case "$answer" in
-  runs/*)
-    if [ -f "$FAKE_GH/stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
-    if [ -f "$FAKE_GH/down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
-    if [ -f "$FAKE_GH/once" ]; then touch "$FAKE_GH/stall"; fi
-    if [ -f "$FAKE_GH/helper" ]; then sleep 60 & echo $! >> "$FAKE_GH/helped"; fi
-    ;;
-esac
-if [ "$answer" = pulls ] && [ "$method" = GET ]; then
-  if [ -f "$FAKE_GH/pulls-stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
-  if [ -f "$FAKE_GH/pulls-down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
-fi
-if [ "$answer" = pulls ] && [ "$method" = POST ]; then
-  if [ -f "$FAKE_GH/no-pulls" ]; then echo "HTTP 422: Validation Failed" >&2; exit 1; fi
-  echo '[{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}]' > "$FAKE_GH/pulls"
-  echo opened >> "$FAKE_GH/opened"
-  echo '{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}'
-  exit 0
-fi
-if [ -f "$FAKE_GH/$answer" ]; then
-  cat "$FAKE_GH/$answer"
-elif [ "$answer" = pulls ]; then
-  echo '[]'
-else
-  echo '{"total_count":0,"workflow_runs":[]}'
-fi
-"#;
-
 const PULL: &str = "Pull request #7: https://github.com/owner/repo/pull/7\n";
 
 /// A repository whose base config names a forge, with `ci_workflow` when
@@ -827,7 +774,7 @@ impl Forge {
         let config =
             format!("{checks}\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n{workflow}");
         append(&root, ".atelier/config.toml", &config);
-        git(&root, &["commit", "-qam", "Configure"]);
+        on_base(&root, "Configure");
         let gh = scratch.dir.path().join("gh");
         fs::create_dir_all(gh.join("bin")).unwrap();
         fs::create_dir_all(gh.join("runs")).unwrap();
@@ -880,6 +827,7 @@ impl Forge {
         assert_eq!(self.atelier(at, "t2", &["review", id]).code, 0);
         let run = self.atelier(at, "t2", &["verdict", "approve"]);
         assert_eq!(run.code, 0, "{}", run.stderr);
+        run_then(at, &run.stdout);
     }
 
     fn atelier(&self, at: &Path, thread: &str, args: &[&str]) -> Run {
@@ -1059,7 +1007,10 @@ fn with_a_forge_submit_pushes_the_branch_and_opens_its_pull_request() {
 fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it_waits() {
     let forge = Forge::set_up(Some("ci.yml"), "", &[ID]);
     let root = forge.scratch.root();
-    // The forge refuses every push of the branch until the hook goes.
+    // `start` pushed the claim; from then the forge refuses every push of
+    // the branch until the hook goes.
+    forge.start(&root, ID);
+    let claimed = forge.remote(ID);
     let hook = forge.remote.join("hooks/pre-receive");
     fs::write(
         &hook,
@@ -1068,7 +1019,6 @@ fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
-    forge.start(&root, ID);
     let run = forge.submit(&root, ID);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(
@@ -1086,7 +1036,7 @@ fn a_push_that_fails_at_submit_is_a_warning_and_merge_pushes_and_opens_before_it
         run.stdout
     );
     assert_eq!(field(&root, ID, "status"), "in_review");
-    assert_eq!(forge.remote(ID), None);
+    assert_eq!(forge.remote(ID), claimed);
     assert_eq!(forge.opened(), 0);
 
     fs::remove_file(&hook).unwrap();

@@ -340,6 +340,10 @@ pub fn parse_config(path: &Path, text: &str) -> Result<Config, Problem> {
         Problem::new(path, format!("line {line}"), error.message().to_string())
     })?;
     ids::validate_slug(&config.slug).map_err(|message| Problem::new(path, "slug", message))?;
+    if let Some(prefix) = &config.branch_prefix {
+        atelier_core::validate_prefix(prefix)
+            .map_err(|message| Problem::new(path, "branch_prefix", message))?;
+    }
     Ok(config)
 }
 

@@ -83,6 +83,34 @@ pub fn commit_file(
     result
 }
 
+/// Writes a commit of the tree `tree` on `parents`, with a trailer for
+/// each rule `skip` passed, and returns it. Nothing else changes.
+pub fn commit_tree(
+    repo: &Path,
+    tree: &str,
+    parents: &[&str],
+    message: &str,
+    skip: &Skip,
+) -> Result<String> {
+    let message = with_skips(repo, message, skip)?;
+    let mut args = vec!["commit-tree", tree, "-m", &message];
+    for parent in parents {
+        args.extend(["-p", parent]);
+    }
+    run(repo, &args)
+}
+
+/// The paths the commit `head` changes against the commit `base`: since
+/// the two parted, as a pull request shows them.
+pub fn changed_from_base(repo: &Path, base: &str, head: &str) -> Result<Vec<String>> {
+    let range = format!("{base}...{head}");
+    let listed = listing(
+        repo,
+        &["diff", "--name-only", "-z", "--no-renames", &range, "--"],
+    )?;
+    Ok(names(&listed))
+}
+
 /// Creates the local branch `name` at `commit`, or returns `false` when a
 /// branch of that name exists. Git creates a ref atomically, so of two
 /// callers racing, exactly one gets `true`.
@@ -99,6 +127,19 @@ pub fn create_branch(repo: &Path, name: &str, commit: &str) -> Result<bool> {
         "git update-ref {reference} failed: {}",
         String::from_utf8_lossy(&output.stderr).trim()
     )
+}
+
+/// Moves the local branch `name` from `from` to `commit`, refused when it
+/// is no longer at `from`.
+pub fn move_branch(repo: &Path, name: &str, commit: &str, from: &str) -> Result<()> {
+    let reference = format!("refs/heads/{name}");
+    run(repo, &["update-ref", &reference, commit, from]).map(drop)
+}
+
+/// Deletes the local branch `name`, refused when it is no longer at `at`.
+pub fn delete_branch(repo: &Path, name: &str, at: &str) -> Result<()> {
+    let reference = format!("refs/heads/{name}");
+    run(repo, &["update-ref", "-d", &reference, at]).map(drop)
 }
 
 pub fn switch(repo: &Path, branch: &str) -> Result<()> {
@@ -145,6 +186,25 @@ pub fn staged_changes(repo: &Path, dir: &str) -> Result<Vec<String>> {
         "-z",
         "--no-renames",
         "--diff-filter=d",
+        "--",
+        dir,
+    ];
+    Ok(names(&listing(repo, &args)?))
+}
+
+/// The files under `dir` the index adds, changes or deletes from `HEAD`,
+/// or that it holds when there is no `HEAD` yet.
+pub fn staged_all(repo: &Path, dir: &str) -> Result<Vec<String>> {
+    if !has_commit(repo, "HEAD")? {
+        return staged_files(repo, dir);
+    }
+    let args = [
+        "diff",
+        "--cached",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "HEAD",
         "--",
         dir,
     ];

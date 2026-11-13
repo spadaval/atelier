@@ -30,8 +30,10 @@ pub struct Scratch {
 }
 
 impl Scratch {
-    /// A repository on `main` whose one commit holds `items`, each an ID
-    /// with its status.
+    /// A repository whose one commit, on `main`, holds `items`, each an
+    /// ID with its status. Its checkout is detached at that commit, since
+    /// nothing is written in the base's own checkout; [`on_base`] commits
+    /// there.
     pub fn new(items: &[(&str, &str)]) -> Scratch {
         let scratch = Scratch {
             dir: TempDir::new().unwrap(),
@@ -49,6 +51,7 @@ impl Scratch {
         }
         git(&root, &["add", "-A"]);
         git(&root, &["commit", "-qm", "Plan"]);
+        git(&root, &["checkout", "-q", "--detach"]);
         scratch
     }
 
@@ -72,6 +75,14 @@ impl Scratch {
         );
         path
     }
+}
+
+/// Commits everything in the detached checkout `at` as `message`, and moves
+/// `main` to that commit, as a merge of a backlog branch would.
+pub fn on_base(at: &Path, message: &str) {
+    git(at, &["add", "-A"]);
+    git(at, &["commit", "-qm", message]);
+    git(at, &["branch", "-f", "main", "HEAD"]);
 }
 
 pub fn item_path(id: &str) -> String {
@@ -152,6 +163,7 @@ pub fn atelier_command(at: &Path, thread: &str, args: &[&str]) -> Command {
     command
 }
 
+#[derive(Clone)]
 pub struct Run {
     pub code: i32,
     pub stdout: String,
@@ -165,6 +177,43 @@ pub fn atelier(at: &Path, thread: &str, args: &[&str]) -> Run {
         stdout: String::from_utf8(output.stdout).unwrap(),
         stderr: String::from_utf8(output.stderr).unwrap(),
     }
+}
+
+/// Runs the Git command a command printed on its last `Then: git ...`
+/// line, as the agent would, in `at`.
+pub fn run_then(at: &Path, stdout: &str) {
+    let line = stdout
+        .lines()
+        .rev()
+        .find_map(|line| line.strip_prefix("Then: "))
+        .filter(|line| line.starts_with("git "))
+        .unwrap_or_else(|| panic!("no Then: git line in {stdout}"));
+    let output = identity(Command::new("sh").current_dir(at).args(["-c", line]))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{line}: {output:?}");
+}
+
+/// `verdict` as `thread`, and, when it wrote its files, the commit it
+/// printed, as the reviewer makes it.
+pub fn verdict(at: &Path, thread: &str, args: &[&str]) -> Run {
+    let run = atelier(at, thread, args);
+    if run.code == 0 {
+        run_then(at, &run.stdout);
+    }
+    run
+}
+
+/// A planning command as `thread`, and, when it wrote its records, the
+/// commit it printed, with the base moved to it, as the merge of a
+/// backlog branch would move it. `at` is a detached checkout.
+pub fn planned(at: &Path, thread: &str, args: &[&str]) -> Run {
+    let run = atelier(at, thread, args);
+    if run.code == 0 && run.stdout.contains("\nThen: git ") {
+        run_then(at, &run.stdout);
+        git(at, &["branch", "-f", "main", "HEAD"]);
+    }
+    run
 }
 
 /// The item's front-matter field `key` as `rev` holds it; a list's entries
@@ -261,3 +310,56 @@ pub fn submitted() -> Scratch {
     finish_and_submit(&root, "t1");
     scratch
 }
+
+/// A fake `gh` that answers from files in `$FAKE_GH`: `runs/<branch>` for
+/// the CI runs of a branch's pull requests, `pulls` for the open pull
+/// requests. A POST to the pull requests opens #7 and adds a line to
+/// `opened`. Every call is logged to `calls`. While `down` exists a runs
+/// lookup fails, and while `stall` exists it never answers, after writing
+/// its process ID to `stalled`; while `once` exists it answers and then
+/// creates `stall`, so every later one stalls; while `helper` exists it answers but leaves
+/// a process holding its output, whose ID it writes to `helped`; while
+/// `no-pulls` exists opening a pull request fails. While `pulls-down`
+/// exists looking one up fails, and while `pulls-stall` exists it never
+/// answers, after writing its process ID to `stalled`.
+pub const FAKE_GH: &str = r#"#!/bin/sh
+echo "$*" >> "$FAKE_GH/calls"
+if [ "$1" = auth ]; then exit 0; fi
+method=GET
+previous=""
+answer=""
+for arg in "$@"; do
+  if [ "$previous" = -X ]; then method="$arg"; fi
+  previous="$arg"
+  case "$arg" in
+    branch=*) answer="runs/${arg#branch=}" ;;
+    */pulls) answer=pulls ;;
+  esac
+done
+case "$answer" in
+  runs/*)
+    if [ -f "$FAKE_GH/stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
+    if [ -f "$FAKE_GH/down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+    if [ -f "$FAKE_GH/once" ]; then touch "$FAKE_GH/stall"; fi
+    if [ -f "$FAKE_GH/helper" ]; then sleep 60 & echo $! >> "$FAKE_GH/helped"; fi
+    ;;
+esac
+if [ "$answer" = pulls ] && [ "$method" = GET ]; then
+  if [ -f "$FAKE_GH/pulls-stall" ]; then echo $$ > "$FAKE_GH/stalled"; exec sleep 600; fi
+  if [ -f "$FAKE_GH/pulls-down" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+fi
+if [ "$answer" = pulls ] && [ "$method" = POST ]; then
+  if [ -f "$FAKE_GH/no-pulls" ]; then echo "HTTP 422: Validation Failed" >&2; exit 1; fi
+  echo '[{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}]' > "$FAKE_GH/pulls"
+  echo opened >> "$FAKE_GH/opened"
+  echo '{"number":7,"html_url":"https://github.com/owner/repo/pull/7"}'
+  exit 0
+fi
+if [ -f "$FAKE_GH/$answer" ]; then
+  cat "$FAKE_GH/$answer"
+elif [ "$answer" = pulls ]; then
+  echo '[]'
+else
+  echo '{"total_count":0,"workflow_runs":[]}'
+fi
+"#;

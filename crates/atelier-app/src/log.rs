@@ -200,7 +200,7 @@ pub fn history(
 ) -> Result<Option<History>> {
     let tips: Vec<(String, String)> = git::branches(&repo.root)?
         .into_iter()
-        .filter(|(name, _)| validate_id(name).is_ok())
+        .filter_map(|(name, tip)| Some((repo.config.record_of(&name)?, tip)))
         .collect();
     let base_tip = repo.base_tip.clone();
     let mission = match of {

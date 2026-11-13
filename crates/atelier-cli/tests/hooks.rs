@@ -361,16 +361,11 @@ fn a_rule_a_hook_skips_in_an_atelier_commit_is_printed() {
 fn a_status_change_is_judged_by_the_acts_of_its_records_kind() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
-    let run = atelier(&root, "t1", &["new", "--mission", "Greet"]);
+    // `start --mission` commits the mission on its branch.
+    let run = atelier(&root, "t1", &["start", "--mission", "Greet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    let id = run
-        .stdout
-        .split_whitespace()
-        .nth(3)
-        .unwrap()
-        .trim_end_matches(',');
+    let id = run.stdout.split_whitespace().nth(3).unwrap();
     let path = format!(".atelier/missions/{id}/mission.md");
-    assert_eq!(commit_all(&root, "Plan").code, 0);
     install_hooks(&root);
     // An item's `close` goes from draft to done; no act on a mission does.
     edit(&root, &path, "status: draft", "status: done");
@@ -526,7 +521,21 @@ fn the_first_commit_of_a_repository_is_checked() {
 
     edit(&root, ".atelier/config.toml", "base = 1\n", "");
     write_item(&root, ID, "draft", &[], &[], "");
+    // Valid, and on the base, so the base's rule refuses it; the first
+    // commit of a repository is the one place a skip is plainly right.
     let run = commit_all(&root, "Start");
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch trunk"),
+        "{}",
+        run.stderr
+    );
+    let run = git_skipping(
+        &root,
+        Some("the repository's first commit"),
+        &["commit", "-qm", "Start"],
+    );
     assert_eq!(run.code, 0, "{}", run.stderr);
 }
 
@@ -536,6 +545,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let root = scratch.root();
     let pushed = remote_tip(&root, "main");
 
+    git(&root, &["switch", "-q", "main"]);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     assert_eq!(commit_all(&root, "Say hello").code, 0);
     let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
@@ -601,7 +611,15 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
         ".atelier/config.toml",
         "\n[[merge_check]]\nrun = \"true\"\n",
     );
-    assert_eq!(commit_all(&root, "Check it").code, 0);
+    // On the base the pre-commit hook refuses it, and a skip is what gets
+    // it as far as the push.
+    git(&root, &["add", "-A"]);
+    let run = git_skipping(
+        &root,
+        Some("testing the push"),
+        &["commit", "-qm", "Check it"],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(
@@ -648,8 +666,12 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     // back to the remote's commit, and the push goes through.
     let run = atelier(&root, "t1", &["start", "--new", "Move the check"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    let moved = git(&root, &["symbolic-ref", "--short", "HEAD"]);
-    git(&root, &["branch", "-f", "main", &pushed[..7]]);
+    // Run in the base's checkout, it makes the branch and leaves the
+    // checkout on the base.
+    let moved = run.stdout.split_whitespace().nth(1).unwrap().to_string();
+    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+    assert!(run.stdout.contains("git worktree add "), "{}", run.stdout);
+    git(&root, &["reset", "-q", "--keep", &pushed[..7]]);
     let run = git_as(&root, &["push", "-q", "origin", "main", &moved]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(remote_tip(&root, "main"), pushed);
@@ -681,7 +703,7 @@ fn a_push_from_a_checkout_whose_config_does_not_read_is_refused_with_the_way_out
 fn planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_base() {
     let scratch = pushed(&[(ID, "draft")]);
     let root = scratch.root();
-    let run = atelier(&root, "t1", &["ready", ID, "--by", "sumeet"]);
+    let run = planned(&root, "t1", &["ready", ID, "--by", "sumeet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let run = atelier(&root, "t1", &["new", "Say goodbye"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -695,7 +717,7 @@ fn planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_ba
     git(&root, &["switch", "-q", "-c", "spike"]);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     assert_eq!(commit_all(&root, "Try hello").code, 0);
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     edit(&root, &item_path(ID), "title: Say hello", "title: Say hi");
     assert_eq!(commit_all(&root, "Retitle").code, 0);
     let run = git_as(&root, &["push", "-q", "origin", "main", "spike"]);
@@ -734,13 +756,13 @@ fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branc
     assert_eq!(run.code, 0, "{}", run.stderr);
     finish_and_submit(&root, "t1");
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
-    let run = atelier(&root, "t2", &["verdict", "approve"]);
+    let run = verdict(&root, "t2", &["verdict", "approve"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let run = atelier(&root, "t1", &["merge"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
 
     // Planning on either side of the merge, pushed with it.
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     let run = atelier(&root, "t1", &["new", "Say goodbye"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(commit_all(&root, "Plan goodbye").code, 0);
@@ -756,9 +778,16 @@ fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     let pushed = remote_tip(&root, "main");
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     git(&root, &["switch", "-q", "main"]);
-    // Ready to done is `close`'s change, so the commit itself goes through.
+    // Ready to done is `close`'s change; on the base, the commit needs a
+    // skip of the base's own rule.
     edit(&root, &item_path(ID), "status: ready", "status: done");
-    assert_eq!(commit_all(&root, "Call it done").code, 0);
+    git(&root, &["add", "-A"]);
+    let run = git_skipping(
+        &root,
+        Some("testing the push"),
+        &["commit", "-qm", "Call it done"],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
     let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
@@ -778,7 +807,13 @@ fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     assert_eq!(remote_tip(&root, "main"), pushed);
 
     edit(&root, &item_path(ID), "status: ready", "status: done");
-    assert_eq!(commit_all(&root, "Call it done").code, 0);
+    git(&root, &["add", "-A"]);
+    let run = git_skipping(
+        &root,
+        Some("testing the push"),
+        &["commit", "-qm", "Call it done"],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
 
     git(&root, &["branch", "-q", "-D", ID]);
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
@@ -899,4 +934,132 @@ fn a_branch_switch_prints_status_and_succeeds_whatever_it_finds() {
     let run = git_as(&root, &["checkout", "--", &item_path(ID)]);
     assert_eq!(run.code, 0);
     assert_eq!(run.stdout + &run.stderr, "");
+}
+
+#[test]
+fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    // Code alone on the base is the pre-push hook's to judge, not this one's.
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    assert_eq!(commit_all(&root, "Say hello").code, 0);
+
+    let before = git(&root, &["rev-parse", "HEAD"]);
+    for change in ["change", "add", "delete"] {
+        match change {
+            "change" => edit(&root, &item_path(ID), "status: draft", "status: ready"),
+            "add" => write_item(&root, "demo-n3w1", "draft", &[], &[], ""),
+            _ => fs::remove_dir_all(root.join(".atelier/items").join(ID)).unwrap(),
+        }
+        let run = commit_all(&root, "Plan on the base");
+        assert_eq!(run.code, 1, "{change}: {}", run.stderr);
+        assert!(
+            run.stderr.contains(
+                "Rule: only a merge writes the base branch main, so no record changes in a commit on it. This commit changes:\n"
+            ) && run.stderr.contains("`atelier start --backlog <slug>`")
+                && run.stderr.contains("`atelier start --mission \"<title>\"`")
+                && run.stderr.ends_with(SKIP),
+            "{change}: {}",
+            run.stderr
+        );
+        assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+        git(&root, &["reset", "-q", "--hard"]);
+        git(&root, &["clean", "-qfd"]);
+    }
+
+    // A skip passes it, with its reason.
+    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    git(&root, &["add", "-A"]);
+    let run = git_skipping(&root, Some("the cutover"), &["commit", "-qm", "Ready"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Skipped with ATELIER_SKIP: Only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+
+    // Off the base, detached or on a branch, the same change commits.
+    git(&root, &["checkout", "-q", "--detach"]);
+    edit(&root, &item_path(ID), "status: ready", "status: draft");
+    let run = commit_all(&root, "Back to draft");
+    assert_ne!(run.code, 0, "ready to draft is no act");
+    git(&root, &["reset", "-q", "--hard"]);
+    write_item(&root, "demo-n3w1", "draft", &[], &[], "");
+    assert_eq!(commit_all(&root, "Plan detached").code, 0);
+    git(&root, &["switch", "-q", "-c", "backlog/plan"]);
+    write_item(&root, "demo-n3w2", "draft", &[], &[], "");
+    assert_eq!(commit_all(&root, "Plan on a branch").code, 0);
+}
+
+#[test]
+fn a_base_commit_is_refused_when_it_deletes_the_config_or_the_config_does_not_read() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    let before = git(&root, &["rev-parse", "HEAD"]);
+    // The base is named by HEAD's config when the commit deletes it.
+    git(&root, &["rm", "-q", ".atelier/config.toml"]);
+    let run = git_as(&root, &["commit", "-qm", "Delete config on base"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr.contains("  .atelier/config.toml\n"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+    git(&root, &["reset", "-q", "--hard"]);
+    // And when the checkout's does not read, beside a staged record.
+    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    git(&root, &["add", "-A"]);
+    append(&root, ".atelier/config.toml", "base = 1\n");
+    let run = git_as(&root, &["commit", "-qm", "Ready on base"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+}
+
+#[test]
+fn the_base_a_commit_is_judged_against_is_heads_not_the_checkouts() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    let before = git(&root, &["rev-parse", "HEAD"]);
+    // A staged change of the base's name does not unprotect it.
+    edit(
+        &root,
+        ".atelier/config.toml",
+        "base_branch = \"main\"",
+        "base_branch = \"other\"",
+    );
+    let run = commit_all(&root, "Move the base");
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+    // Nor does one left unstaged beside a staged record.
+    git(&root, &["reset", "-q"]);
+    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    git(&root, &["add", &item_path(ID)]);
+    let run = git_as(&root, &["commit", "-qm", "Ready on base"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
 }

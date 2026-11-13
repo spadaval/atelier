@@ -18,6 +18,11 @@ pub struct Located {
 pub struct Branch {
     /// Whether the branch's tip is in the base's history.
     pub merged: bool,
+    /// The tip the record was read at.
+    pub tip: String,
+    /// Whether it was read from the forge's remote-tracking branch, as for
+    /// an item started in another clone, rather than the local branch.
+    pub remote: bool,
     /// The item's record on the branch: from the checkout on the current
     /// branch, else, or in a repository opened with
     /// [`Repo::open_committed`](crate::Repo::open_committed), from its tip.
@@ -64,6 +69,23 @@ impl Located {
     pub fn terminal(base: &ItemDir) -> bool {
         matches!(base.item.status, Status::Done | Status::Dropped)
     }
+}
+
+/// Each item of `items` dropped on its unmerged branch whose base copy is
+/// not dropped yet: its ID, its title and why it was dropped.
+pub fn unreached(items: &[Located]) -> Vec<(String, String, Option<String>)> {
+    items
+        .iter()
+        .filter_map(|located| {
+            let branch = located.branch.as_ref().filter(|b| !b.merged)?;
+            let record = branch.record.as_ref()?;
+            let base = located.base.as_ref().map(|b| b.item.status);
+            (record.item.status == Status::Dropped && base != Some(Status::Dropped)).then(|| {
+                let why = record.dropped().map(str::to_string);
+                (located.id.clone(), record.item.title.clone(), why)
+            })
+        })
+        .collect()
 }
 
 /// One item as `status` shows it to the caller.

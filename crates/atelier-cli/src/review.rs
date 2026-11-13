@@ -7,13 +7,13 @@ use crate::output::{self, Brief, PlanBrief};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
-use atelier_app::plan::plan_changed;
-use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path, write_and_commit};
+use atelier_app::plan::{misplaced, plan_changed, Belongs};
+use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path};
 use atelier_app::{carried, carried_plan, refused, Repo};
 use atelier_core::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };
-use atelier_records::{create_review, render_item, render_review, validate_id, ReviewFile};
+use atelier_records::{create_review, validate_id, ReviewFile};
 
 /// Opens this round's review file, or takes it over, and prints the brief.
 /// The file is committed by `verdict`, not here.
@@ -26,6 +26,9 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let Some(record) = located.record() else {
         return Ok(output::no_item(id, &repo.base).into());
     };
+    if let Some(refused) = behind(repo, &located) {
+        return Ok(refused);
+    }
     let links = repo.links(record)?;
     let forge = repo.base_config()?.forge;
     let facts = facts(repo, &located, &links, None);
@@ -42,8 +45,8 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     if let Some(refused) = text.and_then(|text| repo.skip.gated(Act::Review, &facts, text)) {
         return Ok(refused.into());
     }
-    if repo.branch.as_deref() != Some(id) {
-        let checkout = git::checkout_of(&repo.root, id)?;
+    if repo.branch.as_deref() != Some(repo.branch_of(id).as_str()) {
+        let checkout = git::checkout_of(&repo.root, &repo.branch_of(id))?;
         let branch = repo.branch.as_deref();
         let refused = output::elsewhere("review", id, branch, checkout.as_deref());
         return Ok(refused.into());
@@ -115,6 +118,22 @@ fn new_review(
     }
 }
 
+/// A review write refused while the forge's copy of the item's branch is
+/// ahead of this clone's, as after a fetch of another reviewer's push: the
+/// files here are not the record read, so pull first.
+fn behind(repo: &Repo, located: &atelier_app::Located) -> Option<Outcome> {
+    let branch = located.branch.as_ref().filter(|branch| branch.remote)?;
+    let remote = repo.remote().unwrap_or("the remote");
+    let name = repo.branch_of(&located.id);
+    let text = output::behind(&located.id, &name, remote, &branch.tip);
+    Some(Outcome::Refused(text))
+}
+
+/// `command` refused in the base's own checkout, where nothing is written.
+fn on_base(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
+    Ok(misplaced(repo, command, Belongs::Backlog)?.map(Outcome::from))
+}
+
 /// The sections of a mission's record, in order.
 const MISSION_SECTIONS: [&str; 6] = [
     "Why",
@@ -135,6 +154,9 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     if repo.current()?.is_some() {
         let refused = output::plan_review_on_item(id, repo.branch.as_deref(), &repo.base);
         return Ok(Outcome::Refused(refused));
+    }
+    if let Some(refused) = on_base(repo, "review")? {
+        return Ok(refused);
     }
     let store = repo.store();
     let mission = store.mission(id)?;
@@ -201,15 +223,17 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         changed,
         carried: &carried_plan(&mission, file.name.round)?,
         path: &format!("{}/reviews/{name}.md", mission_dir(id)),
-        base: &repo.base,
     });
     Ok(Outcome::Done(said + &brief))
 }
 
 /// `verdict` on the plan review the caller holds in this checkout, which
-/// has no item's branch: records it and commits the file alone, changing
-/// no status.
+/// has no item's branch: records it in the file, without committing it,
+/// changing no status.
 fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Result<Outcome> {
+    if let Some(refused) = on_base(repo, "verdict")? {
+        return Ok(refused);
+    }
     let store = repo.store();
     let mut held = Vec::new();
     for id in store.ids("missions")? {
@@ -261,27 +285,26 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         name.round,
         output::verdict_name(verdict)
     );
-    write_and_commit(
-        repo,
-        &[(path.clone(), render_review(&review))],
-        &[&path],
-        &message,
-    )?;
-    let commit = git::head(&repo.root)?;
-    let on_base = repo.branch.as_deref() == Some(repo.base.as_str());
+    let mut written = file.clone();
+    written.review = review;
+    written.write().context("cannot write the review file")?;
+    let line = output::commit_line(repo.git_at(), std::slice::from_ref(&path), &message);
     Ok(Outcome::Done(output::plan_verdict_recorded(
-        &id, name.round, verdict, &path, &commit, &repo.base, on_base,
+        &id, name.round, verdict, &path, &line,
     )))
 }
 
 /// Records the caller's verdict in its review file and the item's new
-/// status, and commits the two together. Where the checkout is on no
+/// status, without committing them. Where the checkout is on no
 /// item's branch, it records the verdict of the plan review the caller
 /// holds there.
 pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Result<Outcome> {
     let Some(located) = repo.current()? else {
         return plan_verdict(repo, verdict, model);
     };
+    if let Some(refused) = behind(repo, &located) {
+        return Ok(refused);
+    }
     let record = located.record().expect("the current item has a record");
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);
@@ -302,22 +325,26 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
     item.status = row(act).to.expect("a verdict sets the status");
     let id = item.id.clone();
     let review_path = format!("{}/reviews/{}.md", item_dir(&id), file.name);
-    let files = [
-        (item_path(&id), render_item(&item)),
-        (review_path.clone(), render_review(&review)),
-    ];
     let message = format!(
         "Review {id}, round {}: {}",
         file.name.round,
         output::verdict_name(verdict)
     );
-    write_and_commit(repo, &files, &[&files[0].0, &review_path], &message)?;
+    let mut written = file.clone();
+    written.review = review;
+    written.write().context("cannot write the review file")?;
+    repo.store()
+        .write_item(&item)
+        .context("cannot write the item's record")?;
+    let paths = [item_path(&id), review_path];
+    let line = output::commit_line(repo.git_at(), &paths, &message);
     Ok(Outcome::Done(output::verdict_recorded(
         &id,
         file.name.round,
         verdict,
-        &review_path,
+        &paths,
         facts.holder(),
+        &line,
     )))
 }
 
@@ -361,19 +388,21 @@ fn brief(
     }))
 }
 
-/// What the brief says of branch `id`'s pull request on `forge`, where
-/// CI's result is read. The forge is asked under the bound `merge` gives a
-/// question under its lock.
+/// What the brief says of the pull request of item `id`'s branch on
+/// `forge`, where CI's result is read. The forge is asked under the bound
+/// `merge` gives a question under its lock.
 fn pull_request(repo: &Repo, forge: &Forge, id: &str) -> String {
+    let branch = repo.branch_of(id);
     let found = Github::open(&repo.root, forge).and_then(|github| {
         github
             .until(merge::locked_until())
-            .open_pull_request(id, &repo.base)
+            .open_pull_request(&branch, &repo.base)
     });
-    output::brief_pull_request(id, &found)
+    output::brief_pull_request(&branch, &found)
 }
 
 /// The commit branch `id` points at.
 fn tip(repo: &Repo, id: &str) -> Result<String> {
-    git::branch_tip(&repo.root, id)?.with_context(|| format!("branch {id} does not exist"))
+    let branch = repo.branch_of(id);
+    git::branch_tip(&repo.root, &branch)?.with_context(|| format!("branch {branch} does not exist"))
 }

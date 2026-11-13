@@ -95,8 +95,10 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
     let run = skipping(&root, "t2", REASON, &["verdict", "changes"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(run.stdout.starts_with(&skipped(&[none])), "{}", run.stdout);
+    // `verdict` makes no commit, so its skip is in the transcript alone.
+    run_then(&root, &run.stdout);
     assert!(
-        message(&root, "HEAD").ends_with(&format!("changes requested\n\n{}", trailers(&[none]))),
+        message(&root, "HEAD").ends_with("changes requested"),
         "{}",
         message(&root, "HEAD")
     );
@@ -129,7 +131,7 @@ fn set_with_a_skip_changes_a_started_items_base_record() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     let run = skipping(&root, "p1", REASON, &["set", ID, "--priority", "low"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let rule = format!("{ID} is draft or ready (it is building)");
@@ -143,21 +145,20 @@ fn set_with_a_skip_changes_a_started_items_base_record() {
 }
 
 #[test]
-fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_trailed_in_its_commit() {
+fn ready_on_a_record_that_is_not_a_draft_passes_with_a_skip_and_commits_nothing() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     let rule = format!("{ID} is draft (it is ready)");
-    let run = atelier(&root, "p1", &["ready", ID, "--by", "s"]);
+    let run = planned(&root, "p1", &["ready", ID, "--by", "s"]);
     assert_eq!(run.code, 1);
     assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
+    let head = git(&root, &["rev-parse", "HEAD"]);
     let run = skipping(&root, "p1", REASON, &["ready", ID, "--by", "sumeet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert!(run.stdout.starts_with(&skipped(&[&rule])), "{}", run.stdout);
-    assert_eq!(
-        message(&root, "HEAD"),
-        format!("Ready {ID}\n\n{}", trailers(&[&rule]))
-    );
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    // A command that makes no commit writes its skip nowhere.
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&root, &["diff", "--name-only"]), item_path(ID));
 }
 
 #[test]
@@ -239,13 +240,14 @@ fn what_is_not_a_rule_is_refused_with_the_variable_set_and_says_so() {
     refused(&["check"], 1, "These do not read as records");
     fs::remove_dir_all(root.join(".atelier/items/demo-cd34")).unwrap();
     git(&root, &["checkout", "-q", "--", "."]);
-    // A Git command that failed: the branch cannot be switched to while
-    // another worktree has it.
+    // No rule: the branch cannot be switched to while another worktree
+    // has it.
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     let other = scratch.worktree("other");
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     git(&other, &["switch", "-q", ID]);
     let run = skipping(&root, "t2", REASON, &["start", ID]);
-    assert_eq!(run.code, 2, "{}", run.stderr);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(run.stderr.contains("is checked out in"), "{}", run.stderr);
     assert!(run.stderr.ends_with(NOT_SKIPPABLE), "{}", run.stderr);
 }

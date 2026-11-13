@@ -69,24 +69,41 @@ fn outside(root: &Path) {
 }
 
 #[test]
-fn ready_returns_what_it_wrote_and_committed_or_its_refusal() {
+fn ready_returns_what_it_wrote_without_committing_or_its_refusal() {
     let (_dir, root) = scratch("draft");
     outside(&root);
     let skip = Skip::new(None);
-    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
 
+    // In the base's own checkout nothing is written.
+    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
+    let refused = ready(&mut repo, &[ID.into()], "sumeet")
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(
+        refused.rules,
+        ["Nothing is written in the checkout of the base branch main"]
+    );
+    assert!(refused
+        .next
+        .as_deref()
+        .unwrap()
+        .contains("atelier start --backlog <slug>"));
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+
+    git(&root, &["switch", "-q", "-c", "backlog/go"]);
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
     let done = ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
     assert_eq!(done.paths, [item_path(ID)]);
-    assert_eq!(done.commit, Some(git(&root, &["rev-parse", "HEAD"])));
+    assert_eq!(done.commit, None);
     assert!(done
         .text
         .starts_with(&format!("Made ready, as sumeet said: {ID}.\n")));
-    assert_eq!(
-        git(&root, &["log", "-1", "--format=%B"]),
-        format!("Ready {ID}")
-    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&root, &["diff", "--name-only"]), item_path(ID));
 
     // Again: it is no draft now, and nothing is written.
+    let written = fs::read_to_string(root.join(item_path(ID))).unwrap();
     let refused = ready(&mut repo, &[ID.into()], "sumeet")
         .unwrap()
         .unwrap_err();
@@ -103,20 +120,8 @@ fn ready_returns_what_it_wrote_and_committed_or_its_refusal() {
         Some("Run it again with only the drafts to make ready.")
     );
     assert_eq!(
-        git(&root, &["log", "-1", "--format=%s"]),
-        format!("Ready {ID}")
-    );
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
-
-    // Off the base, the way out names the checkout that has it.
-    git(&root, &["switch", "-q", "--detach"]);
-    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
-    let refused = ready(&mut repo, &[ID.into()], "sumeet")
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(
-        refused.next.as_deref(),
-        Some("Run it in a checkout of main, as after `git switch main`.")
+        fs::read_to_string(root.join(item_path(ID))).unwrap(),
+        written
     );
 }
 
@@ -194,29 +199,29 @@ fn a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_
 fn a_skip_reaches_its_own_acts_commit_and_result_and_no_other_acts() {
     // One act with a reason: `ready` on an item that is no draft passes.
     let (_first_dir, first) = scratch("ready");
+    git(&first, &["switch", "-q", "--detach"]);
     let skip = Skip::new(Some("  Sumeet\n said to "));
     let mut repo = Repo::open(&first, Thread("p1".into()), &skip).unwrap();
     let done = ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
     let rule = format!("{ID} is draft (it is ready)");
     assert_eq!(skip.passed(), [format!("{rule}: Sumeet said to")]);
-    assert!(done.commit.is_some());
-    assert_eq!(
-        git(&first, &["log", "-1", "--format=%B"]),
-        format!("Ready {ID}\n\nAtelier-Skip: {rule}: Sumeet said to")
+    // `ready` makes no commit, so the skip is in its result alone.
+    assert!(done.commit.is_none());
+    assert!(
+        done.text.contains("Wrote, and did not commit:"),
+        "{}",
+        done.text
     );
 
     // Then another, in the same process, with no reason, on another
-    // repository: nothing of the first reaches its commit or its result.
+    // repository: nothing of the first reaches its result.
     let (_second_dir, second) = scratch("draft");
+    git(&second, &["switch", "-q", "--detach"]);
     let skip = Skip::new(None);
     let mut repo = Repo::open(&second, Thread("p1".into()), &skip).unwrap();
     let done = ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
     assert!(skip.passed().is_empty());
     assert!(!done.text.contains("Sumeet said to"), "{}", done.text);
-    assert_eq!(
-        git(&second, &["log", "-1", "--format=%B"]),
-        format!("Ready {ID}")
-    );
     // And its refusal of the same rule is refused, offering no pass.
     let refused = ready(&mut repo, &[ID.into()], "sumeet")
         .unwrap()
@@ -227,6 +232,7 @@ fn a_skip_reaches_its_own_acts_commit_and_result_and_no_other_acts() {
 #[test]
 fn ready_given_no_id_refuses_and_commits_nothing() {
     let (_dir, root) = scratch("draft");
+    git(&root, &["switch", "-q", "--detach"]);
     fs::write(root.join("unrelated.txt"), "staged\n").unwrap();
     git(&root, &["add", "unrelated.txt"]);
     let before = (
@@ -249,52 +255,16 @@ fn ready_given_no_id_refuses_and_commits_nothing() {
 }
 
 #[test]
-fn the_hooks_a_commit_runs_are_given_the_invocations_reason_and_not_the_processs() {
-    let (_dir, root) = scratch("draft");
-    for id in ["demo-cd34", "demo-ef56"] {
-        write_item(&root, id, "draft", "[]", "");
-    }
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Plan more"]);
-    // A pre-commit hook that says what ATELIER_SKIP it was given.
-    let seen = root.join(".git/skip-seen");
-    let hook = root.join(".git/hooks/pre-commit");
-    fs::write(
-        &hook,
-        format!(
-            "#!/bin/sh\nprintf '%s' \"${{ATELIER_SKIP-unset}}\" > '{}'\n",
-            seen.display()
-        ),
-    )
-    .unwrap();
-    let mut permissions = fs::metadata(&hook).unwrap().permissions();
-    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
-    fs::set_permissions(&hook, permissions).unwrap();
-    let ready_with = |id: &str, reason: Option<&str>| {
-        let skip = Skip::new(reason);
-        let mut repo = Repo::open(&root, Thread("p1".into()), &skip).unwrap();
-        ready(&mut repo, &[id.into()], "sumeet").unwrap().unwrap();
-        fs::read_to_string(&seen).unwrap()
-    };
-    // Nextest runs each test in a process of its own, so the variable set
-    // here reaches no other test.
-    std::env::set_var("ATELIER_SKIP", "the process's");
-    assert_eq!(ready_with(ID, Some("the invocation's")), "the invocation's");
-    assert_eq!(ready_with("demo-cd34", None), "unset");
-    std::env::remove_var("ATELIER_SKIP");
-    assert_eq!(
-        ready_with("demo-ef56", Some("only this one's")),
-        "only this one's"
-    );
-}
-
-#[test]
 fn history_returns_the_acts_as_data_to_a_repository_opened_as_the_desk_opens_it() {
     let (_dir, root) = scratch("draft");
     outside(&root);
     let skip = Skip::new(None);
+    git(&root, &["switch", "-q", "-c", "backlog/go"]);
     let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
     ready(&mut repo, &[ID.into()], "sumeet").unwrap().unwrap();
+    git(&root, &["commit", "-qam", "Ready"]);
+    // Its backlog branch merged, as a fast-forward here.
+    git(&root, &["branch", "-f", "main", "HEAD"]);
 
     let mut repo = Repo::open_committed(&root, Thread("desk".into()), &skip).unwrap();
     let found = history(&mut repo, Some(ID), None).unwrap().unwrap();

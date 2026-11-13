@@ -111,6 +111,42 @@ pub fn branch_tip(repo: &Path, name: &str) -> Result<Option<String>> {
         .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string()))
 }
 
+/// The commit the remote-tracking branch `remote`/`name` points at, if it
+/// exists.
+pub fn remote_tip(repo: &Path, remote: &str, name: &str) -> Result<Option<String>> {
+    let reference = format!("refs/remotes/{remote}/{name}^{{commit}}");
+    let output = output(
+        repo,
+        &["rev-parse", "--verify", "--quiet", &reference],
+        None,
+    )?;
+    Ok(output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string()))
+}
+
+/// Every remote-tracking branch of `remote`, by its name on the remote,
+/// with the commit it points at.
+pub fn remote_branches(repo: &Path, remote: &str) -> Result<Vec<(String, String)>> {
+    let listed = run(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            &format!("refs/remotes/{remote}/"),
+        ],
+    )?;
+    let prefix = format!("refs/remotes/{remote}/");
+    Ok(listed
+        .lines()
+        .filter_map(|line| line.rsplit_once(' '))
+        .filter_map(|(name, tip)| Some((name.strip_prefix(&prefix)?, tip)))
+        .filter(|(name, _)| *name != "HEAD")
+        .map(|(name, tip)| (name.to_string(), tip.to_string()))
+        .collect())
+}
+
 /// Every local branch, with the commit it points at.
 pub fn branches(repo: &Path) -> Result<Vec<(String, String)>> {
     let listed = run(

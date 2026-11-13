@@ -11,7 +11,8 @@ use atelier_app::repo::{is_planning, planning};
 use atelier_app::Skip;
 use atelier_core::Status;
 use atelier_records::{
-    is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store, CONFIG,
+    is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
+    Store, CONFIG,
 };
 use clap::ValueEnum;
 use std::io::{ErrorKind, Read, Write};
@@ -209,14 +210,53 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
             }
         }
     }
-    if unread.is_empty() && invalid.is_empty() && acts.is_empty() {
+    // Only a merge writes the base, so no record changes in a commit on it.
+    // The base is the one `HEAD`'s config names, which a change in the
+    // checkout, staged or not, cannot move; only a repository's first
+    // commit, or one whose `HEAD` holds none that reads, reads the
+    // checkout's. Where neither names one, the commit is refused, since the
+    // rule cannot be judged.
+    let has_head = git::has_commit(root, "HEAD")?;
+    let at_head = match has_head {
+        true => match reader.text(&git::head(root)?, CONFIG) {
+            Ok(text) => parse_config(Path::new(CONFIG), &text)
+                .ok()
+                .map(|config| config.base_branch),
+            Err(_) => None,
+        },
+        false => None,
+    };
+    let base = at_head.or_else(|| {
+        Store::new(root.join(".atelier"))
+            .config()
+            .ok()
+            .map(|config| config.base_branch)
+    });
+    let branch = git::current_branch(root)?;
+    let on_base = match base {
+        Some(base) => (branch.as_deref() == Some(base.as_str())).then_some(base),
+        None if has_head => {
+            let rule = output::rule_no_base();
+            return Ok(rules(skip, &[], [rule], output::commit_no_base())
+                .unwrap_or(Outcome::Done(String::new())));
+        }
+        None => None,
+    };
+    let base_records = match &on_base {
+        Some(_) => git::staged_all(root, ".atelier")?,
+        None => Vec::new(),
+    };
+    if unread.is_empty() && invalid.is_empty() && acts.is_empty() && base_records.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
-    let text = output::commit_refused(&unread, &invalid, &acts);
-    let broken = (invalid.iter().map(output::valid)).chain(
-        acts.iter()
-            .map(|(path, from, to)| output::rule_status(path, *from, *to)),
-    );
+    let base = on_base.unwrap_or_default();
+    let text = output::commit_refused(&unread, &invalid, &acts, &base, &base_records);
+    let broken = (invalid.iter().map(output::valid))
+        .chain(
+            acts.iter()
+                .map(|(path, from, to)| output::rule_status(path, *from, *to)),
+        )
+        .chain((!base_records.is_empty()).then(|| output::rule_record_on_base(&base)));
     Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
@@ -225,13 +265,14 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
 /// none but a merge sets an item done while its branch exists. `input` is
 /// what Git gives the hook: a line per ref pushed.
 fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
-    let base = match Store::new(root.join(".atelier")).config() {
-        Ok(config) => config.base_branch,
+    let config = match Store::new(root.join(".atelier")).config() {
+        Ok(config) => config,
         Err(mut problem) => {
             problem.file = PathBuf::from(CONFIG);
             return Ok(Outcome::Refused(output::push_no_config(&problem)));
         }
     };
+    let base = config.base_branch.clone();
     let target = format!("refs/heads/{base}");
     let mut reader = CommitReader::new(root);
     let mut old = None;
@@ -288,7 +329,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
                 };
                 if now == Status::Done
                     && !matches!(before, Some(Ok(Status::Done)))
-                    && git::branch_tip(root, id)?.is_some()
+                    && git::branch_tip(root, &config.record_branch(id))?.is_some()
                 {
                     done.push((
                         commit.commit.clone(),

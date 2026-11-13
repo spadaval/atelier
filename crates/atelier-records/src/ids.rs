@@ -38,22 +38,7 @@ pub fn validate_id(id: &str) -> Result<(), String> {
     }
 }
 
-/// Lowercase ASCII letters, digits and inner single hyphens.
-pub(crate) fn validate_slug(slug: &str) -> Result<(), String> {
-    if slug.is_empty()
-        || slug.starts_with('-')
-        || slug.ends_with('-')
-        || slug.contains("--")
-        || !slug
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-    {
-        return Err(format!(
-            "`{slug}` is not a slug: lowercase letters, digits and single inner hyphens"
-        ));
-    }
-    Ok(())
-}
+pub(crate) use atelier_core::validate_slug;
 
 /// Four random base-36 characters.
 pub(crate) fn random_suffix() -> io::Result<String> {

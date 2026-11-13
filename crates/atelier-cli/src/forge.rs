@@ -98,7 +98,12 @@ impl Github {
     /// or else the URL the config gives. A remote name may hold a slash, so
     /// the name is tried first.
     pub fn open(repo: &Path, forge: &Forge) -> Result<Self, ForgeError> {
-        let url = match git::run(repo, &["remote", "get-url", "--", &forge.remote]) {
+        // The URL as configured, before `insteadOf` rewrites it for the
+        // transport: it is what names the repository on the forge.
+        let configured = format!("remote.{}.url", forge.remote);
+        let url = git::run(repo, &["config", "--get", &configured])
+            .or_else(|_| git::run(repo, &["remote", "get-url", "--", &forge.remote]));
+        let url = match url {
             Ok(url) => url,
             Err(_) if forge.remote.contains(':') || forge.remote.contains('/') => {
                 forge.remote.clone()

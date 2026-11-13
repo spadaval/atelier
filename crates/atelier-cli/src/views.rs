@@ -1,13 +1,13 @@
 //! `show`, `list` and `lead`. They read items and missions as `status`
 //! does: the base's record from its last commit, a started item's from its
-//! branch. `lead` writes planning, so it reads and writes its mission in the
-//! checkout of the base, and commits it.
+//! branch. `lead` writes its mission in the checkout it runs in, a backlog
+//! branch's, and commits nothing.
 
 use crate::commands::Outcome;
 use crate::view_output;
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
-use atelier_app::plan::{off_base, save};
+use atelier_app::plan::{misplaced, save, Belongs};
 use atelier_app::repo::mission_path;
 use atelier_app::{
     disputes, entries, item_view, items_of, list as groups, mission_view, Entry, Filter, Repo,
@@ -43,7 +43,32 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
     let missions = repo.missions()?;
     let entries = entries(&items, &missions, &repo.caller)?;
     let groups = groups(&entries, &missions, &repo.caller, filter);
-    Ok(Outcome::Done(view_output::list(&groups, filter)))
+    let mut text = view_output::list(&groups, filter);
+    // A drop that has not reached the base is shown as the flags narrow
+    // the rest: it can start nobody, block nothing, nor be anyone's now.
+    let narrowed =
+        filter.done || filter.ready || filter.blocked || filter.needs_human || filter.mine;
+    if !narrowed {
+        let record = |id: &str| {
+            let found = items.iter().find(|located| located.id == id);
+            found.and_then(|located| located.record())
+        };
+        let unreached: Vec<_> = atelier_app::unreached(&items)
+            .into_iter()
+            .filter(|(id, _, _)| {
+                let Some(record) = record(id) else {
+                    return false;
+                };
+                let item = &record.item;
+                let mission = (filter.mission.as_ref())
+                    .is_none_or(|mission| item.mission.as_ref() == Some(mission));
+                let label = (filter.label.as_ref()).is_none_or(|label| item.labels.contains(label));
+                mission && label
+            })
+            .collect();
+        text += &view_output::unreached(&unreached);
+    }
+    Ok(Outcome::Done(text))
 }
 
 /// `list --deferred`: the deferred findings of done items that nobody has
@@ -69,10 +94,10 @@ pub fn disputed(repo: &mut Repo, mission: Option<&str>) -> Result<Outcome> {
     Ok(Outcome::Done(view_output::disputed(&found, mission)))
 }
 
-/// Makes the caller the lead of a ready mission in the checkout of the
-/// base, and says where each of its items stands.
+/// Makes the caller the lead of a ready mission in this checkout, without
+/// committing it, and says where each of its items stands.
 pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
-    if let Some(refused) = off_base(repo, "lead")? {
+    if let Some(refused) = misplaced(repo, "lead", Belongs::Backlog)? {
         return Ok(refused.into());
     }
     validate_id(id).map_err(|message| anyhow!(message))?;
@@ -104,20 +129,10 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         &repo.caller,
         &items_of(id, &entries),
     );
-    // A thread that already leads it changes nothing, so has nothing to
-    // commit.
+    // A thread that already leads it changes nothing, so writes nothing.
     if before.as_ref() == Some(&repo.caller) {
         return Ok(Outcome::Done(said));
     }
     let message = format!("Lead {id}");
-    Ok(save(
-        repo,
-        "lead",
-        Vec::new(),
-        vec![dir.mission],
-        &said,
-        &message,
-        true,
-    )?
-    .into())
+    Ok(save(repo, "lead", Vec::new(), vec![dir.mission], &said, &message)?.into())
 }
