@@ -45,8 +45,8 @@ In order of importance:
   has to make. A page that only lists records is a sign it is not finished.
 - **Causes, not incidents.** A trip, a finding or a failed run is evidence.
   The Desk groups evidence under a claim and asks about the claim.
-- **Sessions, not queues.** Planning, gardening, grooming and spikes are
-  done with an agent in conversation. The Desk starts that session and shows
+- **Sessions, not queues.** Planning, backlog passes, gardening and spikes
+  are done with an agent in conversation. The Desk starts that session and shows
   its state. It does not leave a list to be answered later.
 - **Everything decided becomes a record.** A go or an answer is written by
   the tracker's own code under the human's name. The Desk holds no decision
@@ -88,5 +88,5 @@ carries both, reached over the tailnet.
 1. The mission page with its brief and debrief, the inbox, agents and the
    human's acts, on the redesigned records (mission atelier-z4cr).
 2. Health for real: the feed, the database, and causes written by a run.
-3. Sessions for gardening and grooming, what changed since the human last
-   looked, and notifications to a phone.
+3. Sessions for gardening and backlog passes, what changed since the human
+   last looked, and notifications to a phone.
