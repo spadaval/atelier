@@ -37,3 +37,7 @@ Garden atelier with structure and design drift as the focus, because Sumeet name
 In: `skills/agent-factory/procedures/garden.md` steps 1 to 7 up to the approval, for atelier only.
 
 Out: the session and what it settles, the run's merge, any new or removed rule, check, gate, interface or default, a run of `scripts/scorecard/`, and other items' branches.
+
+## Report
+
+Focus: structure and design drift, named by Sumeet.
