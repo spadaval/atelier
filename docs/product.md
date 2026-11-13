@@ -89,7 +89,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page Sumeet reads. No command is reserved for it. |
 | Status | A stored field on a mission or item, set only by the command that performs the act. |
 | Done | The end state of merged work, of a closed item, and of a closed mission. |
-| Record-only change | A branch every one of whose changed paths is under `.atelier/`, and which adds no mission and changes no plan. It merges once `atelier check` passes on the merged tree. |
+| Record-only change | A branch every one of whose changed paths is under `.atelier/` other than `config.toml`, and which adds no mission and changes no plan. It merges once `atelier check` passes on the merged tree. |
 | Check | `atelier check`, which the Git hooks and CI also run, or one of a project's configured merge checks. |
 | Skip | Going past a rule on purpose, with `ATELIER_SKIP="<reason>"` set for one command. |
 
@@ -112,20 +112,30 @@ Every change a thread makes, to code or to records, lives on a branch that
 | --- | --- | --- |
 | `<item-id>` | One item's change: its code and its records | `start <id>` on a ready item, or `start --new` |
 | `<mission-id>` | A new mission's plan, its reviews, and its items until the plan merges | `start --mission "<title>"` |
-| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, readying or dropping an item, leading, closing or stopping an open mission, a lead's notes | `start --backlog <slug>` |
+| `backlog/<slug>` | Record changes tied to no started item and no proposed plan: filing a bug, readying or dropping an item, leading, closing or stopping an open mission, a lead's notes, and an amendment of an agreed mission's plan with its plan reviews | `start --backlog <slug>` |
 
 `config.toml` may set one branch prefix, such as `x/`, for a host whose
 forge has a naming rule. It applies to all three kinds: `x/<item-id>`,
 `x/<mission-id>` and `x/backlog/<slug>`. Without one, branches are named as
 above.
 
-A branch merges on what it holds:
+A branch merges on what it holds, whatever its kind:
 
 | A branch that | Needs before it merges |
 | --- | --- |
-| Changes any path outside `.atelier/` | An independent review that approves its head, as now |
+| Changes code: any path outside `.atelier/`, or `config.toml` | An independent review that approves its head, as now |
 | Adds a mission, or changes a mission's plan | Two approving plan reviews of the plan its head holds, from threads that are not its planners |
 | Changes only records, and no plan | `atelier check` passing on the merged tree |
+
+`merge` applies every row a branch's contents meet, and `atelier check` on
+the merged tree is always one of them. A code review is an item's, so only
+an item's branch may change code; code on any other branch is refused,
+naming `start` for an item. A plan's reviews may be on any branch: a new
+mission's on its own branch, and an amendment of an agreed mission's plan on
+a backlog branch, where the thread that submits it becomes one of the
+mission's planners and two other threads review it. An item's branch may
+not change a plan, since its reviewer judges the change against the plan;
+it is refused, naming the backlog branch an amendment goes on.
 
 Three commands act on Git: `start` makes and claims a branch, `submit`
 publishes it, and `merge` merges it. Every other command that changes a
@@ -437,7 +447,8 @@ record is committed on the base.
   backlog branch: filing an item, `set`, `ready`, dropping an item that is
   not started, `lead`, `close`, a lead's notes, an item added to an agreed
   mission, and dropping an agreed mission. Each merges as a record-only
-  change.
+  change. An amendment of an agreed mission's plan is written on a backlog
+  branch too, and merges after two approving plan reviews of it.
 - Once an item is started, its directory changes only on its branch, and those
   changes reach the base in the merge. A drop of a started item is written
   there too, and the base's copy follows by a record-only change.
@@ -540,9 +551,15 @@ wait for a person, and run again later it merges. Without a forge, `merge`
 makes the merge commit and moves the base locally.
 
 With a forge, `submit` has already pushed the branch and opened its pull
-request, so CI ran during the review. `merge` pushes the branch only when the
-forge's copy is missing or is not a commit whose CI would count, so it never
-cancels a run in progress, and opens the pull request if there is none. Then
+request, so CI ran during the review. `merge` pushes the branch whenever the
+forge's copy is not the head, since the forge merges exactly the head of the
+pull request and that must hold the approving verdict the reviewer committed
+in the implementer's checkout. That push starts a CI run on the new head;
+`merge`'s own check still counts a run on an earlier commit from which the
+head differs only inside the item's directory, but a base whose protection
+requires CI on the head makes the forge wait for the new run, and `merge`
+then stops with "not yet" until it passes. It opens the pull request if
+there is none. Then
 it waits for CI, for up to 9 minutes: it merges as soon as a run that counts
 passes, and refuses as soon as one fails with no newer run still going. The
 wait holds no lock and writes nothing, so it can be interrupted. At the bound it stops with "not yet", not

@@ -370,19 +370,19 @@ will check.
 | `start --backlog` | Any | none | none | no branch `backlog/<slug>` exists, local or on the remote |
 | `submit` | Implementer | `building`, `changes_requested`, `approved` | `in_review` | Done when ticked; Report written; each open fix-now finding has a line in Responses or an unanswered question about it; no unanswered question. After its commit, where a forge is configured, it pushes the branch and opens its pull request; a failure of either is a warning, and `merge` does it |
 | `submit` (mission) | Planner | proposed | unchanged | the mission is not dropped; no record the branch changes is uncommitted. A caller not in `planners` is added to it, in a commit of `mission.md` alone, and takes the plan over |
-| `submit` (backlog) | Any | none | none | no record the branch changes is uncommitted |
+| `submit` (backlog) | Any | none | none | no record the branch changes is uncommitted. Where the branch changes an agreed mission's plan, a caller not in that mission's `planners` is added to it the same way, and opens the next plan round |
 | `review` | Reviewer | `in_review` | unchanged | the caller is not in the item's `implementers` |
 | `verdict changes` | Reviewer | `in_review` | `changes_requested` | the file validates; it has an open fix-now finding; it keeps what decisions settled, as the tool wrote it |
 | `verdict approve` | Reviewer | `in_review` | `approved` | the file validates; no fix-now finding of the item is open, the file's or one it does not carry; it keeps what decisions settled |
-| `review` of a plan | Reviewer | proposed | unchanged | the caller is not in the mission's `planners` |
-| `verdict changes` on a plan review | Reviewer | proposed | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
-| `verdict approve` on a plan review | Reviewer | proposed | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
+| `review` of a plan | Reviewer | proposed, or `open` with its plan changed on the backlog branch the checkout is on | unchanged | the caller is not in the mission's `planners` |
+| `verdict changes` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; it has an open fix-now finding; no finding has a `Decided:` line |
+| `verdict approve` on a plan review | Reviewer | as `review` of a plan | unchanged | the file validates; no fix-now finding is open among the file's own and those of earlier rounds; no finding has a `Decided:` line |
 | `escalate` | Implementer | `building`, `changes_requested`, `approved` | unchanged | none |
 | `decide` | Decider | any started status | unchanged | an unanswered question exists; the caller is not in the item's `implementers`, nor, for the oldest unanswered question when it names a finding, in the `reviewers` of the review that raised that finding or of any review whose finding it carries |
 | `merge` | Implementer | `approved` | `done`, read from the merge | a review of the latest round approves it and still covers the head; no unanswered question; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
 | `merge --trivial` | Implementer | `building` | `done`, read from the merge | Done when ticked; Report written; no review file; no unanswered question; nothing uncommitted in tracked files or the item's directory; the item and its mission are not dropped |
-| `merge` (mission) | Planner | proposed | agreed, by being on the base | two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; nothing uncommitted |
-| `merge` (backlog) | Any | none | none | every changed path is under `.atelier/`; it adds no mission and changes no mission's plan; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted |
+| `merge` (mission) | Planner | proposed | agreed, by being on the base | two reviews of the current round, from threads not in `planners`, approve, and the plan has not changed since the commit each reviewed; the mission is not dropped on its branch; no code changed; nothing uncommitted |
+| `merge` (backlog) | Any | none | none | no code changed (no path outside `.atelier/`, and not `config.toml`); for each agreed mission whose plan it changes, the plan gate of a mission's merge; it adds no mission; it brings no item record in a started status; `atelier check` passes on the merged tree; nothing uncommitted |
 | `close` (item) | Any | `draft`, `ready` | `done` | a result text; no branch `<id>` exists |
 | `close` (mission) | Lead or planner | `open`, on the base | `done` | every item done or dropped; Result written |
 | `drop` | Planner | `draft`, `ready`, and an item's started statuses; a mission's `open` | `dropped` | a reason, on one line; for a started item, a checkout on the item's branch; not an item already merged |
@@ -407,7 +407,7 @@ command that commits them.
 | `submit` | The item's branch | The command: the item's directory, with `in_review` |
 | `submit` (mission, backlog) | The branch it is on | The command commits only the addition of a planner taking the plan over; it refuses while a record change is uncommitted, and pushes |
 | `review`, `verdict` (item) | The item's branch, in the implementer's checkout | The agent: the reviewer commits the review file and `item.md` |
-| `review`, `verdict` (plan) | The mission's branch | The agent: the reviewer commits the review file and pushes it to the mission's branch |
+| `review`, `verdict` (plan) | The mission's branch, or the backlog branch that amends an agreed plan | The agent: the reviewer commits the review file and pushes it to that branch |
 | `escalate`, `decide` | The item's branch | The agent, as now; atelier-xbog removes both commands |
 | `merge`, `merge --trivial` | Merges the item's branch into the base | The forge's merge of the pull request, or, without a forge, the command's merge commit. `--trivial` first commits `trivial` on the branch |
 | `merge` (mission, backlog) | Merges the branch into the base | As for an item |
@@ -872,7 +872,10 @@ reads; nothing is written there.
   status change. The implementer's `merge` pushes it.
 - **A plan review is written where its reviewer works.** The reviewer works
   in a checkout of its own at the commit `submit` pushed to the mission's
-  branch, detached or on that branch. `review <mission>` reviews the plan as
+  branch, or to the backlog branch that amends an agreed mission's plan,
+  detached or on that branch. An amendment's rounds continue the mission's
+  numbering, and its review files are written under the mission's
+  `reviews/` on that branch. `review <mission>` reviews the plan as
   that checkout's HEAD holds it: the brief reads the mission, its documents
   and its items from the commit the review records, and names in one line
   the paths of the plan that the checkout or its index changes from that
@@ -947,16 +950,31 @@ In order:
 4. Take the merge lock, then read everything again, as in step 2. Nothing
    read before the lock is trusted, and a checkout now on another branch
    is refused, so `merge` merges only the branch it waited for.
-5. Check the act's conditions from the table. On an item: the approval
-   covers the head, or `--trivial` was given on a building item with no
-   review file; no Decisions entry is unanswered; neither the item nor its
-   mission is dropped, as the reader finds them. On a mission's branch: two
-   reviews of the current round from threads not in `planners` approve, and
-   the plan has not changed since the commit each reviewed, compared by
-   section of `mission.md`, by file for the other documents, and by item
-   while the plan is proposed; the mission is not dropped on its branch. On
-   a backlog branch: every path it changes is under `.atelier/`, and it
-   adds no mission and changes no mission's plan. On any branch: no tracked
+5. Check the act's conditions from the table, and every gate the branch's
+   contents need, whatever its kind. The contents are judged against the
+   merge base: code is any changed path outside `.atelier/`, and
+   `.atelier/config.toml`; a plan change is a mission added, or a change to
+   a mission's plan, compared by section of `mission.md`, by file for its
+   other documents but `notes.md` and its reviews, and by item while the
+   plan is proposed.
+   - **Code** needs an item's approval: on an item's branch, the approval
+     covers the head, or `--trivial` was given on a building item with no
+     review file; no Decisions entry is unanswered; neither the item nor
+     its mission is dropped, as the reader finds them. On a mission's or a
+     backlog branch, code is refused, naming `start` for an item; it is no
+     rule, and `ATELIER_SKIP` does not pass it.
+   - **A plan change** needs, for each mission whose plan it changes, two
+     reviews of that mission's current round, from threads not in its
+     `planners`, that approve, and no change to its plan since the commit
+     each reviewed; and the mission is not dropped on the branch. This
+     holds on a new mission's branch and on a backlog branch, which is
+     where an amendment of an agreed mission's plan is made. An item's
+     branch that changes a plan is refused, naming `start --backlog`,
+     since its reviewer judges the change against the plan and `review` of
+     a plan does not run there; that is no rule either.
+   - **Records alone** need nothing more than the checks of step 7.
+
+   On any branch: no tracked
    file has uncommitted changes and no file in a changed record's directory
    is untracked, ignored or not; and no record the branch brings to the base
    sets an item to a started status except the item the branch is named
@@ -978,8 +996,9 @@ In order:
    failed, the output says, before the line that reports the merge, how
    many checks ran and that each passed, or that `config.toml` names none.
    A failing check `ATELIER_SKIP` passed has its skip line instead, and no
-   line says the checks passed. On a record-only branch, the checks are
-   `atelier check` on the merged tree, whatever `config.toml` lists.
+   line says the checks passed. `atelier check` on the merged tree is
+   always among the checks, whatever `config.toml` lists; on a record-only
+   branch it is the only one.
 8. Confirm the branch tip, the base tip and the checkouts are what steps 4
    to 7 read; otherwise write nothing and say to run it again. Then:
    - **With a forge**, ask it to merge the pull request as a merge commit,
@@ -1151,10 +1170,14 @@ lists each commit once, so each act is printed once.
 - **Both sides of every merge.** Given paths, `git log` simplifies history:
   it follows only the side a merge matches on those paths, and the other
   side's commits are lost once no branch names them. `log` passes
-  `--full-history`, so it follows both. An Atelier merge never matches
-  either side, since it marks its item done, so the loss shows on a plain
-  merge whose branch's record changes were undone; the scenario test of
-  that case fails without the flag.
+  `--full-history`, so it follows both. Under the branch model a merge
+  writes nothing of its own, so when the base has not moved since a branch
+  left it, the merge's tree is the branch's, and without the flag `git log`
+  would follow only that side; a merge of a branch whose record changes
+  were undone matches the base's side, and would lose the branch's. The
+  scenario tests of both cases fail without the flag. Merges made before
+  the branch model set their item `done`, matched neither side, and are
+  read the same way.
 - **Merges.** A commit with one parent is compared with that parent. A merge
   commit on the base's first-parent line that first brings an item's copy
   to the base in a started status, or, before the branch model, an Atelier
@@ -1332,9 +1355,9 @@ rule names.
   their checkout, and `merge` confirms them unchanged,
   index entries, modes and contents, and a submodule's commit and its own
   uncommitted changes, with its other inputs.
-- **Not rules:** a record that does not read; a backlog branch that changes
-  a path outside `.atelier/`, which is code and needs an item and its
-  review, since no change outside `.atelier/` merges unreviewed; an ID, a mission or a finding
+- **Not rules:** a record that does not read; code on a mission's or a
+  backlog branch, which needs an item and its review, since no code merges
+  unreviewed; a plan changed on an item's branch; an ID, a mission or a finding
   that does not exist, and a finding settled already; a missing or
   malformed argument; a command run where it has nothing to act on: off the
   item's branch it writes, with no review file of the round to record a
