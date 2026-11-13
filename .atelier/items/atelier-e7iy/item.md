@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-e7iy
 title: Decide whether `status` should offer `merge` on an approved gardener run that waits for its session
-status: draft
+status: done
 mission: null
 labels:
 - redesign
@@ -37,3 +37,7 @@ A decision. No file changes here.
 ## Context
 
 Reported by the gardeners of atelier-0019, cosplay-studio-ktgi and astromech-qjle on 2026-11-11. Mission atelier-295u's lead did not change the tool: the specifications name no such behaviour.
+
+## Report
+
+Answered by Sumeet in conversation on 2026-11-13, agreeing to the planner's recommendation: have the tool know. `status` should say that an approved gardener run's merge waits for its session, and gate nothing. Filed as atelier-y0ba.
