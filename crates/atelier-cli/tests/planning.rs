@@ -615,12 +615,27 @@ fn status_names_each_record_change_not_committed_and_each_commit_not_pushed() {
         &root,
         &format!("git add -- {paths} && git commit -qm Plan -- {paths}"),
     );
+    git(&root, &["commit", "-q", "--allow-empty", "-m", "Note it"]);
+    let (first, second) = (
+        git(&root, &["rev-parse", "--short", "HEAD^"]),
+        git(&root, &["rev-parse", "--short", "HEAD"]),
+    );
     let status = atelier(&root, "p1", &["status"]).stdout;
     assert!(!status.contains("not committed"), "{status}");
     assert!(
-        status.contains("1 commit of backlog/plan not pushed to origin. Push with: git push origin backlog/plan\n"),
+        status.contains(&format!(
+            "2 commits of backlog/plan not pushed to origin:\n  {first} Plan\n  {second} Note it\nPush with: git push origin backlog/plan\n"
+        )),
         "{status}"
     );
+    // A change to the config is a record change too.
+    append(&root, ".atelier/config.toml", "# note\n");
+    let status = atelier(&root, "p1", &["status"]).stdout;
+    assert!(
+        status.contains("Record changes not committed, which count only once committed and merged:\n  .atelier/config.toml\n"),
+        "{status}"
+    );
+    git(&root, &["checkout", "-q", "--", ".atelier/config.toml"]);
     git(&root, &["push", "-q", "origin", "backlog/plan"]);
     let status = atelier(&root, "p1", &["status"]).stdout;
     assert!(!status.contains("not pushed"), "{status}");

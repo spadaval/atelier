@@ -253,13 +253,14 @@ pub fn overview(
 
 /// What `status` says of what the checkout `at` names, as for
 /// [`commit_line`], has not saved: `records`, the record changes not
-/// committed, and `unpushed`, the commits of `branch` not on `remote`.
+/// committed, and `unpushed`, the commits of `branch` not on `remote`,
+/// oldest first, each its short ID and subject.
 pub fn unsaved(
     at: Option<&Path>,
     records: &[String],
     branch: Option<&str>,
     remote: Option<&str>,
-    unpushed: usize,
+    unpushed: &[String],
 ) -> String {
     let mut text = String::new();
     if !records.is_empty() {
@@ -272,16 +273,20 @@ pub fn unsaved(
             commit_line(at, records, "<what they change>")
         );
     }
-    if let (Some(branch), Some(remote), true) = (branch, remote, unpushed > 0) {
+    if let (Some(branch), Some(remote), false) = (branch, remote, unpushed.is_empty()) {
         let git = match at {
             Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
             None => "git".into(),
         };
-        let commits = match unpushed {
+        let commits = match unpushed.len() {
             1 => "1 commit".to_string(),
             n => format!("{n} commits"),
         };
-        text += &format!("{commits} of {branch} not pushed to {remote}. Push with: {git} push {remote} {branch}\n");
+        text += &format!("{commits} of {branch} not pushed to {remote}:\n");
+        for commit in unpushed {
+            text += &format!("  {commit}\n");
+        }
+        text += &format!("Push with: {git} push {remote} {branch}\n");
     }
     text
 }

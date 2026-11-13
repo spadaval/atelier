@@ -125,27 +125,35 @@ fn orientation(repo: &mut Repo) -> Result<String> {
 /// What `status` says the checkout has not saved: its record changes not
 /// committed, and its branch's commits not pushed to the remote.
 fn unsaved(repo: &Repo) -> Result<String> {
-    let records = planning(&repo.root)?;
+    let mut records = planning(&repo.root)?;
+    // `config.toml` is a record as `check` counts them.
+    let config = atelier_records::CONFIG;
+    if git::uncommitted(&repo.root)?
+        .iter()
+        .any(|path| path == config)
+        || !git::untracked(&repo.root, config)?.is_empty()
+    {
+        records.insert(0, config.to_string());
+    }
     let remote = repo.remote();
-    let unpushed = match (&repo.branch, remote) {
+    let unpushed: Vec<String> = match (&repo.branch, remote) {
         (Some(branch), Some(remote)) => {
             let since = match atelier_app::git::remote_tip(&repo.root, remote, branch)? {
                 Some(tip) => tip,
                 None => repo.base_tip.clone(),
             };
             let range = format!("{since}..HEAD");
-            git::run(&repo.root, &["rev-list", "--count", &range])?
-                .parse()
-                .unwrap_or(0)
+            let listed = git::run(&repo.root, &["log", "--reverse", "--format=%h %s", &range])?;
+            listed.lines().map(str::to_string).collect()
         }
-        _ => 0,
+        _ => Vec::new(),
     };
     Ok(output::unsaved(
         repo.git_at(),
         &records,
         repo.branch.as_deref(),
         remote,
-        unpushed,
+        &unpushed,
     ))
 }
 
