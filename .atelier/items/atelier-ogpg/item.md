@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ogpg
 title: Record the branch model in docs/product.md and docs/design.md before any code changes
-status: approved
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
