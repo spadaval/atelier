@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qb4f
 title: 'Garden atelier: structure, 2026-11-13'
-status: building
+status: in_review
 mission: null
 labels:
 - garden
