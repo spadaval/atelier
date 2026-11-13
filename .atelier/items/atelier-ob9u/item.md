@@ -10,6 +10,7 @@ labels:
 priority: medium
 blocked_by:
 - atelier-ogpg
+- atelier-xbog
 implementers: []
 ready: null
 trivial: null
@@ -29,7 +30,7 @@ merges it.
 
 ## Done when
 
-- [ ] `new`, `set`, `ready`, `drop`, `close`, `lead`, `escalate`, `decide`, `review` and `verdict` write record files in the checkout they run in and make no commit, no branch and no push. Each prints the paths it wrote. Tests show `git status` after each has changes and `git log` has none.
+- [ ] `new`, `set`, `ready`, `drop`, `close`, `lead`, `review` and `verdict` write record files in the checkout they run in and make no commit, no branch and no push. Each prints the paths it wrote. Tests show `git status` after each has changes and `git log` has none.
 - [ ] `start` is the only command that makes a branch, and it makes all three kinds: `start <item>` as today; `start --mission "<title>"`, a new mission's record on a branch named for it; and `start --backlog <slug>`, a `backlog/<slug>` branch for record changes tied to neither. It commits the one record change that is the claim, where there is one.
 - [ ] `config.toml` takes one optional branch prefix. With it set to `x/`, every kind of branch carries it: `x/<item-id>`, `x/<mission-id>` and `x/backlog/<slug>`; unset, branches are named as today. A branch name is read back into its record's ID by one function, tested both ways.
 - [ ] `start` never switches the base's own checkout to another branch: there it does what the design settled, and a test shows the base's checkout still has the base out afterwards.

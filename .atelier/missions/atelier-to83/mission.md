@@ -113,6 +113,7 @@ published.
 - Out: an integration branch for a mission; a database or a lock service for
   records; any change to how an item is reviewed; the work host, which
   adopts the tool once through atelier-7w9s after this mission closes; a
+  rule about when to rebut a finding, which stays in the skill; a
   finder on the Desk (atelier-ic22) and a mission's history page
   (atelier-hj6b); the gardener and backlog procedures, which mission
   atelier-g961 rewrites and item atelier-j5lr then brings to this model.

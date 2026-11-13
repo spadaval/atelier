@@ -38,7 +38,7 @@ approve, and is agreed by being on the base.
 - [ ] `start` and a take-over ask of an item's mission only that it is not dropped, which they keep refusing. An item's `merge` refuses too once its mission is dropped, and names the stop.
 - [ ] `drop` of a mission writes the record, as any `drop` does, and stops nothing until it is published: `status` and `show` say so while it is not. A planner publishes it with Git and, for an open mission, `submit` and `merge` by the record-only path; for a proposed plan, a push and closing its pull request. Tests cover a stop of a proposed plan, and a stop of an open mission with one ready item and one started item, read from a second clone after a fetch.
 - [ ] A mission's Why names whose direction it started from, and `atelier check` says so when the section is empty.
-- [ ] `lead` writes the `lead` field in the checkout it runs in, and it reaches the base by the record-only path. `decide` refuses a thread that implemented the item by reading the item's implementers, not the mission's lead.
+- [ ] `lead` writes the `lead` field in the checkout it runs in, and it reaches the base by the record-only path.
 - [ ] The binary reads a mission record in the old format: `status: ready` reads as `open`, `status: draft` on the base reads as proposed and cannot be led or have its items started, and the `ready` field is ignored. A test reads each open mission record of the five repositories as they stand today.
 - [ ] atelier-lkf5 is dropped as moot, or the Report shows it still happens.
 

@@ -11,6 +11,7 @@ priority: medium
 blocked_by:
 - atelier-dciw
 - atelier-2vdq
+- atelier-xbog
 implementers: []
 ready: null
 trivial: null
@@ -32,6 +33,7 @@ item takes in atelier-qxmr.
 - [ ] A page lists what is proposed in each repository: plans and record changes on branches, with the branch, its pull request where there is one, and its current round's verdicts. A plan dropped on its branch is not listed as proposed.
 - [ ] A page lists work in motion: each started item with its status, read from its branch, and the thread on it, with whether T3 says that thread is alive; and each mission in progress with its lead.
 - [ ] Sumeet is told when a plan is proposed and when it merges, by the means `docs/product/desk.md` settles, and the page links the plan.
+- [ ] The decide page and its act are gone, with the code that finds a checkout to write an answer into. A page lists what `atelier list --disputed` gives, with each side's model where T3 knows the thread.
 - [ ] "Say go" is gone. A mission's page has "stop", which drops the mission with his reason as atelier-2vdq defines a stop, for a proposed plan and for an open mission, and the act is the same record `atelier drop` writes. The Desk carries the stop through itself: it writes the drop, commits it, and publishes it by the path atelier-2vdq gives. A proposed plan is shown as stopped once the drop is pushed and its pull request closed. An open mission's stop is shown as pending until its record-only branch has merged, and then as stopped. The interface test covers both.
 - [ ] The Desk's writes go through a checkout of the branch they change and never touch a served repository's own checkout.
 - [ ] `docs/product/desk.md` and `docs/architecture/desk.md` describe all of this, and `pnpm test` and `pnpm e2e` pass.
