@@ -55,8 +55,9 @@ beside it other than `notes.md` and its reviews, and, until the plan has
 merged, its items. Its lead, its notes, its
 Result section and items added to it once it is open are records.
 
-A mission is proposed while its plan is on its branch and open once that
-merges. It has no draft status and no go-ahead; its Why says whose direction
+A mission is proposed while its record is `open` and on a branch that has
+not merged, and agreed once that merges. One dropped on its branch is
+dropped, not proposed, and cannot merge. It has no draft status and no go-ahead; its Why says whose direction
 it started from. Its stored status is `open`, `done` or `dropped`. Items still merge to the base one at a time, so the base
 shows a mission in progress as it is: agreed, with some items done.
 
