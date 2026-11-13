@@ -344,6 +344,21 @@ pub fn list(groups: &[Group], filter: &Filter) -> String {
     text
 }
 
+/// The items dropped on their branch whose drop has not reached the base.
+pub fn unreached(items: &[(String, String, Option<String>)]) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
+    let mut text = "Dropped on their branch, not yet on the base:\n".to_string();
+    for (id, title, why) in items {
+        let why = why.as_deref().unwrap_or("no reason given");
+        text += &format!(
+            "  {id} (dropped on its branch; the drop has not reached the base: {why}): {title}\n"
+        );
+    }
+    text
+}
+
 /// `list --deferred`: each finding, as `<item>/<finding>`, with its title.
 pub fn deferred(findings: &[(String, Finding)]) -> String {
     let Some((id, first)) = findings.first() else {

@@ -1,18 +1,16 @@
-//! `ready`, and what every planning command shares. Planning happens on
-//! the base, so a planning command reads and writes records in the checkout
-//! of the base and validates what it writes. Those whose write other
-//! threads act on at the base's tip, `ready`, `drop`, `close` and `lead`,
-//! commit it; `new`, `set` and settling a finding leave the commit to Git.
+//! `ready`, and what every planning command shares. A planning command
+//! reads and writes records in the checkout it runs in, validates what it
+//! writes, and commits nothing: the agent commits with Git, on the branch
+//! the change belongs on, and the change reaches the base when that branch
+//! merges. Nothing is written in the base's own checkout.
 
-use crate::acts::{check, check_mission, row, Act, Facts, MissionFacts, Refusal};
-use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path, write_and_commit};
+use crate::acts::{check, check_mission, row, Act, Facts, MissionFacts, Refusal, STARTED};
+use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
 use crate::{git, say, Located, Repo};
 use anyhow::{anyhow, Result};
 use atelier_core::{Item, Mission, MissionStatus, Ready, Status};
-use atelier_records::{
-    render_item, render_mission, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile,
-};
+use atelier_records::{validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use std::path::PathBuf;
 
 /// What an act did: the paths it wrote, the commit it made, if it made
@@ -24,11 +22,11 @@ pub struct Done {
     pub commit: Option<String>,
 }
 
-/// `ready`: marks each of `ids`, a draft item or mission in the checkout of
-/// the base, ready, as `by` said, and commits what it wrote; or refuses,
+/// `ready`: marks each of `ids`, a draft item or mission in this checkout,
+/// ready, as `by` said, and writes it without committing; or refuses,
 /// writing nothing, when one is unknown or not a draft.
 pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, Refused>> {
-    if let Some(refused) = off_base(repo, "ready")? {
+    if let Some(refused) = misplaced(repo, "ready", Belongs::Backlog)? {
         return Ok(Err(refused));
     }
     if ids.is_empty() {
@@ -101,7 +99,7 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
     }
     let said = say::readied(&named, by) + &reviewed;
     let message = format!("Ready {}", named.join(", "));
-    save(repo, "ready", items, missions, &said, &message, true)
+    save(repo, "ready", items, missions, &said, &message)
 }
 
 /// What `ready` says of a mission's plan reviews, for whoever says go:
@@ -222,24 +220,61 @@ pub fn is_mission(repo: &Repo, id: &str) -> bool {
     validate_id(id).is_ok() && repo.root.join(mission_path(id)).exists()
 }
 
-/// Refuses a planning command run anywhere but on the base branch.
-pub fn off_base(repo: &Repo, command: &str) -> Result<Option<Refused>> {
-    if repo.branch.as_deref() == Some(repo.base.as_str()) {
+/// The kind of branch a record change belongs on, by the act table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Belongs<'a> {
+    /// A backlog branch, or a mission's branch for its plan.
+    Backlog,
+    /// Settling a finding: as `Backlog`, or the branch of a started item
+    /// the caller implements.
+    Settle,
+    /// The branch of this started item.
+    Item(&'a str),
+}
+
+/// Refuses `command`, whose change belongs on a branch of kind `belongs`,
+/// where it runs: always in the base's own checkout, and on a branch of
+/// another kind. Each is a rule. A detached checkout, or a branch the
+/// convention does not name, takes any change, as a reviewer's checkout
+/// at a commit does.
+pub fn misplaced(repo: &mut Repo, command: &str, belongs: Belongs) -> Result<Option<Refused>> {
+    let base = repo.base.clone();
+    if repo.branch.as_deref() == Some(base.as_str()) {
+        let text = say::on_base_checkout(command, &base);
+        return Ok(repo.skip.refuse([say::rule_on_base(&base)], text));
+    }
+    if let Belongs::Item(id) = belongs {
+        let branch = repo.branch_of(id);
+        if repo.branch.as_deref() == Some(branch.as_str()) {
+            return Ok(None);
+        }
+        let checkout = git::checkout_of(&repo.root, &branch)?;
+        let text = say::drop_off_branch(id, &branch, repo.branch.as_deref(), checkout.as_deref());
+        return Ok(repo
+            .skip
+            .refuse([say::rule_drop_off_branch(id, &branch)], text));
+    }
+    let Some(current) = repo.current()? else {
+        return Ok(None);
+    };
+    let record = current.record().expect("the current item has a record");
+    let held = STARTED.contains(&record.item.status)
+        && record.item.implementers.holder() == Some(&repo.caller);
+    if belongs == Belongs::Settle && held {
         return Ok(None);
     }
-    let checkout = git::checkout_of(&repo.root, &repo.base)?;
-    let (base, branch) = (&repo.base, repo.branch.as_deref());
-    let text = say::off_base(command, base, branch, checkout.as_deref());
+    let branch = repo.branch.clone().unwrap_or_default();
+    let text = say::belongs_on_backlog(command, &current.id, &branch);
     Ok(repo
         .skip
-        .refuse([say::rule_off_base(base, branch, false)], text))
+        .refuse([say::rule_belongs_on_backlog(command, &branch)], text))
 }
 
 /// Writes `items` and `missions` into the checkout, once each validates
-/// against every record of the checkout, and says what it wrote and, with
-/// `commit`, commits them alone and says the commit; or, when one has a
-/// problem, writes nothing and says why. `said` opens what it says, and
-/// `message` is the commit's.
+/// against every record of the checkout, and says what it wrote and the
+/// Git command that commits it; or, when one has a problem, writes nothing
+/// and says why. `said` opens what it says, and `message` is the commit's
+/// the Git command gives.
 pub fn save(
     repo: &Repo,
     command: &str,
@@ -247,25 +282,8 @@ pub fn save(
     missions: Vec<Mission>,
     said: &str,
     message: &str,
-    commit: bool,
 ) -> Result<Result<Done, Refused>> {
-    if !commit {
-        return save_with(repo, command, items, missions, Vec::new(), said, message);
-    }
-    let paths = match checked(repo, command, &items, &missions, &[])? {
-        Ok(paths) => paths,
-        Err(refused) => return Ok(Err(refused)),
-    };
-    let texts = (items.iter().map(render_item)).chain(missions.iter().map(render_mission));
-    let files: Vec<(String, String)> = paths.iter().cloned().zip(texts).collect();
-    let staged: Vec<&str> = paths.iter().map(String::as_str).collect();
-    write_and_commit(repo, &files, &staged, message)?;
-    let commit = git::head(&repo.root)?;
-    Ok(Ok(Done {
-        text: say::committed(said, &paths, &commit, message),
-        paths,
-        commit: Some(commit),
-    }))
+    save_with(repo, command, items, missions, Vec::new(), said, message)
 }
 
 /// [`save`] without the commit, with `reviews` written too, and the Git

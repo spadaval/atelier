@@ -201,10 +201,40 @@ const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 6] = [
     ),
 ];
 
+/// The acts on no record a status is taken from: a mission's creation on
+/// its branch, and a backlog branch's start, submit and merge.
+const UNRECORDED_SPECIFIED: [(Act, Option<Status>); 4] = [
+    (Act::StartMission, Some(Status::Draft)),
+    (Act::StartBacklog, None),
+    (Act::SubmitBacklog, None),
+    (Act::MergeBacklog, None),
+];
+
+#[test]
+fn a_backlog_branchs_acts_run_from_no_status_for_any_thread_and_are_not_an_implementers() {
+    for (act, to) in UNRECORDED_SPECIFIED {
+        let row = row(act);
+        assert!(row.from.is_empty(), "{act:?}");
+        assert_eq!(row.to, to, "{act:?}");
+        // Any thread: a planner's act, which no thread holds, and binds
+        // nobody; not the implementer's act on an item.
+        assert_eq!(row.role, Role::Planner, "{act:?}");
+        assert!(!row.binds, "{act:?}");
+    }
+    assert_eq!(row(Act::SubmitBacklog).command, "submit");
+    assert_eq!(row(Act::MergeBacklog).command, "merge");
+    assert_eq!(row(Act::StartBacklog).command, "start --backlog");
+    assert_eq!(row(Act::StartMission).command, "start --mission");
+}
+
 #[test]
 fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refused() {
-    // Each item's act, and each mission's, `lead` among them; `drop` is both.
-    assert_eq!(TABLE.len(), SPECIFIED.len() + MISSION_SPECIFIED.len() - 1);
+    // Each item's act, and each mission's, `lead` among them; `drop` is
+    // both; and the acts on no record.
+    assert_eq!(
+        TABLE.len(),
+        SPECIFIED.len() + MISSION_SPECIFIED.len() - 1 + UNRECORDED_SPECIFIED.len()
+    );
     for (act, from, to) in SPECIFIED {
         for status in ALL {
             // Every condition holds: the caller holds the item, except a

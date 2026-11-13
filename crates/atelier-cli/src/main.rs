@@ -167,13 +167,19 @@ enum Command {
         /// The item's result, written into its Report. A mission's is written in its file.
         result: Option<String>,
     },
-    /// Start a ready item on a new branch named for it, or take over a started one.
-    #[command(group(ArgGroup::new("what").required(true).args(["id", "new"])))]
+    /// Make a branch and claim it: start a ready item on a branch named for it, or take over a started one; or make a new mission's branch, or a backlog branch. The only command that makes a branch. Where a remote is configured the push of the branch is the claim. In the base's own checkout it does not switch, and prints the `git worktree add` to run.
+    #[command(group(ArgGroup::new("what").required(true).args(["id", "new", "mission", "backlog"])))]
     Start {
         id: Option<String>,
         /// Create an item already started, for work asked for directly, with this title.
         #[arg(long, value_name = "TITLE", value_parser = NonEmptyStringValueParser::new())]
         new: Option<String>,
+        /// Create a draft mission with this title on a new branch named for it, where its plan is written.
+        #[arg(long, value_name = "TITLE", value_parser = NonEmptyStringValueParser::new())]
+        mission: Option<String>,
+        /// Make the branch backlog/<SLUG> at the base's tip, for record changes tied to no item or mission.
+        #[arg(long, value_name = "SLUG")]
+        backlog: Option<String>,
     },
     /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
     Submit,
@@ -337,7 +343,17 @@ fn main() -> ExitCode {
             Command::Start {
                 new: Some(title), ..
             } => commands::start_new(&mut repo, &title),
-            Command::Start { .. } => unreachable!("clap requires an ID or --new"),
+            Command::Start {
+                mission: Some(title),
+                ..
+            } => commands::start_mission(&mut repo, &title),
+            Command::Start {
+                backlog: Some(slug),
+                ..
+            } => commands::start_backlog(&mut repo, &slug),
+            Command::Start { .. } => {
+                unreachable!("clap requires an ID, --new, --mission or --backlog")
+            }
             Command::Submit => commands::submit(&mut repo),
             Command::Review { id } => review::review(&mut repo, &id),
             Command::Verdict { verdict, model } => {

@@ -5,7 +5,7 @@ mod item;
 mod mission;
 mod review;
 
-pub use config::{Config, Forge, ForgeProvider, MergeCheck};
+pub use config::{validate_prefix, validate_slug, Config, Forge, ForgeProvider, MergeCheck, Named};
 pub use item::{Answer, Decision, Item, ItemSchema, Priority, Ready, Response, Status};
 pub use mission::{Mission, MissionSchema, MissionStatus};
 pub use review::{

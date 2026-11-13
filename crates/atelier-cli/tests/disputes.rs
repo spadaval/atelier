@@ -40,7 +40,7 @@ fn request_changes(root: &Path) {
     assert_eq!(atelier(root, "r1", &["review", ID]).code, 0);
     let (_, path) = review_of(root, 1);
     append(root, &path, NO_PERIOD);
-    let run = atelier(root, "r1", &["verdict", "changes"]);
+    let run = verdict(root, "r1", &["verdict", "changes"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
 }
 
@@ -55,7 +55,7 @@ fn judge(root: &Path, reviewer: &str, round: u32, judge: impl Fn(&str) -> String
         "{text}"
     );
     fs::write(root.join(&path), judge(&text)).unwrap();
-    let run = atelier(root, reviewer, &["verdict", verdict]);
+    let run = common::verdict(root, reviewer, &["verdict", verdict]);
     assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
 }
 
@@ -147,7 +147,7 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
     let lowered = text.replace("Recommendation: fix now", "Recommendation: defer");
     fs::write(root.join(&path), &lowered).unwrap();
     // Without a reason the file does not read, and nothing is recorded.
-    let refused = atelier(&root, "r3", &["verdict", "approve"]);
+    let refused = verdict(&root, "r3", &["verdict", "approve"]);
     assert_eq!(refused.code, 2, "{}{}", refused.stdout, refused.stderr);
     assert!(refused.stderr.contains("says why"), "{}", refused.stderr);
     fs::write(
@@ -155,7 +155,7 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
         lowered + "Right, but it belongs to the next item.\n",
     )
     .unwrap();
-    let run = atelier(&root, "r3", &["verdict", "approve"]);
+    let run = verdict(&root, "r3", &["verdict", "approve"]);
     assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
     assert!(
         disputed(&root, &[]).contains(&format!(
@@ -166,7 +166,7 @@ fn a_rebuttal_the_next_reviewer_keeps_has_had_its_one_try_until_a_reviewer_lower
     );
     let merged = atelier(&root, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     assert!(atelier(&root, "t9", &["list", "--deferred"])
         .stdout
         .contains(&format!("  {ID}/{stem}.1: No period\n")),);
@@ -223,6 +223,8 @@ fn decided_before_removal(root: &Path, finding: &str) -> String {
     git(root, &["commit", "-qm", "Decided"]);
     git(root, &["switch", "-q", "main"]);
     git(root, &["merge", "-q", "--no-ff", ID, "-m", "Merge"]);
+    // Nothing is written in the base's own checkout.
+    git(root, &["checkout", "-q", "--detach"]);
     "2-dcdd.1".into()
 }
 
@@ -300,8 +302,7 @@ fn led() -> Scratch {
     }
     let item = read(&root, &item_path(ID)).replace("mission: null", "mission: demo-m1ss");
     fs::write(root.join(item_path(ID)), item).unwrap();
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Mission"]);
+    on_base(&root, "Mission");
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     scratch
 }

@@ -169,96 +169,39 @@ fn ready_as_the_cli_does(checkout: &Path, ids: &[&str], by: &str) -> Value {
     }
 }
 
-/// The last commit's message and the paths it changed.
-fn last_commit(at: &Path) -> (String, String) {
-    let message = git(at, &["log", "-1", "--format=%B"]);
-    let paths = git(
-        at,
-        &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
-    );
-    (message, paths)
-}
-
-/// A mission's record, with the time `ready` recorded set aside.
-fn without_time(at: &Path, id: &str) -> String {
-    let text = fs::read_to_string(at.join(format!(".atelier/missions/{id}/mission.md"))).unwrap();
-    let lines = text
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("at: "));
-    lines.collect::<Vec<_>>().join("\n")
-}
-
+/// Since atelier-ob9u nothing is written in the base's own checkout, so
+/// `ready` there is refused, from the Desk as from the CLI; atelier-v958
+/// gives the Desk its say-go on the branch model.
 #[tokio::test]
-async fn saying_go_from_the_desk_leaves_the_commit_the_cli_leaves() {
+async fn saying_go_from_the_desk_is_refused_in_the_bases_checkout_as_the_cli_is() {
     let world = world();
     let origin = world.dir.path().join("origin");
     let by_cli = world.dir.path().join("by-cli");
     clone(&origin, &by_cli);
     let before = git(&world.served, &["rev-parse", "HEAD"]);
-    assert_eq!(before, git(&by_cli, &["rev-parse", "HEAD"]));
+    write(&world.served, "notes.txt", "mine\n");
+    git(&world.served, &["add", "notes.txt"]);
 
-    let done = act(
+    let refused = act(
         &world.app,
         json!({"act": "ready", "repo": "demo", "ids": [DRAFT]}),
     )
     .await;
     let cli = ready_as_the_cli_does(&by_cli, &[DRAFT], CALLER);
-
-    assert_eq!(done["result"], "done", "{done}");
-    assert_eq!(done["paths"], cli["paths"]);
-    // Each says the commit it made, which differ in their time.
-    let said = |at: &Path, text: &Value| {
-        let short = git(at, &["rev-parse", "--short", "HEAD"]);
-        text.as_str().unwrap().replace(&short, "<commit>")
-    };
+    assert_eq!(refused["result"], "refused", "{refused}");
+    assert_eq!(refused, cli);
     assert_eq!(
-        said(&world.served, &done["text"]),
-        said(&by_cli, &cli["text"])
+        refused["rules"],
+        json!(["Nothing is written in the checkout of the base branch main"])
     );
-    for at in [&world.served, &by_cli] {
-        let count = git(at, &["rev-list", "--count", &format!("{before}..HEAD")]);
-        assert_eq!(count, "1", "one new commit in {}", at.display());
-    }
-    assert_eq!(done["commit"], git(&world.served, &["rev-parse", "HEAD"]));
-    assert_eq!(last_commit(&world.served), last_commit(&by_cli));
-    let paths = last_commit(&world.served).1;
-    assert_eq!(paths, format!(".atelier/missions/{DRAFT}/mission.md"));
+    // Nothing is written or committed, and what was staged stays staged.
+    assert_eq!(git(&world.served, &["rev-parse", "HEAD"]), before);
     assert_eq!(
-        without_time(&world.served, DRAFT),
-        without_time(&by_cli, DRAFT)
+        git(&world.served, &["status", "--porcelain"]),
+        "A  notes.txt"
     );
-    assert!(without_time(&world.served, DRAFT).contains(&format!("by: {CALLER}\n")));
-
-    // The comparison can fail: the same act under another name differs.
-    let other = world.dir.path().join("other");
-    clone(&origin, &other);
-    ready_as_the_cli_does(&other, &[DRAFT], "someone-else");
-    assert_ne!(
-        without_time(&world.served, DRAFT),
-        without_time(&other, DRAFT)
-    );
-
     let page = get(&world.app, &format!("/api/repos/demo/missions/{DRAFT}")).await;
-    assert_eq!(page["mission"]["status"], "ready");
-    assert_eq!(page["mission"]["ready"]["by"], CALLER);
-}
-
-#[tokio::test]
-async fn saying_go_leaves_an_unrelated_staged_file_staged() {
-    let world = world();
-    write(&world.served, "notes.txt", "mine\n");
-    git(&world.served, &["add", "notes.txt"]);
-    let done = act(
-        &world.app,
-        json!({"act": "ready", "repo": "demo", "ids": [DRAFT]}),
-    )
-    .await;
-    assert_eq!(done["result"], "done", "{done}");
-    assert_eq!(
-        git(&world.served, &["diff", "--cached", "--name-only"]),
-        "notes.txt"
-    );
-    assert!(!last_commit(&world.served).1.contains("notes.txt"));
+    assert_eq!(page["mission"]["status"], "draft");
 }
 
 #[tokio::test]
@@ -372,19 +315,6 @@ async fn where_no_checkout_has_the_branch_the_function_refuses() {
         json!({"result": "refused", "rules": own.rules, "text": own.text, "next": own.next})
     );
     assert!(own.next.is_some());
-
-    // `ready` with no checkout of the base.
-    git(&world.served, &["switch", "-qc", "elsewhere"]);
-    let refused = act(
-        &world.app,
-        json!({"act": "ready", "repo": "demo", "ids": [DRAFT]}),
-    )
-    .await;
-    let own = ready_as_the_cli_does(&world.served, &[DRAFT], CALLER);
-    assert_eq!(refused, own);
-    assert_eq!(refused["result"], "refused");
-    assert!(refused["next"].is_string());
-    assert_eq!(git(&world.served, &["rev-list", "--count", "main"]), "1");
 }
 
 #[tokio::test]
@@ -414,10 +344,12 @@ async fn only_the_desks_own_app_may_act() {
 
     // From the app, at a host it answers to.
     let headers = [("x-atelier-desk", "1"), ("origin", "http://localhost:5173")];
+    // The act is made, and refused as the CLI's `ready` is in the base's
+    // checkout.
     let (status, done) = send(&world.app, "POST", "/api/act", &headers, go).await;
     assert_eq!(
         (status, &done["result"]),
-        (StatusCode::OK, &json!("done")),
+        (StatusCode::OK, &json!("refused")),
         "{done}"
     );
 

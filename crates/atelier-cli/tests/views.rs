@@ -130,8 +130,7 @@ fn fixture() -> (Scratch, PathBuf) {
     let dropped = "\n## Report\n\nDropped: nobody uses it.\n";
     let none = ["null", "[]", "medium", "[]"];
     item(&root, "demo-h8hh", "dropped", "Port it", none, dropped);
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Plan"]);
+    on_base(&root, "Plan");
     let second = scratch.worktree("second");
     let run = atelier(&second, "t1", &["start", "demo-d4dd"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -204,7 +203,7 @@ fn list_shows_open_work_by_mission_and_label_and_each_flag_narrows_it() {
     let mine = format!("{M1}  Labelled ui:\n{D4}");
     assert_eq!(stdout(&root, "t1", &["list", "--mine"]), mine);
     assert_eq!(list(&["--mine"]), "No open work matches.\n");
-    let run = atelier(&root, "lead1", &["lead", "demo-m1ss"]);
+    let run = planned(&root, "lead1", &["lead", "demo-m1ss"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let led = M1.replace("in progress)", "in progress, led by lead1)");
     assert_eq!(
@@ -235,7 +234,7 @@ fn status_on_the_base_shows_what_can_start_the_missions_in_progress_and_what_wai
     assert_eq!(
         stdout(&root, "p1", &["status"]),
         NO_HOOKS.to_string()
-            + "You are thread p1, on the base branch main.\n\
+            + "You are thread p1, on a detached HEAD.\n\
          Ready to start:\n  demo-a1aa (high): Say hello\n  demo-g7gg (medium): Add a version flag\n\
          1 other ready item cannot start yet: 1 waits on a blocker that is not done. \
          See it with: atelier list\n\
@@ -259,15 +258,15 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
         ("demo-m2dn", "Mission demo-m2dn is done, and `atelier lead` runs on a mission that is ready. Nothing is left to lead on it.\n", SKIP),
         ("demo-a1aa", "No mission demo-a1aa is in this checkout. `atelier list` shows the missions.\n", ""),
     ] {
-        let run = atelier(&root, "lead1", &["lead", id]);
+        let run = planned(&root, "lead1", &["lead", id]);
         assert_eq!(run.code, 1, "{id}");
         assert_eq!(run.stderr, format!("`atelier lead {id}` refused; nothing changed.\n{said}{skip}"));
     }
-    // Planning happens on the base.
-    let run = atelier(&second, "lead1", &["lead", "demo-m1ss"]);
+    // Not on an item's branch.
+    let run = planned(&second, "lead1", &["lead", "demo-m1ss"]);
     assert_eq!(run.code, 1);
     assert!(
-        run.stderr.starts_with("`atelier lead` writes planning"),
+        run.stderr.starts_with("`atelier lead` refused; nothing written.\nThis checkout is on demo-d4dd, the branch of item demo-d4dd"),
         "{}",
         run.stderr
     );
@@ -284,19 +283,20 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
          Then wait for it to finish, and run `atelier status`.\n"
     );
     let led = stdout(&root, "lead1", &["lead", "demo-m1ss"]);
-    // It commits the mission alone.
-    let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
-    let then = format!("Committed {commit}, \"Lead demo-m1ss\":\n  {path}\n");
+    // It writes the mission alone, and commits nothing.
+    let head = git(&root, &["rev-parse", "HEAD"]);
+    let then = format!(
+        "Wrote, and did not commit:\n  {path}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\nThen: git add -- {path} && git commit -m \"Lead demo-m1ss\" -- {path}\n"
+    );
     assert_eq!(
         led,
         format!("You now lead mission demo-m1ss: Greet everyone\nNobody led it before.\n{items}{handoff}{then}")
     );
     assert_eq!(front(&read(&root, path), "lead"), "lead1");
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
-    assert_eq!(
-        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
-        format!("Lead demo-m1ss\n\n{path}")
-    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&root, &["diff", "--name-only"]), path);
+    run_then(&root, &led);
+    git(&root, &["branch", "-f", "main", "HEAD"]);
 
     // The lead's status: its mission and what each item needs. A question
     // an item holds from before `escalate` was removed waits on nothing.
@@ -326,7 +326,10 @@ fn lead_takes_a_ready_mission_and_hands_each_item_that_can_start_to_another_thre
         "{again}"
     );
     assert!(!again.contains("Wrote"), "{again}");
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    assert_eq!(
+        git(&root, &["diff", "--name-only"]),
+        ".atelier/missions/demo-m1ss/mission.md"
+    );
 }
 
 #[test]
@@ -344,7 +347,7 @@ fn on_an_items_branch_a_thread_holding_nothing_is_offered_the_take_over_unless_i
     );
     assert!(!status.contains("question"), "{status}");
     // The mission's lead is not offered the item.
-    assert_eq!(atelier(&root, "lead1", &["lead", "demo-m1ss"]).code, 0);
+    assert_eq!(planned(&root, "lead1", &["lead", "demo-m1ss"]).code, 0);
     let leads = "You lead mission demo-m1ss, which demo-d4dd is in: its implementer builds it, \
                  so you do not take it over.\n";
     let status = stdout(&second, "lead1", &["status"]);

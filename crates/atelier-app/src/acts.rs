@@ -19,6 +19,15 @@ pub enum Act {
     Start,
     /// `start --new`, which creates the item it starts.
     StartNew,
+    /// `start --mission`, which creates a mission on its own branch.
+    StartMission,
+    /// `start --backlog`, which makes a backlog branch for record changes
+    /// tied to no item or mission.
+    StartBacklog,
+    /// `submit` on a backlog branch.
+    SubmitBacklog,
+    /// `merge` of a backlog branch, which holds records alone.
+    MergeBacklog,
     TakeOver,
     Submit,
     Review,
@@ -87,7 +96,7 @@ pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 /// Every status a mission can have.
 const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
 
-pub const TABLE: [Row; 19] = [
+pub const TABLE: [Row; 23] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -119,6 +128,43 @@ pub const TABLE: [Row; 19] = [
         binds: true,
         from: &[],
         to: Some(Status::Building),
+    },
+    // Anyone may plan a mission; like a planner's act, it needs no role.
+    // Its stored status stays `draft` until atelier-2vdq.
+    Row {
+        act: Act::StartMission,
+        command: "start --mission",
+        role: Role::Planner,
+        binds: false,
+        from: &[],
+        to: Some(Status::Draft),
+    },
+    // The acts of a backlog branch: any thread, in a checkout on that
+    // branch, with no record to take a status from. None is an
+    // implementer's act on an item.
+    Row {
+        act: Act::StartBacklog,
+        command: "start --backlog",
+        role: Role::Planner,
+        binds: false,
+        from: &[],
+        to: None,
+    },
+    Row {
+        act: Act::SubmitBacklog,
+        command: "submit",
+        role: Role::Planner,
+        binds: false,
+        from: &[],
+        to: None,
+    },
+    Row {
+        act: Act::MergeBacklog,
+        command: "merge",
+        role: Role::Planner,
+        binds: false,
+        from: &[],
+        to: None,
     },
     Row {
         act: Act::TakeOver,
@@ -257,8 +303,9 @@ pub const TABLE: [Row; 19] = [
 
 /// The acts on a mission. `drop` is also an item's; every other act is
 /// only an item's.
-const ON_MISSION: [Act; 6] = [
+const ON_MISSION: [Act; 7] = [
     Act::ReadyMission,
+    Act::StartMission,
     Act::CloseMission,
     Act::Drop,
     Act::PlanVerdictChanges,
@@ -796,6 +843,8 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let mut unmet = Vec::new();
     match act {
         Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead => {}
+        // On no item: a backlog branch's acts, and a mission's creation.
+        Act::StartMission | Act::StartBacklog | Act::SubmitBacklog | Act::MergeBacklog => {}
         // The finding's conditions are checked by `check_settle`.
         Act::Settle => {}
         // A mission's act is checked with `unmet_mission`.

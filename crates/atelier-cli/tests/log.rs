@@ -85,12 +85,12 @@ fn the_plain_path_prints_its_acts_in_order_and_the_same_lines_once_its_branch_is
 ) {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    ok(atelier(&root, "p1", &["ready", ID, "--by", "sumeet"]));
+    ok(planned(&root, "p1", &["ready", ID, "--by", "sumeet"]));
     ok(atelier(&root, "t1", &["start", ID]));
     hello(&root);
     finish_and_submit(&root, "t1");
     ok(atelier(&root, "t2", &["review", ID]));
-    ok(atelier(&root, "t2", &["verdict", "approve"]));
+    ok(verdict(&root, "t2", &["verdict", "approve"]));
     let (review, _) = review_of(&root, 1);
 
     // Before the merge, the branch's acts come from its tip.
@@ -113,7 +113,7 @@ fn the_plain_path_prints_its_acts_in_order_and_the_same_lines_once_its_branch_is
     assert_eq!(commit_of(&merged[5]), short(&root, "main"));
     assert_eq!(commit_of(&merged[4]), short(&root, ID));
 
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     git(&root, &["branch", "-qD", ID]);
     assert!(!branch_exists(&root, ID));
     assert_eq!(log(&root, &[]), merged);
@@ -145,7 +145,9 @@ fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() 
     finish_and_submit(&root, "t3");
     ok(atelier(&root, "t2", &["review", ID]));
     ok(codex(&root, "c1", &["review", ID]));
-    ok(codex(&root, "c1", &["verdict", "approve"]));
+    let run = codex(&root, "c1", &["verdict", "approve"]);
+    ok(run.clone());
+    run_then(&root, &run.stdout);
     let (review, _) = review_of(&root, 1);
     assert_eq!(
         acts(&root, &log(&root, &[])),
@@ -183,8 +185,7 @@ fn a_deferred_finding_settled_on_a_gardeners_branch_shows_once_merged() {
         ),
     )
     .unwrap();
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Merge demo-d0ne"]);
+    on_base(&root, "Merge demo-d0ne");
 
     // The gardener settles it on the branch of the item it implements.
     ok(atelier(&root, "g1", &["start", ID]));
@@ -204,9 +205,9 @@ fn a_deferred_finding_settled_on_a_gardeners_branch_shows_once_merged() {
     hello(&root);
     finish_and_submit(&root, "g1");
     ok(atelier(&root, "r1", &["review", ID]));
-    ok(atelier(&root, "r1", &["verdict", "approve"]));
+    ok(verdict(&root, "r1", &["verdict", "approve"]));
     ok(atelier(&root, "g1", &["merge"]));
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     git(&root, &["branch", "-qD", ID]);
 
     let lines = log(&root, &[DONE]);
@@ -251,17 +252,16 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_acts() {
     let root = scratch.root();
     write_mission(&root);
     git(&root, &["commit", "-qam", "Plan the mission"]);
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Add the mission"]);
-    ok(atelier(
+    on_base(&root, "Add the mission");
+    ok(planned(
         &root,
         "p1",
         &["ready", MISSION, ID, "demo-0ther", "--by", "sumeet"],
     ));
-    ok(atelier(&root, "l1", &["lead", MISSION]));
+    ok(planned(&root, "l1", &["lead", MISSION]));
     ok(atelier(&root, "r1", &["review", MISSION]));
-    ok(atelier(&root, "r1", &["verdict", "approve"]));
-    ok(atelier(
+    ok(verdict(&root, "r1", &["verdict", "approve"]));
+    ok(planned(
         &root,
         "p1",
         &["drop", ID, "--reason", "Nobody needs it."],
@@ -271,8 +271,8 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_acts() {
         &format!(".atelier/missions/{MISSION}/mission.md"),
         "\n## Result\n\nNothing was needed.\n",
     );
-    git(&root, &["commit", "-qam", "Result"]);
-    ok(atelier(&root, "p1", &["close", MISSION]));
+    on_base(&root, "Result");
+    ok(planned(&root, "p1", &["close", MISSION]));
     let stem = fs::read_dir(root.join(format!(".atelier/missions/{MISSION}/reviews")))
         .unwrap()
         .next()
@@ -336,6 +336,17 @@ fn since_leaves_out_the_acts_committed_before_it() {
         "p1",
         &["ready", ID, "--by", "sumeet"],
     );
+    // The agent commits it, and its backlog branch's merge moves the base.
+    let committed = identity(
+        Command::new("git")
+            .current_dir(&root)
+            .args(["commit", "-qam", "Ready"]),
+    )
+    .env("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+    .output()
+    .unwrap();
+    assert!(committed.status.success(), "{committed:?}");
+    git(&root, &["branch", "-f", "main", "HEAD"]);
     at("2026-02-01T12:00:00Z", "t1", &["start", ID]);
     let ready = format!(
         "2026-01-01T00:00:00Z {} {ID} ready - draft -> ready; by sumeet",
@@ -381,7 +392,7 @@ fn two_acts_on_one_record_in_one_commit_show_as_their_net_change() {
         "ready:\n  by: sumeet\n  at: 2026-11-10T09:00:00Z",
     );
     fs::write(&path, text).unwrap();
-    git(&root, &["commit", "-qam", "Ready and close"]);
+    on_base(&root, "Ready and close");
     assert_eq!(
         acts(&root, &log(&root, &[])),
         [format!("{ID} close - draft -> done")]
@@ -395,10 +406,10 @@ fn a_version_that_does_not_read_is_passed_over_and_said_on_stderr() {
     let path = root.join(item_path(ID));
     let draft = fs::read_to_string(&path).unwrap();
     fs::write(&path, draft.replace("status: draft", "status: bogus")).unwrap();
-    git(&root, &["commit", "-qam", "Break it"]);
+    on_base(&root, "Break it");
     let broken = short(&root, "HEAD");
     fs::write(&path, draft.replace("status: draft", "status: ready")).unwrap();
-    git(&root, &["commit", "-qam", "Mend it"]);
+    on_base(&root, "Mend it");
 
     let run = atelier(&root, "t9", &["log"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -451,11 +462,12 @@ fn acts_on_a_branch_whose_records_a_plain_merge_matches_survive_its_deletion() {
     let started = short(&root, "HEAD");
     hello(&root);
     git(&root, &["revert", "--no-edit", &started]);
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     git(
         &root,
         &["merge", "-q", "--no-ff", "-m", "Merge the attempt", ID],
     );
+    git(&root, &["branch", "-f", "main", "HEAD"]);
     git(&root, &["branch", "-qD", ID]);
     let lines = log(&root, &[]);
     assert_eq!(
@@ -478,10 +490,10 @@ fn a_version_that_is_not_utf8_is_passed_over_like_one_that_does_not_parse() {
     let mut bytes = draft.clone().into_bytes();
     bytes.push(0xff);
     fs::write(&path, bytes).unwrap();
-    git(&root, &["commit", "-qam", "Break its encoding"]);
+    on_base(&root, "Break its encoding");
     let broken = short(&root, "HEAD");
     fs::write(&path, draft.replace("status: draft", "status: ready")).unwrap();
-    git(&root, &["commit", "-qam", "Mend it"]);
+    on_base(&root, "Mend it");
 
     for args in [&["log"][..], &["log", ID]] {
         let run = atelier(&root, "t9", args);
@@ -515,7 +527,7 @@ fn a_version_that_does_not_read_twice_stands_each_time_for_the_version_before_it
             draft.replace("status: draft", &format!("status: {status}")),
         )
         .unwrap();
-        git(&root, &["commit", "-qam", status]);
+        on_base(&root, status);
     }
     let run = atelier(&root, "t9", &["log"]);
     assert_eq!(run.code, 0, "{}", run.stderr);

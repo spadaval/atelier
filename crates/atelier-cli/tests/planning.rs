@@ -6,7 +6,6 @@ mod common;
 
 use common::*;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -42,9 +41,17 @@ fn join_mission(checkout: &Path, id: &str, mission: &str) {
     .unwrap();
 }
 
+/// Commits everything in `root`; in a detached checkout, as the fixture's
+/// is, the base moves to it too, as a backlog branch's merge would move it.
 fn commit_all(root: &Path, message: &str) {
     git(root, &["add", "-A"]);
     git(root, &["commit", "-qm", message]);
+    if !git_output(root, &["symbolic-ref", "-q", "HEAD"])
+        .status
+        .success()
+    {
+        git(root, &["branch", "-f", "main", "HEAD"]);
+    }
 }
 
 /// The last line of `output`, which must be a `Then:` line, without its
@@ -85,27 +92,50 @@ fn head_and_index(root: &Path) -> (String, String) {
 }
 
 #[test]
-fn new_writes_a_draft_item_or_mission_commits_nothing_and_says_how_to_commit() {
+fn new_writes_a_draft_item_commits_nothing_and_says_how_to_commit() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
-    let before = head_and_index(&root);
 
-    let mission = atelier(&root, "p1", &["new", "--mission", "Greet everyone"]);
+    // A mission is made on its own branch, by `start --mission`.
+    let refused = atelier(&root, "p1", &["new", "--mission", "Greet everyone"]);
+    assert_eq!(refused.code, 1);
+    assert_eq!(
+        refused.stderr,
+        "`atelier new --mission` refused; nothing written.\nA mission is made on a branch of its own, named for it, with: atelier start --mission \"Greet everyone\"\n"
+    );
+    let mission = atelier(&root, "p1", &["start", "--mission", "Greet everyone"]);
     assert_eq!(mission.code, 0, "{}", mission.stderr);
-    let paths = wrote(&mission.stdout);
-    assert_eq!(paths.len(), 1, "{}", mission.stdout);
-    let mission_id = paths[0]
-        .strip_prefix(".atelier/missions/")
-        .and_then(|rest| rest.strip_suffix("/mission.md"))
+    let mission_id = mission
+        .stdout
+        .split_whitespace()
+        .nth(3)
         .unwrap()
         .to_string();
-    let text = read(&root, &paths[0]);
+    assert!(
+        mission.stdout.starts_with(&format!(
+            "Created draft mission {mission_id} on branch {mission_id}, with empty sections to write.\n"
+        )),
+        "{}",
+        mission.stdout
+    );
+    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), mission_id);
+    // One commit on the base's tip, holding the mission alone.
+    assert_eq!(
+        git(&root, &["rev-parse", "HEAD^"]),
+        git(&root, &["rev-parse", "main"])
+    );
+    assert_eq!(
+        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
+        format!("Plan mission {mission_id}\n\n{}", mission_path(&mission_id))
+    );
+    let text = read(&root, &mission_path(&mission_id));
     assert_eq!(front(&text, "status"), "draft");
     assert_eq!(front(&text, "title"), "Greet everyone");
     assert!(text.ends_with(
         "---\n\n## Why\n\n## Outcome\n\n## Success criteria\n\n## Scope\n\n## Authority\n\n## Result\n"
     ));
 
+    let before = head_and_index(&root);
     let item = atelier(&root, "p1", &["new", "Say hello", "--in", &mission_id]);
     assert_eq!(item.code, 0, "{}", item.stderr);
     let path = wrote(&item.stdout).pop().unwrap();
@@ -144,8 +174,7 @@ fn new_writes_a_draft_item_or_mission_commits_nothing_and_says_how_to_commit() {
         git(&root, &["show", "-s", "--format=%s", "HEAD"]),
         format!("Plan {id}")
     );
-    let left = git(&root, &["status", "--porcelain", "-uall"]);
-    assert_eq!(left, format!("?? {}", mission_path(&mission_id)));
+    assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
 }
 
 #[test]
@@ -160,7 +189,7 @@ fn new_in_a_mission_that_does_not_exist_is_refused_and_writes_nothing() {
             run.stderr,
             format!(
                 "`atelier new` refused; nothing changed.\nNo mission {missing} is in this \
-                 checkout. `atelier new --mission \"<title>\"` creates one.\n"
+                 checkout. `atelier start --mission \"<title>\"` creates one, on its own branch.\n"
             )
         );
         assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
@@ -168,43 +197,47 @@ fn new_in_a_mission_that_does_not_exist_is_refused_and_writes_nothing() {
 }
 
 #[test]
-fn the_planning_commands_run_only_on_the_base_branch() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+fn the_planning_commands_write_nothing_in_the_bases_checkout_nor_on_an_items_branch() {
+    let scratch = Scratch::new(&[(ID, "draft"), ("demo-b2b2", "ready")]);
     let root = scratch.root();
-    git(&root, &["switch", "-q", "-c", "elsewhere"]);
-    for args in [
+    let base = scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    let commands = [
         &["new", "Say hello"][..],
         &["set", ID, "--title", "Hi"],
         &["ready", ID, "--by", "sumeet"],
-    ] {
-        let run = atelier(&root, "p1", args);
+        &["drop", ID, "--reason", "Not needed"],
+        &["close", ID, "Not needed"],
+        &["lead", "demo-zzzz"],
+    ];
+    for args in commands {
+        let run = atelier(&base, "p1", args);
         assert_eq!(run.code, 1, "{args:?}");
         assert_eq!(
             run.stderr,
             format!(
-                "`atelier {}` writes planning, which happens on the base branch main, and this \
-                 checkout is on branch elsewhere. Nothing changed.\nRun it in a checkout of \
-                 main, as after `git switch main`.\n{SKIP}",
+                "`atelier {}` refused; nothing written.\nThis checkout has the base branch main out, and nothing is written there: only a merge writes main, and the pre-commit hook refuses a record change committed on it.\nMake the branch the change belongs on, and run this there: `atelier start --backlog <slug>` for a record change tied to no item or mission, `atelier start --mission \"<title>\"` for a new mission, or `atelier start <id>` for an item's own work. Run in this checkout, `start` makes the branch without switching it, and prints the `git worktree add` that gives the branch a checkout of its own.\n{SKIP}",
                 args[0]
             )
         );
+        assert_eq!(git(&base, &["status", "--porcelain", "-uall"]), "");
+    }
+    // On an item's branch, a change that is not the item's is refused.
+    assert_eq!(atelier(&root, "t1", &["start", "demo-b2b2"]).code, 0);
+    for args in commands {
+        let run = atelier(&root, "p1", args);
+        assert_eq!(run.code, 1, "{args:?}");
+        assert!(
+            run.stderr.starts_with(&format!(
+                "`atelier {}` refused; nothing written.\nThis checkout is on demo-b2b2, the branch of item demo-b2b2, and this change is not demo-b2b2's",
+                args[0]
+            )),
+            "{}",
+            run.stderr
+        );
+        assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
         assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
     }
-    // Where the base is checked out elsewhere, it is named.
-    let base = scratch.dir.path().join("base");
-    git(
-        &root,
-        &["worktree", "add", "-q", base.to_str().unwrap(), "main"],
-    );
-    let run = atelier(&root, "p1", &["new", "Say hello"]);
-    assert!(
-        run.stderr.ends_with(&format!(
-            "Run it in {}, which has main checked out.\n{SKIP}",
-            base.display()
-        )),
-        "{}",
-        run.stderr
-    );
 }
 
 /// An item body with a fence, trailing spaces and no final newline, which
@@ -387,9 +420,9 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
     }
 
     // A started item's record changes only on its branch, which is named.
-    assert_eq!(atelier(&root, "p1", &["ready", ID, "--by", "s"]).code, 0);
+    assert_eq!(planned(&root, "p1", &["ready", ID, "--by", "s"]).code, 0);
     assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     let run = atelier(&root, "p1", &["set", ID, "--title", "T"]);
     assert_eq!(run.code, 1);
     assert_eq!(
@@ -403,7 +436,7 @@ fn set_is_refused_with_nothing_written_for_a_field_or_record_it_cannot_change() 
 }
 
 #[test]
-fn ready_marks_each_named_draft_with_who_and_when_and_changes_no_other_item() {
+fn ready_marks_each_named_draft_with_who_and_when_changes_no_other_item_and_commits_nothing() {
     let scratch = Scratch::new(&[(ID, "draft"), ("demo-b10c", "draft")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
@@ -412,7 +445,7 @@ fn ready_marks_each_named_draft_with_who_and_when_and_changes_no_other_item() {
     commit_all(&root, "Plan");
     let before = head_and_index(&root);
 
-    // Readying the mission readies none of its items, and commits it.
+    // Readying the mission readies none of its items.
     let run = atelier(&root, "p1", &["ready", MISSION, "--by", "sumeet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(wrote(&run.stdout), [mission_path(MISSION)]);
@@ -422,10 +455,14 @@ fn ready_marks_each_named_draft_with_who_and_when_and_changes_no_other_item() {
         mission.contains("ready:\n  by: sumeet\n  at: "),
         "{mission}"
     );
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    assert_eq!(head_and_index(&root), before);
+    assert_eq!(git(&root, &["diff", "--name-only"]), mission_path(MISSION));
     assert_eq!(
-        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
-        format!("Ready {MISSION}\n\n{}", mission_path(MISSION))
+        then(&run.stdout),
+        format!(
+            "git add -- {0} && git commit -m \"Ready {MISSION}\" -- {0}",
+            mission_path(MISSION)
+        )
     );
 
     // Several IDs at once; one named twice is readied once.
@@ -446,17 +483,16 @@ fn ready_marks_each_named_draft_with_who_and_when_and_changes_no_other_item() {
     assert!(run
         .stdout
         .contains(&format!("Made ready, as sumeet said: {ID}, demo-b10c.\n")));
-    // One commit each, and nothing staged.
-    assert_eq!(git(&root, &["rev-parse", "HEAD~2"]), before.0);
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
-    assert_eq!(
-        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
-        format!(
-            "Ready {ID}, demo-b10c\n\n{}\n{}",
-            item_path(ID),
-            item_path("demo-b10c")
-        )
-    );
+    // No commit, and nothing staged.
+    assert_eq!(head_and_index(&root), before);
+    let mut changed: Vec<String> = git(&root, &["diff", "--name-only"])
+        .lines()
+        .map(str::to_string)
+        .collect();
+    changed.sort();
+    let mut expected = vec![mission_path(MISSION), item_path(ID), item_path("demo-b10c")];
+    expected.sort();
+    assert_eq!(changed, expected);
 }
 
 #[test]
@@ -502,38 +538,92 @@ fn ready_writes_nothing_when_any_named_id_is_unknown_or_not_a_draft() {
     assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
 }
 
+/// A remote `origin`, a bare repository holding the base, which the
+/// config names as the forge's remote.
+fn with_remote(scratch: &Scratch) -> std::path::PathBuf {
+    let root = scratch.root();
+    append(
+        &root,
+        ".atelier/config.toml",
+        "\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n",
+    );
+    on_base(&root, "Configure");
+    let remote = scratch.dir.path().join("remote.git");
+    git(
+        &root,
+        &[
+            "init",
+            "-q",
+            "--bare",
+            "-b",
+            "main",
+            remote.to_str().unwrap(),
+        ],
+    );
+    git(
+        &root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    git(&root, &["push", "-q", "origin", "main"]);
+    git(&root, &["fetch", "-q", "origin"]);
+    remote
+}
+
 #[test]
-fn status_on_the_base_lists_planning_not_yet_committed() {
+fn status_names_each_record_change_not_committed_and_each_commit_not_pushed() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    // `ready` commits what it writes, and `new` does not.
+    let remote = with_remote(&scratch);
+    let run = atelier(&root, "p1", &["start", "--backlog", "plan"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        git(&root, &["symbolic-ref", "--short", "HEAD"]),
+        "backlog/plan"
+    );
+    // The branch is on the remote already: `start` pushed it.
+    assert_eq!(
+        git(&remote, &["rev-parse", "backlog/plan"]),
+        git(&root, &["rev-parse", "main"])
+    );
     assert_eq!(atelier(&root, "p1", &["ready", ID, "--by", "s"]).code, 0);
-    let new = atelier(&root, "p1", &["new", "--mission", "Greet"]);
-    let mission = wrote(&new.stdout).pop().unwrap();
-    // Not planning: a change outside the records.
+    let new = atelier(&root, "p1", &["new", "Say goodbye"]);
+    let added = wrote(&new.stdout).pop().unwrap();
+    // Not a record: a change outside them.
     fs::write(root.join("notes.txt"), "x").unwrap();
 
     let status = atelier(&root, "p1", &["status"]).stdout;
-    let paths = mission.clone();
-    assert_eq!(
-        status,
-        format!(
-            "{NO_HOOKS}You are thread p1, on the base branch main.\nReady to start:\n  {ID} \
-             (high): Say hello\nPlanning not committed yet, which `atelier start` does not read \
-             until it is: {mission}\nCommit it with: git add -- {paths} && git commit -m \
-             \"Plan\" -- {paths}\nThen: atelier start {ID}\n"
-        )
+    let mut paths = [added.clone(), item_path(ID)];
+    paths.sort();
+    let paths = paths.join(" ");
+    assert!(
+        status.contains(&format!(
+            "Record changes not committed, which count only once committed and merged:\n  {}\n  {}\nCommit them with: git add -- {paths} && git commit -m \"<what they change>\" -- {paths}\n",
+            paths.split(' ').next().unwrap(),
+            paths.split(' ').nth(1).unwrap(),
+        )),
+        "{status}"
     );
+    assert!(!status.contains("not pushed"), "{status}");
+    assert!(
+        status.starts_with(&format!(
+            "{NO_HOOKS}You are thread p1, on branch backlog/plan, a backlog branch for record changes.\n"
+        )),
+        "{status}"
+    );
+
     shell(
         &root,
-        &format!("git add -- {paths} && git commit -m \"Plan\" -- {paths}"),
+        &format!("git add -- {paths} && git commit -qm Plan -- {paths}"),
     );
     let status = atelier(&root, "p1", &["status"]).stdout;
     assert!(!status.contains("not committed"), "{status}");
     assert!(
-        status.ends_with(&format!("Then: atelier start {ID}\n")),
+        status.contains("1 commit of backlog/plan not pushed to origin. Push with: git push origin backlog/plan\n"),
         "{status}"
     );
+    git(&root, &["push", "-q", "origin", "backlog/plan"]);
+    let status = atelier(&root, "p1", &["status"]).stdout;
+    assert!(!status.contains("not pushed"), "{status}");
 }
 
 #[test]
@@ -566,7 +656,7 @@ fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
     );
 
     assert_eq!(
-        atelier(&root, "p1", &["ready", MISSION, "--by", "s"]).code,
+        planned(&root, "p1", &["ready", MISSION, "--by", "s"]).code,
         0
     );
     let run = atelier(&root, "t1", &["start", ID]);
@@ -588,7 +678,7 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     assert_eq!(
         atelier(&root, "t1", &["status"]).stdout,
         format!(
-            "{NO_HOOKS}You are thread t1, on the base branch main.\nReady to start:\n  \
+            "{NO_HOOKS}You are thread t1, on a detached HEAD.\nReady to start:\n  \
              demo-a1aa (high): Say hello\n{others}Then: atelier start demo-a1aa\n"
         )
     );
@@ -726,14 +816,12 @@ fn a_start_new_stopped_before_its_branch_leaves_no_branch_and_no_item() {
         &["for-each-ref", "--format=%(refname:short)", "refs/heads/"],
     );
     assert_eq!(branches, "main");
-    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
     assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert_eq!(
         status,
-        format!(
-            "{NO_HOOKS}You are thread t1, on the base branch main.\nNothing is ready to start.\n"
-        )
+        format!("{NO_HOOKS}You are thread t1, on a detached HEAD.\nNothing is ready to start.\n")
     );
 }
 
@@ -754,24 +842,30 @@ fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_spl
     shell(&sub, &line);
     assert_eq!(git(&root, &["status", "--porcelain", "-uall"]), "");
 
-    // The base checked out at a path with a space, with an uncommitted
-    // mission document whose name has a space and a quote; `status` is run
-    // from a directory under it.
+    // A backlog branch checked out at a path with a space, with an
+    // uncommitted mission document whose name has a space and a quote;
+    // `status` is run from a directory under it.
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
-    git(&root, &["switch", "-q", "--detach"]);
     let base = scratch.dir.path().join("base copy");
     git(
         &root,
-        &["worktree", "add", "-q", base.to_str().unwrap(), "main"],
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "backlog/plan",
+            base.to_str().unwrap(),
+            "main",
+        ],
     );
     write_mission(&base, MISSION, "draft");
     join_mission(&base, ID, MISSION);
     commit_all(&base, "Plan");
-    assert_eq!(
-        atelier(&base, "p1", &["ready", ID, MISSION, "--by", "s"]).code,
-        0
-    );
+    let run = atelier(&base, "p1", &["ready", ID, MISSION, "--by", "s"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    shell(&base, &then(&run.stdout));
     let document = format!(".atelier/missions/{MISSION}/design notes 'v2'.md");
     fs::write(base.join(&document), "# Design\n").unwrap();
     let under = base.join("src");
@@ -780,7 +874,7 @@ fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_spl
     let status = atelier(&under, "p1", &["status"]).stdout;
     let line = status
         .lines()
-        .find_map(|l| l.strip_prefix("Commit it with: "))
+        .find_map(|l| l.strip_prefix("Commit them with: "))
         .unwrap();
     assert!(
         line.contains("'.atelier/missions/demo-m1ss/design notes '\\''v2'\\''.md'"),
@@ -795,8 +889,6 @@ fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_spl
     assert!(
         git(&base, &["show", "--name-only", "--format=", "HEAD"]).contains("design notes 'v2'.md")
     );
-    let run = atelier(&root, "t1", &["start", ID]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
 }
 
 /// The ID of the record a planning command created.
@@ -806,13 +898,18 @@ fn created(run: &Run) -> String {
     path.split('/').nth(2).unwrap().to_string()
 }
 
-/// Runs a planning command as `p1` on the base, and commits what it wrote
-/// with the line it printed, where it did not commit it itself.
+/// Runs a planning command as `p1`, and commits what it wrote with the
+/// line it printed; in a detached checkout the base moves to that commit,
+/// as a backlog branch's merge would move it.
 fn plan(root: &Path, args: &[&str]) -> Run {
     let run = atelier(root, "p1", args);
     assert_eq!(run.code, 0, "{args:?}: {}", run.stderr);
-    if !["ready", "drop", "close", "lead"].contains(&args[0]) {
-        shell(root, &then(&run.stdout));
+    shell(root, &then(&run.stdout));
+    if !git_output(root, &["symbolic-ref", "-q", "HEAD"])
+        .status
+        .success()
+    {
+        git(root, &["branch", "-f", "main", "HEAD"]);
     }
     run
 }
@@ -886,7 +983,7 @@ fn drop_puts_its_reason_first_in_the_report_and_needs_a_reason_and_a_record_not_
 
     let run = plan(&root, &["drop", ID, "--reason", "The site greets instead"]);
     assert!(run.stdout.starts_with(&format!(
-        "Dropped item {ID}: The site greets instead\nCommitted "
+        "Dropped item {ID}: The site greets instead\nWrote, and did not commit:\n"
     )));
     let text = read(&root, &item_path(ID));
     assert_eq!(front(&text, "status"), "dropped");
@@ -903,7 +1000,7 @@ fn drop_puts_its_reason_first_in_the_report_and_needs_a_reason_and_a_record_not_
     // Dropped or done, it is refused, and nothing is written.
     for (id, status) in [(ID, "dropped"), ("demo-d0ne", "done")] {
         let before = read(&root, &item_path(id));
-        let run = atelier(&root, "p1", &["drop", id, "--reason", "again"]);
+        let run = planned(&root, "p1", &["drop", id, "--reason", "again"]);
         assert_eq!(run.code, 1);
         assert!(
             run.stderr.starts_with(&format!(
@@ -958,8 +1055,8 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
         );
     }
     assert_eq!(tip(&root, STARTED), branch);
-    assert_eq!(git(&root, &["branch", "--show-current"]), "main");
-    let run = atelier(&root, "p1", &["drop", MISSION, "--reason", "again"]);
+    assert_eq!(git(&root, &["branch", "--show-current"]), "");
+    let run = planned(&root, "p1", &["drop", MISSION, "--reason", "again"]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
@@ -971,7 +1068,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
 }
 
 #[test]
-fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
+fn a_started_item_is_dropped_on_its_branch_and_then_refused_everywhere_with_its_reason() {
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     let work = scratch.worktree("work");
@@ -982,48 +1079,65 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
     finish_and_submit(&work, "t1");
     // Approved, so only the drop stands between it and its merge.
     assert_eq!(atelier(&work, "t2", &["review", ID]).code, 0);
-    assert_eq!(atelier(&work, "t2", &["verdict", "approve"]).code, 0);
-    let branch = tip(&work, ID);
+    assert_eq!(verdict(&work, "t2", &["verdict", "approve"]).code, 0);
 
+    // Anywhere but a checkout of its branch, the drop is refused.
     let reason = "The site greets instead";
     let run = atelier(&root, "p1", &["drop", ID, "--reason", reason]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    assert!(run
-        .stdout
-        .contains(&format!("Its branch {ID} is left as it is.")));
-    // The base's record, ready and held by nobody, whatever the branch holds.
-    let text = read(&root, &item_path(ID));
-    assert_eq!(front(&text, "status"), "dropped");
-    assert_eq!(front(&text, "implementers"), "[]");
-    assert_eq!(tip(&work, ID), branch);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.starts_with(&format!(
+            "`atelier drop {ID}` refused; nothing written.\n{ID} is started, and a started item's record changes only on its branch {ID}; this checkout is on a detached HEAD.\nRun it in {}, which has {ID} checked out.\n",
+            work.display()
+        )),
+        "{}",
+        run.stderr
+    );
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
+
+    // In the branch's checkout any thread drops it, and commits it.
+    let run = atelier(&work, "p1", &["drop", ID, "--reason", reason]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "Dropped item {ID} on its branch {ID}: {reason}\nOnce it is committed, `submit`, `merge` and a take-over of {ID} are refused.\nThe base's copy of {ID} is dropped on a backlog branch after that: `atelier start --backlog drop-{ID}`, then there `atelier drop {ID} --reason \"{reason}\"`, commit, `atelier submit` and `atelier merge`. Until then `status` and `list` say the drop has not reached the base.\nWrote, and did not commit:\n  {}\n",
+            item_path(ID)
+        )),
+        "{}",
+        run.stdout
+    );
+    let text = read(&work, &item_path(ID));
+    assert_eq!(front(&text, "status"), "dropped");
+    assert_eq!(front(&text, "implementers"), "t1");
+    shell(&work, &then(&run.stdout));
+    let branch = tip(&work, ID);
     let base = tip(&root, "main");
 
+    // Until the base's copy is dropped too, `status` and `list` say so.
     let listed = atelier(&root, "t3", &["status"]).stdout;
     assert!(
         listed.contains(&format!(
-            "Dropped on the base while started; nothing is left to do on them:\n  {ID}: {reason}\n"
+            "Dropped on their branch, and the drop has not reached the base; carry it on a backlog branch with `atelier drop <id> --reason \"<why>\"` there, then `submit` and `merge`:\n  {ID}: {reason}\n"
         )),
         "{listed}"
     );
-    let why = format!("It was dropped on the base: {reason}\nNothing is left to do on it.\n");
-    let status = atelier(&work, "t1", &["status"]).stdout;
+    let list = atelier(&root, "t3", &["list"]).stdout;
     assert!(
-        status.starts_with(&format!(
-            "{NO_HOOKS}You are thread t1, on the branch of {ID}.\n"
+        list.contains(&format!(
+            "{ID} (dropped on its branch; the drop has not reached the base"
         )),
-        "{status}"
+        "{list}"
     );
+    let why = format!("It was dropped: {reason}\nNothing is left to do on it.\n");
+    let status = atelier(&work, "t1", &["status"]).stdout;
     assert!(
         status.ends_with(&format!("Status: dropped\n{why}")),
         "{status}"
     );
-
-    // `start` would create branch {ID}, which exists: no rule.
     for (at, thread, command, skip) in [
         (&work, "t1", "submit", SKIP),
         (&work, "t1", "merge", SKIP),
-        (&root, "t2", "start", ""),
+        (&root, "t3", "start", ""),
     ] {
         let args: Vec<&str> = match command {
             "start" => vec!["start", ID],
@@ -1045,8 +1159,26 @@ fn a_started_item_dropped_on_the_base_is_refused_everywhere_with_its_reason() {
             (branch.clone(), base.clone())
         );
         assert_eq!(git(&work, &["status", "--porcelain"]), "");
-        assert_eq!(git(&root, &["status", "--porcelain"]), "");
     }
+
+    // The base's copy, on a backlog branch: once it merges, nothing says
+    // the drop is waiting, and the branch can go.
+    assert_eq!(
+        atelier(&root, "p1", &["start", "--backlog", "drop-it"]).code,
+        0
+    );
+    let run = plan(&root, &["drop", ID, "--reason", reason]);
+    assert_eq!(wrote(&run.stdout), [item_path(ID)]);
+    let merged = atelier(&root, "p1", &["merge"]);
+    assert_eq!(merged.code, 0, "{}", merged.stderr);
+    assert_eq!(field(&root, "main", "status"), "dropped");
+    let listed = atelier(&root, "t3", &["status"]).stdout;
+    assert!(!listed.contains("has not reached the base"), "{listed}");
+    git(&work, &["checkout", "-q", "--detach"]);
+    git(&root, &["branch", "-qD", ID]);
+    assert_eq!(field(&root, "main", "status"), "dropped");
+    let shown = atelier(&root, "t3", &["show", ID]).stdout;
+    assert!(shown.contains("Status: dropped\n"), "{shown}");
 }
 
 #[test]
@@ -1057,13 +1189,14 @@ fn a_terminal_status_on_the_base_wins_over_a_branch_record_that_does_not_parse()
         let work = scratch.worktree("work");
         assert_eq!(atelier(&work, "t1", &["start", ID]).code, 0);
         let reason = "The site greets instead";
-        if terminal == "dropped" {
-            let run = atelier(&root, "p1", &["drop", ID, "--reason", reason]);
-            assert_eq!(run.code, 0, "{}", run.stderr);
-        } else {
-            write_item(&root, ID, "done", &[], &[], "");
-            commit_all(&root, terminal);
-        }
+        // The base's copy is final, as its backlog branch's merge or the
+        // item's own merge left it.
+        let report = match terminal {
+            "dropped" => format!("Dropped: {reason}\n"),
+            _ => String::new(),
+        };
+        write_item(&root, ID, terminal, &[], &[], &report);
+        commit_all(&root, terminal);
         // The branch then holds a record that does not parse.
         let path = work.join(item_path(ID));
         let broken = read(&work, &item_path(ID)).replace("status: building", "status: broken");
@@ -1071,9 +1204,7 @@ fn a_terminal_status_on_the_base_wins_over_a_branch_record_that_does_not_parse()
         git(&work, &["commit", "-qam", "Broken"]);
 
         let why = match terminal {
-            "dropped" => {
-                format!("It was dropped on the base: {reason}\nNothing is left to do on it.\n")
-            }
+            "dropped" => format!("It was dropped: {reason}\nNothing is left to do on it.\n"),
             _ => "Nothing is left to do on it.\n".to_string(),
         };
         let status = atelier(&work, "t1", &["status"]);
@@ -1175,7 +1306,7 @@ fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews
     assert_eq!(atelier(&work, "t2", &["review", &id]).code, 0);
     let review = files_in(&work, &format!(".atelier/items/{id}/reviews")).remove(0);
     append(&work, &review, &finding("Too loud"));
-    assert_eq!(atelier(&work, "t2", &["verdict", "changes"]).code, 0);
+    assert_eq!(verdict(&work, "t2", &["verdict", "changes"]).code, 0);
     let stem = review
         .rsplit('/')
         .next()
@@ -1188,8 +1319,17 @@ fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews
         &format!("\n### Responses\n\n- {stem}.1: fixed in abc1234\n"),
     );
     git(&work, &["commit", "-qam", "Answer"]);
+    // Dropped on its branch first, by a thread in its checkout.
+    let run = atelier(
+        &work,
+        "p1",
+        &["drop", &id, "--reason", "Nobody asked for it"],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    shell(&work, &then(&run.stdout));
     let branch = tip(&work, &id);
 
+    // Then the base's copy, which no commit on the base held before.
     let run = plan(&root, &["drop", &id, "--reason", "Nobody asked for it"]);
     assert_eq!(wrote(&run.stdout), std::slice::from_ref(&path));
     // It commits the base record it wrote, which no commit held before.
@@ -1212,7 +1352,7 @@ fn an_item_only_on_its_branch_is_dropped_with_its_definition_and_not_its_reviews
     assert_eq!(tip(&work, &id), branch);
     let status = atelier(&work, "t1", &["status"]).stdout;
     assert!(
-        status.contains("It was dropped on the base: Nobody asked for it\n"),
+        status.contains("It was dropped: Nobody asked for it\n"),
         "{status}"
     );
 }
@@ -1227,7 +1367,7 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
     );
     let before = read(&root, &item_path(ID));
 
-    let run = atelier(&root, "p1", &["close", ID]);
+    let run = planned(&root, "p1", &["close", ID]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
@@ -1236,7 +1376,7 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
              changed.\nThen: atelier close {ID} \"<what came of it>\"\n"
         )
     );
-    let run = atelier(&root, "p1", &["close", "demo-st4r", "Nothing to do"]);
+    let run = planned(&root, "p1", &["close", "demo-st4r", "Nothing to do"]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
@@ -1247,7 +1387,7 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
             .to_string()
             + SKIP
     );
-    let run = atelier(&root, "p1", &["close", "demo-d0ne", "Again"]);
+    let run = planned(&root, "p1", &["close", "demo-d0ne", "Again"]);
     assert_eq!(run.code, 1);
     assert!(run.stderr.starts_with(
         "demo-d0ne is done, and `atelier close` runs on an item that is draft, ready. Nothing changed.\n"
@@ -1279,7 +1419,15 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
 fn a_mission_goes_from_draft_through_its_items_to_closed() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
-    let mission = created(&plan(&root, &["new", "--mission", "Greet everyone"]));
+    let started = atelier(&root, "p1", &["start", "--mission", "Greet everyone"]);
+    assert_eq!(started.code, 0, "{}", started.stderr);
+    let mission = started
+        .stdout
+        .split_whitespace()
+        .nth(3)
+        .unwrap()
+        .to_string();
+    // Its items are planned on its branch.
     let a = created(&plan(&root, &["new", "Say hello", "--in", &mission]));
     let b = created(&plan(&root, &["new", "Say goodbye", "--in", &mission]));
     let path = root.join(item_path(&a));
@@ -1292,7 +1440,24 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
         );
     fs::write(&path, defined).unwrap();
     commit_all(&root, "Define it");
-    let run = atelier(&root, "p1", &["close", &mission]);
+    // A plan's merge, with its reviews, is atelier-2vdq's; `merge` refuses
+    // it until then, so a plain merge stands in for it here.
+    let refused = atelier(&root, "p1", &["merge"]);
+    assert_eq!(refused.code, 1, "{}", refused.stdout);
+    assert!(
+        refused
+            .stderr
+            .contains(&format!("  adds the mission, of mission {mission}\n")),
+        "{}",
+        refused.stderr
+    );
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    git(
+        &root,
+        &["merge", "-q", "--no-ff", "-m", "Merge the plan", &mission],
+    );
+    git(&root, &["branch", "-f", "main", "HEAD"]);
+    let run = planned(&root, "p1", &["close", &mission]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
@@ -1322,12 +1487,14 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
     git(&work, &["commit", "-qm", "Say hello"]);
     assert_eq!(atelier(&work, "t1", &["submit"]).code, 0);
     assert_eq!(atelier(&work, "t2", &["review", &a]).code, 0);
-    assert_eq!(atelier(&work, "t2", &["verdict", "approve"]).code, 0);
+    assert_eq!(verdict(&work, "t2", &["verdict", "approve"]).code, 0);
     let merged = atelier(&work, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
+    // Planning goes on from the base the merge left.
+    git(&root, &["checkout", "-q", "--detach", "main"]);
 
     // The other item is a draft and the Result empty: close lists both.
-    let run = atelier(&root, "p1", &["close", &mission]);
+    let run = planned(&root, "p1", &["close", &mission]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
@@ -1342,7 +1509,7 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
     let text = fs::read_to_string(&path).unwrap();
     fs::write(&path, text + "\nEveryone is greeted.\n").unwrap();
     commit_all(&root, "Result");
-    let run = atelier(&root, "p1", &["close", &mission, "text"]);
+    let run = planned(&root, "p1", &["close", &mission, "text"]);
     assert_eq!(run.code, 1);
     assert!(
         run.stderr.contains("whose result is written in"),
@@ -1448,7 +1615,7 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
     // An open fix-now finding refuses approve; changes commits the file alone.
     append(&root, file, &finding("No sizing"));
     fs::write(root.join("notes.txt"), "not the review's\n").unwrap();
-    let refused = atelier(&root, "r2", &["verdict", "approve"]);
+    let refused = verdict(&root, "r2", &["verdict", "approve"]);
     assert_eq!(refused.code, 1);
     assert!(
         refused.stderr.contains(&format!(
@@ -1464,15 +1631,19 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
         &["verdict", "changes", "--model", "gpt-6.1-sol"],
     );
     assert_eq!(run.code, 0, "{}", run.stderr);
-    let commit = tip(&root, "HEAD");
+    let message = format!("Review the plan of {MISSION}, round 1: changes requested");
     assert_eq!(
         run.stdout,
         format!(
             "Recorded your verdict on the plan of mission {MISSION}, round 1: changes requested. \
-             Committed {file} alone, in commit {commit}.\nIt is on main.\nYour review is done: \
-             tell whoever started you that commit, and stop.\n"
+             Wrote, and did not commit:\n  {file}\nCommit it alone, and push it to the branch of \
+             the plan you reviewed; your review is done once it is there. Tell whoever started \
+             you the commit, and stop.\nThen: git add -- {file} && git commit -m \"{message}\" -- {file}\n"
         )
     );
+    // Nothing is committed until the reviewer runs that line.
+    assert_eq!(tip(&root, "HEAD"), head);
+    shell(&root, &then(&run.stdout));
     assert_eq!(
         git(&root, &["show", "--name-only", "--format=", "HEAD"]),
         *file
@@ -1611,7 +1782,7 @@ fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_com
 }
 
 #[test]
-fn two_blind_plan_reviews_cherry_pick_onto_the_base_and_ready_says_what_they_found() {
+fn two_blind_plan_reviews_each_commit_their_file_and_ready_says_what_they_found() {
     let scratch = Scratch::new(&[(ID, "draft")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
@@ -1630,12 +1801,11 @@ fn two_blind_plan_reviews_cherry_pick_onto_the_base_and_ready_says_what_they_fou
         if verdict == "changes" {
             append(&at, &files[0], &finding("No sizing"));
         }
-        let run = atelier(&at, thread, &["verdict", verdict]);
+        // The reviewer commits its file with the line `verdict` printed.
+        let run = common::verdict(&at, thread, &["verdict", verdict]);
         assert_eq!(run.code, 0, "{}", run.stderr);
         let commit = tip(&at, "HEAD");
-        assert!(run.stdout.contains(&format!(
-            "The planner puts it on main with: git cherry-pick {commit}\n"
-        )));
+        assert_eq!(git(&at, &["rev-parse", "HEAD^"]), reviewed);
         commits.push(commit);
     }
     git(&root, &["cherry-pick", &commits[0], &commits[1]]);
@@ -1649,7 +1819,7 @@ fn two_blind_plan_reviews_cherry_pick_onto_the_base_and_ready_says_what_they_fou
     let path = root.join(item_path(ID));
     let text = fs::read_to_string(&path).unwrap();
     fs::write(&path, text.replace("Print hello.", "Print hello twice.")).unwrap();
-    let run = atelier(&root, "p1", &["ready", MISSION, "--by", "sumeet"]);
+    let run = planned(&root, "p1", &["ready", MISSION, "--by", "sumeet"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let short = &reviewed[..7];
     for file in &files {
@@ -1682,101 +1852,4 @@ fn two_blind_plan_reviews_cherry_pick_onto_the_base_and_ready_says_what_they_fou
         "{}",
         run.stdout
     );
-}
-
-#[test]
-fn ready_commits_only_what_it_wrote_and_leaves_every_other_change_as_it_was() {
-    let scratch = Scratch::new(&[]);
-    let root = scratch.root();
-    write_mission(&root, MISSION, "draft");
-    fs::write(root.join("changed.txt"), "before\n").unwrap();
-    commit_all(&root, "Plan");
-    let before = git(&root, &["rev-parse", "HEAD"]);
-    // One unrelated file staged, and another changed and not staged.
-    fs::write(root.join("staged.txt"), "staged\n").unwrap();
-    git(&root, &["add", "staged.txt"]);
-    fs::write(root.join("changed.txt"), "after\n").unwrap();
-
-    let run = atelier(&root, "p1", &["ready", MISSION, "--by", "sumeet"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
-    assert!(
-        run.stdout.ends_with(&format!(
-            "Committed {commit}, \"Ready {MISSION}\":\n  {}\n",
-            mission_path(MISSION)
-        )),
-        "{}",
-        run.stdout
-    );
-    assert!(!run.stdout.contains("Then:"), "{}", run.stdout);
-    assert_eq!(git(&root, &["rev-parse", "HEAD~1"]), before);
-    assert_eq!(
-        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
-        format!("Ready {MISSION}\n\n{}", mission_path(MISSION))
-    );
-    assert_eq!(
-        git(&root, &["diff", "--cached", "--name-only"]),
-        "staged.txt"
-    );
-    assert_eq!(git(&root, &["diff", "--name-only"]), "changed.txt");
-
-    // A draft no commit holds yet is committed whole, as it stands.
-    let new = atelier(&root, "p1", &["new", "Say hello", "--in", MISSION]);
-    let path = wrote(&new.stdout).pop().unwrap();
-    let id = path.split('/').nth(2).unwrap().to_string();
-    let run = atelier(&root, "p1", &["ready", &id, "--by", "sumeet"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(
-        git(&root, &["show", "--name-only", "--format=%s", "HEAD"]),
-        format!("Ready {id}\n\n{path}")
-    );
-    assert_eq!(
-        git(&root, &["show", &format!("HEAD:{path}")]),
-        read(&root, &path).trim_end()
-    );
-    assert_eq!(
-        git(&root, &["diff", "--cached", "--name-only"]),
-        "staged.txt"
-    );
-    assert_eq!(git(&root, &["diff", "--name-only"]), "changed.txt");
-    // `start` reads the base's last commit, and finds it ready.
-    let work = scratch.worktree("work");
-    let run = atelier(&work, "t1", &["start", &id]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-}
-
-#[test]
-fn a_refused_commit_leaves_the_files_and_the_index_as_they_were_before_ready() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
-    let root = scratch.root();
-    fs::write(root.join("staged.txt"), "staged\n").unwrap();
-    git(&root, &["add", "staged.txt"]);
-    let hook = root.join(".git/hooks/pre-commit");
-    fs::write(&hook, "#!/bin/sh\necho 'the hook says no' >&2\nexit 1\n").unwrap();
-    let mut permissions = fs::metadata(&hook).unwrap().permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&hook, permissions).unwrap();
-    let before = (
-        read(&root, &item_path(ID)),
-        git(&root, &["rev-parse", "HEAD"]),
-        git(&root, &["ls-files", "--stage"]),
-        git(&root, &["status", "--porcelain", "-uall"]),
-    );
-
-    let run = atelier(&root, "p1", &["ready", ID, "--by", "sumeet"]);
-    assert_eq!(run.code, 2, "{}", run.stdout);
-    assert!(
-        run.stderr
-            .starts_with("atelier: The commit failed, so the record is as it was.")
-            && run.stderr.contains("the hook says no"),
-        "{}",
-        run.stderr
-    );
-    let after = (
-        read(&root, &item_path(ID)),
-        git(&root, &["rev-parse", "HEAD"]),
-        git(&root, &["ls-files", "--stage"]),
-        git(&root, &["status", "--porcelain", "-uall"]),
-    );
-    assert_eq!(after, before);
 }

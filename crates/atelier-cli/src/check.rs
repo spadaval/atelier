@@ -209,14 +209,27 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
             }
         }
     }
-    if unread.is_empty() && invalid.is_empty() && acts.is_empty() {
+    // Only a merge writes the base, so no record changes in a commit on it.
+    let on_base = match Store::new(root.join(".atelier")).config() {
+        Ok(config) => (git::current_branch(root)?.as_deref() == Some(config.base_branch.as_str()))
+            .then_some(config.base_branch),
+        Err(_) => None,
+    };
+    let base_records = match &on_base {
+        Some(_) => git::staged_all(root, ".atelier")?,
+        None => Vec::new(),
+    };
+    if unread.is_empty() && invalid.is_empty() && acts.is_empty() && base_records.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
-    let text = output::commit_refused(&unread, &invalid, &acts);
-    let broken = (invalid.iter().map(output::valid)).chain(
-        acts.iter()
-            .map(|(path, from, to)| output::rule_status(path, *from, *to)),
-    );
+    let base = on_base.unwrap_or_default();
+    let text = output::commit_refused(&unread, &invalid, &acts, &base, &base_records);
+    let broken = (invalid.iter().map(output::valid))
+        .chain(
+            acts.iter()
+                .map(|(path, from, to)| output::rule_status(path, *from, *to)),
+        )
+        .chain((!base_records.is_empty()).then(|| output::rule_record_on_base(&base)));
     Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
@@ -225,13 +238,14 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
 /// none but a merge sets an item done while its branch exists. `input` is
 /// what Git gives the hook: a line per ref pushed.
 fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
-    let base = match Store::new(root.join(".atelier")).config() {
-        Ok(config) => config.base_branch,
+    let config = match Store::new(root.join(".atelier")).config() {
+        Ok(config) => config,
         Err(mut problem) => {
             problem.file = PathBuf::from(CONFIG);
             return Ok(Outcome::Refused(output::push_no_config(&problem)));
         }
     };
+    let base = config.base_branch.clone();
     let target = format!("refs/heads/{base}");
     let mut reader = CommitReader::new(root);
     let mut old = None;
@@ -288,7 +302,7 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
                 };
                 if now == Status::Done
                     && !matches!(before, Some(Ok(Status::Done)))
-                    && git::branch_tip(root, id)?.is_some()
+                    && git::branch_tip(root, &config.record_branch(id))?.is_some()
                 {
                     done.push((
                         commit.commit.clone(),

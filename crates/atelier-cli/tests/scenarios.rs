@@ -231,7 +231,7 @@ fn start_on_a_draft_changes_nothing_and_names_ready() {
     );
     assert!(!branch_exists(&root, ID));
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
-    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn another_thread_takes_over_a_started_item_in_any_started_status() {
         git(&root, &["switch", "-q", "-c", ID]);
         write_item(&root, ID, status, &["t1"], &[], "");
         git(&root, &["commit", "-qam", "Started"]);
-        git(&root, &["switch", "-q", "main"]);
+        git(&root, &["checkout", "-q", "--detach", "main"]);
         let tip = git(&root, &["rev-parse", ID]);
 
         let run = atelier(&root, "t2", &["start", ID]);
@@ -310,7 +310,7 @@ fn a_start_stopped_before_its_branch_leaves_the_item_ready() {
 
     assert!(!branch_exists(&root, ID));
     assert_eq!(field(&root, "main", "status"), "ready");
-    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
@@ -409,14 +409,13 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
     let scratch = Scratch::new(&[("demo-b10c", "ready")]);
     let root = scratch.root();
     write_item(&root, ID, "ready", &[], &["demo-b10c"], "");
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Blocked item"]);
+    on_base(&root, "Blocked item");
 
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert_eq!(
         status,
         format!(
-            "{NO_HOOKS}You are thread t1, on the base branch main.\nReady to start:\n  \
+            "{NO_HOOKS}You are thread t1, on a detached HEAD.\nReady to start:\n  \
              demo-b10c (high): Say hello\n1 other ready item cannot start yet: 1 waits on a \
              blocker that is not done. See it with: atelier list\nThen: atelier start demo-b10c\n"
         )
@@ -441,7 +440,7 @@ fn start_refuses_a_ready_item_whose_blocker_is_not_done_or_whose_branch_exists()
         "{}",
         run.stderr
     );
-    assert_eq!(git(&root, &["symbolic-ref", "--short", "HEAD"]), "main");
+    assert_eq!(git(&root, &["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD");
     // `status` counts it with the others that cannot start.
     assert!(
         atelier(&root, "t1", &["status"]).stdout.ends_with(
@@ -552,7 +551,7 @@ fn a_refused_commit_leaves_the_take_over_to_be_run_again() {
     git(&root, &["switch", "-q", "-c", ID]);
     write_item(&root, ID, "building", &["t1"], &[], "");
     git(&root, &["commit", "-qam", "Started"]);
-    git(&root, &["switch", "-q", "main"]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
     let tip = git(&root, &["rev-parse", ID]);
     let hook = refusing_hook(&root);
 
@@ -667,6 +666,8 @@ fn review_opens_the_rounds_file_and_prints_the_brief_and_run_again_only_the_brie
         format!(
             "{NO_HOOKS}You are the reviewer of {ID} (thread t2), round 1.\nReview file: {path}\n\
              `atelier review {ID}` prints the brief again.\nTitle: Say hello\nStatus: in review\n\
+             Record changes not committed, which count only once committed and merged:\n  {path}\n\
+             Commit them with: git add -- {path} && git commit -m \"<what they change>\" -- {path}\n\
              Then: atelier verdict approve (or `atelier verdict changes`, once your file holds a fix-now finding)\n"
         )
     );
@@ -765,7 +766,7 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
 
     // Nothing to fix: changes is refused.
     let opened = read(&root, &path);
-    let refused = atelier(&root, "t2", &["verdict", "changes"]);
+    let refused = verdict(&root, "t2", &["verdict", "changes"]);
     assert_eq!(refused.code, 1);
     assert_eq!(
         refused.stderr,
@@ -781,7 +782,7 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
     // A fix-now finding open: approve is refused.
     append(&root, &path, NO_PERIOD);
     let written = read(&root, &path);
-    let refused = atelier(&root, "t2", &["verdict", "approve"]);
+    let refused = verdict(&root, "t2", &["verdict", "approve"]);
     assert_eq!(refused.code, 1);
     assert!(
         refused.stderr.contains(&format!(
@@ -799,14 +800,20 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
         &["verdict", "changes", "--model", "gpt-6.1-sol"],
     );
     assert_eq!(run.code, 0, "{}", run.stderr);
+    let item = item_path(ID);
+    let message = "Review demo-ab12, round 1: changes requested";
     assert_eq!(
         run.stdout,
         format!(
-            "Recorded your verdict on {ID}, round 1: changes requested. Committed {path} with it.\n\
-             {ID} is back with its implementer, t1, to answer your open findings. \
-             Your review is done: say so to whoever started you, and stop.\n"
+            "Recorded your verdict on {ID}, round 1: changes requested. Wrote, and did not commit:\n  \
+             {item}\n  {path}\n\
+             Commit the two together; once that commit is made, {ID} is back with its implementer, \
+             t1, to answer your open findings, and your review is done: say so to whoever started \
+             you, and stop.\nThen: git add -- {item} {path} && git commit -m \"{message}\" -- {item} {path}\n"
         )
     );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
+    run_then(&root, &run.stdout);
     // One commit: the item's status and the review file, nothing else.
     assert_eq!(git(&root, &["rev-parse", "HEAD^"]), head);
     assert_eq!(
@@ -845,7 +852,7 @@ fn a_verdict_needs_its_finding_state_and_commits_the_file_with_the_status() {
         .contains(&format!("[ ] Finding {stem}.1 (fix now)")));
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
     // The reviewer's work is done: its verdict is not taken again.
-    let again = atelier(&root, "t2", &["verdict", "approve"]);
+    let again = verdict(&root, "t2", &["verdict", "approve"]);
     assert_eq!(again.code, 1);
     assert!(again
         .stderr
@@ -878,7 +885,7 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
     let (first, path) = review_of(&root, 1);
     append(&root, &path, NO_PERIOD);
-    assert_eq!(atelier(&root, "t2", &["verdict", "changes"]).code, 0);
+    assert_eq!(verdict(&root, "t2", &["verdict", "changes"]).code, 0);
 
     // Round 2: the author rebuts; the reviewer keeps the finding.
     append(
@@ -915,12 +922,12 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
         assert!(run.stdout.contains(&part), "no `{part}` in:\n{}", run.stdout);
     }
     // Kept, it is open: approve is refused, changes is not.
-    let refused = atelier(&root, "t3", &["verdict", "approve"]);
+    let refused = verdict(&root, "t3", &["verdict", "approve"]);
     assert_eq!(refused.code, 1);
     assert!(refused
         .stderr
         .contains(&format!("{second}.1 is: No period")));
-    assert_eq!(atelier(&root, "t3", &["verdict", "changes"]).code, 0);
+    assert_eq!(verdict(&root, "t3", &["verdict", "changes"]).code, 0);
 
     // The open finding now goes by its round-2 name, and its rebuttal has
     // had its one try: a fix is left.
@@ -954,7 +961,7 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     assert!(run.stdout.contains(&format!("  As {second}.1:\n")));
     let text = read(&root, &path).replace("Now: kept", "Now: fixed");
     fs::write(root.join(&path), text).unwrap();
-    let approved = atelier(&root, "t4", &["verdict", "approve"]);
+    let approved = verdict(&root, "t4", &["verdict", "approve"]);
     assert_eq!(approved.code, 0, "{}", approved.stderr);
     assert_eq!(field(&root, "HEAD", "status"), "approved");
     assert_eq!(
@@ -982,9 +989,9 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
         &path,
         "\n## Finding 1: Too loud\nRecommendation: fix now\n",
     );
-    let refused = atelier(&root, "t5", &["verdict", "approve"]);
+    let refused = verdict(&root, "t5", &["verdict", "approve"]);
     assert_eq!(refused.code, 1);
-    assert_eq!(atelier(&root, "t5", &["verdict", "changes"]).code, 0);
+    assert_eq!(verdict(&root, "t5", &["verdict", "changes"]).code, 0);
     let _ = third;
 }
 
@@ -1013,7 +1020,7 @@ fn a_new_reviewer_takes_over_a_review_with_no_verdict_and_keeps_its_file() {
     // Only the reviewers changed.
     assert_eq!(after.replace("- t3\n", ""), before);
 
-    let refused = atelier(&root, "t2", &["verdict", "approve"]);
+    let refused = verdict(&root, "t2", &["verdict", "approve"]);
     assert_eq!(refused.code, 1);
     assert_eq!(
         refused.stderr,
@@ -1022,7 +1029,7 @@ fn a_new_reviewer_takes_over_a_review_with_no_verdict_and_keeps_its_file() {
              To take it over: atelier review {ID}\n"
         )
     );
-    let run = atelier(&root, "t3", &["verdict", "approve"]);
+    let run = verdict(&root, "t3", &["verdict", "approve"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let committed = git(&root, &["show", &format!("HEAD:{path}")]);
     assert_eq!(front(&committed, "reviewers"), "t2 t3");
@@ -1059,7 +1066,7 @@ fn a_reviewer_that_runs_an_implementers_command_is_told_its_role() {
     }
     // And the implementer that runs a reviewer's, which has no review file
     // to record a verdict in, so is not offered the skip.
-    let run = atelier(&root, "t1", &["verdict", "approve"]);
+    let run = verdict(&root, "t1", &["verdict", "approve"]);
     assert_eq!(run.code, 1);
     assert_eq!(
         run.stderr,
@@ -1070,41 +1077,27 @@ fn a_reviewer_that_runs_an_implementers_command_is_told_its_role() {
 }
 
 #[test]
-fn a_refused_commit_leaves_the_verdict_to_be_run_again() {
+fn verdict_writes_its_files_commits_nothing_and_leaves_the_index_as_it_was() {
     let scratch = submitted();
     let root = scratch.root();
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
     let (_, path) = review_of(&root, 1);
     append(&root, &path, NO_PERIOD);
-    let review = read(&root, &path);
-    let item = read(&root, &item_path(ID));
     let head = git(&root, &["rev-parse", "HEAD"]);
     fs::write(root.join("notes.txt"), "unrelated\n").unwrap();
     git(&root, &["add", "notes.txt"]);
-    let hook = refusing_hook(&root);
 
     let run = atelier(&root, "t2", &["verdict", "changes"]);
-    assert_eq!(run.code, 2);
-    assert!(
-        run.stderr
-            .contains("The commit failed, so the record is as it was."),
-        "{}",
-        run.stderr
-    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), head);
-    assert_eq!(read(&root, &path), review);
-    assert_eq!(read(&root, &item_path(ID)), item);
     assert_eq!(
         git(&root, &["diff", "--cached", "--name-only"]),
         "notes.txt"
     );
-    assert!(atelier(&root, "t2", &["status"])
-        .stdout
-        .contains("Then: atelier verdict changes\n"));
-
-    fs::remove_file(hook).unwrap();
-    let run = atelier(&root, "t2", &["verdict", "changes"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(git(&root, &["diff", "--name-only"]), item_path(ID));
+    assert_eq!(git(&root, &["ls-files", "--others"]), path);
+    // The printed commit takes the two files and leaves the rest staged.
+    run_then(&root, &run.stdout);
     assert_eq!(field(&root, "HEAD", "status"), "changes_requested");
     assert_eq!(
         git(&root, &["diff", "--cached", "--name-only"]),
@@ -1130,7 +1123,7 @@ fn another_round(root: &Path, previous: &str, round: u32, reviewer: &str, verdic
         let fixed = read(root, &path).replace("Now: kept", "Now: fixed");
         fs::write(root.join(&path), fixed).unwrap();
     }
-    let run = atelier(root, reviewer, &["verdict", verdict]);
+    let run = common::verdict(root, reviewer, &["verdict", verdict]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     stem
 }
@@ -1142,7 +1135,7 @@ fn changes_in_round_1() -> (Scratch, String) {
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
     let (first, path) = review_of(&root, 1);
     append(&root, &path, NO_PERIOD);
-    assert_eq!(atelier(&root, "t2", &["verdict", "changes"]).code, 0);
+    assert_eq!(verdict(&root, "t2", &["verdict", "changes"]).code, 0);
     append(&root, &item_path(ID), "\n### Responses\n\n");
     (scratch, first)
 }
@@ -1261,6 +1254,7 @@ fn a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own() {
         run.stdout
     );
     let run = codex(&root, CHILD, &["verdict", "approve"]);
+    run_then(&root, &run.stdout);
     assert_eq!(run.code, 0, "{}", run.stderr);
     let (_, review) = review_of(&root, 1);
     let committed = git(&root, &["show", &format!("HEAD:{review}")]);

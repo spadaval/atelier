@@ -41,6 +41,7 @@ pub fn item(
     config: &Config,
     dropped: Option<&str>,
     leads: Option<&str>,
+    unsaved: &str,
 ) -> String {
     let id = &entry.id;
     let who = if let Some(review) = &entry.review {
@@ -108,7 +109,7 @@ pub fn item(
         None => String::new(),
     };
     format!(
-        "{who}Title: {}\nStatus: {}{}\n{undefined}{next}",
+        "{who}Title: {}\nStatus: {}{}\n{undefined}{unsaved}{next}",
         entry.title,
         status_name(entry.status),
         since(entry),
@@ -152,22 +153,25 @@ fn gates(config: &Config) -> String {
 }
 
 /// `status` away from an item's branch. `dropped` is each item dropped on
-/// the base while its branch is there, with why. `planning` is the record
-/// changes the base's checkout has not committed, and `at` that checkout,
-/// as for [`commit_line`].
+/// the base while its branch is there, with why, and `unreached` each item
+/// dropped on its branch whose drop has not reached the base. `unsaved` is
+/// what [`unsaved`] says of the checkout.
+#[allow(clippy::too_many_arguments)]
 pub fn overview(
     caller: &Thread,
     branch: Option<&str>,
     base: &str,
+    kind: Option<&str>,
     overview: &Overview,
     dropped: &[(String, Option<String>)],
-    planning: &[String],
-    at: Option<&Path>,
+    unreached: &[(String, Option<String>)],
+    unsaved: &str,
 ) -> String {
-    let place = match branch {
-        Some(branch) if branch == base => format!("the base branch {base}"),
-        Some(branch) => format!("branch {branch}, which is no item's"),
-        None => "a detached HEAD".into(),
+    let place = match (branch, kind) {
+        (Some(branch), _) if branch == base => format!("the base branch {base}"),
+        (Some(branch), Some(kind)) => format!("branch {branch}, {kind}"),
+        (Some(branch), None) => format!("branch {branch}, which is no item's"),
+        (None, _) => "a detached HEAD".into(),
     };
     let mut text = format!("You are thread {caller}, on {place}.\n");
     if !overview.held.is_empty() {
@@ -212,14 +216,14 @@ pub fn overview(
             text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
         }
     }
-    text += &crate::view_output::overview(overview);
-    if !planning.is_empty() {
-        text += &format!(
-            "Planning not committed yet, which `atelier start` does not read until it is: {}\nCommit it with: {}\n",
-            some(planning),
-            commit_line(at, planning, "Plan")
-        );
+    if !unreached.is_empty() {
+        text += "Dropped on their branch, and the drop has not reached the base; carry it on a backlog branch with `atelier drop <id> --reason \"<why>\"` there, then `submit` and `merge`:\n";
+        for (id, why) in unreached {
+            text += &format!("  {id}: {}\n", why.as_deref().unwrap_or("no reason given"));
+        }
     }
+    text += &crate::view_output::overview(overview);
+    text += unsaved;
     text += &crate::view_output::led(&overview.led);
     // A lead holding nothing hands its mission's items to other threads,
     // and is not pointed at one itself.
@@ -236,6 +240,41 @@ pub fn overview(
             text += "Nothing is ready to start.\n";
         }
         (None, None) => text += "No ready item can start now.\n",
+    }
+    text
+}
+
+/// What `status` says of what the checkout `at` names, as for
+/// [`commit_line`], has not saved: `records`, the record changes not
+/// committed, and `unpushed`, the commits of `branch` not on `remote`.
+pub fn unsaved(
+    at: Option<&Path>,
+    records: &[String],
+    branch: Option<&str>,
+    remote: Option<&str>,
+    unpushed: usize,
+) -> String {
+    let mut text = String::new();
+    if !records.is_empty() {
+        text += "Record changes not committed, which count only once committed and merged:\n";
+        for path in records {
+            text += &format!("  {path}\n");
+        }
+        text += &format!(
+            "Commit them with: {}\n",
+            commit_line(at, records, "<what they change>")
+        );
+    }
+    if let (Some(branch), Some(remote), true) = (branch, remote, unpushed > 0) {
+        let git = match at {
+            Some(at) => format!("git -C {}", quoted(&at.display().to_string())),
+            None => "git".into(),
+        };
+        let commits = match unpushed {
+            1 => "1 commit".to_string(),
+            n => format!("{n} commits"),
+        };
+        text += &format!("{commits} of {branch} not pushed to {remote}. Push with: {git} push {remote} {branch}\n");
     }
     text
 }
@@ -291,50 +330,102 @@ pub fn lost_race(id: &str, holder: Option<&Thread>) -> String {
     )
 }
 
-pub fn not_switched(id: &str) -> String {
+pub fn not_switched(branch: &str) -> String {
     format!(
-        "Started {id}: branch {id} holds its start, but this checkout could not switch to it. Run `git switch {id}` once the cause below is fixed"
+        "Started: branch {branch} holds its start, but this checkout could not switch to it. Run `git switch {branch}` once the cause below is fixed"
     )
 }
 
-pub fn switch_failed(id: &str) -> String {
+pub fn switch_failed(id: &str, branch: &str) -> String {
     format!(
-        "Could not switch to branch {id}, so nothing changed. If another worktree has it checked out, run `atelier start {id}` there"
+        "Could not switch to branch {branch}, so {id} was not taken over. If another worktree has it checked out, run `atelier start {id}` there"
     )
 }
 
-pub fn started(id: &str) -> String {
-    format!("Started {id} on branch {id}.\n")
+pub fn checked_out_elsewhere(id: &str, branch: &str, path: &Path) -> String {
+    format!(
+        "`atelier start {id}` refused; nothing changed.\nBranch {branch} is checked out in {}, and a branch can be checked out in one worktree at a time. Run `atelier start {id}` there.\n",
+        path.display()
+    )
 }
 
-pub fn started_new(id: &str) -> String {
-    format!("Created {id} and started it on branch {id}.\n")
+pub fn take_over_not_pushed(id: &str, branch: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Took over {id} on branch {branch} here, but the push to {remote} failed, so other clones still see the last holder: {error:#}\nFix the cause, then push it with: git push {remote} {branch}\n"
+    )
+}
+
+pub fn started(id: &str, branch: &str) -> String {
+    format!("Started {id} on branch {branch}.\n")
+}
+
+pub fn started_new(id: &str, branch: &str) -> String {
+    format!("Created {id} and started it on branch {branch}.\n")
+}
+
+pub fn started_mission(id: &str, branch: &str) -> String {
+    format!(
+        "Created draft mission {id} on branch {branch}, with empty sections to write.\nWrite its plan there, create its items there with `atelier new \"<title>\" --in {id}`, and commit with Git.\n"
+    )
+}
+
+pub fn started_backlog(branch: &str) -> String {
+    format!(
+        "Made branch {branch} at the base's tip, for record changes tied to no item or mission.\nMake them with `new`, `set`, `ready`, `drop`, `close` and `lead`, commit them with Git, then run `atelier submit` and `atelier merge` here.\n"
+    )
+}
+
+/// What `start` prints in the base's own checkout, which it does not
+/// switch: how to give `branch` a checkout of its own at `path`.
+pub fn worktree(branch: &str, path: &Path) -> String {
+    format!(
+        "This checkout has the base out, so `start` left it as it is. Give {branch} a checkout of its own, and work there:\n  git worktree add {} {branch}\n",
+        quoted(&path.display().to_string())
+    )
+}
+
+pub fn bad_backlog_slug(slug: &str, message: &str) -> String {
+    format!("`atelier start --backlog {slug}` refused; nothing changed.\n{message}.\n")
+}
+
+pub fn backlog_exists(branch: &str, remote: Option<&str>) -> String {
+    let place = match remote {
+        Some(remote) => format!("on {remote}"),
+        None => "in this clone".to_string(),
+    };
+    format!(
+        "`atelier start --backlog` refused; nothing changed.\nBranch {branch} exists {place}. Pick another slug, or work on that branch.\n"
+    )
+}
+
+pub fn rule_backlog_exists(branch: &str) -> String {
+    format!("No branch {branch} exists, here or on the remote")
+}
+
+pub fn unreachable(branch: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "`atelier start` refused; nothing changed.\n{remote} cannot be reached, and a branch is claimed by pushing it there, so {branch} was not made: {error:#}\nRun it again once {remote} answers.\n"
+    )
+}
+
+pub fn claim_push_refused(branch: &str, remote: &str, error: &anyhow::Error) -> String {
+    format!(
+        "`atelier start` refused; nothing changed.\n{remote} refused the push of {branch}, which is the claim, so the branch was not kept: {error:#}\n"
+    )
+}
+
+/// `start` lost the claim to `branch`, which `remote` already has, held
+/// by `holder` as its record names it.
+pub fn lost_claim(what: &str, branch: &str, remote: &str, holder: Option<&Thread>) -> String {
+    let holder = holder.map_or("Another thread".to_string(), |t| t.to_string());
+    format!(
+        "`atelier start` refused; nothing changed here.\n{holder} holds {what}: {remote} already has branch {branch}, so this clone's claim lost, and the branch it made is removed. It fetched {remote}/{branch}.\nTo take it over, run `atelier start {what}` again.\n"
+    )
 }
 
 pub fn created_item(id: &str) -> String {
     format!(
         "Created draft item {id}, with empty Goal, Done when and Scope sections to write.\nA planner makes it ready with: atelier ready {id} --by <name>\n"
-    )
-}
-
-pub fn created_mission(id: &str) -> String {
-    format!(
-        "Created draft mission {id}, with empty sections to write.\nIts items are created with: atelier new \"<title>\" --in {id}\nA planner makes it ready with: atelier ready {id} --by <name>\n"
-    )
-}
-
-/// `new --from` or `drop` on a finding, run on a branch that is not the
-/// base's nor that of an item the caller implements.
-pub fn settle_elsewhere(
-    command: &str,
-    base: &str,
-    branch: Option<&str>,
-    checkout: Option<&Path>,
-) -> String {
-    format!(
-        "`atelier {command}` settles a finding on the base branch {base}, or on the branch of an item you implement, and this checkout is on {}. Nothing changed.\n{}\n",
-        place(branch),
-        on_base(base, checkout)
     )
 }
 
@@ -444,10 +535,19 @@ pub fn commit_refused(
     unread: &[Problem],
     invalid: &[Problem],
     acts: &[(String, Status, Status)],
+    base: &str,
+    on_base: &[String],
 ) -> String {
     let mut text = "Atelier's pre-commit hook refused this commit; nothing was committed.\n"
         .to_string()
         + &problems(unread, invalid);
+    if !on_base.is_empty() {
+        text += &format!("Rule: only a merge writes the base branch {base}, so no record changes in a commit on it. This commit changes:\n");
+        for path in on_base {
+            text += &format!("  {path}\n");
+        }
+        text += "Make the branch the change belongs on and commit it there: `atelier start --backlog <slug>` for a record change tied to no item or mission, or `atelier start --mission \"<title>\"` for a new mission. `git stash` carries the change across.\n";
+    }
     if !acts.is_empty() {
         text += "Rule: a status changes only as an act of the lifecycle changes it. These change it as no act does:\n";
     }
@@ -469,6 +569,11 @@ pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
         status_name(from),
         status_name(to)
     )
+}
+
+/// The rule that no commit on the base changes a record.
+pub(crate) fn rule_record_on_base(base: &str) -> String {
+    format!("Only a merge writes the base branch {base}, so no commit on it changes a record")
 }
 
 /// The rule that code reaches `base` only through `atelier merge`, as
@@ -676,7 +781,7 @@ pub fn harness_set(harness: Harness, file: &str, changed: bool) -> String {
 
 pub fn no_mission(id: &str) -> String {
     format!(
-        "`atelier new` refused; nothing changed.\nNo mission {id} is in this checkout. `atelier new --mission \"<title>\"` creates one.\n"
+        "`atelier new` refused; nothing changed.\nNo mission {id} is in this checkout. `atelier start --mission \"<title>\"` creates one, on its own branch.\n"
     )
 }
 
@@ -715,8 +820,8 @@ pub fn taken_over(id: &str, before: Option<&Thread>) -> String {
     }
 }
 
-pub fn already_held(id: &str) -> String {
-    format!("You already hold {id}; this checkout is on its branch.\n")
+pub fn already_held(id: &str, branch: &str) -> String {
+    format!("You already hold {id}, on its branch {branch}.\n")
 }
 
 /// The paths of `uncommitted` outside the item's directory.
@@ -737,6 +842,42 @@ pub fn submitted(id: &str, uncommitted: &[String], forge: &str) -> String {
         );
     }
     text + &start_reviewer(id)
+}
+
+/// `submit` on a records branch `branch` while `paths` are uncommitted.
+pub fn records_uncommitted(branch: &str, paths: &[String], line: &str) -> String {
+    let mut text = format!("`atelier submit` refused; nothing changed.\nThese record changes on {branch} are not committed, and a submit publishes only what is:\n");
+    for path in paths {
+        text += &format!("  {path}\n");
+    }
+    text + &format!("Commit them, or remove them, and submit again.\nThen: {line}\n")
+}
+
+pub fn records_submitted(branch: &str, forge: &str) -> String {
+    let forge = match forge.is_empty() {
+        true => "No forge is configured, so nothing was pushed.\n".to_string(),
+        false => forge.to_string(),
+    };
+    format!(
+        "Submitted {branch}, which changes records alone.\n{forge}It merges once `atelier check` passes on the merged tree, with no review.\nThen: atelier merge\n"
+    )
+}
+
+/// The title and body of a records branch's pull request.
+pub fn records_pull_request_text(branch: &str, base: &str) -> (String, String) {
+    (
+        format!("{branch}: record changes"),
+        format!("Atelier record changes on {branch}, under `.atelier/` alone. `atelier merge` merges them into {base} once `atelier check` passes on the merged tree."),
+    )
+}
+
+/// `submit` or `merge` of item `id`, whose branch `branch` the forge's
+/// `remote` has ahead of this checkout, at `tip`.
+pub fn behind(id: &str, branch: &str, remote: &str, tip: &str) -> String {
+    format!(
+        "Refused; nothing changed.\n{remote}/{branch} is at {}, ahead of this checkout, so another clone changed {id} since: run `git pull --ff-only {remote} {branch}`, then `atelier status`.\n",
+        short(tip)
+    )
 }
 
 pub fn submit_not_pushed(id: &str, remote: &str, error: &anyhow::Error) -> String {
@@ -1029,16 +1170,10 @@ pub fn plan_verdict_recorded(
     round: u32,
     verdict: Verdict,
     path: &str,
-    commit: &str,
-    base: &str,
-    on_base: bool,
+    commit_line: &str,
 ) -> String {
-    let then = match on_base {
-        true => format!("It is on {base}."),
-        false => format!("The planner puts it on {base} with: git cherry-pick {commit}"),
-    };
     format!(
-        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Committed {path} alone, in commit {commit}.\n{then}\nYour review is done: tell whoever started you that commit, and stop.\n",
+        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n",
         verdict_name(verdict)
     )
 }
@@ -1092,12 +1227,36 @@ pub fn unknown_refused(command: &str, id: &str) -> String {
 }
 
 /// `kind` is "item" or "mission". `started` says the item had a branch.
-pub fn dropped(id: &str, kind: &str, reason: &str, started: bool) -> String {
-    let mut text = format!("Dropped {kind} {id}: {reason}\n");
-    if started {
-        text += &format!("Its branch {id} is left as it is. Every command reads the base's record first, so once this is committed nobody can submit, merge or take it over.\n");
-    }
-    text
+pub fn dropped(id: &str, kind: &str, reason: &str) -> String {
+    format!("Dropped {kind} {id}: {reason}\n")
+}
+
+/// `drop` of started item `id`, written on its branch `branch`, which is
+/// pushed to `remote` where one is configured.
+pub fn dropped_started(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
+    let push = match remote {
+        Some(remote) => format!("Once it is committed and pushed (`git push {remote} {branch}`), every clone that has fetched refuses {id}'s `submit`, `merge` and take-over, and the forge refuses a push of the branch from one that has not."),
+        None => format!("Once it is committed, `submit`, `merge` and a take-over of {id} are refused."),
+    };
+    format!(
+        "Dropped item {id} on its branch {branch}: {reason}\n{push}\nThe base's copy of {id} is dropped on a backlog branch after that: `atelier start --backlog drop-{id}`, then there `atelier drop {id} --reason \"{reason}\"`, commit, `atelier submit` and `atelier merge`. Until then `status` and `list` say the drop has not reached the base.\n"
+    )
+}
+
+/// `drop` of an item whose branch the base, or the forge's copy of it,
+/// has merged.
+pub fn drop_merged(id: &str) -> String {
+    format!("`atelier drop {id}` refused; nothing written.\n{id} is merged: its branch is in the history of the base, here or on the forge, so it is done and cannot be dropped. Fetch and pull the base to see it done.\n")
+}
+
+/// `drop` of an item dropped on its branch whose base copy says so too.
+pub fn drop_reached_base(id: &str) -> String {
+    format!("`atelier drop {id}` refused; nothing written.\n{id} is dropped already, on its branch and in this checkout's copy.\n")
+}
+
+/// `new --mission`, which `start --mission` replaced.
+pub fn new_mission(title: &str) -> String {
+    format!("`atelier new --mission` refused; nothing written.\nA mission is made on a branch of its own, named for it, with: atelier start --mission \"{title}\"\n")
 }
 
 pub fn closed(id: &str, kind: &str) -> String {
@@ -1108,17 +1267,24 @@ pub fn verdict_recorded(
     id: &str,
     round: u32,
     verdict: Verdict,
-    path: &str,
+    paths: &[String],
     implementer: Option<&Thread>,
+    commit_line: &str,
 ) -> String {
     let to = match verdict {
         Verdict::Approve => "to merge",
         Verdict::Changes => "to answer your open findings",
     };
     let implementer = implementer.map_or("nobody yet".to_string(), |t| t.to_string());
-    format!(
-        "Recorded your verdict on {id}, round {round}: {}. Committed {path} with it.\n{id} is back with its implementer, {implementer}, {to}. Your review is done: say so to whoever started you, and stop.\n",
+    let mut text = format!(
+        "Recorded your verdict on {id}, round {round}: {}. Wrote, and did not commit:\n",
         verdict_name(verdict)
+    );
+    for path in paths {
+        text += &format!("  {path}\n");
+    }
+    text + &format!(
+        "Commit the two together; once that commit is made, {id} is back with its implementer, {implementer}, {to}, and your review is done: say so to whoever started you, and stop.\nThen: {commit_line}\n"
     )
 }
 
@@ -1353,6 +1519,76 @@ pub fn merged(id: &str, base: &str, commit: &str) -> String {
         "Merged {id} into {base} with merge commit {}, which marks it done.\n",
         short(commit)
     )
+}
+
+pub fn records_merged(branch: &str, base: &str, commit: &str) -> String {
+    format!(
+        "Merged {branch} into {base} with merge commit {}.\n",
+        short(commit)
+    )
+}
+
+pub fn records_checked(base: &str) -> String {
+    format!("The branch changes records alone, so it merges with no review once its records are valid: `atelier check` passed on the merged tree of {base}.\n")
+}
+
+/// The merge message of the records branch `branch`.
+pub fn records_merge_message(branch: &str, base: &str) -> String {
+    format!("Merge {branch}\n\nMerges record changes on {branch} into {base}; every record of the merged tree is valid.\n\nAtelier-Merge: {branch}\n")
+}
+
+/// `merge` of a records branch whose merged tree has invalid records.
+pub fn records_invalid(branch: &str, base: &str, problems: &[String]) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\nMerged into {base}, {branch} leaves records that are not valid:\n");
+    for problem in problems {
+        text += &format!("  {problem}\n");
+    }
+    text + "Fix them on the branch, as `atelier check` there says, commit, and merge again.\n"
+}
+
+/// `merge --trivial` on a records branch.
+pub fn trivial_records(branch: &str) -> String {
+    format!("`atelier merge --trivial` refused; nothing changed.\n{branch} changes records alone, and merges with no review already: run `atelier merge`.\n")
+}
+
+/// `merge` of a records branch that changes `code`, paths outside
+/// `.atelier/` or the config.
+pub fn records_code(branch: &str, base: &str, code: &[String]) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\n{branch} merges with no review only while it changes records alone, under `.atelier/` and not its config.toml, and it changes these against {base}:\n");
+    for path in code {
+        text += &format!("  {path}\n");
+    }
+    text + "A change to code needs an independent review: make it on an item's branch (`atelier start <id>`, or `atelier start --new \"<title>\"`), and take it off this one.\n"
+}
+
+/// `merge` of a records branch that adds a mission or changes a plan.
+pub fn records_plan(branch: &str, planned: &[(String, String)]) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\nA mission's plan needs its plan reviews before it merges, and {branch}:\n");
+    for (id, what) in planned {
+        text += &format!("  {what}, of mission {id}\n");
+    }
+    text + "The merge of a plan and its reviews comes with atelier-2vdq; until then, take these changes off this branch.\n"
+}
+
+pub fn rule_records_plan(branch: &str) -> String {
+    format!("{branch} adds no mission and changes no mission's plan")
+}
+
+pub fn records_dirty(branch: &str, paths: &[String]) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\nThese changes on {branch} are not committed, and would be left behind:\n");
+    for path in paths {
+        text += &format!("  {path}\n");
+    }
+    text + "Commit them, or remove them, and merge again.\n"
+}
+
+pub fn rule_records_dirty(branch: &str) -> String {
+    format!("Nothing on {branch} is uncommitted")
+}
+
+/// A problem of a record, on one line.
+pub fn problem_line(problem: &Problem) -> String {
+    problem.to_string()
 }
 
 pub fn base_pushed(base: &str, remote: &str) -> String {

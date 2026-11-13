@@ -7,7 +7,7 @@ use crate::commands::Outcome;
 use crate::view_output;
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
-use atelier_app::plan::{off_base, save};
+use atelier_app::plan::{misplaced, save, Belongs};
 use atelier_app::repo::mission_path;
 use atelier_app::{
     disputes, entries, item_view, items_of, list as groups, mission_view, Entry, Filter, Repo,
@@ -43,7 +43,11 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
     let missions = repo.missions()?;
     let entries = entries(&items, &missions, &repo.caller)?;
     let groups = groups(&entries, &missions, &repo.caller, filter);
-    Ok(Outcome::Done(view_output::list(&groups, filter)))
+    let mut text = view_output::list(&groups, filter);
+    if !filter.done {
+        text += &view_output::unreached(&atelier_app::unreached(&items));
+    }
+    Ok(Outcome::Done(text))
 }
 
 /// `list --deferred`: the deferred findings of done items that nobody has
@@ -69,10 +73,10 @@ pub fn disputed(repo: &mut Repo, mission: Option<&str>) -> Result<Outcome> {
     Ok(Outcome::Done(view_output::disputed(&found, mission)))
 }
 
-/// Makes the caller the lead of a ready mission in the checkout of the
-/// base, and says where each of its items stands.
+/// Makes the caller the lead of a ready mission in this checkout, without
+/// committing it, and says where each of its items stands.
 pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
-    if let Some(refused) = off_base(repo, "lead")? {
+    if let Some(refused) = misplaced(repo, "lead", Belongs::Backlog)? {
         return Ok(refused.into());
     }
     validate_id(id).map_err(|message| anyhow!(message))?;
@@ -104,20 +108,10 @@ pub fn lead(repo: &mut Repo, id: &str) -> Result<Outcome> {
         &repo.caller,
         &items_of(id, &entries),
     );
-    // A thread that already leads it changes nothing, so has nothing to
-    // commit.
+    // A thread that already leads it changes nothing, so writes nothing.
     if before.as_ref() == Some(&repo.caller) {
         return Ok(Outcome::Done(said));
     }
     let message = format!("Lead {id}");
-    Ok(save(
-        repo,
-        "lead",
-        Vec::new(),
-        vec![dir.mission],
-        &said,
-        &message,
-        true,
-    )?
-    .into())
+    Ok(save(repo, "lead", Vec::new(), vec![dir.mission], &said, &message)?.into())
 }

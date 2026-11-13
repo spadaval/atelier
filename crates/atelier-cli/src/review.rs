@@ -8,12 +8,12 @@ use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
 use atelier_app::plan::plan_changed;
-use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path, write_and_commit};
+use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path};
 use atelier_app::{carried, carried_plan, refused, Repo};
 use atelier_core::{
     Forge, Review, ReviewName, ReviewSchema, SchemaVersion, Thread, Threads, Verdict,
 };
-use atelier_records::{create_review, render_item, render_review, validate_id, ReviewFile};
+use atelier_records::{create_review, validate_id, ReviewFile};
 
 /// Opens this round's review file, or takes it over, and prints the brief.
 /// The file is committed by `verdict`, not here.
@@ -42,8 +42,8 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     if let Some(refused) = text.and_then(|text| repo.skip.gated(Act::Review, &facts, text)) {
         return Ok(refused.into());
     }
-    if repo.branch.as_deref() != Some(id) {
-        let checkout = git::checkout_of(&repo.root, id)?;
+    if repo.branch.as_deref() != Some(repo.branch_of(id).as_str()) {
+        let checkout = git::checkout_of(&repo.root, &repo.branch_of(id))?;
         let branch = repo.branch.as_deref();
         let refused = output::elsewhere("review", id, branch, checkout.as_deref());
         return Ok(refused.into());
@@ -207,8 +207,8 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
 }
 
 /// `verdict` on the plan review the caller holds in this checkout, which
-/// has no item's branch: records it and commits the file alone, changing
-/// no status.
+/// has no item's branch: records it in the file, without committing it,
+/// changing no status.
 fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Result<Outcome> {
     let store = repo.store();
     let mut held = Vec::new();
@@ -261,21 +261,17 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
         name.round,
         output::verdict_name(verdict)
     );
-    write_and_commit(
-        repo,
-        &[(path.clone(), render_review(&review))],
-        &[&path],
-        &message,
-    )?;
-    let commit = git::head(&repo.root)?;
-    let on_base = repo.branch.as_deref() == Some(repo.base.as_str());
+    let mut written = file.clone();
+    written.review = review;
+    written.write().context("cannot write the review file")?;
+    let line = output::commit_line(repo.git_at(), std::slice::from_ref(&path), &message);
     Ok(Outcome::Done(output::plan_verdict_recorded(
-        &id, name.round, verdict, &path, &commit, &repo.base, on_base,
+        &id, name.round, verdict, &path, &line,
     )))
 }
 
 /// Records the caller's verdict in its review file and the item's new
-/// status, and commits the two together. Where the checkout is on no
+/// status, without committing them. Where the checkout is on no
 /// item's branch, it records the verdict of the plan review the caller
 /// holds there.
 pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Result<Outcome> {
@@ -302,22 +298,26 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
     item.status = row(act).to.expect("a verdict sets the status");
     let id = item.id.clone();
     let review_path = format!("{}/reviews/{}.md", item_dir(&id), file.name);
-    let files = [
-        (item_path(&id), render_item(&item)),
-        (review_path.clone(), render_review(&review)),
-    ];
     let message = format!(
         "Review {id}, round {}: {}",
         file.name.round,
         output::verdict_name(verdict)
     );
-    write_and_commit(repo, &files, &[&files[0].0, &review_path], &message)?;
+    let mut written = file.clone();
+    written.review = review;
+    written.write().context("cannot write the review file")?;
+    repo.store()
+        .write_item(&item)
+        .context("cannot write the item's record")?;
+    let paths = [item_path(&id), review_path];
+    let line = output::commit_line(repo.git_at(), &paths, &message);
     Ok(Outcome::Done(output::verdict_recorded(
         &id,
         file.name.round,
         verdict,
-        &review_path,
+        &paths,
         facts.holder(),
+        &line,
     )))
 }
 
@@ -375,5 +375,6 @@ fn pull_request(repo: &Repo, forge: &Forge, id: &str) -> String {
 
 /// The commit branch `id` points at.
 fn tip(repo: &Repo, id: &str) -> Result<String> {
-    git::branch_tip(&repo.root, id)?.with_context(|| format!("branch {id} does not exist"))
+    let branch = repo.branch_of(id);
+    git::branch_tip(&repo.root, &branch)?.with_context(|| format!("branch {branch} does not exist"))
 }

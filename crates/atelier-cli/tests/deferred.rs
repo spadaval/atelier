@@ -46,8 +46,7 @@ fn with_done(items: &[(&str, &str)]) -> Scratch {
     let root = scratch.root();
     write_item(&root, DONE, "done", &["t1"], &[], DECIDED);
     write_review(&root, REVIEW, "approve", FINDINGS);
-    git(&root, &["add", "-A"]);
-    git(&root, &["commit", "-qm", "Merge demo-d0ne"]);
+    on_base(&root, "Merge demo-d0ne");
     scratch
 }
 
@@ -120,7 +119,7 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
     let created = run.stdout.split_whitespace().nth(3).unwrap().to_string();
     let item = item_path(&created);
     assert!(run.stdout.contains(&format!(
-        "Wrote, and did not commit:\n  {item}\n  {REVIEW}\nPlanning counts once it is committed on the base.\n"
+        "Wrote, and did not commit:\n  {item}\n  {REVIEW}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\n"
     )));
     let text = read(&root, &item);
     assert!(text.contains("title: Greet in the locale\nstatus: draft\n"));
@@ -136,7 +135,7 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
     assert_eq!(listed(&root), ["demo-d0ne/1-aaaa.2", "demo-d0ne/1-aaaa.4"]);
 
     // A reason is required.
-    let run = atelier(&root, "t9", &["drop", "demo-d0ne/1-aaaa.2"]);
+    let run = planned(&root, "t9", &["drop", "demo-d0ne/1-aaaa.2"]);
     assert_eq!(run.code, 1);
     assert!(run.stderr.contains("needs a reason"), "{}", run.stderr);
     let run = atelier(
@@ -345,7 +344,7 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
     git(&root, &["commit", "-qm", "Say hello"]);
     finish_and_submit(&root, "t1");
     assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
-    let run = atelier(&root, "t2", &["verdict", "approve"]);
+    let run = verdict(&root, "t2", &["verdict", "approve"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
 
     // Only the item's implementer settles a finding on its branch.
@@ -356,7 +355,7 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
     );
     assert_eq!(run.code, 1);
     assert!(run.stderr.starts_with(
-        "`atelier drop` settles a finding on the base branch main, or on the branch of an item you implement, and this checkout is on branch demo-ab12. Nothing changed.\n"
+        "`atelier drop` refused; nothing written.\nThis checkout is on demo-ab12, the branch of item demo-ab12, and this change is not demo-ab12's: "
     ), "{}", run.stderr);
     assert_eq!(changes(&root), "");
 
