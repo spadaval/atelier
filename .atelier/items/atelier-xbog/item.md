@@ -78,7 +78,7 @@ What changed:
   split plan rounds. `log` no longer has escalate or decide lines.
 - `atelier-records`: `ask` is removed. A carried finding kept at defer or
   no action needs a line of the reviewer's own, not a field or an HTML
-  comment, or the file does not read.
+  comment, single-line or multi-line, or the file does not read.
 - `atelier-core`: `is_open` and `is_deferred` still read Decisions entries
   and `Decided:` lines, so old records read as before.
 - `AGENTS.md` still sent questions to `escalate`. I fixed its two lines,
@@ -116,7 +116,8 @@ has nothing to answer, so it cannot settle a fix-now finding in practice.
   `Decided:`. A withdrawal or a lowering with a reason lets approve pass,
   and a lowering without a reason does not read.
 - Records that exist today: I searched every branch and remote ref of the
-  twelve repositories under `~/projects` that have `.atelier/`, with `git grep
+  twelve directories under `~/projects` that hold `.atelier/` (eleven with
+  a config), with `git grep
   -nE '^## Decisions|^Decided: |^Outcome: |^Finding: '` over
   `.atelier/items` and `.atelier/missions`. Nothing matched outside
   `missions/atelier-to83/design.md`, which only describes this change. The
@@ -125,3 +126,7 @@ has nothing to answer, so it cannot settle a fix-now finding in practice.
   So there is no real record to test. The tests above use records written
   in the old format, and the existing `atelier-records` tests of the
   Decisions format still pass.
+
+### Responses
+
+- 1-aj9b.1: fixed in 42bc22e13
