@@ -38,7 +38,7 @@ counted from `atelier log`. A line whose failure shows in no measure is cut.
 3. **What `AGENTS.md` points to exists.** Every repository path and
    Markdown file it names in backticks, and every relative link in it and
    in the Markdown files it names or links, resolves. Test: the script below
-   prints nothing; it skips home paths, URLs and routes. Shows in: tool
+   prints nothing; a name starting with `/` or `~`, a host path or an HTTP route, is not checked. Shows in: tool
    calls before an agent's first edit.
 
 ## Easy and Reliable to Change
@@ -82,10 +82,8 @@ counted from `atelier log`. A line whose failure shows in no measure is cut.
 Line 3's script, run from the repository's root:
 
 ```sh
-names=$(grep -oE '`[^` <>:*@$~]+`' AGENTS.md | tr -d '`' | grep -E '/|\.md$')
-for p in $names; do r=${p#/}  # a route, absolute path or domain counts only if its first part is here
-  case $p in /*|*.*/*) test -e "${r%%/*}" || continue;; esac
-  test -e "$r" || echo "AGENTS.md names missing $p"; done
+names=$(grep -oE '`[^` <>:*@$~]+`' AGENTS.md | tr -d '`' | grep -v '^/' | grep -E '/|\.md$')
+for p in $names; do test -e "$p" || echo "AGENTS.md names missing $p"; done
 links() { grep -oE '\]\([^) ]+' "$1" | cut -c3- | grep -vE ':|^[/~]' | sed 's/#.*//' | grep .; }
 for f in AGENTS.md $(links AGENTS.md | grep '\.md$') $(printf '%s\n' $names | grep '\.md$'); do
   test -f "$f" || continue
