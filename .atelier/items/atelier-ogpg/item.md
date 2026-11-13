@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ogpg
 title: Record the branch model in docs/product.md and docs/design.md before any code changes
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -115,4 +115,6 @@ place that still put planning on the base. No code or tests were touched.
 - 1-ep2v.3: fixed in c328a9380: `config.toml` counts as code in the definition of a record-only change, the Branches table, `merge` step 5 and the backlog merge row.
 - 1-ep2v.4: fixed in c328a9380: the product's Merge section now pushes whenever the forge's copy is not the head, and explains the extra CI run under a protection that requires CI on the head.
 - 1-ep2v.5: fixed in c328a9380: The walk's `--full-history` bullet now explains why the flag is needed when a merge writes nothing of its own.
+- 2-gci2.6: fixed in 89aef9cb0: every command but `drop` refuses to write an old `draft` mission, naming the rollout, which moves it onto its own branch to go through plan reviews; `drop` writes it as `dropped`.
+- 2-gci2.7: fixed in 89aef9cb0: a plan reviewer pushes to the branch it reviewed (the mission's branch, or the backlog branch for an amendment), in both documents and the Decisions row.
 
