@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qb4f
 title: 'Garden atelier: structure, 2026-11-13'
-status: changes_requested
+status: in_review
 mission: null
 labels:
 - garden
@@ -81,5 +81,8 @@ Moves: time in building. Change: planners write "about N lines, and say why if m
 - atelier-6w8d/3-kvll.1 and atelier-x3n5/1-c6ma.3: settled on atelier-0019's branch (dropped, and taken into atelier-qf7u), which has not merged; settling them here too would conflict with it. Bugs filed: none. Waiting for the merge: none.
 
 ### Responses
+
+- 1-6c7k.1: fixed in 7aa65c7e7
+- 1-6c7k.2: fixed in 7aa65c7e7
 
 ### Session
