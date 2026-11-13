@@ -32,12 +32,15 @@ place a record changes.
 - [ ] A record change tied to no mission's plan and no started item (`new`, `set`, `ready` on an item, `drop`, `close`, `lead`) is committed on a `backlog/<slug>` branch, the current one when the checkout is already on one.
 - [ ] No command leaves an uncommitted record change behind: `new` and `set` commit, as `ready` and `drop` do today.
 - [ ] Run in the base's own checkout, a record-writing command does what the design settled, and a test shows the base's checkout is never switched to another branch by it.
-- [ ] `submit` on a branch that changes only records opens its pull request, and `merge` merges it once `atelier check` passes on the merged tree, with no review file asked for. A branch that also changes a mission is refused here and left to atelier-2vdq.
+- [ ] `submit` on a branch that changes only records opens its pull request, and `merge` merges it once `atelier check` passes on the merged tree, with no review file asked for. A branch counts as records only when every path it changes against the base is under `.atelier/`; `merge` refuses any other on this path and names the paths, with a test that a `backlog/` branch carrying a change under `crates/` is refused. A branch that adds a mission or changes a mission's plan is refused here and left to atelier-2vdq.
+- [ ] The act table has rows for `submit` and `merge` of a `backlog/` branch: any thread, in a checkout on that branch, with no status to come from; and they are not the implementer's acts on an item.
+- [ ] Where a remote is configured, `start` pushes the item's new branch before it reports success. When the remote already has that branch, `start` is refused and names the thread its record gives; when the remote cannot be reached, `start` is refused and says so. With no remote it behaves as today. A test starts one item from two clones of one remote at once and exactly one succeeds.
+- [ ] `AGENTS.md` no longer says a planning record may be committed on the base; the rest of that file waits for atelier-j5lr.
 - [ ] The act table in `docs/design.md` and each command's `--help` match what the commands now do.
 
 ## Scope
 
-In: `crates/atelier-core` (config), `crates/atelier-app` and `crates/atelier-cli` for the named commands, their tests.
+In: `crates/atelier-core` (config), `crates/atelier-app` and `crates/atelier-cli` for the named commands and `start`, their tests, and the one sentence of `AGENTS.md`.
 
 Out: reading records from branches (atelier-dciw); missions' reviews and merge gate (atelier-2vdq); how a merge finishes with a forge and the pre-push rule (atelier-t5am).
 

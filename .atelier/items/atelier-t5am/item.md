@@ -10,6 +10,7 @@ labels:
 priority: medium
 blocked_by:
 - atelier-ob9u
+- atelier-2vdq
 implementers: []
 ready: null
 trivial: null
@@ -27,7 +28,7 @@ the base receives only merges.
 
 ## Done when
 
-- [ ] With a forge configured, `merge` does its checks as now and then has the forge merge the pull request, as a merge commit. It never pushes the base. With no forge it moves the base locally as today.
+- [ ] With a forge configured, `merge` does its checks, the plan-review gate and the record-only rule of atelier-2vdq and atelier-ob9u among them, and then has the forge merge the pull request, as a merge commit. It never pushes the base. With no forge it moves the base locally as today.
 - [ ] `done` is recorded as `docs/design.md` settled, and after a merge by the forge `atelier show <id>` in a fresh clone says done.
 - [ ] The merge checks in `config.toml` still run on the merged tree before the forge is asked, and the Report says what can change between that run and the forge's merge and what catches it.
 - [ ] Where the forge will not merge yet because a required review or check is missing, `merge` stops with exit status 3 and says which, and run again later it merges.

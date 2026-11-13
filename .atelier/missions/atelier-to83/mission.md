@@ -48,11 +48,13 @@ branch named by a convention the commands apply themselves: an item's ID, a
 mission's ID, or `backlog/<slug>` for record changes tied to neither. What a
 branch needs before it merges depends on what it holds: code needs an
 independent review, a mission's plan needs two approving plan reviews, and
-records alone need `atelier check`.
+records alone need `atelier check`. A mission's plan is its Why, Outcome,
+Success criteria, Scope and Authority and the documents beside it. Its lead,
+its notes, its Result and items added to it once it is agreed are records.
 
-A mission is proposed while its plan is on its branch and agreed once that
+A mission is proposed while its plan is on its branch and open once that
 merges. It has no draft status and no go-ahead; its Why says whose direction
-it started from. Items still merge to the base one at a time, so the base
+it started from. Its stored status is `open`, `done` or `dropped`. Items still merge to the base one at a time, so the base
 shows a mission in progress as it is: agreed, with some items done.
 
 `atelier list`, `atelier show` and the Desk give the whole picture by reading
@@ -71,13 +73,19 @@ stop a mission at any time.
   moves the base locally.
 - only-merges: over the proof mission in item atelier-ql64, every commit on
   the base's first-parent history is a merge of a named branch.
+- one-holder: two clones of one remote start the same item at the same
+  moment; one succeeds and the other is refused and told which thread holds
+  it.
 - seen-before-merge: a mission planned in one clone and pushed appears, as
   proposed and with the branch it was read from, in `atelier list` in a
   second clone after `git fetch`, and on the Desk within its refresh period.
-- reviews-are-the-gate: `atelier merge` refuses a branch that adds or changes
-  a mission while it has fewer than two approving plan reviews of its head,
-  and merges it with two. No command records a go-ahead on a mission, and
-  `start` has no check on a mission's status.
+- reviews-are-the-gate: `atelier merge` refuses a branch that adds a mission
+  or changes a mission's plan while fewer than two reviewers, neither a
+  planner of it, approve the plan its head holds, and merges it with two. A
+  branch that changes only a mission's lead, notes, Result or status, or adds
+  an item to an open mission, merges on `atelier check`. No command records
+  a go-ahead on a mission, and `start` asks of a mission only that it is not
+  dropped.
 - desk-is-live: for one open mission in each of the five repositories the
   Desk's page matches `atelier show <mission>` run in the live repository,
   and its page of work in motion names the thread on each started item.
@@ -106,7 +114,8 @@ stop a mission at any time.
 The lead may choose the wording of the design, the config keys, the layout
 of `list`, `show` and the Desk's pages, how `done` is recorded when the forge
 makes the merge commit, and the order of items within their blockers. It may
-not turn on or change branch protection or any other setting of a GitHub
+not let a branch that changes any path outside `.atelier/` merge without an
+independent review; turn on or change branch protection or any other setting of a GitHub
 repository, which is Sumeet's to do; push to the base of any of the five
 repositories outside an Atelier merge without a recorded `ATELIER_SKIP`
 reason; add an integration branch, a database or a lock; restore a go-ahead
