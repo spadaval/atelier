@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xbog
 title: 'Remove escalate and decide: a question is asked, and a disputed finding goes to a fresh reviewer'
-status: ready
+status: building
 mission: atelier-to83
 labels:
 - redesign
 priority: medium
 blocked_by:
 - atelier-ogpg
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A9679df7a-3d14-4844-bae1-e4e8bb337119%3Adelegate-task%3A7c726c12-b16c-463e-a7e1-334572e4aebd
 ready:
   by: sumeet, in conversation on 2026-11-13, after reading docs/design.md
   at: 2026-11-13T16:37:33.471518539Z
