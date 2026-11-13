@@ -3,6 +3,7 @@
 //! item's from its branch.
 
 use crate::acts::approval;
+use crate::disputed::{disputes, Disputes};
 use crate::repo::{facts, item_dir, Links};
 use crate::view::{entries, entry, Entry, Located, ReadFrom};
 use crate::work::{in_progress, items_of};
@@ -19,9 +20,12 @@ pub struct MissionView {
     pub in_progress: bool,
     /// Its items, as [`items_of`] orders them, each [`annotate`]d.
     pub items: Vec<Entry>,
-    /// Each question asked on one of its items, with that item's ID, in
-    /// item ID order.
+    /// Each question asked on one of its items before `escalate` was
+    /// removed, with that item's ID, in item ID order. The Desk shows them
+    /// until atelier-v958 removes its decide page; `show` does not.
     pub questions: Vec<(String, Decision)>,
+    /// Its items' rebuttals and its plan's split rounds.
+    pub disputes: Disputes,
     /// The records of each of its items, base and branch, in item ID
     /// order, for what a caller shows beside an entry.
     pub located: Vec<Located>,
@@ -44,6 +48,7 @@ pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
             questions.extend(asked.map(|d| (record.item.id.clone(), d)));
         }
     }
+    let disputes = disputes(&items, std::slice::from_ref(dir), Some(id))?;
     let in_progress = in_progress(dir, &entries);
     let dir = dir.clone();
     let of =
@@ -53,6 +58,7 @@ pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
         dir,
         items: of_mission,
         questions,
+        disputes,
         located: items.into_iter().filter(of).collect(),
     }))
 }
@@ -122,8 +128,7 @@ pub fn item_view(repo: &mut Repo, id: &str) -> Result<Option<ItemView>> {
 }
 
 /// Adds to `entry`, which `record` gives, what views show besides the act
-/// table: when it was approved, read from the item's branch, and its
-/// unanswered questions.
+/// table: when it was approved, read from the item's branch.
 pub fn annotate(repo: &Repo, entry: &mut Entry, record: &ItemDir) -> Result<()> {
     let id = &record.item.id;
     let approved = approval(record).filter(|_| record.item.status == Status::Approved);
@@ -131,11 +136,6 @@ pub fn annotate(repo: &Repo, entry: &mut Entry, record: &ItemDir) -> Result<()> 
         let path = format!("{}/reviews/{}.md", item_dir(id), review.name);
         entry.approved = git::approved_at(&repo.root, &tip, &path)?;
     }
-    let decisions = record.decisions()?.into_iter();
-    entry.questions = decisions
-        .filter(|d| d.answer.is_none())
-        .map(|d| d.question)
-        .collect();
     Ok(())
 }
 

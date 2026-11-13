@@ -3,7 +3,7 @@ use atelier_app::acts::{
     Facts, MissionFacts, Refusal, Role, TABLE,
 };
 use atelier_app::{carried, carried_plan, entry};
-use atelier_core::{FindingName, MissionStatus, Outcome, Settlement, Status, Thread};
+use atelier_core::{FindingName, MissionStatus, Settlement, Status, Thread};
 use atelier_records::{parse_item, parse_mission, parse_review, ItemDir, MissionDir, ReviewFile};
 use std::path::PathBuf;
 
@@ -113,7 +113,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 15] = [
+const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
     (Act::Ready, &[Status::Draft], Some(Status::Ready)),
     (Act::Start, &[Status::Ready], Some(Status::Building)),
     // Created by the act, so it runs from no status at all.
@@ -143,11 +143,6 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 15] = [
         Act::VerdictApprove,
         &[Status::InReview],
         Some(Status::Approved),
-    ),
-    (
-        Act::Escalate,
-        &[Status::Building, Status::ChangesRequested, Status::Approved],
-        None,
     ),
     (
         Act::Decide,
@@ -726,7 +721,7 @@ fn only_the_holder_submits() {
 }
 
 #[test]
-fn submit_needs_each_open_finding_answered_and_each_question_decided() {
+fn submit_needs_each_open_finding_answered_and_no_question_waits_on_it() {
     let review = "---\nschema: atelier.review\nschema_version: 3\nround: 1\ncommit: abc1234\n\
                   reviewers:\n- r1\nmodel: m\nverdict: changes\ncreated_at: 2026-11-10T09:00:00Z\n---\n\
                   ## Summary\ns\n\n## Finding 1: Wrong\nRecommendation: fix now\n\n\
@@ -767,13 +762,10 @@ fn submit_needs_each_open_finding_answered_and_each_question_decided() {
         "{DONE}\n### Responses\n\n- 1-aaaa.1: fixed in abc1234\n\n## Decisions\n\n\
          ### 2026-11-10: Is finding 2 worth fixing?\n\nFinding: 1-aaaa.2\n"
     );
-    // Finding 2 has a decision, still unanswered: the question is what waits.
-    assert_eq!(
-        conditions(&answered),
-        [Condition::Unanswered(
-            "2026-11-10: Is finding 2 worth fixing?".into()
-        )]
-    );
+    // A question written before `escalate` was removed waits on nothing:
+    // unanswered, finding 2 still needs its response.
+    assert_eq!(conditions(&answered), [open(2, "Also wrong")]);
+    // Decided then, with an outcome, finding 2 reads as settled.
     let decided = format!("{answered}\nAnswer by d1: No.\nOutcome: no action\n");
     assert_eq!(conditions(&decided), []);
     // Answered with no outcome, finding 2 is still open and needs its
@@ -1037,7 +1029,7 @@ fn verdicts_count_open_findings_across_rounds_and_refuse_an_invalid_file() {
 }
 
 #[test]
-fn a_verdict_keeps_what_a_decision_settled_as_the_tool_wrote_it() {
+fn what_a_decision_settled_before_decide_was_removed_stays_settled_and_nothing_decides_now() {
     let first = review("1-aaaa", &["r1"], "changes", FIX_NOW);
     let decided = format!(
         "{DONE}\n## Decisions\n\n### 2026-11-10: Worth it?\n\nFinding: 1-aaaa.1\n\
@@ -1046,7 +1038,6 @@ fn a_verdict_keeps_what_a_decision_settled_as_the_tool_wrote_it() {
     let carry = |was: &str, line: &str| {
         format!("\n## Finding 1: Wrong\nRecommendation: fix now\nWas: {was}\n{line}\n")
     };
-    let as_written = carry("1-aaaa.1", "Decided: defer");
     let caller = thread("r2");
     let verdict = |body: &str, earlier: &[ReviewFile], file: &str, act: Act| {
         let round = earlier.len() + 1;
@@ -1060,41 +1051,41 @@ fn a_verdict_keeps_what_a_decision_settled_as_the_tool_wrote_it() {
         }
     };
     let round_1 = std::slice::from_ref(&first);
-    let approve = |file: &str| verdict(&decided, round_1, file, Act::VerdictApprove);
     let named = |name: &str| name.parse().unwrap();
-    let dropped = Condition::DecisionDropped {
-        finding: named("1-aaaa.1"),
-        outcome: Outcome::Defer,
-    };
-    // As the tool wrote it, the finding is closed and approve allowed.
-    assert_eq!(approve(&as_written), []);
-    // Changed, kept, or removed: refused, and said once.
+    // The Decisions entry closed the finding: a new round need not carry
+    // it, and approves.
+    assert_eq!(verdict(&decided, round_1, "", Act::VerdictApprove), []);
+    // A new review neither reopens it nor writes `Decided:` of its own.
     assert_eq!(
-        approve(&carry("1-aaaa.1", "Decided: no action")),
-        std::slice::from_ref(&dropped)
+        verdict(
+            &decided,
+            round_1,
+            &carry("1-aaaa.1", "Now: kept"),
+            Act::VerdictChanges
+        ),
+        [Condition::Decided(named("2-cccc.1"))]
     );
-    let kept = carry("1-aaaa.1", "Now: kept");
-    assert_eq!(
-        verdict(&decided, round_1, &kept, Act::VerdictChanges),
-        std::slice::from_ref(&dropped)
+    for body in [decided.as_str(), DONE] {
+        assert_eq!(
+            verdict(
+                body,
+                round_1,
+                &carry("1-aaaa.1", "Decided: defer"),
+                Act::VerdictApprove
+            ),
+            [Condition::Decided(named("2-cccc.1"))]
+        );
+    }
+    // A round 2 written then with the tool's `Decided:` line still reads as
+    // settled, and a round 3 cannot carry it or what it carries.
+    let round_2 = review(
+        "2-bbbb",
+        &["r2"],
+        "approve",
+        &carry("1-aaaa.1", "Decided: defer"),
     );
-    assert_eq!(approve(""), [dropped]);
-    // Carried a second time, as kept, beside the tool's line: reopened.
-    let twice = format!(
-        "{as_written}\n## Finding 2: Wrong\nRecommendation: fix now\nWas: 1-aaaa.1\nNow: kept\n"
-    );
-    assert_eq!(
-        verdict(&decided, round_1, &twice, Act::VerdictChanges),
-        [Condition::DecisionChanged(named("2-cccc.2"))]
-    );
-    // A reviewer cannot write `Decided:` where no decision settled it.
-    assert_eq!(
-        verdict(DONE, round_1, &as_written, Act::VerdictApprove),
-        [Condition::DecisionChanged(named("2-cccc.1"))]
-    );
-    // A later round carries neither the finding nor its carrier again.
-    let round_2 = review("2-bbbb", &["r2"], "approve", &as_written);
     let rounds = [first.clone(), round_2];
+    assert_eq!(verdict(&decided, &rounds, "", Act::VerdictApprove), []);
     for was in ["1-aaaa.1", "2-bbbb.1"] {
         assert_eq!(
             verdict(
@@ -1103,21 +1094,56 @@ fn a_verdict_keeps_what_a_decision_settled_as_the_tool_wrote_it() {
                 &carry(was, "Now: kept"),
                 Act::VerdictChanges
             ),
-            [Condition::DecisionChanged(named("3-cccc.1"))],
+            [Condition::Decided(named("3-cccc.1"))],
             "{was}"
         );
     }
-    assert_eq!(verdict(&decided, &rounds, "", Act::VerdictApprove), []);
-    // What a round carries: the settled finding, once, with its decision.
-    let item = with_reviews(record(Status::InReview, &["t1"], &decided), &rounds);
-    let names = |round| carried_names(&item, round);
-    assert_eq!(names(2), ["1-aaaa.1"]);
-    assert!(names(3).is_empty());
-    let round_2 = carried(&item, 2).unwrap();
+    // No round carries a settled finding, and the deferred one is the
+    // carrier, which a done item's `list --deferred` would list.
+    let item = with_reviews(record(Status::Done, &["t1"], &decided), &rounds);
+    assert!(carried_names(&item, 2).is_empty());
+    assert!(carried_names(&item, 3).is_empty());
+    let unsettled: Vec<String> = (unsettled(&item).unwrap().iter())
+        .map(|f| f.name.to_string())
+        .collect();
+    assert_eq!(unsettled, ["2-bbbb.1"]);
+}
+
+#[test]
+fn a_reviewer_closes_a_carried_finding_by_withdrawing_it_or_lowering_it_with_a_reason() {
+    let first = review("1-aaaa", &["r1"], "changes", FIX_NOW);
+    let body = format!("{DONE}\n### Responses\n\n- 1-aaaa.1: rebutted: it is right\n");
+    let caller = thread("r2");
+    let approve = |file: &str| {
+        let reviews = [first.clone(), review("2-cccc", &["r2"], "null", file)];
+        let item = with_reviews(record(Status::InReview, &["t1"], &body), &reviews);
+        match check(Act::VerdictApprove, &facts(&item, &caller)) {
+            Ok(_) => Vec::new(),
+            Err(Refusal::Unmet(unmet)) => unmet,
+            // Its findings do not read.
+            Err(Refusal::Record(problem)) => vec![Condition::Invalid(problem)],
+            Err(other) => panic!("{other:?}"),
+        }
+    };
+    let carry = |recommendation: &str, now: &str, reason: &str| {
+        format!("\n## Finding 1: Wrong\nRecommendation: {recommendation}\nWas: 1-aaaa.1\nNow: {now}\n{reason}")
+    };
+    assert_eq!(approve(&carry("fix now", "withdrawn", "")), []);
     assert_eq!(
-        round_2[0].decision.as_ref().unwrap().outcome,
-        Some(Outcome::Defer)
+        approve(&carry("defer", "kept", "Right, but for the next item.\n")),
+        []
     );
+    assert_eq!(approve(&carry("no action", "kept", "Not worth it.\n")), []);
+    // Kept at fix now, it stands.
+    assert!(matches!(
+        approve(&carry("fix now", "kept", "")).as_slice(),
+        [Condition::OpenFinding { .. }]
+    ));
+    // Lowered with no reason, the file does not read.
+    assert!(matches!(
+        approve(&carry("defer", "kept", "")).as_slice(),
+        [Condition::Invalid(_)]
+    ));
 }
 
 #[test]

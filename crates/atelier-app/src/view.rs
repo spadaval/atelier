@@ -1,11 +1,9 @@
 //! Where an item's record is read from, and what `status` shows.
 
-use crate::acts::{
-    mission_of, next, unmet, Act, Condition, Facts, ESCALATE_AFTER, PLANNED, STARTED,
-};
-use crate::review::chain;
+use crate::acts::{mission_of, next, unmet, Act, Condition, Facts, PLANNED, STARTED};
+use crate::disputed::{disputes, Disputes};
 use crate::work::{in_progress, items_of};
-use atelier_core::{FindingName, MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
+use atelier_core::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict};
 use atelier_records::{ItemDir, MissionDir, Problem};
 use std::collections::HashMap;
 
@@ -96,12 +94,6 @@ pub struct Entry {
     /// requested: the round under review, or the round that asked for
     /// the changes.
     pub round: Option<u32>,
-    /// For its implementer, while it is in review or changes are
-    /// requested: how many rounds have ended with no approve verdict, once
-    /// that is enough to require escalation, with the open fix-now finding
-    /// to escalate when changes are requested. `None` once a question has
-    /// been asked about each open finding, since that is the escalation.
-    pub unapproved: Option<(usize, Option<FindingName>)>,
     /// The last review the caller held, with its verdict, when it is not
     /// this round's reviewer.
     pub reviewed: Option<(ReviewName, Option<Verdict>)>,
@@ -110,8 +102,6 @@ pub struct Entry {
     /// Once approved, the time of the commit that recorded the approving
     /// verdict, where the CLI looked it up; nothing stores it.
     pub approved: Option<String>,
-    /// Its unanswered questions, where the CLI read them.
-    pub questions: Vec<String>,
     /// The act the caller would run next, and its conditions that do not
     /// hold.
     pub next: Option<Act>,
@@ -139,16 +129,6 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         Status::ChangesRequested => facts.item.reviews.iter().map(|r| r.name.round).max(),
         _ => None,
     };
-    let rounds = Some(facts.unapproved_rounds())
-        .filter(|rounds| facts.holds() && round.is_some() && *rounds >= ESCALATE_AFTER);
-    let unapproved = match (rounds, item.status) {
-        (Some(rounds), Status::ChangesRequested) => {
-            unasked(facts.item)?.map(|finding| (rounds, Some(finding)))
-        }
-        // In review, which finding stands waits for the round's verdict.
-        (Some(rounds), _) => Some((rounds, None)),
-        (None, _) => None,
-    };
     Ok(Entry {
         id: item.id.clone(),
         title: item.title.clone(),
@@ -162,7 +142,6 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         undefined,
         review: facts.reviewing().map(|file| file.name.clone()),
         round,
-        unapproved,
         reviewer: match facts.status() {
             Status::InReview => facts
                 .round()
@@ -181,26 +160,10 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
             .map(|checkout| checkout.uncommitted.clone())
             .unwrap_or_default(),
         approved: None,
-        questions: Vec::new(),
         next,
         unmet,
         needs: needs(facts)?,
     })
-}
-
-/// The first open fix-now finding of `item` that no question is about, in
-/// its round or any it was carried from.
-fn unasked(item: &ItemDir) -> Result<Option<FindingName>, Problem> {
-    let (findings, decisions) = (item.findings()?, item.decisions()?);
-    let asked = |name: &FindingName| {
-        chain(name, &findings).iter().any(|f| {
-            decisions
-                .iter()
-                .any(|d| d.finding.as_ref() == Some(&f.name))
-        })
-    };
-    let open = item.open_findings()?.into_iter();
-    Ok(open.map(|f| f.name).find(|name| !asked(name)))
 }
 
 /// For a started item another thread holds: the conditions its holder's
@@ -238,8 +201,8 @@ pub struct Overview {
     /// Ready missions with a started item.
     pub in_progress: Vec<MissionDir>,
     /// The missions the caller leads, each with its items, as
-    /// [`items_of`] orders them.
-    pub led: Vec<(MissionDir, Vec<Entry>)>,
+    /// [`items_of`] orders them, and its disagreements.
+    pub led: Vec<(MissionDir, Vec<Entry>, Disputes)>,
 }
 
 /// What `status` shows the caller of each of `items`, which are every item
@@ -292,10 +255,10 @@ pub fn overview(
         }
         let ready = mission.mission.status == MissionStatus::Ready;
         if ready && mission.mission.lead.as_ref() == Some(caller) {
-            let items = items_of(&mission.mission.id, &entries);
-            overview
-                .led
-                .push((mission.clone(), items.into_iter().cloned().collect()));
+            let id = &mission.mission.id;
+            let of_mission = items_of(id, &entries).into_iter().cloned().collect();
+            let disputed = disputes(items, std::slice::from_ref(mission), Some(id))?;
+            overview.led.push((mission.clone(), of_mission, disputed));
         }
     }
     for entry in entries {

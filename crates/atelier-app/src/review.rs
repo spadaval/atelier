@@ -3,8 +3,7 @@
 use atelier_core::{is_open, Decision, Finding, FindingName, Response};
 use atelier_records::{ItemDir, MissionDir, Problem, ReviewFile};
 
-/// A finding an earlier round left open, or that a decision settled and no
-/// round has carried yet.
+/// A fix-now finding an earlier round left open.
 pub struct Carried {
     /// The finding, under its latest name.
     pub finding: Finding,
@@ -13,9 +12,6 @@ pub struct Carried {
     pub texts: Vec<(FindingName, String)>,
     /// The author's line for it in the Report's Responses.
     pub response: Option<Response>,
-    /// The decision that settled it, which the review carries as
-    /// `Decided:`.
-    pub decision: Option<Decision>,
 }
 
 /// The finding named `name` among `findings`, then each finding it carries,
@@ -41,9 +37,8 @@ pub fn chain<'a>(name: &FindingName, findings: &'a [Finding]) -> Vec<&'a Finding
 }
 
 /// The findings that round `round`'s review file carries from the rounds
-/// before it: each fix-now finding they leave open, and each a decision
-/// settled that none of them carries. Its own file is not read, so what it
-/// carries does not change as its reviewer writes in it.
+/// before it: each fix-now finding they leave open. Its own file is not
+/// read, so what it carries does not change as its reviewer writes in it.
 pub fn carried(item: &ItemDir, round: u32) -> Result<Vec<Carried>, Problem> {
     carry(&item.reviews, &item.responses()?, &item.decisions()?, round)
 }
@@ -73,19 +68,9 @@ fn carry(
             .unwrap_or_default()
             .to_string()
     };
-    let settled = |finding: &Finding| {
-        let carried = findings
-            .iter()
-            .any(|f| f.was.as_ref() == Some(&finding.name));
-        let decision = decisions
-            .iter()
-            .find(|d| d.finding.as_ref() == Some(&finding.name) && d.outcome.is_some());
-        decision.filter(|_| !carried).cloned()
-    };
     let mut carried = Vec::new();
     for finding in &findings {
-        let decision = settled(finding);
-        if decision.is_none() && !is_open(finding, &findings, decisions) {
+        if !is_open(finding, &findings, decisions) {
             continue;
         }
         let texts = chain(&finding.name, &findings).into_iter().rev();
@@ -97,7 +82,6 @@ fn carry(
             finding: finding.clone(),
             texts: texts.map(|f| (f.name.clone(), text(&f.name))).collect(),
             response,
-            decision,
         });
     }
     Ok(carried)

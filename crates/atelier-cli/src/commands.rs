@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, row, unmet, Act, Checkout, Facts, STARTED};
 use atelier_app::repo::{facts, item_dir, item_path, planning, write_and_commit};
 use atelier_app::{
-    annotate, annotate_all, decider, entry, overview, refused, Done, Entry, Located, Refused, Repo,
+    annotate, annotate_all, entry, overview, refused, Done, Entry, Located, Refused, Repo,
 };
 use atelier_core::{Forge, Item, Status};
 use atelier_records::{render_item, validate_id};
@@ -61,30 +61,19 @@ fn orientation(repo: &mut Repo) -> Result<String> {
         let facts = facts(repo, &located, &links, Some(&checkout));
         let mut entry = entry(&facts)?;
         annotate(repo, &mut entry, record)?;
-        let decider = decider(repo, &facts, &links)?;
-        let decides = unmet(Act::Decide, &facts)?.is_empty();
         let config = repo.base_config()?;
         let dropped = record.dropped();
         let leads = match (&links.mission, &links.lead) {
             (Some((mission, _)), Some(lead)) if *lead == repo.caller => Some(mission.as_str()),
             _ => None,
         };
-        let said = output::item(
-            &repo.caller,
-            &entry,
-            &config,
-            dropped,
-            decider.as_deref(),
-            decides,
-            leads,
-        );
-        return Ok(said);
+        return Ok(output::item(&repo.caller, &entry, &config, dropped, leads));
     }
     let items = repo.everything()?;
     let missions = repo.missions()?;
     let mut overview = overview(&items, &missions, &repo.caller)?;
     annotate_all(repo, &mut overview.held, &items)?;
-    for (_, entries) in &mut overview.led {
+    for (_, entries, _) in &mut overview.led {
         annotate_all(repo, entries.iter_mut(), &items)?;
         approved_needs(repo, entries, &items)?;
     }

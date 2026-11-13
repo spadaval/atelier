@@ -1,10 +1,13 @@
-//! `decide`: a decider's answer to a question an implementer escalated. It
-//! writes the item's Decisions section in the checkout on its branch and
-//! commits nothing; `submit` commits it with the item.
+//! `decide`: the Desk's answer to a question an item's Decisions section
+//! holds from before `escalate` was removed. The `atelier` command has no
+//! `decide`, and no command asks a question now; atelier-v958 removes this
+//! with the Desk's decide page. It writes the item's Decisions section in
+//! the checkout on its branch and commits nothing; `submit` commits it with
+//! the item.
 
-use crate::acts::{check, question, unmet, Act, Facts, Refusal};
+use crate::acts::{check, question, Act, Refusal};
 use crate::plan::Done;
-use crate::repo::{facts, item_dir, item_path, Links};
+use crate::repo::{facts, item_path};
 use crate::skip::{refused, Refused};
 use crate::{git, say, Repo};
 use anyhow::{anyhow, bail, Result};
@@ -40,11 +43,7 @@ pub fn decide(
     let facts = facts(repo, &located, &links, None);
     let text = match check(Act::Decide, &facts) {
         Ok(_) => None,
-        Err(Refusal::Unmet(unmet)) => {
-            let handoff = decider(repo, &facts, &links)?;
-            let caller = &repo.caller;
-            Some(say::not_decider(id, caller, &unmet, handoff.as_deref()))
-        }
+        Err(Refusal::Unmet(unmet)) => Some(say::not_decider(id, &repo.caller, &unmet)),
         Err(refusal) => Some(refused(Act::Decide, &refusal, &facts)?),
     };
     if let Some(refused) = text.and_then(|text| repo.skip.gated(Act::Decide, &facts, text)) {
@@ -90,45 +89,9 @@ pub fn decide(
     }))
 }
 
-/// What tells the implementer of `facts`' item who answers the oldest
-/// question waiting on it, if one waits: the item's mission's lead, when
-/// the mission is ready and the lead may decide it, else a new thread. The
-/// lead reads the item from its branch's last commit, so it is told how to
-/// commit a question it cannot see yet.
-pub fn decider(repo: &Repo, facts: &Facts, links: &Links) -> Result<Option<String>> {
-    let Some((_, asked)) = question(facts.item)? else {
-        return Ok(None);
-    };
-    let id = &facts.item.item.id;
-    let mut lead = None;
-    if let (Some((mission, Some(Status::Ready))), Some(thread)) = (&facts.mission, &links.lead) {
-        let as_lead = Facts {
-            caller: thread,
-            mission: facts.mission.clone(),
-            ..*facts
-        };
-        if unmet(Act::Decide, &as_lead)?.is_empty() {
-            lead = Some((mission.as_str(), thread));
-        }
-    }
-    let path = item_path(id);
-    let commit = match lead.is_some() && repo.uncommitted(id)?.contains(&path) {
-        true => Some(say::commit_line(
-            repo.git_at(),
-            &[path],
-            &format!("Ask about {id}"),
-        )),
-        false => None,
-    };
-    let review = (asked.finding.as_ref())
-        .map(|finding| format!("{}/reviews/{}.md", item_dir(id), finding.review));
-    let said = say::decider(id, &asked, review.as_deref(), lead, commit.as_deref());
-    Ok(Some(said))
-}
-
-/// `text` trimmed, when it is one line and not empty: a question is a
-/// heading, and an answer one line under it.
-pub fn one_line(text: &str) -> Option<&str> {
+/// `text` trimmed, when it is one line and not empty: an answer is one
+/// line under its question.
+fn one_line(text: &str) -> Option<&str> {
     let text = text.trim();
     (!text.is_empty() && !text.contains(['\n', '\r'])).then_some(text)
 }

@@ -5,8 +5,8 @@
 
 use crate::review::chain;
 use atelier_core::{
-    is_deferred, is_open, Decision, Finding, FindingName, MissionStatus, Outcome, Response,
-    Settlement, Status, Thread, Verdict,
+    is_deferred, is_open, Decision, Finding, FindingName, MissionStatus, Response, Settlement,
+    Status, Thread, Verdict,
 };
 use atelier_records::{validate, ItemDir, MissionDir, Problem, ReviewFile};
 
@@ -24,7 +24,9 @@ pub enum Act {
     Review,
     VerdictChanges,
     VerdictApprove,
-    Escalate,
+    /// The Desk's answer to a question an item's Decisions section holds
+    /// from before `escalate` was removed. The `atelier` command has no
+    /// `decide`; atelier-v958 removes the Desk's.
     Decide,
     Merge,
     MergeTrivial,
@@ -49,8 +51,8 @@ pub enum Role {
     Planner,
     Implementer,
     Reviewer,
-    /// Answers an item's question: a thread that never implemented the
-    /// item nor reviewed the finding the question is about.
+    /// Answers an item's question on the Desk: a thread that never
+    /// implemented the item nor reviewed the finding the question is about.
     Decider,
     Lead,
 }
@@ -85,7 +87,7 @@ pub const PLANNED: &[Status] = &[Status::Draft, Status::Ready];
 /// Every status a mission can have.
 const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status::Dropped];
 
-pub const TABLE: [Row; 20] = [
+pub const TABLE: [Row; 19] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -157,14 +159,6 @@ pub const TABLE: [Row; 20] = [
         binds: false,
         from: &[Status::InReview],
         to: Some(Status::Approved),
-    },
-    Row {
-        act: Act::Escalate,
-        command: "escalate",
-        role: Role::Implementer,
-        binds: false,
-        from: &[Status::Building, Status::ChangesRequested, Status::Approved],
-        to: None,
     },
     // The answer stores the decider's thread, as an entry command does.
     Row {
@@ -390,11 +384,6 @@ pub fn approval(item: &ItemDir) -> Option<&ReviewFile> {
         .find(|r| r.name.round == latest && r.review.verdict == Some(Verdict::Approve))
 }
 
-/// The rounds without an approve verdict after which the product
-/// specification's Review section requires escalation. `status` says so;
-/// nothing is refused.
-pub const ESCALATE_AFTER: usize = 3;
-
 /// The sections of an item that a review approves along with the code.
 const REQUIREMENTS: [&str; 3] = ["Goal", "Done when", "Scope"];
 
@@ -452,26 +441,6 @@ impl<'a> Facts<'a> {
         (review.review.reviewers.holder() == Some(self.caller)).then_some(review)
     }
 
-    /// How many rounds of the item's review ended with no approve verdict:
-    /// those whose reviews hold a verdict and none `approve`.
-    pub fn unapproved_rounds(&self) -> usize {
-        let mut ended: Vec<(u32, bool)> = Vec::new();
-        for file in &self.item.reviews {
-            let Some(verdict) = file.review.verdict else {
-                continue;
-            };
-            let approve = verdict == Verdict::Approve;
-            match ended
-                .iter_mut()
-                .find(|(round, _)| *round == file.name.round)
-            {
-                Some((_, approved)) => *approved |= approve,
-                None => ended.push((file.name.round, approve)),
-            }
-        }
-        ended.iter().filter(|(_, approved)| !approved).count()
-    }
-
     /// The last review of the item the caller held, if any.
     pub fn reviewed(&self) -> Option<&'a ReviewFile> {
         let item: &'a ItemDir = self.item;
@@ -514,16 +483,13 @@ pub enum Condition {
     /// A Done when line is not ticked.
     Unticked(String),
     NoReport,
-    /// An open fix-now finding has no line in Responses and no question
-    /// waiting on it. `rebutted` when a rebuttal of it was kept, so it has
-    /// had its one try.
+    /// An open fix-now finding has no line in Responses. `rebutted` when a
+    /// rebuttal of it was kept, so it has had its one try.
     NoResponse {
         finding: FindingName,
         title: String,
         rebutted: bool,
     },
-    /// A Decisions entry has no answer.
-    Unanswered(String),
     /// The caller has been the item's implementer, so cannot review it or
     /// decide its question.
     FormerImplementer,
@@ -532,16 +498,10 @@ pub enum Condition {
     ReviewedFinding(FindingName),
     /// `decide` needs an unanswered question.
     NoQuestion,
-    /// A review file does not carry this finding, which a decision settled,
-    /// with the `Decided:` line the tool wrote.
-    DecisionDropped {
-        finding: FindingName,
-        outcome: Outcome,
-    },
-    /// This finding of a review file has a `Decided:` line no decision
-    /// wrote, or carries a finding a decision settled other than as the
-    /// tool wrote it.
-    DecisionChanged(FindingName),
+    /// This finding of a review file has a `Decided:` line, which nothing
+    /// writes since `decide` was removed, or carries a finding that a
+    /// decision settled before then.
+    Decided(FindingName),
     /// `verdict changes` needs an open fix-now finding in the caller's file.
     NoOpenFinding,
     /// `verdict approve` needs no fix-now finding of the item open.
@@ -803,64 +763,28 @@ fn verdict(
     unmet
 }
 
-/// What a decision settled stays settled: `file` carries each finding of
-/// an earlier round that a decision settled and no earlier round carries,
-/// with the `Decided:` line the tool wrote, and nothing else in it has a
-/// `Decided:` line or carries a settled finding. `seen` is the file's
-/// findings and the earlier rounds'.
+/// What a decision settled before `decide` was removed stays settled, and
+/// nothing settles a finding that way now: no finding of `file` has a
+/// `Decided:` line, nor carries a finding that a Decisions entry or a
+/// `Decided:` line settled. `seen` is the file's findings and the earlier
+/// rounds'. A fix-now finding is settled without a fix only by its
+/// reviewer: withdrawn, or kept at a lower recommendation.
 fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<Condition> {
     let settled = |name: &FindingName| {
-        let about = decisions
+        let decision = decisions
             .iter()
-            .filter(|d| d.finding.as_ref() == Some(name));
-        about.filter_map(|d| d.outcome).next()
+            .any(|d| d.finding.as_ref() == Some(name) && d.outcome.is_some());
+        decision || seen.iter().any(|f| f.name == *name && f.decided.is_some())
     };
-    let (own, earlier): (Vec<&Finding>, Vec<&Finding>) =
-        seen.iter().partition(|f| f.name.review == file.name);
-    let carried_before = |name: &FindingName| earlier.iter().any(|f| f.was.as_ref() == Some(name));
-    let mut unmet = Vec::new();
-    let mut dropped = Vec::new();
-    for finding in &earlier {
-        let Some(outcome) = settled(&finding.name).filter(|_| !carried_before(&finding.name))
-        else {
-            continue;
-        };
-        let carried = own
-            .iter()
-            .any(|f| f.was.as_ref() == Some(&finding.name) && f.decided == Some(outcome));
-        if !carried {
-            dropped.push(&finding.name);
-            unmet.push(Condition::DecisionDropped {
-                finding: finding.name.clone(),
-                outcome,
-            });
-        }
-    }
-    for finding in own {
-        let as_written = match &finding.was {
-            // Said once, as the finding the file drops.
-            Some(was) if dropped.contains(&was) => true,
-            Some(was) => match settled(was) {
-                Some(outcome) => finding.decided == Some(outcome) && !carried_before(was),
-                // A finding carried as decided is settled too.
-                None => {
-                    let decided = earlier
-                        .iter()
-                        .any(|f| f.name == *was && f.decided.is_some());
-                    finding.decided.is_none() && !decided
-                }
-            },
-            None => finding.decided.is_none(),
-        };
-        if !as_written {
-            unmet.push(Condition::DecisionChanged(finding.name.clone()));
-        }
-    }
-    unmet
+    seen.iter()
+        .filter(|f| f.name.review == file.name)
+        .filter(|f| f.decided.is_some() || f.was.as_ref().is_some_and(&settled))
+        .map(|f| Condition::Decided(f.name.clone()))
+        .collect()
 }
 
-/// The item's oldest unanswered question, which `decide` answers, with
-/// its place among the Decisions entries.
+/// The item's oldest unanswered question, which the Desk's `decide`
+/// answers, with its place among the Decisions entries.
 pub fn question(item: &ItemDir) -> Result<Option<(usize, Decision)>, Problem> {
     let mut decisions = item.decisions()?.into_iter().enumerate();
     Ok(decisions.find(|(_, d)| d.answer.is_none()))
@@ -871,7 +795,7 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
     let mut unmet = Vec::new();
     match act {
-        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead | Act::Escalate => {}
+        Act::Ready | Act::ReadyMission | Act::StartNew | Act::Drop | Act::Lead => {}
         // The finding's conditions are checked by `check_settle`.
         Act::Settle => {}
         // A mission's act is checked with `unmet_mission`.
@@ -919,19 +843,13 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                 unmet.push(Condition::NoReport);
             }
             let responses = item.responses()?;
-            let decisions = item.decisions()?;
             let findings = item.findings()?;
             let rebutted = |name: &FindingName| {
                 let rebuttal = |r: &Response| matches!(r, Response::Rebutted { finding, .. } if finding == name);
                 responses.iter().any(rebuttal)
             };
             for finding in item.open_findings()? {
-                // A question about it waits, and is listed below.
-                let answered = responses.iter().any(|r| *r.finding() == finding.name)
-                    || decisions
-                        .iter()
-                        .any(|d| d.finding.as_ref() == Some(&finding.name) && d.answer.is_none());
-                if !answered {
+                if !responses.iter().any(|r| *r.finding() == finding.name) {
                     let carried = chain(&finding.name, &findings).into_iter().skip(1);
                     unmet.push(Condition::NoResponse {
                         rebutted: carried.into_iter().any(|f| rebutted(&f.name)),
@@ -939,9 +857,6 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                         title: finding.title,
                     });
                 }
-            }
-            for decision in decisions.into_iter().filter(|d| d.answer.is_none()) {
-                unmet.push(Condition::Unanswered(decision.question));
             }
         }
         Act::Review => {
@@ -1006,11 +921,6 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
                             unmet.extend(stale(item, review, since));
                         }
                     }
-                }
-            }
-            for decision in item.decisions()?.into_iter() {
-                if decision.answer.is_none() {
-                    unmet.push(Condition::Unanswered(decision.question));
                 }
             }
             if let Some(checkout) = checkout.filter(|c| !c.uncommitted.is_empty()) {

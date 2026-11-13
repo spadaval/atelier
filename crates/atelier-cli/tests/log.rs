@@ -162,47 +162,6 @@ fn a_take_over_shows_both_implementers_and_a_review_taken_over_both_reviewers() 
     );
 }
 
-const NO_PERIOD: &str = "\n## Finding 1: No period\nRecommendation: fix now\n\
-                         hello.txt says `hello`, without the Goal's period.\n";
-
-#[test]
-fn an_escalation_shows_with_its_implementer_and_its_answer_with_the_decider() {
-    let scratch = submitted();
-    let root = scratch.root();
-    ok(atelier(&root, "r1", &["review", ID]));
-    let (review, path) = review_of(&root, 1);
-    append(&root, &path, NO_PERIOD);
-    ok(atelier(&root, "r1", &["verdict", "changes"]));
-    let finding = format!("{review}.1");
-    ok(atelier(
-        &root,
-        "t1",
-        &[
-            "escalate",
-            "Is the period worth a round?",
-            "--finding",
-            &finding,
-        ],
-    ));
-    git(&root, &["commit", "-qam", "Ask"]);
-    let asked = short(&root, "HEAD");
-    ok(atelier(&root, "d1", &["decide", ID, "Not now.", "--defer"]));
-    git(&root, &["commit", "-qam", "Answer"]);
-    let answered = short(&root, "HEAD");
-
-    let lines = log(&root, &[ID]);
-    let today = chrono::Utc::now().format("%Y-%m-%d");
-    assert_eq!(
-        acts(&root, &lines[5..]),
-        [
-            format!("{ID} escalate t1 {finding}; {today}: Is the period worth a round?"),
-            format!("{ID} decide d1 defer; Not now."),
-        ]
-    );
-    assert_eq!(commit_of(&lines[5]), asked);
-    assert_eq!(commit_of(&lines[6]), answered);
-}
-
 /// An approving review of `DONE` whose first finding is deferred.
 const FINDINGS: &str = "## Summary\nFine.\n\n\
     ## Finding 1: The greeting ignores the locale\nRecommendation: defer\n\

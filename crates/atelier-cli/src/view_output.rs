@@ -5,8 +5,8 @@ use crate::output::{
     condition, handoff, holder, priority_name, settled, status_name, verdict_name,
 };
 use atelier_app::acts::{Condition, PLANNED, STARTED};
-use atelier_app::{Entry, Filter, Group, Overview, LIFECYCLE};
-use atelier_core::{Decision, Finding, Mission, Ready, Status, Thread};
+use atelier_app::{Disputes, Entry, Filter, Group, Judged, Overview, LIFECYCLE};
+use atelier_core::{Finding, Mission, Outcome, Ready, Recommendation, Status, Thread};
 use atelier_records::{ItemDir, MissionDir, ReviewFile};
 
 /// Where an item stands: who holds it, what blocks it, and whether a
@@ -103,12 +103,7 @@ fn by_status(items: &[&Entry], needs: bool) -> String {
             for unmet in other.filter(|_| status == Status::Ready) {
                 text += &format!("    {}\n", condition(&entry.id, unmet));
             }
-            // A question is listed apart, with the command that answers it.
-            let open = entry
-                .needs
-                .iter()
-                .filter(|c| !matches!(c, Condition::Unanswered(_)));
-            for need in open.filter(|_| needs) {
+            for need in entry.needs.iter().filter(|_| needs) {
                 text += &format!("    {}\n", condition(&entry.id, need));
             }
         }
@@ -119,11 +114,61 @@ fn by_status(items: &[&Entry], needs: bool) -> String {
     }
 }
 
-/// A question waiting on item `id`, with the command that answers it.
-fn waiting(id: &str, question: &str) -> String {
-    format!(
-        "  {id}: {question}\n    Answer it in the checkout on branch {id}: atelier decide {id} \"<answer>\"\n"
-    )
+/// What a later round made of a rebutted finding.
+fn judged(judged: &Judged) -> String {
+    match judged {
+        Judged::Kept => "kept".into(),
+        Judged::Withdrawn => "withdrawn".into(),
+        Judged::Fixed => "fixed".into(),
+        Judged::Lowered(Recommendation::NoAction) => "kept at no action".into(),
+        Judged::Lowered(_) => "kept at defer".into(),
+        Judged::Decided(Outcome::Defer) => "decided: defer".into(),
+        Judged::Decided(Outcome::NoAction) => "decided: no action".into(),
+    }
+}
+
+/// Each disagreement of `disputes`, two lines for a rebuttal and one for a
+/// split plan round, indented under a heading the caller gives.
+fn disputes(disputes: &Disputes) -> String {
+    let mut text = String::new();
+    for rebuttal in &disputes.rebuttals {
+        let next = match rebuttal.judged.as_slice() {
+            [] => "not yet reviewed".to_string(),
+            judged => (judged.iter())
+                .map(|(name, j)| format!("{} in {name}", self::judged(j)))
+                .collect::<Vec<_>>()
+                .join(", "),
+        };
+        text += &format!(
+            "  {}/{} ({next}): {}\n    Rebutted: {}\n",
+            rebuttal.item, rebuttal.finding, rebuttal.title, rebuttal.fact
+        );
+    }
+    for split in &disputes.plans {
+        let reviews: Vec<String> = (split.reviews.iter())
+            .map(|(name, by, model, verdict)| {
+                let by = by.as_ref().map_or("nobody".to_string(), Thread::to_string);
+                let model = model.as_ref().map_or(String::new(), |m| format!(", {m}"));
+                format!("{name} {} by {by}{model}", verdict_name(*verdict))
+            })
+            .collect();
+        text += &format!(
+            "  {} plan, round {}: {}\n",
+            split.mission,
+            split.round,
+            reviews.join("; ")
+        );
+    }
+    text
+}
+
+/// `list --disputed`, of every mission or of `mission`.
+pub fn disputed(found: &Disputes, mission: Option<&str>) -> String {
+    let of = mission.map_or(String::new(), |id| format!(" in mission {id}"));
+    if found.is_empty() {
+        return format!("Nothing is disputed{of}: no finding was rebutted, and no plan-review round's reviewers disagreed.\n");
+    }
+    format!("Disputed{of}: each rebutted finding with what the next round made of it, and each plan-review round whose reviewers' verdicts differ.\n{}", disputes(found))
 }
 
 /// The handoff for each item of `items` a thread could start now, other
@@ -218,13 +263,12 @@ fn review_line(file: &ReviewFile) -> String {
 }
 
 /// `show` on a mission: its fields, its Outcome, Success criteria and
-/// Result, its items by status, its items' questions, unanswered first,
-/// and its plan reviews.
+/// Result, its items by status, its disagreements, and its plan reviews.
 pub fn mission(
     dir: &MissionDir,
     in_progress: bool,
     items: &[&Entry],
-    questions: &[(String, Decision)],
+    disputed: &Disputes,
     reviews: &[ReviewFile],
 ) -> String {
     let mission = &dir.mission;
@@ -248,21 +292,11 @@ pub fn mission(
         }
     }
     text += &format!("\nItems:\n{}", by_status(items, false));
-    let mut questions: Vec<&(String, Decision)> = questions.iter().collect();
-    questions.sort_by_key(|(_, d)| d.answer.is_some());
-    text += "\nQuestions:\n";
-    if questions.is_empty() {
-        text += "  None.\n";
-    }
-    for (id, decision) in questions {
-        text += &match &decision.answer {
-            None => waiting(id, &decision.question),
-            Some(answer) => format!(
-                "  {id}: {} Answer by {}: {}\n",
-                decision.question, answer.by, answer.text
-            ),
-        };
-    }
+    text += "\nDisputed:\n";
+    text += &match disputed.is_empty() {
+        true => "  None.\n".to_string(),
+        false => disputes(disputed),
+    };
     text += "\nPlan reviews:\n";
     if reviews.is_empty() {
         text += "  None.\n";
@@ -345,10 +379,11 @@ pub fn overview(overview: &Overview) -> String {
 }
 
 /// What `status` tells a mission's lead: each mission it leads, where each
-/// item stands, and a handoff for each item that can start now.
-pub fn led(led: &[(MissionDir, Vec<Entry>)]) -> String {
+/// item stands, what is disputed in it, and a handoff for each item that
+/// can start now.
+pub fn led(led: &[(MissionDir, Vec<Entry>, Disputes)]) -> String {
     let mut text = String::new();
-    for (dir, items) in led {
+    for (dir, items, disputed) in led {
         let items: Vec<&Entry> = items.iter().collect();
         text += &format!(
             "You lead mission {}: {}\n{}",
@@ -356,13 +391,9 @@ pub fn led(led: &[(MissionDir, Vec<Entry>)]) -> String {
             dir.mission.title,
             by_status(&items, true),
         );
-        if items.iter().any(|e| !e.questions.is_empty()) {
-            text += "Questions waiting on a decider, oldest first on each item:\n";
-            for entry in &items {
-                for question in &entry.questions {
-                    text += &waiting(&entry.id, question);
-                }
-            }
+        if !disputed.is_empty() {
+            text += "Disputed in this mission (nothing waits on these; a lead steps in by moving disputed work out of an item's Scope into an item of its own):\n";
+            text += &disputes(disputed);
         }
         text += &start_threads(&items);
     }

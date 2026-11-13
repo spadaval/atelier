@@ -85,7 +85,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Verdict | A review's conclusion: approve or changes. |
 | Ready | Someone with authority said this item should start now. Ready is about intent, and only an item has it. It says nothing about review. |
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
-| Role | Lead, implementer, reviewer, decider or planner. A thread gets a role from the command it enters with; `start --mission` makes it a planner of the mission. |
+| Role | Lead, implementer, reviewer or planner. A thread gets a role from the command it enters with; `start --mission` makes it a planner of the mission. |
 | Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate, and brings Sumeet the redesigns that need his taste. A run looks at one focus area, which Sumeet may name at the start, through agents' threads and the code itself. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page Sumeet reads. No command is reserved for it. |
 | Status | A stored field on a mission or item, set only by the command that performs the act. |
 | Done | The end state of merged work, of a closed item, and of a closed mission. |
@@ -164,7 +164,7 @@ base the forge merged into.
 | `ready` | Nobody | `ready` | A thread runs `start` |
 | `building` | Implementer | `start` | Done when lines are ticked, the Report is written, and `submit` runs |
 | `in_review` | Reviewer | `submit` | The reviewer runs `verdict` |
-| `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed, rebutted or decided, and `submit` runs |
+| `changes_requested` | Implementer | `verdict changes` | Each open fix-now finding is fixed or rebutted, and `submit` runs |
 | `approved` | Implementer | `verdict approve` | The merge checks pass on the head, and `merge` runs; or the approval went stale, and `submit` runs again |
 | `done` | Nobody | The merge of its branch, or `close` | Never |
 | `dropped` | Nobody | `drop` | Never |
@@ -180,9 +180,9 @@ Items keep `draft` and `ready`. A draft item is agreed to exist; a ready one
 is agreed to start now. An idea for a mission is a draft item on the base,
 so the base stays the one list of what might be done.
 
-A question the implementer escalates is not a status. It is an unanswered
-entry in the item's Decisions section. `submit` and `merge` wait for the
-answer, and `status` shows it.
+A question is not a status, and no record holds one. The implementer asks
+the thread that started it, or an advisor, and writes into the Report
+anything the answer changed ([Review](#review)).
 
 ### Mission
 
@@ -239,9 +239,7 @@ that binds a role can take the role over, and says which thread held it:
   adds it to them, and it takes the plan over.
 
 A thread that has ever been an item's implementer can never review that
-item or decide a question on it, a thread that has ever been a review's
-reviewer can never decide that review's findings, and a planner of a mission
-can never review its plan. Taking a role over does not erase who held it
+item, and a planner of a mission can never review its plan. Taking a role over does not erase who held it
 before.
 
 Dropping is final, and counts once it is published. A started item is
@@ -255,13 +253,13 @@ branch, and the drop counts once that merges. Until a drop is published,
 
 ## Commands
 
-Eighteen commands are built, plus `setup`. The
+Sixteen commands are built, plus `setup`. The
 tool has no site: the human's pages are the Desk's
 ([the Desk](product/desk.md)).
 
 Three commands act on Git: `start`, `submit` and `merge`. Every other
 command that changes a record (`new`, `set`, `ready`, `drop`, `close`,
-`lead`, `review`, `verdict`, `escalate` and `decide`) only writes the file,
+`lead`, `review` and `verdict`) only writes the file,
 in the checkout it runs in, prints the paths it wrote and the Git command
 that commits them, and stops. It makes no commit, no branch and no push. Run
 in the checkout that has the base out, it writes nothing and names the
@@ -271,9 +269,9 @@ in the checkout that has the base out, it writes nothing and names the
 
 | Command | Behaviour |
 | --- | --- |
-| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission and what each item needs. |
-| `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, its open questions, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
-| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. |
+| `status` | Who this thread is, what it holds, what each thing needs, and the next command. On the base with nothing held: the ready items `start` would accept now, one line counting the other ready items by what stops them, missions in progress and what waits on Sumeet, which is not listed as ready. For a mission's lead, its mission, what each item needs, and what is disputed in it. |
+| `show <id>` | An item in full, with a summary of each review: its round, reviewer, model, the commit it reviewed and its verdict, and each finding's name, recommendation, state and title. A finding's text is in its review file. For a mission, the whole mission on one page: whether it is proposed, agreed, done or dropped, its outcome and criteria, its items grouped by status with who holds each and what blocks each, what is disputed in it as `list --disputed` gives it, and its reviews by round. Either says which ref the record was read from, and, for a fetched ref, how long ago the remote was fetched. |
+| `list` | With no flags, all open work on the base, grouped by mission and then by label, and apart from it what is proposed: missions on unmerged branches and record changes waiting to merge, each with its branch. Narrowed by `--ready`, `--blocked`, `--needs-human`, `--proposed`, `--mission <id>`, `--label <l>`, `--mine` and `--deferred`; `--done` shows finished missions and items instead. `--disputed` lists instead, across open and done items, each finding whose Response is `rebutted` with what the next round made of it (kept, withdrawn, fixed, kept at defer or no action, or not yet reviewed), and each plan-review round whose reviewers gave different verdicts; `--mission <id>` narrows it. Nothing refuses or warns on any of them. |
 | `log` | The history of acts, read from Git, one line each and oldest first: when, the commit, which item or mission, the act, the thread where the record holds one, what changed, and any rule its commit skipped. For everything, one item, or one mission with its plan reviews and its items, and only acts `--since` a time. It adds nothing up. |
 | `check` | Validates every record. The Git hooks and CI run it. |
 
@@ -306,7 +304,6 @@ matter; `set` and the status commands write it.
 | --- | --- |
 | `start <id>` | On a ready item: creates branch `<id>` from the base, sets `building`, binds this thread as implementer, and pushes the branch where a remote is configured, which is the claim. On a started item: switches to its branch and takes it over. `start --new "<title>"` creates an item on a new branch already `building`, for work Sumeet asked for directly. In the checkout that has the base out, `start` makes the branch without switching and prints the Git command that adds a worktree for it. |
 | `submit` | Checks every Done when line is ticked, the Report is written, and each open fix-now finding has a response; sets `in_review` and commits the item's directory; opens a new round; prints the reviewer's handoff line. Where a forge is configured it then pushes the branch and opens its pull request, so CI runs while the review does; a push or pull request that fails is a warning, and `merge` does it later. |
-| `escalate "<question>"` | Adds an unanswered entry to Decisions and prints the decider's handoff line. `--finding <finding>` ties the question to a finding. |
 | `merge` | Runs the checks below and merges the branch. With a forge, the forge merges the pull request, as a merge commit; without one, `merge` makes the merge commit and moves the base locally. If CI has not finished it waits for it, up to 9 minutes, then says "not yet" and is run again later. Its only flag is `--trivial "<why>"`, which skips review for a change whose correctness is evident from the diff and records the claim. |
 
 ### Reviewer
@@ -316,11 +313,10 @@ matter; `set` and the status commands write it.
 | `review <id>` | On an item in review: opens this round's review file if it has none and binds this thread as its reviewer, then prints the brief. Run again by the same thread, it only prints the brief. On a mission: opens a plan review for the commit the checkout is at, refused to a planner of the mission. |
 | `verdict approve` or `verdict changes` | Validates the review file and writes the verdict into it. On an item it also sets the status. On a mission it changes no status. `approve` is refused while the file holds an open fix-now finding. The reviewer commits the file with Git; a plan reviewer also pushes it to the branch it reviewed: the mission's branch for a new plan, the backlog branch for an amendment. |
 
-### Decider and lead
+### Lead
 
 | Command | Behaviour |
 | --- | --- |
-| `decide <id> "<answer>"` | Records the answer to the open question, with this thread's ID. On a question tied to a finding, `--defer` or `--no-action` settles that finding without a fix. No past or present implementer of the item, and no reviewer of the review that raised the finding, can decide it. |
 | `lead <mission>` | Writes this thread as lead of an agreed mission, and prints where each item stands and which need a thread. The lead commits it on a backlog branch, and it reaches the base as a record-only change. |
 
 ### What `status` prints
@@ -339,20 +335,15 @@ Then: atelier submit
 It lists only what is not met: a finding already answered is not shown. A
 Done when line that wraps over several lines of the record is shown whole; a
 wrapped line that begins `#123` is text, not a heading. It
-gives the round of an item in review or with changes requested, and once
-three rounds have ended without an approval it says, on one line, that the
-Review section requires escalation now, naming `atelier escalate
---finding <finding>` with an open fix-now finding no question is about yet.
-Once a question has been asked about each open finding, the line is gone. On
+gives the round of an item in review or with changes requested. A finding
+whose rebuttal a reviewer kept says the rebuttal has had its one try. On
 an approved item it names, before `Then: atelier merge`, the merge checks the
 base's `config.toml` lists, which `merge` runs on the merged tree. It does not
 say when they last passed, since nothing records that.
 
-On an item's branch, a thread that holds nothing on the item, a reviewer
-whose review is done among them, is told each of its unanswered questions,
-and `Then: atelier decide <id> "<answer>"` when it may decide them, before
-the offer to take the item over. The lead of the
-item's mission is told it leads the mission and is offered no take-over. In
+On an item's branch, a thread that holds nothing on the item is offered the
+take-over, and a reviewer whose review is done is told to stop. The lead of
+the item's mission is told it leads the mission and is offered no take-over. In
 a Git checkout with no `.atelier/`, `status` says this is not an Atelier
 repository and exits 2.
 
@@ -384,7 +375,6 @@ with the harness's own tool, using a line the tool prints:
   tool, mission atelier-qr5s). The line and its task have no backticks,
   which an agent pasting the task into a double-quoted shell argument would
   run as a command.
-- `escalate` prints the same for a decider, with `show` and `decide`.
 - `lead` prints one, with a `start` task for each item that can start now,
   and the lead's `status` repeats it.
 
@@ -410,7 +400,7 @@ with the harness's own tool, using a line the tool prints:
 | `mission.md` | status (`open`, `done` or `dropped`), labels, lead thread, planner threads | Why, Outcome, Success criteria (optional), Scope, Authority, Result | Sumeet's direction, recorded by the planner, whose Why says whose direction it is; the lead writes Result |
 | `design.md` and other documents | none required | Shape, Design, Sizing, Derisking, Risks and unknowns | Agents |
 | `notes.md` | none | Free text | The lead |
-| `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses), Decisions | The planner writes the definition; the implementer writes the Report |
+| `item.md` | status, mission, labels, priority, blocked-by, caused-by, implementer threads, ready, trivial | Goal, Done when, Scope, Report (with Validation and Responses) | The planner writes the definition; the implementer writes the Report |
 | `reviews/<round>-<suffix>.md` | round, commit reviewed, reviewer threads and model, verdict | Summary and limits, then one heading per finding with its recommendation | The reviewer |
 
 Rules:
@@ -469,29 +459,33 @@ record is committed on the base.
   checkout, which is where T3 starts a delegated child by default.
 - **What the reviewer is given.** The brief `review <id>` prints: the item's
   definition, the diff, the Report with its validation, earlier rounds' open
-  findings with the author's responses and any decisions, and the branch's
+  findings with the author's responses, and the branch's
   pull request where a forge is configured, where CI's result can be read.
   It carries no author reasoning beyond the Report.
 - **Recommendations.** Fix now, defer, or no action.
-- **A fix-now finding has three exits.** The implementer fixes it. Or it
+- **A fix-now finding has two exits.** The implementer fixes it. Or it
   rebuts it with a fact or a test in the Report's Responses, and the next
-  reviewer, who must be a fresh one, withdraws the finding or keeps it; a
-  rebuttal gets one try. Or it escalates, when the finding is right but not
-  worth fixing now or the fix leaves the item's scope.
-- **The implementer cannot dismiss a finding.** A reviewer withdraws one. A
-  decider settles one as deferred or as no action, and the next review shows
-  it as decided and cannot reopen it.
-- **Escalation is required** after three rounds without an approve verdict,
-  after a rejected rebuttal the implementer still will not fix, and when a fix
-  would leave the item's scope.
-- **The skill applies three of these rules:** a rebuttal's one try, the fresh
-  reviewer for a rebuttal, and escalation after three rounds. The tool
-  refuses none of them; `status` shows the round, the one-try rule and the
-  three-round rule.
-- **Who decides.** The mission's lead, when the item's mission has one. A
-  fresh agent given the item, the finding and both positions when it does
-  not. Anything that touches product direction goes to Sumeet as a
-  `needs-human` item.
+  reviewer, who must be a fresh one, judges the rebuttal: it withdraws the
+  finding, keeps it, or, when the finding is right but not for this item,
+  keeps it at defer or no action with a line that says why. A rebuttal gets
+  one try.
+- **The implementer cannot dismiss a finding.** Only a reviewer settles one
+  without a fix, by withdrawing it or lowering it, and nothing else can.
+- **A question is advice.** An implementer that cannot settle something asks
+  the thread that started it, or an advisor, as a working model asks a
+  stronger one at a decision point and carries on. Nothing records the
+  question or waits on it; the Report says what the answer changed. Anything
+  that touches product direction goes to Sumeet as a `needs-human` item.
+- **A disagreement is found, not enforced.** The records already hold one: a
+  `rebutted` Response with the next round's judgment of it, and a plan-review
+  round whose reviewers differ. `list --disputed` prints them, `show
+  <mission>` and the lead's `status` give a lead its mission's, and the
+  gardener reads them first. Nothing blocks on them. A lead steps in with the
+  lever it owns: it moves the disputed work out of the item's Scope into an
+  item of its own.
+- **The skill applies two of these rules:** a rebuttal's one try and the
+  fresh reviewer for a rebuttal. The tool refuses neither; `status` shows the
+  round and the one-try rule.
 - **Deferred findings stay in their review file.** Merge creates no
   follow-up records. `list --deferred` shows the ones not yet settled, across
   done items, and the gardener settles each: `new --from` takes it into an
@@ -532,15 +526,14 @@ It checks:
 1. The latest round has an approve verdict that still covers the head: since
    the commit it reviewed, nothing changed outside the item's own directory,
    and the item's Goal, Done when and Scope did not change.
-2. No question in Decisions is unanswered.
-3. The configured merge checks pass on the merged tree. Where the forge names
+2. The configured merge checks pass on the merged tree. Where the forge names
    a CI workflow, CI passed on the head, or on an earlier commit of the
    branch from which the head differs only inside the item's directory, such
    as the commit `submit` pushed before `verdict approve` committed. The
    latest finished run among those decides, except that when it failed and
    a newer one is still running, the newer one is waited for.
 
-4. The item, and its mission, are not dropped, as read from the base and
+3. The item, and its mission, are not dropped, as read from the base and
    from the item's branch.
 
 With a forge, the forge makes the merge commit: once its checks pass,

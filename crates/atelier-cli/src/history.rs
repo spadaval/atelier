@@ -72,16 +72,6 @@ fn changed(act: &Happened) -> Vec<String> {
             };
             [vec![format!("{review} {verdict}")], moved(status)].concat()
         }
-        Happened::Escalate { question, finding } => {
-            let finding = finding.iter().map(ToString::to_string);
-            finding.chain([question.clone()]).collect()
-        }
-        Happened::Decide {
-            answer, outcome, ..
-        } => {
-            let outcome = outcome.iter().map(ToString::to_string);
-            outcome.chain([answer.clone()]).collect()
-        }
         Happened::Merge { status, trivial } => {
             let trivial = trivial.iter().map(|why| format!("trivial: {why}"));
             [shown(status)].into_iter().chain(trivial).collect()

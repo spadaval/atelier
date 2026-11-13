@@ -26,8 +26,10 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   `atelier review <id>` and `atelier verdict approve` or `changes`. The
   implementer fixes and submits again, and once approved runs `atelier
   merge`, which marks the item done.
-- A question the implementer cannot settle goes to `atelier escalate`, and
-  whoever `status` names answers it with `atelier decide`.
+- A question the implementer cannot settle goes to the thread that started
+  it, as advice. A finding it disputes is rebutted in the Report's
+  Responses, and the next round's reviewer keeps or withdraws it; `atelier
+  list --disputed` lists each one.
 - A mission is read with `atelier show <mission>`, which lists its items,
   their status and their open questions, and with the files in its
   directory. `atelier list` shows all open work.

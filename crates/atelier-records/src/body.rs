@@ -1,5 +1,6 @@
 //! What the tool reads from a record's Markdown body: an item's sections,
-//! its Decisions entries and Responses lines, and a review's findings.
+//! its Responses lines, a review's findings, and the Decisions entries an
+//! item written before `escalate` was removed may hold.
 
 use crate::document::{sections, unfenced_lines};
 use crate::{ids, Problem};
@@ -107,9 +108,14 @@ fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, Str
     {
         return Err("a carried finding has a `Was:` line and one `Now:` or `Decided:` line".into());
     }
-    // Keeping a fix-now finding moves it to this one, which must stay fix now.
-    if now == Some(Now::Kept) && recommendation != Recommendation::FixNow {
-        return Err("a finding carried as `Now: kept` is `Recommendation: fix now`".into());
+    // Keeping a finding at a lower recommendation settles it without a fix,
+    // so the reviewer who lowers it says why.
+    let lowered = now == Some(Now::Kept) && recommendation != Recommendation::FixNow;
+    if lowered && !reasoned(content) {
+        return Err(
+            "a finding carried as `Now: kept` at defer or no action says why, in a line of its own"
+                .into(),
+        );
     }
     Ok(Finding {
         name,
@@ -119,6 +125,26 @@ fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, Str
         now,
         decided,
         settlement,
+    })
+}
+
+/// Whether a finding's `content` holds a line of the reviewer's own: one
+/// that is no field the tool reads or writes and no HTML comment, such as
+/// the template's.
+fn reasoned(content: &str) -> bool {
+    const FIELDS: [&str; 7] = [
+        "Recommendation: ",
+        "Was: ",
+        "Now: ",
+        "Decided: ",
+        "Response: ",
+        "Taken: ",
+        "Dropped by ",
+    ];
+    fields(content).into_iter().any(|line| {
+        let line = line.trim();
+        let comment = line.starts_with("<!--") && line.ends_with("-->");
+        !comment && !FIELDS.iter().any(|field| line.starts_with(field))
     })
 }
 
@@ -144,7 +170,9 @@ pub(crate) fn settle(body: &str, number: u32, settlement: &Settlement) -> Option
     Some(format!("{head}\n{line}{rest}"))
 }
 
-/// The `### <date>: <question>` entries of an item's `## Decisions`.
+/// The `### <date>: <question>` entries of an item's `## Decisions`, which
+/// `escalate` wrote until it was removed; the Desk's `decide` still answers
+/// one until atelier-v958 removes it.
 pub(crate) fn decisions(file: &Path, body: &str) -> Result<Vec<Decision>, Problem> {
     let Some(entries) = section(body, 2, "Decisions") else {
         return Ok(Vec::new());
@@ -189,29 +217,6 @@ fn decision(question: &str, content: &str) -> Result<Decision, String> {
         answer,
         outcome: outcome_line,
     })
-}
-
-/// `body` with a new, unanswered question at the end of its
-/// `## Decisions`, about `finding` when one is given, adding the section at
-/// the end of the body when it has none. `question` is the entry's heading,
-/// `<date>: <question>`.
-pub fn ask(body: &str, question: &str, finding: Option<&FindingName>) -> String {
-    let mut entry = format!("### {question}");
-    if let Some(finding) = finding {
-        entry += &format!("\n\nFinding: {finding}");
-    }
-    match section(body, 2, "Decisions") {
-        Some(content) if content.trim().is_empty() => add_after(body, content, &entry),
-        Some(content) => add_after(body, content, &format!("\n{entry}")),
-        None => {
-            let sep = if body.is_empty() || body.ends_with('\n') {
-                ""
-            } else {
-                "\n"
-            };
-            format!("{body}{sep}\n## Decisions\n\n{entry}\n")
-        }
-    }
 }
 
 /// `body` with `Answer by <by>: <text>`, and `Outcome: <outcome>` when one
@@ -486,41 +491,29 @@ mod tests {
     }
 
     #[test]
-    fn a_question_asked_and_answered_reads_back_in_order() {
+    fn a_question_written_before_escalate_was_removed_reads_back_and_takes_an_answer() {
         let path = Path::new("item.md");
         let finding: FindingName = "1-aaaa.1".parse().unwrap();
         let by = Thread("d1".into());
-        // With no Decisions section, with an empty one before the Report,
-        // and after an answered entry.
-        for body in [
-            "## Goal\ng",
-            "## Goal\ng\n\n## Decisions\n\n## Report\nr\n",
-            "## Decisions\n\n### 2026-11-09: Old?\n\nAnswer by d0: Yes.\n",
-        ] {
-            let asked = ask(body, "2026-11-10: Why?", Some(&finding));
-            let asked = ask(&asked, "2026-11-10: And?", None);
-            let before = decisions(path, body).unwrap().len();
-            let read = decisions(path, &asked).unwrap();
-            assert_eq!(read.len(), before + 2, "{asked}");
-            assert_eq!(read[before].question, "2026-11-10: Why?");
-            assert_eq!(read[before].finding.as_ref(), Some(&finding));
-            assert!(read[before..].iter().all(|d| d.answer.is_none()));
-            assert_eq!(read[before + 1].finding, None);
-            assert!(asked.contains("## Report\nr\n") == body.contains("## Report"));
+        let body = "## Goal\ng\n\n## Decisions\n\n### 2026-11-09: Old?\n\nAnswer by d0: Yes.\n\n\
+                    ### 2026-11-10: Why?\n\nFinding: 1-aaaa.1\n\n### 2026-11-10: And?\n\n## Report\nr\n";
+        let read = decisions(path, body).unwrap();
+        assert_eq!(read.len(), 3);
+        assert_eq!(read[0].answer.as_ref().unwrap().text, "Yes.");
+        assert_eq!(read[1].question, "2026-11-10: Why?");
+        assert_eq!(read[1].finding.as_ref(), Some(&finding));
+        assert!(read[1..].iter().all(|d| d.answer.is_none()));
+        assert_eq!(read[2].finding, None);
 
-            let answered = answer(&asked, before, &by, "Not now.", Some(Outcome::Defer)).unwrap();
-            let answered = answer(&answered, before + 1, &by, "Yes.", None).unwrap();
-            let read = decisions(path, &answered).unwrap();
-            assert_eq!(read[before].answer.as_ref().unwrap().text, "Not now.");
-            assert_eq!(read[before].outcome, Some(Outcome::Defer));
-            assert_eq!(read[before + 1].answer.as_ref().unwrap().by, by);
-            assert_eq!(read[before + 1].outcome, None);
-            assert_eq!(answer(&answered, before + 2, &by, "x", None), None);
-        }
-        assert_eq!(
-            ask("## Goal\ng\n", "2026-11-10: Why?", None),
-            "## Goal\ng\n\n## Decisions\n\n### 2026-11-10: Why?\n"
-        );
+        let answered = answer(body, 1, &by, "Not now.", Some(Outcome::Defer)).unwrap();
+        let answered = answer(&answered, 2, &by, "Yes.", None).unwrap();
+        assert!(answered.ends_with("## Report\nr\n"));
+        let read = decisions(path, &answered).unwrap();
+        assert_eq!(read[1].answer.as_ref().unwrap().text, "Not now.");
+        assert_eq!(read[1].outcome, Some(Outcome::Defer));
+        assert_eq!(read[2].answer.as_ref().unwrap().by, by);
+        assert_eq!(read[2].outcome, None);
+        assert_eq!(answer(&answered, 3, &by, "x", None), None);
         assert_eq!(
             answer(
                 "## Decisions\n\n### Q\n\nFinding: 1-aaaa.1\n\n### R\n",
@@ -535,12 +528,35 @@ mod tests {
     }
 
     #[test]
+    fn a_kept_finding_lowered_below_fix_now_reads_only_with_a_reason() {
+        let review = "2-bbbb".parse().unwrap();
+        let read = |body: &str| findings(Path::new("r.md"), &review, body);
+        let carried = "## Finding 1: One\nRecommendation: defer\nWas: 1-aaaa.1\nResponse: rebutted: no\nNow: kept\n<!-- Set Now: to fixed, withdrawn or kept. -->\n";
+        assert!(read(carried).unwrap_err().message.contains("says why"));
+        let fenced = format!("{carried}```\nwhy\n```\n");
+        assert!(read(&fenced).is_err());
+        for (recommendation, said) in [
+            ("defer", Recommendation::Defer),
+            ("no action", Recommendation::NoAction),
+        ] {
+            let body = carried.replace("defer", recommendation)
+                + "Real, but it belongs to the next item.\n";
+            let found = read(&body).unwrap();
+            assert_eq!(found[0].recommendation, said);
+            assert_eq!(found[0].now, Some(Now::Kept));
+        }
+        // Withdrawn or fixed needs no reason, at any recommendation.
+        let withdrawn = carried.replace("Now: kept", "Now: withdrawn");
+        assert_eq!(read(&withdrawn).unwrap()[0].now, Some(Now::Withdrawn));
+    }
+
+    #[test]
     fn an_identity_holding_a_slash_reads_back_whole_from_each_line_that_names_one() {
         let by = Thread("t3-root/codex-child".into());
         let path = Path::new("item.md");
         // `Answer by <thread>: <answer>`.
-        let asked = ask("## Goal\ng\n", "2026-11-11: Why?", None);
-        let answered = answer(&asked, 0, &by, "Because: reasons.", None).unwrap();
+        let asked = "## Goal\ng\n\n## Decisions\n\n### 2026-11-11: Why?\n";
+        let answered = answer(asked, 0, &by, "Because: reasons.", None).unwrap();
         let read = decisions(path, &answered).unwrap();
         let answer = read[0].answer.as_ref().unwrap();
         assert_eq!(

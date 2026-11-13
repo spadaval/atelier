@@ -895,7 +895,8 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     let carried = format!(
         "## Finding 1: No period\nRecommendation: fix now\nWas: {first}.1\n\
          Response: rebutted: the period ends the Goal's sentence\nNow: kept\n\
-         <!-- Set Now: to fixed, withdrawn or kept. -->\n"
+         <!-- Set Now: to fixed, withdrawn or kept. To keep it for later work instead, set \
+         Recommendation: to defer or no action and add a line that says why. -->\n"
     );
     assert!(
         read(&root, &path).ends_with(&carried),
@@ -922,17 +923,17 @@ fn later_rounds_carry_each_open_finding_under_its_latest_name_until_it_closes() 
     assert_eq!(atelier(&root, "t3", &["verdict", "changes"]).code, 0);
 
     // The open finding now goes by its round-2 name, and its rebuttal has
-    // had its one try: a fix or `escalate` is left.
+    // had its one try: a fix is left.
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.contains(&format!(
-            "  [ ] Finding {second}.1 (fix now): No period (its rebuttal was kept, and a rebuttal \
-             gets one try: fix it, or escalate it)\n"
+            "  [ ] Finding {second}.1 (fix now): No period (a reviewer kept its rebuttal, and a \
+             rebuttal gets one try: fix it)\n"
         )),
         "{status}"
     );
     assert!(
-        status.contains("escalate it: atelier escalate --finding <finding> \"<question>\"\n"),
+        status.contains("A rebuttal goes to the next round's reviewer, who keeps the finding or withdraws it.\n"),
         "{status}"
     );
     assert!(!status.contains(&format!("{first}.1")), "{status}");
@@ -1063,7 +1064,7 @@ fn a_reviewer_that_runs_an_implementers_command_is_told_its_role() {
     assert_eq!(
         run.stderr,
         format!(
-            "You are the implementer of {ID}. Implementers run `start`, `submit`, `escalate` and `merge`.\n"
+            "You are the implementer of {ID}. Implementers run `start`, `submit` and `merge`.\n"
         )
     );
 }
@@ -1146,10 +1147,8 @@ fn changes_in_round_1() -> (Scratch, String) {
     (scratch, first)
 }
 
-const ESCALATE_NOW: &str = "rounds have ended without an approval, and the Review section requires escalation after three, so escalate now: atelier escalate ";
-
 #[test]
-fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate() {
+fn status_shows_the_round_and_refuses_nothing_after_three_without_an_approval() {
     let (scratch, first) = changes_in_round_1();
     let root = scratch.root();
     let status = atelier(&root, "t1", &["status"]).stdout;
@@ -1157,42 +1156,29 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
         status.contains("Status: changes requested in round 1\nTo return it to review:\n"),
         "{status}"
     );
-    assert!(!status.contains(ESCALATE_NOW), "{status}");
-
     let second = another_round(&root, &first, 2, "t3", "changes");
-    let status = atelier(&root, "t1", &["status"]).stdout;
-    assert!(
-        status.contains("Status: changes requested in round 2\n"),
-        "{status}"
-    );
-    assert!(!status.contains(ESCALATE_NOW), "{status}");
-
     let third = another_round(&root, &second, 3, "t4", "changes");
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains(&format!(
-            "Status: changes requested in round 3\n3 {ESCALATE_NOW}--finding {third}.1 \"<question>\"\n\
-             To return it to review:\n"
-        )),
+        status.contains("Status: changes requested in round 3\nTo return it to review:\n"),
         "{status}"
     );
-    // Only its implementer is told, on the item's branch and away from it.
-    let status = atelier(&root, "t4", &["status"]).stdout;
-    assert!(!status.contains(ESCALATE_NOW), "{status}");
     let base = scratch.worktree("base");
     let away = atelier(&base, "t1", &["status"]).stdout;
     assert!(
         away.contains(&format!(
-            "You hold:\n  {ID} (changes requested in round 3): Say hello\n    3 {ESCALATE_NOW}--finding {third}.1 \"<question>\"\n"
+            "You hold:\n  {ID} (changes requested in round 3): Say hello\n"
         )),
         "{away}"
     );
-    assert!(!atelier(&base, "t4", &["status"])
-        .stdout
-        .contains(ESCALATE_NOW));
+    for said in [&status, &away] {
+        assert!(
+            !said.contains("escalat") && !said.contains("rounds have ended"),
+            "{said}"
+        );
+    }
 
-    // Nothing is refused: submit opens round 4, whose reviewer and
-    // implementer see its number.
+    // Submit opens round 4, whose reviewer and implementer see its number.
     let head = git(&root, &["rev-parse", "--short", "HEAD"]);
     append(
         &root,
@@ -1201,23 +1187,10 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
     );
     let submit = atelier(&root, "t1", &["submit"]);
     assert_eq!(submit.code, 0, "{}", submit.stderr);
-    // The rule is still shown, with when `escalate` can run.
-    let in_review = "3 rounds have ended without an approval, and the Review section requires \
-                     escalation after three, if this round asks for changes too, escalate once \
-                     its verdict is in: atelier escalate \"<question>\"\n";
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
-        status.contains(&format!(
-            "Status: in review, round 4\n{in_review}No reviewer has opened"
-        )),
+        status.contains("Status: in review, round 4\nNo reviewer has opened"),
         "{status}"
-    );
-    let away = atelier(&base, "t1", &["status"]).stdout;
-    assert!(
-        away.contains(&format!(
-            "  {ID} (in review, round 4): Say hello\n    {in_review}"
-        )),
-        "{away}"
     );
     assert_eq!(atelier(&root, "t5", &["review", ID]).code, 0);
     let status = atelier(&root, "t5", &["status"]).stdout;
@@ -1227,59 +1200,6 @@ fn status_shows_the_round_and_after_three_without_an_approval_says_to_escalate()
         )),
         "{status}"
     );
-}
-
-#[test]
-fn the_escalation_line_goes_once_a_question_is_asked_about_the_kept_finding() {
-    let (scratch, first) = changes_in_round_1();
-    let root = scratch.root();
-    let second = another_round(&root, &first, 2, "t3", "changes");
-    let third = another_round(&root, &second, 3, "t4", "changes");
-    let base = scratch.worktree("base");
-    let finding = format!("{third}.1");
-    let run = atelier(
-        &root,
-        "t1",
-        &[
-            "escalate",
-            "--finding",
-            &finding,
-            "Is the period worth a fourth round?",
-        ],
-    );
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    git(&root, &["commit", "-qam", "Ask"]);
-    // Asked, and then answered without settling the finding, which stays
-    // open: the escalation is made either way.
-    for answered in [false, true] {
-        let status = atelier(&root, "t1", &["status"]).stdout;
-        assert!(
-            status.contains("Status: changes requested in round 3\n"),
-            "{status}"
-        );
-        assert!(
-            !status.contains("rounds have ended"),
-            "{answered}: {status}"
-        );
-        let away = atelier(&base, "t1", &["status"]).stdout;
-        assert!(!away.contains("rounds have ended"), "{answered}: {away}");
-        if !answered {
-            let run = atelier(&root, "d1", &["decide", ID, "Yes: fix it."]);
-            assert_eq!(run.code, 0, "{}", run.stderr);
-            git(&root, &["commit", "-qam", "Decide"]);
-        }
-    }
-}
-
-#[test]
-fn an_item_approved_in_round_3_is_not_told_to_escalate() {
-    let (scratch, first) = changes_in_round_1();
-    let root = scratch.root();
-    let second = another_round(&root, &first, 2, "t3", "changes");
-    another_round(&root, &second, 3, "t4", "approve");
-    let status = atelier(&root, "t1", &["status"]).stdout;
-    assert!(status.contains("Status: approved since "), "{status}");
-    assert!(!status.contains("rounds have ended"), "{status}");
 }
 
 /// The variables `codex exec` inside a T3 thread had set, measured on

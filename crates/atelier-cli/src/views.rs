@@ -10,7 +10,7 @@ use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
 use atelier_app::plan::{off_base, save};
 use atelier_app::repo::mission_path;
 use atelier_app::{
-    entries, item_view, items_of, list as groups, mission_view, Entry, Filter, Repo,
+    disputes, entries, item_view, items_of, list as groups, mission_view, Entry, Filter, Repo,
 };
 use atelier_records::validate_id;
 
@@ -22,7 +22,7 @@ pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
             &view.dir,
             view.in_progress,
             &items,
-            &view.questions,
+            &view.disputes,
             &view.dir.reviews,
         )));
     }
@@ -56,6 +56,17 @@ pub fn deferred(repo: &mut Repo) -> Result<Outcome> {
         found.extend(unsettled.map(|finding| (dir.item.id.clone(), finding)));
     }
     Ok(Outcome::Done(view_output::deferred(&found)))
+}
+
+/// `list --disputed`: each rebuttal of an open or done item, with what the
+/// next round made of it, and each plan-review round whose reviewers'
+/// verdicts differ; with `mission`, only that mission's. It reads as
+/// `status` does, a started item from its branch.
+pub fn disputed(repo: &mut Repo, mission: Option<&str>) -> Result<Outcome> {
+    let items = repo.everything()?;
+    let missions = repo.missions()?;
+    let found = disputes(&items, &missions, mission)?;
+    Ok(Outcome::Done(view_output::disputed(&found, mission)))
 }
 
 /// Makes the caller the lead of a ready mission in the checkout of the
