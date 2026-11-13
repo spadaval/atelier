@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s0j2
 title: Make one gardener run in atelier under the rewritten procedure, focused on structure
-status: building
+status: in_review
 mission: atelier-g961
 labels:
 - agent-factory
