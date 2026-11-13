@@ -117,4 +117,3 @@ place that still put planning on the base. No code or tests were touched.
 - 1-ep2v.5: fixed in c328a9380: The walk's `--full-history` bullet now explains why the flag is needed when a merge writes nothing of its own.
 - 2-gci2.6: fixed in 89aef9cb0: every command but `drop` refuses to write an old `draft` mission, naming the rollout, which moves it onto its own branch to go through plan reviews; `drop` writes it as `dropped`.
 - 2-gci2.7: fixed in 89aef9cb0: a plan reviewer pushes to the branch it reviewed (the mission's branch, or the backlog branch for an amendment), in both documents and the Decisions row.
-
