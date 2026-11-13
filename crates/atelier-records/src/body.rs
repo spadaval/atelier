@@ -129,8 +129,8 @@ fn finding(name: FindingName, title: &str, content: &str) -> Result<Finding, Str
 }
 
 /// Whether a finding's `content` holds a line of the reviewer's own: one
-/// that is no field the tool reads or writes and no HTML comment, such as
-/// the template's.
+/// that is no field the tool reads or writes, outside any HTML comment,
+/// such as the template's, whether the comment takes one line or several.
 fn reasoned(content: &str) -> bool {
     const FIELDS: [&str; 7] = [
         "Recommendation: ",
@@ -141,10 +141,19 @@ fn reasoned(content: &str) -> bool {
         "Taken: ",
         "Dropped by ",
     ];
-    fields(content).into_iter().any(|line| {
+    let mut prose = String::new();
+    let mut rest = content;
+    while let Some(start) = rest.find("<!--") {
+        prose.push_str(&rest[..start]);
+        // A comment that is never closed runs to the end.
+        rest = rest[start..]
+            .find("-->")
+            .map_or("", |end| &rest[start + end + 3..]);
+    }
+    prose.push_str(rest);
+    fields(&prose).into_iter().any(|line| {
         let line = line.trim();
-        let comment = line.starts_with("<!--") && line.ends_with("-->");
-        !comment && !FIELDS.iter().any(|field| line.starts_with(field))
+        !line.is_empty() && !FIELDS.iter().any(|field| line.starts_with(field))
     })
 }
 
@@ -545,6 +554,14 @@ mod tests {
             assert_eq!(found[0].recommendation, said);
             assert_eq!(found[0].now, Some(Now::Kept));
         }
+        // A comment of several lines is no reason, and prose after it is.
+        let multiline = carried.replace(
+            "<!-- Set Now: to fixed, withdrawn or kept. -->",
+            "<!--\nSet Now: to fixed, withdrawn or kept.\n-->",
+        );
+        assert!(read(&multiline).is_err());
+        assert!(read(&format!("{carried}<!-- never closed\nwhy\n")).is_err());
+        assert!(read(&format!("{multiline}Not for this item.\n")).is_ok());
         // Withdrawn or fixed needs no reason, at any recommendation.
         let withdrawn = carried.replace("Now: kept", "Now: withdrawn");
         assert_eq!(read(&withdrawn).unwrap()[0].now, Some(Now::Withdrawn));
