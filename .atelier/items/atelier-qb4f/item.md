@@ -3,14 +3,16 @@ schema: atelier.item
 schema_version: 3
 id: atelier-qb4f
 title: 'Garden atelier: structure, 2026-11-13'
-status: draft
+status: ready
 mission: null
 labels:
 - garden
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: sumeet
+  at: 2026-11-13T08:41:35.493423857Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T08:41:28.221257700Z
