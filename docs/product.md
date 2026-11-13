@@ -314,7 +314,7 @@ matter; `set` and the status commands write it.
 | Command | Behaviour |
 | --- | --- |
 | `review <id>` | On an item in review: opens this round's review file if it has none and binds this thread as its reviewer, then prints the brief. Run again by the same thread, it only prints the brief. On a mission: opens a plan review for the commit the checkout is at, refused to a planner of the mission. |
-| `verdict approve` or `verdict changes` | Validates the review file and writes the verdict into it. On an item it also sets the status. On a mission it changes no status. `approve` is refused while the file holds an open fix-now finding. The reviewer commits the file with Git; a plan reviewer also pushes it to the mission's branch. |
+| `verdict approve` or `verdict changes` | Validates the review file and writes the verdict into it. On an item it also sets the status. On a mission it changes no status. `approve` is refused while the file holds an open fix-now finding. The reviewer commits the file with Git; a plan reviewer also pushes it to the branch it reviewed: the mission's branch for a new plan, the backlog branch for an amendment. |
 
 ### Decider and lead
 
@@ -503,7 +503,8 @@ record is committed on the base.
   until two reviews of the current round, from threads that are not its
   planners, approve the plan its head holds. Each reviewer works in its own
   checkout at the commit `submit` pushed, commits its review file and pushes
-  it to the mission's branch. Blind means a reviewer forms its view without
+  it to the branch it reviewed, the mission's branch or, for an amendment,
+  the backlog branch. Blind means a reviewer forms its view without
   the other's; one that goes looking, with `show` or a fetch, can read a
   verdict already pushed, and that is accepted, since the tool's checks are
   nudges for trusted agents.

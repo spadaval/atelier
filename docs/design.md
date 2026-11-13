@@ -203,9 +203,15 @@ above it, with `ready` and `created_at` and the statuses `draft` and
 record is, the base included, so such a mission cannot be led, closed or
 have its items started until the rollout moves it to its branch or its plan
 is reviewed and merged. A missing `planners` reads as none, so any thread
-may review such a plan. When a command next writes such a record it writes
-the new form: `open` for `ready`, the two old fields left out, and
-`planners` added. `check` reports a record in the old form as old, not as a
+may review such a plan. When a command next writes an old `ready` record
+it writes the new form: `open` for `ready`, the two old fields left out,
+and `planners` added. An old `draft` has no new form that keeps it
+proposed outside a branch, and writing it as `open` on a record-only change
+would make it agreed without its plan reviews. So every command but `drop`
+refuses to write an old `draft` mission, naming the rollout; `drop` writes
+it as `dropped` in the new form. The rollout moves each old draft onto a
+branch named for it, where it is `open` and proposed and goes through its
+plan reviews. `check` reports a record in the old form as old, not as a
 problem, so the pre-commit hook lets one stay as it is. The version stays
 3: the two forms differ only in these fields, and an installed binary that
 predates the change refuses `open` and `planners` by name, which says what
@@ -884,8 +890,9 @@ reads; nothing is written there.
   appends the caller to its `reviewers`, and `verdict` in a checkout on no
   item's branch writes the verdict of the one plan review there that the
   caller holds without a verdict. Neither commits. The reviewer commits the
-  file and pushes it to the mission's branch, and the brief gives the
-  commands, including a `git pull --rebase` for when the other reviewer
+  file and pushes it to the branch it reviewed, the mission's branch for a
+  new plan and the backlog branch for an amendment, and the brief gives the
+  commands for that branch, including a `git pull --rebase` for when the other reviewer
   pushed first. Review files have distinct names, so two reviewers' commits
   never conflict. Blindness comes from the order of the steps: each forms
   its view at the submitted commit before it publishes, and a reviewer who
@@ -1665,7 +1672,7 @@ carried here when the ADRs were deleted on 2026-11-11; Git keeps the ADR.
 | The trunk, not an integration branch (2026-11-13) | Each item merges to the base on its own and leaves it working, so a mission half done on the base is an accurate picture |
 | A mission's stored status is `open`, `done` or `dropped` (2026-11-13) | Proposed is never stored: it is `open` read from a branch that has not merged. A mission dropped on its branch is dropped, and `merge` refuses it. An open mission on the base is agreed and may be led and closed. An old record's `ready` reads as `open`, and an old `draft` reads as proposed until the rollout moves it to a branch or its plan merges |
 | A mission records its planners (2026-11-13) | `start --mission` binds the calling thread, as `start` binds an implementer, and a later thread takes the plan over by `submit`. It is how `merge` knows a plan review is independent |
-| A review is a file the reviewer commits (2026-11-13) | `review` creates the file for the commit the checkout is at and prints the brief; `verdict` writes the verdict into it; the reviewer commits and, for a plan, pushes to the mission's branch. Blind means a reviewer forms its view without the other's, and each starts in its own checkout at the submitted commit. A reviewer who goes looking, with `show` or a fetch, can read the other's verdict; that is accepted on Sumeet's direction of 2026-11-13, because the tool's checks are nudges for trusted agents, and hiding it cost a rule in three commands. Plan review 7-dkmp of atelier-to83 kept a finding against this, and it stands as a recorded disagreement |
+| A review is a file the reviewer commits (2026-11-13) | `review` creates the file for the commit the checkout is at and prints the brief; `verdict` writes the verdict into it; the reviewer commits and, for a plan, pushes to the branch it reviewed. Blind means a reviewer forms its view without the other's, and each starts in its own checkout at the submitted commit. A reviewer who goes looking, with `show` or a fetch, can read the other's verdict; that is accepted on Sumeet's direction of 2026-11-13, because the tool's checks are nudges for trusted agents, and hiding it cost a rule in three commands. Plan review 7-dkmp of atelier-to83 kept a finding against this, and it stands as a recorded disagreement |
 | A started item's branch is pushed at `start` where a remote is configured (2026-11-13) | That push is the claim across clones. The loser is refused, told the holder, and its local branch removed, so nothing in that clone shows the item as held there; a later `start` there is a take-over. With no remote the local ref is the claim |
 | Stopping a mission is dropping it, and a drop counts once published (2026-11-13) | `drop` writes the record and stops nothing until it is merged, for an agreed mission by the record-only path, or pushed with its pull request closed, for a proposed plan. `status` and `show` say when a drop is not yet published, and the Desk's stop carries it through. From then `start`, a take-over and an item's `merge` refuse, naming the stop |
 | A started item is dropped on its own branch (2026-11-13) | Its record changes only there, so that is where a drop takes effect: once pushed, its `submit` and `merge` are refused. The base's copy follows by the record-only path, and `status` says so until it has. A drop of an item already merged is refused |
