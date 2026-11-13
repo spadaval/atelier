@@ -81,7 +81,7 @@ which its `dependencies` test checks.
 It takes one argument, the configuration file:
 
 ```console
-$ cd next && cargo build -p atelier-desk
+$ cargo build -p atelier-desk
 $ target/debug/atelier-desk --config ~/.config/atelier-desk/config.toml
 atelier-desk: built from 66af635eef253e133ab4630aba02285b943431f6, serving on http://127.0.0.1:3780
 ```
@@ -135,7 +135,7 @@ The app's TypeScript types are generated from `src/api.rs` into
 writes them again when run with `ATELIER_UPDATE_TYPES=1`:
 
 ```console
-$ cd next && ATELIER_UPDATE_TYPES=1 cargo nextest run -p atelier-desk --test types
+$ ATELIER_UPDATE_TYPES=1 cargo nextest run -p atelier-desk --test types
 ```
 
 ## Running it as a service
@@ -753,7 +753,7 @@ an `ItemView`; `show` prints each.
 | M4 | An approved item's approval time on `Entry` | `atelier_app::annotate` and `annotate_all`, with `atelier_app::git::approved_at`; the CLI calls them | Low | Medium | Low |
 | M7 | An item's page as `show <item>` prints it, with whether its record came from the base or the branch | `atelier_app::item_view`, returning `ItemView`, and `Located::read_from` (`ReadFrom::Base` or `ReadFrom::Branch`); `show` calls it | Low | Medium | Low |
 | M6 | What in a mission's plan changed between a reviewed commit and the base's tip | `atelier_app::plan::plan_changed_at`, comparing two commits; `plan_changed`, which `ready` and `review` use, still compares the checkout | Low | Medium: tells the human at go whether the review is stale | Low |
-| M5 | The history of acts with the commit, time and thread of each, as `atelier log` is specified (`redesign-architecture.md`, The log), for a mission and its items | Missing. The old debrief's reader follows first parents only | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium: the walk is unsettled in the specification |
+| M5 | The history of acts with the commit, time and thread of each, as `atelier log` is specified ([the design record](../design.md#the-log)), for a mission and its items | Missing. The old debrief's reader follows first parents only | High: a Git walk of both merge parents and branch tips, with record diffs per commit | Medium: the timeline, planned against added, and when an item merged | Medium: the walk is unsettled in the specification |
 
 M1 to M4 come before the mission page can match `show`. M5 can follow the
 first mission page: its parts show "not available yet" until then.
@@ -783,8 +783,8 @@ The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from
 - `can_ready` and `can_decide` decide only whether a button shows; the act
   function checks again when it runs.
 - Documents are shown whole, not split into Sizing or Risks: a mission's
-  planning documents have no required shape (`redesign-architecture.md`,
-  Records), so lifting out sections would be a rule only the Desk had.
+  planning documents have no required shape ([the design
+  record](../design.md#records)), so lifting out sections would be a rule only the Desk had.
 - The inbox adds draft missions and open questions to the needs-human list,
   because saying go and answering are the two acts the Desk offers.
 - Live threads are polled as a list and joined to records on the server,
