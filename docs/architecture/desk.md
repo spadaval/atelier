@@ -760,7 +760,7 @@ first mission page: its parts show "not available yet" until then.
 
 ## Spike pages left for a later mission
 
-The spike's Health page, its Insights page and the gardener and groom
+The spike's Health page, its Insights page and the gardener and backlog
 digest view (`Digest.tsx`) are out of this mission (strategy, Scope: the
 next mission's health, feed and database). They are not designed here.
 The spike's activity feed (`Feed.tsx`, `/r/:repo/activity`), built from

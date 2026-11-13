@@ -1,5 +1,10 @@
 # Planner
 
+The planner owns what gets built. It works with Sumeet at two scales: one
+mission, shaped into items he says go on, and the whole backlog, kept worth
+working from. A request to go over, sweep or reorder the backlog follows
+[procedures/backlog.md](../procedures/backlog.md).
+
 ## Readiness and Review
 
 - `ready` records a go-ahead. Run it on a mission only once Sumeet has said

@@ -1,6 +1,6 @@
 ---
 name: agent-factory
-description: Use in repositories tracked with Atelier, to plan or shape work, lead a mission, implement an item, review a change or a plan, answer a question an implementer escalated, or garden, groom or audit a repository. It says how to decide; `atelier status` says what to run.
+description: Use in repositories tracked with Atelier, to plan or shape work, lead a mission, implement an item, review a change or a plan, answer a question an implementer escalated, go over, sweep or reorder a backlog, or garden or audit a repository. It says how to decide; `atelier status` says what to run.
 ---
 
 # Agent Factory
@@ -21,8 +21,8 @@ your role, read that role's file:
 Two roles are routed by the task you were given, whatever `status` suggests
 you start:
 
-- Asked to plan or shape work, such as a mission or a draft item:
-  [roles/planner.md](roles/planner.md).
+- Asked to plan or shape work, such as a mission or a draft item, or to go
+  over, sweep or reorder the backlog: [roles/planner.md](roles/planner.md).
 - Answering a question with `atelier decide`, because a task line started you
   to or because you lead the item's mission:
   [roles/decider.md](roles/decider.md).
@@ -30,13 +30,13 @@ you start:
 Holding nothing else, read the file of the role your task gives you: a task
 to start an item makes you its implementer, and one to lead a mission its
 lead. A garden or audit task also reads
-[procedures/garden.md](procedures/garden.md), and a groom task
-[procedures/groom.md](procedures/groom.md).
+[procedures/garden.md](procedures/garden.md).
 
 ## Who Works With Sumeet
 
-The planner works with Sumeet in conversation, and a gardener settles its
-run's page with him in a session once the run is approved. Every other role
+The planner works with Sumeet in conversation. A gardener takes its focus
+from him when he names one at the start, and settles its run's page with him
+in a session once the run is approved. Every other role
 runs unattended: it never waits on him, and takes a question to `atelier
 escalate`, the mission's lead or an item labelled `needs-human`, as its role
 file says.

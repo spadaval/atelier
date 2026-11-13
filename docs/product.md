@@ -86,7 +86,7 @@ Each word has one meaning in the CLI, its help, the docs and the skill.
 | Ready | Someone with authority said this item should start now. Ready is about intent, and only an item has it. It says nothing about review. |
 | Thread | The T3 Code thread that holds a role. Records store its ID. |
 | Role | Lead, implementer, reviewer, decider or planner. A thread gets a role from the command it enters with; `start --mission` makes it a planner of the mission. |
-| Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page Sumeet reads. No command is reserved for it. |
+| Gardener | Whoever keeps a repository easy to navigate, easy to change and easy to validate, and brings Sumeet the redesigns that need his taste. A run looks at one focus area, which Sumeet may name at the start, through agents' threads and the code itself. In the tool a gardener is the implementer of an item labelled `garden`: that item is its run, and the item's Report is the one page Sumeet reads. No command is reserved for it. |
 | Status | A stored field on a mission or item, set only by the command that performs the act. |
 | Done | The end state of merged work, of a closed item, and of a closed mission. |
 | Record-only change | A branch every one of whose changed paths is under `.atelier/` other than `config.toml`, and which adds no mission and changes no plan. It merges once `atelier check` passes on the merged tree. |
@@ -656,8 +656,9 @@ what happened to each item, `list` says how things stand, and the records hold t
 findings and each bug's `caused-by`. Rework and line counts come from Git.
 Tool calls, tokens and interventions come from T3's events and the
 transcripts, by scripts on the host that has them. Whether a finding was a
-product defect is a judgment. Which numbers to take, and what to make of
-them, is the gardener's procedure in the skill.
+product defect is a judgment. Which numbers to take, which threads to read
+behind them, and what to make of both, is the gardener's procedure in the
+skill.
 
 ## Out of scope
 
