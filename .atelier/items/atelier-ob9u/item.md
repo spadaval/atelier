@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ob9u
 title: Name branches by convention and commit every record change on a branch, never on the base
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -107,9 +107,10 @@ What changed:
 - The pre-commit hook refuses a commit on the base that adds, changes or
   deletes anything under `.atelier/`, naming `start --backlog` and
   `start --mission`; `ATELIER_SKIP` passes it.
-- `status` lists record changes not committed with the commit line, and the
-  branch's commits not on the remote with the push. On an item's branch it
-  leaves out the implementer's own item directory, which `submit` commits.
+- `status` lists every record change not committed with the commit line,
+  and the branch's commits not on the remote with the push. On a dropped
+  item's branch whose base copy is not dropped yet, it says so and names the
+  backlog step.
 - The act table has rows for `start --mission`, `start --backlog`, and
   `submit` and `merge` of a backlog branch: role Planner (no role checked),
   binding nobody, from no status. `docs/design.md`'s table and each
@@ -154,3 +155,10 @@ Things a reviewer should know:
   URL to a local bare repository that way.
 - A verdict or `ready` passed with `ATELIER_SKIP` writes no trailer, since
   it makes no commit, as the design says of commands that make none.
+
+### Responses
+
+- 1-cj3m.1: fixed in 43f940c82
+- 1-cj3m.2: fixed in 43f940c82
+- 1-cj3m.3: fixed in 43f940c82
+- 1-cj3m.4: fixed in 43f940c82
