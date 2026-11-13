@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ob9u
 title: Name branches by convention and commit every record change on a branch, never on the base
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
@@ -12,7 +12,9 @@ blocked_by:
 - atelier-ogpg
 - atelier-xbog
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
+  at: 2026-11-13T22:37:19.473562932Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T06:14:32.623183548Z
