@@ -1,4 +1,5 @@
-//! Copied from `crates/atelier-records/src/record_id.rs`, trimmed to what
+//! Copied from the old tool's `crates/atelier-records/src/record_id.rs`,
+//! which 819024c75 deleted, trimmed to what
 //! the new records use; the random suffix also names review files.
 
 use std::fs::File;

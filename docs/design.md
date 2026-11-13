@@ -79,8 +79,8 @@ crate beside them:
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; `ready` and `decide` as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
-| `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
+| `atelier-app` | Use cases: the status view, the act table every act is checked against (`acts::TABLE`), cross-branch reads, the views `show`, `list` and the Desk read; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; the two acts the Desk also performs, `ready` and `decide`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-cli` | Arguments, dispatch, and every other act (`new`, `set`, `drop`, `close` and `lead`; `start`, `submit` and `escalate`; `review` and `verdict`; `merge` with its merge checks), with their Git and shell calls on `atelier-app`'s Git helpers, and the forge; output |
 
 The dependency direction is `cli` to `app` to `records` to `core`. The
 Desk's crate, `atelier-desk`, depends on `app` and `records`, and nothing

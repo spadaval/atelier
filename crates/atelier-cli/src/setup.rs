@@ -145,7 +145,8 @@ pub fn harness(root: &Path, harness: Harness) -> Result<Outcome> {
 /// `file` under `root`, keeping every other hook there, and says whether
 /// the file changed; or says why the file cannot take them.
 ///
-/// Copied from `crates/atelier-cli/src/commands/setup.rs` (`run`), trimmed
+/// Copied from the old tool's `crates/atelier-cli/src/commands/setup.rs`
+/// (`run`), which 819024c75 deleted, trimmed
 /// of its `--binary` and `--quiet` options, its message and its check of
 /// `CLAUDE.md`, and changed to leave a hook already in place where it is,
 /// so that a second run changes nothing.

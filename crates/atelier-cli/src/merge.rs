@@ -1,7 +1,8 @@
 //! `merge`, the one command that writes to the base
 //! (docs/design.md, Merge and The forge).
 //!
-//! Copied from `crates/atelier-cli/src/commands/merge.rs` and trimmed to
+//! Copied from the old tool's `crates/atelier-cli/src/commands/merge.rs`,
+//! which 819024c75 deleted with the rest of the old tool, and trimmed to
 //! what this command calls: the merged-tree checkout (`MergedCheckout` and
 //! its sweep of checkouts a killed merge left, without the lock file each
 //! held, since the merge lock covers everything after the wait); the merge
