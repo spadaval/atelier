@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ob9u
 title: Name branches by convention and commit every record change on a branch, never on the base
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -171,3 +171,5 @@ Things a reviewer should know:
 - 3-dx0j.7: fixed in ca53169cf
 - 4-9579.3: fixed in 4bbbf7042
 - 4-9579.4: fixed in 4bbbf7042
+- 5-ke95.3: fixed in 52849800f
+- 5-ke95.4: fixed in 52849800f
