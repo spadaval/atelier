@@ -578,6 +578,13 @@ pub(crate) fn rule_status(path: &str, from: Status, to: Status) -> String {
     )
 }
 
+/// A commit refused because no config, the checkout's or `HEAD`'s, names
+/// the base.
+pub fn commit_no_base() -> String {
+    let config = atelier_records::CONFIG;
+    format!("Atelier's pre-commit hook refused this commit; nothing was committed.\nNeither this checkout's {config} nor HEAD's reads, so the hook cannot tell whether this commit is on the base, where no record changes. Fix {config}, stage it with git add, and commit again.\n")
+}
+
 /// The rule that no commit on the base changes a record.
 pub(crate) fn rule_record_on_base(base: &str) -> String {
     format!("Only a merge writes the base branch {base}, so no commit on it changes a record")

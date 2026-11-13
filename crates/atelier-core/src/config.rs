@@ -134,6 +134,7 @@ pub fn validate_prefix(prefix: &str) -> Result<(), String> {
     let valid = parts.split('/').all(|part| {
         !part.is_empty()
             && !part.starts_with('.')
+            && !part.starts_with('-')
             && !part.ends_with(".lock")
             && !part.contains("..")
             && part
@@ -209,7 +210,7 @@ mod tests {
             assert_eq!(validate_prefix(good), Ok(()), "{good}");
         }
         for bad in [
-            "", "x", "/x/", "x//", ".x/", "x..y/", "a b/", "x.lock/", "x:y/",
+            "", "x", "/x/", "x//", ".x/", "-/", "a/-b/", "x..y/", "a b/", "x.lock/", "x:y/",
         ] {
             assert!(validate_prefix(bad).is_err(), "{bad}");
         }

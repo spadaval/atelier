@@ -11,7 +11,8 @@ use atelier_app::repo::{is_planning, planning};
 use atelier_app::Skip;
 use atelier_core::Status;
 use atelier_records::{
-    is_record, load, parse_item, parse_mission, CommitReader, Problem, ReadError, Store, CONFIG,
+    is_record, load, parse_config, parse_item, parse_mission, CommitReader, Problem, ReadError,
+    Store, CONFIG,
 };
 use clap::ValueEnum;
 use std::io::{ErrorKind, Read, Write};
@@ -210,10 +211,25 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
         }
     }
     // Only a merge writes the base, so no record changes in a commit on it.
-    let on_base = match Store::new(root.join(".atelier")).config() {
-        Ok(config) => (git::current_branch(root)?.as_deref() == Some(config.base_branch.as_str()))
-            .then_some(config.base_branch),
+    // The base is named by the checkout's config, or where that does not
+    // read, as when the commit deletes it, by `HEAD`'s; where neither does,
+    // the commit is refused, since the rule cannot be judged.
+    let has_head = git::has_commit(root, "HEAD")?;
+    let base = match Store::new(root.join(".atelier")).config() {
+        Ok(config) => Some(config.base_branch),
+        Err(_) if has_head => match reader.text(&git::head(root)?, CONFIG) {
+            Ok(text) => parse_config(Path::new(CONFIG), &text)
+                .ok()
+                .map(|config| config.base_branch),
+            Err(_) => None,
+        },
         Err(_) => None,
+    };
+    let branch = git::current_branch(root)?;
+    let on_base = match base {
+        Some(base) => (branch.as_deref() == Some(base.as_str())).then_some(base),
+        None if has_head => return Ok(Outcome::Refused(output::commit_no_base())),
+        None => None,
     };
     let base_records = match &on_base {
         Some(_) => git::staged_all(root, ".atelier")?,

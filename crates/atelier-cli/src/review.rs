@@ -26,6 +26,9 @@ pub fn review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     let Some(record) = located.record() else {
         return Ok(output::no_item(id, &repo.base).into());
     };
+    if let Some(refused) = behind(repo, &located) {
+        return Ok(refused);
+    }
     let links = repo.links(record)?;
     let forge = repo.base_config()?.forge;
     let facts = facts(repo, &located, &links, None);
@@ -113,6 +116,17 @@ fn new_review(
         created_at: chrono::Utc::now().into(),
         body: output::template(carried, item),
     }
+}
+
+/// A review write refused while the forge's copy of the item's branch is
+/// ahead of this clone's, as after a fetch of another reviewer's push: the
+/// files here are not the record read, so pull first.
+fn behind(repo: &Repo, located: &atelier_app::Located) -> Option<Outcome> {
+    let branch = located.branch.as_ref().filter(|branch| branch.remote)?;
+    let remote = repo.remote().unwrap_or("the remote");
+    let name = repo.branch_of(&located.id);
+    let text = output::behind(&located.id, &name, remote, &branch.tip);
+    Some(Outcome::Refused(text))
 }
 
 /// `command` refused in the base's own checkout, where nothing is written.
@@ -288,6 +302,9 @@ pub fn verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Resu
     let Some(located) = repo.current()? else {
         return plan_verdict(repo, verdict, model);
     };
+    if let Some(refused) = behind(repo, &located) {
+        return Ok(refused);
+    }
     let record = located.record().expect("the current item has a record");
     let links = repo.links(record)?;
     let facts = facts(repo, &located, &links, None);

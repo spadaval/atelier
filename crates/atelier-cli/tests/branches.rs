@@ -904,3 +904,93 @@ fn status_names_a_holders_uncommitted_drop_with_its_commit() {
         "{status}"
     );
 }
+
+#[test]
+fn review_and_verdict_are_refused_while_the_fetched_branch_is_ahead() {
+    let hub = Hub::new(&[(ID, "ready")]);
+    let a = hub.clone("a");
+    ok(hub.atelier(&a, "t1", &["start", ID]));
+    let path = a.join(item_path(ID));
+    let ticked = fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]");
+    fs::write(&path, ticked + "It prints hello.\n").unwrap();
+    ok(hub.atelier(&a, "t1", &["submit"]));
+    let b = hub.clone("b");
+    git(&b, &["switch", "-q", ID]);
+    // A reviewer in the first clone opens a review, commits and pushes it.
+    ok(hub.atelier(&a, "r1", &["review", ID]));
+    git(&a, &["add", "-A"]);
+    git(&a, &["commit", "-qm", "Open the review"]);
+    git(&a, &["push", "-q", "origin", ID]);
+    git(&b, &["fetch", "-q", "origin"]);
+    let before = head(&b);
+    for (thread, args) in [("r2", &["review", ID][..]), ("r1", &["verdict", "approve"])] {
+        let run = hub.atelier(&b, thread, args);
+        assert_eq!(run.code, 1, "{args:?}: {}{}", run.stdout, run.stderr);
+        assert!(
+            run.stderr.contains(&format!("origin/{ID} is at "))
+                && run.stderr.contains("git pull --ff-only origin"),
+            "{args:?}: {}",
+            run.stderr
+        );
+        assert_eq!(head(&b), before);
+        assert_eq!(git(&b, &["status", "--porcelain"]), "");
+    }
+}
+
+#[test]
+fn list_flags_narrow_a_drop_that_has_not_reached_the_base() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    let run = atelier(&root, "t1", &["drop", ID, "--reason", "Not needed"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+    let pending = format!(
+        "{ID} (dropped on its branch; the drop has not reached the base: Not needed): Say hello\n"
+    );
+    assert!(atelier(&root, "t9", &["list"]).stdout.contains(&pending));
+    for args in [
+        &["list", "--ready"][..],
+        &["list", "--label", "unrelated"],
+        &["list", "--mission", "demo-m1ss"],
+    ] {
+        let listed = atelier(&root, "t9", args).stdout;
+        assert!(!listed.contains(ID), "{args:?}: {listed}");
+    }
+}
+
+#[test]
+fn a_record_write_says_how_its_change_reaches_the_base_for_its_branch() {
+    let scratch = Scratch::new(&[(ID, "draft"), ("demo-c10s", "ready")]);
+    let root = scratch.root();
+    assert_eq!(
+        atelier(&root, "p1", &["start", "--backlog", "plan"]).code,
+        0
+    );
+    let run = atelier(&root, "p1", &["ready", ID, "--by", "sumeet"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let path = item_path(ID);
+    assert_eq!(
+        run.stdout,
+        format!(
+            "Made ready, as sumeet said: {ID}.\nWrote, and did not commit:\n  {path}\nIt counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\nThen: git add -- {path} && git commit -m \"Ready {ID}\" -- {path}\n"
+        )
+    );
+
+    // A started item's drop, on its branch, names its own next steps only.
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    assert_eq!(atelier(&root, "t1", &["start", "demo-c10s"]).code, 0);
+    let run = atelier(
+        &root,
+        "p1",
+        &["drop", "demo-c10s", "--reason", "Not needed"],
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let path = item_path("demo-c10s");
+    assert_eq!(
+        run.stdout,
+        format!(
+            "Dropped item demo-c10s on its branch demo-c10s: Not needed\nOnce it is committed, `submit`, `merge` and a take-over of demo-c10s are refused.\nThe base's copy of demo-c10s is dropped on a backlog branch after that: `atelier start --backlog drop-demo-c10s`, then there `atelier drop demo-c10s --reason \"Not needed\"`, commit, `atelier submit` and `atelier merge`. Until then `status` and `list` say the drop has not reached the base.\nWrote, and did not commit:\n  {path}\nThen: git add -- {path} && git commit -m \"Drop demo-c10s\" -- {path}\n"
+        )
+    );
+}

@@ -44,8 +44,29 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
     let entries = entries(&items, &missions, &repo.caller)?;
     let groups = groups(&entries, &missions, &repo.caller, filter);
     let mut text = view_output::list(&groups, filter);
-    if !filter.done {
-        text += &view_output::unreached(&atelier_app::unreached(&items));
+    // A drop that has not reached the base is shown as the flags narrow
+    // the rest: it can start nobody, block nothing, nor be anyone's now.
+    let narrowed =
+        filter.done || filter.ready || filter.blocked || filter.needs_human || filter.mine;
+    if !narrowed {
+        let record = |id: &str| {
+            let found = items.iter().find(|located| located.id == id);
+            found.and_then(|located| located.record())
+        };
+        let unreached: Vec<_> = atelier_app::unreached(&items)
+            .into_iter()
+            .filter(|(id, _, _)| {
+                let Some(record) = record(id) else {
+                    return false;
+                };
+                let item = &record.item;
+                let mission = (filter.mission.as_ref())
+                    .is_none_or(|mission| item.mission.as_ref() == Some(mission));
+                let label = (filter.label.as_ref()).is_none_or(|label| item.labels.contains(label));
+                mission && label
+            })
+            .collect();
+        text += &view_output::unreached(&unreached);
     }
     Ok(Outcome::Done(text))
 }

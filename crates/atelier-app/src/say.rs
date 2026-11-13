@@ -428,7 +428,7 @@ pub fn commit_line(at: Option<&Path>, paths: &[String], message: &str) -> String
 /// whose branch it ran on, when it settled a finding there.
 pub fn planned(
     said: &str,
-    item: Option<&str>,
+    guidance: &Guidance,
     at: Option<&Path>,
     paths: &[String],
     message: &str,
@@ -437,13 +437,26 @@ pub fn planned(
     for path in paths {
         text += &format!("  {path}\n");
     }
-    text += &match item {
-        None => "It counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\n".into(),
-        Some(id) => format!(
+    text += &match guidance {
+        Guidance::Branch => "It counts once it is committed and its branch is merged: commit it, then run `atelier submit` and `atelier merge` on that branch.\n".into(),
+        Guidance::Settle(id) => format!(
             "Once committed, it reaches the base when {id} merges. It is outside {id}'s directory, so a review of {id} must see it: an approval from before it is stale, and `atelier merge` will say to run `atelier submit`.\n"
         ),
+        Guidance::Own => String::new(),
     };
     text + &format!("Then: {}\n", commit_line(at, paths, message))
+}
+
+/// What a record write says of how its change reaches the base.
+pub enum Guidance {
+    /// By the merge of the backlog or mission branch it is on.
+    Branch,
+    /// In the merge of item `0`, whose branch it is on, outside its
+    /// directory.
+    Settle(String),
+    /// It is the item's own, on its branch: what the command said already
+    /// says what follows.
+    Own,
 }
 
 pub fn not_committed() -> String {

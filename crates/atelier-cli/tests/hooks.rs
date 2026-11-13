@@ -993,3 +993,36 @@ fn a_commit_on_the_base_that_changes_a_record_is_refused_and_a_skip_passes_it() 
     write_item(&root, "demo-n3w2", "draft", &[], &[], "");
     assert_eq!(commit_all(&root, "Plan on a branch").code, 0);
 }
+
+#[test]
+fn a_base_commit_is_refused_when_it_deletes_the_config_or_the_config_does_not_read() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    let before = git(&root, &["rev-parse", "HEAD"]);
+    // The base is named by HEAD's config when the commit deletes it.
+    git(&root, &["rm", "-q", ".atelier/config.toml"]);
+    let run = git_as(&root, &["commit", "-qm", "Delete config on base"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr.contains("  .atelier/config.toml\n"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+    git(&root, &["reset", "-q", "--hard"]);
+    // And when the checkout's does not read, beside a staged record.
+    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    git(&root, &["add", "-A"]);
+    append(&root, ".atelier/config.toml", "base = 1\n");
+    let run = git_as(&root, &["commit", "-qm", "Ready on base"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+}

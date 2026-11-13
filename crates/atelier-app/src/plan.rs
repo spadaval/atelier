@@ -9,7 +9,7 @@ use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
 use crate::{git, say, Located, Repo};
 use anyhow::{anyhow, Result};
-use atelier_core::{Item, Mission, MissionStatus, Ready, Status};
+use atelier_core::{Item, Mission, MissionStatus, Named, Ready, Status};
 use atelier_records::{validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use std::path::PathBuf;
 
@@ -331,9 +331,21 @@ pub fn save_with(
         return Err(anyhow!(error).context(said));
     }
     let at = repo.git_at();
-    let item = repo.branch.as_deref().filter(|branch| *branch != repo.base);
+    // On an item's branch, a write outside its own directory, as settling
+    // another item's finding, reaches the base in the item's merge; one
+    // inside it, as its own drop, is the item's.
+    let item = match repo.named() {
+        Some(Named::Record(id)) if repo.root.join(item_path(&id)).exists() => {
+            let own = format!("{}/", item_dir(&id));
+            match paths.iter().all(|path| path.starts_with(&own)) {
+                true => say::Guidance::Own,
+                false => say::Guidance::Settle(id),
+            }
+        }
+        _ => say::Guidance::Branch,
+    };
     Ok(Ok(Done {
-        text: say::planned(said, item, at, &paths, message),
+        text: say::planned(said, &item, at, &paths, message),
         paths,
         commit: None,
     }))
