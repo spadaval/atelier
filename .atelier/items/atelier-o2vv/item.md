@@ -3,13 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-o2vv
 title: Keep status from pointing a delegated thread at an unrelated item
-status: draft
+status: ready
 mission: null
 labels: []
 priority: medium
 blocked_by: []
 implementers: []
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-13
+  at: 2026-11-13T22:36:55.479505594Z
 trivial: null
 caused_by: null
 created_at: 2026-11-11T16:48:44.562022233Z

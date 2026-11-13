@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-c1z3
 title: Ready the scorecard scripts and rubric for the rerun after the cutover
-status: draft
+status: ready
 mission: null
 labels:
 - redesign
@@ -11,7 +11,9 @@ priority: high
 blocked_by:
 - atelier-x3n5
 implementers: []
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-13
+  at: 2026-11-13T22:36:55.479505594Z
 trivial: null
 caused_by: null
 created_at: 2026-11-10T17:38:05.214716740Z
