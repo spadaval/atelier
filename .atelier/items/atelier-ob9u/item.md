@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ob9u
 title: Name branches by convention and commit every record change on a branch, never on the base
-status: building
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
