@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-ob9u
 title: Name branches by convention and commit every record change on a branch, never on the base
-status: ready
+status: building
 mission: atelier-to83
 labels:
 - redesign
@@ -11,7 +11,8 @@ priority: medium
 blocked_by:
 - atelier-ogpg
 - atelier-xbog
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A93b1b51f-2095-4d1f-af23-677aa6ba570d%3Adelegate-task%3A8c7f6fe9-cf71-4c03-ac83-d9beea29070e
 ready:
   by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
   at: 2026-11-13T22:37:19.473562932Z
