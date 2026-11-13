@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xbog
 title: 'Remove escalate and decide: a question is asked, and a disputed finding goes to a fresh reviewer'
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
