@@ -1025,3 +1025,62 @@ fn a_review_finds_the_pull_request_of_the_prefixed_branch() {
     assert!(calls.contains(&format!("head=owner:x/{ID}")), "{calls}");
     assert!(!calls.contains(&format!("head=owner:{ID}")), "{calls}");
 }
+
+#[test]
+fn submit_on_a_backlog_branch_counts_an_uncommitted_config_change() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    assert_eq!(
+        atelier(&root, "p1", &["start", "--backlog", "config"]).code,
+        0
+    );
+    append(&root, ".atelier/config.toml", "# note\n");
+    let run = atelier(&root, "p1", &["submit"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(
+        run.stderr.contains(
+            "are not committed, and a submit publishes only what is:\n  .atelier/config.toml\n"
+        ),
+        "{}",
+        run.stderr
+    );
+}
+
+#[test]
+fn a_branch_that_changes_only_a_missions_lead_merges_after_the_base_changes_its_plan() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    let path = root.join(".atelier/missions/demo-m1ss/mission.md");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mission = "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
+                   status: ready\nlabels: []\nlead: null\nready: null\n\
+                   created_at: 2026-11-10T09:00:00Z\n---\n\n## Why\n\nTo greet.\n\n## Outcome\n\nGreetings.\n";
+    fs::write(&path, mission).unwrap();
+    on_base(&root, "Plan a mission");
+    assert_eq!(
+        atelier(&root, "l1", &["start", "--backlog", "lead"]).code,
+        0
+    );
+    let run = atelier(&root, "l1", &["lead", "demo-m1ss"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    run_then(&root, &run.stdout);
+    // Meanwhile the base's plan moves on.
+    let other = scratch.worktree("other");
+    let text = fs::read_to_string(other.join(".atelier/missions/demo-m1ss/mission.md")).unwrap();
+    fs::write(
+        other.join(".atelier/missions/demo-m1ss/mission.md"),
+        text.replace("To greet.", "To greet everyone."),
+    )
+    .unwrap();
+    on_base(&other, "Sharpen the why");
+    let run = atelier(&root, "l1", &["merge"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let merged = git(
+        &root,
+        &["show", "main:.atelier/missions/demo-m1ss/mission.md"],
+    );
+    assert!(
+        merged.contains("lead: l1\n") && merged.contains("To greet everyone."),
+        "{merged}"
+    );
+}

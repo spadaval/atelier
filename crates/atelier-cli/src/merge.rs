@@ -553,6 +553,10 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
 /// criteria, Scope or Authority, or a file beside `mission.md` other than
 /// `notes.md` and its reviews. atelier-2vdq gives these their gate.
 fn plans_changed(repo: &mut Repo, head: &str, changed: &[String]) -> Result<Vec<(String, String)>> {
+    // What the branch itself changed: its plan sections as it forked from
+    // the base, against its head, so a plan edit the base made since is
+    // not taken for the branch's.
+    let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, head])?;
     let mut found: Vec<(String, String)> = Vec::new();
     for path in changed {
         let Some(rest) = path.strip_prefix(".atelier/missions/") else {
@@ -564,8 +568,7 @@ fn plans_changed(repo: &mut Repo, head: &str, changed: &[String]) -> Result<Vec<
         if found.iter().any(|(m, _)| m == id) {
             continue;
         }
-        let base = repo.mission_at(&repo.base_tip.clone(), id)?;
-        let Some(base) = base else {
+        let Some(base) = repo.mission_at(&fork, id)? else {
             found.push((id.to_string(), "adds the mission".into()));
             continue;
         };

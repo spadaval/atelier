@@ -122,11 +122,11 @@ fn orientation(repo: &mut Repo) -> Result<String> {
     ))
 }
 
-/// What `status` says the checkout has not saved: its record changes not
-/// committed, and its branch's commits not pushed to the remote.
-fn unsaved(repo: &Repo) -> Result<String> {
+/// The record changes the checkout has not committed, as `check` lists
+/// them: `config.toml`, and the changed and new files under the missions
+/// and items.
+fn record_changes(repo: &Repo) -> Result<Vec<String>> {
     let mut records = planning(&repo.root)?;
-    // `config.toml` is a record as `check` counts them.
     let config = atelier_records::CONFIG;
     if git::uncommitted(&repo.root)?
         .iter()
@@ -135,6 +135,13 @@ fn unsaved(repo: &Repo) -> Result<String> {
     {
         records.insert(0, config.to_string());
     }
+    Ok(records)
+}
+
+/// What `status` says the checkout has not saved: its record changes not
+/// committed, and its branch's commits not pushed to the remote.
+fn unsaved(repo: &Repo) -> Result<String> {
+    let records = record_changes(repo)?;
     let remote = repo.remote();
     let unpushed: Vec<String> = match (&repo.branch, remote) {
         (Some(branch), Some(remote)) => {
@@ -585,7 +592,7 @@ pub fn records_branch(repo: &mut Repo) -> Result<Option<String>> {
 /// branch is pushed and its pull request opened.
 fn submit_records(repo: &mut Repo) -> Result<Outcome> {
     let branch = records_branch(repo)?.expect("on a records branch");
-    let uncommitted = planning(&repo.root)?;
+    let uncommitted = record_changes(repo)?;
     if !uncommitted.is_empty() {
         let line = output::commit_line(repo.git_at(), &uncommitted, "<what they change>");
         return Ok(Outcome::Refused(output::records_uncommitted(
