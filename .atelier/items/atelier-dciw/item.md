@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-dciw
 title: Read missions and items from named branches, local and fetched, so list and show cover work in motion
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
@@ -11,7 +11,9 @@ priority: medium
 blocked_by:
 - atelier-ob9u
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
+  at: 2026-11-13T23:47:21.436386299Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T06:14:32.646572592Z
