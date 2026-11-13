@@ -6,7 +6,7 @@ title: Split the human-facing work into a planner who owns what to build and a g
 status: ready
 labels:
 - agent-factory
-lead: null
+lead: mcp:5dded1ba-9616-4c3e-8ca1-9e7b35bdaca5
 ready:
   by: sumeet, in conversation on 2026-11-13
   at: 2026-11-13T08:27:11.885174987Z
