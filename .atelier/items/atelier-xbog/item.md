@@ -37,7 +37,7 @@ this item makes it easy to find.
 - [ ] `escalate` and `decide` are gone from the binary, with the Decisions section, the `Decided:` line of a review file, the check that refuses `submit` and `merge` on an open question, and the decider's guard and routing in `status`.
 - [ ] A review's reviewer can close its own carried finding as `Now: withdrawn`, or lower it to defer or no action with its reason, and nothing else can settle a fix-now finding without a fix. A test walks a rebuttal kept and a rebuttal withdrawn.
 - [ ] The binary still reads an item that has a Decisions section and a review that has a `Decided:` line, and treats a finding decided as defer or no action as settled, so no merged item in the five repositories reads differently. A test reads each such record that exists today.
-- [ ] `atelier list --disputed` lists, across open and done items, each finding whose Response is `rebutted`, with what the next round did (kept, withdrawn, or not yet reviewed), and each round of a plan review whose reviewers gave different verdicts. Nothing refuses or warns on any of them.
+- [ ] `atelier list --disputed` lists, across open and done items, each finding whose Response is `rebutted`, with what the next round did (kept, withdrawn, or not yet reviewed), and each round of a plan review whose reviewers gave different verdicts. Nothing refuses or warns on any of them. `--mission <id>` narrows it, and `show <mission>` and the lead's `status` list the mission's disputed findings where they listed open questions.
 - [ ] `docs/product.md` and `docs/design.md` no longer describe either command, and say where a question and a disputed finding go.
 
 ## Scope
