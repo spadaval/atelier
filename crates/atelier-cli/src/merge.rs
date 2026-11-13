@@ -22,7 +22,7 @@ use crate::forge::{CiRun, ForgeError, Github, PullRequest};
 use crate::git;
 use crate::output;
 use anyhow::{Context, Result};
-use atelier_app::acts::{check, Act, Refusal};
+use atelier_app::acts::{check, Act, Refusal, STARTED};
 use atelier_app::repo::{facts, item_dir, item_path};
 use atelier_app::{refused, Located, Repo, Skip};
 use atelier_core::{Config, Forge, Status, Thread};
@@ -507,6 +507,28 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
         return Ok(Err(Outcome::Refused(output::records_code(
             &branch, &repo.base, &code,
         ))));
+    }
+    // A started item's record changes on its own branch, and reaches the
+    // base in its own merge.
+    let mut started = Vec::new();
+    for path in &changed {
+        let Some(id) = path
+            .strip_prefix(".atelier/items/")
+            .and_then(|rest| rest.strip_suffix("/item.md"))
+        else {
+            continue;
+        };
+        let status = repo.item_at(&head, id)?.map(|dir| dir.item.status);
+        if let Some(status) = status.filter(|status| STARTED.contains(status)) {
+            started.push((id.to_string(), status));
+        }
+    }
+    if !started.is_empty() {
+        let text = output::records_started(&branch, &started);
+        let rule = output::rule_records_started(&branch);
+        if let Some(refused) = repo.skip.refuse([rule], text) {
+            return Ok(Err(refused.into()));
+        }
     }
     let planned = plans_changed(repo, &head, &changed)?;
     if !planned.is_empty() {

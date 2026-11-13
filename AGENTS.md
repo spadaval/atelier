@@ -17,9 +17,10 @@ Records live in `.atelier/`: a mission in `missions/<id>/mission.md`, an
 item in `items/<id>/item.md` with its reviews beside it, and the rules in
 `config.toml`. They are committed with the code they describe.
 
-- Planning happens on `master`: `atelier new`, `atelier set`, then `atelier
-  ready <id> --by <who said go>`. `ready`, `drop`, `close` and `lead` make
-  their own commit; push `master` with `git push` when you are done.
+- Planning happens on a backlog branch: `atelier start --backlog <slug>`,
+  then `atelier new`, `atelier set` and `atelier ready <id> --by <who said
+  go>`. They write the records and commit nothing; commit with Git, then
+  `atelier submit` and `atelier merge`.
 - An item, in order: `atelier start <id>` (a branch named `<id>`),
   implement, tick every Done when line and write the `## Report`, `atelier
   submit`. A reviewer, in a thread that did not write the change, runs
@@ -36,8 +37,8 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
 
 ## Merge Policy
 
-- Unreviewed non-trivial code never reaches `master`. Planning records may
-  be committed there directly.
+- Unreviewed non-trivial code never reaches `master`, and nothing is
+  committed on it directly: records reach it by the merge of their branch.
 - `atelier submit` pushes the item's branch and opens its pull request, so
   CI runs during the review. `atelier merge` waits for CI on the branch's
   latest code for up to 9 minutes, runs the merge checks in `config.toml`

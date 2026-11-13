@@ -1024,8 +1024,8 @@ pub fn brief(brief: &Brief) -> String {
         path,
         brief.carried.len() + 1,
         "the change merges",
-        "commits it with the item's new status",
-    ) + "Your review is then done.\n"
+        "writes it and the item's new status and prints the Git command that commits the two",
+    ) + "Run that command; your review is then done.\n"
 }
 
 /// The open findings of earlier rounds that a review carries, with the
@@ -1102,7 +1102,6 @@ pub struct PlanBrief<'a> {
     pub changed: Vec<String>,
     pub carried: &'a [Carried],
     pub path: &'a str,
-    pub base: &'a str,
 }
 
 pub fn plan_brief(brief: &PlanBrief) -> String {
@@ -1144,11 +1143,8 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
         brief.path,
         brief.carried.len() + 1,
         "the mission starts",
-        "commits it alone, changing no status",
-    ) + &format!(
-        "Then tell whoever started you the commit it prints, which the planner cherry-picks onto {}. Your review is then done.\n",
-        brief.base
-    )
+        "writes it, changing no status, and prints the Git command that commits it alone",
+    ) + "Run that command, push the commit to the branch of the plan you reviewed, and tell whoever started you the commit. Your review is then done.\n"
 }
 
 pub fn plan_not_committed(id: &str, commit: &str, commit_line: &str) -> String {
@@ -1568,6 +1564,20 @@ pub fn records_plan(branch: &str, planned: &[(String, String)]) -> String {
         text += &format!("  {what}, of mission {id}\n");
     }
     text + "The merge of a plan and its reviews comes with atelier-2vdq; until then, take these changes off this branch.\n"
+}
+
+/// `merge` of a records branch that brings `started`, items in a started
+/// status, to the base.
+pub fn records_started(branch: &str, started: &[(String, Status)]) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\nA started item's record changes on its own branch and reaches the base in its own merge, and {branch} brings these to the base started:\n");
+    for (id, status) in started {
+        text += &format!("  {id}: {}\n", status_name(*status));
+    }
+    text + "Take those changes off this branch.\n"
+}
+
+pub fn rule_records_started(branch: &str) -> String {
+    format!("{branch} brings no item to the base in a started status")
 }
 
 pub fn rule_records_plan(branch: &str) -> String {

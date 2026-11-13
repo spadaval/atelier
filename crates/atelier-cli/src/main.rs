@@ -109,21 +109,21 @@ enum Command {
         #[arg(long, conflicts_with_all = ["ready", "blocked", "needs_human", "label", "mine", "done", "deferred"])]
         disputed: bool,
     },
-    /// Create a draft item, or with --mission a draft mission, in this checkout of the base, without committing it.
+    /// Create a draft item in this checkout, on a backlog or mission branch, and commit nothing; it prints the path and the Git command that commits it. A mission is made by `start --mission`.
     New {
         #[arg(value_parser = NonEmptyStringValueParser::new())]
         title: String,
         /// Make the item part of this mission.
         #[arg(long = "in", value_name = "MISSION", conflicts_with = "mission")]
         into: Option<String>,
-        /// Create a mission instead of an item.
+        /// Refused: a mission is made on its own branch by `atelier start --mission "<title>"`.
         #[arg(long)]
         mission: bool,
-        /// Make the item from a deferred finding of a done item, named as `atelier list --deferred` prints it, and mark the finding taken; also on the branch of an item you implement.
+        /// Make the item from a deferred finding of a done item, named as `atelier list --deferred` prints it, and mark the finding taken; on a backlog branch, or on the branch of an item you implement.
         #[arg(long, value_name = "FINDING", conflicts_with = "mission")]
         from: Option<String>,
     },
-    /// Change front-matter fields of a draft or ready item or mission, without committing them.
+    /// Change front-matter fields of a draft or ready item or mission in this checkout, on a backlog or mission branch, and commit nothing.
     #[command(group(ArgGroup::new("fields").required(true).multiple(true)))]
     Set {
         id: String,
@@ -145,7 +145,7 @@ enum Command {
         #[arg(long, group = "fields", value_name = "CAUSE")]
         caused_by: Option<String>,
     },
-    /// Mark each named draft item or mission ready, recording who said so, and commit that alone.
+    /// Mark each named draft item or mission ready, recording who said so, in this checkout, on a backlog or mission branch, and commit nothing.
     Ready {
         #[arg(required = true)]
         ids: Vec<String>,
@@ -153,7 +153,7 @@ enum Command {
         #[arg(long, required = true, value_parser = NonEmptyStringValueParser::new())]
         by: String,
     },
-    /// End a draft, ready or started item, or a draft or ready mission, that will not be done, on the base, and commit that alone. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped without committing it; also on the branch of an item you implement.
+    /// End an item or mission that will not be done, in this checkout, and commit nothing. A started item is dropped in a checkout of its own branch, by any thread, and its base copy then on a backlog branch; an item not started, or a mission, on a backlog branch. An item already merged is refused. Given a deferred finding of a done item, named as `atelier list --deferred` prints it, mark it dropped, on a backlog branch or the branch of an item you implement.
     Drop {
         /// An item, a mission, or a finding.
         id: String,
@@ -161,7 +161,7 @@ enum Command {
         #[arg(long)]
         reason: Option<String>,
     },
-    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; on the base, and commit that alone.
+    /// End a ready mission whose items are done or dropped and whose Result is written, or a draft or ready item that will not be built, with its result; in this checkout, on a backlog branch, and commit nothing.
     Close {
         id: String,
         /// The item's result, written into its Report. A mission's is written in its file.
@@ -181,20 +181,20 @@ enum Command {
         #[arg(long, value_name = "SLUG")]
         backlog: Option<String>,
     },
-    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written.
+    /// Send this branch's item to review, once its Done when lines are ticked and its Report is written, committing its directory and pushing the branch where a forge is configured. On a backlog or mission branch, refused while a record change is uncommitted; else it pushes the branch and opens its pull request.
     Submit,
-    /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief.
+    /// Open this round's review file of an item in review, or of a mission's plan, or take it over, and print the brief. It commits nothing.
     Review { id: String },
-    /// Record your verdict in your review file and commit it.
+    /// Record your verdict in your review file, and the item's new status, and commit nothing; it prints the Git command that commits the two.
     Verdict {
         verdict: VerdictArg,
         /// The model you run on, such as gpt-6.1-sol; written into the review file.
         #[arg(long)]
         model: Option<String>,
     },
-    /// Lead a ready mission, in this checkout of the base, commit that alone, and see what each of its items needs.
+    /// Lead a ready mission, written in this checkout, on a backlog branch, committing nothing, and see what each of its items needs.
     Lead { mission: String },
-    /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done.
+    /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done. A backlog branch, which changes records alone, merges once its records are valid on the merged tree, with no review.
     Merge {
         /// Merge an item nobody reviewed, whose correctness is evident from its diff, giving why.
         #[arg(long, value_name = "WHY")]

@@ -333,7 +333,8 @@ pub fn row(act: Act) -> &'static Row {
 /// cross-branch rule, and what lies outside it.
 pub struct Facts<'a> {
     pub item: &'a ItemDir,
-    /// Whether a local branch named for the item exists.
+    /// Whether a branch named for the item exists, local or the forge's
+    /// remote-tracking one.
     pub branch: bool,
     /// Each item the item is blocked by, with its status; `None` when no
     /// such item is found.

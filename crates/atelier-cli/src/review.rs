@@ -7,7 +7,7 @@ use crate::output::{self, Brief, PlanBrief};
 use crate::{git, merge};
 use anyhow::{anyhow, Context, Result};
 use atelier_app::acts::{check, plan_round, row, Act, Facts, MissionFacts, Refusal};
-use atelier_app::plan::plan_changed;
+use atelier_app::plan::{misplaced, plan_changed, Belongs};
 use atelier_app::repo::{facts, item_dir, item_path, mission_dir, mission_path};
 use atelier_app::{carried, carried_plan, refused, Repo};
 use atelier_core::{
@@ -115,6 +115,11 @@ fn new_review(
     }
 }
 
+/// `command` refused in the base's own checkout, where nothing is written.
+fn on_base(repo: &mut Repo, command: &str) -> Result<Option<Outcome>> {
+    Ok(misplaced(repo, command, Belongs::Backlog)?.map(Outcome::from))
+}
+
 /// The sections of a mission's record, in order.
 const MISSION_SECTIONS: [&str; 6] = [
     "Why",
@@ -135,6 +140,9 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
     if repo.current()?.is_some() {
         let refused = output::plan_review_on_item(id, repo.branch.as_deref(), &repo.base);
         return Ok(Outcome::Refused(refused));
+    }
+    if let Some(refused) = on_base(repo, "review")? {
+        return Ok(refused);
     }
     let store = repo.store();
     let mission = store.mission(id)?;
@@ -201,7 +209,6 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
         changed,
         carried: &carried_plan(&mission, file.name.round)?,
         path: &format!("{}/reviews/{name}.md", mission_dir(id)),
-        base: &repo.base,
     });
     Ok(Outcome::Done(said + &brief))
 }
@@ -210,6 +217,9 @@ fn plan_review(repo: &mut Repo, id: &str) -> Result<Outcome> {
 /// has no item's branch: records it in the file, without committing it,
 /// changing no status.
 fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Result<Outcome> {
+    if let Some(refused) = on_base(repo, "verdict")? {
+        return Ok(refused);
+    }
     let store = repo.store();
     let mut held = Vec::new();
     for id in store.ids("missions")? {

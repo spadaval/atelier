@@ -1,5 +1,6 @@
 //! The repository an act runs in, and how it finds items: on the base
-//! branch's tip, and on the local branch named for each.
+//! branch's tip, and on the branch named for each, local or the forge's
+//! remote-tracking one.
 
 use crate::acts::{approval, mission_of, Checkout, Facts, SinceApproval};
 use crate::{git, say, Branch, Located, Skip};

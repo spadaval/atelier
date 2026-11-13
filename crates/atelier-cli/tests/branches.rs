@@ -543,6 +543,26 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     );
     assert_eq!(git(&root, &["rev-parse", "main"]), base);
 
+    // A started item's record reaches the base only in its own merge.
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    assert_eq!(
+        atelier(&root, "p1", &["start", "--backlog", "start-it"]).code,
+        0
+    );
+    write_item(&root, ID, "building", &["t1"], &[], "");
+    git(&root, &["commit", "-qam", "Start by hand"]);
+    let run = atelier(&root, "p1", &["merge"]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.contains(&format!(
+            "brings these to the base started:\n  {ID}: building\n"
+        )),
+        "{}",
+        run.stderr
+    );
+    assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
+    assert_eq!(git(&root, &["rev-parse", "main"]), base);
+
     // Records that do not validate on the merged tree are refused.
     git(&root, &["checkout", "-q", "--detach", "main"]);
     assert_eq!(

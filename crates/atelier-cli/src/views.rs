@@ -1,7 +1,7 @@
 //! `show`, `list` and `lead`. They read items and missions as `status`
 //! does: the base's record from its last commit, a started item's from its
-//! branch. `lead` writes planning, so it reads and writes its mission in the
-//! checkout of the base, and commits it.
+//! branch. `lead` writes its mission in the checkout it runs in, a backlog
+//! branch's, and commits nothing.
 
 use crate::commands::Outcome;
 use crate::view_output;
