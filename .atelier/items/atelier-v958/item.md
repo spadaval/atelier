@@ -29,7 +29,7 @@ item takes in atelier-qxmr.
 
 - [ ] The installed service's roots are the five live repositories, and for one open mission in each the page's title, status and item counts match `atelier show <mission>` there.
 - [ ] The Desk fetches each repository's remote on a timer the config sets, and each page says when it last did.
-- [ ] A page lists what is proposed in each repository: plans and record changes on branches, with the branch, its pull request where there is one, and how many approving plan reviews a plan has.
+- [ ] A page lists what is proposed in each repository: plans and record changes on branches, with the branch, its pull request where there is one, and how many verdicts its current round has, with the verdicts themselves once the round is on the mission's branch. A plan dropped on its branch is not listed as proposed.
 - [ ] A page lists work in motion: each started item with its status, read from its branch, and the thread on it, with whether T3 says that thread is alive; and each mission in progress with its lead.
 - [ ] Sumeet is told when a plan is proposed and when it merges, by the means `docs/product/desk.md` settles, and the page links the plan.
 - [ ] "Say go" is gone. A mission's page has "stop", which drops the mission with his reason as atelier-2vdq defines a stop, for a proposed plan and for an open mission, and the act is the same record `atelier drop` writes. The Desk drives the stop to its end. A proposed plan is shown as stopped once the drop is pushed and its pull request closed. An open mission's stop is shown as pending until its record-only branch has merged, and then as stopped. The interface test covers both.

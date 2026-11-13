@@ -28,7 +28,8 @@ host appears nowhere.
 
 - [ ] The reader in `atelier-app` finds records on every branch the convention names, local and remote-tracking for the configured remote, and gives each record the ref it was read from. The rule for which copy wins is the one in `docs/design.md`.
 - [ ] A mission whose record is only on its branch is read from there, with its items.
-- [ ] For a proposed mission the reader also finds the `review/<mission-id>/...` branches, and `show <mission>` gives each round's verdicts whether or not they have been brought onto the mission's branch.
+- [ ] For a proposed mission the reader also finds the `review/<mission-id>/...` branches, and `show <mission>` says how many verdicts each round has. It gives the verdicts and their findings only for a round already brought onto the mission's branch, so a reviewer who runs `show` learns nothing of another's verdict in the round it is reviewing. A test publishes one verdict and `show` in a second clone prints the count and no verdict.
+- [ ] A mission dropped on its branch is not listed as proposed: `list` and `show` give it as dropped, with the reason, and `--proposed` leaves it out.
 - [ ] `atelier list` shows, apart from the base's backlog, what is proposed: missions and record changes on branches not yet merged, each with its branch. `--proposed` narrows to them.
 - [ ] `atelier show <id>` finds a record wherever it is and says where it read it from. For a record read from a remote-tracking ref it says how long ago that remote was fetched.
 - [ ] `atelier status` lists a started item held on another host by the thread its branch names.
