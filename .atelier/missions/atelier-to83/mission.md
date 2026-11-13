@@ -45,12 +45,14 @@ what was considered and turned down, is in [design.md](design.md).
 
 Only a merge writes the base. A thread's changes, code or records, live on a
 branch named by a convention the commands apply themselves: an item's ID, a
-mission's ID, or `backlog/<slug>` for record changes tied to neither. What a
+mission's ID, `backlog/<slug>` for record changes tied to neither, and
+`review/<mission-id>/<round>-<suffix>` for one plan reviewer's verdict. What a
 branch needs before it merges depends on what it holds: code needs an
 independent review, a mission's plan needs two approving plan reviews, and
-records alone need `atelier check`. A mission's plan is its Why, Outcome,
-Success criteria, Scope and Authority and the documents beside it. Its lead,
-its notes, its Result and items added to it once it is agreed are records.
+records alone need `atelier check`. A mission's plan is the Why, Outcome,
+Success criteria, Scope and Authority sections of `mission.md`, the documents
+beside it and, until the plan has merged, its items. Its lead, its notes, its
+Result section and items added to it once it is open are records.
 
 A mission is proposed while its plan is on its branch and open once that
 merges. It has no draft status and no go-ahead; its Why says whose direction
@@ -61,7 +63,8 @@ shows a mission in progress as it is: agreed, with some items done.
 the base and the named branches, local and fetched. The Desk reads the live
 repositories, shows what is proposed and in motion and which thread is doing
 it, tells Sumeet when a plan is proposed and when it merges, and lets him
-stop a mission at any time.
+stop a mission at any time, by an act that is finished only when the stop is
+published.
 
 ## Success criteria
 
@@ -73,6 +76,11 @@ stop a mission at any time.
   moves the base locally.
 - only-merges: over the proof mission in item atelier-ql64, every commit on
   the base's first-parent history is a merge of a named branch.
+- stop-is-effective: after a stop of an open mission from the Desk, `start`
+  on one of its ready items and `merge` of one of its started items are both
+  refused, in a second clone that has fetched. After `drop` of a started
+  item, that item's `merge` is refused, whichever of the two was run first
+  on the other host.
 - one-holder: two clones of one remote start the same item at the same
   moment; one succeeds and the other is refused and told which thread holds
   it.

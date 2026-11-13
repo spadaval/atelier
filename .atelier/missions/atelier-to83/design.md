@@ -29,8 +29,11 @@ because it never left the thread.
   `atelier check`, and a branch counts as records alone only when every path
   it changes is under `.atelier/`. A mission's plan is its Why, Outcome,
   Success criteria, Scope and Authority and the files beside `mission.md`
-  other than `notes.md` and the reviews. Its lead, notes, Result and status,
-  and an item added to an open mission, are records. Conflicts are merge conflicts, and `check` on the merged
+  other than `notes.md` and the reviews. Until the plan has merged, the mission's items are
+  part of it too: changing, adding, removing or reassigning one makes the
+  approvals stale. Its lead, notes and status, the Result section of
+  `mission.md`, and an item added to an open mission, are records. The
+  comparison is by section of `mission.md`, not by file. Conflicts are merge conflicts, and `check` on the merged
   tree catches two branches that are each valid and contradict each other.
 - **The trunk, not an integration branch.** Each item merges to the base on
   its own, and each merge leaves the base working. A mission half done on
@@ -43,13 +46,14 @@ because it never left the thread.
 | Decision | Why |
 | --- | --- |
 | Only a merge writes the base | A protected branch refuses anything else, and most repositories protect theirs. Requiring the opposite would be backwards. |
-| Branch names: `<item-id>`, `<mission-id>`, `backlog/<slug>`, with one optional prefix in `config.toml` | The names are the index where there is no forge, the claim, and the line between published work and scratch. One prefix covers a host's own naming rule; a free pattern could not be read back into an ID. |
+| Branch names: `<item-id>`, `<mission-id>`, `backlog/<slug>` and `review/<mission-id>/<round>-<suffix>`, with one optional prefix in `config.toml` | The names are the index where there is no forge, the claim, and the line between published work and scratch. One prefix covers a host's own naming rule; a free pattern could not be read back into an ID. |
 | Commands make and choose the branch | An agent never invents a name. A command that would switch the base's own checkout refuses or makes a worktree, since `start` doing so has cost us before. |
 | A mission's stored status is `open`, `done` or `dropped` | An open mission read from a branch that has not merged is shown as proposed; on the base it is agreed and may be led and closed. An old record's `ready` reads as `open`, and an old `draft` on the base reads as proposed until the rollout moves it to a branch or its plan is reviewed. |
 | A mission records its planners | `new --mission` binds the calling thread, as `start` binds an implementer, and a later thread takes the plan over the same way. It is how `merge` knows a plan review is independent. |
-| Two plan reviewers publish on their own refs | Reviewers of one round must not see each other's files, and two pushes to one branch cannot both be first. Each `verdict` publishes a ref of its own; the tool, not the planner by hand, brings both onto the mission's branch at the next `submit` or `merge`. |
-| A started item's branch is pushed at `start` where a remote is configured | That push is the claim across clones. The loser is refused and told the holder. With no remote the local ref is the claim, as now. |
-| Stopping a mission is dropping it | On a proposed plan the drop is committed on its branch and its pull request closed. On an open mission it goes through the record-only path, and from its merge `start`, a take-over and an item's `merge` refuse, naming the stop. |
+| Two plan reviewers publish on their own refs | Reviewers of one round must not see each other's files, and two pushes to one branch cannot both be first. `verdict` writes only the branch `review/<mission-id>/<round>-<suffix>`, where the suffix is the review file's, and pushes it; it never writes the mission's branch. The planner's next `submit` or `merge` brings every such branch of the round onto the mission's branch itself. The reader finds these branches too, so `show` and the Desk can count a proposed plan's verdicts; `review` never reads another reviewer's branch of the same round. |
+| A started item's branch is pushed at `start` where a remote is configured | That push is the claim across clones. The loser is refused and told the holder, and `start` removes the local branch it had made, so nothing in that clone shows the item as held there; a later `start` there is a take-over. With no remote the local ref is the claim, as now. |
+| Stopping a mission is dropping it, and `drop` finishes the job | A drop is done only when it is published. On a proposed plan it is committed on the mission's branch, pushed, and the pull request closed. On an open mission `drop` commits on a `backlog/` branch and itself submits and merges it by the record-only path, stopping with status 3 while CI runs, as `merge` does. From that merge `start`, a take-over and an item's `merge` refuse, naming the stop. A planner may run it, and so may the Desk as the caller its config names. |
+| A started item is dropped on its own branch | A started item's record changes only on its branch, so that is where a drop is effective at once: `drop` commits there and pushes, and from then the item's `submit` and `merge` are refused. The base's copy follows by the record-only path. A drop of an item already merged is refused. |
 | A mission has no draft status | A plan on its branch is a draft by where it is. An idea for a mission is a draft item on the base, so the base stays the one list of what we might do and branches stay short-lived. |
 | A mission has no go-ahead | It protected direction, and direction is given when the mission starts: in a conversation with Sumeet, or a proposal he agreed. The Why says which. The plan reviews do the checking. He keeps a veto at any time, made real by the Desk telling him when a plan is proposed and merged. |
 | The two plan reviews are enforced by `merge` | They are now the only gate, and until now the rule lived only in the skill. |
