@@ -3,11 +3,13 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-g961
 title: Split the human-facing work into a planner who owns what to build and a gardener who reads how it went
-status: draft
+status: ready
 labels:
 - agent-factory
 lead: null
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-13
+  at: 2026-11-13T08:27:11.885174987Z
 created_at: 2026-11-12T01:02:51.245176518Z
 ---
 
