@@ -33,9 +33,10 @@ item with no such line, such as the old digest atelier-j86z, is not a run.
 order that no earlier run's `Focus:` line records (a page with no such line
 records none); else the area whose newest such line is oldest.
 
-On the base, `atelier new "Garden <repo>: <focus>, <YYYY-MM-DD>"` and `atelier
-set <id> --labels garden`; the run joins no mission. Its Goal gives the focus
-and why, its Scope steps 1 to 7 up to the approval, and these Done when lines:
+In the base's checkout, which `git worktree list` shows, `atelier new
+"Garden <repo>: <focus>, <YYYY-MM-DD>"` and `atelier set <id> --labels
+garden`; the run joins no mission. Its Goal gives the focus and why, its
+Scope steps 1 to 7 up to the approval, and these Done when lines:
 
 ```markdown
 - [ ] The numbers follow garden.md's steps, and `artifacts/numbers.md` holds the log lines behind them.
@@ -65,14 +66,15 @@ its lines before the window too, into `artifacts/numbers.md`.
 
 - **Time in each status.** A line holding `<from> -> <to>` puts the item in
   `<to>` until the next such line. Sum the seconds in `ready` (waiting to
-  start), `building`, `in_review`, `changes_requested` and `approved`, then
-  give whole minutes, halves rounded up; a status never reached is 0.
+  start), `building`, `in_review`, `changes_requested` and `approved`; a
+  status never reached is 0.
 - **Rounds** are its `submit` lines, **take-overs** its `take-over` lines,
   **escalations** its `escalate` lines, and **skips** its `skip <rule>:
   <reason>` parts, the rule being the text up to the first ` (` or `: `.
 
 Give each status's time and the rounds as a median over the items (the mean
-of the middle two for an even count), and the rest as totals. Name the item
+of the middle two for an even count), the times in whole minutes rounded from
+the median's seconds, halves up, and the rest as totals. Name the item
 with the most beside each, comparing seconds; on a tie, the one merged first.
 Count, including the run's own item, open items by status (`atelier list |
 grep -oE '^ +[^ ]+ \([a-z_]+' | awk '{print $2}' | sort | uniq -c`), blocked
@@ -80,11 +82,12 @@ items (`atelier list --blocked`, counted the same way) and unsettled deferred
 findings (the `<item>/<finding>:` lines of `atelier list --deferred`).
 
 Every repository's other Scorecard measures are those in atelier's
-`docs/product.md`. Carry each from the last page with the date it was
-measured, running nothing in `scripts/scorecard/`; a first run carries its
-column of atelier's `docs/architecture/quality/scorecard-baseline-2026-11.md`,
-dated 2026-11-10, or "not measured". Then check [readiness.md](readiness.md)
-as it says, into `artifacts/checklist.md`.
+`docs/product.md`. Carry each from the last page into This run with the
+date it was measured and "carried" under Last run, running nothing in
+`scripts/scorecard/`; a first run carries its column of atelier's
+`docs/architecture/quality/scorecard-baseline-2026-11.md`, dated 2026-11-10,
+or "not measured". Then check [readiness.md](readiness.md) as it says, into
+`artifacts/checklist.md`.
 
 ## 3. Read the Threads
 
@@ -142,7 +145,9 @@ the product does is a proposal.
 Settle each finding `atelier list --deferred` shows, on the branch, with
 `atelier new "<title>" --from <finding>` or `atelier drop <finding> --reason
 "<why>"` (`"fixed in <commit>"` for one the run fixed). An item taken this
-way gets its labels and `--caused-by` on the base after the run merges.
+way gets its labels and `--caused-by` on the base after the run merges. A
+fix or a settled finding already on an earlier run's unmerged branch is not
+made again: the page names that run instead.
 
 ## 6. Write the Page
 
