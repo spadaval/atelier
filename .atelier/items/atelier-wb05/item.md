@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-wb05
 title: Rewrite garden.md so a run has a stated purpose, a focus and transcripts as its main evidence
-status: in_review
+status: changes_requested
 mission: atelier-g961
 labels:
 - agent-factory
