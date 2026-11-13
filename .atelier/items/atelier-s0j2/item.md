@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-s0j2
 title: Make one gardener run in atelier under the rewritten procedure, focused on structure
-status: ready
+status: building
 mission: atelier-g961
 labels:
 - agent-factory
 priority: medium
 blocked_by:
 - atelier-wb05
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3Abe2146c6-f4c6-4217-8f3a-ee1dc9eec577%3Adelegate-task%3Abc9f4804-261c-43c2-a446-3d0cd4a70d1f
 ready:
   by: sumeet, in conversation on 2026-11-13
   at: 2026-11-13T08:27:11.885174987Z
