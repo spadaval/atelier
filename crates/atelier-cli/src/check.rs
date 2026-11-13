@@ -211,24 +211,35 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
         }
     }
     // Only a merge writes the base, so no record changes in a commit on it.
-    // The base is named by the checkout's config, or where that does not
-    // read, as when the commit deletes it, by `HEAD`'s; where neither does,
-    // the commit is refused, since the rule cannot be judged.
+    // The base is the one `HEAD`'s config names, which a change in the
+    // checkout, staged or not, cannot move; only a repository's first
+    // commit, or one whose `HEAD` holds none that reads, reads the
+    // checkout's. Where neither names one, the commit is refused, since the
+    // rule cannot be judged.
     let has_head = git::has_commit(root, "HEAD")?;
-    let base = match Store::new(root.join(".atelier")).config() {
-        Ok(config) => Some(config.base_branch),
-        Err(_) if has_head => match reader.text(&git::head(root)?, CONFIG) {
+    let at_head = match has_head {
+        true => match reader.text(&git::head(root)?, CONFIG) {
             Ok(text) => parse_config(Path::new(CONFIG), &text)
                 .ok()
                 .map(|config| config.base_branch),
             Err(_) => None,
         },
-        Err(_) => None,
+        false => None,
     };
+    let base = at_head.or_else(|| {
+        Store::new(root.join(".atelier"))
+            .config()
+            .ok()
+            .map(|config| config.base_branch)
+    });
     let branch = git::current_branch(root)?;
     let on_base = match base {
         Some(base) => (branch.as_deref() == Some(base.as_str())).then_some(base),
-        None if has_head => return Ok(Outcome::Refused(output::commit_no_base())),
+        None if has_head => {
+            let rule = output::rule_no_base();
+            return Ok(rules(skip, &[], [rule], output::commit_no_base())
+                .unwrap_or(Outcome::Done(String::new())));
+        }
         None => None,
     };
     let base_records = match &on_base {

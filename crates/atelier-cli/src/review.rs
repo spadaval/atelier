@@ -388,16 +388,17 @@ fn brief(
     }))
 }
 
-/// What the brief says of branch `id`'s pull request on `forge`, where
-/// CI's result is read. The forge is asked under the bound `merge` gives a
-/// question under its lock.
+/// What the brief says of the pull request of item `id`'s branch on
+/// `forge`, where CI's result is read. The forge is asked under the bound
+/// `merge` gives a question under its lock.
 fn pull_request(repo: &Repo, forge: &Forge, id: &str) -> String {
+    let branch = repo.branch_of(id);
     let found = Github::open(&repo.root, forge).and_then(|github| {
         github
             .until(merge::locked_until())
-            .open_pull_request(id, &repo.base)
+            .open_pull_request(&branch, &repo.base)
     });
-    output::brief_pull_request(id, &found)
+    output::brief_pull_request(&branch, &found)
 }
 
 /// The commit branch `id` points at.

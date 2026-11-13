@@ -994,3 +994,34 @@ fn a_record_write_says_how_its_change_reaches_the_base_for_its_branch() {
         )
     );
 }
+
+#[test]
+fn a_review_finds_the_pull_request_of_the_prefixed_branch() {
+    let hub = Hub::new(&[(ID, "ready")]);
+    let a = hub.clone("a");
+    let config = a.join(".atelier/config.toml");
+    let text = fs::read_to_string(&config).unwrap().replace(
+        "base_branch = \"main\"\n",
+        "base_branch = \"main\"\nbranch_prefix = \"x/\"\n",
+    );
+    fs::write(&config, text).unwrap();
+    git(&a, &["commit", "-qam", "Configure"]);
+    git(&a, &["push", "-q", "origin", "HEAD:main"]);
+    git(&a, &["branch", "-f", "main", "HEAD"]);
+    ok(hub.atelier(&a, "t1", &["start", ID]));
+    assert_eq!(hub.tip(&format!("x/{ID}")), Some(head(&a)));
+    let path = a.join(item_path(ID));
+    let ticked = fs::read_to_string(&path).unwrap().replace("- [ ]", "- [x]");
+    fs::write(&path, ticked + "It prints hello.\n").unwrap();
+    ok(hub.atelier(&a, "t1", &["submit"]));
+    let run = hub.atelier(&a, "r1", &["review", ID]);
+    ok(run.clone());
+    assert!(
+        run.stdout.contains("Pull request #7, where CI's result on the branch can be read: https://github.com/owner/repo/pull/7\n"),
+        "{}",
+        run.stdout
+    );
+    let calls = fs::read_to_string(hub.gh.join("calls")).unwrap();
+    assert!(calls.contains(&format!("head=owner:x/{ID}")), "{calls}");
+    assert!(!calls.contains(&format!("head=owner:{ID}")), "{calls}");
+}

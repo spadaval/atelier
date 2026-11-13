@@ -1026,3 +1026,40 @@ fn a_base_commit_is_refused_when_it_deletes_the_config_or_the_config_does_not_re
     );
     assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
 }
+
+#[test]
+fn the_base_a_commit_is_judged_against_is_heads_not_the_checkouts() {
+    let scratch = Scratch::new(&[(ID, "draft")]);
+    let root = scratch.root();
+    install_hooks(&root);
+    git(&root, &["switch", "-q", "main"]);
+    let before = git(&root, &["rev-parse", "HEAD"]);
+    // A staged change of the base's name does not unprotect it.
+    edit(
+        &root,
+        ".atelier/config.toml",
+        "base_branch = \"main\"",
+        "base_branch = \"other\"",
+    );
+    let run = commit_all(&root, "Move the base");
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+    // Nor does one left unstaged beside a staged record.
+    git(&root, &["reset", "-q"]);
+    edit(&root, &item_path(ID), "status: draft", "status: ready");
+    git(&root, &["add", &item_path(ID)]);
+    let run = git_as(&root, &["commit", "-qm", "Ready on base"]);
+    assert_eq!(run.code, 1, "{}", run.stderr);
+    assert!(
+        run.stderr
+            .contains("Rule: only a merge writes the base branch main"),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
+}
