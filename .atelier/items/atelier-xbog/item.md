@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-xbog
 title: 'Remove escalate and decide: a question is asked, and a disputed finding goes to a fresh reviewer'
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
@@ -11,7 +11,9 @@ priority: medium
 blocked_by:
 - atelier-ogpg
 implementers: []
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-13, after reading docs/design.md
+  at: 2026-11-13T16:37:33.471518539Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T08:16:08.586117508Z
