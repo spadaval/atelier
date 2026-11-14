@@ -3,12 +3,13 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nl43
 title: Call a state-changing command an action, not an act, everywhere
-status: ready
+status: building
 mission: atelier-dy62
 labels: []
 priority: low
 blocked_by: []
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A7528a691-d081-4f17-89b8-d45bea97b6e3%3Adelegate-task%3A1828caa7-d9d0-48e3-8641-39d9f47ddb06
 ready:
   by: sumeet, in conversation on 2026-11-14
   at: 2026-11-14T06:21:12.860651075Z
