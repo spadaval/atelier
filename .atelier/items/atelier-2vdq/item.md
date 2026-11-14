@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2vdq
 title: Plan a mission on its branch and make two approving plan reviews its only gate, with no draft status and no go
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -142,6 +142,16 @@ What changed, by Done when line:
   the reviewer works in a checkout at the submitted commit, and `merge`
   judges the committed head with `plan_diff`.
 
+Round 1 found three paths the gate missed, each now refused and tested:
+an item's branch that changes a plan merged on its code review
+(`an_items_branch_that_changes_a_plan_does_not_merge_on_its_code_review`;
+it is refused and named the backlog branch an amendment goes on, as
+`docs/product.md` says); an old draft on the base written open merged
+with no review
+(`an_old_draft_on_the_base_is_agreed_only_by_two_plan_reviews`); and
+`show` in a clone that had fetched a published stop still called it
+unpublished (now covered in the cross-clone stop test).
+
 Outside the Done when lines:
 
 - `submit` on a backlog branch that changes an agreed mission's plan adds
@@ -157,3 +167,9 @@ Outside the Done when lines:
 - The installed `atelier` is older than atelier-ob9u (it has no `start
   --backlog`). Once this merges, reinstall before planning with it.
 
+
+### Responses
+
+- 1-lxxo.1: fixed in 6ba389903
+- 1-lxxo.2: fixed in 6ba389903
+- 1-lxxo.3: fixed in 6ba389903
