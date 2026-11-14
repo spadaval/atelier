@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.6.0] - 2026-11-14
+
+Every change now reaches the base through a branch and a merge, so Atelier
+works where the base is protected, and work in motion shows from any clone.
+0.6.0 reads a 0.5 repository's records as they are: no migration, and the
+hooks `atelier setup` installed keep working, since they call the binary.
+
+### Added
+- The branch model. Every change lives on a branch that `atelier start`
+  makes: `<item-id>` for an item, `<mission-id>` for a new mission's plan
+  (`start --mission "<title>"`), and `backlog/<slug>` for record changes tied
+  to neither (`start --backlog <slug>`). `start --new "<title>"` creates an
+  item already started, for work asked for directly. An optional
+  `branch_prefix` in `config.toml` prefixes every branch name.
+- A mission's plan is written on its branch and merges once two plan reviews
+  approve it. There is no go-ahead step after.
+- `merge` finishes through the forge's merge of the pull request where a
+  forge is configured, so it works on a protected base. A backlog branch,
+  which changes only records, merges once `check` passes on the merged tree,
+  with no review.
+- `list` and `show` read missions and items from every named branch the clone
+  has, local and fetched, and say where each was read from, so a plan on a
+  branch or an item started on another host appears.
+- `atelier log`: the history of acts, read from Git, one line each, of
+  everything, of one item, or of one mission with its plan reviews and items.
+- `list --disputed` lists each finding an implementer has rebutted.
+
+### Changed
+- Only `start`, `submit` and `merge` act on Git. `new`, `set`, `ready`,
+  `drop`, `close`, `lead`, `review` and `verdict` write files and commit
+  nothing; commit and push their changes with Git.
+- With a forge configured, the pre-push hook refuses every push that moves
+  the base, since the forge makes its merges. Without one, it accepts only
+  Atelier's merge commits on the base.
+- `status` tells a thread more of what it holds and what to run next, in six
+  places first use showed it fell short.
+
+### Removed
+- `escalate` and `decide`. A question goes to the thread that started the
+  work, as advice; a disputed finding is rebutted in the Report's Responses
+  and a fresh reviewer keeps or withdraws it.
+- `new --mission`; use `start --mission`.
+
 ## [0.5.0] - 2026-11-11
 
 The tracker is rewritten from scratch around one loop: start, submit,
