@@ -352,16 +352,14 @@ fn status_on_the_base_reads_a_started_item_from_its_branch_until_it_merges() {
         "Then: atelier start {ID} (switches to its branch)\n"
     )));
 
-    // Merged, with the base's record moved on: the base's record counts,
-    // though the branch still says building.
+    // Merged: the base's copy, which says building, came only with the
+    // merge of its branch, so it reads as done.
     git(&base, &["merge", "-q", "--no-ff", "-m", "Merge", ID]);
-    write_item(&base, ID, "in_review", &["t1", "t9"], &[], "");
-    git(&base, &["commit", "-qam", "Base moves on"]);
+    assert_eq!(field(&base, "main", "status"), "building");
     let status = atelier(&base, "t3", &["status"]).stdout;
-    assert!(
-        status.contains(&format!("  {ID} (in review, held by t9): Say hello\n")),
-        "{status}"
-    );
+    assert!(!status.contains(ID), "{status}");
+    let shown = atelier(&base, "t3", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done"), "{shown}");
 }
 
 #[test]
@@ -1288,5 +1286,5 @@ fn a_codex_subagent_reviews_its_parents_item_as_a_thread_of_its_own() {
     // And the root merges.
     let run = codex(&root, SESSION, &["merge"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(field(&root, "main", "status"), "done");
+    assert_eq!(field(&root, "main", "status"), "approved");
 }

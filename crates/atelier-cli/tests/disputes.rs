@@ -96,7 +96,8 @@ fn a_rebuttal_the_next_reviewer_withdraws_closes_its_finding() {
         rebuttal(&format!("withdrawn in {carrier}"))
     );
     assert_eq!(atelier(&root, "t1", &["merge"]).code, 0);
-    assert_eq!(field(&root, "main", "status"), "done");
+    // Merged as approved, which on the base reads as done.
+    assert_eq!(field(&root, "main", "status"), "approved");
     // A done item's dispute is still listed.
     assert_eq!(
         disputed(&root, &[]),

@@ -197,7 +197,7 @@ enum Command {
     },
     /// Lead a ready mission, written in this checkout, on a backlog branch, committing nothing, and see what each of its items needs.
     Lead { mission: String },
-    /// Merge this branch's approved item into the base, once its checks pass, in one commit that marks it done. A backlog branch, which changes records alone, merges once its records are valid on the merged tree, with no review.
+    /// Merge this branch's approved item into the base once its checks pass: through the forge's merge of its pull request where a forge is configured, else by moving the local base to a merge commit. The item is done once merged. A backlog branch, which changes records alone, merges once its records are valid on the merged tree, with no review.
     Merge {
         /// Merge an item nobody reviewed, whose correctness is evident from its diff, giving why.
         #[arg(long, value_name = "WHY")]

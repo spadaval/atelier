@@ -1,7 +1,9 @@
 //! The GitHub forge `config.toml` names, reached through the `gh` CLI as
 //! Atelier reaches Git through `git`: authentication is whatever
-//! `gh auth login` set up. It finds or opens a branch's pull request and
-//! reads the CI runs of its branch, for `submit` and `merge`.
+//! `gh auth login` set up. It finds or opens a branch's pull request,
+//! reads the CI runs of its branch, for `submit` and `merge`, and merges
+//! the pull request once `merge`'s checks pass, through `gh pr merge`,
+//! reading why it will not yet through `gh pr view`.
 //!
 //! It calls the REST API through `gh api` with fixed fields rather than
 //! parsing `gh run list`, whose output is `gh`'s own and changes between
@@ -81,6 +83,21 @@ impl PullRequest {
             url: pull["html_url"].as_str().unwrap_or_default().to_owned(),
         })
     }
+}
+
+/// Where a pull request stands for a merge, in GitHub's words: `state`
+/// (`OPEN`, `MERGED`, `CLOSED`), `reviewDecision` (`REVIEW_REQUIRED`,
+/// `CHANGES_REQUESTED`, `APPROVED`, or empty where no review is required),
+/// `mergeStateStatus` (`BLOCKED` where a required review or check is
+/// missing, `BEHIND` where the branch must be brought up to date with its
+/// base, `DIRTY` where it conflicts, `CLEAN` and others), and the head
+/// commit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeState {
+    pub state: String,
+    pub review_decision: String,
+    pub merge_state_status: String,
+    pub head: String,
 }
 
 /// A GitHub repository.
@@ -203,6 +220,60 @@ impl Github {
         PullRequest::from_json(&pull).ok_or_else(|| {
             ForgeError::Unreachable(format!("gh api {path} returned no pull request number"))
         })
+    }
+
+    /// Merges pull request `number` as a merge commit of `head` onto its
+    /// base, with `subject` and `body` as the commit's message. The forge
+    /// refuses when its head is no longer `head`, and whenever the base's
+    /// protection is not met.
+    pub fn merge_pull_request(
+        &self,
+        number: u64,
+        head: &str,
+        subject: &str,
+        body: &str,
+    ) -> Result<(), ForgeError> {
+        let number = number.to_string();
+        let repo = self.repo();
+        let args = [
+            "pr",
+            "merge",
+            &number,
+            "--repo",
+            &repo,
+            "--merge",
+            "--match-head-commit",
+            head,
+            "--subject",
+            subject,
+            "--body",
+            body,
+        ];
+        self.gh(&args, "gh pr merge").map(drop)
+    }
+
+    /// Where pull request `number` stands for a merge, as the forge says.
+    pub fn merge_state(&self, number: u64) -> Result<MergeState, ForgeError> {
+        let number = number.to_string();
+        let repo = self.repo();
+        let fields = "state,reviewDecision,mergeStateStatus,headRefOid";
+        let args = ["pr", "view", &number, "--repo", &repo, "--json", fields];
+        let stdout = self.gh(&args, "gh pr view")?;
+        let value: Value = serde_json::from_slice(&stdout).map_err(|error| {
+            ForgeError::Unreachable(format!("gh pr view returned unreadable JSON: {error}"))
+        })?;
+        let text = |key: &str| value[key].as_str().unwrap_or_default().to_owned();
+        Ok(MergeState {
+            state: text("state"),
+            review_decision: text("reviewDecision"),
+            merge_state_status: text("mergeStateStatus"),
+            head: text("headRefOid"),
+        })
+    }
+
+    /// The repository as `gh --repo` names it, with its host.
+    fn repo(&self) -> String {
+        format!("{}/{}", self.host, self.slug)
     }
 
     fn api(&self, path: &str, fields: &[(&str, &str)]) -> Result<Value, ForgeError> {

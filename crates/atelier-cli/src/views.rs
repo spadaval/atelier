@@ -8,13 +8,13 @@ use crate::view_output;
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
 use atelier_app::plan::{misplaced, save, Belongs};
-use atelier_app::repo::mission_path;
+use atelier_app::repo::{mission_path, on_base};
 use atelier_app::say::status_name;
 use atelier_app::{
     disputes, entries, git, item_view, items_of, list as groups, mission_view, narrows_item,
     narrows_mission, Entry, Filter, Located, Record, Repo,
 };
-use atelier_core::MissionStatus;
+use atelier_core::{MissionStatus, Named};
 use atelier_records::{validate_id, ItemDir, MissionDir};
 use view_output::{Change, Whence};
 
@@ -270,7 +270,17 @@ fn change<R: Record>(
 /// `new --from` and `drop` do, so it lists what they would settle here.
 pub fn deferred(repo: &mut Repo) -> Result<Outcome> {
     let mut found = Vec::new();
+    let own = match repo.named() {
+        Some(Named::Record(id)) if repo.on_unmerged_branch_of(&id)? => Some(id),
+        _ => None,
+    };
     for dir in repo.store().items()? {
+        // A started item here came with the merge of its branch, unless
+        // this is that branch, not merged yet.
+        let dir = match own.as_deref() == Some(dir.item.id.as_str()) {
+            true => dir,
+            false => on_base(dir),
+        };
         let unsettled = unsettled(&dir)?.into_iter();
         found.extend(unsettled.map(|finding| (dir.item.id.clone(), finding)));
     }

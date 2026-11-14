@@ -544,7 +544,7 @@ fn the_first_commit_of_a_repository_is_checked() {
 }
 
 #[test]
-fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
+fn a_push_of_the_base_with_a_commit_that_is_no_atelier_merge_is_refused() {
     let scratch = pushed(&[(ID, "ready")]);
     let root = scratch.root();
     let pushed = remote_tip(&root, "main");
@@ -558,17 +558,17 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     assert!(
         run.stderr.starts_with(
             "Atelier's pre-push hook refused this push; nothing was pushed.\n\
-             Rule: code and config.toml reach main only through atelier merge. Each new commit on main's first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:\n"
+             Rule: main receives only merges made by atelier merge. Each new commit on main's first-parent line is one. These are not:\n"
         ),
         "{}",
         run.stderr
     );
     assert!(run
         .stderr
-        .contains(&format!("  {commit} Say hello: changes hello.txt\n")));
+        .contains(&format!("  {commit} Say hello: not an Atelier merge\n")));
     assert!(run.stderr.contains(
-        &format!("Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then git branch -f main {} takes them off main, and atelier merge brings them in once the item is approved.\n", &pushed[..7])
-    ));
+        &format!("Move them to a branch: atelier start --new \"<title>\" starts an item that holds code, atelier start --backlog <slug> a branch for record changes. Then git branch -f main {} takes them off main, and atelier merge brings the branch in.\n", &pushed[..7])
+    ), "{}", run.stderr);
     assert_eq!(remote_tip(&root, "main"), pushed);
 
     // Pushed under another name, it is no push of the base.
@@ -579,10 +579,10 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     git(&root, &["reset", "-q", "--hard", "HEAD^"]);
     let run = git_as(&root, &["push", "-q", "origin", "feature:main"]);
     assert_ne!(run.code, 0);
-    assert!(run.stderr.contains("changes hello.txt"));
+    assert!(run.stderr.contains("Say hello: not an Atelier merge"));
 
-    // A merge that is not Atelier's is judged by what it brings to the base,
-    // and so is a commit that is no merge but carries the trailer.
+    // A merge that is not Atelier's is refused, and so is a commit that is
+    // no merge but carries the trailer.
     let run = git_as(
         &root,
         &["merge", "-q", "--no-ff", "feature", "-m", "Merge feature"],
@@ -591,7 +591,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(
-        run.stderr.contains("Merge feature: changes hello.txt"),
+        run.stderr.contains("Merge feature: not an Atelier merge"),
         "{}",
         run.stderr
     );
@@ -604,7 +604,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(
-        run.stderr.contains("Say hi: changes hello.txt"),
+        run.stderr.contains("Say hi: not an Atelier merge"),
         "{}",
         run.stderr
     );
@@ -627,8 +627,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(
-        run.stderr
-            .contains("Check it: changes .atelier/config.toml\n"),
+        run.stderr.contains("Check it: not an Atelier merge\n"),
         "{}",
         run.stderr
     );
@@ -636,7 +635,8 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     let run = git_as(&root, &["push", "-q", "--force", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(
-        run.stderr.contains(&format!("approved.\n{SKIP}")),
+        run.stderr
+            .contains(&format!("brings the branch in.\n{SKIP}")),
         "{}",
         run.stderr
     );
@@ -656,7 +656,7 @@ fn a_push_of_the_base_with_a_plain_commit_of_code_or_config_is_refused() {
     assert_eq!(
         run.stdout + &run.stderr,
         format!(
-            "Skipped with ATELIER_SKIP: Code and config.toml reach main only through atelier merge ({commit} Check it): CI is down\n"
+            "Skipped with ATELIER_SKIP: main receives only merges made by atelier merge ({commit} Check it is not one): CI is down\n"
         )
     );
     assert!(remote_tip(&root, "main").starts_with(&git(&root, &["rev-parse", "HEAD"])));
@@ -704,20 +704,11 @@ fn a_push_from_a_checkout_whose_config_does_not_read_is_refused_with_the_way_out
 }
 
 #[test]
-fn planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_base() {
+fn a_push_of_several_refs_judges_only_the_base() {
     let scratch = pushed(&[(ID, "draft")]);
     let root = scratch.root();
-    let run = planned(&root, "t1", &["ready", ID, "--by", "sumeet"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    let run = atelier(&root, "t1", &["new", "Say goodbye"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(commit_all(&root, "Plan goodbye").code, 0);
-    let run = git_as(&root, &["push", "-q", "origin", "main"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    let planned = git(&root, &["rev-parse", "main"]);
-    assert!(remote_tip(&root, "main").starts_with(&planned));
-
-    // Code on another branch, and planning on the base: the base is judged.
+    // Code on another branch, and the base as the remote has it: the base
+    // is judged, and moves nothing.
     git(&root, &["switch", "-q", "-c", "spike"]);
     fs::write(root.join("hello.txt"), "hello\n").unwrap();
     assert_eq!(commit_all(&root, "Try hello").code, 0);
@@ -736,7 +727,7 @@ fn planning_commits_reach_the_base_and_a_push_of_several_refs_judges_only_the_ba
     );
     assert_ne!(run.code, 0);
     assert!(
-        run.stderr.contains("Say it louder: changes hello.txt"),
+        run.stderr.contains("Say it louder: not an Atelier merge"),
         "{}",
         run.stderr
     );
@@ -776,14 +767,12 @@ fn an_atelier_merge_of_a_branch_with_code_commits_reaches_the_base_and_its_branc
 }
 
 #[test]
-fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
+fn a_plain_commit_of_records_alone_on_the_base_is_refused() {
     let scratch = pushed(&[(ID, "ready")]);
     let root = scratch.root();
     let pushed = remote_tip(&root, "main");
-    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
     git(&root, &["switch", "-q", "main"]);
-    // Ready to done is `close`'s change; on the base, the commit needs a
-    // skip of the base's own rule.
+    // On the base the commit needs a skip of the pre-commit hook's rule.
     edit(&root, &item_path(ID), "status: ready", "status: done");
     git(&root, &["add", "-A"]);
     let run = git_skipping(
@@ -796,49 +785,71 @@ fn a_plain_commit_setting_an_item_done_while_its_branch_exists_is_refused() {
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
     assert!(
-        run.stderr.contains(&format!(
-            "Rule: an item whose branch exists is done on main only through atelier merge. These set one done:\n  {commit} Call it done: sets {ID} done while branch {ID} exists\nTake each such commit off main: git reset --keep HEAD^ when it is the last, else git rebase -i {} and drop it. Then run atelier merge on the item's branch.\n",
-            &pushed[..7]
-        )),
+        run.stderr
+            .contains(&format!("  {commit} Call it done: not an Atelier merge\n")),
         "{}",
         run.stderr
     );
-    assert!(!run.stderr.contains("Rule: code"));
-    // The way out it names, with both hooks in place.
+    // The way out it names.
     git(&root, &["reset", "-q", "--keep", "HEAD^"]);
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(remote_tip(&root, "main"), pushed);
+}
 
-    edit(&root, &item_path(ID), "status: ready", "status: done");
-    git(&root, &["add", "-A"]);
-    let run = git_skipping(
+#[test]
+fn with_a_forge_any_push_that_moves_the_base_is_refused_and_names_merge() {
+    let scratch = pushed(&[(ID, "ready")]);
+    let root = scratch.root();
+    let pushed = remote_tip(&root, "main");
+    git(&root, &["switch", "-q", "main"]);
+    append(
         &root,
-        Some("testing the push"),
-        &["commit", "-qm", "Call it done"],
+        ".atelier/config.toml",
+        "\n[forge]\nprovider = \"github\"\nremote = \"origin\"\n",
     );
+    git(&root, &["add", "-A"]);
+    let run = git_skipping(&root, Some("set up"), &["commit", "-qm", "Name the forge"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
-
-    git(&root, &["branch", "-q", "-D", ID]);
-    let run = git_as(&root, &["push", "-q", "origin", "main"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-
-    // A record that does not read in a commit pushed, as when the commit
-    // went past the pre-commit hook, is refused with how to repair it.
-    fs::write(root.join(item_path(ID)), "no front matter\n").unwrap();
-    git(&root, &["commit", "-qam", "Break it", "--no-verify"]);
-    let commit = git(&root, &["rev-parse", "--short=7", "HEAD"]);
+    // Even a merge with the trailer: the forge makes every merge.
+    git(&root, &["switch", "-q", "-c", "side", "HEAD^"]);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    assert_eq!(commit_all(&root, "Say hello").code, 0);
+    git(&root, &["switch", "-q", "main"]);
+    git(
+        &root,
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "side",
+            "-m",
+            "Merge side\n\nAtelier-Merge: side",
+        ],
+    );
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
-    assert!(
-        run.stderr.contains(&format!(
-            "These do not read as records, so no rule can be checked on them:\n  {commit}:{}: front matter: ",
-            item_path(ID)
-        )) && run.stderr.contains(
-            "Fix each record in the commit that broke it: git commit --amend for the last commit, git rebase -i for an earlier one. A later commit that fixes it leaves the broken one in the push.\n"
-        ),
-        "{}",
-        run.stderr
+    assert_eq!(
+        run.stderr,
+        format!(
+            "Atelier's pre-push hook refused this push; nothing was pushed.\n\
+             Rule: main is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes main, so no push may move it.\n\
+             Put the commits on a branch and run atelier merge there; `git branch -f main {}` puts main back.\n{SKIP}",
+            &pushed[..7]
+        )
+        + "error: failed to push some refs to '"
+        + &format!("{}'\n", scratch.dir.path().join("remote.git").display())
+    );
+    assert_eq!(remote_tip(&root, "main"), pushed);
+    // A branch is pushed as before, and so is the base's own commit.
+    let run = git_as(&root, &["push", "-q", "origin", "side", "HEAD~2:main"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    // A skip passes it, and says so.
+    let run = git_skipping(&root, Some("bootstrap"), &["push", "-q", "origin", "main"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        run.stdout + &run.stderr,
+        "Skipped with ATELIER_SKIP: main is moved only by the forge's merge of a pull request, through atelier merge: bootstrap\n"
     );
 }
 
@@ -856,10 +867,10 @@ fn a_first_push_of_a_base_judges_its_whole_line() {
         &root,
         &["remote", "add", "origin", remote.to_str().unwrap()],
     );
-    // Its first commit wrote config.toml.
+    // Its first commit is no merge.
     let run = git_as(&root, &["push", "-q", "origin", "main"]);
     assert_ne!(run.code, 0);
-    assert!(run.stderr.contains("Plan: changes .atelier/config.toml"));
+    assert!(run.stderr.contains("Plan: not an Atelier merge"));
     // With no commit of the remote's to name, the way out names none.
     assert!(
         run.stderr

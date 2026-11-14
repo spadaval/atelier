@@ -672,8 +672,12 @@ reads and writes.
 
 - **The refs read.** The base's tip is the remote-tracking ref of the base
   (`refs/remotes/<remote>/<base_branch>`) where a forge is configured and
-  that ref exists, since the forge makes every merge; otherwise it is the
-  local base (`refs/heads/<base_branch>`). A local base that holds commits
+  that ref exists, since the forge makes every merge, so a merge whose
+  catch-up could not move the local base, behind or diverged, counts.
+  Where the local base is strictly ahead of it, or with no forge, it is
+  the local base (`refs/heads/<base_branch>`). A planning reader and `list --deferred`
+  read a started copy in the checkout as done, as the base's, unless the
+  checkout is that item's own branch and it is not merged. A local base that holds commits
   the remote's does not is reported by `status`, since no merge made them.
   The branches read are every local branch, and every remote-tracking branch
   of the forge's remote, whose name less the configured prefix is an item
@@ -908,9 +912,11 @@ and moves the local base, as before.
 
 In order:
 
-1. With `--trivial "<why>"` on an item: unless the head already holds that
-   reason, write it into the item's `trivial` field and commit `item.md`
-   alone on the branch. The head then differs from the one before only
+1. With `--trivial "<why>"` on an item: once the act's conditions hold, as
+   step 2 reads them, and unless the head already holds that reason, write
+   it into the item's `trivial` field and commit `item.md` alone on the
+   branch. An uncommitted change to `item.md` refuses this, since it would
+   be committed with the reason. The head then differs from the one before only
    inside the item's directory, so a CI run on the earlier commit still
    counts for it.
 2. Read everything, without a lock: first the head, which every later step
@@ -982,26 +988,34 @@ In order:
    many checks ran and that each passed, or that `config.toml` names none.
    A failing check `ATELIER_SKIP` passed has its skip line instead, and no
    line says the checks passed. `atelier check` on the merged tree is
-   always among the checks, whatever `config.toml` lists; on a record-only
-   branch it is the only one.
+   always among the checks, whatever `config.toml` lists, and runs first;
+   on a record-only branch it is the only one.
 8. Confirm the branch tip, the base tip and the checkouts are what steps 4
    to 7 read; otherwise write nothing and say to run it again. Then:
    - **With a forge**, ask it to merge the pull request as a merge commit,
      only at the head checked, with the message of step 6: for GitHub,
      `gh pr merge <number> --merge --match-head-commit <head> --subject
-     <subject> --body <body>`. The commit object of step 6 is discarded;
-     the forge makes its own merge commit of the same head onto its base,
-     with that message, trailers included. When the forge
-     merges, fetch the base, so this clone reads the merge, and fast-forward
-     the local base where it is checked out with no changes. When the
-     forge refuses because a review or a check its branch protection
-     requires is missing, stop with exit status 3, change nothing, and say
-     which is missing, as the forge reports it (for GitHub, the pull
-     request's `reviewDecision` and `mergeStateStatus`). `merge` does not
-     wait for a person: a required human review can take a day, and the
-     command is run again once it is given. When the forge refuses because
-     the head or the base moved, or the branch conflicts, refuse and say to
-     run it again.
+     <subject> --body <body>`, ended after the minute under the lock. The
+     commit object of step 6 is discarded; the forge makes its own merge
+     commit of the same head onto its base, with that message, trailers
+     included. When the forge merges, fetch the base into its
+     remote-tracking ref, so this clone reads the merge, and fast-forward
+     the local base: in its checkout where one has it out with no changes,
+     else by moving the ref. What it cannot bring up to date (a checkout
+     with changes, a local base with commits the forge's lacks, a fetch that
+     fails) it says, and the merge stands. When the forge refuses, ask why
+     (for GitHub, `gh pr view --json
+     state,reviewDecision,mergeStateStatus,headRefOid`). Merged after all,
+     as when its answer came late, counts as merged. A review or a check
+     its branch protection requires that is missing (`mergeStateStatus`
+     `BLOCKED`, or `reviewDecision` `REVIEW_REQUIRED` or
+     `CHANGES_REQUESTED`), or a branch it requires to be up to date with
+     the base (`BEHIND`), stops with exit status 3, changes nothing, and
+     says which, quoting both fields. `merge` does not wait for a person: a
+     required human review can take a day, and the command is run again
+     once it is given. A head that moved refuses as an input that moved,
+     a conflict (`DIRTY`) refuses naming the `git merge` that catches up,
+     and anything else refuses with what `gh` said.
    - **Without a forge**, move the base to the merge commit: a fast-forward
      of the base's checkout where one has it checked out, else `git
      update-ref` from the tip read. Nothing is pushed.
@@ -1025,8 +1039,9 @@ conflict is refused by the forge. A clash between two changes that each
 merge cleanly is not seen by this run's checks; CI on the base after the
 merge sees it, and a protection that requires a branch to be up to date
 with its base makes the forge refuse instead, which `merge` reports with
-exit status 3 and the `git merge` of the base that catches up. atelier-t5am
-measures this and says in its Report what else catches it.
+exit status 3 and the `git merge` of the base that catches up. A clone
+whose remote-tracking base is behind the forge's runs its checks on an
+older base still, which is the same gap and is caught the same ways.
 
 **A protected base that requires CI on the head.** The forge then waits for
 a run on the exact head it merges. The commit holding a reviewer's verdict
@@ -1264,9 +1279,10 @@ stopping at it.
   `HEAD` is the branch `config.toml` names as the base; a commit in a
   detached checkout is not, since it reaches the base only through a
   branch.
-- **pre-push** reads the base's name from the checkout's `config.toml` and
-  judges each pushed line whose remote ref is the base, whatever the local
-  ref; a deletion adds nothing. The new commits are those on the local
+- **pre-push** reads the base's name and the forge from the checkout's
+  `config.toml` and judges each pushed line whose remote ref is the base,
+  whatever the local ref; a deletion adds nothing, and a push of the commit
+  the remote has moves nothing. The new commits are those on the local
   commit's first-parent line not in the history of the remote's old commit.
   When the remote has no base yet, or this clone lacks its commit after a
   force push, every commit on the line is new, so the first push of a
@@ -1281,10 +1297,10 @@ stopping at it.
 A refusal is printed on stderr with exit 1, inside the Git command's own
 output. It names each rule broken, each file or commit (its short ID and
 subject) that breaks it, and the way out. A record that does not parse is
-listed apart, as no rule; in a push, the way out is
-to rewrite the commit that broke it, since every new commit is read. A
-push from a checkout whose `config.toml` does not read is refused that
-way too, since the config names the base.
+listed apart, as no rule. The pre-push hook reads no record of the commits
+it judges, only their parents and trailers; a push from a checkout whose
+`config.toml` does not read is refused that way, since the config names
+the base and whether a forge is configured.
 
 `ATELIER_SKIP`, set to a reason, lets every rule one command or hook meets
 pass. A rule is a refusal that depends on the state of the work or on who
@@ -1380,10 +1396,14 @@ read again under it. `merge` is the only command that takes the lock, since
 it is the only one that merges. The lock orders merges in one clone; with a
 forge, merges from different clones are ordered by the forge, and step 8 of
 [Merge](#merge) says what that leaves open.
-After the checks, and before it writes anything, it confirms that the branch
-tip and the base tip are the ones the checks ran on and that neither the
-work checkout nor the base's checkout has changed, and it refuses if any
-has. The lock and that confirmation were copied from the old `merge.rs`,
+After the checks, and before it writes anything or asks the forge to merge,
+it confirms that the branch tip and the base tip are the ones the checks
+ran on and that the work checkout has not changed, nor, without a forge,
+the base's checkout, which only then is merged into; and it refuses if any
+has. With a forge both stay: the lock keeps two merges in one clone from
+checking one base for two branches, and the confirmation keeps a commit
+made during the checks from going unchecked, which `--match-head-commit`
+alone would catch only once pushed. The lock and that confirmation were copied from the old `merge.rs`,
 `mutation_lock` and `committed_snapshot.rs`, with tests that move the base,
 move the branch, change the checkout and run two merges at once. The parts
 of that code that guarded against tampering with file modes and index flags
@@ -1401,8 +1421,8 @@ code as `merge`.
 The forge's part grows by three calls under the branch model: `merge` asks
 it to merge a pull request at a given head (`gh pr merge --merge
 --match-head-commit`), reads why it will not yet (`gh pr view --json
-reviewDecision,mergeStateStatus`), and `start` pushes a new branch without
-force as the claim. Pull request reviews and comments are still not read:
+state,reviewDecision,mergeStateStatus,headRefOid`), and `start` pushes a
+new branch without force as the claim. Pull request reviews and comments are still not read:
 a required human review is something the forge reports as missing, not a
 verdict Atelier records.
 

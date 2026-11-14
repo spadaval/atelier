@@ -3,7 +3,7 @@
 //! `atelier-app` say and the wording of a refusal, which live in
 //! `atelier_app::say` and are used from here.
 
-use crate::forge::{CiRun, ForgeError, PullRequest};
+use crate::forge::{CiRun, ForgeError, MergeState, PullRequest};
 use crate::merge::Moved;
 use crate::setup::{Harness, Step};
 use atelier_app::acts::{Act, Condition, Refusal};
@@ -146,15 +146,15 @@ fn gates(config: &Config) -> String {
     }
     if let Some(forge) = &config.forge {
         text += &format!(
-            "It pushes the branch to {} and opens its pull request where `atelier submit` did not",
+            "It pushes the branch to {} where the forge's copy is behind and opens its pull request where `atelier submit` did not",
             forge.remote
         );
         text += &match &forge.ci_workflow {
             Some(workflow) => format!(
-                ", waits up to {} for {workflow} to pass on the branch's latest code, then merges and pushes the base.\n",
+                ", waits up to {} for {workflow} to pass on the branch's latest code, then has the forge merge the pull request.\n",
                 span(crate::merge::WAIT)
             ),
-            None => ", then merges and pushes the base.\n".into(),
+            None => ", then has the forge merge the pull request.\n".into(),
         };
     }
     text
@@ -602,22 +602,19 @@ pub(crate) fn rule_record_on_base(base: &str) -> String {
     format!("Only a merge writes the base branch {base}, so no commit on it changes a record")
 }
 
-/// The rule that code reaches `base` only through `atelier merge`, as
-/// `commit` breaks it.
-pub(crate) fn rule_code(base: &str, commit: &str, subject: &str) -> String {
+/// The rule that the base receives only merges, as `commit`, which is not
+/// an Atelier merge, breaks it.
+pub(crate) fn rule_merge(base: &str, commit: &str, subject: &str) -> String {
     format!(
-        "Code and config.toml reach {base} only through atelier merge ({} {subject})",
+        "{base} receives only merges made by atelier merge ({} {subject} is not one)",
         short(commit)
     )
 }
 
-/// The rule that an item with a branch is done only through `atelier
-/// merge`, as `commit` breaks it for item `id`.
-pub(crate) fn rule_done(base: &str, commit: &str, id: &str) -> String {
-    format!(
-        "An item whose branch exists is done on {base} only through atelier merge ({} sets {id} done)",
-        short(commit)
-    )
+/// The rule that with a forge configured no push moves the base, since
+/// the forge makes every merge.
+pub(crate) fn rule_base_moved(base: &str) -> String {
+    format!("{base} is moved only by the forge's merge of a pull request, through atelier merge")
 }
 
 /// How many commits a refused push lists.
@@ -635,54 +632,33 @@ fn commits<T>(found: &[(String, String, T)], what: impl Fn(&T) -> String) -> Str
 }
 
 /// The pre-push hook's refusal of a push of `base`, whose commit on the
-/// remote, if it has one this clone has, is `old`: records that do not
-/// read, commits that bring code without an Atelier merge, with the paths
-/// they change outside planning, and commits that set an item done while
-/// its branch exists, with the item.
-pub fn push_refused(
-    base: &str,
-    old: Option<&str>,
-    unread: &[Problem],
-    code: &[(String, String, Vec<String>)],
-    done: &[(String, String, String)],
-) -> String {
-    // With no commit of the remote's to name, the commands are described.
-    let (back, drop) = match old.map(short) {
-        Some(old) => (
-            format!("git branch -f {base} {old}"),
-            format!("git rebase -i {old}"),
-        ),
-        None => (
-            format!("moving {base} back to the remote's commit"),
-            "git rebase -i".to_string(),
-        ),
+/// remote, if it has one this clone has, is `old`: the new commits on its
+/// first-parent line that are not Atelier merges.
+pub fn push_refused(base: &str, old: Option<&str>, plain: &[(String, String, ())]) -> String {
+    let back = match old.map(short) {
+        Some(old) => format!("git branch -f {base} {old}"),
+        None => format!("moving {base} back to the remote's commit"),
     };
-    let mut text = "Atelier's pre-push hook refused this push; nothing was pushed.\n".to_string()
-        + &problems(unread, &[]);
-    if !unread.is_empty() {
-        text += "Fix each record in the commit that broke it: git commit --amend for the last commit, git rebase -i for an earlier one. A later commit that fixes it leaves the broken one in the push.\n";
-    }
-    if !code.is_empty() {
-        text += &format!(
-            "Rule: code and config.toml reach {base} only through atelier merge. Each new commit on {base}'s first-parent line is an Atelier merge, or changes only .atelier/missions/ and .atelier/items/. These are neither:\n"
-        );
-        text += &commits(code, |paths| format!("changes {}", some(paths)));
-        text += &format!(
-            "Move them to an item's branch: atelier start --new \"<title>\" starts one that holds them. Then {back} takes them off {base}, and atelier merge brings them in once the item is approved.\n"
-        );
-    }
-    if !done.is_empty() {
-        text += &format!(
-            "Rule: an item whose branch exists is done on {base} only through atelier merge. These set one done:\n"
-        );
-        text += &commits(done, |id| {
-            format!("sets {id} done while branch {id} exists")
-        });
-        text += &format!(
-            "Take each such commit off {base}: git reset --keep HEAD^ when it is the last, else {drop} and drop it. Then run atelier merge on the item's branch.\n"
-        );
-    }
-    text
+    let mut text = format!(
+        "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} receives only merges made by atelier merge. Each new commit on {base}'s first-parent line is one. These are not:\n"
+    );
+    text += &commits(plain, |()| "not an Atelier merge".to_string());
+    text + &format!(
+        "Move them to a branch: atelier start --new \"<title>\" starts an item that holds code, atelier start --backlog <slug> a branch for record changes. Then {back} takes them off {base}, and atelier merge brings the branch in.\n"
+    )
+}
+
+/// The pre-push hook's refusal of a push that moves `base` where a forge
+/// on `remote` is configured; `old` is the remote's commit, if this clone
+/// has it.
+pub fn push_moves_base(base: &str, remote: &str, old: Option<&str>) -> String {
+    let back = match old.map(short) {
+        Some(old) => format!("`git branch -f {base} {old}` puts {base} back"),
+        None => format!("moving {base} back to {remote}'s commit puts it back"),
+    };
+    format!(
+        "Atelier's pre-push hook refused this push; nothing was pushed.\nRule: {base} is moved only by the forge's merge of a pull request. With a forge configured, atelier merge has the forge merge each branch's pull request and never pushes {base}, so no push may move it.\nPut the commits on a branch and run atelier merge there; {back}.\n"
+    )
 }
 
 /// The pre-push hook's refusal when the checkout's `config.toml`, which
@@ -1479,8 +1455,9 @@ pub fn conflicts(id: &str, base: &str, paths: &[String]) -> String {
 /// The merge commit's message. Its last line is the trailer the pre-push
 /// hook knows an Atelier merge by.
 pub fn merge_message(id: &str, title: &str, base: &str, config: &Config) -> String {
-    let mut text =
-        format!("Merge {id}: {title}\n\nMerges branch {id} into {base} and marks {id} done.\n");
+    let mut text = format!(
+        "Merge {id}: {title}\n\nMerges branch {id} into {base}, where its record reads as done.\n"
+    );
     if !config.merge_checks.is_empty() {
         text += "These merge checks passed on this tree:\n";
         for check in &config.merge_checks {
@@ -1671,9 +1648,107 @@ pub fn checks_passed(base: &str, count: usize) -> String {
 
 pub fn merged(id: &str, base: &str, commit: &str) -> String {
     format!(
-        "Merged {id} into {base} with merge commit {}, which marks it done.\n",
+        "Merged {id} into {base} with merge commit {}; it is done.\n",
         short(commit)
     )
+}
+
+/// The forge merged `id`'s pull request `pull` into `base`.
+pub fn forge_merged(id: &str, base: &str, pull: &PullRequest) -> String {
+    format!(
+        "The forge merged pull request #{} into {base}; {id} is done.\n",
+        pull.number
+    )
+}
+
+/// The forge did not merge `id`'s pull request `pull`, for `error`.
+pub fn forge_merge_failed(id: &str, base: &str, pull: &PullRequest, error: &ForgeError) -> String {
+    let (reason, next) = forge_reason(error);
+    format!(
+        "`atelier merge` refused: the forge did not merge pull request #{} of {id} into {base}: {reason}. Nothing was merged.\n{next}, then run `atelier merge` again.\n",
+        pull.number
+    )
+}
+
+/// The forge will not merge `id`'s pull request `pull`, since its branch
+/// conflicts with the forge's `base`.
+pub fn forge_conflicts(id: &str, base: &str, remote: &str, pull: &PullRequest) -> String {
+    format!(
+        "`atelier merge` refused: pull request #{} does not merge cleanly into {remote}'s {base}, which has moved since this clone fetched it. Nothing was merged.\nBring it in on branch {id} with `git fetch {remote} {base}` and `git merge {remote}/{base}`, resolve the conflicts and commit, then run `atelier merge` again.\n",
+        pull.number
+    )
+}
+
+/// The forge will not merge `id`'s pull request `pull` until its branch is
+/// up to date with `base`, as the base's protection requires.
+pub fn forge_behind(id: &str, base: &str, remote: &str, pull: &PullRequest) -> String {
+    format!(
+        "The forge will not merge pull request #{} yet: {base}'s protection requires the branch to be up to date with {base}, and it is not (mergeStateStatus BEHIND). Nothing was merged.\nBring {base} in on branch {id} with `git fetch {remote} {base}` and `git merge {remote}/{base}`, commit, and run `atelier merge` again.\n",
+        pull.number
+    )
+}
+
+/// The forge will not merge pull request `pull` until a review or a check
+/// its base's protection requires is given, as `state` says.
+pub fn forge_blocked(pull: &PullRequest, state: &MergeState) -> String {
+    let review = match state.review_decision.as_str() {
+        "REVIEW_REQUIRED" => "a review the base's protection requires has not been given",
+        "CHANGES_REQUESTED" => "a reviewer on the forge requested changes",
+        _ => "a check the base's protection requires has not passed",
+    };
+    let decision = match state.review_decision.as_str() {
+        "" => "none".to_string(),
+        decision => decision.to_string(),
+    };
+    format!(
+        "The forge will not merge pull request #{} yet: {review} (reviewDecision {decision}, mergeStateStatus {}). Nothing was merged.\nRun `atelier merge` again once it is given: {}\n",
+        pull.number, state.merge_state_status, pull.url
+    )
+}
+
+/// The fetch of `base` after the forge's merge failed.
+pub fn not_fetched(remote: &str, base: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Fetching {base} from {remote} afterwards failed: {error:#}. This clone does not show the merge until `git fetch {remote}` and a fast-forward of {base} bring it in.\n"
+    )
+}
+
+/// The local `base` holds commits the forge's does not, so it was not
+/// brought up to date with the merge.
+pub fn base_diverged(remote: &str, base: &str) -> String {
+    format!(
+        "The local {base} has commits {remote}/{base} does not, so it was left as it was; no merge made them. Move it to {remote}/{base} once they are on a branch.\n"
+    )
+}
+
+/// The checkout of `base` at `path` has uncommitted changes, so it was not
+/// brought up to date with the merge.
+pub fn base_left(remote: &str, base: &str, path: &Path) -> String {
+    format!(
+        "{base} is checked out at {}, where tracked files have uncommitted changes, so it was left as it was. Bring it up to date there with `git merge --ff-only {remote}/{base}`.\n",
+        path.display()
+    )
+}
+
+/// The fast-forward of the checkout of `base` failed.
+pub fn base_not_moved(remote: &str, base: &str, error: &anyhow::Error) -> String {
+    format!(
+        "Bringing the checkout of {base} up to date failed: {error:#}. Do it there with `git merge --ff-only {remote}/{base}`.\n"
+    )
+}
+
+/// `merge --trivial` where the item's record has uncommitted changes, which
+/// would be committed with the reason.
+pub fn trivial_uncommitted(path: &str) -> String {
+    format!(
+        "`atelier merge --trivial` refused: {path} has uncommitted changes, and the reason is committed in that file. Nothing changed.\nCommit them or undo them, then run it again.\n"
+    )
+}
+
+/// The message of the commit that records why item `id` merges with no
+/// review.
+pub fn trivial_message(id: &str, why: &str) -> String {
+    format!("Merge {id} as trivial: {why}\n")
 }
 
 pub fn records_merged(branch: &str, base: &str, commit: &str) -> String {
@@ -1807,16 +1882,6 @@ pub fn rule_records_dirty(branch: &str) -> String {
 /// A problem of a record, on one line.
 pub fn problem_line(problem: &Problem) -> String {
     problem.to_string()
-}
-
-pub fn base_pushed(base: &str, remote: &str) -> String {
-    format!("Pushed {base} to {remote}.\n")
-}
-
-pub fn base_push_failed(base: &str, remote: &str, error: &anyhow::Error) -> String {
-    format!(
-        "Pushing {base} to {remote} failed: {error:#}. The merge stays on the local {base}.\nIf {remote}'s {base} has commits the local one lacks, bring them into the local {base} first. Then run `atelier merge` again on this branch to push it.\n"
-    )
 }
 
 pub fn already_merged(id: &str, base: &str) -> String {

@@ -197,8 +197,9 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
 fn settling_is_refused_with_nothing_written_and_says_why() {
     let scratch = with_done(&[]);
     let root = scratch.root();
-    // An item in review, whose finding is deferred.
-    write_item(&root, "demo-0pen", "in_review", &["t1"], &[], "Done.");
+    // An item not done, whose finding is deferred. A started item here
+    // would read as done: it reaches the base only by its merge.
+    write_item(&root, "demo-0pen", "ready", &[], &[], "Done.");
     write_review(
         &root,
         ".atelier/items/demo-0pen/reviews/1-bbbb.md",
@@ -227,7 +228,7 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
         ),
         (
             "demo-0pen/1-bbbb.1",
-            "  [ ] demo-0pen is done (it is in review; only a done item's findings are settled)\n",
+            "  [ ] demo-0pen is done (it is ready; only a done item's findings are settled)\n",
             true,
         ),
         (
@@ -420,4 +421,36 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
         .contains("A review of demo-l8tr has a finding 1-cccc.1 (none does)"));
     // The base has not settled the branch's finding until the branch merges.
     assert_eq!(listed(&base).len(), 4);
+}
+
+/// A merge leaves the item's record as the branch had it, approved, and the
+/// checkout on its branch; the item is done there once merged, and its
+/// deferred findings are listed as they are from the base.
+#[test]
+fn a_merged_items_deferred_findings_are_listed_on_its_own_branch() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
+    let (stem, path) = review_of(&root, 1);
+    append(
+        &root,
+        &path,
+        "\n## Finding 1: The greeting ignores the locale\nRecommendation: defer\nEnglish only.\n",
+    );
+    let run = verdict(&root, "t2", &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let run = atelier(&root, "t1", &["merge"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(field(&root, "main", "status"), "approved");
+
+    let finding = format!("{ID}/{stem}.1");
+    let on_branch = listed(&root);
+    assert_eq!(on_branch, [finding]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    assert_eq!(listed(&root), on_branch);
 }

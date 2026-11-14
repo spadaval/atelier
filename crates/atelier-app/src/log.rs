@@ -5,6 +5,7 @@
 //! process reads those versions; and an act is found by comparing a
 //! record's two versions across one commit.
 
+use crate::acts::STARTED;
 use crate::repo::item_path;
 use crate::{git, Repo};
 use anyhow::{bail, Context, Result};
@@ -593,7 +594,10 @@ impl Walker<'_, '_> {
         };
         let old = at(self.repo, &commit.parents[1])?;
         let from = old.map(|old| old.status);
-        if new.status != Status::Done || from == Some(Status::Done) {
+        // The merge of its own branch brings a started item to the base,
+        // where it reads as done; a merge before that wrote `done`.
+        let merged = new.status == Status::Done || STARTED.contains(&new.status);
+        if !merged || from == Some(Status::Done) {
             return Ok(None);
         }
         let act = Happened::Merge {

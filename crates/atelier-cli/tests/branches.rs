@@ -62,6 +62,7 @@ impl Hub {
         fs::write(gh.join("bin/gh"), FAKE_GH).unwrap();
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(gh.join("bin/gh"), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(gh.join("remote"), remote.to_str().unwrap()).unwrap();
         Hub { dir, remote, gh }
     }
 
@@ -390,7 +391,10 @@ fn a_branch_prefix_names_every_kind_of_branch_and_the_item_loop_runs_on_it() {
     assert_eq!(verdict(&root, "t2", &["verdict", "approve"]).code, 0);
     let merged = atelier(&root, "t1", &["merge"]);
     assert_eq!(merged.code, 0, "{}", merged.stderr);
-    assert_eq!(field(&root, "main", "status"), "done");
+    // The merge brings the item to main as approved, which reads as done.
+    assert_eq!(field(&root, "main", "status"), "approved");
+    let shown = atelier(&root, "t1", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done"), "{shown}");
 
     git(&root, &["checkout", "-q", "--detach", "main"]);
     let run = atelier(&root, "p1", &["start", "--backlog", "tidy"]);
@@ -652,7 +656,8 @@ fn a_drop_after_the_item_merged_in_another_clone_is_refused() {
     let (a, b) = (hub.clone("a"), hub.clone("b"));
     hub.approved(&a, "t1");
     ok(hub.atelier(&a, "t1", &["merge"]));
-    assert_eq!(hub.field("main", "status"), "done");
+    // The forge merged it as approved, which on the base reads as done.
+    assert_eq!(hub.field("main", "status"), "approved");
 
     // The other clone has fetched, and its own base is behind.
     git(&b, &["fetch", "-q", "origin"]);
@@ -669,7 +674,7 @@ fn a_drop_after_the_item_merged_in_another_clone_is_refused() {
     );
     assert_eq!(read(&b, &item_path(ID)), before);
     assert_eq!(git(&b, &["status", "--porcelain"]), "");
-    assert_eq!(hub.field("main", "status"), "done");
+    assert_eq!(hub.field("main", "status"), "approved");
 }
 
 /// What `git status` lists as changed, and that `HEAD` is still `head`.

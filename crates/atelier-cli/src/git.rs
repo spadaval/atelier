@@ -218,9 +218,6 @@ pub struct LineCommit {
     pub subject: String,
     /// Whether its message ends in an `Atelier-Merge:` trailer.
     pub atelier_merge: bool,
-    /// The paths it changes from its first parent; a root commit's every
-    /// path.
-    pub paths: Vec<String>,
 }
 
 /// The commits on the first-parent line of `tip` that are not in the
@@ -232,10 +229,6 @@ pub fn first_parent_line(repo: &Path, tip: &str, known: Option<&str>) -> Result<
         "-z",
         "--no-color",
         "--first-parent",
-        "--diff-merges=first-parent",
-        "--root",
-        "--no-renames",
-        "--name-only",
         "--format=%x01%H %P%x02%s%x02%(trailers:key=Atelier-Merge,valueonly)",
         tip,
     ];
@@ -243,8 +236,7 @@ pub fn first_parent_line(repo: &Path, tip: &str, known: Option<&str>) -> Result<
     args.push("--");
     let listed = listing(repo, &args)?;
     // Each commit is \x01, its ID and parents, \x02, its subject, \x02,
-    // its trailer's values, a NUL, a newline, and its paths each ended by
-    // a NUL.
+    // its trailer's values and a NUL.
     listed
         .split('\x01')
         .skip(1)
@@ -255,7 +247,7 @@ pub fn first_parent_line(repo: &Path, tip: &str, known: Option<&str>) -> Result<
             else {
                 bail!("git log printed a commit this tool cannot read: {entry:?}");
             };
-            let (trailer, paths) = rest.split_once('\0').unwrap_or((rest, ""));
+            let trailer = rest.split_once('\0').map_or(rest, |(trailer, _)| trailer);
             let mut ids = ids
                 .split(' ')
                 .filter(|id| !id.is_empty())
@@ -265,7 +257,6 @@ pub fn first_parent_line(repo: &Path, tip: &str, known: Option<&str>) -> Result<
                 parents: ids.collect(),
                 subject: subject.to_string(),
                 atelier_merge: !trailer.trim().is_empty(),
-                paths: names(paths.strip_prefix('\n').unwrap_or(paths)),
             })
         })
         .collect()
