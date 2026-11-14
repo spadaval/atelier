@@ -14,9 +14,8 @@ use crate::api::ActionResponse;
 use crate::{fetch, read};
 use anyhow::{bail, Context, Result};
 use atelier_core::model::{MissionStatus, Thread};
-use atelier_core::{git, Done, Refused, Repo, Skip};
+use atelier_core::{forge, git, Done, Refused, Repo, Skip};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// What the stop needs besides the request.
 pub struct Stopping<'a> {
@@ -136,7 +135,8 @@ pub fn stop(at: &Stopping, id: &str, reason: &str) -> Result<ActionResponse> {
     if let Err(error) = push(&clone, &remote, &branch) {
         bail!("the drop of {id} is committed in the Desk's clone and was not pushed, so nothing is stopped: {error:#}. Stop it again once the page shows what its branch holds now");
     }
-    let closed = close_pull_request(at.gh, &clone, &branch, at.caller, reason);
+    let comment = format!("Stopped from the Desk by {}: {reason}", at.caller);
+    let closed = forge::close_pull_request(at.gh, &clone, &branch, &comment);
     // The served repository sees the push at once.
     let _ = fetch::fetch(at.served, &remote);
     let Done { text, paths, .. } = done;
@@ -166,7 +166,8 @@ fn clone_of(at: &Stopping, remote: &str) -> Result<PathBuf> {
         let _ = std::fs::remove_dir_all(&clone);
         let source = at.served.display().to_string();
         let target = clone.display().to_string();
-        let made = Command::new("git")
+        // Run where the Desk runs, which the paths may be relative to.
+        let made = git::git(Path::new("."))
             .args([
                 "clone",
                 "--quiet",
@@ -210,10 +211,7 @@ fn clone_of(at: &Stopping, remote: &str) -> Result<PathBuf> {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Result<()> {
-    let output = Command::new("git")
-        .current_dir(dir)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+    let output = git::unattended(&mut git::git(dir))
         .args(args)
         .output()
         .with_context(|| format!("cannot run git {}", args.join(" ")))?;
@@ -239,30 +237,4 @@ fn push(clone: &Path, remote: &str, branch: &str) -> Result<()> {
             &format!("refs/heads/{branch}:refs/heads/{branch}"),
         ],
     )
-}
-
-/// Closes the open pull request whose head is `branch`: `Ok(false)` when
-/// there is none.
-fn close_pull_request(
-    gh: &Path,
-    clone: &Path,
-    branch: &str,
-    caller: &str,
-    reason: &str,
-) -> Result<bool> {
-    let comment = format!("Stopped from the Desk by {caller}: {reason}");
-    let output = Command::new(gh)
-        .current_dir(clone)
-        .env("GH_PROMPT_DISABLED", "1")
-        .args(["pr", "close", branch, "--comment", &comment])
-        .output()
-        .with_context(|| format!("cannot run {}", gh.display()))?;
-    if output.status.success() {
-        return Ok(true);
-    }
-    let error = String::from_utf8_lossy(&output.stderr);
-    if error.contains("no pull requests found") || error.contains("no open pull requests") {
-        return Ok(false);
-    }
-    bail!("gh pr close failed: {}", error.trim())
 }

@@ -5,6 +5,10 @@
 //! the pull request once `merge`'s checks pass, through `gh pr merge`,
 //! reading why it will not yet through `gh pr view`.
 //!
+//! The Desk's reads and closes of pull requests are here too, as
+//! [`list_pull_requests`] and [`close_pull_request`], run from the `gh`
+//! program its configuration names.
+//!
 //! It calls the REST API through `gh api` with fixed fields rather than
 //! parsing `gh run list`, whose output is `gh`'s own and changes between
 //! versions.
@@ -440,6 +444,69 @@ fn github_repository(url: &str) -> Option<(String, String)> {
         return None;
     }
     Some((host.to_owned(), format!("{owner}/{name}")))
+}
+
+/// A pull request as `gh pr list` lists it, for the Desk.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Listed {
+    pub number: u32,
+    pub url: String,
+    pub state: String,
+    pub head_ref_name: String,
+}
+
+/// The pull requests in `state` of the repository whose checkout is `dir`,
+/// at most `limit`, as `gh pr list` run from `gh` gives them. The Desk
+/// reads them on each fetch.
+pub fn list_pull_requests(
+    gh: &Path,
+    dir: &Path,
+    state: &str,
+    limit: usize,
+) -> anyhow::Result<Vec<Listed>> {
+    use anyhow::Context;
+    let limit = limit.to_string();
+    let output = Command::new(gh)
+        .current_dir(dir)
+        .env("GH_PROMPT_DISABLED", "1")
+        .args(["pr", "list", "--state", state, "--limit", &limit])
+        .args(["--json", "number,url,state,headRefName"])
+        .output()
+        .with_context(|| format!("cannot run {}", gh.display()))?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "gh pr list failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    serde_json::from_slice(&output.stdout).context("gh pr list gave unreadable JSON")
+}
+
+/// Closes the open pull request whose head is `branch`, in the repository
+/// whose checkout is `dir`, with `comment`, through `gh pr close` run from
+/// `gh`: `Ok(false)` when there is none. The Desk's stop calls it.
+pub fn close_pull_request(
+    gh: &Path,
+    dir: &Path,
+    branch: &str,
+    comment: &str,
+) -> anyhow::Result<bool> {
+    use anyhow::Context;
+    let output = Command::new(gh)
+        .current_dir(dir)
+        .env("GH_PROMPT_DISABLED", "1")
+        .args(["pr", "close", branch, "--comment", comment])
+        .output()
+        .with_context(|| format!("cannot run {}", gh.display()))?;
+    if output.status.success() {
+        return Ok(true);
+    }
+    let error = String::from_utf8_lossy(&output.stderr);
+    if error.contains("no pull requests found") || error.contains("no open pull requests") {
+        return Ok(false);
+    }
+    anyhow::bail!("gh pr close failed: {}", error.trim())
 }
 
 #[cfg(test)]
