@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-dciw
 title: Read missions and items from named branches, local and fetched, so list and show cover work in motion
-status: in_review
+status: approved
 mission: atelier-to83
 labels:
 - redesign
