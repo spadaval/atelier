@@ -65,7 +65,7 @@ function Rail({ repo, loaded, selected }: { repo: string; loaded: Loaded<Mission
       {going.map((m) => (
         <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />
       ))}
-      {open.length > 0 ? <div className="pane-label">Open, nothing started</div> : null}
+      {open.length > 0 ? <div className="pane-label">Agreed, nothing started</div> : null}
       {open.map((m) => (
         <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />
       ))}

@@ -130,7 +130,7 @@ test("Not yet sends no stop, and an open mission offers no stop act, only the co
   expect(world.sent).toEqual([]);
 
   await load(page, "/r/atelier/mission/atelier-z4cr");
-  await expect(page.getByTestId("status")).toHaveText("Open");
+  await expect(page.getByTestId("status")).toHaveText("Agreed");
   await expect(page.getByRole("button", { name: "Stop this plan" })).toHaveCount(0);
   const how = page.getByTestId("stop");
   await how.getByText("How to stop this mission").click();

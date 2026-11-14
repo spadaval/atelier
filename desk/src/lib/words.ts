@@ -44,7 +44,7 @@ export function missionState(mission: Pick<MissionRow, "state" | "in_progress">)
 /** A mission's state in words, for its pill. */
 export const stateWords: Record<MissionState, string> = {
   proposed: "Proposed",
-  open: "Open",
+  open: "Agreed",
   stop_pending: "Stop not published yet",
   stopped: "Stopped",
   done: "Done",

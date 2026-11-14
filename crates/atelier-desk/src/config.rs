@@ -124,9 +124,12 @@ impl Config {
         if config.roots.is_empty() && config.repos.is_empty() {
             bail!("{} names no repository and no root", path.display());
         }
-        if let Some(notify) = &config.notify {
-            if notify.command.is_empty() {
+        if let Some(notify) = &mut config.notify {
+            let Some(program) = notify.command.first_mut() else {
                 bail!("{}: [notify] command names no program", path.display());
+            };
+            if program.starts_with("~/") {
+                *program = resolve(here, Path::new(program)).display().to_string();
             }
         }
         Ok(config)
@@ -261,6 +264,17 @@ mod tests {
         assert_eq!(config.fetch_seconds, 60);
         assert_eq!(config.state, Some(dir.path().join("st")));
         assert_eq!(config.notify.unwrap().command, ["echo", "-n"]);
+        let mail =
+            "caller = \"s\"\nrepos = [\"a\"]\n[notify]\ncommand = [\"~/bin/mail\", \"personal\"]\n";
+        std::fs::write(&path, mail).unwrap();
+        let command = Config::load(&path).unwrap().notify.unwrap().command;
+        assert_eq!(
+            command,
+            [
+                home.join("bin/mail").display().to_string(),
+                "personal".into()
+            ]
+        );
         let empty = "caller = \"s\"\nrepos = [\"a\"]\n[notify]\ncommand = []\n";
         std::fs::write(&path, empty).unwrap();
         assert!(

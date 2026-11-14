@@ -41,7 +41,7 @@ test("the sidebar's footer names the commit the server was built from", async ({
 test("the mission page shows the title, status and counts atelier show prints", async ({ page }) => {
   await load(page, "/r/atelier/mission/atelier-z4cr");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(z4cr.mission.title);
-  await expect(page.getByTestId("status")).toHaveText("Open");
+  await expect(page.getByTestId("status")).toHaveText("Agreed");
   await expect(page.locator(".paper-head").getByTestId("counts")).toHaveText("5 draft2 ready1 building1 done");
   // Overview: what waits on the human first, then the mission's sections.
   const overview = page.locator(".paper-body");
