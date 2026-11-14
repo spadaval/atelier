@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-nl43
 title: Call a state-changing command an action, not an act, everywhere
-status: in_review
+status: approved
 mission: atelier-dy62
 labels: []
 priority: low
