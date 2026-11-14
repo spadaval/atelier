@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-x5al
 title: Run every git and gh call through the core's git and forge modules
-status: draft
+status: ready
 mission: atelier-dy62
 labels: []
 priority: medium
@@ -11,7 +11,9 @@ blocked_by:
 - atelier-ni3d
 - atelier-yclc
 implementers: []
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-14
+  at: 2026-11-14T06:21:12.860651075Z
 trivial: null
 caused_by: null
 created_at: 2026-11-14T05:56:52.574493145Z

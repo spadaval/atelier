@@ -3,11 +3,13 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-dy62
 title: Make the tracker one crate, atelier-core, that the CLI and the Desk call
-status: draft
+status: ready
 labels:
 - refactor
 lead: null
-ready: null
+ready:
+  by: sumeet, in conversation on 2026-11-14
+  at: 2026-11-14T06:21:12.860651075Z
 created_at: 2026-11-14T05:56:49.622444154Z
 ---
 
