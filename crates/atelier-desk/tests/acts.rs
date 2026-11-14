@@ -116,6 +116,8 @@ fn world() -> World {
     let gh = dir.path().join("gh");
     let script = format!(
         "#!/bin/sh\n[ \"$(cat {state})\" = FAIL ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
+         [ \"$1 $2 $(cat {state})\" = 'pr close HOLD' ] && {{ echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
+         [ \"$1 $2 $(cat {state})\" = 'pr list HOLD' ] && {{ cat {state}.fifo >/dev/null; echo 'gh: the forge did not answer' >&2; exit 1; }}\n\
          [ \"$1 $2 $(cat {state})\" = 'pr list NONE' ] && {{ echo '[]'; exit 0; }}\ncase \"$1 $2\" in\n\
          'pr list') printf '[{{\"number\":7,\"url\":\"https://forge.example/pull/7\",\"state\":\"%s\",\"headRefName\":\"{PLAN}\"}}]' \"$(cat {state})\" ;;\n\
          'pr close') printf '%s\\n' \"$*\" >> {closed}; printf CLOSED > {state} ;;\n\
@@ -739,4 +741,83 @@ async fn an_amendment_and_a_stop_on_another_branch_are_each_shown_as_they_are() 
         .collect();
     assert_eq!(drops.len(), 1, "{repo}");
     assert_eq!(drops[0]["branch"], format!("origin/{stop}"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stop_is_pending_while_its_pull_request_is_read_again() {
+    let world = world();
+    world.desk.fetch_all();
+    // The pull request cannot be closed, and the list read after the stop
+    // waits until the test lets it fail.
+    let fifo = format!("{}.fifo", world.pr_state.display());
+    let made = Command::new("mkfifo").arg(&fifo).status().unwrap();
+    assert!(made.success());
+    fs::write(&world.pr_state, "HOLD").unwrap();
+    let app = world.app.clone();
+    let stopping = tokio::spawn(async move {
+        let body = json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON});
+        act(&app, body).await
+    });
+    // Wait for the drop to be pushed, then read while the list is held.
+    let branch = format!("refs/heads/{PLAN}");
+    let before = git(&world.origin, &["rev-parse", &branch]);
+    for _ in 0..200 {
+        if git(&world.origin, &["rev-parse", &branch]) != before {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert_ne!(
+        git(&world.origin, &["rev-parse", &branch]),
+        before,
+        "the drop is pushed"
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let during = shown(&world.app, PLAN).await;
+    // Let the list fail before asserting, so a failure here never leaves it
+    // held.
+    fs::write(&fifo, "go\n").unwrap();
+    let done = stopping.await.unwrap();
+    assert_eq!(during, (json!("stop_pending"), true, false));
+    assert!(
+        done["text"]
+            .as_str()
+            .unwrap()
+            .contains("its pull request was not closed"),
+        "{done}"
+    );
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+}
+
+#[tokio::test]
+async fn a_drop_pushed_from_another_clone_is_not_confirmed_by_an_older_list() {
+    let world = world();
+    // The last list showed the plan's pull request closed, before the drop.
+    fs::write(&world.pr_state, "CLOSED").unwrap();
+    world.desk.fetch_all();
+    git(&world.planner, &["switch", "-q", PLAN]);
+    let skip = Skip::new(None);
+    let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
+    atelier_app::plan::drop_mission(&mut repo, PLAN, REASON)
+        .unwrap()
+        .unwrap();
+    git(&world.planner, &["commit", "-qam", &format!("Drop {PLAN}")]);
+    git(&world.planner, &["push", "-q", "origin", PLAN]);
+    // The Desk fetches the drop, and the forge does not answer.
+    fs::write(&world.pr_state, "FAIL").unwrap();
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stop_pending"), true, false)
+    );
+    // A list read with the drop fetched confirms it.
+    fs::write(&world.pr_state, "CLOSED").unwrap();
+    world.desk.fetch_all();
+    assert_eq!(
+        shown(&world.app, PLAN).await,
+        (json!("stopped"), false, true)
+    );
 }

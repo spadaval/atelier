@@ -109,16 +109,9 @@ impl Desk {
             gh: &self.config.gh,
         };
         let acted = stop::stop(&at, &id, &reason).map_err(|e| Failure::Failed(format!("{e:#}")))?;
-        // What was known of the plan's pull request came from before this
-        // stop, so it confirms nothing about it: only a list read from now
-        // on does. Then its pull request is read again, so the page shows
-        // it closed.
-        if matches!(acted, crate::api::ActResponse::Done { .. }) {
-            let skip = Skip::new(None);
-            if let Ok(served) = read::open(&dir, &self.config.caller, &skip) {
-                self.fetches.forget(&repo, &served.branch_of(&id));
-            }
-        }
+        // Its pull request is read again, so the page shows it closed. Until
+        // then the last list, read before the drop was pushed, confirms
+        // nothing about it (`Fetches::pr_state`).
         let (remote, github) = self.remote(&repo, &dir);
         self.fetches.fetch(&repo, &dir, remote.as_deref(), github);
         Ok(acted)
@@ -156,21 +149,30 @@ impl Desk {
         self.fetches.mark(name, dir, remote.as_deref())
     }
 
-    /// What the forge says of the pull request of the branch shown as
-    /// `shown` in `name`.
-    fn pr_state(&self, name: &str, dir: &Path, shown: &str) -> PrState {
+    /// The branch name `shown`, a ref as the reader shows it, has on the
+    /// remote, and the full ref it names here.
+    fn branch_ref(&self, name: &str, dir: &Path, shown: &str) -> (String, String) {
         let (remote, _) = self.remote(name, dir);
-        let branch = match &remote {
-            Some(remote) => shown.strip_prefix(&format!("{remote}/")).unwrap_or(shown),
-            None => shown,
-        };
-        self.fetches.pull_request(name, branch)
+        let on_remote = remote.and_then(|remote| {
+            let branch = shown.strip_prefix(&format!("{remote}/"))?;
+            Some((branch.to_string(), format!("refs/remotes/{shown}")))
+        });
+        on_remote.unwrap_or_else(|| (shown.to_string(), format!("refs/heads/{shown}")))
+    }
+
+    /// What the forge says of the pull request of the branch shown as
+    /// `shown` in `name`, at that branch's tip now.
+    fn pr_state(&self, name: &str, dir: &Path, shown: &str) -> PrState {
+        let (branch, full) = self.branch_ref(name, dir, shown);
+        let tip = atelier_app::git::run(dir, &["rev-parse", "--verify", "--quiet", &full]).ok();
+        self.fetches.pr_state(name, &branch, tip.as_deref())
     }
 
     /// The pull request of the branch shown as `shown` in `name`, where
-    /// the forge's list has one.
+    /// the forge's last list has one.
     fn pull_request(&self, name: &str, dir: &Path, shown: &str) -> Option<PrMark> {
-        self.pr_state(name, dir, shown).mark()
+        let (branch, _) = self.branch_ref(name, dir, shown);
+        self.fetches.pull_request(name, &branch)
     }
 
     /// `row`'s state with its pull request known.

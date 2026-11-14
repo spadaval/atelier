@@ -30,6 +30,10 @@ struct Fetched {
     /// The pull requests of the forge, by head branch, as last read; `None`
     /// while none has been read.
     prs: Option<HashMap<String, PrMark>>,
+    /// The tip of each of the remote's branches, as fetched just before
+    /// that list was read. The list says what the forge held of a branch
+    /// at that tip, and of no later one.
+    tips: HashMap<String, String>,
     /// Why the last read of the pull requests failed.
     forge_error: Option<String>,
 }
@@ -63,6 +67,12 @@ impl Fetches {
     pub fn fetch(&self, name: &str, dir: &Path, remote: Option<&str>, github: bool) {
         let error = remote.and_then(|remote| fetch(dir, remote).err().map(|e| format!("{e:#}")));
         let github = github && remote.is_some();
+        // The tips are read before the list, so a branch the list was read
+        // at is at that tip or later: a list never vouches for a commit it
+        // may have been read before.
+        let tips = remote
+            .map(|remote| remote_tips(dir, remote))
+            .unwrap_or_default();
         let read = github.then(|| pull_requests(&self.gh, dir));
         let mut state = self.state.lock().unwrap();
         let kept = state.entry(name.to_string()).or_default();
@@ -70,7 +80,7 @@ impl Fetches {
         kept.github = github;
         match read {
             None => (kept.prs, kept.forge_error) = (None, None),
-            Some(Ok(prs)) => (kept.prs, kept.forge_error) = (Some(prs), None),
+            Some(Ok(prs)) => (kept.prs, kept.tips, kept.forge_error) = (Some(prs), tips, None),
             // A failed read keeps the last list, which still says what was
             // open, and says why it failed.
             Some(Err(e)) => kept.forge_error = Some(format!("{e:#}")),
@@ -93,40 +103,49 @@ impl Fetches {
         }
     }
 
-    /// Forgets what the last list said of `branch`'s pull request in
-    /// `name`, so it is unknown until a list read after this names it or
-    /// confirms it has none.
-    pub fn forget(&self, name: &str, branch: &str) {
-        let mut state = self.state.lock().unwrap();
-        if let Some(prs) = state.get_mut(name).and_then(|kept| kept.prs.as_mut()) {
-            prs.remove(branch);
-        }
+    /// The pull request whose head is `branch` in `name`, as the last list
+    /// that was read gave it, for a page to link.
+    pub fn pull_request(&self, name: &str, branch: &str) -> Option<PrMark> {
+        let state = self.state.lock().unwrap();
+        let prs = state.get(name)?.prs.as_ref()?;
+        prs.get(branch).cloned()
     }
 
     /// What the forge says of the pull request whose head is `branch` in
-    /// `name`, the newest where several are: unknown while no list of its
-    /// GitHub forge has been read, or when the last read failed and the
-    /// list before it had none, and none for a repository with no GitHub
-    /// forge.
-    pub fn pull_request(&self, name: &str, branch: &str) -> PrState {
+    /// `name` while that branch's tip is `tip`: the last list's word, when
+    /// that list was read with the branch at `tip`; unknown when no list
+    /// has been read, or the branch has moved since the last one, as when
+    /// a drop was pushed after it, since that list says nothing of the
+    /// drop; and none for a repository with no GitHub forge.
+    pub fn pr_state(&self, name: &str, branch: &str, tip: Option<&str>) -> PrState {
         let state = self.state.lock().unwrap();
         match state.get(name) {
             Some(kept) if !kept.github => PrState::Known(None),
             Some(Fetched {
                 prs: Some(prs),
-                forge_error,
+                tips,
                 ..
-            }) => match prs.get(branch) {
-                // A pull request the last good list named stays as it was.
-                Some(pr) => PrState::Known(Some(pr.clone())),
-                // Its absence is confirmed only by a list read just now:
-                // one may have been opened since a list that failed after.
-                None if forge_error.is_none() => PrState::Known(None),
-                None => PrState::Unknown,
-            },
+            }) if tip.is_some() && tips.get(branch).map(String::as_str) == tip => {
+                PrState::Known(prs.get(branch).cloned())
+            }
             _ => PrState::Unknown,
         }
     }
+}
+
+/// The tip of each of `remote`'s branches in `dir`, by branch name.
+fn remote_tips(dir: &Path, remote: &str) -> HashMap<String, String> {
+    let prefix = format!("refs/remotes/{remote}/");
+    let listed = git::run(
+        dir,
+        &["for-each-ref", "--format=%(refname) %(objectname)", &prefix],
+    );
+    let listed = listed.unwrap_or_default();
+    let tips = listed.lines().filter_map(|line| {
+        let (name, tip) = line.split_once(' ')?;
+        Some((name.strip_prefix(&prefix)?.to_string(), tip.to_string()))
+    });
+    tips.collect()
 }
 
 /// `git fetch --prune <remote>`, asking nothing of a terminal.

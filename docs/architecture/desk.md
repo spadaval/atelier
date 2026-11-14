@@ -737,15 +737,17 @@ pushed, and the pull request closed (`crates/atelier-desk/src/stop.rs`).
    requests again, so the page shows the plan stopped.
 
 The page shows the plan `stopped` once the drop is on the forge's copy of
-the branch and the forge's last list of pull requests has its pull request
-closed or none, and `stop_pending` before, and while no list has been read,
-since closing it is then not confirmed. A list that fails after one was read
-keeps the last one, and `fetched.error` says why; a pull request that list
-named keeps its state, but its having none counts only from a list that was
-read just now, since one may have been opened since. A stop forgets what was known
-of its branch's pull request, so only a list read after it can confirm it. An agreed mission dropped
-on any unmerged branch, its own too, is `stop_pending` until that branch
-merges, whatever its pull request says.
+the branch and a list of pull requests read with the branch at that tip has
+its pull request closed or none, and `stop_pending` before. The Desk keeps,
+with each list, the tip of every remote branch as fetched just before it was
+read; a list counts for a branch only while the branch is still at that tip.
+So a drop pushed after the last list, by the Desk or by another clone, is
+pending until a list is read with it fetched, whether the list before said
+closed, open or none, and a page read while that list is being read says
+pending too. A list that fails keeps the last one, and `fetched.error` says
+why; a plan whose stop that last list confirmed stays stopped. An agreed
+mission dropped on any unmerged branch, its own too, is `stop_pending`
+until that branch merges, whatever its pull request says.
 
 An agreed mission's stop reaches the base by `atelier start --backlog`,
 `atelier drop`, a commit, `atelier submit` and `atelier merge`. `submit` and
