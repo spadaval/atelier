@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-2vdq
 title: Plan a mission on its branch and make two approving plan reviews its only gate, with no draft status and no go
-status: approved
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -151,6 +151,11 @@ with no review
 (`an_old_draft_on_the_base_is_agreed_only_by_two_plan_reviews`); and
 `show` in a clone that had fetched a published stop still called it
 unpublished (now covered in the cross-clone stop test).
+
+After round 2 approved it, CI's Desk browser tests failed: two of them
+expected a mission's status pill to read "Ready", and it now reads
+"Open". Only those two expectations changed (`desk/e2e/acts.spec.ts`,
+`desk/e2e/pages.spec.ts`); `pnpm e2e` passes locally, 52 of 52.
 
 Outside the Done when lines:
 
