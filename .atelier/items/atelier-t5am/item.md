@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t5am
 title: Finish a merge through the forge's pull request, so Atelier works on a protected base
-status: ready
+status: building
 mission: atelier-to83
 labels:
 - redesign
@@ -11,7 +11,8 @@ priority: medium
 blocked_by:
 - atelier-ob9u
 - atelier-2vdq
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A93b1b51f-2095-4d1f-af23-677aa6ba570d%3Adelegate-task%3A7c80863b-f4e9-4f60-b975-1de8a1234a68
 ready:
   by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
   at: 2026-11-14T00:56:53.839951546Z
