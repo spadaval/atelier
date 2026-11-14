@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-v958
 title: Show on the Desk what is proposed and in motion and who is doing it, from the live repositories
-status: building
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
