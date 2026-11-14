@@ -197,8 +197,9 @@ fn each_deferred_finding_of_a_done_item_is_listed_until_taken_or_dropped_once() 
 fn settling_is_refused_with_nothing_written_and_says_why() {
     let scratch = with_done(&[]);
     let root = scratch.root();
-    // An item in review, whose finding is deferred.
-    write_item(&root, "demo-0pen", "in_review", &["t1"], &[], "Done.");
+    // An item not done, whose finding is deferred. A started item here
+    // would read as done: it reaches the base only by its merge.
+    write_item(&root, "demo-0pen", "ready", &[], &[], "Done.");
     write_review(
         &root,
         ".atelier/items/demo-0pen/reviews/1-bbbb.md",
@@ -227,7 +228,7 @@ fn settling_is_refused_with_nothing_written_and_says_why() {
         ),
         (
             "demo-0pen/1-bbbb.1",
-            "  [ ] demo-0pen is done (it is in review; only a done item's findings are settled)\n",
+            "  [ ] demo-0pen is done (it is ready; only a done item's findings are settled)\n",
             true,
         ),
         (

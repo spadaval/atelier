@@ -1,16 +1,17 @@
-//! `merge`, the one command that writes to the base
-//! (docs/design.md, Merge and The forge).
+//! `merge`, the one command that merges into the base
+//! (docs/design.md, Merge and The forge). With a forge it has the forge
+//! merge the branch's pull request and never pushes the base; without one
+//! it moves the local base to its merge commit.
 //!
 //! Copied from `crates/atelier-cli/src/commands/merge.rs` and trimmed to
 //! what this command calls: the merged-tree checkout (`MergedCheckout` and
 //! its sweep of checkouts a killed merge left, without the lock file each
 //! held, since the merge lock covers everything after the wait); the merge
-//! commit, built in a scratch index on the merged tree
-//! (`git::commit_file`); the fast-forward of the base's checkout; and the
-//! confirmation, after the checks and before any write, that the branch
-//! tip, the base tip and the checkouts are the ones the checks ran on.
-//! From `merge_push.rs`: pushing the branch, finding or opening its pull
-//! request, and pushing the base. From
+//! commit on the merged tree (`git::commit_tree`); the fast-forward of the
+//! base's checkout; and the confirmation, after the checks and before any
+//! write, that the branch tip, the base tip and the checkouts are the ones
+//! the checks ran on. From `merge_push.rs`: pushing the branch, and finding
+//! or opening its pull request. From
 //! `crates/atelier-records/src/mutation_lock.rs`: the exclusive lock,
 //! without its shared form and re-entry, which nothing here needs.
 //! `committed_snapshot.rs`'s checks of file modes and index flags are not
@@ -18,16 +19,16 @@
 //! the head, are new.
 
 use crate::commands::{self, hold, Outcome};
-use crate::forge::{CiRun, ForgeError, Github, PullRequest};
+use crate::forge::{CiRun, ForgeError, Github, MergeState, PullRequest};
 use crate::git;
 use crate::output;
 use anyhow::{Context, Result};
 use atelier_app::acts::{check, Act, MissionFacts, Refusal, STARTED};
 use atelier_app::plan::{approvals, plan_diff};
-use atelier_app::repo::{facts, item_dir, item_path};
+use atelier_app::repo::{facts, item_dir, item_path, write_and_commit};
 use atelier_app::{refused, Located, Repo, Skip};
 use atelier_core::{Config, Forge, MissionStatus, Named, Status, Thread};
-use atelier_records::{is_record, load, parse_item, render_item, CommitReader, CONFIG};
+use atelier_records::{is_record, load, render_item, CommitReader, CONFIG};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{Read, Write};
@@ -51,20 +52,26 @@ const POLL: Duration = Duration::from_secs(15);
 /// every other merge, and never longer than the wait.
 const LOCKED: Duration = Duration::from_secs(60);
 
-/// Merges the item of the checked-out branch into the base, in one merge
-/// commit that marks it done, once its checks pass. With `trivial`, an
-/// item nobody reviewed merges on that reason. Run again, it picks up
-/// where the facts now stand. `caller` is who merges, and `skip` the
-/// invocation's, whose rules it prints after the last repository it opens.
+/// Merges the checked-out branch into the base once its checks pass: with
+/// a forge, through the forge's merge of its pull request; without one, by
+/// moving the local base to a merge commit. With `trivial`, an item nobody
+/// reviewed merges on that reason. Run again, it picks up where the facts
+/// now stand. `caller` is who merges, and `skip` the invocation's, whose
+/// rules it prints after the last repository it opens.
 pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) -> Result<Outcome> {
     if trivial.as_ref().is_some_and(|why| why.trim().is_empty()) {
         return Ok(Outcome::Refused(output::no_reason()));
     }
+    if let Some(why) = &trivial {
+        if let Some(refused) = record_trivial(root, caller.clone(), why, skip)? {
+            return Ok(refused);
+        }
+    }
     // Until CI passes nothing is locked and nothing in the clone written,
     // so a merge interrupted then leaves it as it was; everything read
     // before is read again under the lock.
-    let judged = match before_lock(root, caller.clone(), trivial.is_some(), skip)? {
-        Ok(id) => id,
+    let (judged, pull) = match before_lock(root, caller.clone(), trivial.is_some(), skip)? {
+        Ok(judged) => judged,
         Err(outcome) => return Ok(outcome),
     };
     // Everything is read under the lock, so a merge that waited for
@@ -90,7 +97,7 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
         Err(outcome) => return Ok(outcome),
     };
     if merged {
-        return publish(repo, &config, &id);
+        return Ok(Outcome::Done(publish(repo, &id)));
     }
 
     // What the checks run on, confirmed unchanged before anything is
@@ -99,7 +106,12 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
     let root = repo.root.clone();
     let base = repo.base.clone();
     let base_tip = repo.base_tip.clone();
-    let base_checkout = git::checkout_of(&root, &base)?;
+    // With a forge the base's checkout is not merged into, and is only
+    // brought up to date afterwards where nothing in it is uncommitted.
+    let base_checkout = match &config.forge {
+        None => git::checkout_of(&root, &base)?,
+        Some(_) => None,
+    };
     let mut base_dirt = None;
     if let Some(path) = &base_checkout {
         let dirty = git::uncommitted(path)?;
@@ -140,31 +152,27 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
             }
         }
     }
-    let commit = match records {
-        true => {
-            let message = output::records_merge_message(&branch, &base);
-            let commit = git::commit_tree(&root, &tree, &[&base_tip, &head], &message, skip)?;
-            let problems = records_at(&root, &commit)?;
-            if !problems.is_empty() {
-                return Ok(Outcome::Refused(output::records_invalid(
-                    &branch, &base, &problems,
-                )));
-            }
-            (commit, false)
+    let message = match records {
+        true => output::records_merge_message(&branch, &base),
+        false => {
+            let title = (repo.item_at(&head, &id)?)
+                .map(|dir| dir.item.title)
+                .unwrap_or_default();
+            output::merge_message(&id, &title, &base, &config)
         }
-        false => match merge_item(
-            &root,
-            &tree,
-            (&base_tip, &head),
-            &id,
-            &base,
-            &config,
-            trivial,
-            skip,
-        )? {
-            Ok(merged) => merged,
-            Err(outcome) => return Ok(outcome),
-        },
+    };
+    let commit = match checked_merge(
+        &root,
+        &tree,
+        (&base_tip, &head),
+        (&id, &branch, &base),
+        &config,
+        records,
+        &message,
+        skip,
+    )? {
+        Ok(merged) => merged,
+        Err(outcome) => return Ok(outcome),
     };
     let base_read = (base_checkout.as_deref(), base_dirt.as_ref());
     finish(
@@ -176,42 +184,76 @@ pub fn merge(root: &Path, caller: Thread, trivial: Option<String>, skip: &Skip) 
         commit,
         &config,
         records,
+        pull.as_ref(),
     )
 }
 
-/// The merge commit of item `id`'s branch at `head` into the base at
-/// `base_tip`, whose merged tree is `tree`, with the item marked done
-/// there, once the merge checks pass on it, and whether a skip passed one
-/// that failed.
+/// Step 1 of `merge --trivial`: once the merge's conditions hold, writes
+/// `why` into the item's `trivial` field and commits `item.md` alone on
+/// the branch, unless the head holds that reason already. The head then
+/// differs from the one before only inside the item's directory, so a CI
+/// run on the earlier commit still counts. The outcome is a refusal.
+fn record_trivial(root: &Path, caller: Thread, why: &str, skip: &Skip) -> Result<Option<Outcome>> {
+    let repo = &mut Repo::open(root, caller, skip)?;
+    let judged = match read(repo, true)? {
+        Ok(judged) => judged,
+        Err(outcome) => return Ok(Some(outcome)),
+    };
+    if judged.merged || judged.records {
+        return Ok(None);
+    }
+    let Some(dir) = repo.item_at(&judged.head, &judged.id)? else {
+        return Ok(None);
+    };
+    let mut item = dir.item;
+    if item.trivial.as_deref() == Some(why) {
+        return Ok(None);
+    }
+    let path = item_path(&judged.id);
+    // Its uncommitted changes, which a skip let stay, are not committed
+    // with the reason.
+    if git::uncommitted(&repo.root)?.contains(&path) {
+        return Ok(Some(Outcome::Refused(output::trivial_uncommitted(&path))));
+    }
+    item.trivial = Some(why.to_string());
+    let message = output::trivial_message(&judged.id, why);
+    write_and_commit(
+        repo,
+        &[(path.clone(), render_item(&item))],
+        &[&path],
+        &message,
+    )?;
+    Ok(None)
+}
+
+/// The merge commit of `branch`, item `id`'s or a records branch, at
+/// `head` into the base at `base_tip`, whose merged tree is `tree`, with
+/// `message`, once the merge checks pass on it: `atelier check` always,
+/// and for an item the merge checks of `config`. Also whether a skip
+/// passed a check that failed. With a forge the commit is not written
+/// anywhere; the forge makes its own with the same message.
 #[allow(clippy::too_many_arguments)]
-fn merge_item(
+fn checked_merge(
     root: &Path,
     tree: &str,
     (base_tip, head): (&str, &str),
-    id: &str,
-    base: &str,
+    (id, branch, base): (&str, &str, &str),
     config: &Config,
-    trivial: Option<String>,
+    records: bool,
+    message: &str,
     skip: &Skip,
 ) -> Result<Result<(String, bool), Outcome>> {
-    // The item as the merged tree holds it, marked done.
-    let path = item_path(id);
-    let text = git::run(root, &["cat-file", "blob", &format!("{tree}:{path}")])?;
-    let mut item = parse_item(Path::new(&path), &text)?;
-    item.status = Status::Done;
-    if trivial.is_some() {
-        item.trivial = trivial;
-    }
-    let message = output::merge_message(id, &item.title, base, config);
     // Its message carries each rule skipped so far.
-    let commit_merge = || {
-        let item = render_item(&item);
-        git::commit_file(root, tree, &[base_tip, head], &path, &item, &message, skip)
-    };
+    let commit_merge = || git::commit_tree(root, tree, &[base_tip, head], message, skip);
     let mut commit = commit_merge()?;
-
+    let problems = records_at(root, &commit)?;
+    if !problems.is_empty() {
+        return Ok(Err(Outcome::Refused(output::records_invalid(
+            branch, base, &problems,
+        ))));
+    }
     let mut skipped = false;
-    if !config.merge_checks.is_empty() {
+    if !records && !config.merge_checks.is_empty() {
         let checkout = MergedCheckout::add(root, &commit)?;
         for check in &config.merge_checks {
             if let Some((code, tail)) = run_check(&checkout.path, &check.run)? {
@@ -231,9 +273,10 @@ fn merge_item(
     Ok(Ok((commit, skipped)))
 }
 
-/// Moves the base to `commit`, the merge of the branch whose `head` the
-/// checks ran on with the base at `base_tip`, once nothing they read has
-/// moved, and pushes it where a forge is configured.
+/// Merges `commit`, the merge of the branch whose `head` the checks ran
+/// on with the base at `base_tip`, once nothing they read has moved: with
+/// a forge, by its merge of the pull request `pull`; without one, by
+/// moving the local base.
 #[allow(clippy::too_many_arguments)]
 fn finish(
     repo: &mut Repo,
@@ -244,58 +287,168 @@ fn finish(
     (commit, skipped): (String, bool),
     config: &Config,
     records: bool,
+    pull: Option<&PullRequest>,
 ) -> Result<Outcome> {
     let commit = commit.as_str();
-    let (root, base, skip) = (repo.root.clone(), repo.base.clone(), repo.skip);
+    let (root, base) = (repo.root.clone(), repo.base.clone());
     let read = (head, base_tip, uncommitted);
-    let base_read = base_checkout.zip(base_dirt);
+    let base_read = match &config.forge {
+        None => Some(base_checkout.zip(base_dirt)),
+        Some(_) => None,
+    };
     if let Some(moved) = moved(repo, (id, records), read, base_read)? {
         return Ok(Outcome::Refused(output::moved(&moved, id, &base)));
     }
-    match base_checkout {
-        Some(path) => git::run(
-            path,
-            &[
-                "-c",
-                "core.hooksPath=/dev/null",
-                "merge",
-                "--ff-only",
-                // A local file Git ignores is still someone's work.
-                "--no-overwrite-ignore",
-                "--quiet",
-                commit,
-            ],
-        ),
-        None => git::run(
-            &root,
-            &[
-                "update-ref",
-                &format!("refs/heads/{base}"),
-                commit,
-                base_tip,
-            ],
-        ),
-    }
-    .with_context(|| output::not_merged(&base))?;
     // A check a skip passed failed, and its skip's line says so.
     let mut said = match (records, skipped) {
         (true, _) => output::records_checked(&base),
         (false, true) => String::new(),
         (false, false) => output::checks_passed(&base, config.merge_checks.len()),
     };
-    said += &match records {
-        true => output::records_merged(id, &base, commit),
-        false => output::merged(id, &base, commit),
-    };
-    if let Some(forge) = &config.forge {
-        if let Err(error) = push(&root, &forge.remote, commit, &base, skip) {
-            return Ok(Outcome::Refused(
-                said + &output::base_push_failed(&base, &forge.remote, &error),
-            ));
+    let Some(forge) = &config.forge else {
+        match base_checkout {
+            Some(path) => fast_forward(path, commit),
+            None => git::run(
+                &root,
+                &[
+                    "update-ref",
+                    &format!("refs/heads/{base}"),
+                    commit,
+                    base_tip,
+                ],
+            ),
         }
-        said += &output::base_pushed(&base, &forge.remote);
+        .with_context(|| output::not_merged(&base))?;
+        said += &match records {
+            true => output::records_merged(id, &base, commit),
+            false => output::merged(id, &base, commit),
+        };
+        return Ok(Outcome::Done(said));
+    };
+    // With a forge the base moves only by its merge of the pull request,
+    // which the wait before the lock found or opened.
+    let pull = pull.context("no pull request was found or opened for the forge to merge")?;
+    let github = match Github::open(&root, forge) {
+        Ok(github) => github,
+        Err(error) => return Ok(Outcome::Refused(output::forge_failed(&error, false))),
+    };
+    // The forge writes its own merge commit of the same head onto its
+    // base, with this one's message, trailers included.
+    let message = git::run(&root, &["show", "-s", "--format=%B", commit])?;
+    let (subject, body) = message.split_once("\n\n").unwrap_or((&message, ""));
+    let asked = (github.until(locked_until())).merge_pull_request(
+        pull.number,
+        head,
+        subject.trim(),
+        body.trim(),
+    );
+    if let Err(error) = asked {
+        // Why it would not, as the forge now says; it may have merged
+        // after all, as when its answer came too late.
+        match github.until(locked_until()).merge_state(pull.number) {
+            Ok(state) if state.state == "MERGED" => {}
+            Ok(state) => return Ok(forge_refused(&error, &state, id, head, &base, forge, pull)),
+            Err(_) => {
+                return Ok(Outcome::Refused(output::forge_merge_failed(
+                    id, &base, pull, &error,
+                )))
+            }
+        }
     }
+    said += &output::forge_merged(id, &base, pull);
+    said += &catch_up(&root, &forge.remote, &base)?;
     Ok(Outcome::Done(said))
+}
+
+/// Why the forge refused to merge pull request `pull` with `error`, from
+/// where it says the pull request stands: exit status 3 where a review or
+/// a check its protection requires is missing, or the branch must first
+/// be brought up to date with the base, since run again later it merges;
+/// a refusal where the head moved, the branch conflicts, or for any other
+/// reason.
+fn forge_refused(
+    error: &ForgeError,
+    state: &MergeState,
+    id: &str,
+    head: &str,
+    base: &str,
+    forge: &Forge,
+    pull: &PullRequest,
+) -> Outcome {
+    if !state.head.is_empty() && state.head != head {
+        return Outcome::Refused(output::moved(&Moved::Branch, id, base));
+    }
+    let remote = &forge.remote;
+    match state.merge_state_status.as_str() {
+        "DIRTY" => Outcome::Refused(output::forge_conflicts(id, base, remote, pull)),
+        "BEHIND" => Outcome::NotYet(output::forge_behind(id, base, remote, pull)),
+        _ if state.merge_state_status == "BLOCKED"
+            || ["REVIEW_REQUIRED", "CHANGES_REQUESTED"]
+                .contains(&state.review_decision.as_str()) =>
+        {
+            Outcome::NotYet(output::forge_blocked(pull, state))
+        }
+        _ => Outcome::Refused(output::forge_merge_failed(id, base, pull, error)),
+    }
+}
+
+/// Brings this clone up to date with the merge the forge made: fetches
+/// `base` from `remote`, then fast-forwards the local base, in its checkout
+/// where one has it out with nothing uncommitted, else by moving the ref.
+/// Says what it could not do; the merge is made either way.
+fn catch_up(root: &Path, remote: &str, base: &str) -> Result<String> {
+    let tracking = format!("refs/remotes/{remote}/{base}");
+    let refspec = format!("+refs/heads/{base}:{tracking}");
+    let fetched = git::run(root, &["fetch", "--quiet", remote, &refspec]);
+    if let Err(error) = fetched {
+        return Ok(output::not_fetched(remote, base, &error));
+    }
+    let merged = git::run(root, &["rev-parse", &tracking])?;
+    let local = git::branch_tip(root, base)?;
+    if local.as_deref() == Some(merged.as_str()) {
+        return Ok(String::new());
+    }
+    if let Some(local) = &local {
+        if !git::is_ancestor(root, local, &merged)? {
+            return Ok(output::base_diverged(remote, base));
+        }
+    }
+    match git::checkout_of(root, base)? {
+        Some(path) => {
+            let dirty = git::uncommitted(&path)?;
+            if !dirty.is_empty() {
+                return Ok(output::base_left(remote, base, &path));
+            }
+            if let Err(error) = fast_forward(&path, &merged) {
+                return Ok(output::base_not_moved(remote, base, &error));
+            }
+        }
+        None => {
+            let to = format!("refs/heads/{base}");
+            let mut args = vec!["update-ref", to.as_str(), merged.as_str()];
+            args.extend(local.as_deref());
+            git::run(root, &args)?;
+        }
+    }
+    Ok(String::new())
+}
+
+/// Fast-forwards the checkout at `path` to `commit`, with no hook run and
+/// no file Git ignores overwritten, since a local file is still someone's
+/// work.
+fn fast_forward(path: &Path, commit: &str) -> Result<String> {
+    git::run(
+        path,
+        &[
+            "-c",
+            "core.hooksPath=/dev/null",
+            "merge",
+            "--ff-only",
+            "--no-overwrite-ignore",
+            "--quiet",
+            commit,
+        ],
+    )
 }
 
 /// What `merge` judges, read from the clone as it now stands.
@@ -313,7 +466,7 @@ struct Judged {
     text: (String, String),
     /// The base's.
     config: Config,
-    /// The item is done and its branch merged into the base.
+    /// The branch is merged into the base, so the item is done.
     merged: bool,
     /// What the checkout holds that no commit does, which a skip let stay.
     uncommitted: Dirt,
@@ -480,6 +633,15 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
                 return Ok(Err(refused.into()));
             }
         }
+        let branch = repo.branch_of(&id);
+        let started = started(repo, &head, &changed, Some(&id))?;
+        if !started.is_empty() {
+            let text = output::records_started(&branch, &started);
+            let rule = output::rule_records_started(&branch);
+            if let Some(refused) = repo.skip.refuse([rule], text) {
+                return Ok(Err(refused.into()));
+            }
+        }
     }
     Ok(Ok(Judged {
         head,
@@ -546,21 +708,7 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
             }
         }
     }
-    // A started item's record changes on its own branch, and reaches the
-    // base in its own merge.
-    let mut started = Vec::new();
-    for path in &changed {
-        let Some(id) = path
-            .strip_prefix(".atelier/items/")
-            .and_then(|rest| rest.strip_suffix("/item.md"))
-        else {
-            continue;
-        };
-        let status = repo.item_at(&head, id)?.map(|dir| dir.item.status);
-        if let Some(status) = status.filter(|status| STARTED.contains(status)) {
-            started.push((id.to_string(), status));
-        }
-    }
+    let started = started(repo, &head, &changed, None)?;
     if !started.is_empty() {
         let text = output::records_started(&branch, &started);
         let rule = output::rule_records_started(&branch);
@@ -594,6 +742,34 @@ fn read_records(repo: &mut Repo, head: String, branch: String) -> Result<Result<
         }
     }
     Ok(Ok(judged(Dirt::read(&root, uncommitted)?)))
+}
+
+/// The items other than `own` whose record the branch at `head`, which
+/// changes `changed` against the base, brings to the base in a started
+/// status. A started item's record changes on its own branch and reaches
+/// the base only in its own merge, which is why a started copy on the base
+/// reads as done.
+fn started(
+    repo: &mut Repo,
+    head: &str,
+    changed: &[String],
+    own: Option<&str>,
+) -> Result<Vec<(String, Status)>> {
+    let mut started = Vec::new();
+    for path in changed {
+        let Some(id) = path
+            .strip_prefix(".atelier/items/")
+            .and_then(|rest| rest.strip_suffix("/item.md"))
+            .filter(|id| Some(*id) != own)
+        else {
+            continue;
+        };
+        let status = repo.item_at(head, id)?.map(|dir| dir.item.status);
+        if let Some(status) = status.filter(|status| STARTED.contains(status)) {
+            started.push((id.to_string(), status));
+        }
+    }
+    Ok(started)
 }
 
 /// The missions whose plan a branch changes, from `fork`, where it forked
@@ -673,20 +849,21 @@ fn records_at(root: &Path, commit: &str) -> Result<Vec<String>> {
 /// What comes before the lock where a forge is configured: the branch
 /// pushed and its pull request opened, each only when missing, then the
 /// wait for CI. It prints as it goes, since the wait is long. It returns
-/// the item it judged, or the outcome when `merge` stops here.
+/// the branch it judged, with its pull request where a forge is
+/// configured, or the outcome when `merge` stops here.
 fn before_lock(
     root: &Path,
     caller: Thread,
     trivial: bool,
     skip: &Skip,
-) -> Result<Result<String, Outcome>> {
+) -> Result<Result<(String, Option<PullRequest>), Outcome>> {
     let repo = &mut Repo::open(root, caller, skip)?;
     let judged = match read(repo, trivial)? {
         Ok(judged) => judged,
         Err(outcome) => return Ok(Err(outcome)),
     };
     let Some(forge) = judged.config.forge.as_ref().filter(|_| !judged.merged) else {
-        return Ok(Ok(judged.branch));
+        return Ok(Ok((judged.branch, None)));
     };
     let (root, base) = (&repo.root, &repo.base);
     let Judged { head, id, .. } = &judged;
@@ -703,11 +880,13 @@ fn before_lock(
         Ok(github) => github,
         Err(error) => return Ok(Err(Outcome::Refused(output::forge_failed(&error, false)))),
     };
-    // A push would start CI again, and cancel a run in progress, so the
-    // branch is pushed only when no run on the forge's copy would count.
+    // The forge merges the pull request's head, which must be the commit
+    // checked here: this is how a reviewer's verdict commit, made in this
+    // checkout, reaches it. A run on an earlier commit still counts where
+    // the head differs from it only inside the item's directory.
     let mut known = HashMap::new();
     let pushed = match git::remote_tip(root, &forge.remote, branch)? {
-        Some(tip) if counts(root, own, head, &tip, &mut known)? => false,
+        Some(tip) if tip == *head => false,
         _ => {
             if let Err(error) = push(root, &forge.remote, head, branch, skip) {
                 let failed = output::branch_push_failed(branch, &forge.remote, &error);
@@ -722,7 +901,7 @@ fn before_lock(
     };
     say(&output::pull_request(branch, &forge.remote, &pull, pushed));
     let Some(workflow) = &forge.ci_workflow else {
-        return Ok(Ok(judged.branch.clone()));
+        return Ok(Ok((judged.branch.clone(), Some(pull))));
     };
     let (wait, poll) = wait_times();
     let deadline = Instant::now() + wait;
@@ -738,7 +917,7 @@ fn before_lock(
             now => {
                 return Ok(match ci_stops(now, workflow, head, skip) {
                     Some(stopped) => Err(stopped),
-                    None => Ok(judged.branch.clone()),
+                    None => Ok((judged.branch.clone(), Some(pull))),
                 })
             }
         };
@@ -871,21 +1050,9 @@ fn counts(
     Ok(counts)
 }
 
-/// `merge` run again on an item it merged: pushes the base where a forge
-/// is configured, since a run that stopped after the merge commit left
-/// that undone.
-fn publish(repo: &Repo, config: &Config, id: &str) -> Result<Outcome> {
-    let base = &repo.base;
-    let mut said = output::already_merged(id, base);
-    if let Some(Forge { remote, .. }) = &config.forge {
-        if let Err(error) = push(&repo.root, remote, &repo.base_tip, base, repo.skip) {
-            return Ok(Outcome::Refused(
-                said + &output::base_push_failed(base, remote, &error),
-            ));
-        }
-        said += &output::base_pushed(base, remote);
-    }
-    Ok(Outcome::Done(said))
+/// `merge` run again on a branch the base holds already.
+fn publish(repo: &Repo, id: &str) -> String {
+    output::already_merged(id, &repo.base)
 }
 
 /// What moved while the checks ran.
@@ -897,11 +1064,13 @@ pub enum Moved {
 
 /// The first input of the merge that is no longer what the checks ran on:
 /// the branch's tip, the base's tip, or a checkout of either.
+/// The base's checkout is judged where `base_checkout` is given, as read:
+/// with a forge it is not merged into.
 fn moved(
     repo: &Repo,
     (id, records): (&str, bool),
     (head, base_tip, uncommitted): (&str, &str, &Dirt),
-    base_checkout: Option<(&Path, &Dirt)>,
+    base_checkout: Option<Option<(&Path, &Dirt)>>,
 ) -> Result<Option<Moved>> {
     let root = &repo.root;
     let branch = repo.branch.as_deref().expect("merge runs on a branch");
@@ -920,6 +1089,9 @@ fn moved(
     {
         return Ok(Some(Moved::Checkout(root.clone())));
     }
+    let Some(base_checkout) = base_checkout else {
+        return Ok(None);
+    };
     let now = git::checkout_of(root, &repo.base)?;
     if now.as_deref() != base_checkout.map(|(path, _)| path) {
         let path = now.or_else(|| base_checkout.map(|(path, _)| path.to_path_buf()));

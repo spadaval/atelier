@@ -7,7 +7,7 @@ use crate::commands::{self, Outcome};
 use crate::{git, output, setup};
 use anyhow::{bail, Context, Result};
 use atelier_app::acts::changes;
-use atelier_app::repo::{is_planning, planning};
+use atelier_app::repo::planning;
 use atelier_app::Skip;
 use atelier_core::Status;
 use atelier_records::{
@@ -267,10 +267,10 @@ fn pre_commit(root: &Path, skip: &Skip) -> Result<Outcome> {
     Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
 }
 
-/// When the push updates the base branch, each new commit on its
-/// first-parent line is an Atelier merge or touches only planning, and
-/// none but a merge sets an item done while its branch exists. `input` is
-/// what Git gives the hook: a line per ref pushed.
+/// The pre-push hook: the base receives only merges. With a forge
+/// configured the forge makes every merge, so any push that moves the base
+/// is refused. Without one, each new commit on the base's first-parent
+/// line is an Atelier merge: two parents and the `Atelier-Merge:` trailer.
 fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     let config = match Store::new(root.join(".atelier")).config() {
         Ok(config) => config,
@@ -281,17 +281,17 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
     };
     let base = config.base_branch.clone();
     let target = format!("refs/heads/{base}");
-    let mut reader = CommitReader::new(root);
+    let forge = config.forge.as_ref().map(|forge| forge.remote.as_str());
     let mut old = None;
-    let mut unread = Vec::new();
-    let mut code = Vec::new();
-    let mut done = Vec::new();
+    let mut moves = false;
+    let mut plain = Vec::new();
     for line in input.lines() {
         let [_, local, remote_ref, remote] = line.split(' ').collect::<Vec<_>>()[..] else {
             bail!("the pre-push hook was given a line it cannot read: {line:?}");
         };
-        // A deletion adds no commit.
-        if remote_ref != target || zero(local) {
+        // A deletion adds no commit, and a push of the commit the remote
+        // has moves nothing.
+        if remote_ref != target || zero(local) || local == remote {
             continue;
         }
         // A new base, or one this clone has not fetched, has no commit
@@ -301,64 +301,34 @@ fn pre_push(root: &Path, input: &str, skip: &Skip) -> Result<Outcome> {
             false => Some(remote),
         };
         old = known;
+        if forge.is_some() {
+            moves = true;
+            continue;
+        }
         for commit in git::first_parent_line(root, local, known)? {
-            if commit.atelier_merge && commit.parents.len() > 1 {
-                continue;
-            }
-            let outside: Vec<String> = commit
-                .paths
-                .iter()
-                .filter(|path| !is_planning(path))
-                .cloned()
-                .collect();
-            if !outside.is_empty() {
-                code.push((commit.commit.clone(), commit.subject.clone(), outside));
-            }
-            for path in &commit.paths {
-                let Some(id) = path
-                    .strip_prefix(".atelier/items/")
-                    .and_then(|rest| rest.strip_suffix("/item.md"))
-                    .filter(|id| !id.contains('/'))
-                else {
-                    continue;
-                };
-                let now = match status_at(&mut reader, &commit.commit, path)? {
-                    None => continue,
-                    Some(Err(problem)) => {
-                        unread.push(problem);
-                        continue;
-                    }
-                    Some(Ok(status)) => status,
-                };
-                let before = match commit.parents.first() {
-                    Some(parent) => status_at(&mut reader, parent, path)?,
-                    None => None,
-                };
-                if now == Status::Done
-                    && !matches!(before, Some(Ok(Status::Done)))
-                    && git::branch_tip(root, &config.record_branch(id))?.is_some()
-                {
-                    done.push((
-                        commit.commit.clone(),
-                        commit.subject.clone(),
-                        id.to_string(),
-                    ));
-                }
+            if !(commit.atelier_merge && commit.parents.len() > 1) {
+                plain.push((commit.commit.clone(), commit.subject.clone(), ()));
             }
         }
     }
-    if unread.is_empty() && code.is_empty() && done.is_empty() {
+    if moves {
+        let text = output::push_moves_base(&base, forge.unwrap_or_default(), old);
+        let rule = output::rule_base_moved(&base);
+        return Ok(skip
+            .refuse([rule], text)
+            .map(Outcome::from)
+            .unwrap_or(Outcome::Done(String::new())));
+    }
+    if plain.is_empty() {
         return Ok(Outcome::Done(String::new()));
     }
-    let text = output::push_refused(&base, old, &unread, &code, &done);
-    let broken = (code
-        .iter()
-        .map(|(commit, subject, _)| output::rule_code(&base, commit, subject)))
-    .chain(
-        done.iter()
-            .map(|(commit, _, id)| output::rule_done(&base, commit, id)),
-    );
-    Ok(rules(skip, &unread, broken, text).unwrap_or(Outcome::Done(String::new())))
+    let text = output::push_refused(&base, old, &plain);
+    let broken =
+        (plain.iter()).map(|(commit, subject, _)| output::rule_merge(&base, commit, subject));
+    Ok(skip
+        .refuse(broken, text)
+        .map(Outcome::from)
+        .unwrap_or(Outcome::Done(String::new())))
 }
 
 /// On a branch switch, what `status` prints; else nothing. A failure is

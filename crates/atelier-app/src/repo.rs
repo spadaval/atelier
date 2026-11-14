@@ -2,7 +2,7 @@
 //! branch's tip, and on the branch named for each, local or the forge's
 //! remote-tracking one.
 
-use crate::acts::{approval, mission_of, Checkout, Facts, SinceApproval};
+use crate::acts::{approval, mission_of, Checkout, Facts, SinceApproval, STARTED};
 use crate::view::Record;
 use crate::{git, say, Branch, Located, Skip};
 use anyhow::{bail, Context, Result};
@@ -43,6 +43,20 @@ trait Stored: Record + Sized {
     const DIR: &'static str;
     fn at(reader: &mut CommitReader, commit: &str, id: &str) -> Result<Option<Self>>;
     fn in_checkout(repo: &Repo, id: &str) -> Result<Option<Self>>;
+    /// The record as the base's copy `self` is read.
+    fn on_base(self) -> Self {
+        self
+    }
+}
+
+/// An item's copy on the base as it is read: one in a started status
+/// reached the base only in the merge of its own branch, so it is done
+/// (docs/design.md, How `done` is recorded).
+pub fn on_base(mut dir: ItemDir) -> ItemDir {
+    if STARTED.contains(&dir.item.status) {
+        dir.item.status = Status::Done;
+    }
+    dir
 }
 
 impl Stored for ItemDir {
@@ -52,6 +66,9 @@ impl Stored for ItemDir {
     }
     fn in_checkout(repo: &Repo, id: &str) -> Result<Option<Self>> {
         repo.checkout_item(id)
+    }
+    fn on_base(self) -> Self {
+        on_base(self)
     }
 }
 
@@ -199,7 +216,7 @@ impl<'s> Repo<'s> {
     /// branch adds is not on the base until that branch merges.
     pub fn locate(&mut self, id: &str) -> Result<Located> {
         let refs = self.refs()?;
-        let base = self.reader.item(&self.base_tip, id)?;
+        let base = self.reader.item(&self.base_tip, id)?.map(on_base);
         self.located(&refs, id, base, Vec::new())
     }
 
@@ -208,7 +225,7 @@ impl<'s> Repo<'s> {
     pub fn find(&mut self, id: &str) -> Result<Located> {
         let refs = self.refs()?;
         let touching = self.touching(&refs)?;
-        let base = self.reader.item(&self.base_tip, id)?;
+        let base = self.reader.item(&self.base_tip, id)?.map(on_base);
         let elsewhere = self.elsewhere(&touching, id)?;
         self.located(&refs, id, base, elsewhere)
     }
@@ -218,7 +235,10 @@ impl<'s> Repo<'s> {
     /// branch.
     pub fn locate_planned(&mut self, id: &str) -> Result<Located> {
         let refs = self.refs()?;
-        let base = self.checkout_item(id)?;
+        // A started copy came with the merge of its branch, unless this is
+        // that branch.
+        let own = self.named() == Some(Named::Record(id.to_string()));
+        let base = (self.checkout_item(id)?).map(|dir| if own { dir } else { on_base(dir) });
         self.located(&refs, id, base, Vec::new())
     }
 
@@ -473,7 +493,7 @@ impl<'s> Repo<'s> {
         }
         let mut found = Vec::new();
         for id in ids {
-            let base = R::at(&mut self.reader, &self.base_tip, &id)?;
+            let base = R::at(&mut self.reader, &self.base_tip, &id)?.map(R::on_base);
             let elsewhere = self.elsewhere(&touching, &id)?;
             let located = self.located(&refs, &id, base, elsewhere)?;
             // A branch named for an ID is an item's or a mission's: keep

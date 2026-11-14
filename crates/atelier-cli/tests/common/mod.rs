@@ -322,9 +322,56 @@ pub fn submitted() -> Scratch {
 /// `no-pulls` exists opening a pull request fails. While `pulls-down`
 /// exists looking one up fails, and while `pulls-stall` exists it never
 /// answers, after writing its process ID to `stalled`.
+///
+/// `pr merge` merges as the forge does, in the bare repository whose path
+/// is in `remote`, past its hooks: a merge commit of `main` and the head
+/// `--match-head-commit` names, which must be a branch's tip there, with
+/// the subject and body given. Then no pull request is open, and a line is
+/// added to `merged`. While `merge-refused` exists it refuses as GitHub
+/// does when the base's protection is not met. `pr view` answers with
+/// `view`, or an open pull request with nothing missing.
 pub const FAKE_GH: &str = r#"#!/bin/sh
 echo "$*" >> "$FAKE_GH/calls"
 if [ "$1" = auth ]; then exit 0; fi
+if [ "$1" = pr ] && [ "$2" = view ]; then
+  if [ -f "$FAKE_GH/view" ]; then cat "$FAKE_GH/view"; else
+    echo '{"state":"OPEN","reviewDecision":"","mergeStateStatus":"CLEAN","headRefOid":""}'
+  fi
+  exit 0
+fi
+if [ "$1" = pr ] && [ "$2" = merge ]; then
+  if [ -f "$FAKE_GH/merge-refused" ]; then
+    echo "X Pull request owner/repo#7 is not mergeable: the base branch policy prohibits the merge." >&2
+    exit 1
+  fi
+  head=""; subject=""; body=""; previous=""
+  for arg in "$@"; do
+    case "$previous" in
+      --match-head-commit) head="$arg" ;;
+      --subject) subject="$arg" ;;
+      --body) body="$arg" ;;
+    esac
+    previous="$arg"
+  done
+  remote=$(cat "$FAKE_GH/remote")
+  export GIT_AUTHOR_NAME=forge GIT_AUTHOR_EMAIL=forge@example.com
+  export GIT_COMMITTER_NAME=forge GIT_COMMITTER_EMAIL=forge@example.com
+  if [ -z "$(git --git-dir="$remote" for-each-ref --points-at "$head" refs/heads/)" ]; then
+    echo "GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)" >&2
+    exit 1
+  fi
+  tree=$(git --git-dir="$remote" merge-tree --write-tree main "$head") || {
+    echo "GraphQL: Pull Request is not mergeable (mergePullRequest)" >&2; exit 1; }
+  commit=$(printf '%s
+
+%s
+' "$subject" "$body" |
+    git --git-dir="$remote" commit-tree "$tree" -p main -p "$head") || exit 1
+  git --git-dir="$remote" update-ref refs/heads/main "$commit" || exit 1
+  echo '[]' > "$FAKE_GH/pulls"
+  echo "$head" >> "$FAKE_GH/merged"
+  exit 0
+fi
 method=GET
 previous=""
 answer=""

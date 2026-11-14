@@ -115,11 +115,14 @@ fn a_skipped_rule_is_printed_and_trailed_in_the_commit_of_start_submit_verdict_a
         skipped(&[&status, approval])
             + &format!(
                 "main's config.toml names no merge check, so none ran.\n\
-                 Merged {ID} into main with merge commit {}, which marks it done.\n",
+                 Merged {ID} into main with merge commit {}; it is done.\n",
                 git(&root, &["rev-parse", "--short=7", "main"])
             )
     );
-    assert_eq!(field(&root, "main", "status"), "done");
+    // Merged in a started status, which on the base reads as done.
+    assert_eq!(field(&root, "main", "status"), "changes_requested");
+    let shown = atelier(&root, "t1", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done"), "{shown}");
     assert!(message(&root, "main").ends_with(&format!(
         "\n\nAtelier-Merge: {ID}\n{}",
         trailers(&[&status, approval])
