@@ -3,7 +3,7 @@ schema: atelier.mission
 schema_version: 3
 id: atelier-dy62
 title: Make the tracker one crate, atelier-core, that the CLI and the Desk call
-status: ready
+status: done
 labels:
 - refactor
 lead: d7c28b6a-ecd6-469e-8cb8-154984751526
@@ -134,3 +134,39 @@ nothing else rests on it. If it is dropped the module stays `acts`, and
 the criterion one-word is not met and the Result says so.
 
 ## Result
+
+All three items merged on 2026-11-14, each implemented by Claude Opus 5.5
+and approved by GPT-6.1 Sol with no findings, and each ending with the same
+362 Rust tests passing as its base.
+
+- atelier-ni3d (519984c): `atelier-records` and `atelier-app` are modules of
+  `atelier-core`. The workspace is `atelier-core`, `atelier-cli` and
+  `atelier-desk`.
+- atelier-nl43 (8fcc22c): "action" for "act" in the code, the help, the
+  Desk's app and the four documents. The Desk's route is `POST /api/action`.
+- atelier-x5al (6843c70): `forge.rs` moved into the core, and the record
+  reader and the Desk run `git` and `gh` through the core's `git` and
+  `forge` modules.
+
+Every criterion is met, checked on 6843c70. three-crates: `cargo metadata`
+lists the three, and the core depends on neither other. model-is-pure: no
+file under `model/` names `std::fs`, `std::process` or the rest of the
+crate. one-git: `git` is spawned from `crates/atelier-core/src/git.rs` and
+`gh` from `crates/atelier-core/src/forge.rs`, and from nowhere else but the
+Desk's build script. one-word and the-rules-are-written hold in the
+documents. nothing-changed: each item's Report gives its test counts.
+
+What changed from the plan: Sumeet dropped atelier-yclc of atelier-to83
+while this ran, so atelier-x5al moved the forge code itself, after a third
+and fourth round of plan review. `submit` and `merge` stay in `atelier-cli`.
+
+Left open:
+
+- atelier-f3ax (draft): the documents and two of the Desk's messages still
+  name atelier-yclc.
+- "Act" as the noun is still in `docs/architecture/quality/standards.md:23`
+  and in a field of `scripts/scorecard/`, both outside atelier-nl43's scope.
+- The Desk's Git calls now pass `--no-replace-objects`, as every other call
+  does. atelier-x5al's Report says why that changes nothing it does.
+- The installed `atelier` and the Desk's service are older builds and have
+  none of this until they are rebuilt.
