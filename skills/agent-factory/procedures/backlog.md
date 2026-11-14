@@ -34,7 +34,9 @@ the rest; if you cannot tell, it is a call for Sumeet.
 You may also make record fixes evident from the records alone, such as a
 missing label, a link both items' text already states, or a format fix
 `atelier check` asks for that keeps the wording, and clear a blocker that
-names a dropped item. Commit them on the base.
+names a dropped item. A pass's drops and fixes go on one branch, `atelier
+start --backlog <slug>`: commit them there, then `atelier submit` and
+`atelier merge`, which merges records alone on `atelier check`.
 
 ## Never Without Sumeet
 
