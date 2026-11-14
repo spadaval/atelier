@@ -11,6 +11,16 @@ works where the base is protected, and work in motion shows from any clone.
 0.6.0 reads a 0.5 repository's records as they are: no migration, and the
 hooks `atelier setup` installed keep working, since they call the binary.
 
+### Upgrading from 0.5
+- A mission that was `ready` or `open` on the base is agreed and carries on
+  as before.
+- A mission still `draft` on the base is proposed, and `ready` no longer
+  takes a mission. To carry its plan on, make a branch named for its ID from
+  the base (`git worktree add -b <mission-id> <path> <base>`), run `atelier
+  submit` there, and merge once two plan reviews approve it. `start
+  --mission` makes a new mission instead.
+- `ready` now marks items only.
+
 ### Added
 - The branch model. Every change lives on a branch that `atelier start`
   makes: `<item-id>` for an item, `<mission-id>` for a new mission's plan
