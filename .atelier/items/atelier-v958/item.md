@@ -140,7 +140,7 @@ the CLI's `drop`, and the three lines in `docs/design.md`.
 
 ### The installed service
 
-The service on this host runs this branch's build, 8a14c2e0. I installed it
+The service on this host runs this branch's build, 7ec74590. I installed it
 with `desk/service/install.sh` from a clean checkout of this branch, because
 the first Done when line asks for the installed service. Its config, backed
 up first to `~/.cache/atelier-desk/config.toml.before-v958`, now names the
@@ -165,7 +165,7 @@ systemd: the push over SSH, and `gh` being signed in.
   `origin` seconds after the start. `/api/proposed`, `/api/motion` and
   `/api/disputed` read all five repositories without error. In motion lists
   this item's thread as live.
-- `cargo nextest run`: 356 passed, 1 skipped. `cargo clippy --all-targets
+- `cargo nextest run`: 358 passed, 1 skipped. `cargo clippy --all-targets
   -- -D warnings` and `cargo fmt -- --check` are clean.
 - `crates/atelier-desk/tests/acts.rs` runs against a bare remote with a
   `gh` stand-in:
@@ -185,6 +185,10 @@ systemd: the push over SSH, and `gh` being signed in.
     pending while the forge fails, a stopped plan's items are not proposed,
     and an agreed mission's own-branch drop is a proposed change until it
     merges. Each of these three tests fails with its fix reverted.
+  - Round 3's fixes: a pull request closed before the stop does not
+    confirm it, and an amendment on the mission's own branch and a stop on
+    another branch are each shown as they are. Both tests fail with their
+    fix reverted.
 - `crates/atelier-desk/tests/desk.rs` covers the proposed, in-motion and
   disputed pages from local branches. `news.rs` has a unit test of proposed
   and merged news, with no repeat across a restart and the stub command's
@@ -207,3 +211,5 @@ systemd: the push over SSH, and `gh` being signed in.
 - 2-2zhl.2: fixed in 8a14c2e
 - 2-2zhl.7: fixed in 8a14c2e
 - 2-2zhl.8: fixed in 8a14c2e
+- 3-lb05.1: fixed in 7ec7459
+- 3-lb05.4: fixed in 7ec7459
