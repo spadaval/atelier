@@ -1393,3 +1393,123 @@ fn list_with_200_named_remote_branches_takes_under_two_seconds() {
     eprintln!("list with 200 named remote branches took {took:?}");
     assert!(took < Duration::from_secs(2), "{took:?}");
 }
+
+/// The item in `at` whose ID is not one of `known`.
+fn new_item(at: &Path, known: &[&str]) -> String {
+    fs::read_dir(at.join(".atelier/items"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .find(|id| !known.contains(&id.as_str()))
+        .expect("the new item")
+}
+
+#[test]
+fn a_record_written_but_not_committed_on_the_branch_checked_out_is_found() {
+    let hub = Hub::new(&[(ID, "ready")]);
+    let a = hub.clone("a");
+    ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
+    // The branch is at the base's tip, with no commit of its own yet.
+    ok(hub.atelier(&a, "t1", &["new", "Say bye"]));
+    let first = new_item(&a, &[ID]);
+    let listed = hub.atelier(&a, "t1", &["list", "--proposed"]);
+    ok(listed.clone());
+    assert!(
+        listed.stdout.contains(&format!(
+            "{first} (draft, medium, on backlog/tidy): Say bye\n"
+        )),
+        "{}",
+        listed.stdout
+    );
+    let shown = hub.atelier(&a, "t1", &["show", &first]);
+    ok(shown.clone());
+    assert!(
+        shown
+            .stdout
+            .contains("\nRead from: backlog/tidy, where it is proposed"),
+        "{}",
+        shown.stdout
+    );
+
+    // With a commit on the branch, a later record not committed is found
+    // beside the committed one.
+    git(&a, &["add", "-A"]);
+    git(&a, &["commit", "-qm", "File one"]);
+    ok(hub.atelier(&a, "t1", &["new", "Say thanks"]));
+    let second = new_item(&a, &[ID, &first]);
+    let listed = hub.atelier(&a, "t1", &["list", "--proposed"]);
+    ok(listed.clone());
+    for (id, title) in [(&first, "Say bye"), (&second, "Say thanks")] {
+        assert!(
+            listed
+                .stdout
+                .contains(&format!("{id} (draft, medium, on backlog/tidy): {title}\n")),
+            "{}",
+            listed.stdout
+        );
+    }
+    ok(hub.atelier(&a, "t1", &["show", &second]));
+}
+
+#[test]
+fn a_ready_item_only_on_an_unmerged_branch_cannot_start_and_is_not_said_to() {
+    let hub = Hub::new(&[(ID, "draft")]);
+    let a = hub.clone("a");
+    ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
+    ok(hub.atelier(&a, "t1", &["new", "Say bye"]));
+    let id = new_item(&a, &[ID]);
+    let path = a.join(item_path(&id));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(&path, text.replace("status: draft", "status: ready")).unwrap();
+    git(&a, &["add", "-A"]);
+    git(&a, &["commit", "-qm", "File it ready"]);
+
+    let line = format!("{id} (ready, medium, on backlog/tidy): Say bye\n");
+    let proposed = hub.atelier(&a, "t1", &["list", "--proposed"]);
+    ok(proposed.clone());
+    assert!(proposed.stdout.contains(&line), "{}", proposed.stdout);
+    for flags in [&["list", "--ready"][..], &["list", "--proposed", "--ready"]] {
+        let listed = hub.atelier(&a, "t1", flags);
+        ok(listed.clone());
+        assert!(!listed.stdout.contains(&id), "{flags:?}: {}", listed.stdout);
+    }
+    let shown = hub.atelier(&a, "t1", &["show", &id]);
+    ok(shown.clone());
+    assert!(
+        shown.stdout.contains("\nStatus: ready\n"),
+        "{}",
+        shown.stdout
+    );
+    let status = hub.atelier(&a, "t1", &["status"]);
+    ok(status.clone());
+    assert!(!status.stdout.contains(&id), "{}", status.stdout);
+    let started = hub.atelier(&a, "t2", &["start", &id]);
+    assert_eq!(started.code, 1, "{}{}", started.stdout, started.stderr);
+}
+
+#[test]
+fn a_proposed_record_change_is_narrowed_by_the_flags_its_record_would_be() {
+    let hub = Hub::new(&[(ID, "draft")]);
+    let a = hub.clone("a");
+    ok(hub.atelier(&a, "t1", &["start", "--backlog", "tidy"]));
+    let path = a.join(item_path(ID));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("title: Say hello", "title: Say hello twice"),
+    )
+    .unwrap();
+    git(&a, &["commit", "-qam", "Retitle"]);
+
+    let change = format!("{ID} (on backlog/tidy: changed there, still draft): Say hello\n");
+    let listed = hub.atelier(&a, "t1", &["list", "--proposed"]);
+    ok(listed.clone());
+    assert!(listed.stdout.contains(&change), "{}", listed.stdout);
+    for flag in ["--mine", "--ready", "--needs-human", "--blocked"] {
+        let narrowed = hub.atelier(&a, "t1", &["list", "--proposed", flag]);
+        ok(narrowed.clone());
+        assert!(!narrowed.stdout.contains(ID), "{flag}: {}", narrowed.stdout);
+    }
+    let labelled = hub.atelier(&a, "t1", &["list", "--proposed", "--label", "none-such"]);
+    ok(labelled.clone());
+    assert!(!labelled.stdout.contains(ID), "{}", labelled.stdout);
+}

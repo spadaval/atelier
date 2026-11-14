@@ -379,24 +379,43 @@ impl<'s> Repo<'s> {
             let Some(named) = &pair.named else {
                 continue;
             };
-            let tip = self.tip(pair)?;
-            if tip.merged {
-                continue;
-            }
+            // On the branch checked out here its files count, committed or
+            // not, so a record `new` just wrote is found before any commit.
+            let here = !self.committed && self.branch.as_deref() == Some(pair.name.as_str());
+            let (tip, paths) = match (here, &pair.local) {
+                (true, Some(local)) => {
+                    let tip = Tip {
+                        tip: local.tip.clone(),
+                        remote: false,
+                        merged: local.merged,
+                        diverged: false,
+                    };
+                    let fork = git::run(&self.root, &["merge-base", &self.base_tip, &local.tip])?;
+                    let dirs = [".atelier/items", ".atelier/missions"];
+                    (tip, git::changed_since(&self.root, &fork, &dirs)?)
+                }
+                _ => {
+                    let tip = self.tip(pair)?;
+                    if tip.merged {
+                        continue;
+                    }
+                    let cached = self.changed.borrow().get(&tip.tip).cloned();
+                    let paths = match cached {
+                        Some(paths) => paths,
+                        None => {
+                            let paths = git::changed_records(&self.root, &self.base_tip, &tip.tip)?;
+                            let mut changed = self.changed.borrow_mut();
+                            changed.entry(tip.tip.clone()).or_insert(paths).clone()
+                        }
+                    };
+                    (tip, paths)
+                }
+            };
             let own = match named {
                 Named::Record(id) => Some(id.as_str()),
                 Named::Backlog(_) => None,
             };
             let mut ids = BTreeSet::new();
-            let cached = self.changed.borrow().get(&tip.tip).cloned();
-            let paths = match cached {
-                Some(paths) => paths,
-                None => {
-                    let paths = git::changed_records(&self.root, &self.base_tip, &tip.tip)?;
-                    let mut changed = self.changed.borrow_mut();
-                    changed.entry(tip.tip.clone()).or_insert(paths).clone()
-                }
-            };
             for path in paths {
                 let kinds = [(true, ItemDir::DIR), (false, MissionDir::DIR)];
                 for (item, dir) in kinds {

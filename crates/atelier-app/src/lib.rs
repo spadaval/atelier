@@ -33,4 +33,7 @@ pub use skip::{refused, Refused, Skip, VARIABLE as SKIP_VARIABLE};
 pub use view::{
     entries, entry, mark, overview, unreached, Branch, Entry, Located, Overview, ReadFrom, Record,
 };
-pub use work::{in_progress, items_of, list, Filter, Group, LIFECYCLE, NEEDS_HUMAN};
+pub use work::{
+    in_progress, items_of, list, narrows_item, narrows_mission, Filter, Group, LIFECYCLE,
+    NEEDS_HUMAN,
+};

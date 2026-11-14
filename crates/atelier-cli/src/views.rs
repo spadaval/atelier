@@ -10,8 +10,8 @@ use atelier_app::acts::{check_mission, unsettled, Act, MissionFacts, Refusal};
 use atelier_app::plan::{misplaced, save, Belongs};
 use atelier_app::repo::mission_path;
 use atelier_app::{
-    disputes, entries, git, item_view, items_of, list as groups, mission_view, Entry, Filter,
-    Located, Record, Repo,
+    disputes, entries, git, item_view, items_of, list as groups, mission_view, narrows_item,
+    narrows_mission, Entry, Filter, Located, Record, Repo,
 };
 use atelier_records::{validate_id, ItemDir, MissionDir};
 use view_output::{Change, Whence};
@@ -114,25 +114,18 @@ pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
             ..*filter
         };
         let groups = groups(&entries, &missions, &proposed, &repo.caller, &only);
-        let kept = |mission: Option<&String>, labels: &[String]| {
-            (filter.mission.as_ref()).is_none_or(|m| mission == Some(m))
-                && (filter.label.as_ref()).is_none_or(|l| labels.contains(l))
-        };
+        // A change is kept as the flags would keep its record.
         let mut changes = Vec::new();
         for item in &items {
-            if let Some(record) = item
-                .record()
-                .filter(|r| kept(r.item.mission.as_ref(), &r.item.labels))
-            {
+            let entry = entries.iter().find(|e| e.id == item.id);
+            let kept = entry.is_some_and(|e| narrows_item(e, &missions, &repo.caller, filter));
+            if let Some(record) = item.record().filter(|_| kept) {
                 changes.extend(change(item, record, |dir: &ItemDir| dir.item.status));
             }
         }
         for mission in &located {
-            let only_items = filter.ready || filter.blocked || filter.needs_human;
-            if let Some(record) = mission
-                .record()
-                .filter(|r| !only_items && kept(Some(&r.mission.id), &r.mission.labels))
-            {
+            let kept = |r: &&MissionDir| narrows_mission(r, &repo.caller, filter);
+            if let Some(record) = mission.record().filter(kept) {
                 changes.extend(change(mission, record, |dir: &MissionDir| {
                     dir.mission.status.status()
                 }));
