@@ -1,6 +1,10 @@
-//! `POST /api/act`: `ready` and `decide` made through the Desk leave what
-//! the core's own functions, the ones the `atelier` command calls, leave.
-//! Each test acts in clones of a scratch repository made here.
+//! `POST /api/act`: the human's stop of a proposed plan, carried through
+//! by the Desk in a clone of its own, writes the record `atelier drop`
+//! writes, through the same function, and publishes it as atelier-2vdq
+//! defines a stop: pushed to the plan's branch and its pull request
+//! closed. An open mission's stop, which `submit` and `merge` publish, is
+//! shown pending until its branch merges, and then stopped. Each test works
+//! against a bare remote with a forge, and a `gh` stand-in.
 
 use atelier_app::{Repo, Skip};
 use atelier_core::Thread;
@@ -12,15 +16,16 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-/// A caller holding a slash, as a Codex subagent's identity does.
-const CALLER: &str = "sumeet/desk";
-const ALPHA: &str = "demo-aaaa";
-const DRAFT: &str = "demo-bbbb";
-const STARTED: &str = "demo-a003";
-const QUESTION: &str = "2026-11-10: Which way?";
+const CALLER: &str = "sumeet";
+/// An agreed mission, open on the base.
+const OPEN: &str = "demo-aaaa";
+/// A proposed plan, on its own branch.
+const PLAN: &str = "demo-pppp";
+const REASON: &str = "Not worth it this month";
 
 fn git(at: &Path, args: &[&str]) -> String {
     let output = Command::new("git").current_dir(at).args(args).output();
@@ -35,24 +40,14 @@ fn write(root: &Path, path: &str, text: &str) {
     fs::write(path, text).unwrap();
 }
 
-fn mission(root: &Path, id: &str, status: &str) {
+fn mission(root: &Path, id: &str) {
     let text = format!(
         "---\nschema: atelier.mission\nschema_version: 3\nid: {id}\ntitle: Mission {id}\n\
-         status: {status}\nlabels: []\nlead: null\nready: null\n\
-         created_at: 2026-11-10T09:00:00Z\n---\n## Why\n\nBecause.\n\n## Outcome\n\nIt works.\n"
+         status: open\nlabels: []\nlead: null\nplanners:\n- p1\n\
+         created_at: 2026-11-10T09:00:00Z\n---\n## Why\n\nSumeet asked for it.\n\n\
+         ## Outcome\n\nIt works.\n\n## Result\n"
     );
     write(root, &format!(".atelier/missions/{id}/mission.md"), &text);
-}
-
-fn item(root: &Path, id: &str, status: &str, mission: &str, body: &str) {
-    let text = format!(
-        "---\nschema: atelier.item\nschema_version: 3\nid: {id}\ntitle: Item {id}\n\
-         status: {status}\nmission: {mission}\nlabels: []\npriority: high\nblocked_by: []\n\
-         implementers: []\nready: null\ntrivial: null\ncaused_by: null\n\
-         created_at: 2026-11-10T09:00:00Z\n---\n\n## Goal\n\nDo {id}.\n\n\
-         ## Done when\n\n- [ ] It is done.\n{body}"
-    );
-    write(root, &format!(".atelier/items/{id}/item.md"), &text);
 }
 
 fn identify(root: &Path) {
@@ -60,54 +55,97 @@ fn identify(root: &Path) {
     git(root, &["config", "user.email", "b@b"]);
 }
 
-/// A repository on `main` with a ready mission ALPHA, whose item STARTED
-/// is building on its own branch with a question, and a draft mission
-/// DRAFT that may be made ready.
-fn scratch(root: &Path) {
-    fs::create_dir_all(root).unwrap();
-    git(root, &["init", "-q", "-b", "main"]);
-    identify(root);
-    let config = "schema_version = 3\nslug = \"demo\"\nbase_branch = \"main\"\n";
-    write(root, ".atelier/config.toml", config);
-    mission(root, ALPHA, "ready");
-    mission(root, DRAFT, "draft");
-    item(root, STARTED, "ready", ALPHA, "");
-    item(root, "demo-b001", "draft", DRAFT, "");
-    git(root, &["add", "-A"]);
-    git(root, &["commit", "-qm", "Plan"]);
-    git(root, &["switch", "-qc", STARTED]);
-    let question = format!("\n## Decisions\n\n### {QUESTION}\n");
-    item(root, STARTED, "building", ALPHA, &question);
-    git(root, &["commit", "-qam", "Start"]);
-    git(root, &["switch", "-q", "main"]);
-}
-
-/// A clone of `origin` at `to`, with each of its branches local.
-fn clone(origin: &Path, to: &Path) {
-    let (from, to_text) = (origin.to_str().unwrap(), to.to_str().unwrap());
-    git(origin, &["clone", "-q", from, to_text]);
-    identify(to);
-    git(to, &["branch", "-q", STARTED, &format!("origin/{STARTED}")]);
-}
-
 struct World {
     dir: TempDir,
+    /// The bare remote, the forge's.
+    origin: PathBuf,
+    /// The planner's clone, which pushes.
+    planner: PathBuf,
     /// The repository the Desk serves as `demo`.
     served: PathBuf,
+    /// What the `gh` stand-in says the plan's pull request is.
+    pr_state: PathBuf,
+    /// Each `gh pr close` the stand-in was given.
+    closed: PathBuf,
+    desk: Arc<Desk>,
     app: Router,
 }
 
-/// A Desk acting as `CALLER` on a clone of a scratch repository.
+/// A bare remote whose `main` holds OPEN, agreed, and whose branch PLAN
+/// proposes mission PLAN; a planner's clone; and the served clone, which
+/// has `main` out.
 fn world() -> World {
     let dir = TempDir::new().unwrap();
-    scratch(&dir.path().join("origin"));
+    let origin = dir.path().join("origin.git");
+    git(
+        dir.path(),
+        &["init", "-q", "--bare", "-b", "main", "origin.git"],
+    );
+    let planner = dir.path().join("planner");
+    git(
+        dir.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "planner"],
+    );
+    identify(&planner);
+    git(&planner, &["switch", "-qc", "main"]);
+    let config = "schema_version = 3\nslug = \"demo\"\nbase_branch = \"main\"\n\n\
+                  [forge]\nprovider = \"github\"\nremote = \"origin\"\n";
+    write(&planner, ".atelier/config.toml", config);
+    mission(&planner, OPEN);
+    git(&planner, &["add", "-A"]);
+    git(&planner, &["commit", "-qm", "Plan"]);
+    git(&planner, &["push", "-q", "origin", "main"]);
+    git(&planner, &["switch", "-qc", PLAN]);
+    mission(&planner, PLAN);
+    git(&planner, &["add", "-A"]);
+    git(&planner, &["commit", "-qm", "Plan the plan"]);
+    git(&planner, &["push", "-q", "origin", PLAN]);
+    git(&planner, &["switch", "-q", "main"]);
+
     let served = dir.path().join("repos/demo");
-    clone(&dir.path().join("origin"), &served);
-    let text = format!("caller = \"{CALLER}\"\nroots = []\n");
+    fs::create_dir_all(served.parent().unwrap()).unwrap();
+    git(
+        dir.path(),
+        &["clone", "-q", origin.to_str().unwrap(), "repos/demo"],
+    );
+    identify(&served);
+
+    let pr_state = dir.path().join("pr-state");
+    let closed = dir.path().join("closed");
+    fs::write(&pr_state, "OPEN").unwrap();
+    let gh = dir.path().join("gh");
+    let script = format!(
+        "#!/bin/sh\ncase \"$1 $2\" in\n\
+         'pr list') printf '[{{\"number\":7,\"url\":\"https://forge.example/pull/7\",\"state\":\"%s\",\"headRefName\":\"{PLAN}\"}}]' \"$(cat {state})\" ;;\n\
+         'pr close') printf '%s\\n' \"$*\" >> {closed}; printf CLOSED > {state} ;;\n\
+         *) exit 1 ;;\nesac\n",
+        state = pr_state.display(),
+        closed = closed.display(),
+    );
+    fs::write(&gh, script).unwrap();
+    chmod(&gh);
+
+    let text = format!("caller = \"{CALLER}\"\nrepos = []\n");
     let mut config: Config = toml::from_str(&text).unwrap();
-    config.roots = vec![dir.path().join("repos")];
-    let app = router_for(Desk::new(config));
-    World { dir, served, app }
+    config.repos = vec![served.clone()];
+    config.state = Some(dir.path().join("state"));
+    config.gh = gh;
+    let desk = Desk::new(config);
+    World {
+        app: router_for(desk.clone()),
+        desk,
+        dir,
+        origin,
+        planner,
+        served,
+        pr_state,
+        closed,
+    }
+}
+
+fn chmod(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 async fn send(
@@ -154,178 +192,192 @@ async fn get(app: &Router, uri: &str) -> Value {
     page
 }
 
-/// What the CLI's `atelier ready <ids> --by <by>` calls, in `checkout`.
-fn ready_as_the_cli_does(checkout: &Path, ids: &[&str], by: &str) -> Value {
-    let skip = Skip::new(None);
-    let mut repo = Repo::open(checkout, Thread(CALLER.into()), &skip).unwrap();
-    let ids: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
-    match atelier_app::ready(&mut repo, &ids, by).unwrap() {
-        Ok(done) => {
-            json!({"result": "done", "text": done.text, "paths": done.paths, "commit": done.commit})
-        }
-        Err(refused) => {
-            json!({"result": "refused", "rules": refused.rules, "text": refused.text, "next": refused.next})
-        }
-    }
+/// The served repository's state that the Desk must never change: its
+/// checkout's `HEAD`, its files, and its local branches.
+fn untouched(served: &Path) -> (String, String, String) {
+    (
+        git(served, &["rev-parse", "HEAD"]),
+        git(served, &["status", "--porcelain"]),
+        git(
+            served,
+            &[
+                "for-each-ref",
+                "--format=%(refname) %(objectname)",
+                "refs/heads",
+            ],
+        ),
+    )
 }
 
-/// Since atelier-ob9u nothing is written in the base's own checkout, so
-/// `ready` there is refused, from the Desk as from the CLI; atelier-v958
-/// gives the Desk its say-go on the branch model.
-#[tokio::test]
-async fn saying_go_from_the_desk_is_refused_in_the_bases_checkout_as_the_cli_is() {
-    let world = world();
-    let origin = world.dir.path().join("origin");
-    let by_cli = world.dir.path().join("by-cli");
-    clone(&origin, &by_cli);
-    let before = git(&world.served, &["rev-parse", "HEAD"]);
-    write(&world.served, "notes.txt", "mine\n");
-    git(&world.served, &["add", "notes.txt"]);
+/// What `atelier drop <id> --reason <reason>` writes, in a fresh clone of
+/// `origin` on `branch` as it was at `at`: the command calls the same
+/// function.
+fn drop_as_the_cli_does(dir: &Path, origin: &Path, branch: &str, at: &str, id: &str) -> String {
+    let clone = dir.join("cli");
+    git(dir, &["clone", "-q", origin.to_str().unwrap(), "cli"]);
+    identify(&clone);
+    git(&clone, &["switch", "-qC", branch, at]);
+    let skip = Skip::new(None);
+    let mut repo = Repo::open(&clone, Thread(CALLER.into()), &skip).unwrap();
+    let done = atelier_app::plan::drop_mission(&mut repo, id, REASON)
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.paths, [format!(".atelier/missions/{id}/mission.md")]);
+    fs::read_to_string(clone.join(&done.paths[0])).unwrap()
+}
 
-    let refused = act(
+#[tokio::test]
+async fn a_proposed_plan_is_stopped_from_its_page_and_shown_stopped_once_published() {
+    let world = world();
+    world.desk.fetch_all();
+    let before = untouched(&world.served);
+    let uri = format!("/api/repos/demo/missions/{PLAN}");
+
+    let page = get(&world.app, &uri).await;
+    assert_eq!(page["mission"]["state"], "proposed", "{page}");
+    assert_eq!(page["mission"]["branch"], format!("origin/{PLAN}"));
+    assert_eq!(page["pull_request"]["number"], 7);
+    assert_eq!(page["can_stop"], true);
+    let proposed = get(&world.app, "/api/proposed").await;
+    let plans = &proposed["repos"][0]["plans"];
+    assert_eq!(plans[0]["mission"]["id"], PLAN, "{proposed}");
+    assert_eq!(
+        plans[0]["pull_request"]["url"],
+        "https://forge.example/pull/7"
+    );
+
+    // A reason is needed, on one line.
+    let empty = act(
         &world.app,
-        json!({"act": "ready", "repo": "demo", "ids": [DRAFT]}),
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": " "}),
     )
     .await;
-    let cli = ready_as_the_cli_does(&by_cli, &[DRAFT], CALLER);
-    assert_eq!(refused["result"], "refused", "{refused}");
-    assert_eq!(refused, cli);
-    assert_eq!(
-        refused["rules"],
-        json!(["Nothing is written in the checkout of the base branch main"])
-    );
-    // Nothing is written or committed, and what was staged stays staged.
-    assert_eq!(git(&world.served, &["rev-parse", "HEAD"]), before);
-    assert_eq!(
-        git(&world.served, &["status", "--porcelain"]),
-        "A  notes.txt"
-    );
-    let page = get(&world.app, &format!("/api/repos/demo/missions/{DRAFT}")).await;
-    assert_eq!(page["mission"]["status"], "draft");
-}
+    assert_eq!(empty["result"], "refused", "{empty}");
 
-#[tokio::test]
-async fn an_answer_waits_in_memory_until_a_commit_on_the_branch_holds_it() {
-    let world = world();
-    let checkout = world.dir.path().join("started");
-    let path = checkout.to_str().unwrap();
-    git(&world.served, &["worktree", "add", "-q", path, STARTED]);
-    let tips = || git(&world.served, &["rev-parse", "main", STARTED]);
-    let before = tips();
-    let item_uri = format!("/api/repos/demo/items/{STARTED}");
-    let mission_uri = format!("/api/repos/demo/missions/{ALPHA}");
-    let page = get(&world.app, &item_uri).await;
-    assert_eq!(page["can_decide"], true);
-    let found = fs::canonicalize(page["decide_at"].as_str().unwrap()).unwrap();
-    assert_eq!(found, fs::canonicalize(&checkout).unwrap());
-    let inbox = get(&world.app, "/api/inbox").await;
-    assert_eq!(inbox["repos"][0]["questions"][0]["item"], STARTED);
-
-    let body = json!({"act": "decide", "repo": "demo", "id": STARTED, "answer": "This way.", "settle": null});
-    let done = act(&world.app, body).await;
+    let done = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
     assert_eq!(done["result"], "done", "{done}");
-    assert_eq!(done["commit"], Value::Null);
-    let written = format!(".atelier/items/{STARTED}/item.md");
-    assert_eq!(done["paths"], json!([written]));
-    assert_eq!(tips(), before, "decide commits nothing");
     assert_eq!(
-        git(&checkout, &["status", "--porcelain"]),
-        format!("M {written}")
+        done["paths"],
+        json!([format!(".atelier/missions/{PLAN}/mission.md")])
     );
-    let record = fs::read_to_string(checkout.join(&written)).unwrap();
+    let pushed = git(&world.origin, &["rev-parse", &format!("refs/heads/{PLAN}")]);
+    assert_eq!(
+        done["commit"], pushed,
+        "the drop is pushed to the plan's branch"
+    );
+    let closed = fs::read_to_string(&world.closed).unwrap();
+    assert_eq!(
+        closed.trim(),
+        format!("pr close {PLAN} --comment Stopped from the Desk by {CALLER}: {REASON}")
+    );
+    assert_eq!(
+        untouched(&world.served),
+        before,
+        "the served repository's checkout is not written"
+    );
+
+    // The record is the one `atelier drop` writes.
+    let path = format!("{PLAN}:.atelier/missions/{PLAN}/mission.md");
+    let stopped = git(&world.origin, &["show", &path]);
+    let cli = drop_as_the_cli_does(
+        world.dir.path(),
+        &world.origin,
+        PLAN,
+        &format!("origin/{PLAN}~1"),
+        PLAN,
+    );
+    assert_eq!(format!("{stopped}\n"), cli);
     assert!(
-        record.contains(&format!("Answer by {CALLER}: This way.")),
-        "{record}"
+        stopped.contains(&format!("## Result\n\nDropped: {REASON}")),
+        "{stopped}"
     );
 
-    let pending = json!([{"item": STARTED, "question": QUESTION, "finding": null,
-        "answer": {"by": CALLER, "text": "This way."}, "outcome": null}]);
-    assert_eq!(
-        get(&world.app, &mission_uri).await["pending_answers"],
-        pending
-    );
-    let page = get(&world.app, &item_uri).await;
-    assert_eq!(page["pending_answers"], pending);
-    assert_eq!(page["decisions"][0]["answer"], Value::Null);
-    let inbox = get(&world.app, "/api/inbox").await;
-    assert_eq!(inbox["repos"][0]["questions"], json!([]));
-
-    git(&checkout, &["commit", "-qam", "Submit"]);
-    let page = get(&world.app, &item_uri).await;
-    assert_eq!(page["pending_answers"], json!([]));
-    assert_eq!(page["decisions"][0]["answer"]["by"], CALLER);
-    assert_eq!(
-        get(&world.app, &mission_uri).await["pending_answers"],
-        json!([])
-    );
+    // Pushed and the pull request closed: stopped, and no longer proposed.
+    let page = get(&world.app, &uri).await;
+    assert_eq!(page["mission"]["state"], "stopped", "{page}");
+    assert_eq!(page["dropped"], REASON);
+    let proposed = get(&world.app, "/api/proposed").await;
+    assert_eq!(proposed["repos"][0]["plans"], json!([]), "{proposed}");
+    // While its pull request is open, the stop is not published.
+    fs::write(&world.pr_state, "OPEN").unwrap();
+    world.desk.fetch_all();
+    let page = get(&world.app, &uri).await;
+    assert_eq!(page["mission"]["state"], "stop_pending", "{page}");
+    // A second stop is refused: it is stopped already.
+    let again = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON}),
+    )
+    .await;
+    assert_eq!(again["result"], "refused", "{again}");
 }
 
 #[tokio::test]
-async fn an_answer_is_told_from_an_earlier_one_under_the_same_heading() {
+async fn an_open_missions_stop_is_pending_until_its_branch_merges_and_the_desk_does_not_make_it() {
     let world = world();
-    let checkout = world.dir.path().join("started");
-    let path = checkout.to_str().unwrap();
-    git(&world.served, &["worktree", "add", "-q", path, STARTED]);
-    // The question asked again under the same heading, the first answered.
-    let asked = format!(
-        "\n## Decisions\n\n### {QUESTION}\n\nAnswer by someone: That way.\n\n### {QUESTION}\n"
-    );
-    item(&checkout, STARTED, "building", ALPHA, &asked);
-    git(&checkout, &["commit", "-qam", "Ask again"]);
-    let item_uri = format!("/api/repos/demo/items/{STARTED}");
-    let mission_uri = format!("/api/repos/demo/missions/{ALPHA}");
-    let inbox = get(&world.app, "/api/inbox").await;
-    assert_eq!(inbox["repos"][0]["questions"][0]["item"], STARTED);
-
-    let body = json!({"act": "decide", "repo": "demo", "id": STARTED, "answer": "This way."});
-    assert_eq!(act(&world.app, body).await["result"], "done");
-    let pending = json!([{"item": STARTED, "question": QUESTION, "finding": null,
-        "answer": {"by": CALLER, "text": "This way."}, "outcome": null}]);
+    world.desk.fetch_all();
+    let uri = format!("/api/repos/demo/missions/{OPEN}");
+    let page = get(&world.app, &uri).await;
+    assert_eq!(page["mission"]["state"], "open", "{page}");
+    assert_eq!(page["can_stop"], false);
     assert_eq!(
-        get(&world.app, &mission_uri).await["pending_answers"],
-        pending
+        page["stop_commands"][1],
+        format!("atelier drop {OPEN} --reason \"<why>\"")
     );
-    assert_eq!(get(&world.app, &item_uri).await["pending_answers"], pending);
-    let inbox = get(&world.app, "/api/inbox").await;
-    assert_eq!(inbox["repos"][0]["questions"], json!([]));
+    let refused = act(
+        &world.app,
+        json!({"act": "stop", "repo": "demo", "id": OPEN, "reason": REASON}),
+    )
+    .await;
+    assert_eq!(refused["result"], "refused", "{refused}");
 
-    git(&checkout, &["commit", "-qam", "Submit"]);
-    assert_eq!(
-        get(&world.app, &mission_uri).await["pending_answers"],
-        json!([])
-    );
-    let page = get(&world.app, &item_uri).await;
-    assert_eq!(page["pending_answers"], json!([]));
-    assert_eq!(page["decisions"][1]["answer"]["by"], CALLER);
-}
-
-#[tokio::test]
-async fn where_no_checkout_has_the_branch_the_function_refuses() {
-    let world = world();
-    // `decide` with no checkout of the item's branch, from the checkout
-    // of the base, as the function refuses there.
-    let body = json!({"act": "decide", "repo": "demo", "id": STARTED, "answer": "This way."});
-    let refused = act(&world.app, body).await;
+    // Someone writes the stop on a backlog branch and pushes it.
+    let branch = format!("backlog/stop-{OPEN}");
+    git(&world.planner, &["switch", "-qc", &branch, "main"]);
     let skip = Skip::new(None);
-    let mut repo = Repo::open(&world.served, Thread(CALLER.into()), &skip).unwrap();
-    let own = atelier_app::decide(&mut repo, STARTED, "This way.", None).unwrap();
-    let own = own.unwrap_err();
+    let mut repo = Repo::open(&world.planner, Thread("p1".into()), &skip).unwrap();
+    atelier_app::plan::drop_mission(&mut repo, OPEN, REASON)
+        .unwrap()
+        .unwrap();
+    git(&world.planner, &["commit", "-qam", &format!("Drop {OPEN}")]);
+    git(&world.planner, &["push", "-q", "origin", &branch]);
+    world.desk.fetch_all();
+    let page = get(&world.app, &uri).await;
+    assert_eq!(page["mission"]["state"], "stop_pending", "{page}");
+    assert_eq!(page["stop_on"], format!("origin/{branch}"));
+    let proposed = get(&world.app, "/api/proposed").await;
+    let changes = &proposed["repos"][0]["changes"];
     assert_eq!(
-        refused,
-        json!({"result": "refused", "rules": own.rules, "text": own.text, "next": own.next})
+        changes[0]["branch"],
+        format!("origin/{branch}"),
+        "{proposed}"
     );
-    assert!(own.next.is_some());
+    assert_eq!(changes[0]["records"][0]["change"], "dropped");
+
+    // It merges.
+    git(&world.planner, &["switch", "-q", "main"]);
+    git(
+        &world.planner,
+        &["merge", "-q", "--no-ff", "-m", "Merge the stop", &branch],
+    );
+    git(&world.planner, &["push", "-q", "origin", "main"]);
+    world.desk.fetch_all();
+    let page = get(&world.app, &uri).await;
+    assert_eq!(page["mission"]["state"], "stopped", "{page}");
 }
 
 #[tokio::test]
 async fn only_the_desks_own_app_may_act() {
     let world = world();
-    let head = || git(&world.served, &["rev-parse", "HEAD"]);
-    let before = head();
-    let go = json!({"act": "ready", "repo": "demo", "ids": [DRAFT]});
-    let session = json!({"repo": "demo", "mission": DRAFT});
+    let before = untouched(&world.served);
+    let stop = json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": REASON});
+    let session = json!({"repo": "demo", "mission": PLAN});
     for uri in ["/api/act", "/api/sessions"] {
-        let body = if uri == "/api/act" { &go } else { &session };
+        let body = if uri == "/api/act" { &stop } else { &session };
         for headers in [
             &[][..],
             &[("x-atelier-desk", "0")][..],
@@ -340,35 +392,29 @@ async fn only_the_desks_own_app_may_act() {
             assert!(answer["error"].is_string());
         }
     }
-    assert_eq!(head(), before, "a refused act writes nothing");
-
-    // From the app, at a host it answers to.
-    let headers = [("x-atelier-desk", "1"), ("origin", "http://localhost:5173")];
-    // The act is made, and refused as the CLI's `ready` is in the base's
-    // checkout.
-    let (status, done) = send(&world.app, "POST", "/api/act", &headers, go).await;
     assert_eq!(
-        (status, &done["result"]),
-        (StatusCode::OK, &json!("refused")),
-        "{done}"
+        untouched(&world.served),
+        before,
+        "a refused act writes nothing"
     );
+    assert!(!world.closed.exists(), "a refused act closes nothing");
 
     // A request the app could not have meant.
     for (body, status) in [
         (
-            json!({"act": "close", "repo": "demo", "ids": [DRAFT]}),
+            json!({"act": "ready", "repo": "demo", "ids": [PLAN]}),
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (
-            json!({"act": "ready", "repo": "demo", "ids": [DRAFT], "by": "x"}),
+            json!({"act": "stop", "repo": "demo", "id": PLAN, "reason": "r", "by": "x"}),
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (
-            json!({"act": "decide", "repo": "demo", "id": "../x", "answer": "a"}),
+            json!({"act": "stop", "repo": "demo", "id": "../x", "reason": "r"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"act": "ready", "repo": "nowhere", "ids": [DRAFT]}),
+            json!({"act": "stop", "repo": "nowhere", "id": PLAN, "reason": "r"}),
             StatusCode::NOT_FOUND,
         ),
     ] {

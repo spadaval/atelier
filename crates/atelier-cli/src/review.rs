@@ -308,7 +308,7 @@ fn plan_verdict(repo: &mut Repo, verdict: Verdict, model: Option<String>) -> Res
 /// Where a review of mission `id`'s plan goes once committed: its branch,
 /// while it is proposed, on the forge's remote or in this clone.
 fn landing(repo: &mut Repo, id: &str) -> Result<Landing> {
-    if crate::plan::agreed(repo, id)? {
+    if atelier_app::plan::agreed(repo, id)? {
         return Ok(Landing {
             branch: None,
             remote: repo.remote().map(str::to_string),

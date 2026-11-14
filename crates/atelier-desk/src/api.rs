@@ -21,12 +21,30 @@ pub struct RepoSummary {
     pub path: String,
     pub base: Option<String>,
     pub base_tip: Option<String>,
-    /// Ready missions with a started item.
+    /// Agreed missions with a started item.
     pub in_progress: usize,
-    pub drafts: usize,
+    /// Missions proposed: open on a branch that has not merged.
+    pub proposed: usize,
     /// Open items labelled needs-human, as `list --needs-human` lists them.
     pub waiting: usize,
     pub error: Option<String>,
+    pub fetched: FetchMark,
+}
+
+/// When the Desk last fetched a repository's remote, so a page can say how
+/// fresh what it read from remote-tracking branches is.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
+pub struct FetchMark {
+    /// The remote fetched: the forge's, else `origin`; `null` when the
+    /// repository has neither, and nothing is fetched.
+    pub remote: Option<String>,
+    /// When it was last fetched, by the Desk or anything else, from the
+    /// clone's `FETCH_HEAD`; `null` when never.
+    pub at: Option<String>,
+    /// Why the Desk's last fetch failed.
+    pub error: Option<String>,
+    /// How often the Desk fetches, in seconds; `0` when it does not.
+    pub every_seconds: u64,
 }
 
 /// `GET /api/repos/{repo}/missions`.
@@ -37,23 +55,71 @@ pub struct MissionsResponse {
     pub missions: Vec<MissionRow>,
     /// The open items in no mission (finished ones with `?done=true`).
     pub loose: usize,
+    pub fetched: FetchMark,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct MissionRow {
     pub id: String,
     pub title: String,
+    /// As its record that counts stores it.
     pub status: MissionStatus,
+    /// Where it stands, as the human is shown it.
+    pub state: MissionState,
     pub labels: Vec<String>,
     pub lead: Option<String>,
-    pub ready: Option<ReadyMark>,
     pub created_at: String,
     pub in_progress: bool,
     /// Its items per status, in the order of the lifecycle; a status with
     /// none is left out.
     pub counts: Vec<StatusCount>,
-    /// Its open items labelled needs-human or with an unanswered question.
+    /// Its open items labelled needs-human.
     pub waiting: Vec<String>,
+    /// The ref its record was read from: a branch, or `<remote>/<branch>`;
+    /// `null` for the base.
+    pub branch: Option<String>,
+}
+
+/// Where a mission stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MissionState {
+    /// Open on a branch that has not merged: its plan is under review.
+    Proposed,
+    /// Agreed: on the base and open.
+    Open,
+    /// A stop is written and not published yet: a plan dropped on its
+    /// branch whose pull request is still open, or an open mission
+    /// dropped on a branch that has not merged.
+    StopPending,
+    /// Dropped, and the stop is published.
+    Stopped,
+    Done,
+}
+
+/// A pull request on the forge, as `gh pr list` gives it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct PrMark {
+    pub number: u64,
+    pub url: String,
+    /// `OPEN`, `CLOSED` or `MERGED`.
+    pub state: String,
+}
+
+/// The verdicts of a plan's current round of review.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct RoundMark {
+    pub round: u32,
+    pub reviews: Vec<RoundReview>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct RoundReview {
+    pub name: String,
+    pub reviewer: Option<String>,
+    pub model: Option<String>,
+    /// `null` while the review is not finished.
+    pub verdict: Option<Verdict>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -77,19 +143,30 @@ pub struct MissionPage {
     /// it has.
     pub sections: Vec<Section>,
     pub dropped: Option<String>,
-    /// Whether saying go would be accepted now.
-    pub can_ready: bool,
+    /// The commit its record and documents were read at: the base's tip,
+    /// or the tip of the branch it was read from.
+    pub read_at: String,
+    /// For a proposed plan, or one stopped on its branch, the pull request
+    /// of its branch, where there is one.
+    pub pull_request: Option<PrMark>,
+    /// The verdicts of its plan's current round, where it has reviews.
+    pub round: Option<RoundMark>,
+    /// For a stop not yet published, the branch that holds it.
+    pub stop_on: Option<String>,
+    /// Whether the Desk can stop it from this page: a proposed plan on the
+    /// forge's remote.
+    pub can_stop: bool,
+    /// For an open mission, the commands that stop it, run in a checkout
+    /// of the repository (atelier-yclc moves this into the Desk).
+    pub stop_commands: Vec<String>,
     pub documents: Vec<Document>,
     pub items: Vec<ItemRow>,
-    pub questions: Vec<Question>,
     pub plan_reviews: Vec<Review>,
     /// Its lead, the reviewers of its plan reviews, and every agent of
     /// each of its items, naming the item.
     pub threads: Vec<Agent>,
     pub t3: T3State,
-    /// Answers given from this Desk to its items' questions that no commit
-    /// holds yet.
-    pub pending_answers: Vec<Question>,
+    pub fetched: FetchMark,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -126,8 +203,6 @@ pub struct ItemRow {
     /// For a started item, what its holder's next act still lacks.
     pub needs: Vec<String>,
     pub branch: Option<BranchMark>,
-    /// Its oldest unanswered question.
-    pub question: Option<String>,
     pub report_written: bool,
     pub dropped: Option<String>,
     pub approved_at: Option<String>,
@@ -143,9 +218,12 @@ pub struct Blocker {
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct BranchMark {
     pub merged: bool,
+    /// The ref read: the branch, or `<remote>/<branch>`.
+    pub name: String,
 }
 
-/// A question asked on an item, and its answer once given.
+/// A question asked on an item before `escalate` was removed, and its
+/// answer once given: shown, never asked or answered now.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct Question {
     pub item: String,
@@ -200,7 +278,7 @@ pub enum Settlement {
     Dropped { by: String, reason: String },
 }
 
-/// `GET /api/repos/{repo}/doc?path=`.
+/// `GET /api/repos/{repo}/doc?path=&at=`.
 #[derive(Debug, Clone, Serialize, TS)]
 pub struct DocResponse {
     pub commit: String,
@@ -226,6 +304,7 @@ pub struct ItemPage {
     pub scope: Option<String>,
     pub report: Option<String>,
     pub done_when: Vec<DoneWhen>,
+    /// Its Decisions section, from before `escalate` was removed.
     pub decisions: Vec<Question>,
     pub responses: Vec<ResponseLine>,
     pub reviews: Vec<Review>,
@@ -235,14 +314,7 @@ pub struct ItemPage {
     /// its answers.
     pub threads: Vec<Agent>,
     pub t3: T3State,
-    /// Whether the human may answer its oldest question now.
-    pub can_decide: bool,
-    /// The checkout with the item's branch out, where `decide` writes;
-    /// `null` when none has it out, and then `decide` is refused.
-    pub decide_at: Option<String>,
-    /// Answers given from this Desk to its questions that no commit holds
-    /// yet.
-    pub pending_answers: Vec<Question>,
+    pub fetched: FetchMark,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -263,6 +335,29 @@ pub enum ResponseLine {
 pub struct InboxResponse {
     pub repos: Vec<InboxRepo>,
     pub t3: T3State,
+    /// Plans proposed and merged lately, newest first, in every
+    /// repository.
+    pub news: Vec<NewsEvent>,
+}
+
+/// A plan proposed, or merged, as the Desk saw it on its fetch timer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct NewsEvent {
+    pub repo: String,
+    pub mission: String,
+    pub title: String,
+    pub kind: NewsKind,
+    /// When the Desk saw it.
+    pub at: String,
+    /// The mission's page.
+    pub link: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum NewsKind {
+    Proposed,
+    Merged,
 }
 
 #[derive(Debug, Clone, Default, Serialize, TS)]
@@ -272,8 +367,8 @@ pub struct InboxRepo {
     pub error: Option<String>,
     /// As `list --needs-human` groups them: by mission, then those in none.
     pub needs_human: Vec<NeedsHuman>,
-    pub drafts: Vec<MissionRow>,
-    pub questions: Vec<InboxQuestion>,
+    /// Plans under review, which he may stop.
+    pub proposed: Vec<MissionRow>,
     /// T3 Code's live threads waiting on a person that hold something in
     /// this repository's records, with only those holds.
     pub threads: Vec<LiveThread>,
@@ -284,20 +379,6 @@ pub struct NeedsHuman {
     pub mission: Option<String>,
     pub mission_title: Option<String>,
     pub items: Vec<ItemRow>,
-}
-
-/// The oldest unanswered question of a started item.
-#[derive(Debug, Clone, Serialize, TS)]
-pub struct InboxQuestion {
-    pub item: String,
-    pub mission: Option<String>,
-    pub question: String,
-    pub finding: Option<String>,
-    /// Which of the item's decisions it is, so an answer the Desk gave and
-    /// no commit holds yet can leave it out. Not sent.
-    #[serde(skip)]
-    #[ts(skip)]
-    pub index: usize,
 }
 
 /// An identity a record names, in one role, and the live thread it is
@@ -328,6 +409,7 @@ pub struct ThreadMark {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
+    Planner,
     Implementer,
     Reviewer,
     Lead,
@@ -397,29 +479,18 @@ pub enum HoldKind {
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(tag = "act", rename_all = "snake_case")]
 pub enum ActRequest {
-    /// Says go on draft missions or items, as `atelier ready <ids> --by
-    /// <caller>`.
-    Ready(ReadyAct),
-    /// Answers an item's oldest question, as `atelier decide`.
-    Decide(DecideAct),
+    /// Stops a proposed plan: `atelier drop <id> --reason <reason>` on its
+    /// branch, committed, pushed, and its pull request closed.
+    Stop(StopAct),
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
-pub struct ReadyAct {
-    pub repo: String,
-    pub ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct DecideAct {
+pub struct StopAct {
     pub repo: String,
     pub id: String,
-    pub answer: String,
-    /// Settles the finding the question is about.
-    #[serde(default)]
-    pub settle: Option<Outcome>,
+    /// Why, on one line.
+    pub reason: String,
 }
 
 /// What an act did, or why it was refused, as the core's function gave it.
@@ -429,8 +500,7 @@ pub enum ActResponse {
     Done {
         text: String,
         paths: Vec<String>,
-        /// The commit `ready` made; `null` for `decide`, whose answer the
-        /// implementer's `submit` commits.
+        /// The commit the act made.
         commit: Option<String>,
     },
     Refused {
@@ -465,6 +535,169 @@ pub enum SessionResponse {
     },
     /// Nothing was started, and why.
     Refused { text: String },
+}
+
+/// `GET /api/proposed`: what is proposed in every repository.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ProposedResponse {
+    pub repos: Vec<ProposedRepo>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, TS)]
+pub struct ProposedRepo {
+    pub repo: String,
+    pub commit: Option<String>,
+    pub error: Option<String>,
+    pub fetched: FetchMark,
+    /// Missions proposed, each read from its branch.
+    pub plans: Vec<ProposedPlan>,
+    /// Record changes on branches not merged, by branch, other than a
+    /// proposed plan's own branch and a started item's.
+    pub changes: Vec<RecordChanges>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ProposedPlan {
+    pub mission: MissionRow,
+    pub pull_request: Option<PrMark>,
+    pub round: Option<RoundMark>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct RecordChanges {
+    /// The ref read: the branch, or `<remote>/<branch>`.
+    pub branch: String,
+    pub pull_request: Option<PrMark>,
+    pub records: Vec<ChangedRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct ChangedRecord {
+    pub kind: HoldKind,
+    pub id: String,
+    pub title: String,
+    pub change: Change,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Change {
+    /// The base has no such record.
+    Added,
+    Changed,
+    /// Changed to dropped.
+    Dropped,
+    Removed,
+}
+
+/// `GET /api/motion`: work in motion in every repository.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct MotionResponse {
+    pub repos: Vec<MotionRepo>,
+    pub t3: T3State,
+}
+
+#[derive(Debug, Clone, Default, Serialize, TS)]
+pub struct MotionRepo {
+    pub repo: String,
+    pub commit: Option<String>,
+    pub error: Option<String>,
+    pub fetched: FetchMark,
+    /// Each started item, its record read from its branch.
+    pub items: Vec<MotionItem>,
+    /// Each agreed mission with a started item.
+    pub missions: Vec<MotionMission>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct MotionItem {
+    pub id: String,
+    pub title: String,
+    pub status: Status,
+    pub mission: Option<String>,
+    /// The ref its record was read from.
+    pub branch: Option<String>,
+    /// The thread that holds it, with its live thread where T3 Code lists
+    /// one.
+    pub holder: Option<Agent>,
+    /// Who holds its review, while it is in review.
+    pub reviewer: Option<Agent>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct MotionMission {
+    pub mission: MissionRow,
+    pub lead: Option<Agent>,
+}
+
+/// `GET /api/disputed`: what `atelier list --disputed` gives, in every
+/// repository.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct DisputedResponse {
+    pub repos: Vec<DisputedRepo>,
+    pub t3: T3State,
+}
+
+#[derive(Debug, Clone, Default, Serialize, TS)]
+pub struct DisputedRepo {
+    pub repo: String,
+    pub commit: Option<String>,
+    pub error: Option<String>,
+    pub rebuttals: Vec<RebuttalRow>,
+    pub plans: Vec<SplitRoundRow>,
+}
+
+/// A finding its implementer rebutted, and what the next round made of it.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct RebuttalRow {
+    pub item: String,
+    pub mission: Option<String>,
+    pub finding: String,
+    pub title: String,
+    pub fact: String,
+    /// The implementer who rebutted it.
+    pub implementer: Option<Side>,
+    /// The reviewer who raised it.
+    pub raised_by: Option<Side>,
+    /// Each later finding that carries it, judged; empty while none has.
+    pub judged: Vec<JudgedRow>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct JudgedRow {
+    pub finding: String,
+    /// `kept`, `withdrawn`, `fixed`, `lowered to defer`, `lowered to no
+    /// action`, or `decided: defer` or `decided: no action`.
+    pub judged: String,
+    pub reviewer: Option<Side>,
+}
+
+/// A round of a plan's review whose reviewers gave different verdicts.
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SplitRoundRow {
+    pub mission: String,
+    pub round: u32,
+    pub reviews: Vec<SplitReview>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct SplitReview {
+    pub name: String,
+    pub reviewer: Option<Side>,
+    pub verdict: Verdict,
+}
+
+/// One side of a disagreement: a thread, with the model its review
+/// records or T3 Code gives for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct Side {
+    pub identity: String,
+    /// From the review's `model`, else from T3 Code where it knows the
+    /// thread; `null` when neither does.
+    pub model: Option<String>,
+    /// The provider T3 Code gives for the thread, where it knows it.
+    pub provider: Option<String>,
+    pub link: Option<String>,
 }
 
 /// The body of every response that is not a 200.
@@ -554,6 +787,9 @@ pub fn export_types(dir: &std::path::Path) -> Result<(), ts_rs::ExportError> {
     ItemPage::export_all(&config)?;
     InboxResponse::export_all(&config)?;
     ThreadsResponse::export_all(&config)?;
+    ProposedResponse::export_all(&config)?;
+    MotionResponse::export_all(&config)?;
+    DisputedResponse::export_all(&config)?;
     ActRequest::export_all(&config)?;
     ActResponse::export_all(&config)?;
     SessionRequest::export_all(&config)?;

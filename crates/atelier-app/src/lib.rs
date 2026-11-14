@@ -1,13 +1,11 @@
 //! Atelier's use cases: who is calling, the act table, which record of an
 //! item counts, what `status` shows, the disagreements the records hold,
-//! and the acts a program such as the Desk calls as functions, `ready` and,
-//! until atelier-v958 removes the Desk's, `decide`, over a repository
-//! opened by path ([`Repo::open`]). Each returns what it did, or a refusal, as
+//! and the acts a program such as the Desk calls as functions, such as
+//! `ready` and a mission's `drop`, over a repository opened by path ([`Repo::open`]). Each returns what it did, or a refusal, as
 //! data; a [`Skip`] made for the invocation passes the rules its reason
 //! covers.
 
 pub mod acts;
-mod decide;
 mod disputed;
 pub mod git;
 mod identity;
@@ -21,7 +19,6 @@ mod skip;
 mod view;
 mod work;
 
-pub use decide::decide;
 pub use disputed::{disputes, rebuttals, split_rounds, Disputes, Judged, Rebuttal, SplitRound};
 pub use identity::identity;
 pub use log::{history, Happened, History, Logged, Move, PassedOver};

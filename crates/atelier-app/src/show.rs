@@ -9,7 +9,7 @@ use crate::view::{entries, entry, mark, Entry, Located, ReadFrom};
 use crate::work::{in_progress, items_of};
 use crate::{git, Repo};
 use anyhow::Result;
-use atelier_core::{Decision, Finding, Status};
+use atelier_core::{Finding, Status};
 use atelier_records::{ItemDir, MissionDir};
 
 /// A mission as `show <mission>` shows it.
@@ -23,10 +23,6 @@ pub struct MissionView {
     pub in_progress: bool,
     /// Its items, as [`items_of`] orders them, each [`annotate`]d.
     pub items: Vec<Entry>,
-    /// Each question asked on one of its items before `escalate` was
-    /// removed, with that item's ID, in item ID order. The Desk shows them
-    /// until atelier-v958 removes its decide page; `show` does not.
-    pub questions: Vec<(String, Decision)>,
     /// Its items' rebuttals and its plan's split rounds.
     pub disputes: Disputes,
     /// The records of each of its items, base and branch, in item ID
@@ -47,13 +43,6 @@ pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
     let entries = entries(&items, &missions, &repo.caller)?;
     let mut of_mission: Vec<Entry> = items_of(id, &entries).into_iter().cloned().collect();
     annotate_all(repo, &mut of_mission, &items)?;
-    let mut questions = Vec::new();
-    for record in items.iter().filter_map(Located::record) {
-        if record.item.mission.as_deref() == Some(id) {
-            let asked = record.decisions()?.into_iter();
-            questions.extend(asked.map(|d| (record.item.id.clone(), d)));
-        }
-    }
     let disputes = disputes(&items, std::slice::from_ref(dir), Some(id))?;
     let in_progress = in_progress(dir, &entries);
     let dir = dir.clone();
@@ -63,7 +52,6 @@ pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
         in_progress,
         dir,
         items: of_mission,
-        questions,
         disputes,
         located: items.into_iter().filter(of).collect(),
         mission,

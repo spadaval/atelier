@@ -8,7 +8,9 @@ use crate::commands::Outcome;
 use crate::output;
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check, settle_refusals, Act, MissionFacts, Refusal, PLANNED, STARTED};
-use atelier_app::plan::{is_mission, misplaced, planned_facts, save, save_own, save_with, Belongs};
+use atelier_app::plan::{
+    agreed, drop_mission, is_mission, misplaced, planned_facts, save, save_with, Belongs,
+};
 use atelier_app::repo::{item_dir, mission_path};
 use atelier_app::{refused as refused_act, Located, Refused, Repo};
 use atelier_core::{
@@ -232,34 +234,7 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
     }
     let line = format!("Dropped: {reason}");
     if is_mission(repo, id) {
-        if let Some(refused) = misplaced(repo, "drop", Belongs::Backlog)? {
-            return Ok(refused.into());
-        }
-        let dir = repo.store().mission(id)?;
-        let facts = MissionFacts {
-            mission: &dir,
-            caller: &repo.caller,
-            items: &[],
-            review: None,
-        };
-        if let Some(refused) = repo.skip.mission_gate(Act::Drop, id, &facts)? {
-            return Ok(refused.into());
-        }
-        let mut mission = dir.mission;
-        mission.status = MissionStatus::Dropped;
-        mission.body = put_first(&mission.body, "Result", &line);
-        // A stop counts once it is published: a proposed plan's by the
-        // push of its branch, an agreed mission's by the merge of the
-        // branch it is written on.
-        let agreed = agreed(repo, id)?;
-        let branch = repo.branch.clone().unwrap_or_default();
-        let message = format!("Drop {id}");
-        if agreed {
-            let said = output::dropped_mission(id, &branch, reason);
-            return Ok(save(repo, "drop", Vec::new(), vec![mission], &said, &message)?.into());
-        }
-        let said = output::dropped_plan(id, &branch, reason, repo.remote());
-        return Ok(save_own(repo, "drop", vec![mission], &said, &message)?.into());
+        return Ok(drop_mission(repo, id, reason)?.into());
     }
     validate_id(id).map_err(|message| anyhow!(message))?;
     let located = repo.locate_planned(id)?;
@@ -424,14 +399,6 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
     let said = output::closed(id, "item");
     let message = format!("Close {id}");
     Ok(save(repo, "close", vec![item], Vec::new(), &said, &message)?.into())
-}
-
-/// Whether mission `id` is agreed: on the base, as its last commit holds
-/// it, and not the old `draft`, which is proposed wherever it is read.
-pub fn agreed(repo: &mut Repo, id: &str) -> Result<bool> {
-    let base = repo.base_tip.clone();
-    let found = repo.mission_at(&base, id)?;
-    Ok(found.is_some_and(|dir| dir.mission.status != MissionStatus::Draft))
 }
 
 /// `command` on mission `id` refused while it is proposed, not agreed: it

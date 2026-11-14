@@ -2,20 +2,37 @@
 //! and joined to the identities the records hold by comparing whole
 //! strings (docs/architecture/desk.md, Tying a thread to an item).
 
-use crate::api::{Agent, Hold, LiveThread, PullRequest, T3State, ThreadMark};
+use crate::api::{Agent, Hold, LiveThread, PullRequest, Side, T3State, ThreadMark};
 use crate::config::T3Config;
 use crate::t3::{self, Client, T3Project, T3Thread};
 use anyhow::{bail, Result};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// How often the thread list is read.
 pub const POLL: Duration = Duration::from_secs(10);
 
+/// Every how many polls the recent threads, ended ones too, are read, for
+/// the models of threads that are no longer live.
+pub const RECENT_EVERY: usize = 6;
+
 pub struct Threads {
     /// `None` when the configuration has no `[t3]` table.
     client: Option<Mutex<Client>>,
     polled: RwLock<Polled>,
+    /// Each thread T3 Code has listed since the Desk started, live or
+    /// not, by ID: its provider, model and link.
+    known: RwLock<HashMap<String, Known>>,
+    polls: AtomicUsize,
+}
+
+#[derive(Clone)]
+struct Known {
+    provider: String,
+    model: String,
+    link: Option<String>,
 }
 
 #[derive(Default)]
@@ -42,6 +59,8 @@ impl Threads {
         Threads {
             client,
             polled: RwLock::default(),
+            known: RwLock::default(),
+            polls: AtomicUsize::new(0),
         }
     }
 
@@ -55,7 +74,17 @@ impl Threads {
         let Some(client) = &self.client else {
             return;
         };
-        let listed = client.lock().unwrap().live_threads();
+        let mut client = client.lock().unwrap();
+        let listed = client.live_threads();
+        if (self.polls.fetch_add(1, Ordering::Relaxed)).is_multiple_of(RECENT_EVERY) {
+            if let Ok(recent) = client.recent_threads(100) {
+                self.learn(&recent);
+            }
+        }
+        drop(client);
+        if let Ok(threads) = &listed {
+            self.learn(threads);
+        }
         let mut polled = self.polled.write().unwrap();
         match listed {
             Ok(threads) => {
@@ -66,6 +95,31 @@ impl Threads {
             Err(error) => {
                 polled.reachable = false;
                 polled.error = Some(format!("{error:#}"));
+            }
+        }
+    }
+
+    fn learn(&self, threads: &[T3Thread]) {
+        let mut known = self.known.write().unwrap();
+        for thread in threads {
+            let seen = Known {
+                provider: thread.provider_instance_id.clone(),
+                model: thread.model.clone(),
+                link: thread.link.clone(),
+            };
+            known.insert(thread.thread_id.clone(), seen);
+        }
+    }
+
+    /// Fills in what T3 Code has said of `side`'s thread: its provider,
+    /// its link, and its model where the review records none.
+    pub fn describe(&self, side: &mut Side) {
+        let known = self.known.read().unwrap();
+        if let Some(found) = known.get(&side.identity) {
+            side.provider = Some(found.provider.clone());
+            side.link = found.link.clone();
+            if side.model.is_none() {
+                side.model = Some(found.model.clone());
             }
         }
     }

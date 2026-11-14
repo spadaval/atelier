@@ -202,8 +202,10 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
     assert_eq!(alpha["mission"]["counts"], expected);
     assert_eq!(
         alpha["mission"]["waiting"],
-        serde_json::json!(["demo-a002", STARTED])
+        serde_json::json!(["demo-a002"])
     );
+    assert_eq!(alpha["mission"]["state"], "open");
+    assert_eq!(alpha["read_at"], repo.base_tip.as_str());
     assert_eq!(alpha["documents"][0]["title"], "The design");
     assert_eq!(alpha["sections"][0]["heading"], "Why");
 
@@ -213,6 +215,9 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
     let items = repo.everything().unwrap();
     let missions = repo.missions().unwrap();
     let entries = atelier_app::entries(&items, &missions, &repo.caller).unwrap();
+    // An old `draft` on the base reads as proposed.
+    let beta = ok(&served.app, &format!("/api/repos/demo/missions/{BETA}")).await;
+    assert_eq!(beta["mission"]["state"], "proposed");
     let filter = Filter {
         needs_human: true,
         ..Filter::default()
@@ -223,8 +228,7 @@ async fn each_mission_agrees_with_show_and_the_inbox_with_list() {
         .collect();
     assert_eq!(served_ids, listed);
     assert_eq!(listed, ["demo-a002", "demo-c001"]);
-    assert_eq!(inbox["repos"][0]["questions"][0]["item"], STARTED);
-    assert_eq!(ids(&inbox["repos"][0]["drafts"]), [BETA]);
+    assert_eq!(ids(&inbox["repos"][0]["proposed"]), [BETA]);
 
     let rail = ok(&served.app, "/api/repos/demo/missions").await;
     assert_eq!(ids(&rail["missions"]), [ALPHA, BETA]);
@@ -261,7 +265,7 @@ async fn records_are_read_from_commits_not_the_checkouts() {
     let item = ok(&served.app, &format!("/api/repos/demo/items/{STARTED}")).await;
     assert_eq!(item["row"]["status"], "building");
     assert_eq!(item["read_from"], "branch");
-    assert_eq!(item["row"]["question"], "2026-11-10: Which way?");
+    assert_eq!(item["decisions"][0]["question"], "2026-11-10: Which way?");
     assert_eq!(item["report"], Value::Null);
 }
 
@@ -300,7 +304,6 @@ async fn a_new_commit_on_the_base_changes_the_response_without_a_restart() {
         page["mission"]["waiting"],
         serde_json::json!(["demo-a002", STARTED])
     );
-    assert_eq!(page["questions"], serde_json::json!([]));
 }
 
 #[tokio::test]
@@ -401,7 +404,7 @@ async fn a_repository_that_does_not_read_is_listed_with_its_error() {
     );
     assert_eq!(repos[1]["error"], Value::Null);
     assert_eq!(
-        (&repos[1]["drafts"], &repos[1]["waiting"]),
+        (&repos[1]["proposed"], &repos[1]["waiting"]),
         (&Value::from(1), &Value::from(2))
     );
     assert_eq!(repos[1]["in_progress"], 1);
@@ -476,5 +479,126 @@ async fn the_app_is_served_with_its_index_for_its_own_paths() {
     assert_eq!(
         ok(&api_only, "/api/repos").await["repos"],
         serde_json::json!([])
+    );
+}
+
+/// Review `name` of round `round`, by `reviewer`, with `verdict` and
+/// `findings` after its summary.
+fn review_file(name: &str, round: u32, reviewer: &str, verdict: &str, findings: &str) -> String {
+    let _ = name;
+    format!(
+        "---\nschema: atelier.review\nschema_version: 3\nround: {round}\n\
+         commit: 0000000000000000000000000000000000000000\nreviewers:\n- {reviewer}\n\
+         model: model-of-{reviewer}\nverdict: {verdict}\ncreated_at: 2026-11-10T10:00:00Z\n---\n\n\
+         ## Summary\n\nRead.\n{findings}"
+    )
+}
+
+#[tokio::test]
+async fn what_is_proposed_in_motion_and_disputed_is_read_from_the_branches() {
+    let served = serve();
+    let root = &served.root;
+    // A plan on its own branch, with a round whose reviewers disagree.
+    git(root, &["switch", "-qc", "demo-pppp", "main"]);
+    put(root, mission("demo-pppp", "Proposed", "open"));
+    let plan = ".atelier/missions/demo-pppp/reviews";
+    write(
+        root,
+        &format!("{plan}/1-aaaa.md"),
+        &review_file("1-aaaa", 1, "r1", "approve", ""),
+    );
+    write(
+        root,
+        &format!("{plan}/1-bbbb.md"),
+        &review_file("1-bbbb", 1, "r2", "changes", ""),
+    );
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "Plan"]);
+    // A backlog branch that adds an item and changes another.
+    git(root, &["switch", "-qc", "backlog/more", "main"]);
+    put(root, item("demo-c002", "draft", "null", "[]", ""));
+    put(root, item("demo-a001", "draft", ALPHA, "[urgent]", ""));
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "More"]);
+    // The started item: held by t1, with a finding it rebutted.
+    git(root, &["switch", "-q", STARTED]);
+    let held = fs::read_to_string(root.join(format!(".atelier/items/{STARTED}/item.md")))
+        .unwrap()
+        .replace("implementers: []", "implementers:\n- t1")
+        .replace("status: building", "status: changes_requested")
+        + "\n## Report\n\nDone.\n\n### Responses\n\n- 1-cccc.1: rebutted: it is right\n";
+    write(root, &format!(".atelier/items/{STARTED}/item.md"), &held);
+    let finding = "\n## Finding 1: Wrong\nRecommendation: fix now\nIt is wrong.\n";
+    let reviews = format!(".atelier/items/{STARTED}/reviews");
+    write(
+        root,
+        &format!("{reviews}/1-cccc.md"),
+        &review_file("1-cccc", 1, "r3", "changes", finding),
+    );
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-qm", "Rebut"]);
+    git(root, &["switch", "-q", "main"]);
+
+    let proposed = ok(&served.app, "/api/proposed").await;
+    let repo = &proposed["repos"][0];
+    let plans: Vec<&str> = (repo["plans"].as_array().unwrap().iter())
+        .map(|p| p["mission"]["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(plans, [BETA, "demo-pppp"], "{repo}");
+    let pppp = &repo["plans"][1];
+    assert_eq!(pppp["mission"]["branch"], "demo-pppp");
+    assert_eq!(pppp["round"]["round"], 1);
+    assert_eq!(pppp["round"]["reviews"][1]["verdict"], "changes");
+    assert_eq!(repo["changes"][0]["branch"], "backlog/more", "{repo}");
+    let records: Vec<(String, String)> = (repo["changes"][0]["records"].as_array().unwrap().iter())
+        .map(|r| {
+            (
+                r["id"].as_str().unwrap().into(),
+                r["change"].as_str().unwrap().into(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        records,
+        [
+            ("demo-a001".into(), "changed".into()),
+            ("demo-c002".into(), "added".into())
+        ]
+    );
+    assert_eq!(
+        repo["changes"].as_array().unwrap().len(),
+        1,
+        "a started item's branch is in motion, not proposed"
+    );
+
+    let motion = ok(&served.app, "/api/motion").await;
+    let items = &motion["repos"][0]["items"];
+    assert_eq!(items[0]["id"], STARTED, "{motion}");
+    assert_eq!(items[0]["status"], "changes_requested");
+    assert_eq!(items[0]["branch"], STARTED);
+    assert_eq!(items[0]["holder"]["identity"], "t1");
+    assert_eq!(items[0]["holder"]["thread"], Value::Null);
+    assert_eq!(motion["repos"][0]["missions"][0]["mission"]["id"], ALPHA);
+    assert_eq!(motion["t3"]["reachable"], false);
+
+    let disputed = ok(&served.app, "/api/disputed").await;
+    let repo = &disputed["repos"][0];
+    let rebuttal = &repo["rebuttals"][0];
+    assert_eq!(rebuttal["item"], STARTED, "{repo}");
+    assert_eq!(rebuttal["finding"], "1-cccc.1");
+    assert_eq!(rebuttal["fact"], "it is right");
+    assert_eq!(rebuttal["implementer"]["identity"], "t1");
+    assert_eq!(rebuttal["raised_by"]["identity"], "r3");
+    assert_eq!(rebuttal["raised_by"]["model"], "model-of-r3");
+    let split = &repo["plans"][0];
+    assert_eq!(split["mission"], "demo-pppp");
+    assert_eq!(split["reviews"][0]["reviewer"]["model"], "model-of-r1");
+
+    // A proposed plan's documents are read at its branch's tip.
+    let page = ok(&served.app, "/api/repos/demo/missions/demo-pppp").await;
+    assert_eq!(page["read_at"], git(root, &["rev-parse", "demo-pppp"]));
+    assert_eq!(
+        page["can_stop"], false,
+        "no forge: the Desk cannot publish a stop"
     );
 }

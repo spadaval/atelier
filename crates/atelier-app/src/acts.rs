@@ -37,10 +37,6 @@ pub enum Act {
     Review,
     VerdictChanges,
     VerdictApprove,
-    /// The Desk's answer to a question an item's Decisions section holds
-    /// from before `escalate` was removed. The `atelier` command has no
-    /// `decide`; atelier-v958 removes the Desk's.
-    Decide,
     Merge,
     MergeTrivial,
     /// `drop` on an item or a mission.
@@ -64,9 +60,6 @@ pub enum Role {
     Planner,
     Implementer,
     Reviewer,
-    /// Answers an item's question on the Desk: a thread that never
-    /// implemented the item nor reviewed the finding the question is about.
-    Decider,
     Lead,
 }
 
@@ -105,7 +98,7 @@ const MISSION: &[Status] = &[Status::Draft, Status::Ready, Status::Done, Status:
 /// `open`, or the old `draft`.
 pub const PROPOSED: &[Status] = &[Status::Draft, Status::Ready];
 
-pub const TABLE: [Row; 24] = [
+pub const TABLE: [Row; 23] = [
     Row {
         act: Act::Ready,
         command: "ready",
@@ -227,15 +220,6 @@ pub const TABLE: [Row; 24] = [
         binds: false,
         from: &[Status::InReview],
         to: Some(Status::Approved),
-    },
-    // The answer stores the decider's thread, as an entry command does.
-    Row {
-        act: Act::Decide,
-        command: "decide",
-        role: Role::Decider,
-        binds: true,
-        from: STARTED,
-        to: None,
     },
     Row {
         act: Act::Merge,
@@ -565,14 +549,8 @@ pub enum Condition {
         title: String,
         rebutted: bool,
     },
-    /// The caller has been the item's implementer, so cannot review it or
-    /// decide its question.
+    /// The caller has been the item's implementer, so cannot review it.
     FormerImplementer,
-    /// The caller reviewed the finding the question is about, here or in
-    /// a round it was carried from, so cannot decide it.
-    ReviewedFinding(FindingName),
-    /// `decide` needs an unanswered question.
-    NoQuestion,
     /// This finding of a review file has a `Decided:` line, which nothing
     /// writes since `decide` was removed, or carries a finding that a
     /// decision settled before then.
@@ -630,10 +608,7 @@ impl Condition {
             (Act::Start, Condition::BranchExists)
                 | (
                     _,
-                    Condition::NoBranch
-                        | Condition::NoQuestion
-                        | Condition::NoFinding(_)
-                        | Condition::Settled { .. }
+                    Condition::NoBranch | Condition::NoFinding(_) | Condition::Settled { .. }
                 )
         )
     }
@@ -694,12 +669,12 @@ fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
     let row = row(act);
     let mut found = Vec::new();
     // A thread that holds one role and runs another's command is told its
-    // role, whatever the status. `review` and `decide` by an implementer
-    // are refused by their own conditions instead, which name every thread
-    // that may not run them, and a planner's act on an item nobody holds
+    // role, whatever the status. `review` by an implementer is refused by
+    // its own condition instead, which names every thread that may not run
+    // it, and a planner's act on an item nobody holds
     // yet needs no role on it.
     if let Some(role) = facts.role().filter(|role| *role != row.role) {
-        if !matches!(act, Act::Review | Act::Decide) && row.role != Role::Planner {
+        if !matches!(act, Act::Review) && row.role != Role::Planner {
             found.push(Refusal::Role(role));
         }
     }
@@ -711,9 +686,8 @@ fn found(act: Act, facts: &Facts, all: bool) -> Result<Vec<Refusal>, Problem> {
     }
     if !row.binds {
         let (holds, holder) = match row.role {
-            // A mission's role and a decider's bind, so their acts never
-            // come here.
-            Role::Planner | Role::Lead | Role::Decider => (true, None),
+            // A mission's roles bind, so their acts never come here.
+            Role::Planner | Role::Lead => (true, None),
             Role::Implementer => (facts.holds(), facts.holder()),
             Role::Reviewer => (
                 facts.reviewing().is_some(),
@@ -867,13 +841,6 @@ fn decided(file: &ReviewFile, seen: &[Finding], decisions: &[Decision]) -> Vec<C
         .collect()
 }
 
-/// The item's oldest unanswered question, which the Desk's `decide`
-/// answers, with its place among the Decisions entries.
-pub fn question(item: &ItemDir) -> Result<Option<(usize, Decision)>, Problem> {
-    let mut decisions = item.decisions()?.into_iter().enumerate();
-    Ok(decisions.find(|(_, d)| d.answer.is_none()))
-}
-
 /// The conditions of `act` that do not hold.
 pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
     let item = facts.item;
@@ -946,27 +913,6 @@ pub fn unmet(act: Act, facts: &Facts) -> Result<Vec<Condition>, Problem> {
         Act::Review => {
             if item.item.implementers.0.contains(facts.caller) {
                 unmet.push(Condition::FormerImplementer);
-            }
-        }
-        Act::Decide => {
-            if item.item.implementers.0.contains(facts.caller) {
-                unmet.push(Condition::FormerImplementer);
-            }
-            let Some((_, question)) = question(item)? else {
-                unmet.push(Condition::NoQuestion);
-                return Ok(unmet);
-            };
-            // Every reviewer of the finding, and of each it carries.
-            let findings = item.findings()?;
-            let about = question.finding.as_ref();
-            let reviewed = about.is_some_and(|name| {
-                chain(name, &findings).iter().any(|f| {
-                    let review = item.reviews.iter().find(|r| r.name == f.name.review);
-                    review.is_some_and(|r| r.review.reviewers.0.contains(facts.caller))
-                })
-            });
-            if let Some(name) = about.filter(|_| reviewed) {
-                unmet.push(Condition::ReviewedFinding(name.clone()));
             }
         }
         Act::VerdictChanges | Act::VerdictApprove => {

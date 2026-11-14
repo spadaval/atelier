@@ -5,8 +5,7 @@
  */
 export type ActResponse = { "result": "done", text: string, paths: Array<string>,
 /**
- * The commit `ready` made; `null` for `decide`, whose answer the
- * implementer's `submit` commits.
+ * The commit the act made.
  */
 commit: string | null, } | { "result": "refused",
 /**

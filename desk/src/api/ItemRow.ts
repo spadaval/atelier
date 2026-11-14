@@ -23,8 +23,4 @@ cannot_start: Array<string>,
 /**
  * For a started item, what its holder's next act still lacks.
  */
-needs: Array<string>, branch: BranchMark | null,
-/**
- * Its oldest unanswered question.
- */
-question: string | null, report_written: boolean, dropped: string | null, approved_at: string | null, };
+needs: Array<string>, branch: BranchMark | null, report_written: boolean, dropped: string | null, approved_at: string | null, };
