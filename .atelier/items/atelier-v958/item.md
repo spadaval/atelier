@@ -140,7 +140,7 @@ the CLI's `drop`, and the three lines in `docs/design.md`.
 
 ### The installed service
 
-The service on this host runs this branch's build, 932f1cc7. I installed it
+The service on this host runs this branch's build, 90aa7481. I installed it
 with `desk/service/install.sh` from a clean checkout of this branch, because
 the first Done when line asks for the installed service. Its config, backed
 up first to `~/.cache/atelier-desk/config.toml.before-v958`, now names the
@@ -165,7 +165,7 @@ systemd: the push over SSH, and `gh` being signed in.
   `origin` seconds after the start. `/api/proposed`, `/api/motion` and
   `/api/disputed` read all five repositories without error. In motion lists
   this item's thread as live.
-- `cargo nextest run`: 350 passed, 1 skipped. `cargo clippy --all-targets
+- `cargo nextest run`: 354 passed, 1 skipped. `cargo clippy --all-targets
   -- -D warnings` and `cargo fmt -- --check` are clean.
 - `crates/atelier-desk/tests/acts.rs` runs against a bare remote with a
   `gh` stand-in:
@@ -177,6 +177,10 @@ systemd: the push over SSH, and `gh` being signed in.
     is open.
   - An open mission's stop shows as pending until its backlog branch
     merges, then as stopped, and the Desk refuses to make it.
+  - Round 1's fixes: a plan merged after the last fetch is refused, an
+    agreed mission dropped on its own branch is pending in both lists, a
+    stop whose pull request cannot be read stays pending and says why, and
+    an agreed mission's amendment on its own branch is proposed.
 - `crates/atelier-desk/tests/desk.rs` covers the proposed, in-motion and
   disputed pages from local branches. `news.rs` has a unit test of proposed
   and merged news, with no repeat across a restart and the stub command's
@@ -187,3 +191,12 @@ systemd: the push over SSH, and `gh` being signed in.
   and each new page.
 - `desk/service/notify-mail.test.sh` passes against a `gog` stand-in, and
   nothing was sent.
+
+### Responses
+
+- 1-oo0v.1: fixed in 90aa748
+- 1-oo0v.2: fixed in 90aa748
+- 1-oo0v.3: fixed in 90aa748
+- 1-oo0v.4: fixed in 90aa748
+- 1-oo0v.5: fixed in 90aa748
+- 1-oo0v.6: fixed in 90aa748
