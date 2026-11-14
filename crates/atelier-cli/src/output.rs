@@ -1760,6 +1760,20 @@ pub fn plan_unapproved(
     text + &format!("Run `atelier submit` here to open the next round of plan reviews, and start two reviewers, each in a checkout of its own at the commit submitted.{fetch}\n")
 }
 
+/// `merge` of item `id`'s branch, which adds or changes the plans of
+/// `planned`, each with what it changes.
+pub fn item_changes_plan(id: &str, planned: &[(String, String)]) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\nAn item's reviewer judges its change against the plan, so an item's branch changes no mission's plan, and {id}'s does:\n");
+    for (mission, what) in planned {
+        text += &format!("  Mission {mission}: it {what}.\n");
+    }
+    text + &format!("Take those changes off this branch. A new mission is planned with `atelier start --mission \"<title>\"`, and an amendment of an agreed mission's plan goes on a backlog branch, `atelier start --backlog <slug>`, where two plan reviews approve it.\n")
+}
+
+pub fn rule_item_changes_plan(id: &str) -> String {
+    format!("{id}'s branch changes no mission's plan")
+}
+
 pub fn rule_plan_approved(id: &str) -> String {
     format!("{APPROVALS} plan reviews by threads that are not its planners approve the plan of mission {id} its head holds")
 }

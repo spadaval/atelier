@@ -1759,6 +1759,19 @@ fn a_stop_of_an_agreed_mission_refuses_its_ready_and_started_items_in_a_clone_th
     let run = hub.atelier(&b, "t2", &["start", READY]);
     assert_eq!(run.code, 1, "{}", run.stdout);
     assert!(run.stderr.contains(stop), "{}", run.stderr);
+    // `show` reads it the same way: dropped, and published.
+    let shown = hub.atelier(&b, "t2", &["show", MISSION]);
+    ok(shown.clone());
+    assert!(
+        shown.stdout.contains("\nStatus: dropped\n"),
+        "{}",
+        shown.stdout
+    );
+    assert!(
+        !shown.stdout.contains("Stop not published"),
+        "{}",
+        shown.stdout
+    );
     // `list` reads the stop the same way: nothing of it can start.
     let listed = hub.atelier(&b, "t2", &["list", "--ready"]);
     ok(listed.clone());

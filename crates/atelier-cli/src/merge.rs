@@ -461,6 +461,25 @@ fn read(repo: &mut Repo, trivial: bool) -> Result<Result<Judged, Outcome>> {
         if let Some(refused) = repo.skip.refusal(act, &facts)? {
             return Ok(Err(refused.into()));
         }
+        // Its reviewer judges the change against the plan, so an item's
+        // branch changes no plan and adds no mission: those go through
+        // their own plan reviews.
+        let fork = git::run(&repo.root, &["merge-base", &repo.base_tip, &head])?;
+        let changed = git::changed_from_base(&repo.root, &repo.base_tip, &head)?;
+        let planned = plans_changed(repo, (&fork, &head), &changed)?;
+        if !planned.is_empty() {
+            let planned: Vec<(String, String)> = planned
+                .into_iter()
+                .map(|(id, what, _)| (id, what))
+                .collect();
+            let text = output::item_changes_plan(&id, &planned);
+            if let Some(refused) = repo
+                .skip
+                .refuse([output::rule_item_changes_plan(&id)], text)
+            {
+                return Ok(Err(refused.into()));
+            }
+        }
     }
     Ok(Ok(Judged {
         head,
@@ -613,11 +632,20 @@ pub(crate) fn plans_changed(
             .as_ref()
             .is_some_and(|dir| dir.mission.status != MissionStatus::Draft);
         let diff = plan_diff(repo, &id, (fork, head), !on_base)?;
-        if diff.is_empty() {
+        // An old draft on the base written open is its plan's first
+        // agreement, whatever else changed.
+        let agrees = !on_base
+            && base.is_some()
+            && (repo.mission_at(head, &id)?)
+                .is_some_and(|dir| dir.mission.status != MissionStatus::Draft);
+        if diff.is_empty() && !agrees {
             continue;
         }
         let what = match &base {
             None => "adds the mission".to_string(),
+            Some(_) if agrees && diff.is_empty() => {
+                "agrees the mission, whose record on the base is an old draft".to_string()
+            }
             Some(_) if !on_base => format!("changes the proposed plan: {}", diff.join(", ")),
             Some(_) => format!("changes its plan: {}", diff.join(", ")),
         };

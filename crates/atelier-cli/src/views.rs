@@ -20,7 +20,10 @@ use view_output::{Change, Whence};
 
 pub fn show(repo: &mut Repo, id: &str) -> Result<Outcome> {
     validate_id(id).map_err(|message| anyhow!(message))?;
-    if let Some(view) = mission_view(repo, id)? {
+    if let Some(mut view) = mission_view(repo, id)? {
+        // A stop the fetched forge's base holds is published.
+        let located = std::slice::from_ref(&view.mission);
+        repo.published_stops(located, std::slice::from_mut(&mut view.dir))?;
         let items: Vec<&Entry> = view.items.iter().collect();
         let mut whence = whence(repo, &view.mission, mission_status)?;
         whence.unpublished = unpublished_stop(repo, &view.mission)?;
@@ -93,6 +96,10 @@ pub(crate) fn unpublished_stop(
 ) -> Result<Option<String>> {
     let id = &located.id;
     let dropped = |dir: &MissionDir| dir.mission.status == MissionStatus::Dropped;
+    // On the forge's base as this clone fetched it, a stop is published.
+    if located.base.is_some() && repo.dropped_on_forge(id)? {
+        return Ok(None);
+    }
     if located.base.as_ref().is_some_and(|base| !dropped(base)) {
         let on: Vec<String> = (located.elsewhere.iter())
             .chain(located.branch.as_ref().filter(|b| !b.merged))

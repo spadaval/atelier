@@ -2325,3 +2325,62 @@ fn an_agreed_missions_record_changes_merge_on_check_and_its_plan_needs_two_revie
     let run = atelier(&root, "p3", &["merge"]);
     assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
 }
+
+#[test]
+fn an_items_branch_that_changes_a_plan_does_not_merge_on_its_code_review() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "open");
+    join_mission(&root, ID, MISSION);
+    commit_all(&root, "Agree");
+    let base = tip(&root, "main");
+    let work = scratch.worktree("work");
+    assert_eq!(atelier(&work, "t1", &["start", ID]).code, 0);
+    fs::write(work.join("hello.txt"), "hello\n").unwrap();
+    let path = work.join(mission_path(MISSION));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(&path, text.replace("Greetings.", "Greetings, and more.")).unwrap();
+    git(&work, &["add", "-A"]);
+    git(&work, &["commit", "-qm", "Say hello, and widen the plan"]);
+    finish_and_submit(&work, "t1");
+    assert_eq!(atelier(&work, "t2", &["review", ID]).code, 0);
+    assert_eq!(verdict(&work, "t2", &["verdict", "approve"]).code, 0);
+    let run = atelier(&work, "t1", &["merge"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(
+        run.stderr.contains(&format!(
+            "so an item's branch changes no mission's plan, and {ID}'s does:\n  Mission {MISSION}: it changes its plan: its Outcome.\n"
+        )),
+        "{}",
+        run.stderr
+    );
+    assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
+    assert_eq!(tip(&root, "main"), base);
+}
+
+#[test]
+fn an_old_draft_on_the_base_is_agreed_only_by_two_plan_reviews() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "draft");
+    commit_all(&root, "Plan it as before");
+    git(&root, &["switch", "-q", "-c", MISSION, "main"]);
+    let run = atelier(&root, "p1", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        front(&read(&root, &mission_path(MISSION)), "status"),
+        "open"
+    );
+    plan_refused(
+        &root,
+        &format!("  Mission {MISSION}: {MISSION} agrees the mission, whose record on the base is an old draft.\n    Its plan has no review.\n"),
+    );
+    let commit = tip(&root, "HEAD");
+    approve(&root, MISSION, "1-aaaa", "r1", &commit);
+    plan_refused(&root, "    1 of 2 count.\n");
+    approve(&root, MISSION, "1-bbbb", "r2", &commit);
+    let run = atelier(&root, "p1", &["merge"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    let merged = git(&root, &["show", &format!("main:{}", mission_path(MISSION))]);
+    assert_eq!(front(&merged, "status"), "open");
+}
