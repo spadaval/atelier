@@ -422,3 +422,35 @@ fn a_settlement_on_an_approved_items_branch_is_a_change_its_merge_sends_back_to_
     // The base has not settled the branch's finding until the branch merges.
     assert_eq!(listed(&base).len(), 4);
 }
+
+/// A merge leaves the item's record as the branch had it, approved, and the
+/// checkout on its branch; the item is done there once merged, and its
+/// deferred findings are listed as they are from the base.
+#[test]
+fn a_merged_items_deferred_findings_are_listed_on_its_own_branch() {
+    let scratch = Scratch::new(&[(ID, "ready")]);
+    let root = scratch.root();
+    assert_eq!(atelier(&root, "t1", &["start", ID]).code, 0);
+    fs::write(root.join("hello.txt"), "hello\n").unwrap();
+    git(&root, &["add", "hello.txt"]);
+    git(&root, &["commit", "-qm", "Say hello"]);
+    finish_and_submit(&root, "t1");
+    assert_eq!(atelier(&root, "t2", &["review", ID]).code, 0);
+    let (stem, path) = review_of(&root, 1);
+    append(
+        &root,
+        &path,
+        "\n## Finding 1: The greeting ignores the locale\nRecommendation: defer\nEnglish only.\n",
+    );
+    let run = verdict(&root, "t2", &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let run = atelier(&root, "t1", &["merge"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(field(&root, "main", "status"), "approved");
+
+    let finding = format!("{ID}/{stem}.1");
+    let on_branch = listed(&root);
+    assert_eq!(on_branch, [finding]);
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    assert_eq!(listed(&root), on_branch);
+}

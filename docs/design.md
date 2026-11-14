@@ -672,8 +672,12 @@ reads and writes.
 
 - **The refs read.** The base's tip is the remote-tracking ref of the base
   (`refs/remotes/<remote>/<base_branch>`) where a forge is configured and
-  that ref exists, since the forge makes every merge; otherwise it is the
-  local base (`refs/heads/<base_branch>`). A local base that holds commits
+  that ref holds the local base, since the forge makes every merge, as
+  after a merge whose catch-up could not move the local base; otherwise,
+  and where the two have diverged, it is the local base
+  (`refs/heads/<base_branch>`). A planning reader and `list --deferred`
+  read a started copy in the checkout as done, as the base's, unless the
+  checkout is that item's own branch and it is not merged. A local base that holds commits
   the remote's does not is reported by `status`, since no merge made them.
   The branches read are every local branch, and every remote-tracking branch
   of the forge's remote, whose name less the configured prefix is an item

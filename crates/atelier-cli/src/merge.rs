@@ -1077,7 +1077,7 @@ fn moved(
     if git::branch_tip(root, branch)?.as_deref() != Some(head) {
         return Ok(Some(Moved::Branch));
     }
-    if git::branch_tip(root, &repo.base)?.as_deref() != Some(base_tip) {
+    if atelier_app::repo::base_tip(root, &repo.config)? != base_tip {
         return Ok(Some(Moved::Base));
     }
     let unchanged = |path: &Path, branch: &str, tip: &str| -> Result<bool> {

@@ -1913,6 +1913,42 @@ fn where_the_forge_waits_on_a_required_review_or_check_merge_exits_not_yet_and_m
     assert_eq!(forge.remote("main"), Some(head(&root, "main")));
 }
 
+/// A forge merge that cannot bring the local base up to date, as when its
+/// checkout has changes, is still read: the forge's base as fetched holds
+/// the local one, so it is the base.
+#[test]
+fn a_forge_merge_the_local_base_cannot_follow_still_reads_as_done() {
+    let forge = Forge::new(None);
+    let root = forge.scratch.root();
+    let base = forge.scratch.worktree("base");
+    git(&base, &["switch", "-q", "main"]);
+    append(&base, ".atelier/config.toml", "# a note\n");
+    let tip = head(&root, "main");
+    let run = forge.merge();
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.ends_with(&format!(
+            "The forge merged pull request #7 into main; {ID} is done.\nmain is checked out at {}, where tracked files have uncommitted changes, so it was left as it was. Bring it up to date there with `git merge --ff-only origin/main`.\n",
+            base.display()
+        )),
+        "{}",
+        run.stdout
+    );
+    assert_eq!(head(&root, "main"), tip);
+    assert!(read(&base, ".atelier/config.toml").ends_with("# a note\n"));
+    let shown = forge.atelier(&root, "t1", &["show", ID]).stdout;
+    assert!(shown.contains("Status: done\n"), "{shown}");
+    // Run again, it is merged, and nothing more is asked of the forge.
+    let again = forge.merge();
+    assert_eq!(again.code, 0, "{}", again.stderr);
+    assert_eq!(
+        again.stdout,
+        format!("{ID} is already merged into main; nothing is left to do on it.\n")
+    );
+    let merges = fs::read_to_string(forge.gh.join("merged")).unwrap();
+    assert_eq!(merges.lines().count(), 1);
+}
+
 #[test]
 fn a_forge_merge_whose_branch_moves_during_its_checks_pushes_nothing() {
     let forge = Forge::with(Some("ci.yml"), &waiting_check());

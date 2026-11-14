@@ -49,6 +49,27 @@ trait Stored: Record + Sized {
     }
 }
 
+/// The base's tip as the commands read it. Where a forge is configured the
+/// forge makes every merge, so its remote-tracking base, as last fetched,
+/// is read when it holds the local base, as after a merge by the forge that
+/// could not move the local base. Otherwise, as with no forge, the local
+/// base is read.
+pub fn base_tip(root: &Path, config: &Config) -> Result<String> {
+    let base = &config.base_branch;
+    let local = git::branch_tip(root, base)?.with_context(|| {
+        format!("the base branch {base} named in .atelier/config.toml does not exist")
+    })?;
+    let Some(forge) = &config.forge else {
+        return Ok(local);
+    };
+    match git::remote_tip(root, &forge.remote, base)? {
+        Some(tracking) if tracking != local && git::is_ancestor(root, &local, &tracking)? => {
+            Ok(tracking)
+        }
+        _ => Ok(local),
+    }
+}
+
 /// An item's copy on the base as it is read: one in a started status
 /// reached the base only in the merge of its own branch, so it is done
 /// (docs/design.md, How `done` is recorded).
@@ -171,12 +192,7 @@ impl<'s> Repo<'s> {
             true => head_config(&root, &mut reader),
         }
         .context("cannot read this repository's Atelier config")?;
-        let base_tip = git::branch_tip(&root, &config.base_branch)?.with_context(|| {
-            format!(
-                "the base branch {} named in .atelier/config.toml does not exist",
-                config.base_branch
-            )
-        })?;
+        let base_tip = base_tip(&root, &config)?;
         Ok(Repo {
             branch: git::current_branch(&root)?,
             reader,
@@ -236,10 +252,21 @@ impl<'s> Repo<'s> {
     pub fn locate_planned(&mut self, id: &str) -> Result<Located> {
         let refs = self.refs()?;
         // A started copy came with the merge of its branch, unless this is
-        // that branch.
-        let own = self.named() == Some(Named::Record(id.to_string()));
+        // that branch, not merged yet.
+        let own = self.on_unmerged_branch_of(id)?;
         let base = (self.checkout_item(id)?).map(|dir| if own { dir } else { on_base(dir) });
         self.located(&refs, id, base, Vec::new())
+    }
+
+    /// Whether this checkout is on the branch named for `id` and that
+    /// branch is not merged into the base, so a started copy of its record
+    /// here is the branch's, not one the merge brought.
+    pub fn on_unmerged_branch_of(&self, id: &str) -> Result<bool> {
+        if self.named() != Some(Named::Record(id.to_string())) {
+            return Ok(false);
+        }
+        let head = git::head(&self.root)?;
+        Ok(!git::is_ancestor(&self.root, &head, &self.base_tip)?)
     }
 
     /// The branch named for the item or mission `id`.

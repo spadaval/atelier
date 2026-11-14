@@ -271,12 +271,12 @@ fn change<R: Record>(
 pub fn deferred(repo: &mut Repo) -> Result<Outcome> {
     let mut found = Vec::new();
     let own = match repo.named() {
-        Some(Named::Record(id)) => Some(id),
+        Some(Named::Record(id)) if repo.on_unmerged_branch_of(&id)? => Some(id),
         _ => None,
     };
     for dir in repo.store().items()? {
         // A started item here came with the merge of its branch, unless
-        // this is that branch.
+        // this is that branch, not merged yet.
         let dir = match own.as_deref() == Some(dir.item.id.as_str()) {
             true => dir,
             false => on_base(dir),
