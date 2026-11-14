@@ -90,6 +90,7 @@ a known pushed drop still needs pushing merely because the PR is unknown.
 
 ## Finding 2: Resolve relative notification helpers beside the config as documented
 Recommendation: defer
+Taken: atelier-b0lx by mcp:1bb2bc70-d102-4419-8ae0-631379f52f4b
 
 `crates/atelier-desk/src/config.rs:127-133` resolves `notify.command[0]`
 only when it starts with `~/`. A path such as `./notify-helper` stays
