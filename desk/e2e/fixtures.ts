@@ -1,11 +1,14 @@
 // Responses the Playwright suite serves in place of atelier-desk, typed with
 // the generated API types so they cannot drift from the server's contract.
-// They are modelled on the converted clone's atelier-z4cr, with a review, a
-// question and a finished item added so every part of a page shows.
+// They are modelled on atelier-z4cr, with a review, a finished item, a
+// proposed plan, a stop under way and a dispute added so every part of a
+// page shows.
 import type { ActRequest } from "../src/api/ActRequest";
 import type { ActResponse } from "../src/api/ActResponse";
 import type { Agent } from "../src/api/Agent";
+import type { DisputedResponse } from "../src/api/DisputedResponse";
 import type { DocResponse } from "../src/api/DocResponse";
+import type { FetchMark } from "../src/api/FetchMark";
 import type { InboxResponse } from "../src/api/InboxResponse";
 import type { ItemPage } from "../src/api/ItemPage";
 import type { ItemRow } from "../src/api/ItemRow";
@@ -13,7 +16,8 @@ import type { MissionPage } from "../src/api/MissionPage";
 import type { MissionRow } from "../src/api/MissionRow";
 import type { MissionsResponse } from "../src/api/MissionsResponse";
 import type { LiveThread } from "../src/api/LiveThread";
-import type { Question } from "../src/api/Question";
+import type { MotionResponse } from "../src/api/MotionResponse";
+import type { ProposedResponse } from "../src/api/ProposedResponse";
 import type { ReposResponse } from "../src/api/ReposResponse";
 import type { SessionRequest } from "../src/api/SessionRequest";
 import type { SessionResponse } from "../src/api/SessionResponse";
@@ -27,8 +31,8 @@ const at = "2026-11-11T03:50:46+00:00";
 const t3: T3State = { reachable: true, age_seconds: 4, error: null };
 /** T3 Code never read: these pages say threads are unavailable. */
 export const unreachable: T3State = { reachable: false, age_seconds: null, error: "T3 Code did not answer: connection refused" };
-/** atelier-uwxy's second open question, asked after the one about the cache key. */
-export const secondQuestion = "Should the cache be dropped instead?";
+/** Fetched from origin two minutes before the page is read. */
+export const fetched: FetchMark = { remote: "origin", at: new Date(Date.now() - 120_000).toISOString(), error: null, every_seconds: 300 };
 const thread = "thread:delegated-task:command%3Amcp%3Ad4040a34-c28b-4672-8918-87b1ffbc9fe0%3Adelegate-task%3A4e47a5ad";
 /** A Codex subagent's identity: a slash, and no T3 thread of its own. */
 export const codexChild = "019a6d2e-codex-parent/review-child:7";
@@ -93,6 +97,7 @@ const z4crAgents: Agent[] = [
   { identity: live.asking.id, role: "implementer", item: "atelier-aab1", thread: mark(live.asking) },
   { identity: codexChild, role: "reviewer", item: "atelier-1ie1", thread: null },
   { identity: "sumeet", role: "decider", item: "atelier-1ie1", thread: null },
+  { identity: "planner-thread", role: "planner", item: null, thread: null },
 ];
 
 function row(id: string, title: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
@@ -111,7 +116,6 @@ function row(id: string, title: string, status: ItemRow["status"], more: Partial
     cannot_start: [],
     needs: [],
     branch: null,
-    question: null,
     report_written: false,
     dropped: null,
     approved_at: null,
@@ -124,18 +128,20 @@ function counts(items: ItemRow[]): StatusCount[] {
   return order.map((status) => ({ status, count: items.filter((i) => i.status === status).length })).filter((c) => c.count > 0);
 }
 
-function mission(id: string, title: string, status: MissionRow["status"], items: ItemRow[], more: Partial<MissionRow> = {}): MissionRow {
+function mission(id: string, title: string, state: MissionRow["state"], items: ItemRow[], more: Partial<MissionRow> = {}): MissionRow {
+  const status: MissionRow["status"] = state === "done" ? "done" : state === "stopped" ? "dropped" : "open";
   return {
     id,
     title,
     status,
+    state,
     labels: [],
     lead: null,
-    ready: status === "draft" ? null : { by: "sumeet", at },
     created_at: at,
-    in_progress: items.some((i) => ["building", "in_review", "changes_requested", "approved"].includes(i.status)),
+    in_progress: state === "open" && items.some((i) => ["building", "in_review", "changes_requested", "approved"].includes(i.status)),
     counts: counts(items),
-    waiting: items.filter((i) => i.needs_human || i.question).map((i) => i.id),
+    waiting: items.filter((i) => i.needs_human).map((i) => i.id),
+    branch: state === "proposed" ? `origin/${id}` : null,
     ...more,
   };
 }
@@ -146,21 +152,24 @@ export const z4crItems: ItemRow[] = [
     waiting_on: ["atelier-uwxy"],
   }),
   row("atelier-e05n", "Show the agents working on a mission and its items", "draft", { priority: "medium" }),
-  row("atelier-h3hl", "Let Sumeet say go, answer a question and start a planning session from a page", "draft", { priority: "medium" }),
+  row("atelier-h3hl", "Let Sumeet start a planning session from a page", "draft", { priority: "medium" }),
   row("atelier-va99", "Install the Desk as a service on this host, on converted clones", "draft", { priority: "medium" }),
   row("atelier-qxmr", "Point the Desk at the live repositories after this host's cutover", "draft", { priority: "low" }),
   row("atelier-psjw", "Move the acts and repository access into atelier-app", "ready", {
-    cannot_start: ["atelier-psjw waits on its mission's go"],
+    cannot_start: ["atelier-psjw is blocked by atelier-uwxy"],
   }),
   row("atelier-aab1", "Find how atelier serve can read T3 thread status", "ready", { labels: ["needs-human"], needs_human: true, startable: true }),
   row("atelier-uwxy", "Serve the Desk's reading routes from commits: the atelier-desk crate", "building", {
     holder: thread,
-    branch: { merged: false },
-    question: "Should the cache key include the checkout's HEAD?",
+    branch: { merged: false, name: "origin/atelier-uwxy" },
     needs: ["atelier-uwxy needs its Report written"],
   }),
-  row("atelier-1ie1", "Write the Desk's API as a document first", "done", { branch: { merged: true }, report_written: true, approved_at: at }),
+  row("atelier-1ie1", "Write the Desk's API as a document first", "done", { branch: { merged: true, name: "atelier-1ie1" }, report_written: true, approved_at: at }),
 ];
+
+function stopCommands(id: string): string[] {
+  return [`atelier start --backlog stop-${id}`, `atelier drop ${id} --reason "<why>"`, `git commit -m "Drop ${id}" .atelier/missions/${id}/mission.md`, "atelier submit", "atelier merge"];
+}
 
 export const z4cr: MissionPage = {
   commit,
@@ -172,12 +181,18 @@ export const z4cr: MissionPage = {
         "Sumeet has no tool of his own. A page that lists records asks him to read records.\n[ADR 0032](../../../docs/adr/0032-the-desk-is-the-humans-product.md) makes the human's tool a product of its own, and [its intent](../../../docs/product/desk.md) says what it is for.",
     },
     { heading: "Outcome", markdown: "On this host, a service reached over the tailnet shows Atelier repositories on the redesigned records." },
-    { heading: "Success criteria", markdown: "- desk-matches-cli: every open mission has a page that shows what `atelier show` prints.\n- act-is-a-record: saying go leaves one commit." },
+    { heading: "Success criteria", markdown: "- desk-matches-cli: every open mission has a page that shows what `atelier show` prints.\n- act-is-a-record: a stop leaves the commit `atelier drop` leaves." },
     { heading: "Scope", markdown: "- In: the `atelier-desk` crate and the app.\n- Out: health, the feed and any database." },
     { heading: "Authority", markdown: "The orchestrator may choose the API's routes and fields." },
   ],
   dropped: null,
-  can_ready: false,
+  read_at: commit,
+  pull_request: null,
+  round: { round: 2, reviews: [{ name: "plan-r2", reviewer: "codex-reviewer-2", model: "gpt-6.1-sol", verdict: "approve" }] },
+  stop_on: null,
+  can_stop: false,
+  stop_commands: stopCommands("atelier-z4cr"),
+  fetched,
   documents: [
     { path: ".atelier/missions/atelier-z4cr/design.md", title: "Sizing" },
     { path: ".atelier/missions/atelier-z4cr/notes.md", title: "Notes of atelier-z4cr" },
@@ -185,12 +200,6 @@ export const z4cr: MissionPage = {
   items: z4crItems,
   threads: z4crAgents,
   t3,
-  pending_answers: [],
-  questions: [
-    { item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null },
-    { item: "atelier-uwxy", question: secondQuestion, finding: null, answer: null, outcome: null },
-    { item: "atelier-1ie1", question: "Is the history of acts in this mission?", finding: null, answer: { by: "sumeet", text: "No: it waits for M5." }, outcome: "defer" },
-  ],
   plan_reviews: [
     {
       name: "plan-r1",
@@ -243,10 +252,15 @@ export const z4cr: MissionPage = {
   ],
 };
 
-const otherMissions: [string, string, MissionRow["status"], ItemRow[], Partial<MissionRow>?][] = [
-  ["atelier-295u", "Give the gardener `atelier log` and a readiness checklist", "draft", [row("atelier-k1aa", "Write the log", "draft")]],
-  ["atelier-k9rf", "Try a plan that has had no review", "draft", [row("atelier-k9r1", "Write the plan", "draft")]],
+/** atelier-295u's plan: proposed on its branch, with a pull request and a split first round. */
+export const planPr = { number: 412, url: "https://github.com/spadaval/atelier/pull/412", state: "OPEN" };
+
+const otherMissions: [string, string, MissionRow["state"], ItemRow[], Partial<MissionRow>?][] = [
+  ["atelier-295u", "Give the gardener `atelier log` and a readiness checklist", "proposed", [row("atelier-k1aa", "Write the log", "draft")]],
+  ["atelier-k9rf", "Try a plan whose stop is refused", "proposed", [row("atelier-k9r1", "Write the plan", "draft")]],
   ["atelier-g6rp", "Ship Agent Factory from this repository", "open", []],
+  ["atelier-st0p", "A mission someone is stopping", "stop_pending", []],
+  ["atelier-pr0x", "A plan whose pull request will not close", "proposed", []],
   [
     "atelier-qr5s",
     "Move all five repositories and Agent Factory onto the new loop, one cutover per host",
@@ -256,30 +270,54 @@ const otherMissions: [string, string, MissionRow["status"], ItemRow[], Partial<M
 ];
 
 export const missionPages: Record<string, MissionPage> = { [z4cr.mission.id]: z4cr };
-for (const [id, title, status, items, more] of otherMissions) {
+for (const [id, title, state, items, more] of otherMissions) {
+  const proposed = state === "proposed";
   missionPages[id] = {
     commit,
-    mission: mission(id, title, status, items, more),
+    mission: mission(id, title, state, items, more),
     sections: [{ heading: "Why", markdown: `${title}.` }],
     dropped: null,
-    can_ready: status === "draft",
+    read_at: proposed ? "295a000000000000000000000000000000000000" : commit,
+    pull_request: id === "atelier-295u" ? planPr : null,
+    round:
+      id === "atelier-295u"
+        ? {
+            round: 1,
+            reviews: [
+              { name: "1-aaaa", reviewer: "codex-reviewer", model: "gpt-6.1-sol", verdict: "approve" },
+              { name: "1-bbbb", reviewer: "grok-reviewer", model: "grok-4.6", verdict: "changes" },
+            ],
+          }
+        : null,
+    stop_on: state === "stop_pending" ? "origin/backlog/stop-atelier-st0p" : null,
+    can_stop: proposed,
+    stop_commands: state === "open" ? stopCommands(id) : [],
+    fetched,
     documents: [],
     items,
     // atelier-qr5s is read while T3 Code cannot be reached.
     threads: id === "atelier-qr5s" ? [{ identity: codexChild, role: "reviewer", item: "atelier-u1ko", thread: null }] : [],
     t3: id === "atelier-qr5s" ? unreachable : t3,
-    questions: [],
     plan_reviews: [],
-    pending_answers: [],
   };
 }
 
-export const missions: MissionsResponse = { commit, missions: Object.values(missionPages).map((p) => p.mission), loose: 80 };
+export const missions: MissionsResponse = { commit, missions: Object.values(missionPages).map((p) => p.mission), loose: 80, fetched };
 
 export const repos: ReposResponse = {
   repos: [
-    { name: "atelier", path: "/clones/atelier", base: "master", base_tip: commit, in_progress: 2, drafts: 1, waiting: 1, error: null },
-    { name: "broken", path: "/clones/broken", base: null, base_tip: null, in_progress: 0, drafts: 0, waiting: 0, error: "`.atelier/items/x/item.md` does not read: missing field `status`" },
+    { name: "atelier", path: "/projects/atelier", base: "master", base_tip: commit, in_progress: 2, proposed: 2, waiting: 1, error: null, fetched },
+    {
+      name: "broken",
+      path: "/projects/broken",
+      base: null,
+      base_tip: null,
+      in_progress: 0,
+      proposed: 0,
+      waiting: 0,
+      error: "`.atelier/items/x/item.md` does not read: missing field `status`",
+      fetched: { remote: null, at: null, error: null, every_seconds: 300 },
+    },
   ],
   built_from: "5e1f0c2d9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d",
 };
@@ -307,15 +345,15 @@ function itemPage(r: ItemRow, more: Partial<ItemPage>): ItemPage {
     unsettled: [],
     threads: [],
     t3,
-    can_decide: false,
-    decide_at: null,
-    pending_answers: [],
+    fetched,
     ...more,
   };
 }
 
 const done = z4crItems.find((i) => i.id === "atelier-1ie1")!;
-const building = z4crItems.find((i) => i.id === "atelier-uwxy")!;
+function building() {
+  return z4crItems.find((i) => i.id === "atelier-uwxy")!;
+}
 
 export const items: Record<string, ItemPage> = {
   "atelier-1ie1": itemPage(done, {
@@ -414,25 +452,20 @@ export const items: Record<string, ItemPage> = {
     ],
     responses: [{ kind: "fixed", finding: "1-aaaa.1", commit: "3333cccc00000000000000000000000000000000" }],
   }),
-  "atelier-uwxy": itemPage(building, {
+  "atelier-uwxy": itemPage(building(), {
     read_from: "branch",
     implementers: [thread],
     threads: [
       { identity: thread, role: "implementer", item: null, thread: mark(live.uwxy) },
       { identity: codexChild, role: "reviewer", item: null, thread: null },
     ],
-    can_decide: true,
-    decide_at: "/clones/atelier-uwxy",
     goal: "Serve the reading routes. See [the API](../../../docs/architecture/desk.md#routes).",
     scope: "`crates/atelier-desk` only.",
     done_when: [
       { ticked: true, text: "`GET /api/repos` answers." },
       { ticked: false, text: "`GET /api/inbox` answers." },
     ],
-    decisions: [
-      { item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: null, outcome: null },
-      { item: "atelier-uwxy", question: secondQuestion, finding: null, answer: null, outcome: null },
-    ],
+    decisions: [{ item: "atelier-uwxy", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2", answer: { by: "sumeet", text: "No." }, outcome: null }],
   }),
 };
 
@@ -477,14 +510,115 @@ export const inbox: InboxResponse = {
         { mission: "atelier-z4cr", mission_title: z4cr.mission.title, items: [z4crItems.find((i) => i.id === "atelier-aab1")!] },
         { mission: null, mission_title: null, items: [row("atelier-pywh", "Read the fleet site on your phone for taste", "ready", { labels: ["needs-human"], needs_human: true, priority: "low", startable: true })] },
       ],
-      drafts: [missionPages["atelier-295u"].mission],
-      questions: [
-        { item: "atelier-uwxy", mission: "atelier-z4cr", question: "Should the cache key include the checkout's HEAD?", finding: "1-cccc.2" },
-        { item: "atelier-u1ko", mission: "atelier-qr5s", question: "May the old workspace go before the runbook is tried?", finding: null },
-      ],
+      proposed: [missionPages["atelier-295u"].mission, missionPages["atelier-k9rf"].mission],
       threads: [live.asking],
+      fetched,
     },
-    { repo: "broken", commit: null, error: "`.atelier/items/x/item.md` does not read: missing field `status`", needs_human: [], drafts: [], questions: [], threads: [] },
+    {
+      repo: "broken",
+      commit: null,
+      error: "`.atelier/items/x/item.md` does not read: missing field `status`",
+      needs_human: [],
+      proposed: [],
+      threads: [],
+      fetched: { remote: null, at: null, error: null, every_seconds: 300 },
+    },
+  ],
+  t3,
+  news: [
+    { repo: "atelier", mission: "atelier-295u", title: missionPages["atelier-295u"].mission.title, kind: "proposed", at, link: "http://desk:3780/r/atelier/mission/atelier-295u" },
+    { repo: "atelier", mission: "atelier-z4cr", title: z4cr.mission.title, kind: "merged", at, link: "http://desk:3780/r/atelier/mission/atelier-z4cr" },
+  ],
+};
+
+export const proposed: ProposedResponse = {
+  repos: [
+    {
+      repo: "atelier",
+      commit,
+      error: null,
+      fetched,
+      plans: [
+        ...["atelier-295u", "atelier-k9rf"].map((id) => ({ mission: missionPages[id].mission, amends: false, pull_request: missionPages[id].pull_request, round: missionPages[id].round })),
+        { mission: { ...missionPages["atelier-g6rp"].mission, branch: "origin/atelier-g6rp" }, amends: true, pull_request: null, round: null },
+      ],
+      changes: [
+        {
+          branch: "origin/backlog/file-bugs",
+          pull_request: { number: 415, url: "https://github.com/spadaval/atelier/pull/415", state: "OPEN" },
+          records: [
+            { kind: "item", id: "atelier-n3w1", title: "Fix the fetch timer", change: "added" },
+            { kind: "item", id: "atelier-94pv", title: "Move the spike's app to desk/ on the new API", change: "dropped" },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export const motion: MotionResponse = {
+  repos: [
+    {
+      repo: "atelier",
+      commit,
+      error: null,
+      fetched,
+      items: [
+        {
+          id: "atelier-uwxy",
+          title: building().title,
+          status: "building",
+          mission: "atelier-z4cr",
+          branch: "origin/atelier-uwxy",
+          holder: { identity: thread, role: "implementer", item: "atelier-uwxy", thread: mark(live.uwxy) },
+          reviewer: null,
+        },
+        {
+          id: "atelier-u1ko",
+          title: "Delete the old workspace",
+          status: "in_review",
+          mission: "atelier-qr5s",
+          branch: "atelier-u1ko",
+          holder: { identity: "thread:gone", role: "implementer", item: "atelier-u1ko", thread: null },
+          reviewer: { identity: codexChild, role: "reviewer", item: "atelier-u1ko", thread: null },
+        },
+      ],
+      missions: [{ mission: z4cr.mission, lead: { identity: live.lor.id, role: "lead", item: null, thread: mark(live.lor) } }],
+    },
+  ],
+  t3,
+};
+
+export const disputed: DisputedResponse = {
+  repos: [
+    {
+      repo: "atelier",
+      commit,
+      error: null,
+      fetched,
+      rebuttals: [
+        {
+          item: "atelier-uwxy",
+          mission: "atelier-z4cr",
+          finding: "1-cccc.2",
+          title: "The cache key leaves out HEAD",
+          fact: "HEAD is in the key since 3f2a",
+          implementer: { identity: thread, model: "claude-opus-5-5", provider: "claudeAgent", link: live.uwxy.link },
+          raised_by: { identity: "codex-reviewer", model: "gpt-6.1-sol", provider: null, link: null },
+          judged: [{ finding: "2-dddd.1", judged: "withdrawn", reviewer: { identity: "codex-reviewer-2", model: "gpt-6.1-sol", provider: null, link: null } }],
+        },
+      ],
+      plans: [
+        {
+          mission: "atelier-295u",
+          round: 1,
+          reviews: [
+            { name: "1-aaaa", reviewer: { identity: "codex-reviewer", model: "gpt-6.1-sol", provider: null, link: null }, verdict: "approve" },
+            { name: "1-bbbb", reviewer: { identity: "grok-reviewer", model: null, provider: null, link: null }, verdict: "changes" },
+          ],
+        },
+      ],
+    },
   ],
   t3,
 };
@@ -493,32 +627,26 @@ export const threads: ThreadsResponse = { t3, threads: [live.uwxy, live.asking, 
 
 /** What the fixture server answers to each act it is sent. */
 export const answers = {
-  go: {
+  stopped: {
     result: "done",
-    text: "Made ready, as sumeet said: atelier-295u.\nAgents may start its ready items.",
+    text: "Dropped the proposed plan of mission atelier-295u: Not this month\nPushed atelier-295u to origin and closed its pull request. The plan is stopped.",
     paths: [".atelier/missions/atelier-295u/mission.md"],
     commit: "76cbb6c0ffee0000000000000000000000000000",
   },
-  goRefused: {
-    result: "refused",
-    rules: ["A mission is made ready only after its plan is reviewed."],
-    text: "`atelier ready` refused; atelier-k9rf's plan has no review.",
-    next: "Ask for a plan review with `atelier review request atelier-k9rf`, then say go again.",
-  },
-  answered: {
+  stopHalfDone: {
     result: "done",
-    text: "Answered atelier-uwxy's question as sumeet, and deferred finding 1-cccc.2.\nIts implementer's submit commits the answer.",
-    paths: [".atelier/items/atelier-uwxy/item.md"],
-    commit: null,
+    text: "Dropped the proposed plan of mission atelier-pr0x: Not now\nPushed atelier-pr0x to origin, but its pull request was not closed: gh pr close failed: HTTP 403. The stop is published once it is closed: gh pr close atelier-pr0x.",
+    paths: [".atelier/missions/atelier-pr0x/mission.md"],
+    commit: "88aa000000000000000000000000000000000000",
   },
-  answerRefused: {
+  stopRefused: {
     result: "refused",
     rules: [],
-    text: "`atelier decide` refused: no checkout has branch atelier-u1ko out.",
-    next: "Check out branch atelier-u1ko in a worktree, then answer again.",
+    text: "This repository names no forge remote, so a stop of atelier-k9rf is published by committing the drop on its branch in the planner's checkout. Nothing changed.",
+    next: "There: atelier drop atelier-k9rf --reason \"<why>\", then commit it.",
   },
   started: { result: "started", thread_id: "thread:plan-z4cr", link: "https://app.t3.codes/threads/env-1/thread%3Aplan-z4cr", project_id: "project-atelier" },
-  sessionRefused: { result: "refused", text: "No T3 Code project has /clones/atelier as its workspace root, so no session can start there." },
+  sessionRefused: { result: "refused", text: "No T3 Code project has /projects/atelier as its workspace root, so no session can start there." },
 } satisfies Record<string, ActResponse | SessionResponse>;
 
 /** A request the app sent to an act or session route. */
@@ -536,9 +664,11 @@ export class World {
   missionPages = structuredClone(missionPages);
   items = structuredClone(items);
   sent: Sent[] = [];
+  /** The query of each document read. */
+  docsRead: string[] = [];
 
   missions(): MissionsResponse {
-    return { commit, missions: Object.values(this.missionPages).map((p) => p.mission), loose: 80 };
+    return { commit, missions: Object.values(this.missionPages).map((p) => p.mission), loose: 80, fetched };
   }
 
   item(id: string): ItemPage | undefined {
@@ -564,57 +694,25 @@ export class World {
   }
 
   private act(request: ActRequest): ActResponse {
-    if (request.act === "ready") {
-      if (request.ids.join() !== "atelier-295u") return answers.goRefused;
-      const page = this.missionPages["atelier-295u"];
-      page.mission = { ...page.mission, status: "open", ready: { by: "sumeet", at } };
-      page.can_ready = false;
-      for (const r of this.inbox.repos) r.drafts = r.drafts.filter((m) => m.id !== "atelier-295u");
-      return answers.go;
+    if (request.id === "atelier-pr0x") {
+      // Pushed, and its pull request is still open.
+      const page = this.missionPages["atelier-pr0x"];
+      page.mission = { ...page.mission, status: "dropped", state: "stop_pending" };
+      page.dropped = request.reason;
+      page.pull_request = { number: 413, url: "https://github.com/spadaval/atelier/pull/413", state: "OPEN" };
+      page.can_stop = false;
+      return answers.stopHalfDone;
     }
-    if (request.id !== "atelier-uwxy") return answers.answerRefused;
-    const item = this.items["atelier-uwxy"];
-    // decide answers the oldest question the item's checkout still has open.
-    const asked = item.decisions.filter((d) => d.answer === null)[item.pending_answers.length];
-    if (!asked) return answers.answerRefused;
-    const pending: Question = { ...asked, answer: { by: "sumeet", text: request.answer }, outcome: request.settle };
-    item.pending_answers.push(pending);
-    this.missionPages["atelier-z4cr"].pending_answers.push(pending);
-    this.askNext("atelier-uwxy");
-    return answers.answered;
-  }
-
-  /** Lists in the inbox the item's oldest question with no answer, committed or pending, as the server does. */
-  private askNext(id: string) {
-    const item = this.items[id];
-    const next = item.decisions.filter((d) => d.answer === null)[item.pending_answers.length];
-    for (const r of this.inbox.repos) {
-      r.questions = r.questions.filter((q) => q.item !== id);
-      if (next) r.questions.push({ item: id, mission: item.mission, question: next.question, finding: next.finding });
-    }
-  }
-
-  /** The implementer's submit: a commit now holds every pending answer of the item, so none is pending. */
-  commitAnswers(id: string) {
-    const item = this.items[id];
-    const mission = this.missionPages[item.mission!];
-    for (const pending of item.pending_answers) {
-      const at = item.decisions.findIndex((d) => d.answer === null && d.question === pending.question);
-      item.decisions[at] = pending;
-      const inMission = mission.questions.findIndex((q) => q.item === id && q.answer === null && q.question === pending.question);
-      mission.questions[inMission] = pending;
-    }
-    item.pending_answers = [];
-    mission.pending_answers = mission.pending_answers.filter((p) => p.item !== id);
-    this.askNext(id);
-  }
-
-  /** Someone answers the item's oldest question elsewhere, as with the CLI, and commits it. */
-  answerElsewhere(id: string, text: string) {
-    const item = this.items[id];
-    const at = item.decisions.findIndex((d) => d.answer === null);
-    item.decisions[at] = { ...item.decisions[at], answer: { by: "codex-lead", text } };
-    this.askNext(id);
+    if (request.id !== "atelier-295u") return answers.stopRefused;
+    // The stop is pushed and its pull request closed: stopped, and no longer proposed.
+    const page = this.missionPages["atelier-295u"];
+    page.mission = { ...page.mission, status: "dropped", state: "stopped" };
+    page.dropped = request.reason;
+    page.pull_request = { ...planPr, state: "CLOSED" };
+    page.can_stop = false;
+    for (const r of this.inbox.repos) r.proposed = r.proposed.filter((m) => m.id !== "atelier-295u");
+    for (const r of this.repos.repos) if (r.name === "atelier") r.proposed -= 1;
+    return answers.stopped;
   }
 
   private session(request: SessionRequest): SessionResponse {
@@ -627,12 +725,16 @@ export class World {
     if (path === "/api/repos") return { status: 200, body: this.repos };
     if (path === "/api/inbox") return { status: 200, body: this.inbox };
     if (path === "/api/threads") return { status: 200, body: this.threads };
+    if (path === "/api/proposed") return { status: 200, body: proposed };
+    if (path === "/api/motion") return { status: 200, body: motion };
+    if (path === "/api/disputed") return { status: 200, body: disputed };
     const repo = /^\/api\/repos\/([^/]+)(\/.*)$/.exec(path);
     if (!repo) return missing("route");
     if (repo[1] !== "atelier") return missing(`repository ${repo[1]}`);
     const rest = repo[2];
     if (rest === "/missions") return { status: 200, body: this.missions() };
     if (rest === "/doc") {
+      this.docsRead.push(url.search);
       const doc = docs[url.searchParams.get("path") ?? ""];
       return doc ? { status: 200, body: doc } : missing("document");
     }

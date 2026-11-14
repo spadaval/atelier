@@ -9,8 +9,8 @@ use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
 use crate::{git, say, Located, Repo};
 use anyhow::{anyhow, Result};
-use atelier_core::{Item, Mission, Named, Ready, Status};
-use atelier_records::{validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
+use atelier_core::{Item, Mission, MissionStatus, Named, Ready, Status};
+use atelier_records::{put_first, validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use std::path::PathBuf;
 
 /// What an act did: the paths it wrote, the commit it made, if it made
@@ -175,6 +175,48 @@ pub fn planned_facts<'a>(repo: &'a Repo, located: &Located, record: &'a ItemDir)
         caller: &repo.caller,
         checkout: None,
     }
+}
+
+/// Whether mission `id` is agreed: the base's last commit has it, and not
+/// as an old `draft`. A mission only on a branch is proposed.
+pub fn agreed(repo: &mut Repo, id: &str) -> Result<bool> {
+    let base = repo.base_tip.clone();
+    let found = repo.mission_at(&base, id)?;
+    Ok(found.is_some_and(|dir| dir.mission.status != MissionStatus::Draft))
+}
+
+/// `drop` of mission `id`, in this checkout, with `reason`, a line the
+/// caller has checked is not empty: writes it dropped, with `Dropped:
+/// <reason>` first in its Result, and commits nothing. An agreed mission
+/// is dropped on a backlog branch and the stop counts once that merges; a
+/// proposed plan on its own branch, and the stop counts once the branch is
+/// pushed and its pull request closed. The `atelier drop` command and the
+/// Desk's stop both write a stop through this.
+pub fn drop_mission(repo: &mut Repo, id: &str, reason: &str) -> Result<Result<Done, Refused>> {
+    if let Some(refused) = misplaced(repo, "drop", Belongs::Backlog)? {
+        return Ok(Err(refused));
+    }
+    let dir = repo.store().mission(id)?;
+    let facts = crate::acts::MissionFacts {
+        mission: &dir,
+        caller: &repo.caller,
+        items: &[],
+        review: None,
+    };
+    if let Some(refused) = repo.skip.mission_gate(Act::Drop, id, &facts)? {
+        return Ok(Err(refused));
+    }
+    let mut mission = dir.mission;
+    mission.status = MissionStatus::Dropped;
+    mission.body = put_first(&mission.body, "Result", &format!("Dropped: {reason}"));
+    let branch = repo.branch.clone().unwrap_or_default();
+    let message = format!("Drop {id}");
+    if agreed(repo, id)? {
+        let said = say::dropped_mission(id, &branch, reason);
+        return save(repo, "drop", Vec::new(), vec![mission], &said, &message);
+    }
+    let said = say::dropped_plan(id, &branch, reason, repo.remote());
+    save_own(repo, "drop", vec![mission], &said, &message)
 }
 
 /// Whether `id` names a mission in this checkout.

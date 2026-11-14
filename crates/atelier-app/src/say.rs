@@ -6,7 +6,7 @@
 use crate::acts::{row, Act, Condition, Refusal, Role};
 use crate::skip::Refused;
 use crate::Entry;
-use atelier_core::{Decision, Outcome, Settlement, Status, Thread, Verdict};
+use atelier_core::{Settlement, Status, Thread, Verdict};
 use atelier_records::Problem;
 use std::path::Path;
 
@@ -34,7 +34,6 @@ pub fn command(act: Act, id: &str) -> String {
         Act::Drop => format!("atelier drop {id} --reason \"<why>\""),
         Act::Close => format!("atelier close {id} \"<result>\""),
         Act::CloseMission => format!("atelier close {id}"),
-        Act::Decide => format!("atelier decide {id} \"<answer>\""),
         _ => format!("atelier {}", row(act).command),
     }
 }
@@ -50,7 +49,6 @@ pub fn goal(act: Act, status: Status) -> &'static str {
         Act::Submit => "submit it for review",
         Act::Review => "review it",
         Act::VerdictChanges | Act::VerdictApprove => "record your verdict",
-        Act::Decide => "decide its question",
         Act::Merge | Act::MergeTrivial => "merge it",
         Act::Drop => "drop it",
         Act::Close | Act::CloseMission => "close it",
@@ -100,8 +98,6 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
             "Finding {finding} (fix now): {title} (a reviewer kept its rebuttal, and a rebuttal gets one try: fix it)"
         ),
         Condition::FormerImplementer => format!("You have never implemented {id}"),
-        Condition::ReviewedFinding(finding) => format!("You have never reviewed finding {finding}"),
-        Condition::NoQuestion => "A question waits under `## Decisions` (none does)".into(),
         Condition::Decided(finding) => format!(
             "Finding {finding} has no `Decided:` line and carries no finding a decision settled (nothing decides a finding now: close a carried one with `Now: withdrawn`, or keep it at defer or no action and say why)"
         ),
@@ -153,7 +149,6 @@ pub fn role_name(role: Role) -> &'static str {
         Role::Planner => "planner",
         Role::Implementer => "implementer",
         Role::Reviewer => "reviewer",
-        Role::Decider => "decider",
         Role::Lead => "lead",
     }
 }
@@ -341,7 +336,7 @@ pub fn refusal(
         Refusal::Role(Role::Implementer) => format!(
             "You are the implementer of {id}. Implementers run `start`, `submit` and `merge`.\n"
         ).into(),
-        Refusal::Role(Role::Planner | Role::Lead | Role::Decider) => {
+        Refusal::Role(Role::Planner | Role::Lead) => {
             unreachable!("no thread holds a planner's, a lead's or a decider's role on an item")
         }
         Refusal::From { act, status } => {
@@ -706,89 +701,6 @@ pub fn verdict_name(verdict: Verdict) -> &'static str {
     }
 }
 
-/// `answered` is the question `decide` answered, `waiting` the next one,
-/// and `approved` whether the item is approved, so its implementer merges
-/// next rather than submits.
-pub fn decided(
-    id: &str,
-    answered: &Decision,
-    waiting: Option<&Decision>,
-    implementer: Option<&Thread>,
-    approved: bool,
-) -> String {
-    let answer = answered.answer.as_ref().expect("it was just answered");
-    let mut text = format!(
-        "Answered a question on {id}, as thread {}:\n  {}\n  Answer: {}\n",
-        answer.by, answered.question, answer.text
-    );
-    if let (Some(finding), Some(outcome)) = (&answered.finding, answered.outcome) {
-        text += &format!("Finding {finding} is settled, `Decided: {outcome}`: the next review carries it so, and no review reopens it.\n");
-    }
-    text += &format!(
-        "Wrote {}, and did not commit it.\n",
-        crate::repo::item_path(id)
-    );
-    if let Some(waiting) = waiting {
-        return text
-            + &format!(
-                "Another question waits on {id}:\n  {}\nThen: {}\n",
-                waiting.question,
-                command(Act::Decide, id)
-            );
-    }
-    let implementer = implementer.map_or("nobody yet".to_string(), |t| format!("thread {t}"));
-    let next = match approved {
-        true => "commits your answer, then runs `atelier merge`".to_string(),
-        false => "runs `atelier submit`, which commits your answer with the item".into(),
-    };
-    text + &format!(
-        "No other question waits. Its implementer, {implementer}, {next}. Your decision is done: say so to whoever started you, and stop.\n"
-    )
-}
-
-/// `act`'s `what`, a question or an answer, was empty or had a line break.
-pub fn not_one_line(act: Act, id: &str, what: &str) -> String {
-    format!(
-        "`{}` needs its {what} on one line. Nothing changed.\n",
-        command(act, id)
-    )
-}
-
-/// `decide` given `settled` on its question `asked`, whose finding there is
-/// none of, or is not open.
-pub fn not_settled(id: &str, asked: &Decision, settled: Outcome) -> Refused {
-    let flag = match settled {
-        Outcome::Defer => "--defer",
-        Outcome::NoAction => "--no-action",
-    };
-    let why = match &asked.finding {
-        None => "is about no finding".to_string(),
-        Some(finding) => format!("is about finding {finding}, which is no longer open"),
-    };
-    Refused::then(
-        format!(
-            "`atelier decide {id} {flag}` refused; nothing changed.\nIts oldest question, which it answers, {why}, so there is nothing to settle:\n  {}\n",
-            asked.question,
-        ),
-        format!("Then: {}", command(Act::Decide, id)),
-    )
-}
-
-/// The Desk's `decide` refused for who the caller is, or for no question
-/// waiting.
-pub fn not_decider(id: &str, caller: &Thread, unmet: &[Condition]) -> Refused {
-    let mut text = format!("`atelier decide {id}` refused; nothing changed.\n");
-    for condition in unmet {
-        text += &match condition {
-            Condition::FormerImplementer => format!("You (thread {caller}) implemented {id}, and none of its implementers, past or present, decides its questions.\n"),
-            Condition::ReviewedFinding(finding) => format!("You (thread {caller}) reviewed finding {finding}, which its question is about, and none of its reviewers decides it.\n"),
-            Condition::NoQuestion => format!("{id} has no unanswered question under `## Decisions`.\n"),
-            other => unreachable!("decide has no condition {other:?}"),
-        };
-    }
-    text.into()
-}
-
 pub fn unreadable(path: &str) -> String {
     format!("Written so, `## Decisions` in {path} would not read back as asked, so nothing was written. Look there for a code fence that is not closed")
 }
@@ -804,6 +716,26 @@ pub fn some(names: &[String]) -> String {
         text += &format!(" and {} more", names.len() - 5);
     }
     text
+}
+
+/// `drop` of agreed mission `id`, written on `branch`: the stop counts once
+/// that branch merges.
+pub fn dropped_mission(id: &str, branch: &str, reason: &str) -> String {
+    format!(
+        "Dropped mission {id}: {reason}\nIt stops nothing until it is published: once {branch} merges, `start` and a take-over of its items, and the merge of any of them, are refused in every clone that has fetched. Until then `status` and `show` say the stop is not published.\n"
+    )
+}
+
+/// `drop` of mission `id`'s proposed plan, written on its branch `branch`,
+/// which is pushed to `remote` where one is configured.
+pub fn dropped_plan(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
+    let publish = match remote {
+        Some(remote) => format!(
+            "It stops nothing until it is published: commit it, push the branch (`git push {remote} {branch}`) and close its pull request (`gh pr close {branch}`). Its branch is never merged."
+        ),
+        None => "It stops nothing until it is committed. Its branch is never merged.".into(),
+    };
+    format!("Dropped the proposed plan of mission {id}: {reason}\n{publish}\n")
 }
 
 #[cfg(test)]

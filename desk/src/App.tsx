@@ -6,6 +6,9 @@ import { AgentsPage } from "./pages/Agents";
 import { InboxPage } from "./pages/Inbox";
 import { ItemPageView } from "./pages/Item";
 import { MissionPageView } from "./pages/Mission";
+import { DisputedPage } from "./pages/Disputed";
+import { MotionPage } from "./pages/Motion";
+import { ProposedPage } from "./pages/Proposed";
 import { ReposPage } from "./pages/Repos";
 
 export function App() {
@@ -14,6 +17,9 @@ export function App() {
       <Routes>
         <Route path="/" element={<ReposPage />} />
         <Route path="/inbox" element={<InboxPage />} />
+        <Route path="/proposed" element={<ProposedPage />} />
+        <Route path="/motion" element={<MotionPage />} />
+        <Route path="/disputed" element={<DisputedPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/r/:repo/agents" element={<AgentsPage />} />
         <Route path="/r/:repo" element={<MissionPageView />} />

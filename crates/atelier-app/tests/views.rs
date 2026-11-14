@@ -175,12 +175,6 @@ fn the_mission_view_holds_what_show_prints() {
         items,
         [(PLANNED, Status::Ready), (STARTED, Status::Building)]
     );
-    // A question written before `escalate` was removed is kept for the
-    // Desk, and is no part of an item's entry.
-    assert_eq!(view.questions.len(), 1);
-    assert_eq!(view.questions[0].0, PLANNED);
-    assert_eq!(view.questions[0].1.question, "2026-11-10: Which way?");
-    assert!(view.questions[0].1.answer.is_none());
     let reviews: Vec<String> = view
         .dir
         .reviews

@@ -218,6 +218,19 @@ impl Client {
         }
     }
 
+    /// T3 Code's last `limit` threads of any status, settled or not, in
+    /// every project and with subagents, newest first: one page.
+    pub fn recent_threads(&mut self, limit: u32) -> Result<Vec<T3Thread>> {
+        let arguments = json!({
+            "allProjects": true,
+            "includeSubagents": true,
+            "limit": limit,
+        });
+        let page: ListPage = serde_json::from_value(self.call("t3_thread_list", arguments)?)
+            .context("t3_thread_list answered in a shape the Desk does not read")?;
+        Ok(page.threads)
+    }
+
     /// Calls the MCP tool `tool` and returns its structured result. A token
     /// that is refused, or an MCP session the server no longer knows, is
     /// replaced and the call made once more.

@@ -4,23 +4,23 @@ import type { MissionsResponse } from "../api/MissionsResponse";
 import type { RepoSummary } from "../api/RepoSummary";
 import type { ReposResponse } from "../api/ReposResponse";
 import { Crumbs } from "../components/Crumbs";
-import { Empty, ErrorBanner, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
+import { Empty, ErrorBanner, FetchedNote, ScopeBar, Skeleton, StatusGlyph } from "../components/ui";
 import { api, to, useData } from "../lib/api";
-import { countsLine, finished, missionState, plural, shortCommit, statusTitle, total } from "../lib/words";
+import { countsLine, finished, missionState, plural, shortCommit, stateWords, total } from "../lib/words";
 
 function RepoMissions({ name }: { name: string }) {
   const loaded = useData<MissionsResponse>(api.missions(name), 60_000);
   if (!loaded.data) return loaded.error ? <ErrorBanner loaded={loaded} /> : <Skeleton rows={3} />;
-  const missions = [...loaded.data.missions].sort((a, b) => Number(b.in_progress) - Number(a.in_progress) || Number(a.status === "draft") - Number(b.status === "draft"));
+  const missions = [...loaded.data.missions].sort((a, b) => Number(b.in_progress) - Number(a.in_progress) || Number(a.state === "proposed") - Number(b.state === "proposed"));
   if (missions.length === 0) return <Empty title="No open missions." />;
   return (
     <>
       {missions.map((m) => (
         <Link key={m.id} to={to.mission(name, m.id)} className="mission-row">
           <span className="t">
-            <StatusGlyph status={missionState(m)} label={m.in_progress ? "Work in progress" : statusTitle(m.status)} />
+            <StatusGlyph status={missionState(m)} label={m.in_progress ? "Work in progress" : stateWords[m.state]} />
             <span className="truncate">{m.title}</span>
-            {m.status === "draft" ? <span className="tag you">draft</span> : null}
+            {m.state === "proposed" ? <span className="tag you">proposed</span> : null}
             {m.waiting.length > 0 ? <span className="tag you">{m.waiting.length} for you</span> : null}
           </span>
           <span title={countsLine(m.counts)}>
@@ -59,8 +59,8 @@ function Repo({ repo }: { repo: RepoSummary }) {
             <span>
               <b className="num">{repo.in_progress}</b> in progress
             </span>
-            <span className={repo.drafts > 0 ? "you" : ""}>
-              <b className="num">{repo.drafts}</b> {repo.drafts === 1 ? "draft" : "drafts"} waiting for your go
+            <span className={repo.proposed > 0 ? "you" : ""}>
+              <b className="num">{repo.proposed}</b> {repo.proposed === 1 ? "plan" : "plans"} proposed
             </span>
             <span className={repo.waiting > 0 ? "you" : ""}>
               <b className="num">{repo.waiting}</b> {repo.waiting === 1 ? "item needs" : "items need"} you
@@ -69,6 +69,7 @@ function Repo({ repo }: { repo: RepoSummary }) {
           <div className="list">
             <RepoMissions name={repo.name} />
           </div>
+          <FetchedNote fetched={repo.fetched} />
         </>
       )}
     </section>
@@ -80,7 +81,7 @@ export function ReposPage() {
   const loaded = useData<ReposResponse>(api.repos());
   const repos = loaded.data?.repos ?? [];
   const going = repos.reduce((n, r) => n + r.in_progress, 0);
-  const drafts = repos.reduce((n, r) => n + r.drafts, 0);
+  const proposed = repos.reduce((n, r) => n + r.proposed, 0);
   const waiting = repos.reduce((n, r) => n + r.waiting, 0);
   return (
     <div className="page narrow">
@@ -90,11 +91,11 @@ export function ReposPage() {
           <h1>{loaded.data ? `${plural(going, "mission", "missions")} in progress.` : "Reading every repository…"}</h1>
           {loaded.data ? (
             <p className="lede">
-              {drafts + waiting === 0 ? (
+              {proposed + waiting === 0 ? (
                 "Nothing waits on you."
               ) : (
                 <Link to="/inbox" className="you-link">
-                  {plural(drafts, "draft waits", "drafts wait")} for your go and {plural(waiting, "item needs", "items need")} you.
+                  {plural(proposed, "plan is", "plans are")} proposed and {plural(waiting, "item needs", "items need")} you.
                 </Link>
               )}{" "}
               Across {plural(repos.length, "repository", "repositories")}.

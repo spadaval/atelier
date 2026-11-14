@@ -1,24 +1,28 @@
-// desk-matches-cli: the mission's first success criterion, as one command.
+// desk-matches-cli: the Desk's pages against the CLI, as one command
+// (atelier-v958's first Done when line, and mission atelier-to83's
+// desk-is-live criterion).
 //
-//   pnpm desk-matches-cli <desk address> <clones directory> [--atelier <binary>]
+//   pnpm desk-matches-cli <desk address> <repository>... [--atelier <binary>]
 //
-// For every open mission in every clone under <clones directory>, it loads
-// the mission's page from the running Desk at <desk address> in a headless
-// browser, fails on a page error or a console error, and compares the page's
-// title, status and per-status item counts with what the new
-// `atelier show <mission>` prints in that clone. For every clone it compares
-// the inbox's needs-human items with `atelier list --needs-human` there. It
-// prints one line per mission and per inbox and exits 1 on any difference.
-// The binary defaults to target/debug/atelier in this checkout.
+// Each repository is served under its directory's name. For every mission
+// `atelier list` shows there that is not done or dropped, proposed ones
+// included, it loads the mission's page from the running Desk at <desk
+// address> in a headless browser, fails on a page error or a console error,
+// and compares the page's title, status and per-status item counts with what
+// `atelier show <mission>` prints in that repository. For every repository it
+// compares the inbox's needs-human items with `atelier list --needs-human`
+// there. It prints one line per mission and per inbox and exits 1 on any
+// difference. The binary defaults to target/debug/atelier in this checkout.
 //
-// It reads only: the Desk's pages, and `show` and `list` in the clones.
+// It reads only: the Desk's pages, and `list` and `show` in the
+// repositories, which fetch nothing.
 
 import { chromium, type Browser, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-const usage = "usage: pnpm desk-matches-cli <desk address> <clones directory> [--atelier <binary>]";
+const usage = "usage: pnpm desk-matches-cli <desk address> <repository>... [--atelier <binary>]";
 
 type Shown = { title: string; status: string; inProgress: boolean; counts: Record<string, number> };
 
@@ -34,11 +38,11 @@ function parseArgs(argv: string[]) {
     if (argv[i] === "--atelier") atelier = argv[++i] ?? fail(usage);
     else positional.push(argv[i]);
   }
-  if (positional.length !== 2) fail(usage);
+  if (positional.length < 2) fail(usage);
   const top = path.resolve(import.meta.dirname, "../..");
   atelier ??= [path.join(top, "target/debug/atelier")].find(existsSync);
   if (!atelier || !existsSync(atelier)) fail(`No new atelier binary${atelier ? ` at ${atelier}` : ""}: build it, or give --atelier <binary>`);
-  return { address: positional[0].replace(/\/+$/, ""), clones: path.resolve(positional[1]), atelier: path.resolve(atelier) };
+  return { address: positional[0].replace(/\/+$/, ""), repos: positional.slice(1).map((r) => path.resolve(r)), atelier: path.resolve(atelier) };
 }
 
 /** Runs a command in `cwd` with no harness's identity, and gives its output. */
@@ -48,44 +52,39 @@ function run(cwd: string, command: string, args: string[]): string {
   return execFileSync(command, args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
-/** The clones: each directory under `clones` whose last commit holds an Atelier configuration. */
-function clonesIn(clones: string): string[] {
-  return readdirSync(clones, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .filter((name) => {
-      try {
-        run(path.join(clones, name), "git", ["cat-file", "-e", "HEAD:.atelier/config.toml"]);
-        return true;
-      } catch {
-        return false;
-      }
-    })
-    .sort();
-}
-
 /** `atelier show <mission>`: its title, status, and how many items it lists under each status. */
 function show(atelier: string, clone: string, id: string): Shown {
   const text = run(clone, atelier, ["show", id]);
   const lines = text.split("\n");
   const title = lines[0].match(/^Mission \S+: (.*)$/)?.[1];
-  const status = text.match(/^Status: ([a-z ]+?)(, in progress)?$/m);
+  const status = text.match(/^Status: ([a-z ]+)$/m)?.[1];
   if (title === undefined || !status) throw new Error(`atelier show ${id} printed no title or status line`);
   const counts: Record<string, number> = {};
-  const items = lines.slice(lines.indexOf("Items:") + 1, lines.indexOf("Questions:"));
+  // The items run from `Items:` to the next heading of the same level.
+  const from = lines.indexOf("Items:") + 1;
+  const end = lines.findIndex((line, at) => at >= from && /^[A-Z][A-Za-z ]*:$/.test(line));
+  const items = from === 0 ? [] : lines.slice(from, end < 0 ? undefined : end);
   let heading: string | null = null;
   for (const line of items) {
     const h = line.match(/^ {2}([A-Z][a-z ]*):$/);
     if (h) heading = h[1].toLowerCase().replaceAll(" ", "_");
     else if (heading && /^ {4}\S+ \(/.test(line)) counts[heading] = (counts[heading] ?? 0) + 1;
   }
-  return { title, status: status[1].replaceAll(" ", "_"), inProgress: status[2] !== undefined, counts };
+  // `show` says "in progress" for an agreed mission with a started item; the Desk shows it agreed, with a tag.
+  const inProgress = status === "in progress";
+  return { title, status: inProgress ? "agreed" : status, inProgress, counts };
 }
 
-/** The missions in the clone's last commit. */
-function missionsIn(clone: string): string[] {
-  const listed = run(clone, "git", ["ls-tree", "--name-only", "HEAD", ".atelier/missions/"]);
-  return listed.split("\n").filter(Boolean).map((p) => path.basename(p)).sort();
+/** The missions `atelier list` shows: those not done or dropped, on the base and proposed. */
+function missionsIn(atelier: string, repo: string): string[] {
+  const text = run(repo, atelier, ["list"]);
+  return [...new Set([...text.matchAll(/^\s*Mission (\S+) \(/gm)].map((m) => m[1]))].sort();
+}
+
+/** The Desk's pill, in the words `show` uses. */
+function pageStatus(pill: string): string {
+  const words = pill.trim().toLowerCase();
+  return words === "stopped" ? "dropped" : words;
 }
 
 /** `atelier list --needs-human`: the IDs of the items it lists. */
@@ -117,10 +116,9 @@ function countsText(counts: Record<string, number>): string {
 }
 
 async function main() {
-  const { address, clones, atelier } = parseArgs(process.argv.slice(2));
-  const repos = clonesIn(clones);
-  if (repos.length === 0) fail(`No clone with an Atelier configuration is under ${clones}`);
-  console.log(`Desk at ${address}; clones in ${clones}: ${repos.join(", ")}; atelier is ${atelier}`);
+  const { address, repos: dirs, atelier } = parseArgs(process.argv.slice(2));
+  const repos = dirs.map((dir) => path.basename(dir));
+  console.log(`Desk at ${address}; repositories ${dirs.join(", ")}; atelier is ${atelier}`);
   const browser = await chromium.launch();
   let differ = 0;
   let missions = 0;
@@ -129,18 +127,17 @@ async function main() {
     console.log(`${ok ? "same" : "DIFF"}  ${line}`);
   };
   try {
-    for (const repo of repos) {
-      const clone = path.join(clones, repo);
-      for (const id of missionsIn(clone)) {
+    for (const clone of dirs) {
+      const repo = path.basename(clone);
+      for (const id of missionsIn(atelier, clone)) {
         const cli = show(atelier, clone, id);
-        if (cli.status !== "draft" && cli.status !== "ready") continue;
         missions++;
         const url = `${address}/r/${encodeURIComponent(repo)}/mission/${encodeURIComponent(id)}`;
         const { page, errors } = await load(browser, url, (p) => p.getByRole("heading", { level: 1 }).waitFor({ timeout: 60_000 }));
         const head = page.locator(".paper-head");
         const shown: Shown = {
           title: (await page.getByRole("heading", { level: 1 }).innerText()).trim(),
-          status: (await page.getByTestId("status").innerText()).trim().toLowerCase().replaceAll(" ", "_"),
+          status: pageStatus(await page.getByTestId("status").innerText()),
           inProgress: (await head.getByText("Work in progress", { exact: true }).count()) > 0,
           counts: {},
         };
@@ -160,8 +157,9 @@ async function main() {
     const { page, errors } = await load(browser, `${address}/inbox`, (p) => p.getByRole("heading", { level: 1 }).waitFor({ timeout: 60_000 }));
     await page.getByText("Reading every repository").waitFor({ state: "detached", timeout: 60_000 });
     if (errors.length) report(false, `inbox: ${errors.join("; ")}`);
-    for (const repo of repos) {
-      const cli = needsHuman(atelier, path.join(clones, repo));
+    for (const clone of dirs) {
+      const repo = path.basename(clone);
+      const cli = needsHuman(atelier, clone);
       const region = page.getByRole("region", { name: repo, exact: true });
       const shown = (await region.locator("[data-testid=needs-human] .iline .id").allInnerTexts()).map((t) => t.trim()).sort();
       const same = shown.join(" ") === cli.join(" ");
@@ -172,7 +170,7 @@ async function main() {
   } finally {
     await browser.close();
   }
-  console.log(differ === 0 ? `All ${missions} open missions and ${repos.length} inboxes match the CLI.` : `${differ} differences.`);
+  console.log(differ === 0 ? `All ${missions} missions and ${repos.length} inboxes match the CLI.` : `${differ} differences.`);
   process.exit(differ === 0 ? 0 : 1);
 }
 

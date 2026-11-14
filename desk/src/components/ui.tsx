@@ -3,11 +3,12 @@ import { Children, isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useSearchParams } from "react-router";
+import type { FetchMark } from "../api/FetchMark";
 import type { Priority as PriorityLevel } from "../api/Priority";
 import type { StatusCount } from "../api/StatusCount";
 import type { Loaded } from "../lib/api";
 import { resolveLink, slug } from "../lib/links";
-import { countsLine, statusName, statusTitle } from "../lib/words";
+import { countsLine, fetchedLine, statusName, statusTitle } from "../lib/words";
 
 const GLYPHS: Record<string, [typeof Circle, string]> = {
   draft: [CircleDashed, "dim"],
@@ -218,5 +219,15 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: [T, Re
         </button>
       ))}
     </div>
+  );
+}
+
+/** When the repository a page reads was last fetched, so the human knows how fresh other clones' work is. */
+export function FetchedNote({ fetched, repo }: { fetched: FetchMark; repo?: string }) {
+  return (
+    <p className={`fetched${fetched.error ? " bad-text" : ""}`} data-testid="fetched">
+      {repo ? <b>{repo}: </b> : null}
+      {fetchedLine(fetched)}
+    </p>
   );
 }

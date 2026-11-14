@@ -3,6 +3,7 @@ import type { AnswerMark } from "./AnswerMark";
 import type { Outcome } from "./Outcome";
 
 /**
- * A question asked on an item, and its answer once given.
+ * A question asked on an item before `escalate` was removed, and its
+ * answer once given: shown, never asked or answered now.
  */
 export type Question = { item: string, question: string, finding: string | null, answer: AnswerMark | null, outcome: Outcome | null, };

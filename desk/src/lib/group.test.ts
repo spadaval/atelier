@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { ItemRow } from "../api/ItemRow";
-import type { Question } from "../api/Question";
 import { groupByStatus, waitingOnYou } from "./group";
 
 function row(id: string, status: ItemRow["status"], more: Partial<ItemRow> = {}): ItemRow {
@@ -19,7 +18,6 @@ function row(id: string, status: ItemRow["status"], more: Partial<ItemRow> = {})
     cannot_start: [],
     needs: [],
     branch: null,
-    question: null,
     report_written: false,
     dropped: null,
     approved_at: null,
@@ -45,14 +43,8 @@ describe("groupByStatus", () => {
 });
 
 describe("waitingOnYou", () => {
-  it("lists unanswered questions, then open needs-human items without one, each item once", () => {
-    const questions: Question[] = [
-      { item: "a", question: "Which?", finding: null, answer: null, outcome: null },
-      { item: "b", question: "Done?", finding: null, answer: { by: "sumeet", text: "Yes" }, outcome: null },
-    ];
-    const items = [row("a", "building", { needs_human: true }), row("c", "ready", { needs_human: true }), row("d", "done", { needs_human: true }), row("e", "ready")];
-    const waiting = waitingOnYou(items, questions);
-    expect(waiting.questions.map((q) => q.item)).toEqual(["a"]);
-    expect(waiting.items.map((i) => i.id)).toEqual(["c"]);
+  it("lists open needs-human items", () => {
+    const items = [row("c", "ready", { needs_human: true }), row("d", "done", { needs_human: true }), row("e", "ready")];
+    expect(waitingOnYou(items).map((i) => i.id)).toEqual(["c"]);
   });
 });

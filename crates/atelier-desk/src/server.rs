@@ -1,16 +1,21 @@
 //! The HTTP server: the reading routes, the acts and sessions, the `Host`
 //! and app checks, the cache, and the built app's files.
 
-use crate::acts::{self, Answers, On};
 use crate::api::{
-    ActRequest, ApiError, Hold, InboxRepo, InboxResponse, RepoSummary, ReposResponse,
-    SessionRequest, ThreadsResponse,
+    ActRequest, ApiError, DisputedRepo, DisputedResponse, FetchMark, Hold, InboxRepo,
+    InboxResponse, MissionRow, MissionState, MotionRepo, MotionResponse, PrMark, ProposedRepo,
+    ProposedResponse, RepoSummary, ReposResponse, SessionRequest, StopAct, ThreadsResponse,
 };
 use crate::config::Config;
+use crate::fetch::{self, Fetches};
+use crate::news::News;
+use crate::read::PrState;
+use crate::stop::{self, Stopping};
 use crate::threads::Threads;
 use crate::{read, sessions};
 use anyhow::Result;
-use atelier_app::{git, Repo, Skip};
+use atelier_app::{Repo, Skip};
+use atelier_core::ForgeProvider;
 use atelier_records::validate_id;
 use axum::extract::{Path as UrlPath, Query, Request, State};
 use axum::http::{header, StatusCode};
@@ -39,24 +44,37 @@ pub struct Desk {
     config: Config,
     /// T3 Code's live threads, as last polled.
     pub threads: Arc<Threads>,
+    /// What the Desk last fetched, and each forge's pull requests.
+    pub fetches: Fetches,
+    /// Plans proposed and merged, as the Desk saw them.
+    pub news: News,
     /// By repository and route.
     cache: Mutex<HashMap<(String, String), Slot>>,
+    /// Each repository's remote, as its configuration names it at
+    /// `HEAD`, and whether its forge is GitHub's, by name.
+    remotes: Mutex<HashMap<String, (Option<String>, bool)>>,
     /// How many responses were built rather than taken from the cache.
     pub built: AtomicUsize,
-    /// Answers given with `decide` that no commit holds yet.
-    answers: Answers,
     /// Held while an act runs, so two acts never write at once.
     acting: Mutex<()>,
 }
 
 impl Desk {
     pub fn new(config: Config) -> Arc<Desk> {
+        let state = config.state.clone();
+        let notify = config.notify.as_ref().map(|n| n.command.clone());
         Arc::new(Desk {
             threads: Arc::new(Threads::new(config.t3.as_ref())),
+            fetches: Fetches::new(config.fetch_seconds, config.gh.clone()),
+            news: News::new(
+                state.map(|dir| dir.join("news.json")),
+                config.url.clone(),
+                notify,
+            ),
             config,
             cache: Mutex::default(),
+            remotes: Mutex::default(),
             built: AtomicUsize::new(0),
-            answers: Answers::default(),
             acting: Mutex::default(),
         })
     }
@@ -70,29 +88,115 @@ impl Desk {
             .any(|a| a.eq_ignore_ascii_case(name))
     }
 
-    /// Runs `request` with the core's own function, under the configured
-    /// caller.
+    /// Runs `request`, under the configured caller.
     fn act(&self, request: ActRequest) -> Result<crate::api::ActResponse, Failure> {
-        let repo = match &request {
-            ActRequest::Ready(ready) => &ready.repo,
-            ActRequest::Decide(decide) => {
-                checked(&decide.id)?;
-                &decide.repo
-            }
+        let ActRequest::Stop(StopAct { repo, id, reason }) = request;
+        checked(&id)?;
+        let dir = self.served(&repo)?;
+        let Some(state) = self.config.state.as_ref() else {
+            return Ok(crate::api::ActResponse::Refused {
+                rules: Vec::new(),
+                text: "The Desk's configuration names no state directory, where it keeps the clone it writes a stop in. Nothing changed.".into(),
+                next: None,
+            });
         };
-        let dir = self.served(repo)?;
         let _one = self.acting.lock().unwrap_or_else(|p| p.into_inner());
-        let (response, answered) = acts::act(&dir, &self.config.caller, &request)
-            .map_err(|error| Failure::Failed(format!("{error:#}")))?;
-        if let Some(answer) = answered {
-            self.answers.add(repo, answer);
-        }
-        Ok(response)
+        let at = Stopping {
+            served: &dir,
+            name: &repo,
+            state,
+            caller: &self.config.caller,
+            gh: &self.config.gh,
+        };
+        let acted = stop::stop(&at, &id, &reason).map_err(|e| Failure::Failed(format!("{e:#}")))?;
+        // Its pull request is read again, so the page shows it closed. Until
+        // then the last list, read before the drop was pushed, confirms
+        // nothing about it (`Fetches::pr_state`).
+        let (remote, github) = self.remote(&repo, &dir);
+        self.fetches.fetch(&repo, &dir, remote.as_deref(), github);
+        Ok(acted)
     }
 
     fn served(&self, name: &str) -> Result<std::path::PathBuf, Failure> {
         (self.config.repository(name))
             .ok_or_else(|| Failure::NotFound(format!("No repository {name} is served.")))
+    }
+
+    /// The remote of the repository `name` at `dir`, and whether its forge
+    /// is GitHub's.
+    fn remote(&self, name: &str, dir: &Path) -> (Option<String>, bool) {
+        if let Some(known) = self.remotes.lock().unwrap().get(name) {
+            return known.clone();
+        }
+        let skip = Skip::new(None);
+        match read::open(dir, &self.config.caller, &skip) {
+            Ok(repo) => self.remember(name, &repo),
+            Err(_) => (None, false),
+        }
+    }
+
+    fn remember(&self, name: &str, repo: &Repo) -> (Option<String>, bool) {
+        let forge = repo.config.forge.as_ref();
+        let github = forge.is_some_and(|f| f.provider == ForgeProvider::Github);
+        let known = (fetch::remote_of(&repo.root, repo.remote()), github);
+        (self.remotes.lock().unwrap()).insert(name.to_string(), known.clone());
+        known
+    }
+
+    /// When the repository `name` at `dir` was last fetched.
+    fn fetched(&self, name: &str, dir: &Path) -> FetchMark {
+        let (remote, _) = self.remote(name, dir);
+        self.fetches.mark(name, dir, remote.as_deref())
+    }
+
+    /// The branch name `shown`, a ref as the reader shows it, has on the
+    /// remote, and the full ref it names here.
+    fn branch_ref(&self, name: &str, dir: &Path, shown: &str) -> (String, String) {
+        let (remote, _) = self.remote(name, dir);
+        let on_remote = remote.and_then(|remote| {
+            let branch = shown.strip_prefix(&format!("{remote}/"))?;
+            Some((branch.to_string(), format!("refs/remotes/{shown}")))
+        });
+        on_remote.unwrap_or_else(|| (shown.to_string(), format!("refs/heads/{shown}")))
+    }
+
+    /// What the forge says of the pull request of the branch shown as
+    /// `shown` in `name`, at that branch's tip now.
+    fn pr_state(&self, name: &str, dir: &Path, shown: &str) -> PrState {
+        let (branch, full) = self.branch_ref(name, dir, shown);
+        let tip = atelier_app::git::run(dir, &["rev-parse", "--verify", "--quiet", &full]).ok();
+        self.fetches.pr_state(name, &branch, tip.as_deref())
+    }
+
+    /// The pull request of the branch shown as `shown` in `name`, where
+    /// the forge's last list has one.
+    fn pull_request(&self, name: &str, dir: &Path, shown: &str) -> Option<PrMark> {
+        let (branch, _) = self.branch_ref(name, dir, shown);
+        self.fetches.pull_request(name, &branch)
+    }
+
+    /// `row`'s state with its pull request known.
+    fn settle(&self, name: &str, dir: &Path, row: &mut MissionRow) {
+        if let Some(branch) = row.branch.clone() {
+            read::settle_state(row, &self.pr_state(name, dir, &branch));
+        }
+    }
+
+    /// Fetches every repository served once, then looks for news.
+    pub fn fetch_all(&self) {
+        for (name, dir, duplicate) in self.config.repositories() {
+            if duplicate.is_some() {
+                continue;
+            }
+            let (remote, github) = self.remote(&name, &dir);
+            if self.config.fetch_seconds > 0 {
+                self.fetches.fetch(&name, &dir, remote.as_deref(), github);
+            }
+            let seen = self.read(&name, &dir, "plans", |r| read::plans(r).map(Some));
+            if let Ok(Some(seen)) = seen {
+                self.news.observe(&name, &seen);
+            }
+        }
     }
 
     /// The response for `route` of the repository `name` at `dir`, from the
@@ -109,6 +213,7 @@ impl Desk {
         // which runs on a blocking thread.
         let skip = Skip::new(None);
         let mut repo = read::open(dir, &self.config.caller, &skip)?;
+        self.remember(name, &repo);
         let commits = read::commits(&repo)?;
         let slot = (name.to_string(), route.to_string());
         if let Some((at, kept)) = self.cache.lock().unwrap().get(&slot) {
@@ -158,6 +263,46 @@ impl Desk {
             Err(error) => Err(Failure::Failed(format!("{error:#}"))),
         }
     }
+
+    /// One response per repository served, each from `build` or with the
+    /// error that kept it from being read, made by `failed`.
+    fn every<T: Clone + Send + Sync + 'static>(
+        &self,
+        route: &str,
+        build: impl Fn(&mut Repo, &str) -> Result<Option<T>>,
+        failed: impl Fn(&str, String) -> T,
+        mut each: impl FnMut(&str, &Path, &mut T),
+    ) -> Vec<T> {
+        let mut found = Vec::new();
+        for (name, dir, duplicate) in self.config.repositories() {
+            let mut one = match duplicate {
+                Some(error) => failed(&name, error),
+                None => match self.read(&name, &dir, route, |r| build(r, &name)) {
+                    Ok(Some(one)) => one,
+                    Ok(None) => continue,
+                    Err(error) => failed(&name, format!("{error:#}")),
+                },
+            };
+            each(&name, &dir, &mut one);
+            found.push(one);
+        }
+        found
+    }
+}
+
+/// Fetches every repository on a thread of its own, every
+/// `fetch_seconds`, from now until the process ends, telling the human of
+/// news after each round; with `fetch_seconds` 0 it only looks for news,
+/// every five minutes.
+pub fn keep_fetching(desk: Arc<Desk>) {
+    let every = match desk.config.fetch_seconds {
+        0 => crate::config::FETCH_SECONDS,
+        seconds => seconds,
+    };
+    std::thread::spawn(move || loop {
+        desk.fetch_all();
+        std::thread::sleep(std::time::Duration::from_secs(every));
+    });
 }
 
 pub enum Failure {
@@ -201,6 +346,9 @@ pub fn router_for(desk: Arc<Desk>) -> Router {
         .route("/api/repos/{repo}/items/{id}", get(item))
         .route("/api/inbox", get(inbox))
         .route("/api/threads", get(threads))
+        .route("/api/proposed", get(proposed))
+        .route("/api/motion", get(motion))
+        .route("/api/disputed", get(disputed))
         .merge(
             Router::new()
                 .route("/api/act", post(act))
@@ -312,22 +460,21 @@ fn host_name(host: &str) -> &str {
 
 async fn repos(State(desk): State<Arc<Desk>>) -> Response {
     blocking(move || {
-        let mut repos = Vec::new();
-        for (name, dir, duplicate) in desk.config.repositories() {
-            let failed = |error: String| RepoSummary {
-                name: name.clone(),
-                path: dir.display().to_string(),
+        let repos = desk.every(
+            "summary",
+            read::summary,
+            |name, error| RepoSummary {
+                name: name.to_string(),
+                path: desk
+                    .config
+                    .repository(name)
+                    .map(|dir| dir.display().to_string())
+                    .unwrap_or_default(),
                 error: Some(error),
                 ..RepoSummary::default()
-            };
-            repos.push(match duplicate {
-                Some(error) => failed(error),
-                None => match desk.read(&name, &dir, "summary", |r| read::summary(r, &name)) {
-                    Ok(summary) => summary.expect("a summary is always built"),
-                    Err(error) => failed(format!("{error:#}")),
-                },
-            });
-        }
+            },
+            |name, dir, summary| summary.fetched = desk.fetched(name, dir),
+        );
         Ok(ReposResponse {
             repos,
             built_from: crate::BUILT_FROM.into(),
@@ -349,7 +496,18 @@ async fn missions(
 ) -> Response {
     blocking(move || {
         let route = format!("missions?done={done}");
-        desk.repo_route(&repo, &route, String::new, |r| read::missions(r, done))
+        let mut page = desk.repo_route(&repo, &route, String::new, |r| read::missions(r, done))?;
+        let dir = desk.served(&repo)?;
+        for row in &mut page.missions {
+            desk.settle(&repo, &dir, row);
+        }
+        // Kept once settled, so a stop still pending stays with the
+        // unfinished missions.
+        let finished =
+            |row: &MissionRow| matches!(row.state, MissionState::Done | MissionState::Stopped);
+        page.missions.retain(|row| finished(row) == done);
+        page.fetched = desk.fetched(&repo, &dir);
+        Ok(page)
     })
     .await
 }
@@ -364,14 +522,19 @@ async fn mission(
 ) -> Response {
     blocking(move || {
         checked(&id)?;
-        let missing = || format!("No mission {id} is in the base's last commit.");
+        let missing = || format!("No mission {id} is on the base or on a branch.");
         let mut page = desk.repo_route(&repo, &format!("mission {id}"), missing, |r| {
             read::mission(r, &id)
         })?;
+        let dir = desk.served(&repo)?;
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
-        page.pending_answers = (desk.answers).pending(&repo, On::Mission(&id), &page.questions);
+        page.pull_request =
+            (page.mission.branch.clone()).and_then(|b| desk.pull_request(&repo, &dir, &b));
+        desk.settle(&repo, &dir, &mut page.mission);
+        page.can_stop &= desk.config.state.is_some();
+        page.fetched = desk.fetched(&repo, &dir);
         Ok(page)
     })
     .await
@@ -383,19 +546,14 @@ async fn item(
 ) -> Response {
     blocking(move || {
         checked(&id)?;
-        let missing =
-            || format!("No item {id} is in the base's last commit or on a branch named {id}.");
+        let missing = || format!("No item {id} is on the base or on a branch.");
         let mut page = desk.repo_route(&repo, &format!("item {id}"), missing, |r| {
             read::item(r, &id)
         })?;
         let snapshot = desk.threads.snapshot();
         snapshot.join(&mut page.threads);
         page.t3 = snapshot.state;
-        page.pending_answers = (desk.answers).pending(&repo, On::Item(&id), &page.decisions);
-        // A checkout can be added without a commit, so this is not cached.
-        let checkout = git::checkout_of(&desk.served(&repo)?, &id);
-        let checkout = checkout.map_err(|error| Failure::Failed(format!("{error:#}")))?;
-        page.decide_at = checkout.map(|path| path.display().to_string());
+        page.fetched = desk.fetched(&repo, &desk.served(&repo)?);
         Ok(page)
     })
     .await
@@ -404,12 +562,13 @@ async fn item(
 #[derive(Deserialize)]
 struct DocPath {
     path: String,
+    at: Option<String>,
 }
 
 async fn doc(
     State(desk): State<Arc<Desk>>,
     UrlPath(repo): UrlPath<String>,
-    Query(DocPath { path }): Query<DocPath>,
+    Query(DocPath { path, at }): Query<DocPath>,
 ) -> Response {
     blocking(move || {
         let path = normalized(&path).ok_or_else(|| {
@@ -417,9 +576,18 @@ async fn doc(
                 "`{path}` is not a Markdown file's path in the repository"
             ))
         })?;
-        let missing = || format!("No file {path} is in the base's last commit.");
-        desk.repo_route(&repo, &format!("doc {path}"), missing, |r| {
-            read::doc(r, &path)
+        if let Some(at) = &at {
+            let commit = at.len() == 40 && at.bytes().all(|b| b.is_ascii_hexdigit());
+            if !commit {
+                return Err(Failure::BadRequest(format!(
+                    "`{at}` is not a commit's full ID"
+                )));
+            }
+        }
+        let missing = || format!("No file {path} is in that commit.");
+        let route = format!("doc {path} {}", at.as_deref().unwrap_or("base"));
+        desk.repo_route(&repo, &route, missing, |r| {
+            read::doc(r, &path, at.as_deref())
         })
     })
     .await
@@ -445,32 +613,126 @@ fn normalized(path: &str) -> Option<String> {
 async fn inbox(State(desk): State<Arc<Desk>>) -> Response {
     blocking(move || {
         let snapshot = desk.threads.snapshot();
-        let mut repos = Vec::new();
-        for (name, dir, duplicate) in desk.config.repositories() {
-            let failed = |error: String| InboxRepo {
-                repo: name.clone(),
+        let repos = desk.every(
+            "inbox",
+            read::inbox,
+            |name, error| InboxRepo {
+                repo: name.to_string(),
                 error: Some(error),
                 ..InboxRepo::default()
-            };
-            repos.push(match duplicate {
-                Some(error) => failed(error),
-                None => match desk.read(&name, &dir, "inbox", |r| read::inbox(r, &name)) {
-                    Ok(inbox) => {
-                        let mut inbox = inbox.expect("an inbox is always built");
-                        let answers = &desk.answers;
-                        (inbox.questions).retain(|q| !answers.waits(&name, &q.item, q.index));
-                        let live = snapshot.live(&desk.repo_holds(&name, &dir));
-                        let waiting = live.into_iter().filter(|thread| {
-                            thread.status == "waiting" && !thread.holds.is_empty()
-                        });
-                        inbox.threads = waiting.collect();
-                        inbox
-                    }
-                    Err(error) => failed(format!("{error:#}")),
-                },
-            });
-        }
+            },
+            |name, dir, inbox| {
+                for row in &mut inbox.proposed {
+                    desk.settle(name, dir, row);
+                }
+                let live = snapshot.live(&desk.repo_holds(name, dir));
+                let waiting = live
+                    .into_iter()
+                    .filter(|thread| thread.status == "waiting" && !thread.holds.is_empty());
+                inbox.threads = waiting.collect();
+                inbox.fetched = desk.fetched(name, dir);
+            },
+        );
         Ok(InboxResponse {
+            repos,
+            t3: snapshot.state,
+            news: desk.news.recent(),
+        })
+    })
+    .await
+}
+
+/// What is proposed in every repository, with each branch's pull request.
+async fn proposed(State(desk): State<Arc<Desk>>) -> Response {
+    blocking(move || {
+        let repos = desk.every(
+            "proposed",
+            read::proposed,
+            |name, error| ProposedRepo {
+                repo: name.to_string(),
+                error: Some(error),
+                ..ProposedRepo::default()
+            },
+            |name, dir, proposed| {
+                for plan in &mut proposed.plans {
+                    let branch = plan.mission.branch.clone();
+                    plan.pull_request = branch.and_then(|b| desk.pull_request(name, dir, &b));
+                    desk.settle(name, dir, &mut plan.mission);
+                }
+                for change in &mut proposed.changes {
+                    change.pull_request = desk.pull_request(name, dir, &change.branch);
+                }
+                proposed.fetched = desk.fetched(name, dir);
+            },
+        );
+        Ok(ProposedResponse { repos })
+    })
+    .await
+}
+
+/// Work in motion in every repository, with each thread T3 Code lists.
+async fn motion(State(desk): State<Arc<Desk>>) -> Response {
+    blocking(move || {
+        let snapshot = desk.threads.snapshot();
+        let repos = desk.every(
+            "motion",
+            read::motion,
+            |name, error| MotionRepo {
+                repo: name.to_string(),
+                error: Some(error),
+                ..MotionRepo::default()
+            },
+            |name, dir, motion| {
+                for item in &mut motion.items {
+                    let agents = item.holder.iter_mut().chain(item.reviewer.iter_mut());
+                    agents.for_each(|agent| snapshot.join(std::slice::from_mut(agent)));
+                }
+                for mission in &mut motion.missions {
+                    (mission.lead.iter_mut()).for_each(|a| snapshot.join(std::slice::from_mut(a)));
+                    desk.settle(name, dir, &mut mission.mission);
+                }
+                motion.fetched = desk.fetched(name, dir);
+            },
+        );
+        Ok(MotionResponse {
+            repos,
+            t3: snapshot.state,
+        })
+    })
+    .await
+}
+
+/// What `atelier list --disputed` gives in every repository, with each
+/// side's model where T3 Code knows the thread.
+async fn disputed(State(desk): State<Arc<Desk>>) -> Response {
+    blocking(move || {
+        let snapshot = desk.threads.snapshot();
+        let repos = desk.every(
+            "disputed",
+            read::disputed,
+            |name, error| DisputedRepo {
+                repo: name.to_string(),
+                error: Some(error),
+                ..DisputedRepo::default()
+            },
+            |name, dir, disputed| {
+                disputed.fetched = desk.fetched(name, dir);
+                let describe = |side: &mut crate::api::Side| desk.threads.describe(side);
+                for rebuttal in &mut disputed.rebuttals {
+                    rebuttal.implementer.iter_mut().for_each(describe);
+                    rebuttal.raised_by.iter_mut().for_each(describe);
+                    for judged in &mut rebuttal.judged {
+                        judged.reviewer.iter_mut().for_each(describe);
+                    }
+                }
+                for plan in &mut disputed.plans {
+                    for review in &mut plan.reviews {
+                        review.reviewer.iter_mut().for_each(describe);
+                    }
+                }
+            },
+        );
+        Ok(DisputedResponse {
             repos,
             t3: snapshot.state,
         })
@@ -491,7 +753,7 @@ async fn threads(State(desk): State<Arc<Desk>>) -> Response {
     .await
 }
 
-/// `POST /api/act`: `ready` or `decide`, made by the core's own function.
+/// `POST /api/act`: the stop of a proposed plan.
 async fn act(State(desk): State<Arc<Desk>>, Json(request): Json<ActRequest>) -> Response {
     blocking(move || desk.act(request)).await
 }
@@ -504,7 +766,7 @@ async fn session(
 ) -> Response {
     blocking(move || {
         checked(&mission)?;
-        let missing = || format!("No mission {mission} is in the base's last commit.");
+        let missing = || format!("No mission {mission} is on the base or on a branch.");
         let page = desk.repo_route(&repo, &format!("mission {mission}"), missing, |r| {
             read::mission(r, &mission)
         })?;

@@ -670,7 +670,7 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
     // A plan on its own branch is submitted with nothing changed yet, as
     // after `start --mission`.
     let own = match repo.named() {
-        Some(Named::Record(id)) if !crate::plan::agreed(repo, &id)? => Some(id),
+        Some(Named::Record(id)) if !atelier_app::plan::agreed(repo, &id)? => Some(id),
         _ => None,
     };
     if let Some(id) = own.as_ref().filter(|id| !ids.contains(id)) {

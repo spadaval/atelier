@@ -2,7 +2,7 @@
 
 use anyhow::{bail, Context, Result};
 use atelier_desk::threads::keep_polling;
-use atelier_desk::{router_for, Config, Desk};
+use atelier_desk::{keep_fetching, router_for, Config, Desk};
 use std::future::IntoFuture;
 use std::path::PathBuf;
 use tokio::net::TcpListener;
@@ -31,6 +31,7 @@ async fn main() -> Result<()> {
     }
     let desk = Desk::new(config);
     keep_polling(desk.threads.clone());
+    keep_fetching(desk.clone());
     let app = router_for(desk.clone());
     let mut servers = JoinSet::new();
     for listener in listeners {

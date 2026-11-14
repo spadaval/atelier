@@ -1,4 +1,4 @@
-import { GitBranch, MessageCircleQuestion } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { ItemRow } from "../api/ItemRow";
@@ -30,14 +30,9 @@ export function ItemLine({ repo, row, extra, after }: { repo: string; row: ItemR
         <span className="id">{row.id}</span>
         <span className="title">{row.title}</span>
         <span className="meta">
-          {row.question ? (
-            <span className="tag you" title={row.question}>
-              <MessageCircleQuestion size={11} aria-hidden /> Question
-            </span>
-          ) : null}
           {row.needs_human ? <span className="tag you">Needs you</span> : null}
           {row.branch ? (
-            <span className="tag opt" title={row.branch.merged ? "Its branch is merged" : "Its branch is not merged yet"}>
+            <span className="tag opt" title={`${row.branch.name}: ${row.branch.merged ? "merged" : "not merged yet"}`}>
               <GitBranch size={11} aria-hidden /> {row.branch.merged ? "merged" : "branch"}
             </span>
           ) : null}

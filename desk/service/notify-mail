@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# The Desk's [notify] command on this host: mails the human, from his own
+# Gmail account to itself, through gog.
+#
+#   notify-mail <gog account alias> <title> <text> <link>
+#
+# The Desk adds the last three. The alias, such as `personal`, names the
+# account in gog's keyring; the address is looked up there, so no address
+# is written in the Desk's configuration. docs/architecture/desk.md, "Being
+# told", says how to turn it on.
+set -euo pipefail
+[ $# -eq 4 ] || { echo "usage: $0 <alias> <title> <text> <link>" >&2; exit 2; }
+alias=$1 title=$2 text=$3 link=$4
+# A service does not read ~/.profile, where gog's keyring is set up.
+export GOG_KEYRING_BACKEND=${GOG_KEYRING_BACKEND:-file}
+if [ -z "${GOG_KEYRING_PASSWORD:-}" ] && [ -r "$HOME/.config/gogcli/keyring.password" ]; then
+  GOG_KEYRING_PASSWORD=$(cat "$HOME/.config/gogcli/keyring.password")
+  export GOG_KEYRING_PASSWORD
+fi
+to=$(gog auth alias list --plain --no-input | awk -v a="$alias" '$1 == a { print $2 }')
+[ -n "$to" ] || { echo "gog knows no account alias $alias" >&2; exit 1; }
+gog gmail send --no-input --account "$alias" --to "$to" --subject "Desk: $title" \
+  --body "$text
+
+$link"

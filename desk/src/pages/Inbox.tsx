@@ -1,54 +1,19 @@
-import { CircleCheck, Target } from "lucide-react";
-import { useState } from "react";
+import { GitMerge, GitPullRequestArrow, Target } from "lucide-react";
 import { Link } from "react-router";
 import type { InboxRepo } from "../api/InboxRepo";
-import type { InboxQuestion } from "../api/InboxQuestion";
 import type { InboxResponse } from "../api/InboxResponse";
-import type { ItemPage } from "../api/ItemPage";
+import type { NewsEvent } from "../api/NewsEvent";
 import { LiveThreadRow, T3Notice } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
 import { ItemLine } from "../components/ItemLine";
-import { PendingMark, QuestionLine, questionKey } from "../components/Questions";
 import { inboxCount } from "../components/Shell";
-import { Empty, ErrorBanner, ScopeBar, Skeleton } from "../components/ui";
+import { Empty, ErrorBanner, FetchedNote, ScopeBar, Skeleton } from "../components/ui";
 import { api, to, useData } from "../lib/api";
-import { countsLine, plural } from "../lib/words";
-
-/** A question answered from this inbox: the question, the answer given, and the act's text. */
-type Answered = InboxQuestion & { answer: string; text: string };
-
-/**
- * A question answered from this inbox, shown while its item's page lists the
- * answer in `pending_answers`, which the inbox does not carry. Once a commit
- * holds the answer it is no longer pending, and the line goes.
- */
-function AnsweredLine({ repo, answered: a }: { repo: string; answered: Answered }) {
-  const item = useData<ItemPage>(api.item(repo, a.item));
-  const pending = item.data?.pending_answers.some((p) => p.question === a.question && p.finding === a.finding && p.answer?.text === a.answer);
-  if (item.data && !pending) return null;
-  return (
-    <div className="qline" data-testid="answered">
-      <span className="glyph ok">
-        <CircleCheck size={15} aria-hidden />
-      </span>
-      <span className="grow">
-        <Link to={to.item(repo, a.item)} className="q">
-          {a.question}
-        </Link>
-        <span className="sub">
-          <span className="mono">{a.item}</span> <PendingMark /> Its item's page shows the answer until its implementer commits it.
-        </span>
-        <p className="act-text">{a.text}</p>
-      </span>
-    </div>
-  );
-}
+import { countsLine, dateTime, plural } from "../lib/words";
 
 function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
   const name = repo.repo;
   const count = inboxCount(repo);
-  // Answers given here this visit. The server leaves an answered question out of the inbox until a commit holds it.
-  const [answered, setAnswered] = useState<Answered[]>([]);
   return (
     <section className="inbox-repo" aria-label={name}>
       {many ? (
@@ -62,21 +27,21 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
             {name} cannot be read: {repo.error}
           </span>
         </div>
-      ) : count === 0 && answered.length === 0 ? (
+      ) : count === 0 ? (
         <div className="list">
           <Empty title="Nothing waits on you here." />
         </div>
       ) : null}
 
-      {repo.drafts.length > 0 ? (
+      {repo.proposed.length > 0 ? (
         <div className="sect">
           <div className="sect-head">
-            <h3>Draft missions, waiting for your go</h3>
-            <span className="tally">{repo.drafts.length}</span>
+            <h3>Plans proposed, which you may stop</h3>
+            <span className="tally">{repo.proposed.length}</span>
           </div>
           <div className="list">
-            {repo.drafts.map((m) => (
-              <Link key={m.id} to={to.mission(name, m.id)} className="mission-row wait">
+            {repo.proposed.map((m) => (
+              <Link key={m.id} to={to.mission(name, m.id)} className="mission-row wait" data-testid="proposed">
                 <span className="t">
                   <span className="glyph you">
                     <Target size={15} aria-hidden />
@@ -106,29 +71,6 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
         </div>
       ) : null}
 
-      {repo.questions.length + answered.length > 0 ? (
-        <div className="sect">
-          <div className="sect-head">
-            <h3>Open questions</h3>
-            <span className="tally">{repo.questions.length}</span>
-          </div>
-          <div className="list">
-            {repo.questions.map((q) => (
-              <QuestionLine
-                key={questionKey(q)}
-                repo={name}
-                question={q}
-                answerable
-                onAnswered={(text, answer) => setAnswered((was) => [...was, { ...q, answer, text }])}
-              />
-            ))}
-            {answered.map((a, at) => (
-              <AnsweredLine key={at} repo={name} answered={a} />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {repo.needs_human.map((group) => (
         <div key={group.mission ?? ""} className="sect" data-testid="needs-human">
           <div className="sect-head">
@@ -142,11 +84,41 @@ function RepoInbox({ repo, many }: { repo: InboxRepo; many: boolean }) {
           </div>
         </div>
       ))}
+      {repo.error ? null : <FetchedNote fetched={repo.fetched} />}
     </section>
   );
 }
 
-/** `/inbox`: what waits on the human, in every repository: missions to say go on, questions, and work only he can do. */
+/** Plans proposed and merged lately, as the Desk saw them and told the human. */
+function News({ news }: { news: NewsEvent[] }) {
+  if (news.length === 0) return null;
+  return (
+    <section className="inbox-repo" aria-label="Lately">
+      <h2 className="repo-title">
+        Lately <span className="tally">{news.length}</span>
+      </h2>
+      <div className="list">
+        {news.map((n, at) => (
+          <Link key={at} to={to.mission(n.repo, n.mission)} className="mission-row" data-testid="news">
+            <span className="t">
+              <span className={`glyph ${n.kind === "proposed" ? "you" : "ok"}`}>
+                {n.kind === "proposed" ? <GitPullRequestArrow size={15} aria-hidden /> : <GitMerge size={15} aria-hidden />}
+              </span>
+              <span className="truncate-2">
+                {n.kind === "proposed" ? "Proposed" : "Merged"}: {n.title}
+              </span>
+            </span>
+            <span className="n muted">
+              {n.repo}, {dateTime(n.at)}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** `/inbox`: what waits on the human, in every repository, and the plans proposed and merged lately. */
 export function InboxPage() {
   const loaded = useData<InboxResponse>(api.inbox());
   const repos = loaded.data?.repos ?? [];
@@ -158,8 +130,8 @@ export function InboxPage() {
         <div>
           <h1>Inbox</h1>
           <p className="lede">
-            {loaded.data ? (count === 0 ? "Nothing waits on you." : `${plural(count, "thing waits", "things wait")} on you.`) : "Reading every repository…"} Draft missions wait for
-            your go, threads and questions for an answer, and items labelled needs-human for work only you can do.
+            {loaded.data ? (count === 0 ? "Nothing waits on you." : `${plural(count, "thing waits", "things wait")} on you.`) : "Reading every repository…"} Proposed plans
+            go ahead unless you stop them, threads wait for an answer, and items labelled needs-human for work only you can do.
           </p>
         </div>
       </div>
@@ -169,6 +141,7 @@ export function InboxPage() {
       {repos.map((r) => (
         <RepoInbox key={r.repo} repo={r} many={repos.length > 1} />
       ))}
+      {loaded.data ? <News news={loaded.data.news} /> : null}
     </div>
   );
 }

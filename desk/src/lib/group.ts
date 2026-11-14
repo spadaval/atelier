@@ -1,5 +1,4 @@
 import type { ItemRow } from "../api/ItemRow";
-import type { Question } from "../api/Question";
 import type { Status } from "../api/Status";
 import { LIFECYCLE } from "./words";
 
@@ -10,13 +9,8 @@ export function groupByStatus(items: ItemRow[]): StatusGroup[] {
   return LIFECYCLE.map((status) => ({ status, items: items.filter((i) => i.status === status) })).filter((g) => g.items.length > 0);
 }
 
-/**
- * What waits on the human in a mission: its unanswered questions, then its
- * open items labelled needs-human that have none, each item once.
- */
-export function waitingOnYou(items: ItemRow[], questions: Question[]): { questions: Question[]; items: ItemRow[] } {
-  const open = questions.filter((q) => q.answer === null);
-  const asked = new Set(open.map((q) => q.item));
+/** What waits on the human in a mission: its open items labelled needs-human. */
+export function waitingOnYou(items: ItemRow[]): ItemRow[] {
   const closed = new Set<Status>(["done", "dropped"]);
-  return { questions: open, items: items.filter((i) => i.needs_human && !closed.has(i.status) && !asked.has(i.id)) };
+  return items.filter((i) => i.needs_human && !closed.has(i.status));
 }

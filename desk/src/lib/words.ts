@@ -1,4 +1,6 @@
+import type { FetchMark } from "../api/FetchMark";
 import type { MissionRow } from "../api/MissionRow";
+import type { MissionState } from "../api/MissionState";
 import type { MissionStatus } from "../api/MissionStatus";
 import type { Role } from "../api/Role";
 import type { T3State } from "../api/T3State";
@@ -34,8 +36,31 @@ export function finished(counts: StatusCount[]): number {
 }
 
 /** Where a mission stands, for its glyph: work under way shows as running. */
-export function missionState(mission: Pick<MissionRow, "status" | "in_progress">): string {
-  return mission.in_progress ? "building" : mission.status;
+export function missionState(mission: Pick<MissionRow, "state" | "in_progress">): string {
+  if (mission.in_progress) return "building";
+  return { proposed: "draft", open: "ready", stop_pending: "changes_requested", stopped: "dropped", done: "done" }[mission.state];
+}
+
+/** A mission's state in words, for its pill. */
+export const stateWords: Record<MissionState, string> = {
+  proposed: "Proposed",
+  open: "Agreed",
+  stop_pending: "Stop not published yet",
+  stopped: "Stopped",
+  done: "Done",
+};
+
+/**
+ * When a repository was last fetched, as a page says it: `Fetched from
+ * origin 3 minutes ago`, with the Desk's period and its last failure.
+ */
+export function fetchedLine(fetched: FetchMark, now = Date.now()): string {
+  if (fetched.remote === null) return "This repository has no remote, so nothing is fetched; branches are read as this clone has them.";
+  const at = fetched.at ? Date.parse(fetched.at) : NaN;
+  const when = Number.isNaN(at) ? `never fetched from ${fetched.remote}` : `fetched from ${fetched.remote} ${ago(Math.max(0, (now - at) / 1000))}`;
+  const every = fetched.every_seconds > 0 ? ` The Desk fetches every ${plural(Math.round(fetched.every_seconds / 60), "minute")}.` : " The Desk does not fetch it.";
+  const failed = fetched.error ? ` Its last fetch failed: ${fetched.error}` : "";
+  return `${when[0].toUpperCase()}${when.slice(1)}.${every}${failed}`;
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {
@@ -63,6 +88,7 @@ export function shortCommit(commit: string | null | undefined): string {
 
 /** What a thread is to the records, as the agents list names it. */
 export const roleWords: Record<Role, string> = {
+  planner: "Planner",
   implementer: "Implementer",
   reviewer: "Reviewer",
   lead: "Lead",
@@ -97,7 +123,8 @@ export function t3Note(t3: T3State): { known: boolean; text: string; error: stri
 export function ago(seconds: number): string {
   if (seconds < 60) return `${plural(Math.round(seconds), "second")} ago`;
   if (seconds < 3600) return `${plural(Math.round(seconds / 60), "minute")} ago`;
-  return `${plural(Math.round(seconds / 3600), "hour")} ago`;
+  if (seconds < 172_800) return `${plural(Math.round(seconds / 3600), "hour")} ago`;
+  return `${plural(Math.round(seconds / 86_400), "day")} ago`;
 }
 
 export const recommendationWords: Record<string, string> = {

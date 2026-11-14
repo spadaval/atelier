@@ -5,7 +5,7 @@
 #   desk/service/install.sh [--caller <name>]
 #
 # It builds atelier-desk (release, -j 4) and the app (pnpm build), copies
-# them and the t3 wrapper to ~/.local/share/atelier-desk/, writes
+# them, the t3 wrapper and notify-mail to ~/.local/share/atelier-desk/, writes
 # ~/.config/atelier-desk/config.toml when it does not exist (which needs
 # --caller, the name the human acts under), installs the unit as
 # ~/.config/systemd/user/atelier-desk.service, enables it and restarts it,
@@ -49,8 +49,10 @@ echo "Building the app"
 echo "Installing into $share"
 cp "$workspace/target/release/atelier-desk" "$share/atelier-desk.new"
 mv -f "$share/atelier-desk.new" "$share/atelier-desk"
-cp "$here/t3" "$share/t3.new"
-mv -f "$share/t3.new" "$share/t3"
+for tool in t3 notify-mail; do
+  cp "$here/$tool" "$share/$tool.new"
+  mv -f "$share/$tool.new" "$share/$tool"
+done
 rm -rf "$share/app.new" "$share/app.old"
 cp -r "$top/desk/dist" "$share/app.new"
 [ ! -e "$share/app" ] || mv "$share/app" "$share/app.old"
@@ -69,10 +71,26 @@ print(ip, me["DNSName"].rstrip("."), me["HostName"])')
 # "Running the server", explains each key. Written by
 # desk/service/install.sh, which never overwrites it.
 caller = "$caller"
-roots = ["~/.cache/atelier-desk/clones"]
+# The live repositories, each served under its directory name.
+repos = [
+  "~/projects/atelier",
+  "~/projects/astromech",
+  "~/projects/demiurge",
+  "~/projects/life-on-rails",
+  "~/projects/cosplay-studio",
+]
+# Each repository's remote is fetched this often, in seconds.
+fetch_seconds = 300
+state = "~/.cache/atelier-desk"
+url = "http://$dns:3780"
 listen = ["127.0.0.1:3780", "$ip:3780"]
 hosts = ["localhost", "127.0.0.1", "$ip", "$host", "$dns"]
 app = "~/.local/share/atelier-desk/app"
+
+# Mail when a plan is proposed or merges, from the human's own account to
+# itself. Off until he turns it on; the inbox lists the news either way.
+# [notify]
+# command = ["~/.local/share/atelier-desk/notify-mail", "personal"]
 
 [t3]
 # The wrapper runs the t3 of the T3 Code version that is running.

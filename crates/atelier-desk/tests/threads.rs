@@ -329,13 +329,31 @@ async fn live_threads_are_listed_with_what_they_hold() {
         .filter(|(_, r)| r["method"] == "tools/call")
         .map(|(_, r)| &r["params"]["arguments"])
         .collect();
-    assert_eq!(calls.len(), 4, "one page per thread");
+    assert_eq!(
+        calls.len(),
+        5,
+        "one page per thread, and the recent threads"
+    );
     assert_eq!(calls[0]["allProjects"], true);
     assert_eq!(calls[0]["includeSubagents"], true);
     assert_eq!(calls[0]["settled"], false);
     let live = ["preparing", "queued", "starting", "running", "waiting"];
     assert_eq!(calls[0]["statuses"], json!(live));
     assert_eq!(calls[3]["cursor"], 3);
+    // The first poll also reads the recent threads, ended ones too, for
+    // the models of threads no longer live.
+    assert_eq!(calls[4]["statuses"], Value::Null);
+    assert_eq!(calls[4]["settled"], Value::Null);
+    assert_eq!(calls[4]["limit"], 100);
+    let mut side = atelier_desk::api::Side {
+        identity: SECOND_IMPLEMENTER.into(),
+        model: None,
+        provider: None,
+        link: None,
+    };
+    world.desk.threads.describe(&mut side);
+    assert_eq!(side.model.as_deref(), Some("claude-fable-5-2"));
+    assert_eq!(side.provider.as_deref(), Some("claudeAgent"));
 
     // Stopping revokes the token's session, and no new one is issued.
     world.desk.threads.close();

@@ -1,6 +1,6 @@
 use atelier_app::acts::{
-    check, check_mission, next, question, row, settle_refusals, unmet, unsettled, Act, Condition,
-    Facts, MissionFacts, Refusal, Role, TABLE,
+    check, check_mission, next, row, settle_refusals, unmet, unsettled, Act, Condition, Facts,
+    MissionFacts, Refusal, Role, TABLE,
 };
 use atelier_app::{carried, carried_plan, entry};
 use atelier_core::{FindingName, MissionStatus, Settlement, Status, Thread};
@@ -113,7 +113,7 @@ fn facts<'a>(item: &'a ItemDir, caller: &'a Thread) -> Facts<'a> {
 
 /// The architecture specification's act table, for the acts this step
 /// builds, written out here so the code's table is checked against it.
-const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
+const SPECIFIED: [(Act, &[Status], Option<Status>); 13] = [
     (Act::Ready, &[Status::Draft], Some(Status::Ready)),
     (Act::Start, &[Status::Ready], Some(Status::Building)),
     // Created by the act, so it runs from no status at all.
@@ -143,16 +143,6 @@ const SPECIFIED: [(Act, &[Status], Option<Status>); 14] = [
         Act::VerdictApprove,
         &[Status::InReview],
         Some(Status::Approved),
-    ),
-    (
-        Act::Decide,
-        &[
-            Status::Building,
-            Status::InReview,
-            Status::ChangesRequested,
-            Status::Approved,
-        ],
-        None,
     ),
     (Act::Merge, &[Status::Approved], Some(Status::Done)),
     (Act::MergeTrivial, &[Status::Building], Some(Status::Done)),
@@ -262,19 +252,12 @@ fn every_act_in_the_table_from_every_status_sets_the_specified_status_or_is_refu
                 Act::Merge => vec![review("1-aaaa", &["r1"], "approve", "")],
                 _ => vec![review("1-aaaa", &["r1"], "null", findings)],
             };
-            // A decider has a question to answer.
-            let body = match act {
-                Act::Decide => format!("{DONE}\n## Decisions\n\n### 2026-11-10: Q?\n"),
-                _ => DONE.to_string(),
-            };
-            let item = with_reviews(record(status, &["t1"], &body), &reviews);
+            let item = with_reviews(record(status, &["t1"], DONE), &reviews);
             let reviewer = matches!(act, Act::Review | Act::VerdictChanges | Act::VerdictApprove);
             // A planner holds nothing; the item's holder readying it is
-            // refused by its status too, never by its role. A decider is
-            // neither the item's implementer nor a reviewer.
+            // refused by its status too, never by its role.
             let caller = thread(match act {
                 _ if reviewer => "r1",
-                Act::Decide => "d1",
                 Act::Ready if status == Status::Draft => "p1",
                 _ => "t1",
             });
@@ -901,59 +884,6 @@ fn a_kept_finding_whose_rebuttal_was_kept_has_had_its_one_try() {
             rebutted: true,
         }]
     );
-}
-
-#[test]
-fn the_oldest_question_is_decided_by_a_thread_that_never_implemented_the_item_nor_reviewed_its_finding(
-) {
-    let reviews = carried_twice();
-    let item = |body: &str| {
-        let body = format!("{DONE}\n## Decisions\n\n{body}");
-        with_reviews(
-            record(Status::ChangesRequested, &["t1", "t2"], &body),
-            &reviews,
-        )
-    };
-    let answered = "### 2026-11-09: First?\n\nAnswer by d0: Yes.\n\n";
-    let about = "### 2026-11-10: Worth fixing?\n\nFinding: 2-bbbb.1\n\n";
-    let free = "### 2026-11-10: Later?\n";
-    let waiting = item(&format!("{answered}{about}{free}"));
-    assert_eq!(question(&waiting).unwrap().unwrap().0, 1);
-    let decide = |item: &ItemDir, caller: &str| {
-        let caller = thread(caller);
-        unmet(Act::Decide, &facts(item, &caller)).unwrap()
-    };
-    // Every implementer, the holder and the one before; every reviewer of
-    // the finding and of the one it carries, a taken-over one too.
-    for implementer in ["t1", "t2"] {
-        assert_eq!(
-            decide(&waiting, implementer),
-            [Condition::FormerImplementer]
-        );
-    }
-    let finding = "2-bbbb.1".parse().unwrap();
-    for reviewer in ["r1", "r2", "r3"] {
-        assert_eq!(
-            decide(&waiting, reviewer),
-            [Condition::ReviewedFinding(Clone::clone(&finding))]
-        );
-    }
-    assert_eq!(decide(&waiting, "d1"), []);
-    // The holder is refused by that condition, not told its role.
-    let holder = thread("t2");
-    assert!(matches!(
-        check(Act::Decide, &facts(&waiting, &holder)),
-        Err(Refusal::Unmet(unmet)) if unmet == [Condition::FormerImplementer]
-    ));
-    // Once it is answered, the next is about no finding: a reviewer may
-    // decide that one, an implementer still not.
-    let next = item(&format!("{answered}{about}Answer by d1: Fix it.\n\n{free}"));
-    assert_eq!(question(&next).unwrap().unwrap().0, 2);
-    assert_eq!(decide(&next, "r3"), []);
-    assert_eq!(decide(&next, "t1"), [Condition::FormerImplementer]);
-    // Nothing waits.
-    let none = item(answered);
-    assert_eq!(decide(&none, "d1"), [Condition::NoQuestion]);
 }
 
 #[test]

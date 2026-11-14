@@ -107,16 +107,22 @@ export const api = {
   repos: () => "/api/repos",
   inbox: () => "/api/inbox",
   threads: () => "/api/threads",
+  proposed: () => "/api/proposed",
+  motion: () => "/api/motion",
+  disputed: () => "/api/disputed",
   missions: (repo: string) => `/api/repos/${seg(repo)}/missions`,
   mission: (repo: string, id: string) => `/api/repos/${seg(repo)}/missions/${seg(id)}`,
   item: (repo: string, id: string) => `/api/repos/${seg(repo)}/items/${seg(id)}`,
-  doc: (repo: string, path: string) => `/api/repos/${seg(repo)}/doc?path=${seg(path)}`,
+  doc: (repo: string, path: string, at?: string | null) => `/api/repos/${seg(repo)}/doc?path=${seg(path)}${at ? `&at=${seg(at)}` : ""}`,
 };
 
 /** The app's own routes. */
 export const to = {
   repo: (repo: string) => `/r/${seg(repo)}`,
   agents: (repo?: string) => (repo === undefined ? "/agents" : `/r/${seg(repo)}/agents`),
+  proposed: () => "/proposed",
+  motion: () => "/motion",
+  disputed: () => "/disputed",
   mission: (repo: string, id: string) => `/r/${seg(repo)}/mission/${seg(id)}`,
   item: (repo: string, id: string) => `/r/${seg(repo)}/item/${seg(id)}`,
   doc: (repo: string, mission: string, path: string) => `/r/${seg(repo)}/mission/${seg(mission)}?tab=docs&doc=${seg(path)}`,

@@ -2,7 +2,7 @@
 //! opened by path, from a working directory outside it, with the caller
 //! naming who acts, and each result read as data.
 
-use atelier_app::{decide, history, ready, Happened, Move, Repo, Skip};
+use atelier_app::{history, ready, Happened, Move, Repo, Skip};
 use atelier_core::{Status, Thread};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -137,47 +137,6 @@ fn asked() -> (TempDir, PathBuf) {
 }
 
 #[test]
-fn decide_writes_the_answer_by_the_caller_named_or_returns_its_refusal() {
-    let (_dir, root) = asked();
-    outside(&root);
-    let skip = Skip::new(None);
-
-    // Its implementer does not decide it.
-    let mut repo = Repo::open(&root, Thread("t1".into()), &skip).unwrap();
-    let refused = decide(&mut repo, ID, "Hello", None).unwrap().unwrap_err();
-    assert_eq!(refused.rules, ["You have never implemented demo-ab12"]);
-    assert_eq!(
-        refused.text,
-        format!(
-            "`atelier decide {ID}` refused; nothing changed.\nYou (thread t1) implemented {ID}, \
-             and none of its implementers, past or present, decides its questions.\n"
-        )
-    );
-    assert_eq!(refused.next, None);
-    assert_eq!(git(&root, &["status", "--porcelain"]), "");
-
-    // The caller the program names is the one the record gets.
-    let mut repo = Repo::open(&root, Thread("sumeet".into()), &skip).unwrap();
-    let done = decide(&mut repo, ID, "Hello", None).unwrap().unwrap();
-    assert_eq!(done.paths, [item_path(ID)]);
-    assert_eq!(done.commit, None);
-    assert!(
-        done.text.starts_with(&format!(
-            "Answered a question on {ID}, as thread sumeet:\n  2026-11-10: Which greeting?\n  \
-             Answer: Hello\n"
-        )),
-        "{}",
-        done.text
-    );
-    let text = fs::read_to_string(root.join(item_path(ID))).unwrap();
-    assert!(
-        text.ends_with("### 2026-11-10: Which greeting?\n\nAnswer by sumeet: Hello\n"),
-        "{text}"
-    );
-    assert!(skip.passed().is_empty());
-}
-
-#[test]
 fn a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_written() {
     let (_dir, root) = asked();
     let skip = Skip::new(None);
@@ -191,8 +150,8 @@ fn a_caller_the_records_cannot_name_and_read_back_is_refused_before_anything_is_
     }
     assert_eq!(git(&root, &["status", "--porcelain"]), "");
     // A slash is read back whole, as a Codex subagent's identity has one.
-    let mut repo = Repo::open(&root, Thread("t3/codex".into()), &skip).unwrap();
-    assert!(decide(&mut repo, ID, "Hello", None).unwrap().is_ok());
+    let repo = Repo::open(&root, Thread("t3/codex".into()), &skip).unwrap();
+    assert_eq!(repo.caller, Thread("t3/codex".into()));
 }
 
 #[test]

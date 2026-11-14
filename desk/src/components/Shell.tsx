@@ -1,4 +1,4 @@
-import { Bot, FolderGit2, Inbox, LayoutGrid, Menu, Moon, Sun } from "lucide-react";
+import { Activity, Bot, FolderGit2, GitPullRequestArrow, Inbox, LayoutGrid, Menu, Moon, Scale, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import type { InboxResponse } from "../api/InboxResponse";
@@ -44,7 +44,7 @@ function ThemeToggle() {
 
 /** How many things wait on the human in one repository of the inbox. */
 export function inboxCount(repo: InboxResponse["repos"][number]): number {
-  return repo.needs_human.reduce((n, g) => n + g.items.length, 0) + repo.drafts.length + repo.questions.length + repo.threads.length;
+  return repo.needs_human.reduce((n, g) => n + g.items.length, 0) + repo.proposed.length + repo.threads.length;
 }
 
 function Sidebar({ open }: { open: boolean }) {
@@ -61,6 +61,15 @@ function Sidebar({ open }: { open: boolean }) {
         <Inbox size={16} /> Inbox
         {waiting !== undefined ? <span className={`count${waiting > 0 ? " you" : ""}`}>{waiting}</span> : null}
       </NavLink>
+      <NavLink to="/proposed" className="nav">
+        <GitPullRequestArrow size={16} /> Proposed
+      </NavLink>
+      <NavLink to="/motion" className="nav">
+        <Activity size={16} /> In motion
+      </NavLink>
+      <NavLink to="/disputed" className="nav">
+        <Scale size={16} /> Disputed
+      </NavLink>
       <NavLink to="/agents" className="nav">
         <Bot size={16} /> Agents
       </NavLink>
@@ -69,7 +78,7 @@ function Sidebar({ open }: { open: boolean }) {
         <NavLink key={repo.name} to={to.repo(repo.name)} className="nav">
           <FolderGit2 size={15} />
           <span className="truncate">{repo.name}</span>
-          {repo.error ? <span className="count bad">error</span> : repo.drafts + repo.waiting > 0 ? <span className="count you">{repo.drafts + repo.waiting}</span> : null}
+          {repo.error ? <span className="count bad">error</span> : repo.proposed + repo.waiting > 0 ? <span className="count you">{repo.proposed + repo.waiting}</span> : null}
         </NavLink>
       ))}
       <div className="side-foot">

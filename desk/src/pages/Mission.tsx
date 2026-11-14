@@ -7,24 +7,21 @@ import type { ItemRow } from "../api/ItemRow";
 import type { MissionPage } from "../api/MissionPage";
 import type { MissionRow } from "../api/MissionRow";
 import type { MissionsResponse } from "../api/MissionsResponse";
-import type { Question } from "../api/Question";
-import { PlanningSession, SayGo } from "../components/Acts";
+import { PlanningSession, StopControl } from "../components/Acts";
 import { AgentsCard, Identity } from "../components/Agents";
 import { Crumbs } from "../components/Crumbs";
-import { PendingMark, QuestionLine } from "../components/Questions";
 import { ItemLine } from "../components/ItemLine";
 import { Findings, ReviewList } from "../components/Reviews";
-import { Card, Counts, Empty, ErrorBanner, Markdown, ScopeBar, Skeleton, StatusGlyph, Tabs, useTab } from "../components/ui";
-import { withPending } from "../lib/acts";
+import { Card, Counts, Empty, ErrorBanner, FetchedNote, Markdown, ScopeBar, Skeleton, StatusGlyph, Tabs, useTab } from "../components/ui";
 import { api, to, useData, type Loaded } from "../lib/api";
 import { findingFates, fixedInReview } from "../lib/findings";
 import { groupByStatus, waitingOnYou } from "../lib/group";
 import { fileName, recordPath, splitFrontMatter } from "../lib/links";
-import { countsLine, dateTime, finished, missionState, plural, shortCommit, shortDate, statusTitle, total } from "../lib/words";
+import { countsLine, finished, missionState, plural, shortCommit, shortDate, stateWords, statusTitle, total } from "../lib/words";
 
-/** Which mission a repository opens on: one with work in progress, else a ready one, else the first. */
+/** Which mission a repository opens on: one with work in progress, else an open one, else the first. */
 export function currentMission(missions: MissionRow[]): string | undefined {
-  return (missions.find((m) => m.in_progress) ?? missions.find((m) => m.status === "open") ?? missions[0])?.id;
+  return (missions.find((m) => m.in_progress) ?? missions.find((m) => m.state === "open") ?? missions[0])?.id;
 }
 
 function MissionCard({ repo, mission, current }: { repo: string; mission: MissionRow; current: boolean }) {
@@ -32,7 +29,7 @@ function MissionCard({ repo, mission, current }: { repo: string; mission: Missio
   return (
     <Link to={to.mission(repo, mission.id)} className="mcard" aria-current={current ? "page" : undefined}>
       <span className="mcard-t">
-        <StatusGlyph status={missionState(mission)} size={14} label={mission.in_progress ? "Work in progress" : statusTitle(mission.status)} />
+        <StatusGlyph status={missionState(mission)} size={14} label={mission.in_progress ? "Work in progress" : stateWords[mission.state]} />
         <span className="mcard-title">{mission.title}</span>
       </span>
       <span className="mcard-b">
@@ -50,9 +47,9 @@ function Rail({ repo, loaded, selected }: { repo: string; loaded: Loaded<Mission
   const body = loaded.data;
   const missions = body?.missions ?? [];
   const going = missions.filter((m) => m.in_progress);
-  const ready = missions.filter((m) => !m.in_progress && m.status === "open");
-  const drafts = missions.filter((m) => m.status === "draft");
-  const [showDrafts, setShowDrafts] = useState(true);
+  const open = missions.filter((m) => !m.in_progress && (m.state === "open" || m.state === "stop_pending"));
+  const proposed = missions.filter((m) => m.state === "proposed");
+  const [showProposed, setShowProposed] = useState(true);
   return (
     <nav className="pane rail-pane" aria-label={`Missions of ${repo}`}>
       <div className="pane-head">
@@ -68,71 +65,34 @@ function Rail({ repo, loaded, selected }: { repo: string; loaded: Loaded<Mission
       {going.map((m) => (
         <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />
       ))}
-      {ready.length > 0 ? <div className="pane-label">Ready, nothing started</div> : null}
-      {ready.map((m) => (
+      {open.length > 0 ? <div className="pane-label">Agreed, nothing started</div> : null}
+      {open.map((m) => (
         <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />
       ))}
-      {drafts.length > 0 ? (
-        <button type="button" className="pane-label" aria-expanded={showDrafts} onClick={() => setShowDrafts(!showDrafts)}>
-          {showDrafts ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Drafts, waiting for your go <span className="tally">{drafts.length}</span>
+      {proposed.length > 0 ? (
+        <button type="button" className="pane-label" aria-expanded={showProposed} onClick={() => setShowProposed(!showProposed)}>
+          {showProposed ? <ChevronDown size={12} /> : <ChevronRight size={12} />} Proposed, under plan review <span className="tally">{proposed.length}</span>
         </button>
       ) : null}
-      {showDrafts ? drafts.map((m) => <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />) : null}
-      {body && missions.length === 0 ? <Empty title="No open missions.">A mission is a batch of work agents run once you say go.</Empty> : null}
+      {showProposed ? proposed.map((m) => <MissionCard key={m.id} repo={repo} mission={m} current={m.id === selected} />) : null}
+      {body && missions.length === 0 ? <Empty title="No open missions.">A mission is a batch of work, proposed on its branch and agreed once its plan merges.</Empty> : null}
       {body ? (
         <p className="loose" data-testid="loose">
           {body.loose === 0 ? "No open item is outside a mission." : `${plural(body.loose, "open item is", "open items are")} in no mission.`}
         </p>
       ) : null}
+      {body ? <FetchedNote fetched={body.fetched} /> : null}
     </nav>
   );
 }
 
 const HEADINGS = ["Why", "Success criteria", "Scope", "Authority"] as const;
 
-function Decided({ repo, questions }: { repo: string; questions: { question: Question; pending: Question | null }[] }) {
-  const answered = questions.flatMap(({ question, pending }) => (question.answer ? [{ q: question, pending: false }] : pending?.answer ? [{ q: pending, pending: true }] : []));
-  if (answered.length === 0) return null;
-  return (
-    <section className="prose-sect">
-      <h2>
-        Decided on the way <span className="tally">{answered.length}</span>
-      </h2>
-      <ol className="decisions">
-        {answered.map(({ q, pending }, at) => (
-          <li key={`${q.item}${at}`}>
-            <div className="q">{q.question}</div>
-            <div className="a">
-              {q.answer!.text}
-              {q.outcome ? <span className="tag">{q.outcome === "defer" ? "deferred" : "no action"}</span> : null}
-              {pending ? <PendingMark /> : null}
-            </div>
-            <div className="sub">
-              <Link to={to.item(repo, q.item)} className="mono">
-                {q.item}
-              </Link>{" "}
-              · answered by <Identity id={q.answer!.by} />
-            </div>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
 function Overview({ repo, page }: { repo: string; page: MissionPage }) {
   const section = (heading: string) => page.sections.find((s) => s.heading.toLowerCase() === heading.toLowerCase());
   const from = recordPath.mission(page.mission.id);
   const docHref = (path: string, hash: string) => `${to.doc(repo, page.mission.id, path)}${hash ? `#${hash}` : ""}`;
-  const questions = withPending(page.questions, page.pending_answers);
-  const waiting = waitingOnYou(
-    page.items,
-    questions.filter((q) => !q.pending).map((q) => q.question),
-  );
-  // Only an item's oldest open question can be answered.
-  const oldest = new Set<Question>();
-  const seen = new Set<string>();
-  for (const q of waiting.questions) if (!seen.has(q.item)) (seen.add(q.item), oldest.add(q));
+  const waiting = waitingOnYou(page.items);
   const result = section("Result");
   return (
     <>
@@ -141,17 +101,13 @@ function Overview({ repo, page }: { repo: string; page: MissionPage }) {
           <b>Dropped.</b> {page.dropped}
         </div>
       ) : null}
-      {waiting.questions.length + waiting.items.length > 0 ? (
+      {waiting.length > 0 ? (
         <section className="prose-sect">
           <h2>
-            Waiting on you <span className="tally">{waiting.questions.length + waiting.items.length}</span>
+            Waiting on you <span className="tally">{waiting.length}</span>
           </h2>
           <div className="list">
-            {waiting.questions.map((q) => (
-              // Keyed by its place among the mission's questions, which answering another does not move.
-              <QuestionLine key={page.questions.indexOf(q)} repo={repo} question={q} answerable={oldest.has(q)} />
-            ))}
-            {waiting.items.map((row) => (
+            {waiting.map((row) => (
               <ItemLine key={row.id} repo={repo} row={row} />
             ))}
           </div>
@@ -172,7 +128,7 @@ function Overview({ repo, page }: { repo: string; page: MissionPage }) {
           </section>
         ) : null;
       })}
-      {!result && page.mission.status !== "draft" ? (
+      {!result && page.mission.state !== "proposed" ? (
         <section className="prose-sect">
           <h2>Result</h2>
           <p className="muted">Not written yet. A mission's Result is written when it closes.</p>
@@ -182,9 +138,21 @@ function Overview({ repo, page }: { repo: string; page: MissionPage }) {
         <h2>
           Plan reviews <span className="tally">{page.plan_reviews.length}</span>
         </h2>
+        {page.round ? (
+          <p className="round" data-testid="round">
+            Round {page.round.round}:{" "}
+            {page.round.reviews.map((r, at) => (
+              <span key={r.name}>
+                {at > 0 ? ", " : null}
+                {r.verdict === "approve" ? "approved" : r.verdict === "changes" ? "changes asked" : "not finished"}
+                {r.model ? <span className="muted"> ({r.model})</span> : null}
+              </span>
+            ))}
+            .
+          </p>
+        ) : null}
         {page.plan_reviews.length === 0 ? <p className="muted">No one has reviewed this plan.</p> : <ReviewList reviews={page.plan_reviews} plan />}
       </section>
-      <Decided repo={repo} questions={questions} />
     </>
   );
 }
@@ -251,15 +219,16 @@ function Work({ repo, items }: { repo: string; items: ItemRow[] }) {
   );
 }
 
-function DocReader({ repo, mission, docs, chosen }: { repo: string; mission: string; docs: MissionPage["documents"]; chosen: string | null }) {
+function DocReader({ repo, mission, docs, chosen, at }: { repo: string; mission: string; docs: MissionPage["documents"]; chosen: string | null; at: string | null }) {
   const path = chosen ?? docs[0]?.path ?? null;
-  const loaded = useData<DocResponse>(path ? api.doc(repo, path) : null, 120_000);
+  // A proposed plan's own documents are read at its branch's tip; any other file at the base's.
+  const listed = docs.some((d) => d.path === path);
+  const loaded = useData<DocResponse>(path ? api.doc(repo, path, listed ? at : null) : null, 120_000);
   const { hash } = useLocation();
   useEffect(() => {
     if (!loaded.data || !hash) return;
     document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: "start" });
   }, [loaded.data, hash]);
-  const listed = docs.some((d) => d.path === path);
   if (!path) {
     return (
       <div className="list">
@@ -359,11 +328,19 @@ function MissionView({ repo, id }: { repo: string; id: string }) {
         <article className="paper">
           <header className="paper-head">
             <div className="ids">
-              <span className={`status-pill ${m.status === "draft" ? "you" : m.status === "dropped" ? "" : "plain"}`} data-testid="status">
-                <StatusGlyph status={m.status} size={13} quiet /> {statusTitle(m.status)}
+              <span className={`status-pill ${m.state === "proposed" || m.state === "stop_pending" ? "you" : m.state === "stopped" ? "" : "plain"}`} data-testid="status">
+                <StatusGlyph status={missionState({ ...m, in_progress: false })} size={13} quiet /> {stateWords[m.state]}
               </span>
               {m.in_progress ? <span className="tag run">Work in progress</span> : null}
               <span className="mono muted">{m.id}</span>
+              <span className="muted read-from" data-testid="read-from">
+                {m.branch ? <>Read from <span className="mono">{m.branch}</span></> : "Read from the base"}
+              </span>
+              {page.pull_request ? (
+                <a className="tag" href={page.pull_request.url} target="_blank" rel="noreferrer" data-testid="pull-request">
+                  Pull request #{page.pull_request.number}, {page.pull_request.state.toLowerCase()}
+                </a>
+              ) : null}
             </div>
             <h1>{m.title}</h1>
             <div className="mcounts">
@@ -375,8 +352,8 @@ function MissionView({ repo, id }: { repo: string; id: string }) {
                 <Markdown text={outcome.markdown} from={from} docHref={docHref} />
               </div>
             ) : null}
-            <SayGo repo={repo} page={page} />
-            {m.status !== "done" && m.status !== "dropped" ? <PlanningSession repo={repo} mission={m.id} /> : null}
+            <StopControl repo={repo} page={page} />
+            {m.state === "proposed" || m.state === "open" ? <PlanningSession repo={repo} mission={m.id} /> : null}
           </header>
           <div className="paper-tabs">
             <Tabs
@@ -392,7 +369,7 @@ function MissionView({ repo, id }: { repo: string; id: string }) {
           <div className="paper-body">
             {tab === "overview" ? <Overview repo={repo} page={page} /> : null}
             {tab === "work" ? <Work repo={repo} items={page.items} /> : null}
-            {tab === "docs" ? <DocReader repo={repo} mission={m.id} docs={page.documents} chosen={params.get("doc")} /> : null}
+            {tab === "docs" ? <DocReader repo={repo} mission={m.id} docs={page.documents} chosen={params.get("doc")} at={m.branch ? page.read_at : null} /> : null}
           </div>
         </article>
       </div>
@@ -408,11 +385,11 @@ function MissionView({ repo, id }: { repo: string; id: string }) {
         <Card title="Details">
           <dl className="kv">
             <dt>Status</dt>
-            <dd>{statusTitle(m.status)}</dd>
+            <dd>{stateWords[m.state]}</dd>
             <dt>Lead</dt>
             <dd>{m.lead ? <Identity id={m.lead} /> : "Nobody"}</dd>
-            <dt>Go</dt>
-            <dd>{m.ready ? `${m.ready.by}, ${dateTime(m.ready.at)}` : "Not given yet"}</dd>
+            <dt>Read from</dt>
+            <dd className="mono">{m.branch ?? "the base"}</dd>
             <dt>Created</dt>
             <dd>{shortDate(m.created_at)}</dd>
             {m.labels.length > 0 ? (
@@ -428,8 +405,9 @@ function MissionView({ repo, id }: { repo: string; id: string }) {
               </>
             ) : null}
             <dt>Read at</dt>
-            <dd className="mono">{shortCommit(page.commit)}</dd>
+            <dd className="mono">{shortCommit(page.read_at)}</dd>
           </dl>
+          <FetchedNote fetched={page.fetched} />
         </Card>
         <Card title="Documents" tally={page.documents.length} flush>
           {page.documents.length === 0 ? <p className="card-empty">No document beside the mission's record.</p> : null}
