@@ -85,7 +85,7 @@ crate beside them:
 | --- | --- |
 | `atelier-core` | Domain values: Mission, Item, Review, Finding, Status, Thread, Config |
 | `atelier-records` | Reading and writing the three record kinds and `config.toml`, from a checkout or from a commit; IDs; validation |
-| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; the disagreements `list --disputed` prints; `ready`, and until atelier-v958 removes the Desk's decide page `decide`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
+| `atelier-app` | Use cases: the status view, each lifecycle act, the merge checks, cross-branch reads, the views the Desk reads; a repository opened by path (`Repo`) and the Git calls it and the acts here make; the history of acts `log` prints; the disagreements `list --disputed` prints; `ready` and a mission's `drop`, as functions that return what they did or a refusal as data; the refusal and skip policy, and the wording of the refusals and results of the acts here |
 | `atelier-cli` | Arguments, dispatch, the other commands' Git and shell calls, on `atelier-app`'s Git helpers, and the forge; output |
 
 The dependency direction is `cli` to `app` to `records` to `core`. The
@@ -167,8 +167,7 @@ answered it has `Answer by <thread>: <answer>`, and then, for a finding,
 `Outcome: defer` or `Outcome: no action`, which settles that finding: it is
 no longer open, and with `defer` it is deferred. An `Outcome:` without a
 `Finding:` and an answer is refused. An unanswered entry waits on nothing.
-No command writes an entry; the Desk's `decide` answers one until
-atelier-v958 removes it.
+No command writes an entry, and since atelier-v958 neither does the Desk.
 
 ### `missions/<id>/mission.md`
 
@@ -795,7 +794,10 @@ reads; nothing is written there.
   the push and the `gh pr close` that publish it. Dropping a mission
   changes no item; `start` and a take-over on one of its items, and an
   item's `merge`, are refused once the drop is found, saying the mission
-  was dropped. The Desk's stop does all of this through the same functions.
+  was dropped. A mission's drop is `atelier_app::plan::drop_mission`, which
+  the command and the Desk's stop both call. The Desk publishes a proposed
+  plan's stop itself; an agreed mission's waits on atelier-yclc, which
+  moves `submit` and `merge` into the core.
 - **`close`** on an item with a branch is refused, naming `merge` as the way
   it ends. `close` on a mission runs only on an agreed one, and counts its
   items as the reader finds them.

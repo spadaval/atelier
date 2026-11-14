@@ -718,6 +718,26 @@ pub fn some(names: &[String]) -> String {
     text
 }
 
+/// `drop` of agreed mission `id`, written on `branch`: the stop counts once
+/// that branch merges.
+pub fn dropped_mission(id: &str, branch: &str, reason: &str) -> String {
+    format!(
+        "Dropped mission {id}: {reason}\nIt stops nothing until it is published: once {branch} merges, `start` and a take-over of its items, and the merge of any of them, are refused in every clone that has fetched. Until then `status` and `show` say the stop is not published.\n"
+    )
+}
+
+/// `drop` of mission `id`'s proposed plan, written on its branch `branch`,
+/// which is pushed to `remote` where one is configured.
+pub fn dropped_plan(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
+    let publish = match remote {
+        Some(remote) => format!(
+            "It stops nothing until it is published: commit it, push the branch (`git push {remote} {branch}`) and close its pull request (`gh pr close {branch}`). Its branch is never merged."
+        ),
+        None => "It stops nothing until it is committed. Its branch is never merged.".into(),
+    };
+    format!("Dropped the proposed plan of mission {id}: {reason}\n{publish}\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -742,24 +762,4 @@ mod tests {
         assert!(!first.contains('`'), "{first}");
         assert!(!line.lines().nth(1).unwrap().contains('`'));
     }
-}
-
-/// `drop` of agreed mission `id`, written on `branch`: the stop counts once
-/// that branch merges.
-pub fn dropped_mission(id: &str, branch: &str, reason: &str) -> String {
-    format!(
-        "Dropped mission {id}: {reason}\nIt stops nothing until it is published: once {branch} merges, `start` and a take-over of its items, and the merge of any of them, are refused in every clone that has fetched. Until then `status` and `show` say the stop is not published.\n"
-    )
-}
-
-/// `drop` of mission `id`'s proposed plan, written on its branch `branch`,
-/// which is pushed to `remote` where one is configured.
-pub fn dropped_plan(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
-    let publish = match remote {
-        Some(remote) => format!(
-            "It stops nothing until it is published: commit it, push the branch (`git push {remote} {branch}`) and close its pull request (`gh pr close {branch}`). Its branch is never merged."
-        ),
-        None => "It stops nothing until it is committed. Its branch is never merged.".into(),
-    };
-    format!("Dropped the proposed plan of mission {id}: {reason}\n{publish}\n")
 }
