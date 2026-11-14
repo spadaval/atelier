@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-dciw
 title: Read missions and items from named branches, local and fetched, so list and show cover work in motion
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
@@ -134,6 +134,25 @@ Left for other items, all outside this item's Done when:
   old-format reading is atelier-2vdq's.
 - `status` on an item's branch does not yet say that the local and remote
   tips have diverged; `show` does.
-- On the branch checked out, a record copy is read from the checkout's
-  files, but which records a branch touches is found from its commits, so a
-  new record not yet committed on a backlog branch is not listed.
+
+Round 1 asked for three fixes, all made in 3e145311f:
+
+- On the branch checked out here, the records it touches are found from
+  the checkout's files since the branch forked, committed or not, so a
+  record `new` just wrote is in `list` and `show`, also on a backlog branch
+  with no commit yet.
+- `Entry::startable` is false for a proposed item, so `list --ready`,
+  `list --proposed --ready` and `show` no longer offer one, and `start`
+  still refuses it.
+- A proposed record change is kept as its record would be: `narrows_item`
+  and `narrows_mission` in `work.rs` hold the narrowing flags, and `list`
+  uses them for its groups and for the changes.
+
+After the fixes, the full suite with the timing test passes: 336 tests.
+`list` with 200 named remote branches took 0.81 s on the debug build.
+
+### Responses
+
+- 1-d4f6.1: fixed in 3e145311f
+- 1-d4f6.2: fixed in 3e145311f
+- 1-d4f6.3: fixed in 3e145311f
