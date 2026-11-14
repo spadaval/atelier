@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t5am
 title: Finish a merge through the forge's pull request, so Atelier works on a protected base
-status: changes_requested
+status: in_review
 mission: atelier-to83
 labels:
 - redesign
