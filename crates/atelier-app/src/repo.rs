@@ -594,7 +594,7 @@ impl<'s> Repo<'s> {
             .iter()
             .map(|id| Ok((id.clone(), self.locate(id)?.status())))
             .collect::<Result<_>>()?;
-        let (mission, lead) = match &item.item.mission {
+        let (mut mission, lead) = match &item.item.mission {
             None => (None, None),
             Some(id) => {
                 let found = self.reader.mission(&self.base_tip, id)?;
@@ -602,11 +602,38 @@ impl<'s> Repo<'s> {
                 (mission_of(item, found.as_slice()), lead)
             }
         };
+        // A stop is published once it is on the base, the forge's or this
+        // clone's: a clone that has fetched it refuses the mission's items
+        // before its own base has moved.
+        if let Some((id, status)) = mission
+            .as_mut()
+            .filter(|(_, s)| *s != Some(Status::Dropped))
+        {
+            if self.dropped_on_forge(id)? {
+                *status = Some(Status::Dropped);
+            }
+        }
         Ok(Links {
             blockers,
             mission,
             lead,
         })
+    }
+
+    /// Whether the forge's base, as this clone last fetched it, holds
+    /// mission `id` dropped.
+    pub fn dropped_on_forge(&mut self, id: &str) -> Result<bool> {
+        let Some(remote) = self.remote().map(str::to_string) else {
+            return Ok(false);
+        };
+        let Some(tip) = git::remote_tip(&self.root, &remote, &self.base)? else {
+            return Ok(false);
+        };
+        if tip == self.base_tip {
+            return Ok(false);
+        }
+        let found = self.reader.mission(&tip, id)?;
+        Ok(found.is_some_and(|dir| dir.mission.status == atelier_core::MissionStatus::Dropped))
     }
 
     /// The mission `id` as `commit` holds it.

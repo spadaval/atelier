@@ -256,8 +256,17 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_acts() {
     ok(planned(
         &root,
         "p1",
-        &["ready", MISSION, ID, "demo-0ther", "--by", "sumeet"],
+        &["ready", ID, "demo-0ther", "--by", "sumeet"],
     ));
+    // Made ready as a mission was before it had no go-ahead, by the old
+    // tool, which wrote who said go.
+    let path = format!(".atelier/missions/{MISSION}/mission.md");
+    let text = fs::read_to_string(root.join(&path)).unwrap().replace(
+        "status: draft\nlabels: []\nlead: null\nready: null\n",
+        "status: ready\nlabels: []\nlead: null\nready:\n  by: sumeet\n  at: 2026-11-10T10:00:00Z\n",
+    );
+    fs::write(root.join(&path), text).unwrap();
+    on_base(&root, "Ready the mission");
     ok(planned(&root, "l1", &["lead", MISSION]));
     ok(atelier(&root, "r1", &["review", MISSION]));
     ok(verdict(&root, "r1", &["verdict", "approve"]));
@@ -285,12 +294,12 @@ fn a_mission_shows_its_ready_lead_plan_review_and_close_with_its_items_acts() {
 
     let ours = [
         format!("{ID} ready - draft -> ready; by sumeet"),
-        format!("{MISSION} ready - draft -> ready; by sumeet"),
+        format!("{MISSION} ready - draft -> open; by sumeet"),
         format!("{MISSION} lead l1"),
         format!("{MISSION} review r1 {review}"),
         format!("{MISSION} verdict r1 {review} approve"),
         format!("{ID} drop - ready -> dropped; Nobody needs it."),
-        format!("{MISSION} close - ready -> done"),
+        format!("{MISSION} close - open -> done"),
     ];
     assert_eq!(acts(&root, &log(&root, &[MISSION])), ours);
     // Everything holds the other item too; the item alone holds its own.

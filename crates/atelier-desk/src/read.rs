@@ -4,7 +4,7 @@
 
 use crate::api::*;
 use anyhow::Result;
-use atelier_app::acts::{check, check_mission, question, unsettled, Act, MissionFacts, STARTED};
+use atelier_app::acts::{check, question, unsettled, Act, STARTED};
 use atelier_app::plan::plan_changed_at;
 use atelier_app::say::condition_text;
 use atelier_app::{
@@ -165,11 +165,6 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
             markdown: markdown.to_string(),
         })
     });
-    let facts = MissionFacts {
-        mission: dir,
-        items: &[],
-        review: None,
-    };
     let base_tip = repo.base_tip.clone();
     let findings = dir.findings()?;
     let mut plan_reviews = Vec::new();
@@ -190,7 +185,8 @@ pub fn mission(repo: &mut Repo, id: &str) -> Result<Option<MissionPage>> {
         mission: mission_row(dir, &items, &view.located, view.in_progress)?,
         sections: sections.collect(),
         dropped: dir.dropped().map(str::to_string),
-        can_ready: check_mission(Act::ReadyMission, &facts).is_ok(),
+        // A mission has no go-ahead; atelier-v958 removes the Desk's.
+        can_ready: false,
         documents: documents(&repo.root, &base_tip, id)?,
         items: rows.collect::<Result<_>>()?,
         questions: (view.questions.iter())

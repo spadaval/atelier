@@ -7,7 +7,7 @@ use crate::acts::{row, Act, Condition, Refusal, Role};
 use crate::skip::Refused;
 use crate::Entry;
 use atelier_core::{Decision, Outcome, Settlement, Status, Thread, Verdict};
-use atelier_records::{Problem, ReviewFile};
+use atelier_records::Problem;
 use std::path::Path;
 
 pub fn status_name(status: Status) -> &'static str {
@@ -26,7 +26,7 @@ pub fn status_name(status: Status) -> &'static str {
 pub fn command(act: Act, id: &str) -> String {
     match act {
         Act::Start | Act::TakeOver | Act::Review => format!("atelier {} {id}", row(act).command),
-        Act::Ready | Act::ReadyMission => format!("atelier ready {id} --by <name>"),
+        Act::Ready => format!("atelier ready {id} --by <name>"),
         Act::StartNew => "atelier start --new \"<title>\"".into(),
         Act::StartMission => "atelier start --mission \"<title>\"".into(),
         Act::StartBacklog => "atelier start --backlog <slug>".into(),
@@ -41,10 +41,10 @@ pub fn command(act: Act, id: &str) -> String {
 
 pub fn goal(act: Act, status: Status) -> &'static str {
     match act {
-        Act::Ready | Act::ReadyMission => "make it ready",
+        Act::Ready => "make it ready",
         Act::Start | Act::StartNew | Act::StartMission | Act::StartBacklog => "start it",
-        Act::SubmitBacklog => "submit it",
-        Act::MergeBacklog => "merge it",
+        Act::SubmitBacklog | Act::SubmitMission => "submit it",
+        Act::MergeBacklog | Act::MergeMission => "merge it",
         Act::TakeOver => "take it over",
         Act::Submit if status == Status::ChangesRequested => "return it to review",
         Act::Submit => "submit it for review",
@@ -75,17 +75,17 @@ pub fn condition_text(id: &str, condition: &Condition) -> String {
         Condition::Blocked { id: blocker, status: None } => {
             format!("{blocker} is done (no item {blocker} is found)")
         }
-        Condition::MissionNotReady { id: mission, status: Some(Status::Draft) } => format!(
-            "Mission {mission} is ready (it is draft; a planner makes it ready with: atelier ready {mission} --by <name>)"
+        Condition::MissionNotOpen { id: mission, status: Some(Status::Draft) } => format!(
+            "Mission {mission} is agreed (its record on the base is an old `draft`, which is proposed: its plan merges once two plan reviews approve it)"
         ),
-        Condition::MissionNotReady { id: mission, status: Some(Status::Dropped) } => format!(
-            "Mission {mission} is ready (it was dropped, so none of its items starts)"
+        Condition::MissionNotOpen { id: mission, status: Some(Status::Dropped) } => format!(
+            "Mission {mission} is not dropped (it was stopped, so none of its items starts or merges)"
         ),
-        Condition::MissionNotReady { id: mission, status: Some(status) } => {
-            format!("Mission {mission} is ready (it is {})", status_name(*status))
+        Condition::MissionNotOpen { id: mission, status: Some(status) } => {
+            format!("Mission {mission} is not dropped (it is {})", status_name(*status))
         }
-        Condition::MissionNotReady { id: mission, status: None } => format!(
-            "Mission {mission} is ready (no mission {mission} is in the base's last commit)"
+        Condition::MissionNotOpen { id: mission, status: None } => format!(
+            "Mission {mission} is agreed (no mission {mission} is in the base's last commit: it is on the base once its plan merges)"
         ),
         Condition::BranchExists => format!(
             "No branch {id} exists yet (one does; if nothing on it is needed, delete it with `git branch -D {id}`)"
@@ -582,10 +582,19 @@ pub fn unknown(id: &str) -> String {
     format!("  {id}: no item or mission has this ID in this checkout or on a branch\n")
 }
 
-pub fn ready_refused(unknown_ids: &[&str], refused: &[(&str, Status)]) -> Refused {
+pub fn ready_refused(
+    unknown_ids: &[&str],
+    refused: &[(&str, Status)],
+    missions: &[&str],
+) -> Refused {
     let mut text = "`atelier ready` refused; nothing changed.\n".to_string();
     for id in unknown_ids {
         text += &unknown(id);
+    }
+    for id in missions {
+        text += &format!(
+            "  {id}: it is a mission, and a mission needs no go-ahead: its plan reaches the base once two plan reviews approve it, and its items are made ready one by one\n"
+        );
     }
     for (id, status) in refused {
         text += &format!(
@@ -602,7 +611,7 @@ pub fn ready_refused(unknown_ids: &[&str], refused: &[(&str, Status)]) -> Refuse
 /// `ready` given no ID, which only a program calling it can do.
 pub fn ready_nothing() -> Refused {
     Refused::then(
-        "`atelier ready` names no item or mission to make ready; nothing changed.\n".into(),
+        "`atelier ready` names no item to make ready; nothing changed.\n".into(),
         "Then: atelier ready <id>... --by <name>".into(),
     )
 }
@@ -641,6 +650,12 @@ pub fn elsewhere(
     )
 }
 
+/// A mission's status, written in the act table as an item's, by the name
+/// its record stores.
+pub fn mission_status_name(status: Status) -> &'static str {
+    atelier_core::MissionStatus::of(status).map_or(status_name(status), |s| s.name())
+}
+
 /// A mission's act refused for `refusal`.
 pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
     match refusal {
@@ -649,19 +664,27 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
                 .from
                 .iter()
                 .filter(|s| atelier_core::MissionStatus::of(**s).is_some())
-                .map(|s| status_name(*s))
+                .map(|s| mission_status_name(*s))
                 .collect();
             let then = match status {
-                Status::Draft => {
-                    format!("A planner makes it ready with: atelier ready {id} --by <name>\n")
-                }
+                Status::Draft => "Its record is an old `draft`, which is proposed: its plan reaches the base once two plan reviews approve it and its branch merges.\n".to_string(),
+                Status::Dropped if matches!(act, Act::SubmitMission | Act::MergeMission) => "A plan dropped on its branch is not merged: push the branch and close its pull request, if it has one.\n".to_string(),
                 _ => "Nothing is left to do on it.\n".into(),
             };
             format!(
                 "Mission {id} is {}, and `atelier {}` runs on a mission that is {}. Nothing changed.\n{then}",
-                status_name(*status),
+                mission_status_name(*status),
                 row(act).command,
-                from.join(", ")
+                from.join(" or ")
+            )
+        }
+        Refusal::NotHolder { holder, .. } => {
+            let by = holder
+                .as_ref()
+                .map_or(String::new(), |t| format!(", last {t}"));
+            format!(
+                "`atelier {}` on mission {id}'s branch is a planner's, and you have not planned it{by}. Nothing changed.\nTo take the plan over, run `atelier submit` here, which makes you one of its planners.\n",
+                row(act).command
             )
         }
         Refusal::Unmet(unmet) => format!(
@@ -669,53 +692,10 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
             command(act, id),
             needs(act, Status::Ready, id, unmet)
         ),
-        Refusal::Role(_) | Refusal::NotHolder { .. } | Refusal::Record(_) => {
-            unreachable!("a mission's act is refused only for its status or conditions")
+        Refusal::Role(_) | Refusal::Record(_) => {
+            unreachable!("a mission's act is refused only for its status, planner or conditions")
         }
     }
-}
-
-pub fn no_plan_review(id: &str) -> String {
-    format!("Mission {id}'s plan has no review.\n")
-}
-
-/// What `ready` says of a mission's plan reviews: `latest` are those of
-/// round `round`, and `changed` what changed in the plan since each commit
-/// they reviewed, `None` where this clone lacks the commit.
-pub fn plan_reviews(
-    id: &str,
-    round: u32,
-    latest: &[&ReviewFile],
-    changed: &[(&str, Option<Vec<String>>)],
-) -> String {
-    let mut text = format!("Mission {id}'s plan reviews, round {round}:\n");
-    for file in latest {
-        let verdict = file.review.verdict.map_or("no verdict yet", verdict_name);
-        let by = file
-            .review
-            .reviewers
-            .holder()
-            .map_or("nobody".into(), |t| t.to_string());
-        text += &format!(
-            "  {} by {by}: {verdict}, of commit {}\n",
-            file.name,
-            short(&file.review.commit)
-        );
-    }
-    for (commit, paths) in changed {
-        text += &match paths {
-            None => format!(
-                "Commit {} is not in this clone, so what changed since is not known.\n",
-                short(commit)
-            ),
-            Some(paths) if paths.is_empty() => format!(
-                "Since {}, nothing in the mission's directory or its items changed.\n",
-                short(commit)
-            ),
-            Some(paths) => format!("Since {}, these changed: {}\n", short(commit), some(paths)),
-        };
-    }
-    text
 }
 
 pub fn verdict_name(verdict: Verdict) -> &'static str {

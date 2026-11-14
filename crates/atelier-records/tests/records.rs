@@ -237,9 +237,14 @@ fn each_record_kind_reads_and_writes_back_the_same_file() {
     let path = Path::new("item.md");
     assert_eq!(render_item(&parse_item(path, ITEM).unwrap()), ITEM);
     assert_eq!(render_item(&parse_item(path, BLOCKER).unwrap()), BLOCKER);
+    // A mission as this tool writes it: open, with its planners.
+    let mission = MISSION.replace("status: ready", "status: open").replace(
+        "ready:\n  by: sumeet\n  at: 2026-11-09T19:56:00-05:00\n",
+        "planners:\n- p1\n- p2\n",
+    );
     assert_eq!(
-        render_mission(&parse_mission(path, MISSION).unwrap()),
-        MISSION
+        render_mission(&parse_mission(path, &mission).unwrap()),
+        mission
     );
     for review in [REVIEW_1, REVIEW_2] {
         assert_eq!(render_review(&parse_review(path, review).unwrap()), review);
@@ -370,10 +375,13 @@ fn a_mission_reads_its_fields_and_keeps_its_body() {
     let read = Store::new(dir.path()).mission("atelier-icv4").unwrap();
     assert!(read.path.ends_with("missions/atelier-icv4/mission.md"));
     let mission = read.mission;
-    assert_eq!(mission.status, MissionStatus::Ready);
+    // A record from before a mission had no go-ahead: `ready` is open,
+    // its `ready` field is read, and it names no planner.
+    assert_eq!(mission.status, MissionStatus::Open);
     assert_eq!(mission.labels, ["review"]);
     assert_eq!(mission.lead, Some(Thread("t3-lead".into())));
-    assert_eq!(mission.ready.unwrap().by, "sumeet");
+    assert_eq!(mission.ready.as_ref().unwrap().by, "sumeet");
+    assert!(mission.planners.0.is_empty());
     assert_eq!(
         mission.body,
         MISSION
@@ -381,6 +389,31 @@ fn a_mission_reads_its_fields_and_keeps_its_body() {
             .unwrap()
             .1
     );
+}
+
+#[test]
+fn a_mission_is_written_open_with_its_planners_and_no_go_ahead_and_reads_the_old_form() {
+    let mut mission = parse_mission(Path::new("x"), MISSION).unwrap();
+    mission.planners.take(Thread("p1".into()));
+    let text = render_mission(&mission);
+    assert!(text.contains("\nstatus: open\n"), "{text}");
+    assert!(
+        text.contains("\nlead: t3-lead\nplanners:\n- p1\ncreated_at: "),
+        "{text}"
+    );
+    assert!(!text.contains("ready"), "{text}");
+    // The old `draft` reads, and is written as it reads.
+    let draft = MISSION.replace("status: ready", "status: draft");
+    let read = parse_mission(Path::new("x"), &draft).unwrap();
+    assert_eq!(read.status, MissionStatus::Draft);
+    // A record with neither `ready` nor `planners`, as `start --mission`
+    // never writes one, reads too.
+    let bare = MISSION.replace(
+        "ready:\n  by: sumeet\n  at: 2026-11-09T19:56:00-05:00\n",
+        "",
+    );
+    let read = parse_mission(Path::new("x"), &bare).unwrap();
+    assert_eq!((read.ready, read.planners.0.len()), (None, 0));
 }
 
 #[test]
@@ -473,6 +506,8 @@ fn the_store_writes_a_mission_where_it_reads_it() {
     let mut mission = parse_mission(Path::new("x"), MISSION).unwrap();
     mission.status = MissionStatus::Done;
     store.write_mission(&mission).unwrap();
+    // Its old `ready` field is not written back.
+    mission.ready = None;
     assert_eq!(store.mission("atelier-icv4").unwrap().mission, mission);
     assert_eq!(store.missions().unwrap().len(), 1);
 }

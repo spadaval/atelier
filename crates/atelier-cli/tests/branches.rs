@@ -527,7 +527,7 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     fs::write(
         &path,
         "---\nschema: atelier.mission\nschema_version: 3\nid: demo-m1ss\ntitle: Greet\n\
-         status: draft\nlabels: []\nlead: null\nready: null\n\
+         status: open\nlabels: []\nlead: null\nplanners:\n- p1\n\
          created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n",
     )
     .unwrap();
@@ -536,8 +536,9 @@ fn a_backlog_branch_with_code_a_new_mission_or_invalid_records_is_not_merged() {
     let run = atelier(&root, "p1", &["merge"]);
     assert_eq!(run.code, 1);
     assert!(
-        run.stderr
-            .contains("  adds the mission, of mission demo-m1ss\n"),
+        run.stderr.contains(
+            "  Mission demo-m1ss: backlog/mission adds the mission.\n    Its plan has no review.\n    0 of 2 count.\n"
+        ),
         "{}",
         run.stderr
     );
@@ -1152,7 +1153,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     let listed = hub.atelier(&b, "p1", &["list"]);
     ok(listed.clone());
     let proposed = format!(
-        "Proposed, on branches not yet merged:\nMission {mission} (draft, proposed on origin/{mission}): Greet\n  \
+        "Proposed, on branches not yet merged:\nMission {mission} (proposed on origin/{mission}): Greet\n  \
          No label:\n    {item} (draft, medium, on origin/{mission}): Say hi\n"
     );
     assert!(listed.stdout.contains(&proposed), "{}", listed.stdout);
@@ -1187,7 +1188,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
         "{}",
         shown.stdout
     );
-    assert_eq!(lines[2], "Status: draft, proposed");
+    assert_eq!(lines[2], "Status: proposed");
     assert!(
         shown.stdout.contains(&format!(
             "\nItems:\n  Draft:\n    {item} (medium, on origin/{mission}): Say hi\n"
@@ -1218,7 +1219,7 @@ fn a_plan_pushed_from_one_clone_is_proposed_in_another_once_it_has_fetched() {
     ok(here.clone());
     assert!(
         here.stdout.contains(&format!(
-            "Mission {mission} (draft, proposed on {mission}): Greet\n"
+            "Mission {mission} (proposed on {mission}): Greet\n"
         )),
         "{}",
         here.stdout
@@ -1232,7 +1233,7 @@ fn a_mission_dropped_on_its_branch_is_listed_as_dropped_and_not_as_proposed() {
     let (mission, _) = planned_and_pushed(&hub, &a);
     let path = a.join(mission_path(&mission));
     let text = fs::read_to_string(&path).unwrap();
-    let dropped = text.replace("status: draft", "status: dropped");
+    let dropped = text.replace("status: open", "status: dropped");
     let dropped = match dropped.contains("## Result\n") {
         true => dropped.replace("## Result\n", "## Result\n\nDropped: no longer wanted\n"),
         false => dropped + "\n## Result\n\nDropped: no longer wanted\n",

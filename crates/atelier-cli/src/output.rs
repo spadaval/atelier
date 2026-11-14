@@ -7,6 +7,7 @@ use crate::forge::{CiRun, ForgeError, PullRequest};
 use crate::merge::Moved;
 use crate::setup::{Harness, Step};
 use atelier_app::acts::{Act, Condition, Refusal};
+use atelier_app::plan::{Approvals, NotCounted, APPROVALS};
 use atelier_app::{Carried, Entry, Overview};
 use atelier_core::{Config, Priority, Response, Status, Thread, Verdict};
 use atelier_records::Problem;
@@ -310,9 +311,9 @@ fn cannot_start(entries: &[Entry], others: bool) -> String {
             "wait on a blocker that is not done",
         ),
         (
-            with(|c| matches!(c, Condition::MissionNotReady { .. })),
-            "is in a mission that is not ready",
-            "are in a mission that is not ready",
+            with(|c| matches!(c, Condition::MissionNotOpen { .. })),
+            "is in a mission that is dropped or not agreed",
+            "are in a mission that is dropped or not agreed",
         ),
         (
             with(|c| matches!(c, Condition::BranchExists)),
@@ -379,7 +380,7 @@ pub fn started_new(id: &str, branch: &str) -> String {
 
 pub fn started_mission(id: &str, branch: &str) -> String {
     format!(
-        "Created draft mission {id} on branch {branch}, with empty sections to write.\nWrite its plan there, create its items there with `atelier new \"<title>\" --in {id}`, and commit with Git.\n"
+        "Created proposed mission {id} on branch {branch}, with empty sections to write and you as its planner. It is agreed once that branch merges.\nWrite its plan there, starting with whose direction it started from in its Why; create its items there with `atelier new \"<title>\" --in {id}`, and commit with Git. Then run `atelier submit` here for its two plan reviews.\n"
     )
 }
 
@@ -888,6 +889,57 @@ pub fn records_submitted(branch: &str, forge: &str) -> String {
     )
 }
 
+/// What `check` says of the missions `ids`, whose Why is empty.
+pub fn why_unwritten(ids: &[&str]) -> String {
+    ids.iter()
+        .map(|id| format!("Mission {id}'s Why is empty: it says why the mission is wanted and whose direction it started from: the conversation or the agreed proposal it came from.\n"))
+        .collect()
+}
+
+/// `submit` on records branch `branch`, whose copy fetched from `remote`
+/// at `tip` has commits this checkout lacks.
+pub fn records_behind(branch: &str, remote: &str, tip: &str) -> String {
+    format!(
+        "`atelier submit` refused; nothing changed.\n{remote}/{branch} is at {}, which this checkout does not have, as after a reviewer pushed its review file there. A submit from here would leave it out.\nThen: git pull --no-rebase {remote} {branch}\n",
+        short(tip)
+    )
+}
+
+/// The title and body of the pull request of `branch`, which proposes or
+/// changes the plans of `plans`.
+pub fn plan_pull_request_text(
+    branch: &str,
+    plans: &[(String, u32)],
+    base: &str,
+) -> (String, String) {
+    let ids: Vec<&str> = plans.iter().map(|(id, _)| id.as_str()).collect();
+    (
+        format!("{branch}: the plan of {}", ids.join(", ")),
+        format!("The plan of mission {}, on {branch}. `atelier merge` merges it into {base} once two plan reviews, by threads that are not its planners, approve the plan its head holds.", ids.join(", ")),
+    )
+}
+
+/// `submit` of `branch`, at commit `head`, which proposes or changes the
+/// plans of `plans`, each with the round of plan review it opens.
+pub fn plan_submitted(branch: &str, plans: &[(String, u32)], head: &str, forge: &str) -> String {
+    let forge = match forge.is_empty() {
+        true => "No forge is configured, so nothing was pushed.\n".to_string(),
+        false => forge.to_string(),
+    };
+    let mut text = String::new();
+    let mut tasks = Vec::new();
+    for (id, round) in plans {
+        text += &format!("Submitted the plan of mission {id} on {branch}, at commit {}, for round {round} of plan review. You are one of its planners, so you do not review it.\n", short(head));
+        let task = format!("In a checkout of your own detached at commit {head}, run atelier review {id} and follow what it prints.");
+        tasks.push(task.clone());
+        tasks.push(task);
+    }
+    text += &forge;
+    text += &format!("Give each reviewer its own checkout at that commit, as `git worktree add --detach <path> {head}` makes one, so that neither sees the other's review.\n");
+    let then = format!("Then wait for both verdicts. Each reviewer pushes its review file to {branch}; once two approve, bring them here with `git pull`, and run `atelier merge`. If either asks for changes, change the plan, commit, and run `atelier submit` again for the next round.");
+    text + &handoff("Each of two reviewers", &tasks, &then)
+}
+
 /// The title and body of a records branch's pull request.
 pub fn records_pull_request_text(branch: &str, base: &str) -> (String, String) {
     (
@@ -1127,6 +1179,44 @@ pub struct PlanBrief<'a> {
     pub changed: Vec<String>,
     pub carried: &'a [Carried],
     pub path: &'a str,
+    /// Where the review file goes once it is committed.
+    pub landing: &'a Landing,
+}
+
+/// Where a plan review is pushed once committed: the branch of the plan,
+/// on the forge's remote, or in this clone, where that branch may be
+/// checked out; `None` for an amendment, whose backlog branch the review
+/// cannot know.
+pub struct Landing {
+    pub branch: Option<String>,
+    pub remote: Option<String>,
+    /// The checkout of the branch, in a clone with no remote.
+    pub checkout: Option<std::path::PathBuf>,
+}
+
+impl Landing {
+    /// The commands that put the committed review on its branch, the push
+    /// first and then the one for a push the other reviewer got ahead of.
+    pub fn commands(&self) -> String {
+        let Some(branch) = &self.branch else {
+            return "Push it to the backlog branch the amendment of the plan is on: git push <remote> HEAD:refs/heads/<branch>\nIf the push is refused because the other reviewer pushed first, take theirs and push again: git pull --rebase <remote> <branch> && git push <remote> HEAD:refs/heads/<branch>\n".into();
+        };
+        let (push, behind) = match (&self.remote, &self.checkout) {
+            (Some(remote), _) => (
+                format!("git push {remote} HEAD:refs/heads/{branch}"),
+                format!("git pull --rebase {remote} {branch} && git push {remote} HEAD:refs/heads/{branch}"),
+            ),
+            (None, Some(path)) => {
+                let land = format!("git -C {} merge --ff-only \"$(git rev-parse HEAD)\"", quoted(&path.display().to_string()));
+                (land.clone(), format!("git rebase {branch} && {land}"))
+            }
+            (None, None) => (
+                format!("git push . HEAD:refs/heads/{branch}"),
+                format!("git rebase {branch} && git push . HEAD:refs/heads/{branch}"),
+            ),
+        };
+        format!("Push it to {branch}: {push}\nIf that is refused because the other reviewer got there first, put your commit after theirs and push again; your files differ, so this cannot conflict: {behind}\n")
+    }
 }
 
 pub fn plan_brief(brief: &PlanBrief) -> String {
@@ -1169,7 +1259,7 @@ pub fn plan_brief(brief: &PlanBrief) -> String {
         brief.carried.len() + 1,
         "the mission starts",
         "writes it, changing no status, and prints the Git command that commits it alone",
-    ) + "Run that command, push the commit to the branch of the plan you reviewed, and tell whoever started you the commit. Your review is then done.\n"
+    ) + "No command commits or pushes your review: you do, with Git. Run the command `verdict` prints, which commits the file alone, then push the commit to the branch of the plan:\n" + &brief.landing.commands() + "Tell whoever started you the commit. Your review is then done.\n"
 }
 
 pub fn plan_not_committed(id: &str, commit: &str, commit_line: &str) -> String {
@@ -1192,11 +1282,24 @@ pub fn plan_verdict_recorded(
     verdict: Verdict,
     path: &str,
     commit_line: &str,
+    landing: &Landing,
 ) -> String {
     format!(
-        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n",
-        verdict_name(verdict)
+        "Recorded your verdict on the plan of mission {id}, round {round}: {}. Wrote, and did not commit:\n  {path}\nCommit it alone, and push it to the branch of the plan you reviewed; your review is done once it is there. Tell whoever started you the commit, and stop.\nThen: {commit_line}\n{}",
+        verdict_name(verdict),
+        landing.commands(),
     )
+}
+
+/// `review` of mission `id`'s plan by one of its planners.
+pub fn planner_reviews(id: &str, caller: &Thread) -> String {
+    format!(
+        "`atelier review {id}` refused; nothing changed.\nYou ({caller}) are a planner of mission {id}, and a planner of a mission never reviews its plan: its two reviews are what let it merge, so each comes from a thread that did not write it.\nStart two other threads to review it, as `atelier submit` on the mission's branch says.\n"
+    )
+}
+
+pub fn rule_planner_reviews(id: &str) -> String {
+    format!("A planner of mission {id} does not review its plan")
 }
 
 /// `held` is the paths of the plan reviews without a verdict the caller
@@ -1250,6 +1353,37 @@ pub fn unknown_refused(command: &str, id: &str) -> String {
 /// `kind` is "item" or "mission". `started` says the item had a branch.
 pub fn dropped(id: &str, kind: &str, reason: &str) -> String {
     format!("Dropped {kind} {id}: {reason}\n")
+}
+
+/// `drop` of agreed mission `id`, written on `branch`: the stop counts once
+/// that branch merges.
+pub fn dropped_mission(id: &str, branch: &str, reason: &str) -> String {
+    format!(
+        "Dropped mission {id}: {reason}\nIt stops nothing until it is published: once {branch} merges, `start` and a take-over of its items, and the merge of any of them, are refused in every clone that has fetched. Until then `status` and `show` say the stop is not published.\n"
+    )
+}
+
+/// `drop` of mission `id`'s proposed plan, written on its branch `branch`,
+/// which is pushed to `remote` where one is configured.
+pub fn dropped_plan(id: &str, branch: &str, reason: &str, remote: Option<&str>) -> String {
+    let publish = match remote {
+        Some(remote) => format!(
+            "It stops nothing until it is published: commit it, push the branch (`git push {remote} {branch}`) and close its pull request (`gh pr close {branch}`). Its branch is never merged."
+        ),
+        None => "It stops nothing until it is committed. Its branch is never merged.".into(),
+    };
+    format!("Dropped the proposed plan of mission {id}: {reason}\n{publish}\n")
+}
+
+/// `command` on mission `id`, which is proposed and not on the base `base`.
+pub fn mission_proposed(command: &str, id: &str, base: &str) -> String {
+    format!(
+        "`atelier {command} {id}` refused; nothing written.\nMission {id} is proposed: {base}'s last commit does not have it open. `atelier {command}` runs on an agreed mission, whose plan has merged after two approving plan reviews.\n"
+    )
+}
+
+pub fn rule_agreed(command: &str, id: &str) -> String {
+    format!("`atelier {command}` runs on an agreed mission, and {id} is proposed")
 }
 
 /// `drop` of started item `id`, written on its branch `branch`, which is
@@ -1583,12 +1717,51 @@ pub fn records_code(branch: &str, base: &str, code: &[String]) -> String {
 }
 
 /// `merge` of a records branch that adds a mission or changes a plan.
-pub fn records_plan(branch: &str, planned: &[(String, String)]) -> String {
-    let mut text = format!("`atelier merge` refused; nothing changed.\nA mission's plan needs its plan reviews before it merges, and {branch}:\n");
-    for (id, what) in planned {
-        text += &format!("  {what}, of mission {id}\n");
+/// `merge` of `branch`, which adds a mission or changes a plan, refused
+/// for each mission in `unapproved`, with what the branch changes of it,
+/// while fewer than two plan reviews approve the plan its head holds.
+pub fn plan_unapproved(
+    branch: &str,
+    unapproved: &[(String, Approvals)],
+    remote: Option<&str>,
+) -> String {
+    let mut text = format!("`atelier merge` refused; nothing changed.\nA new mission or a changed plan merges once {APPROVALS} plan reviews of its current round, by threads that are not its planners, approve the plan the branch's head holds, and {branch} has fewer:\n");
+    for (what, approvals) in unapproved {
+        let id = &approvals.id;
+        text += &format!("  Mission {id}: {branch} {what}.\n");
+        if approvals.reviews.is_empty() {
+            text += "    Its plan has no review.\n";
+        }
+        for review in &approvals.reviews {
+            let by = review
+                .by
+                .as_ref()
+                .map_or("nobody".to_string(), |t| t.to_string());
+            let why = match &review.not {
+                None => "approves, and counts".to_string(),
+                Some(NotCounted::NoVerdict) => "has no verdict yet".into(),
+                Some(NotCounted::Changes) => "asks for changes".into(),
+                Some(NotCounted::Planner) => "approves, and does not count: its reviewer is a planner of the mission".into(),
+                Some(NotCounted::SameReviewer) => "approves, and does not count: its reviewer's other approval of the round counts already".into(),
+                Some(NotCounted::Unknown) => format!("approves {}, which is not in this clone, so it does not count", short(&review.commit)),
+                Some(NotCounted::Stale(changed)) => format!("approves {}, and does not count: the plan has changed since ({})", short(&review.commit), changed.join(", ")),
+            };
+            text += &format!(
+                "    Round {}, review {} by {by}: {why}.\n",
+                approvals.round, review.name
+            );
+        }
+        text += &format!("    {} of {APPROVALS} count.\n", approvals.counted());
     }
-    text + "The merge of a plan and its reviews comes with atelier-2vdq; until then, take these changes off this branch.\n"
+    let fetch = match remote {
+        Some(remote) => format!(" Reviewers push their files to {branch}; fetch them with `git pull {remote} {branch}` first if they are there."),
+        None => String::new(),
+    };
+    text + &format!("Run `atelier submit` here to open the next round of plan reviews, and start two reviewers, each in a checkout of its own at the commit submitted.{fetch}\n")
+}
+
+pub fn rule_plan_approved(id: &str) -> String {
+    format!("{APPROVALS} plan reviews by threads that are not its planners approve the plan of mission {id} its head holds")
 }
 
 /// `merge` of a records branch that brings `started`, items in a started
@@ -1603,10 +1776,6 @@ pub fn records_started(branch: &str, started: &[(String, Status)]) -> String {
 
 pub fn rule_records_started(branch: &str) -> String {
     format!("{branch} brings no item to the base in a started status")
-}
-
-pub fn rule_records_plan(branch: &str) -> String {
-    format!("{branch} adds no mission and changes no mission's plan")
 }
 
 pub fn records_dirty(branch: &str, paths: &[String]) -> String {

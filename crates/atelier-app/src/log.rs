@@ -44,6 +44,9 @@ pub struct Logged {
 pub struct Move {
     pub from: Option<Status>,
     pub to: Status,
+    /// A mission's move, whose statuses the act table writes as an item's
+    /// ([`atelier_core::MissionStatus::status`]).
+    pub mission: bool,
 }
 
 /// What happened, with what changed.
@@ -597,6 +600,7 @@ impl Walker<'_, '_> {
             status: Move {
                 from,
                 to: Status::Done,
+                mission: false,
             },
             trivial: new.trivial.clone(),
         };
@@ -722,6 +726,7 @@ fn item_acts(old: Option<&Version>, new: &Version) -> (Acts, Option<Move>) {
     let moved = (from != Some(new.status)).then_some(Move {
         from,
         to: new.status,
+        mission: false,
     });
     let holder = new.implementers.holder().cloned();
     let mut acts = Vec::new();
@@ -778,11 +783,19 @@ fn mission_acts(old: Option<&Version>, new: &Version) -> Acts {
     let from = old.map(|old| old.status.status());
     let to = new.status.status();
     if from != Some(to) {
-        let status = Move { from, to };
+        let status = Move {
+            from,
+            to,
+            mission: true,
+        };
         match new.status {
-            MissionStatus::Ready => {
-                let by = new.ready.as_ref().map(|ready| ready.by.clone());
-                acts.push((None, Happened::Ready { by, status }));
+            // Made ready, in a record from when a mission had a go-ahead;
+            // an old draft written open by `submit` is no act of its own.
+            MissionStatus::Open => {
+                if let Some(ready) = new.ready.as_ref().filter(|_| from.is_some()) {
+                    let by = Some(ready.by.clone());
+                    acts.push((None, Happened::Ready { by, status }));
+                }
             }
             MissionStatus::Dropped => {
                 let reason = dropped.clone();

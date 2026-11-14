@@ -8,12 +8,12 @@ use crate::commands::Outcome;
 use crate::output;
 use anyhow::{anyhow, Result};
 use atelier_app::acts::{check, settle_refusals, Act, MissionFacts, Refusal, PLANNED, STARTED};
-use atelier_app::plan::{is_mission, misplaced, planned_facts, save, save_with, Belongs};
+use atelier_app::plan::{is_mission, misplaced, planned_facts, save, save_own, save_with, Belongs};
 use atelier_app::repo::{item_dir, mission_path};
 use atelier_app::{refused as refused_act, Located, Refused, Repo};
 use atelier_core::{
     Finding, FindingName, Item, ItemSchema, Mission, MissionSchema, MissionStatus, Priority,
-    SchemaVersion, Settlement, Status, Threads,
+    SchemaVersion, Settlement, Status, Thread, Threads,
 };
 use atelier_records::{put_first, validate_id, ReviewFile};
 
@@ -79,17 +79,19 @@ pub fn new(
     Ok(save(repo, "new", vec![item], Vec::new(), &said, &message)?.into())
 }
 
-/// A new draft mission `id` titled `title`, with its sections empty, which
-/// `start --mission` creates on its branch.
-pub fn draft_mission(id: &str, title: &str) -> Mission {
+/// A new mission `id` titled `title`, open, planned by `planner`, with its
+/// sections empty, which `start --mission` creates on its branch, where it
+/// is proposed until that branch merges.
+pub fn new_mission(id: &str, title: &str, planner: Thread) -> Mission {
     Mission {
         schema: MissionSchema::Mission,
         schema_version: SchemaVersion,
         id: id.to_string(),
         title: title.to_string(),
-        status: MissionStatus::Draft,
+        status: MissionStatus::Open,
         labels: Vec::new(),
         lead: None,
+        planners: Threads(vec![planner]),
         ready: None,
         created_at: chrono::Utc::now().into(),
         body: MISSION_BODY.to_string(),
@@ -236,6 +238,7 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
         let dir = repo.store().mission(id)?;
         let facts = MissionFacts {
             mission: &dir,
+            caller: &repo.caller,
             items: &[],
             review: None,
         };
@@ -245,9 +248,18 @@ pub fn drop(repo: &mut Repo, id: &str, reason: Option<&str>) -> Result<Outcome> 
         let mut mission = dir.mission;
         mission.status = MissionStatus::Dropped;
         mission.body = put_first(&mission.body, "Result", &line);
-        let said = output::dropped(id, "mission", reason);
+        // A stop counts once it is published: a proposed plan's by the
+        // push of its branch, an agreed mission's by the merge of the
+        // branch it is written on.
+        let agreed = agreed(repo, id)?;
+        let branch = repo.branch.clone().unwrap_or_default();
         let message = format!("Drop {id}");
-        return Ok(save(repo, "drop", Vec::new(), vec![mission], &said, &message)?.into());
+        if agreed {
+            let said = output::dropped_mission(id, &branch, reason);
+            return Ok(save(repo, "drop", Vec::new(), vec![mission], &said, &message)?.into());
+        }
+        let said = output::dropped_plan(id, &branch, reason, repo.remote());
+        return Ok(save_own(repo, "drop", vec![mission], &said, &message)?.into());
     }
     validate_id(id).map_err(|message| anyhow!(message))?;
     let located = repo.locate_planned(id)?;
@@ -348,7 +360,7 @@ fn carry_drop(repo: &mut Repo, id: &str, located: &Located, reason: &str) -> Res
     Ok(save(repo, "drop", vec![item], Vec::new(), &said, &message)?.into())
 }
 
-/// `close`: ends a ready mission whose items are all done or dropped and
+/// `close`: ends an agreed mission whose items are all done or dropped and
 /// whose Result is written, or, with its result, a draft or ready item that
 /// has no branch.
 pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome> {
@@ -358,6 +370,9 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
     if is_mission(repo, id) {
         if result.is_some() {
             return Ok(Outcome::Refused(output::close_mission_text(id)));
+        }
+        if let Some(refused) = not_agreed(repo, "close", id)? {
+            return Ok(refused.into());
         }
         let dir = repo.store().mission(id)?;
         let mut items = Vec::new();
@@ -370,6 +385,7 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
         }
         let facts = MissionFacts {
             mission: &dir,
+            caller: &repo.caller,
             items: &items,
             review: None,
         };
@@ -408,6 +424,24 @@ pub fn close(repo: &mut Repo, id: &str, result: Option<&str>) -> Result<Outcome>
     let said = output::closed(id, "item");
     let message = format!("Close {id}");
     Ok(save(repo, "close", vec![item], Vec::new(), &said, &message)?.into())
+}
+
+/// Whether mission `id` is agreed: on the base, as its last commit holds
+/// it, and not the old `draft`, which is proposed wherever it is read.
+pub fn agreed(repo: &mut Repo, id: &str) -> Result<bool> {
+    let base = repo.base_tip.clone();
+    let found = repo.mission_at(&base, id)?;
+    Ok(found.is_some_and(|dir| dir.mission.status != MissionStatus::Draft))
+}
+
+/// `command` on mission `id` refused while it is proposed, not agreed: it
+/// runs once the mission's plan has merged. A rule.
+pub fn not_agreed(repo: &mut Repo, command: &str, id: &str) -> Result<Option<Refused>> {
+    if agreed(repo, id)? {
+        return Ok(None);
+    }
+    let text = output::mission_proposed(command, id, &repo.base);
+    Ok(repo.skip.refuse([output::rule_agreed(command, id)], text))
 }
 
 /// How `new --from` or `drop` settles a deferred finding.
@@ -492,6 +526,7 @@ fn settle(repo: &mut Repo, command: &str, name: &str, how: Settle) -> Result<Out
         vec![review],
         &said,
         &message,
+        false,
     )?;
     Ok(saved.into())
 }

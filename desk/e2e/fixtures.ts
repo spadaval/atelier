@@ -164,7 +164,7 @@ export const z4crItems: ItemRow[] = [
 
 export const z4cr: MissionPage = {
   commit,
-  mission: mission("atelier-z4cr", "Build the Desk: the human's place to plan missions and read results, on the redesigned records", "ready", z4crItems),
+  mission: mission("atelier-z4cr", "Build the Desk: the human's place to plan missions and read results, on the redesigned records", "open", z4crItems),
   sections: [
     {
       heading: "Why",
@@ -246,11 +246,11 @@ export const z4cr: MissionPage = {
 const otherMissions: [string, string, MissionRow["status"], ItemRow[], Partial<MissionRow>?][] = [
   ["atelier-295u", "Give the gardener `atelier log` and a readiness checklist", "draft", [row("atelier-k1aa", "Write the log", "draft")]],
   ["atelier-k9rf", "Try a plan that has had no review", "draft", [row("atelier-k9r1", "Write the plan", "draft")]],
-  ["atelier-g6rp", "Ship Agent Factory from this repository", "ready", []],
+  ["atelier-g6rp", "Ship Agent Factory from this repository", "open", []],
   [
     "atelier-qr5s",
     "Move all five repositories and Agent Factory onto the new loop, one cutover per host",
-    "ready",
+    "open",
     [row("atelier-u1ko", "Delete the old workspace", "in_review", { reviewer: "codex-reviewer" }), row("atelier-wd1i", "Run the cutover on this host", "ready")],
   ],
 ];
@@ -567,7 +567,7 @@ export class World {
     if (request.act === "ready") {
       if (request.ids.join() !== "atelier-295u") return answers.goRefused;
       const page = this.missionPages["atelier-295u"];
-      page.mission = { ...page.mission, status: "ready", ready: { by: "sumeet", at } };
+      page.mission = { ...page.mission, status: "open", ready: { by: "sumeet", at } };
       page.can_ready = false;
       for (const r of this.inbox.repos) r.drafts = r.drafts.filter((m) => m.id !== "atelier-295u");
       return answers.go;

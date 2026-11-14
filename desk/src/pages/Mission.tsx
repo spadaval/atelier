@@ -24,7 +24,7 @@ import { countsLine, dateTime, finished, missionState, plural, shortCommit, shor
 
 /** Which mission a repository opens on: one with work in progress, else a ready one, else the first. */
 export function currentMission(missions: MissionRow[]): string | undefined {
-  return (missions.find((m) => m.in_progress) ?? missions.find((m) => m.status === "ready") ?? missions[0])?.id;
+  return (missions.find((m) => m.in_progress) ?? missions.find((m) => m.status === "open") ?? missions[0])?.id;
 }
 
 function MissionCard({ repo, mission, current }: { repo: string; mission: MissionRow; current: boolean }) {
@@ -50,7 +50,7 @@ function Rail({ repo, loaded, selected }: { repo: string; loaded: Loaded<Mission
   const body = loaded.data;
   const missions = body?.missions ?? [];
   const going = missions.filter((m) => m.in_progress);
-  const ready = missions.filter((m) => !m.in_progress && m.status === "ready");
+  const ready = missions.filter((m) => !m.in_progress && m.status === "open");
   const drafts = missions.filter((m) => m.status === "draft");
   const [showDrafts, setShowDrafts] = useState(true);
   return (

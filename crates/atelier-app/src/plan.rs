@@ -4,12 +4,12 @@
 //! the change belongs on, and the change reaches the base when that branch
 //! merges. Nothing is written in the base's own checkout.
 
-use crate::acts::{check, check_mission, row, Act, Facts, MissionFacts, Refusal, STARTED};
+use crate::acts::{check, row, Act, Facts, Refusal, STARTED};
 use crate::repo::{is_planning, item_dir, item_path, mission_dir, mission_path};
 use crate::skip::Refused;
 use crate::{git, say, Located, Repo};
 use anyhow::{anyhow, Result};
-use atelier_core::{Item, Mission, MissionStatus, Named, Ready, Status};
+use atelier_core::{Item, Mission, Named, Ready, Status};
 use atelier_records::{validate, validate_id, ItemDir, MissionDir, Problem, ReviewFile};
 use std::path::PathBuf;
 
@@ -22,9 +22,10 @@ pub struct Done {
     pub commit: Option<String>,
 }
 
-/// `ready`: marks each of `ids`, a draft item or mission in this checkout,
-/// ready, as `by` said, and writes it without committing; or refuses,
-/// writing nothing, when one is unknown or not a draft.
+/// `ready`: marks each of `ids`, a draft item in this checkout, ready, as
+/// `by` said, and writes it without committing; or refuses, writing
+/// nothing, when one is unknown, not a draft, or a mission, which needs no
+/// go-ahead.
 pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, Refused>> {
     if let Some(refused) = misplaced(repo, "ready", Belongs::Backlog)? {
         return Ok(Err(refused));
@@ -37,7 +38,6 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
         at: chrono::Utc::now().into(),
     };
     let (mut items, mut missions, mut unknown, mut refused) = (vec![], vec![], vec![], vec![]);
-    let mut reviewed = String::new();
     let mut named: Vec<&str> = Vec::new();
     for id in ids.iter().map(String::as_str) {
         if named.contains(&id) {
@@ -45,22 +45,7 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
         }
         named.push(id);
         if is_mission(repo, id) {
-            let dir = repo.store().mission(id)?;
-            let facts = MissionFacts {
-                mission: &dir,
-                items: &[],
-                review: None,
-            };
-            match check_mission(Act::ReadyMission, &facts) {
-                Ok(_) => {}
-                Err(Refusal::From { status, .. }) => refused.push((id, status)),
-                Err(other) => unreachable!("a mission's ready has no conditions: {other:?}"),
-            }
-            reviewed += &plan_reviewed(repo, &dir)?;
-            let mut mission = dir.mission;
-            mission.status = MissionStatus::Ready;
-            mission.ready = Some(ready.clone());
-            missions.push(mission);
+            missions.push(id);
             continue;
         }
         let located = match validate_id(id) {
@@ -85,11 +70,11 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
         item.ready = Some(ready.clone());
         items.push(item);
     }
-    if !unknown.is_empty() || !refused.is_empty() {
-        let text = say::ready_refused(&unknown, &refused);
+    if !unknown.is_empty() || !refused.is_empty() || !missions.is_empty() {
+        let text = say::ready_refused(&unknown, &refused, &missions);
         let from = row(Act::Ready).from;
         let rules = (refused.iter()).map(|(id, status)| say::rule_from(id, from, *status));
-        let refused = match unknown.is_empty() {
+        let refused = match unknown.is_empty() && missions.is_empty() {
             true => repo.skip.refuse(rules, text),
             false => Some(text),
         };
@@ -97,32 +82,9 @@ pub fn ready(repo: &mut Repo, ids: &[String], by: &str) -> Result<Result<Done, R
             return Ok(Err(refused));
         }
     }
-    let said = say::readied(&named, by) + &reviewed;
+    let said = say::readied(&named, by);
     let message = format!("Ready {}", named.join(", "));
-    save(repo, "ready", items, missions, &said, &message)
-}
-
-/// What `ready` says of a mission's plan reviews, for whoever says go:
-/// each review of the latest round with its verdict, and what in the plan
-/// changed since the commit it reviewed. None of it refuses anything.
-fn plan_reviewed(repo: &mut Repo, dir: &MissionDir) -> Result<String> {
-    let id = &dir.mission.id;
-    let Some(round) = dir.reviews.iter().map(|r| r.name.round).max() else {
-        return Ok(say::no_plan_review(id));
-    };
-    let latest: Vec<_> = dir
-        .reviews
-        .iter()
-        .filter(|r| r.name.round == round)
-        .collect();
-    let mut commits: Vec<&str> = latest.iter().map(|r| r.review.commit.as_str()).collect();
-    commits.sort();
-    commits.dedup();
-    let mut changed = Vec::new();
-    for commit in commits {
-        changed.push((commit, plan_changed(repo, id, commit)?));
-    }
-    Ok(say::plan_reviews(id, round, &latest, &changed))
+    save(repo, "ready", items, Vec::new(), &said, &message)
 }
 
 /// The paths of mission `id`'s plan, its directory less its reviews and
@@ -283,13 +245,38 @@ pub fn save(
     said: &str,
     message: &str,
 ) -> Result<Result<Done, Refused>> {
-    save_with(repo, command, items, missions, Vec::new(), said, message)
+    save_with(
+        repo,
+        command,
+        items,
+        missions,
+        Vec::new(),
+        said,
+        message,
+        false,
+    )
+}
+
+/// [`save`] of a record change whose `said` already says how it reaches
+/// the base, as the drop of a proposed plan, which is pushed and never
+/// merged.
+pub fn save_own(
+    repo: &Repo,
+    command: &str,
+    missions: Vec<Mission>,
+    said: &str,
+    message: &str,
+) -> Result<Result<Done, Refused>> {
+    let (items, reviews) = (Vec::new(), Vec::new());
+    save_with(repo, command, items, missions, reviews, said, message, true)
 }
 
 /// [`save`] without the commit, with `reviews` written too, and the Git
-/// command that commits what it wrote. A new item it creates is removed
-/// again when a later write fails, so a finding is never left untaken
-/// beside the item that took it.
+/// command that commits what it wrote; with `own`, `said` says how the
+/// change reaches the base. A new item it creates is removed again when a
+/// later write fails, so a finding is never left untaken beside the item
+/// that took it.
+#[allow(clippy::too_many_arguments)]
 pub fn save_with(
     repo: &Repo,
     command: &str,
@@ -298,6 +285,7 @@ pub fn save_with(
     reviews: Vec<ReviewFile>,
     said: &str,
     message: &str,
+    own: bool,
 ) -> Result<Result<Done, Refused>> {
     let paths = match checked(repo, command, &items, &missions, &reviews)? {
         Ok(paths) => paths,
@@ -335,6 +323,7 @@ pub fn save_with(
     // another item's finding, reaches the base in the item's merge; one
     // inside it, as its own drop, is the item's.
     let item = match repo.named() {
+        _ if own => say::Guidance::Own,
         Some(Named::Record(id)) if repo.root.join(item_path(&id)).exists() => {
             let own = format!("{}/", item_dir(&id));
             match paths.iter().all(|path| path.starts_with(&own)) {
@@ -414,4 +403,174 @@ fn checked(
         }
     }
     Ok(Ok(written.into_iter().map(|(_, shown)| shown).collect()))
+}
+
+/// The sections of `mission.md` that are part of a mission's plan. Its
+/// Result and its front matter are not.
+pub const PLAN_SECTIONS: [&str; 5] = ["Why", "Outcome", "Success criteria", "Scope", "Authority"];
+
+/// What of mission `id`'s plan differs between the commits `from` and
+/// `to`: each section of `mission.md` in [`PLAN_SECTIONS`], each other
+/// file of its directory but `notes.md` and its reviews, and, with
+/// `items`, as while the mission is not on the base, each path in the
+/// directory of an item of the mission at either commit. Each is named as
+/// a reader is told it: "its Why", or the path.
+pub fn plan_diff(
+    repo: &mut Repo,
+    id: &str,
+    (from, to): (&str, &str),
+    items: bool,
+) -> Result<Vec<String>> {
+    let own = format!("{}/", mission_dir(id));
+    let mut found = Vec::new();
+    let (before, after) = (repo.mission_at(from, id)?, repo.mission_at(to, id)?);
+    match (&before, &after) {
+        (None, None) => {}
+        (None, Some(_)) => found.push(format!("{} is added", mission_path(id))),
+        (Some(_), None) => found.push(format!("{} is removed", mission_path(id))),
+        (Some(before), Some(after)) => {
+            for heading in PLAN_SECTIONS {
+                let text =
+                    |dir: &MissionDir| dir.section(heading).map(str::trim).map(str::to_string);
+                if text(before) != text(after) {
+                    found.push(format!("its {heading}"));
+                }
+            }
+        }
+    }
+    let notes = format!("{own}notes.md");
+    let reviews = format!("{own}reviews/");
+    for path in git::changed(&repo.root, from, to)? {
+        if let Some(rest) = path.strip_prefix(".atelier/items/") {
+            let Some(item) = rest.split('/').next().filter(|_| items) else {
+                continue;
+            };
+            // An item whose record at either commit does not read is
+            // counted.
+            let mut of_mission = |at: &str| {
+                repo.item_at(at, item).map_or(true, |dir| {
+                    dir.is_some_and(|d| d.item.mission.as_deref() == Some(id))
+                })
+            };
+            if of_mission(from) || of_mission(to) {
+                found.push(path);
+            }
+            continue;
+        }
+        let other = path.starts_with(&own)
+            && path != mission_path(id)
+            && path != notes
+            && !path.starts_with(&reviews);
+        if other {
+            found.push(path);
+        }
+    }
+    Ok(found)
+}
+
+/// Why a plan review of the current round does not count toward a merge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NotCounted {
+    NoVerdict,
+    Changes,
+    /// Its reviewer is one of the mission's planners.
+    Planner,
+    /// Its reviewer has an approval of the round counted already.
+    SameReviewer,
+    /// The commit it reviewed is not in this clone.
+    Unknown,
+    /// The plan changed since the commit it reviewed: these.
+    Stale(Vec<String>),
+}
+
+/// One review of a plan's current round, as `merge` counts it.
+#[derive(Debug, Clone)]
+pub struct Counted {
+    pub name: atelier_core::ReviewName,
+    pub by: Option<atelier_core::Thread>,
+    pub commit: String,
+    /// `None` when it counts.
+    pub not: Option<NotCounted>,
+}
+
+/// The approvals a merge of mission `id`'s plan at `head` has: each review
+/// of the current round, its latest, at `head`, and whether it counts. One
+/// counts when it approves, its reviewer is not a planner of the mission
+/// as `head` holds it nor counted already, and the plan as its commit
+/// holds it is the plan at `head`, items included when `on_base` is false.
+pub struct Approvals {
+    pub id: String,
+    /// The current round; 0 when the plan has no review.
+    pub round: u32,
+    pub reviews: Vec<Counted>,
+}
+
+/// How many approving plan reviews a plan needs to merge.
+pub const APPROVALS: usize = 2;
+
+impl Approvals {
+    pub fn counted(&self) -> usize {
+        self.reviews.iter().filter(|r| r.not.is_none()).count()
+    }
+
+    pub fn enough(&self) -> bool {
+        self.counted() >= APPROVALS
+    }
+}
+
+/// The [`Approvals`] of mission `id`'s plan at the commit `head`.
+pub fn approvals(repo: &mut Repo, id: &str, head: &str, on_base: bool) -> Result<Approvals> {
+    let Some(mission) = repo.mission_at(head, id)? else {
+        return Ok(Approvals {
+            id: id.to_string(),
+            round: 0,
+            reviews: Vec::new(),
+        });
+    };
+    let round = mission
+        .reviews
+        .iter()
+        .map(|r| r.name.round)
+        .max()
+        .unwrap_or(0);
+    let planners = &mission.mission.planners;
+    let mut reviews: Vec<Counted> = Vec::new();
+    for file in mission.reviews.iter().filter(|r| r.name.round == round) {
+        let by = file.review.reviewers.holder().cloned();
+        let commit = file.review.commit.clone();
+        let not = match file.review.verdict {
+            None => Some(NotCounted::NoVerdict),
+            Some(atelier_core::Verdict::Changes) => Some(NotCounted::Changes),
+            Some(atelier_core::Verdict::Approve) => {
+                let counted = |r: &Counted| r.not.is_none() && r.by == by;
+                if file
+                    .review
+                    .reviewers
+                    .0
+                    .iter()
+                    .any(|t| planners.0.contains(t))
+                {
+                    Some(NotCounted::Planner)
+                } else if reviews.iter().any(counted) {
+                    Some(NotCounted::SameReviewer)
+                } else if !git::has_commit(&repo.root, &commit)? {
+                    Some(NotCounted::Unknown)
+                } else {
+                    let changed = plan_diff(repo, id, (&commit, head), !on_base)?;
+                    (!changed.is_empty()).then_some(NotCounted::Stale(changed))
+                }
+            }
+        };
+        reviews.push(Counted {
+            name: file.name.clone(),
+            by,
+            commit,
+            not,
+        });
+    }
+    Ok(Approvals {
+        id: id.to_string(),
+        round,
+        reviews,
+    })
 }

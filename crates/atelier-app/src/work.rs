@@ -57,7 +57,7 @@ impl Entry {
 /// `entries`. That is shown, never stored.
 pub fn in_progress(mission: &MissionDir, entries: &[Entry]) -> bool {
     let id = &mission.mission.id;
-    mission.mission.status == MissionStatus::Ready
+    mission.mission.status == MissionStatus::Open
         && entries
             .iter()
             .any(|e| e.mission.as_ref() == Some(id) && STARTED.contains(&e.status))

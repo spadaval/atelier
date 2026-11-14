@@ -23,7 +23,7 @@ fn write_mission(checkout: &Path, id: &str, status: &str) {
         path,
         format!(
             "---\nschema: atelier.mission\nschema_version: 3\nid: {id}\ntitle: Greet\n\
-             status: {status}\nlabels: []\nlead: null\nready: null\n\
+             status: {status}\nlabels: []\nlead: null\nplanners:\n- p1\nready: null\n\
              created_at: 2026-11-10T09:00:00Z\n---\n\n## Outcome\n\nGreetings.\n"
         ),
     )
@@ -113,7 +113,7 @@ fn new_writes_a_draft_item_commits_nothing_and_says_how_to_commit() {
         .to_string();
     assert!(
         mission.stdout.starts_with(&format!(
-            "Created draft mission {mission_id} on branch {mission_id}, with empty sections to write.\n"
+            "Created proposed mission {mission_id} on branch {mission_id}, with empty sections to write and you as its planner. It is agreed once that branch merges.\n"
         )),
         "{}",
         mission.stdout
@@ -129,7 +129,8 @@ fn new_writes_a_draft_item_commits_nothing_and_says_how_to_commit() {
         format!("Plan mission {mission_id}\n\n{}", mission_path(&mission_id))
     );
     let text = read(&root, &mission_path(&mission_id));
-    assert_eq!(front(&text, "status"), "draft");
+    assert_eq!(front(&text, "status"), "open");
+    assert_eq!(front(&text, "planners"), "p1");
     assert_eq!(front(&text, "title"), "Greet everyone");
     assert!(text.ends_with(
         "---\n\n## Why\n\n## Outcome\n\n## Success criteria\n\n## Scope\n\n## Authority\n\n## Result\n"
@@ -445,26 +446,6 @@ fn ready_marks_each_named_draft_with_who_and_when_changes_no_other_item_and_comm
     commit_all(&root, "Plan");
     let before = head_and_index(&root);
 
-    // Readying the mission readies none of its items.
-    let run = atelier(&root, "p1", &["ready", MISSION, "--by", "sumeet"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
-    assert_eq!(wrote(&run.stdout), [mission_path(MISSION)]);
-    let mission = read(&root, &mission_path(MISSION));
-    assert_eq!(front(&mission, "status"), "ready");
-    assert!(
-        mission.contains("ready:\n  by: sumeet\n  at: "),
-        "{mission}"
-    );
-    assert_eq!(head_and_index(&root), before);
-    assert_eq!(git(&root, &["diff", "--name-only"]), mission_path(MISSION));
-    assert_eq!(
-        then(&run.stdout),
-        format!(
-            "git add -- {0} && git commit -m \"Ready {MISSION}\" -- {0}",
-            mission_path(MISSION)
-        )
-    );
-
     // Several IDs at once; one named twice is readied once.
     let run = atelier(
         &root,
@@ -490,7 +471,7 @@ fn ready_marks_each_named_draft_with_who_and_when_changes_no_other_item_and_comm
         .map(str::to_string)
         .collect();
     changed.sort();
-    let mut expected = vec![mission_path(MISSION), item_path(ID), item_path("demo-b10c")];
+    let mut expected = vec![item_path(ID), item_path("demo-b10c")];
     expected.sort();
     assert_eq!(changed, expected);
 }
@@ -522,8 +503,9 @@ fn ready_writes_nothing_when_any_named_id_is_unknown_or_not_a_draft() {
         "`atelier ready` refused; nothing changed.\n  \
          demo-zzzz: no item or mission has this ID in this checkout or on a branch\n  \
          not-an-id!: no item or mission has this ID in this checkout or on a branch\n  \
+         demo-m1ss: it is a mission, and a mission needs no go-ahead: its plan reaches the \
+         base once two plan reviews approve it, and its items are made ready one by one\n  \
          demo-r3dy: it is ready, and `atelier ready` readies a draft\n  \
-         demo-m1ss: it is ready, and `atelier ready` readies a draft\n  \
          demo-d0ne: it is done, and `atelier ready` readies a draft\n\
          Run it again with only the drafts to make ready.\n"
     );
@@ -642,7 +624,8 @@ fn status_names_each_record_change_not_committed_and_each_commit_not_pushed() {
 }
 
 #[test]
-fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
+fn start_needs_the_items_mission_agreed_and_ready_refuses_a_mission() {
+    // An old `draft` on the base is proposed: nobody starts its items.
     let scratch = Scratch::new(&[(ID, "ready")]);
     let root = scratch.root();
     write_mission(&root, MISSION, "draft");
@@ -655,8 +638,8 @@ fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
         run.stderr,
         format!(
             "`atelier start {ID}` refused; nothing changed.\nTo start it:\n  [ ] Mission \
-             {MISSION} is ready (it is draft; a planner makes it ready with: atelier ready \
-             {MISSION} --by <name>)\nThen: atelier start {ID}\n{SKIP}"
+             {MISSION} is agreed (its record on the base is an old `draft`, which is proposed: \
+             its plan merges once two plan reviews approve it)\nThen: atelier start {ID}\n{SKIP}"
         )
     );
     assert!(!branch_exists(&root, ID));
@@ -664,18 +647,37 @@ fn start_is_refused_until_the_items_mission_is_ready_and_names_ready() {
     let status = atelier(&root, "t1", &["status"]).stdout;
     assert!(
         status.ends_with(
-            "1 ready item cannot start yet: 1 is in a mission that is not ready. \
+            "1 ready item cannot start yet: 1 is in a mission that is dropped or not agreed. \
              See it with: atelier list\nNo ready item can start now.\n"
         ),
         "{status}"
     );
-
+    // A mission needs no go-ahead, and `ready` refuses one.
+    git(&root, &["switch", "-q", "-c", "backlog/go", "main"]);
+    let refused = atelier(&root, "p1", &["ready", MISSION, "--by", "s"]);
+    assert_eq!(refused.code, 1);
     assert_eq!(
-        planned(&root, "p1", &["ready", MISSION, "--by", "s"]).code,
-        0
+        refused.stderr,
+        format!(
+            "`atelier ready` refused; nothing changed.\n  {MISSION}: it is a mission, and a \
+             mission needs no go-ahead: its plan reaches the base once two plan reviews approve \
+             it, and its items are made ready one by one\nRun it again with only the drafts to \
+             make ready.\n"
+        )
     );
-    let run = atelier(&root, "t1", &["start", ID]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+
+    // Open on the base, as once its plan merged, its items start; the old
+    // `ready` reads as open.
+    for status in ["open", "ready"] {
+        write_mission(&root, MISSION, status);
+        commit_all(&root, "Agree");
+        let run = atelier(&root, "t1", &["start", ID]);
+        assert_eq!(run.code, 0, "{status}: {}", run.stderr);
+        git(&root, &["checkout", "-q", "--detach", "main"]);
+        git(&root, &["branch", "-qD", ID]);
+    }
 }
 
 #[test]
@@ -689,7 +691,7 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     commit_all(&root, "Plan");
 
     let others = "2 other ready items cannot start yet: 1 waits on a blocker that is not done, \
-                  1 is in a mission that is not ready. See them with: atelier list\n";
+                  1 is in a mission that is dropped or not agreed. See them with: atelier list\n";
     assert_eq!(
         atelier(&root, "t1", &["status"]).stdout,
         format!(
@@ -708,7 +710,7 @@ fn status_on_the_base_lists_only_what_can_start_and_counts_the_rest_by_cause() {
     let base = scratch.worktree("base");
     git(&base, &["switch", "-q", "main"]);
     let count = "2 ready items cannot start yet: 1 waits on a blocker that is not done, \
-                 1 is in a mission that is not ready. See them with: atelier list\n";
+                 1 is in a mission that is dropped or not agreed. See them with: atelier list\n";
     assert_eq!(
         atelier(&base, "t2", &["status"]).stdout,
         format!(
@@ -875,10 +877,10 @@ fn the_printed_commit_works_from_a_subdirectory_and_with_paths_a_shell_would_spl
             "main",
         ],
     );
-    write_mission(&base, MISSION, "draft");
+    write_mission(&base, MISSION, "open");
     join_mission(&base, ID, MISSION);
     commit_all(&base, "Plan");
-    let run = atelier(&base, "p1", &["ready", ID, MISSION, "--by", "s"]);
+    let run = atelier(&base, "p1", &["ready", ID, "--by", "s"]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     shell(&base, &then(&run.stdout));
     let document = format!(".atelier/missions/{MISSION}/design notes 'v2'.md");
@@ -1063,7 +1065,7 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
         assert_eq!(run.code, 1, "{id}");
         assert!(
             run.stderr.contains(&format!(
-                "  [ ] Mission {MISSION} is ready (it was dropped, so none of its items starts)\n"
+                "  [ ] Mission {MISSION} is not dropped (it was stopped, so none of its items starts or merges)\n"
             )),
             "{}",
             run.stderr
@@ -1076,8 +1078,8 @@ fn a_dropped_mission_changes_no_item_and_start_on_one_says_it_was_dropped() {
     assert_eq!(
         run.stderr,
         format!(
-            "Mission {MISSION} is dropped, and `atelier drop` runs on a mission that is draft, \
-             ready. Nothing changed.\nNothing is left to do on it.\n{SKIP}"
+            "Mission {MISSION} is dropped, and `atelier drop` runs on a mission that is draft \
+             or open. Nothing changed.\nNothing is left to do on it.\n{SKIP}"
         )
     );
 }
@@ -1433,8 +1435,49 @@ fn close_ends_an_item_with_no_branch_with_its_result_and_names_merge_for_a_start
     assert!(!branch_exists(&root, ID));
 }
 
+/// The command the line of `output` that starts with `prefix` gives
+/// after its last `: `.
+fn command_after(output: &str, prefix: &str) -> String {
+    let line = output
+        .lines()
+        .find(|line| line.starts_with(prefix))
+        .unwrap_or_else(|| panic!("no line {prefix:?} in {output}"));
+    line.rsplit_once(": ").unwrap().1.to_string()
+}
+
+/// Reviews mission `id`'s plan as `thread` in `at`, a checkout of its own
+/// at the commit submitted, approves it and commits the file with the line
+/// `verdict` printed, and lands it on the mission's branch with the
+/// commands it printed: the push, and where the other reviewer got there
+/// first, the one after it. Returns whether that second one was needed.
+fn review_and_land(at: &Path, thread: &str, id: &str) -> bool {
+    let run = atelier(at, thread, &["review", id]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout
+            .contains("No command commits or pushes your review: you do, with Git."),
+        "{}",
+        run.stdout
+    );
+    let run = common::verdict(at, thread, &["verdict", "approve"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let push = command_after(&run.stdout, &format!("Push it to {id}: "));
+    let pushed = identity(Command::new("sh").current_dir(at).args(["-c", &push]))
+        .output()
+        .unwrap();
+    if pushed.status.success() {
+        return false;
+    }
+    let again = command_after(
+        &run.stdout,
+        "If that is refused because the other reviewer got there first",
+    );
+    shell(at, &again);
+    true
+}
+
 #[test]
-fn a_mission_goes_from_draft_through_its_items_to_closed() {
+fn a_mission_goes_from_its_branch_through_two_plan_reviews_and_its_items_to_closed() {
     let scratch = Scratch::new(&[]);
     let root = scratch.root();
     let started = atelier(&root, "p1", &["start", "--mission", "Greet everyone"]);
@@ -1457,37 +1500,106 @@ fn a_mission_goes_from_draft_through_its_items_to_closed() {
             "## Done when\n\n- [ ] `hello.txt` says hello.\n",
         );
     fs::write(&path, defined).unwrap();
+    let why = root.join(mission_path(&mission));
+    let text = fs::read_to_string(&why).unwrap();
+    fs::write(
+        &why,
+        text.replace("## Why\n", "## Why\n\nSumeet asked, in conversation.\n"),
+    )
+    .unwrap();
     commit_all(&root, "Define it");
-    // A plan's merge, with its reviews, is atelier-2vdq's; `merge` refuses
-    // it until then, so a plain merge stands in for it here.
+
+    // Unreviewed, it does not merge, and says what it lacks.
     let refused = atelier(&root, "p1", &["merge"]);
     assert_eq!(refused.code, 1, "{}", refused.stdout);
     assert!(
-        refused
-            .stderr
-            .contains(&format!("  adds the mission, of mission {mission}\n")),
+        refused.stderr.contains(&format!(
+            "  Mission {mission}: {mission} adds the mission.\n    Its plan has no review.\n    0 of 2 count.\n"
+        )),
         "{}",
         refused.stderr
     );
+    // Proposed, it is neither led nor closed.
+    for command in ["lead", "close"] {
+        let run = atelier(&root, "p1", &[command, &mission]);
+        assert_eq!(run.code, 1, "{command}");
+        assert!(
+            run.stderr.contains(&format!(
+                "Mission {mission} is proposed: main's last commit does not have it open."
+            )),
+            "{}",
+            run.stderr
+        );
+    }
+
+    // Submitted, it names the round and starts two reviewers.
+    let submitted = atelier(&root, "p1", &["submit"]);
+    assert_eq!(submitted.code, 0, "{}", submitted.stderr);
+    let head = tip(&root, "HEAD");
+    assert!(
+        submitted.stdout.starts_with(&format!(
+            "Submitted the plan of mission {mission} on {mission}, at commit {}, for round 1 of plan review.",
+            &head[..7]
+        )),
+        "{}",
+        submitted.stdout
+    );
+    assert!(
+        submitted.stdout.contains(&format!(
+            "  In a checkout of your own detached at commit {head}, run atelier review {mission} and follow what it prints.\n"
+        )),
+        "{}",
+        submitted.stdout
+    );
+    // A planner never reviews its own plan.
+    let own = atelier(&root, "p1", &["review", &mission]);
+    assert_eq!(own.code, 1);
+    assert!(
+        own.stderr
+            .contains(&format!("You (p1) are a planner of mission {mission}")),
+        "{}",
+        own.stderr
+    );
+
+    // Two reviewers, each in a checkout of its own at the commit submitted,
+    // land their files on the branch; the second after the first.
+    let mut after = Vec::new();
+    for (name, thread) in [("r1-at", "r1"), ("r2-at", "r2")] {
+        let at = scratch.dir.path().join(name);
+        git(
+            &root,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                at.to_str().unwrap(),
+                &head,
+            ],
+        );
+        let run = atelier(&at, thread, &["review", &mission]);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        after.push(at);
+    }
+    let landed: Vec<bool> = after
+        .iter()
+        .zip(["r1", "r2"])
+        .map(|(at, thread)| review_and_land(at, thread, &mission))
+        .collect();
+    assert_eq!(landed, [false, true]);
+    assert_eq!(files_in(&root, &plan_reviews(&mission)).len(), 2);
+    assert_eq!(git(&root, &["status", "--porcelain"]), "");
+
+    let merged = atelier(&root, "p1", &["merge"]);
+    assert_eq!(merged.code, 0, "{}{}", merged.stdout, merged.stderr);
     git(&root, &["checkout", "-q", "--detach", "main"]);
-    git(
+    let text = git(
         &root,
-        &["merge", "-q", "--no-ff", "-m", "Merge the plan", &mission],
+        &["show", &format!("main:{}", mission_path(&mission))],
     );
-    git(&root, &["branch", "-f", "main", "HEAD"]);
-    let run = planned(&root, "p1", &["close", &mission]);
-    assert_eq!(run.code, 1);
-    assert_eq!(
-        run.stderr,
-        format!(
-            "Mission {mission} is draft, and `atelier close` runs on a mission that is ready. \
-             Nothing changed.\nA planner makes it ready with: atelier ready {mission} --by <name>\n{SKIP}"
-        )
-    );
-    let ready = plan(&root, &["ready", &mission, &a, "--by", "sumeet"]);
-    assert!(ready
-        .stdout
-        .contains(&format!("Mission {mission}'s plan has no review.\n")));
+    assert_eq!(front(&text, "status"), "open");
+    // Agreed, its items are made ready one by one, with no go for it.
+    plan(&root, &["ready", &a, "--by", "sumeet"]);
 
     // The item's work, through review to its merge.
     let work = scratch.worktree("work");
@@ -1656,12 +1768,16 @@ fn review_of_a_mission_opens_a_plan_review_and_its_verdict_commits_only_that_fil
             "Recorded your verdict on the plan of mission {MISSION}, round 1: changes requested. \
              Wrote, and did not commit:\n  {file}\nCommit it alone, and push it to the branch of \
              the plan you reviewed; your review is done once it is there. Tell whoever started \
-             you the commit, and stop.\nThen: git add -- {file} && git commit -m \"{message}\" -- {file}\n"
+             you the commit, and stop.\nThen: git add -- {file} && git commit -m \"{message}\" -- {file}\n\
+             Push it to {MISSION}: git push . HEAD:refs/heads/{MISSION}\nIf that is refused because \
+             the other reviewer got there first, put your commit after theirs and push again; your \
+             files differ, so this cannot conflict: git rebase {MISSION} && git push . \
+             HEAD:refs/heads/{MISSION}\n"
         )
     );
     // Nothing is committed until the reviewer runs that line.
     assert_eq!(tip(&root, "HEAD"), head);
-    shell(&root, &then(&run.stdout));
+    run_then(&root, &run.stdout);
     assert_eq!(
         git(&root, &["show", "--name-only", "--format=", "HEAD"]),
         *file
@@ -1800,10 +1916,12 @@ fn a_plan_review_shows_the_plan_as_its_commit_holds_it_and_names_what_is_not_com
 }
 
 #[test]
-fn two_blind_plan_reviews_each_commit_their_file_and_ready_says_what_they_found() {
-    let scratch = Scratch::new(&[(ID, "draft")]);
+fn two_blind_plan_reviews_each_commit_their_file_and_merge_counts_only_what_still_holds() {
+    let scratch = Scratch::new(&[]);
     let root = scratch.root();
-    write_mission(&root, MISSION, "draft");
+    git(&root, &["switch", "-q", "-c", MISSION, "main"]);
+    write_mission(&root, MISSION, "open");
+    write_item(&root, ID, "draft", &[], &[], "");
     join_mission(&root, ID, MISSION);
     commit_all(&root, "Plan");
     let reviewed = tip(&root, "HEAD");
@@ -1811,7 +1929,18 @@ fn two_blind_plan_reviews_each_commit_their_file_and_ready_says_what_they_found(
     // Each reviewer in a detached worktree of the same commit, blind.
     let mut commits = Vec::new();
     for (name, thread, verdict) in [("a", "r1", "approve"), ("b", "r2", "changes")] {
-        let at = scratch.worktree(name);
+        let at = scratch.dir.path().join(name);
+        git(
+            &root,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                at.to_str().unwrap(),
+                &reviewed,
+            ],
+        );
         let run = atelier(&at, thread, &["review", MISSION]);
         assert_eq!(run.code, 0, "{}", run.stderr);
         let files = files_in(&at, &plan_reviews(MISSION));
@@ -1833,12 +1962,14 @@ fn two_blind_plan_reviews_each_commit_their_file_and_ready_says_what_they_found(
         assert_eq!(front(&read(&root, file), "round"), "1", "{file}");
     }
 
-    // An edit to its item since the commit reviewed shows; it refuses nothing.
+    // An edit to its item since the commit reviewed makes the approval
+    // stale; the other asks for changes; so neither counts.
     let path = root.join(item_path(ID));
     let text = fs::read_to_string(&path).unwrap();
     fs::write(&path, text.replace("Print hello.", "Print hello twice.")).unwrap();
-    let run = planned(&root, "p1", &["ready", MISSION, "--by", "sumeet"]);
-    assert_eq!(run.code, 0, "{}", run.stderr);
+    commit_all(&root, "Twice");
+    let run = atelier(&root, "p1", &["merge"]);
+    assert_eq!(run.code, 1);
     let short = &reviewed[..7];
     for file in &files {
         let text = read(&root, file);
@@ -1848,26 +1979,14 @@ fn two_blind_plan_reviews_each_commit_their_file_and_ready_says_what_they_found(
             .unwrap()
             .strip_suffix(".md")
             .unwrap();
-        let (by, verdict) = match front(&text, "verdict").as_str() {
-            "approve" => ("r1", "approved"),
-            _ => ("r2", "changes requested"),
+        let said = match front(&text, "verdict").as_str() {
+            "approve" => format!(
+                "    Round 1, review {stem} by r1: approves {short}, and does not count: the plan has changed since ({}).\n",
+                item_path(ID)
+            ),
+            _ => format!("    Round 1, review {stem} by r2: asks for changes.\n"),
         };
-        assert!(
-            run.stdout
-                .contains(&format!("  {stem} by {by}: {verdict}, of commit {short}\n")),
-            "{}",
-            run.stdout
-        );
+        assert!(run.stderr.contains(&said), "{said}\n---\n{}", run.stderr);
     }
-    assert!(run
-        .stdout
-        .contains(&format!("Mission {MISSION}'s plan reviews, round 1:\n")));
-    assert!(
-        run.stdout.contains(&format!(
-            "Since {short}, these changed: {}\n",
-            item_path(ID)
-        )),
-        "{}",
-        run.stdout
-    );
+    assert!(run.stderr.contains("    0 of 2 count.\n"), "{}", run.stderr);
 }

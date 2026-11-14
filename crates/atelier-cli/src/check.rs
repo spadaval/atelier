@@ -58,10 +58,17 @@ pub fn check(skip: &Skip) -> Result<Outcome> {
         uncommitted.insert(0, CONFIG.to_string());
     }
     let (unread, invalid) = (&loaded.unread, &loaded.invalid);
+    // Nothing refuses a mission whose Why is not written yet, as a plan
+    // just started; `check` says so.
+    let unwritten: Vec<&str> = (loaded.missions.iter())
+        .filter(|dir| dir.section("Why").is_none_or(|why| why.trim().is_empty()))
+        .map(|dir| dir.mission.id.as_str())
+        .collect();
+    let why = output::why_unwritten(&unwritten);
     if unread.is_empty() && invalid.is_empty() {
-        return Ok(Outcome::Done(output::checked(counts, &uncommitted)));
+        return Ok(Outcome::Done(output::checked(counts, &uncommitted) + &why));
     }
-    let text = output::check_found(counts, unread, invalid, &uncommitted);
+    let text = output::check_found(counts, unread, invalid, &uncommitted) + &why;
     // What a skip passes is still reported.
     Ok(rules(
         skip,

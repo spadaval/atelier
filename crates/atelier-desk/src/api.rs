@@ -518,10 +518,10 @@ named!(
 named!(
     MissionStatus,
     atelier_core::MissionStatus,
-    Draft,
-    Ready,
+    Open,
     Done,
-    Dropped
+    Dropped,
+    Draft
 );
 named!(
     Priority,

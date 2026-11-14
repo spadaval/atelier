@@ -418,7 +418,7 @@ pub fn overview(
         if in_progress(mission, &entries) {
             overview.in_progress.push(mission.clone());
         }
-        let ready = mission.mission.status == MissionStatus::Ready;
+        let ready = mission.mission.status == MissionStatus::Open;
         if ready && mission.mission.lead.as_ref() == Some(caller) {
             let id = &mission.mission.id;
             let of_mission = items_of(id, &entries).into_iter().cloned().collect();
