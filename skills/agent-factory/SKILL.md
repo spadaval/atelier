@@ -1,6 +1,6 @@
 ---
 name: agent-factory
-description: Use in repositories tracked with Atelier, to plan or shape work, lead a mission, implement an item, review a change or a plan, answer a question an implementer escalated, go over, sweep or reorder a backlog, or garden or audit a repository. It says how to decide; `atelier status` says what to run.
+description: Use in repositories tracked with Atelier, to plan or shape work, lead a mission, implement an item, review a change or a plan, go over, sweep or reorder a backlog, or garden or audit a repository. It says how to decide; `atelier status` says what to run.
 ---
 
 # Agent Factory
@@ -18,14 +18,9 @@ your role, read that role's file:
 - the reviewer of an item or a plan: [roles/reviewer.md](roles/reviewer.md);
 - the lead of a mission: [roles/lead.md](roles/lead.md).
 
-Two roles are routed by the task you were given, whatever `status` suggests
-you start:
-
-- Asked to plan or shape work, such as a mission or a draft item, or to go
-  over, sweep or reorder the backlog: [roles/planner.md](roles/planner.md).
-- Answering a question with `atelier decide`, because a task line started you
-  to or because you lead the item's mission:
-  [roles/decider.md](roles/decider.md).
+Asked to plan or shape work, such as a mission or a draft item, or to go
+over, sweep or reorder the backlog, read [roles/planner.md](roles/planner.md),
+whatever `status` suggests you start.
 
 Holding nothing else, read the file of the role your task gives you: a task
 to start an item makes you its implementer, and one to lead a mission its
@@ -37,14 +32,13 @@ lead. A garden or audit task also reads
 The planner works with Sumeet in conversation. A gardener takes its focus
 from him when he names one at the start, and settles its run's page with him
 in a session once the run is approved. Every other role
-runs unattended: it never waits on him, and takes a question to `atelier
-escalate`, the mission's lead or an item labelled `needs-human`, as its role
-file says.
+runs unattended: it never waits on him, and takes a question to the thread
+that started it or to an item labelled `needs-human`, as its role file says.
 
 ## Independent Review
 
 Every non-trivial change is reviewed before it merges by a thread that did
-not write it. No thread approves its own work or decides a finding on it. A
+not write it. No thread approves its own work or settles a finding on it. A
 change is trivial only when its correctness is evident from the diff alone,
 such as a typo; rewording a document is not trivial.
 
@@ -57,7 +51,7 @@ reasoning.
 
 - Under T3 Code, `delegate_task` starts a new thread, whatever the provider.
 - Under Codex, a subagent from `spawn_agent` is a thread of its own and may
-  review or decide. Pass `fork_turns: "none"`; its default copies your
+  review. Pass `fork_turns: "none"`; its default copies your
   context.
 - Under Claude Code, a subagent from the `Agent` tool runs as your thread and
   is refused.

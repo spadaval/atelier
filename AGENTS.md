@@ -17,10 +17,21 @@ Records live in `.atelier/`: a mission in `missions/<id>/mission.md`, an
 item in `items/<id>/item.md` with its reviews beside it, and the rules in
 `config.toml`. They are committed with the code they describe.
 
-- Planning happens on a backlog branch: `atelier start --backlog <slug>`,
-  then `atelier new`, `atelier set` and `atelier ready <id> --by <who said
-  go>`. They write the records and commit nothing; commit with Git, then
-  `atelier submit` and `atelier merge`.
+- Every change, to code or to records, lives on a branch that `atelier
+  start` makes, and reaches `master` only by `atelier merge`. There are
+  three kinds: `<item-id>` for an item's code and records, `<mission-id>`
+  for a new mission's plan, its items and its plan reviews, and
+  `backlog/<slug>` for record changes tied to neither, such as filing,
+  readying or dropping an item, leading or closing a mission, or a lead's
+  notes.
+- Only `start`, `submit` and `merge` act on Git. `new`, `set`, `ready`,
+  `drop`, `close`, `lead`, `review` and `verdict` write files and commit
+  nothing; commit and push them with Git.
+- A mission starts from Sumeet's direction: `atelier start --mission
+  "<title>"`, write the plan and its items, `atelier submit`, and two
+  reviewers who did not plan it each run `atelier review <mission>` and push
+  their verdict to the branch. It merges once both approve, with no go-ahead
+  after.
 - An item, in order: `atelier start <id>` (a branch named `<id>`),
   implement, tick every Done when line and write the `## Report`, `atelier
   submit`. A reviewer, in a thread that did not write the change, runs
@@ -29,28 +40,31 @@ item in `items/<id>/item.md` with its reviews beside it, and the rules in
   merge`, which marks the item done.
 - A question the implementer cannot settle goes to the thread that started
   it, as advice. A finding it disputes is rebutted in the Report's
-  Responses, and the next round's reviewer keeps or withdraws it; `atelier
+  Responses, and a fresh reviewer in the next round keeps or withdraws it; `atelier
   list --disputed` lists each one.
 - A mission is read with `atelier show <mission>`, which lists its items,
-  their status and their open questions, and with the files in its
+  their status and what is disputed in them, and with the files in its
   directory. `atelier list` shows all open work.
 
 ## Merge Policy
 
-- Unreviewed non-trivial code never reaches `master`, and nothing is
-  committed on it directly: records reach it by the merge of their branch.
-- `atelier submit` pushes the item's branch and opens its pull request, so
-  CI runs during the review. `atelier merge` waits for CI on the branch's
+- Nothing is committed on `master` directly. A branch merges on what it
+  holds: one that changes code needs an approving independent review of its
+  head; one that adds a mission or changes a plan needs two approving plan
+  reviews; one that changes only records needs `atelier check` to pass on
+  the merged tree. Only an item's branch may change code.
+- `atelier submit` pushes the branch and opens its pull request, so CI runs
+  during the review. `atelier merge` waits for CI on the branch's
   latest code for up to 9 minutes, runs the merge checks in `config.toml`
-  on the merged tree, merges and pushes `master`. Exit status 3 means CI has
-  not finished: run it again. Do not push branches, open pull requests or
-  push `master` by hand around it.
+  on the merged tree, and has the forge merge the pull request. Exit status
+  3 means CI has not finished: run it again. Do not open or merge pull
+  requests or push `master` by hand around it.
 - Git hooks guard the rules: pre-commit validates every record a commit
-  changes, and pre-push refuses a push to `master` that brings code or sets
-  an item done outside an Atelier merge. `atelier setup` installs them in a
+  changes, and pre-push refuses every push that moves `master`, since the
+  forge makes its merges. `atelier setup` installs them in a
   new clone. A rule can be passed on purpose with `ATELIER_SKIP="<reason>"`
   on the command, which the commit records; use it only when you mean to.
-- `merge` pushes over `origin`, whose URL here is HTTPS. A host without
+- Branches are pushed over `origin`, whose URL here is HTTPS. A host without
   HTTPS credentials for GitHub needs one command in a fresh checkout:
   `git config remote.origin.pushurl git@github.com:spadaval/atelier.git`,
   or `gh auth setup-git`. `gh` must be signed in either way.

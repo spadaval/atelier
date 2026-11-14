@@ -78,6 +78,9 @@ counted from `atelier log`. A line whose failure shows in no measure is cut.
    below prints nothing, or only such items. Shows in: defects found after
    merge and where each defect was caught, which leave out a bug with no
    cause and so read better than the code is.
+10. **A branch that changes only records passes CI in under two minutes.**
+    Test: its last run, `gh run list --branch <branch>`. Shows in: the time
+    from `submit` to `merge` on such branches in `atelier log`.
 
 Line 3's script, run from the repository's root:
 
