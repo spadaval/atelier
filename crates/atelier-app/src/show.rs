@@ -5,7 +5,7 @@
 use crate::acts::approval;
 use crate::disputed::{disputes, Disputes};
 use crate::repo::{facts, item_dir, Links};
-use crate::view::{entries, entry, Entry, Located, ReadFrom};
+use crate::view::{entries, entry, mark, Entry, Located, ReadFrom};
 use crate::work::{in_progress, items_of};
 use crate::{git, Repo};
 use anyhow::Result;
@@ -14,8 +14,11 @@ use atelier_records::{ItemDir, MissionDir};
 
 /// A mission as `show <mission>` shows it.
 pub struct MissionView {
-    /// The mission's record, with its plan reviews in `reviews`.
+    /// The mission's record, with its plan reviews in `reviews`: the copy
+    /// that counts, so a proposed mission's reviews are its branch's.
     pub dir: MissionDir,
+    /// Its copies, on the base and on branches, and where `dir` was read.
+    pub mission: Located<MissionDir>,
     /// Whether it is ready with a started item ([`in_progress`]).
     pub in_progress: bool,
     /// Its items, as [`items_of`] orders them, each [`annotate`]d.
@@ -31,12 +34,15 @@ pub struct MissionView {
     pub located: Vec<Located>,
 }
 
-/// The mission `id` at the base's tip, or `None` when it has none.
+/// The mission `id` wherever it is, or `None` when no record of it is
+/// found.
 pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
-    let missions = repo.missions()?;
-    let Some(dir) = missions.iter().find(|dir| dir.mission.id == id) else {
+    let mission = repo.find_mission(id)?;
+    let Some(dir) = mission.record().cloned() else {
         return Ok(None);
     };
+    let missions = repo.missions()?;
+    let dir = &dir;
     let items = repo.everything()?;
     let entries = entries(&items, &missions, &repo.caller)?;
     let mut of_mission: Vec<Entry> = items_of(id, &entries).into_iter().cloned().collect();
@@ -60,6 +66,7 @@ pub fn mission_view(repo: &mut Repo, id: &str) -> Result<Option<MissionView>> {
         questions,
         disputes,
         located: items.into_iter().filter(of).collect(),
+        mission,
     }))
 }
 
@@ -95,12 +102,13 @@ impl ItemView {
 /// not, and its record there is not read, so one that does not parse
 /// cannot hide the base's.
 pub fn item_view(repo: &mut Repo, id: &str) -> Result<Option<ItemView>> {
-    let located = repo.locate(id)?;
+    let located = repo.find(id)?;
     let (Some(record), Some(read_from)) = (located.record(), located.read_from()) else {
         return Ok(None);
     };
     let links = repo.links(record)?;
     let mut entry = entry(&facts(repo, &located, &links, None))?;
+    mark(&mut entry, &located);
     annotate(repo, &mut entry, record)?;
     let own_branch = repo.branch.as_deref() == Some(id);
     let mut findings = record.findings()?;

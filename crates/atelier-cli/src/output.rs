@@ -208,8 +208,10 @@ pub fn overview(
     if !overview.started.is_empty() {
         text += "Held by other threads:\n";
         for entry in &overview.started {
+            // Read from a remote-tracking branch: held in another clone.
+            let on = (entry.on.as_ref()).map_or(String::new(), |on| format!(", on {on}"));
             text += &format!(
-                "  {} ({}, {}): {}\n",
+                "  {} ({}, {}{on}): {}\n",
                 entry.id,
                 status_name(entry.status),
                 holder(entry),

@@ -7,15 +7,80 @@ use atelier_core::{MissionStatus, Priority, ReviewName, Status, Thread, Verdict}
 use atelier_records::{ItemDir, MissionDir, Problem};
 use std::collections::HashMap;
 
-/// An item as the commands find it: its record at the base's tip, and the
-/// local branch named for it, if one exists.
-pub struct Located {
-    pub id: String,
-    pub base: Option<ItemDir>,
-    pub branch: Option<Branch>,
+/// What the reader asks of a record of either kind, an item or a mission.
+pub trait Record {
+    fn record_id(&self) -> &str;
+    fn title(&self) -> &str;
+    /// Done or dropped: a final copy on the base wins over any branch's.
+    fn finished(&self) -> bool;
+    fn is_dropped(&self) -> bool;
+    /// Why it was dropped, as its record says.
+    fn why_dropped(&self) -> Option<&str>;
+    /// Whether a copy read from its own unmerged branch, where the base has
+    /// none, is proposed: a mission's plan is, an item started there is not.
+    const OWN_BRANCH_PROPOSES: bool;
 }
 
-pub struct Branch {
+impl Record for ItemDir {
+    fn record_id(&self) -> &str {
+        &self.item.id
+    }
+    fn title(&self) -> &str {
+        &self.item.title
+    }
+    fn finished(&self) -> bool {
+        matches!(self.item.status, Status::Done | Status::Dropped)
+    }
+    fn is_dropped(&self) -> bool {
+        self.item.status == Status::Dropped
+    }
+    fn why_dropped(&self) -> Option<&str> {
+        self.dropped()
+    }
+    const OWN_BRANCH_PROPOSES: bool = false;
+}
+
+impl Record for MissionDir {
+    fn record_id(&self) -> &str {
+        &self.mission.id
+    }
+    fn title(&self) -> &str {
+        &self.mission.title
+    }
+    fn finished(&self) -> bool {
+        matches!(
+            self.mission.status,
+            MissionStatus::Done | MissionStatus::Dropped
+        )
+    }
+    fn is_dropped(&self) -> bool {
+        self.mission.status == MissionStatus::Dropped
+    }
+    fn why_dropped(&self) -> Option<&str> {
+        self.dropped()
+    }
+    const OWN_BRANCH_PROPOSES: bool = true;
+}
+
+/// A record as the commands find it: its copy at the base's tip, its copy
+/// on the branch named for it, and its copies on the other unmerged named
+/// branches that add, change or remove it. [`Located::record`] picks the
+/// one that counts, by the rule in `docs/design.md`.
+pub struct Located<R = ItemDir> {
+    pub id: String,
+    pub base: Option<R>,
+    /// The branch named for it, local or the forge's remote-tracking one.
+    pub branch: Option<Branch<R>>,
+    /// Each other unmerged named branch whose changes since it forked from
+    /// the base touch the record, by branch name, with its copy there;
+    /// `None` where that branch removes it. Filled by the readers that
+    /// read everything ([`Repo::everything`](crate::Repo::everything),
+    /// [`Repo::find`](crate::Repo::find) and the missions'); empty from
+    /// [`Repo::locate`](crate::Repo::locate).
+    pub elsewhere: Vec<Branch<R>>,
+}
+
+pub struct Branch<R = ItemDir> {
     /// Whether the branch's tip is in the base's history.
     pub merged: bool,
     /// The tip the record was read at.
@@ -23,43 +88,102 @@ pub struct Branch {
     /// Whether it was read from the forge's remote-tracking branch, as for
     /// an item started in another clone, rather than the local branch.
     pub remote: bool,
-    /// The item's record on the branch: from the checkout on the current
-    /// branch, else, or in a repository opened with
+    /// The ref read, as it is shown: the branch's name, or
+    /// `<remote>/<branch>` for a remote-tracking one.
+    pub name: String,
+    /// The local branch and its remote-tracking branch have diverged, and
+    /// this one was read.
+    pub diverged: bool,
+    /// The record on the branch: from the checkout on the current branch,
+    /// else, or in a repository opened with
     /// [`Repo::open_committed`](crate::Repo::open_committed), from its tip.
-    pub record: Option<ItemDir>,
+    pub record: Option<R>,
 }
 
-/// Which of an item's records [`Located::record`] picks.
+/// Which of a record's copies [`Located::record`] picks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadFrom {
     /// The base's record.
     Base,
-    /// The record on the item's unmerged branch.
+    /// The record on an unmerged branch: its own, or, for a record the
+    /// base does not hold, the branch that adds it.
     Branch,
 }
 
-impl Located {
-    /// The item's record: the base's when that says done or dropped, else
-    /// the record on its unmerged branch, else the base's.
-    pub fn record(&self) -> Option<&ItemDir> {
+impl<R: Record> Located<R> {
+    /// The record that counts: the base's when it is final, else the copy
+    /// on its own unmerged branch, else the base's, else, for a record the
+    /// base does not hold, the copy on the first unmerged branch by name
+    /// that adds it.
+    pub fn record(&self) -> Option<&R> {
         self.picked().map(|(record, _)| record)
     }
 
-    /// Where [`Located::record`] reads the item's record from.
+    /// Where [`Located::record`] reads the record from.
     pub fn read_from(&self) -> Option<ReadFrom> {
-        self.picked().map(|(_, from)| from)
+        self.picked().map(|(_, from)| match from {
+            None => ReadFrom::Base,
+            Some(_) => ReadFrom::Branch,
+        })
     }
 
-    fn picked(&self) -> Option<(&ItemDir, ReadFrom)> {
-        let base = self.base.as_ref().map(|base| (base, ReadFrom::Base));
-        if self.base.as_ref().is_some_and(Located::terminal) {
+    /// The branch [`Located::record`] reads the record from; `None` for
+    /// the base's.
+    pub fn source(&self) -> Option<&Branch<R>> {
+        self.picked().and_then(|(_, from)| from)
+    }
+
+    fn picked(&self) -> Option<(&R, Option<&Branch<R>>)> {
+        let base = self.base.as_ref().map(|base| (base, None));
+        if self.base.as_ref().is_some_and(R::finished) {
             return base;
         }
-        let started = self.branch.as_ref().filter(|branch| !branch.merged);
-        let branch = started.and_then(|branch| branch.record.as_ref());
-        branch.map(|record| (record, ReadFrom::Branch)).or(base)
+        let own = self.branch.as_ref().filter(|branch| !branch.merged);
+        let own = own.and_then(|branch| Some((branch.record.as_ref()?, Some(branch))));
+        let added = || {
+            let mut adding = self.elsewhere.iter();
+            adding.find_map(|branch| Some((branch.record.as_ref()?, Some(branch))))
+        };
+        match self.base {
+            Some(_) => own.or(base),
+            None => own.or_else(added),
+        }
     }
 
+    /// Whether it is proposed: open, not on the base, and read from an
+    /// unmerged branch that adds it, or, for a mission, from its own.
+    pub fn proposed(&self) -> bool {
+        let Some((record, Some(from))) = self.picked() else {
+            return false;
+        };
+        let own = self.branch.as_ref().is_some_and(|b| std::ptr::eq(b, from));
+        self.base.is_none() && !record.finished() && (!own || R::OWN_BRANCH_PROPOSES)
+    }
+
+    /// The other unmerged branches that add it, where it is read from the
+    /// first of them.
+    pub fn also_added(&self) -> Vec<&Branch<R>> {
+        let from = self.source();
+        let adding = self.elsewhere.iter().filter(|b| b.record.is_some());
+        match self.base {
+            None => adding
+                .filter(|b| !from.is_some_and(|f| std::ptr::eq(*b, f)))
+                .collect(),
+            Some(_) => Vec::new(),
+        }
+    }
+
+    /// The unmerged branches that change or remove the base's copy: changes
+    /// proposed, which take effect when the branch merges.
+    pub fn changes(&self) -> Vec<&Branch<R>> {
+        match self.base {
+            Some(_) => self.elsewhere.iter().collect(),
+            None => Vec::new(),
+        }
+    }
+}
+
+impl Located {
     pub fn status(&self) -> Option<Status> {
         self.record().map(|dir| dir.item.status)
     }
@@ -67,22 +191,22 @@ impl Located {
     /// Whether the base's record `base` ends the item whatever its branch
     /// holds: done or dropped.
     pub fn terminal(base: &ItemDir) -> bool {
-        matches!(base.item.status, Status::Done | Status::Dropped)
+        base.finished()
     }
 }
 
-/// Each item of `items` dropped on its unmerged branch whose base copy is
-/// not dropped yet: its ID, its title and why it was dropped.
-pub fn unreached(items: &[Located]) -> Vec<(String, String, Option<String>)> {
-    items
+/// Each record of `located` dropped on its unmerged branch whose base copy
+/// is not dropped yet: its ID, its title and why it was dropped.
+pub fn unreached<R: Record>(located: &[Located<R>]) -> Vec<(String, String, Option<String>)> {
+    located
         .iter()
         .filter_map(|located| {
             let branch = located.branch.as_ref().filter(|b| !b.merged)?;
             let record = branch.record.as_ref()?;
-            let base = located.base.as_ref().map(|b| b.item.status);
-            (record.item.status == Status::Dropped && base != Some(Status::Dropped)).then(|| {
-                let why = record.dropped().map(str::to_string);
-                (located.id.clone(), record.item.title.clone(), why)
+            let base_dropped = located.base.as_ref().is_some_and(R::is_dropped);
+            (record.is_dropped() && !base_dropped).then(|| {
+                let why = record.why_dropped().map(str::to_string);
+                (located.id.clone(), record.title().to_string(), why)
             })
         })
         .collect()
@@ -131,6 +255,12 @@ pub struct Entry {
     /// For a started item another thread holds: what its holder's next act
     /// needs, the conditions the holder's `status` lists as unmet.
     pub needs: Vec<Condition>,
+    /// The ref its record was read from, where views name it: a
+    /// remote-tracking branch, or the unmerged branch a proposed item is
+    /// on. Set by [`entries`], not by [`entry`].
+    pub on: Option<String>,
+    /// It is proposed ([`Located::proposed`]). Set by [`entries`].
+    pub proposed: bool,
 }
 
 pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
@@ -185,6 +315,8 @@ pub fn entry(facts: &Facts) -> Result<Entry, Problem> {
         next,
         unmet,
         needs: needs(facts)?,
+        on: None,
+        proposed: false,
     })
 }
 
@@ -258,9 +390,20 @@ pub fn entries(
             caller,
             checkout: None,
         };
-        entries.push(entry(&facts)?);
+        let mut entry = entry(&facts)?;
+        mark(&mut entry, located);
+        entries.push(entry);
     }
     Ok(entries)
+}
+
+/// Marks `entry` with where `located`, its item, was read from.
+pub fn mark(entry: &mut Entry, located: &Located) {
+    entry.proposed = located.proposed();
+    let source = located.source();
+    entry.on = source
+        .filter(|branch| branch.remote || entry.proposed)
+        .map(|branch| branch.name.clone());
 }
 
 /// The overview of `items` and `missions`, as for [`entries`].
@@ -283,7 +426,8 @@ pub fn overview(
             overview.led.push((mission.clone(), of_mission, disputed));
         }
     }
-    for entry in entries {
+    // A proposed item is not on the base yet: nobody can start it.
+    for entry in entries.into_iter().filter(|entry| !entry.proposed) {
         if entry.needs_human() && PLANNED.contains(&entry.status) {
             overview.waiting.push(entry);
         } else if entry.startable() {

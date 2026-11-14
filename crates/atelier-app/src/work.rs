@@ -25,9 +25,10 @@ pub const LIFECYCLE: [Status; 8] = [
 
 impl Entry {
     /// A thread could start it now: it is ready, its blockers are done and
-    /// its mission is ready, which are `start`'s conditions.
+    /// its mission is ready, which are `start`'s conditions, and it is on
+    /// the base, not proposed on a branch that has not merged.
     pub fn startable(&self) -> bool {
-        self.status == Status::Ready && self.unmet.is_empty()
+        self.status == Status::Ready && self.unmet.is_empty() && !self.proposed
     }
 
     pub fn needs_human(&self) -> bool {
@@ -89,6 +90,9 @@ pub struct Filter {
     pub mine: bool,
     /// Finished missions and items, done or dropped, instead of open ones.
     pub done: bool,
+    /// What is proposed on branches not yet merged, instead of the base's
+    /// backlog.
+    pub proposed: bool,
 }
 
 /// One mission's kept items, or the kept items in no mission.
@@ -102,44 +106,70 @@ pub struct Group<'a> {
     pub items: Vec<&'a Entry>,
 }
 
+/// Whether `entry` passes `filter`'s narrowing flags, all but `done` and
+/// `proposed`; its mission is looked up among `missions`.
+pub fn narrows_item(
+    entry: &Entry,
+    missions: &[MissionDir],
+    caller: &Thread,
+    filter: &Filter,
+) -> bool {
+    let find = |id: &str| missions.iter().find(|m| m.mission.id == id);
+    let leads = |m: &MissionDir| m.mission.lead.as_ref() == Some(caller);
+    (!filter.ready || entry.startable())
+        && (!filter.blocked || !entry.waiting_on().is_empty())
+        && (!filter.needs_human || entry.needs_human())
+        && (filter.mission.is_none() || entry.mission == filter.mission)
+        && filter
+            .label
+            .as_ref()
+            .is_none_or(|l| entry.labels.contains(l))
+        && (!filter.mine
+            || entry.holds
+            || entry.review.is_some()
+            || entry.mission.as_deref().and_then(find).is_some_and(leads))
+}
+
+/// Whether `mission` passes `filter`'s narrowing flags, all but `done` and
+/// `proposed`: none that only items have is given, and the rest keep it.
+pub fn narrows_mission(mission: &MissionDir, caller: &Thread, filter: &Filter) -> bool {
+    let only_items = filter.ready || filter.blocked || filter.needs_human;
+    !only_items
+        && filter
+            .mission
+            .as_ref()
+            .is_none_or(|id| *id == mission.mission.id)
+        && (filter.label.as_ref()).is_none_or(|l| mission.mission.labels.contains(l))
+        && (!filter.mine || mission.mission.lead.as_ref() == Some(caller))
+}
+
 /// What `list` shows with `filter`: each mission with an item kept, by
 /// ID, and then the kept items in no mission. A mission with no item kept
 /// is shown when the mission itself is kept, unless a flag only items have
-/// (`ready`, `blocked`, `needs_human`) is given.
+/// (`ready`, `blocked`, `needs_human`) is given. `proposed` names the
+/// missions of `missions` that are proposed: they and the proposed items
+/// are kept with `filter.proposed`, and only then.
 pub fn list<'a>(
     entries: &'a [Entry],
     missions: &'a [MissionDir],
+    proposed: &[String],
     caller: &Thread,
     filter: &Filter,
 ) -> Vec<Group<'a>> {
     let find = |id: &str| missions.iter().find(|m| m.mission.id == id);
-    let leads = |m: &MissionDir| m.mission.lead.as_ref() == Some(caller);
     let keep_item = |e: &Entry| {
         e.finished() == filter.done
-            && (!filter.ready || e.startable())
-            && (!filter.blocked || !e.waiting_on().is_empty())
-            && (!filter.needs_human || e.needs_human())
-            && (filter.mission.is_none() || e.mission == filter.mission)
-            && filter.label.as_ref().is_none_or(|l| e.labels.contains(l))
-            && (!filter.mine
-                || e.holds
-                || e.review.is_some()
-                || e.mission.as_deref().and_then(find).is_some_and(leads))
+            && e.proposed == filter.proposed
+            && narrows_item(e, missions, caller, filter)
     };
-    let only_items = filter.ready || filter.blocked || filter.needs_human;
     let keep_mission = |m: &&MissionDir| {
         let finished = matches!(
             m.mission.status,
             MissionStatus::Done | MissionStatus::Dropped
         );
         finished == filter.done
-            && !only_items
-            && filter.mission.as_ref().is_none_or(|id| *id == m.mission.id)
-            && filter
-                .label
-                .as_ref()
-                .is_none_or(|l| m.mission.labels.contains(l))
-            && (!filter.mine || leads(m))
+            && proposed.contains(&m.mission.id) == filter.proposed
+            && narrows_mission(m, caller, filter)
     };
     // Items in no mission sort last.
     let mut groups: BTreeMap<(bool, Option<String>), Vec<&Entry>> = BTreeMap::new();
