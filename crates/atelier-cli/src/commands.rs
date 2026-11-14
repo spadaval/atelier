@@ -679,6 +679,8 @@ fn planned_here(repo: &mut Repo) -> Result<Result<Vec<(String, u32)>, Outcome>> 
     let mut plans = Vec::new();
     let mut written = Vec::new();
     let mut messages = Vec::new();
+    // A mission the branch removes has no record here to write.
+    ids.retain(|id| repo.root.join(mission_path(id)).exists());
     for id in ids {
         let dir = repo.store().mission(&id)?;
         if own.as_deref() == Some(id.as_str()) {

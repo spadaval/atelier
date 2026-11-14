@@ -551,10 +551,39 @@ impl<'s> Repo<'s> {
     /// record that counts.
     pub fn missions(&mut self) -> Result<Vec<MissionDir>> {
         let located = self.all_missions()?;
-        Ok(located
+        let mut missions: Vec<MissionDir> = located
             .iter()
             .filter_map(|located| located.record().cloned())
-            .collect())
+            .collect();
+        self.published_stops(&located, &mut missions)?;
+        Ok(missions)
+    }
+
+    /// Marks dropped each of `missions`, read from `located`, that is on
+    /// the base and that the forge's base, as this clone last fetched it,
+    /// holds dropped: a stop is published once it is on the forge's base,
+    /// as `links` reads it for `start` and `merge`.
+    pub fn published_stops(
+        &mut self,
+        located: &[Located<MissionDir>],
+        missions: &mut [MissionDir],
+    ) -> Result<()> {
+        let Some(tip) = self.forge_base()? else {
+            return Ok(());
+        };
+        let dropped = atelier_core::MissionStatus::Dropped;
+        for dir in missions {
+            let on_base = located
+                .iter()
+                .any(|l| l.id == dir.mission.id && l.base.is_some());
+            if dir.mission.status != dropped && on_base {
+                let forge = self.reader.mission(&tip, &dir.mission.id)?;
+                if forge.is_some_and(|f| f.mission.status == dropped) {
+                    dir.mission.status = dropped;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Every mission on the base, on its own branch, and on an unmerged
@@ -623,17 +652,21 @@ impl<'s> Repo<'s> {
     /// Whether the forge's base, as this clone last fetched it, holds
     /// mission `id` dropped.
     pub fn dropped_on_forge(&mut self, id: &str) -> Result<bool> {
-        let Some(remote) = self.remote().map(str::to_string) else {
+        let Some(tip) = self.forge_base()? else {
             return Ok(false);
         };
-        let Some(tip) = git::remote_tip(&self.root, &remote, &self.base)? else {
-            return Ok(false);
-        };
-        if tip == self.base_tip {
-            return Ok(false);
-        }
         let found = self.reader.mission(&tip, id)?;
         Ok(found.is_some_and(|dir| dir.mission.status == atelier_core::MissionStatus::Dropped))
+    }
+
+    /// The forge's base as this clone last fetched it, where it is not
+    /// this clone's base.
+    fn forge_base(&self) -> Result<Option<String>> {
+        let Some(remote) = self.remote() else {
+            return Ok(None);
+        };
+        let tip = git::remote_tip(&self.root, remote, &self.base)?;
+        Ok(tip.filter(|tip| *tip != self.base_tip))
     }
 
     /// The mission `id` as `commit` holds it.

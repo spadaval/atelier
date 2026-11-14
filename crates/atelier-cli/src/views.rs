@@ -128,7 +128,9 @@ pub(crate) fn unpublished_stop(
 pub fn list(repo: &mut Repo, filter: &Filter) -> Result<Outcome> {
     let items = repo.everything()?;
     let located = repo.all_missions()?;
-    let missions: Vec<MissionDir> = located.iter().filter_map(|l| l.record().cloned()).collect();
+    let mut missions: Vec<MissionDir> =
+        located.iter().filter_map(|l| l.record().cloned()).collect();
+    repo.published_stops(&located, &mut missions)?;
     let proposed: Vec<String> = (located.iter())
         .filter(|l| l.proposed())
         .map(|l| l.id.clone())

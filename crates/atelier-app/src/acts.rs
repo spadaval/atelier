@@ -170,7 +170,8 @@ pub const TABLE: [Row; 24] = [
     // The acts of a mission's branch, from proposed, in a checkout on that
     // branch: `submit` binds the caller as a planner, taking the plan over
     // when it was not one, and writes an old `draft` as `open`; `merge`
-    // needs a planner. A plan dropped on its branch does neither.
+    // needs a planner, and the plan `open`, as `submit` leaves it. A plan
+    // dropped on its branch does neither.
     Row {
         act: Act::SubmitMission,
         command: "submit",
@@ -184,7 +185,7 @@ pub const TABLE: [Row; 24] = [
         command: "merge",
         role: Role::Planner,
         binds: false,
-        from: PROPOSED,
+        from: &[Status::Ready],
         to: None,
     },
     Row {

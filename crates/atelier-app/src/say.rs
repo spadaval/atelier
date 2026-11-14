@@ -667,6 +667,7 @@ pub fn mission_refused(act: Act, id: &str, refusal: &Refusal) -> String {
                 .map(|s| mission_status_name(*s))
                 .collect();
             let then = match status {
+                Status::Draft if act == Act::MergeMission => "Its record is an old `draft`: run `atelier submit` here, which writes it open, and start its two plan reviews.\n".to_string(),
                 Status::Draft => "Its record is an old `draft`, which is proposed: its plan reaches the base once two plan reviews approve it and its branch merges.\n".to_string(),
                 Status::Dropped if matches!(act, Act::SubmitMission | Act::MergeMission) => "A plan dropped on its branch is not merged: push the branch and close its pull request, if it has one.\n".to_string(),
                 _ => "Nothing is left to do on it.\n".into(),

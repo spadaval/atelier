@@ -1989,4 +1989,339 @@ fn two_blind_plan_reviews_each_commit_their_file_and_merge_counts_only_what_stil
         assert!(run.stderr.contains(&said), "{said}\n---\n{}", run.stderr);
     }
     assert!(run.stderr.contains("    0 of 2 count.\n"), "{}", run.stderr);
+
+    // Round 1 is over, so a submit after the changes opens round 2.
+    let run = atelier(&root, "p1", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.contains(&format!(
+            "Submitted the plan of mission {MISSION} on {MISSION}, at commit {}, for round 2 of plan review.",
+            &tip(&root, "HEAD")[..7]
+        )),
+        "{}",
+        run.stdout
+    );
+}
+
+#[test]
+fn check_says_when_a_missions_why_is_empty() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    let run = atelier(&root, "p1", &["start", "--mission", "Greet"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let id = run.stdout.split_whitespace().nth(3).unwrap().to_string();
+    let note = format!("Mission {id}'s Why is empty: it says why the mission is wanted and whose direction it started from: the conversation or the agreed proposal it came from.\n");
+    let run = atelier(&root, "p1", &["check"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(run.stdout.ends_with(&note), "{}", run.stdout);
+    let path = root.join(mission_path(&id));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("## Why\n", "## Why\n\nSumeet asked, in conversation.\n"),
+    )
+    .unwrap();
+    let run = atelier(&root, "p1", &["check"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(!run.stdout.contains("Why is empty"), "{}", run.stdout);
+}
+
+/// Writes an approving plan review `name` of mission `id` by `thread`, of
+/// the commit `commit`, in `at`, and commits it.
+fn approve(at: &Path, id: &str, name: &str, thread: &str, commit: &str) {
+    let path = format!(".atelier/missions/{id}/reviews/{name}.md");
+    fs::create_dir_all(at.join(&path).parent().unwrap()).unwrap();
+    let round = name.split('-').next().unwrap();
+    fs::write(
+        at.join(&path),
+        format!(
+            "---\nschema: atelier.review\nschema_version: 3\nround: {round}\ncommit: {commit}\n\
+             reviewers:\n- {thread}\nmodel: null\nverdict: approve\ncreated_at: 2026-11-13T09:00:00Z\n---\n\n\
+             ## Summary\n\nGood.\n"
+        ),
+    )
+    .unwrap();
+    git(at, &["add", "-A"]);
+    git(at, &["commit", "-qm", &format!("Review {id}: {name}")]);
+}
+
+/// A scratch repository whose checkout is on branch `MISSION`, holding
+/// the mission planned by p1 with a `design.md` beside it and item `ID` in
+/// it, committed, and approved by r1 and r2 at that commit: the commit.
+fn approved_plan(scratch: &Scratch) -> String {
+    let root = scratch.root();
+    git(&root, &["switch", "-q", "-c", MISSION, "main"]);
+    write_mission(&root, MISSION, "open");
+    let path = root.join(mission_path(MISSION));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text + "\n## Success criteria\n\n- hello: it greets.\n\n## Result\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join(format!(".atelier/missions/{MISSION}/design.md")),
+        "Shape\n",
+    )
+    .unwrap();
+    write_item(&root, ID, "draft", &[], &[], "");
+    join_mission(&root, ID, MISSION);
+    commit_all(&root, "Plan");
+    let commit = tip(&root, "HEAD");
+    approve(&root, MISSION, "1-aaaa", "r1", &commit);
+    approve(&root, MISSION, "1-bbbb", "r2", &commit);
+    commit
+}
+
+/// `atelier merge` as p1 in `root`, refused for the plan, with `said` in
+/// what it says; nothing merges.
+fn plan_refused(root: &Path, said: &str) {
+    let base = tip(root, "main");
+    let run = atelier(root, "p1", &["merge"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+    assert!(run.stderr.contains(said), "{said}\n---\n{}", run.stderr);
+    assert!(run.stderr.ends_with(SKIP), "{}", run.stderr);
+    assert_eq!(tip(root, "main"), base);
+}
+
+#[test]
+fn a_proposed_plan_merges_on_two_approvals_of_its_head_and_any_change_to_it_after_makes_them_stale()
+{
+    // Changed after its approvals: its Success criteria, a document beside
+    // it, and one of its items' Done when each make both stale.
+    let changes: [(&str, &str, &str, &str); 3] = [
+        (
+            ".atelier/missions/demo-m1ss/mission.md",
+            "it greets.",
+            "it greets twice.",
+            "its Success criteria",
+        ),
+        (
+            ".atelier/missions/demo-m1ss/design.md",
+            "Shape",
+            "Another shape",
+            ".atelier/missions/demo-m1ss/design.md",
+        ),
+        (
+            ".atelier/items/demo-ab12/item.md",
+            "`hello` prints hello.",
+            "`hello` prints hi.",
+            ".atelier/items/demo-ab12/item.md",
+        ),
+    ];
+    for (path, from, to, named) in changes {
+        let scratch = Scratch::new(&[]);
+        let root = scratch.root();
+        let commit = approved_plan(&scratch);
+        let text = read(&root, path);
+        assert!(text.contains(from), "{path}");
+        fs::write(root.join(path), text.replace(from, to)).unwrap();
+        commit_all(&root, "Change it");
+        plan_refused(
+            &root,
+            &format!(
+                "    Round 1, review 1-aaaa by r1: approves {}, and does not count: the plan has changed since ({named}).\n",
+                &commit[..7]
+            ),
+        );
+    }
+
+    // A note, the Result, the lead and a review file are not the plan: it
+    // merges with the approvals it has.
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    approved_plan(&scratch);
+    fs::write(
+        root.join(format!(".atelier/missions/{MISSION}/notes.md")),
+        "A note.\n",
+    )
+    .unwrap();
+    let path = root.join(mission_path(MISSION));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(&path, text + "\nNot yet.\n").unwrap();
+    commit_all(&root, "Note it");
+    let run = atelier(&root, "p1", &["merge"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+    assert!(run.stdout.contains("Merged"), "{}", run.stdout);
+    let merged = git(&root, &["show", &format!("main:{}", mission_path(MISSION))]);
+    assert_eq!(front(&merged, "status"), "open");
+}
+
+#[test]
+fn a_plan_reviewed_by_a_planner_or_twice_by_one_thread_or_dropped_does_not_merge() {
+    // A planner's approval does not count, nor a second by the same thread.
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    git(&root, &["switch", "-q", "-c", MISSION, "main"]);
+    write_mission(&root, MISSION, "open");
+    commit_all(&root, "Plan");
+    let commit = tip(&root, "HEAD");
+    approve(&root, MISSION, "1-aaaa", "p1", &commit);
+    approve(&root, MISSION, "1-bbbb", "r1", &commit);
+    approve(&root, MISSION, "1-cccc", "r1", &commit);
+    plan_refused(
+        &root,
+        "    Round 1, review 1-aaaa by p1: approves, and does not count: its reviewer is a planner of the mission.\n    Round 1, review 1-bbbb by r1: approves, and counts.\n    Round 1, review 1-cccc by r1: approves, and does not count: its reviewer's other approval of the round counts already.\n    1 of 2 count.\n",
+    );
+    // Only the latest round counts.
+    approve(&root, MISSION, "2-dddd", "r2", &commit);
+    plan_refused(
+        &root,
+        "    Round 2, review 2-dddd by r2: approves, and counts.\n    1 of 2 count.\n",
+    );
+
+    // A thread that is not a planner does not merge it; one that submits
+    // it takes the plan over and is added to its planners.
+    approve(&root, MISSION, "2-eeee", "r3", &commit);
+    let run = atelier(&root, "p2", &["merge"]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.contains(&format!(
+            "`atelier merge` on mission {MISSION}'s branch is a planner's, and you have not planned it, last p1."
+        )),
+        "{}",
+        run.stderr
+    );
+    let run = atelier(&root, "p2", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        front(&read(&root, &mission_path(MISSION)), "planners"),
+        "p1 p2"
+    );
+    assert_eq!(
+        git(&root, &["log", "-1", "--format=%s"]),
+        format!("Take over the plan of {MISSION} from p1")
+    );
+    // The commit that recorded p2 changed no plan, so both still count.
+    let run = atelier(&root, "p2", &["merge"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
+
+    // A plan dropped on its branch, with two approvals, never merges.
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    approved_plan(&scratch);
+    let run = atelier(&root, "p1", &["drop", MISSION, "--reason", "Not now"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.starts_with(&format!(
+            "Dropped the proposed plan of mission {MISSION}: Not now\nIt stops nothing until it is committed. Its branch is never merged.\nWrote, and did not commit:\n"
+        )),
+        "{}",
+        run.stdout
+    );
+    // Until it is committed, `status` and `show` say the stop is not
+    // published.
+    let unpublished = format!(
+        "Stop not published: mission {MISSION}'s plan is dropped in this checkout and not committed on {MISSION}. Commit it.\n"
+    );
+    for args in [&["status"][..], &["show", MISSION]] {
+        let run = atelier(&root, "p1", args);
+        assert!(
+            run.stdout.contains(&unpublished),
+            "{args:?}: {}",
+            run.stdout
+        );
+    }
+    run_then(&root, &run.stdout);
+    for args in [&["status"][..], &["show", MISSION]] {
+        let run = atelier(&root, "p1", args);
+        assert!(
+            !run.stdout.contains("Stop not published"),
+            "{args:?}: {}",
+            run.stdout
+        );
+    }
+    let base = tip(&root, "main");
+    let run = atelier(&root, "p1", &["merge"]);
+    assert_eq!(run.code, 1);
+    assert!(
+        run.stderr.starts_with(&format!(
+            "Mission {MISSION} is dropped, and `atelier merge` runs on a mission that is open. Nothing changed.\nA plan dropped on its branch is not merged"
+        )),
+        "{}",
+        run.stderr
+    );
+    assert_eq!(tip(&root, "main"), base);
+    let run = atelier(&root, "p1", &["submit"]);
+    assert_eq!(run.code, 1, "{}", run.stdout);
+}
+
+#[test]
+fn an_agreed_missions_record_changes_merge_on_check_and_its_plan_needs_two_reviews() {
+    let scratch = Scratch::new(&[]);
+    let root = scratch.root();
+    write_mission(&root, MISSION, "open");
+    let path = root.join(mission_path(MISSION));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(
+        &path,
+        text.replace("## Outcome", "## Why\n\nAsked for.\n\n## Outcome") + "\n## Result\n",
+    )
+    .unwrap();
+    commit_all(&root, "Agree");
+
+    // A note, a Result, an added item and the lead each merge on `check`.
+    let notes = format!(".atelier/missions/{MISSION}/notes.md");
+    type Change<'a> = (&'a str, &'a dyn Fn(&Path));
+    let changes: [Change; 4] = [
+        ("note", &|at: &Path| {
+            fs::write(at.join(&notes), "A note.\n").unwrap()
+        }),
+        ("result", &|at: &Path| {
+            let path = at.join(mission_path(MISSION));
+            let text = fs::read_to_string(&path).unwrap();
+            fs::write(&path, text + "\nHalf done.\n").unwrap();
+        }),
+        ("item", &|at: &Path| {
+            let run = atelier(at, "p1", &["new", "Say bye", "--in", MISSION]);
+            assert_eq!(run.code, 0, "{}", run.stderr);
+        }),
+        ("lead", &|at: &Path| {
+            let run = atelier(at, "l1", &["lead", MISSION]);
+            assert_eq!(run.code, 0, "{}", run.stderr);
+        }),
+    ];
+    for (slug, change) in changes {
+        git(&root, &["checkout", "-q", "--detach", "main"]);
+        assert_eq!(atelier(&root, "p1", &["start", "--backlog", slug]).code, 0);
+        change(&root);
+        git(&root, &["add", "-A"]);
+        git(&root, &["commit", "-qm", slug]);
+        let run = atelier(&root, "p1", &["merge"]);
+        assert_eq!(run.code, 0, "{slug}: {}{}", run.stdout, run.stderr);
+    }
+    let merged = git(&root, &["show", &format!("main:{}", mission_path(MISSION))]);
+    assert_eq!(front(&merged, "lead"), "l1");
+
+    // A change to its Why is a change of its plan, and waits for two
+    // reviews of it.
+    git(&root, &["checkout", "-q", "--detach", "main"]);
+    assert_eq!(atelier(&root, "p1", &["start", "--backlog", "why"]).code, 0);
+    let path = root.join(mission_path(MISSION));
+    let text = fs::read_to_string(&path).unwrap();
+    fs::write(&path, text.replace("Asked for.", "Asked for twice.")).unwrap();
+    commit_all(&root, "Why");
+    plan_refused(
+        &root,
+        &format!("  Mission {MISSION}: backlog/why changes its plan: its Why.\n"),
+    );
+    // The thread that submits it becomes a planner, and two others review
+    // it.
+    let run = atelier(&root, "p3", &["submit"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(
+        run.stdout.contains("for round 1 of plan review"),
+        "{}",
+        run.stdout
+    );
+    assert_eq!(
+        front(&read(&root, &mission_path(MISSION)), "planners"),
+        "p1 p3"
+    );
+    let commit = tip(&root, "HEAD");
+    approve(&root, MISSION, "1-aaaa", "r1", &commit);
+    plan_refused(&root, "    1 of 2 count.\n");
+    approve(&root, MISSION, "1-bbbb", "r2", &commit);
+    let run = atelier(&root, "p3", &["merge"]);
+    assert_eq!(run.code, 0, "{}{}", run.stdout, run.stderr);
 }

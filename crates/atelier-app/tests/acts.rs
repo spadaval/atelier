@@ -189,7 +189,7 @@ const MISSION_SPECIFIED: [(Act, &[Status], Option<Status>); 7] = [
         &[Status::Draft, Status::Ready],
         Some(Status::Ready),
     ),
-    (Act::MergeMission, &[Status::Draft, Status::Ready], None),
+    (Act::MergeMission, &[Status::Ready], None),
     (
         Act::Drop,
         &[Status::Draft, Status::Ready],
@@ -1311,4 +1311,73 @@ fn carried_names(item: &ItemDir, round: u32) -> Vec<String> {
         .iter()
         .map(|c| c.finding.name.to_string())
         .collect()
+}
+
+/// Each open mission record of the five repositories this tool serves, as
+/// their bases held them on 2026-11-13, with each one's title, labels,
+/// threads and body replaced, since some are private: the front matter
+/// they were written in, `status: ready` with a `ready` field, or `status:
+/// draft` with none.
+#[test]
+fn every_open_mission_record_of_the_five_repositories_reads_in_the_old_form() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../atelier-records/tests/fixtures/open-missions");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    paths.sort();
+    assert_eq!(paths.len(), 16);
+    let (mut open, mut drafts) = (0, 0);
+    let caller = thread("l1");
+    for path in &paths {
+        let text = std::fs::read_to_string(path).unwrap();
+        let mission = parse_mission(path, &text).unwrap_or_else(|e| panic!("{e}"));
+        let stored = text
+            .lines()
+            .find_map(|l| l.strip_prefix("status: "))
+            .unwrap();
+        let dir = MissionDir {
+            mission: mission.clone(),
+            path: path.clone(),
+            reviews: Vec::new(),
+        };
+        let lead = check_mission(
+            Act::Lead,
+            &MissionFacts {
+                mission: &dir,
+                caller: &caller,
+                items: &[],
+                review: None,
+            },
+        );
+        // An item of it, ready, as `start` sees it on the base.
+        let item = record(Status::Ready, &[], DONE);
+        let facts = Facts {
+            mission: Some((mission.id.clone(), Some(mission.status.status()))),
+            branch: false,
+            ..facts(&item, &caller)
+        };
+        let start = check(Act::Start, &facts);
+        match stored {
+            // `ready` is open: led, and its items start.
+            "ready" => {
+                open += 1;
+                assert_eq!(mission.status, MissionStatus::Open, "{}", path.display());
+                assert!(lead.is_ok() && start.is_ok(), "{}", path.display());
+            }
+            // The old draft is proposed: neither led nor started.
+            "draft" => {
+                drafts += 1;
+                assert_eq!(mission.status, MissionStatus::Draft, "{}", path.display());
+                assert!(lead.is_err() && start.is_err(), "{}", path.display());
+            }
+            other => panic!("{}: {other}", path.display()),
+        }
+        // Its `ready` field is read and never written back.
+        let written = atelier_records::render_mission(&mission);
+        assert!(!written.contains("ready"), "{written}");
+        assert!(written.contains("\nplanners: []\n"), "{written}");
+    }
+    assert_eq!((open, drafts), (8, 8));
 }
