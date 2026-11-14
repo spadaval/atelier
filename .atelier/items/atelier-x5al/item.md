@@ -3,14 +3,15 @@ schema: atelier.item
 schema_version: 3
 id: atelier-x5al
 title: Run every git and gh call through the core's git and forge modules
-status: ready
+status: building
 mission: atelier-dy62
 labels: []
 priority: medium
 blocked_by:
 - atelier-ni3d
 - atelier-nl43
-implementers: []
+implementers:
+- thread:delegated-task:command%3Amcp%3A7528a691-d081-4f17-89b8-d45bea97b6e3%3Adelegate-task%3A8b1ae668-ea37-441e-9029-3a499f04af34
 ready:
   by: sumeet, in conversation on 2026-11-14
   at: 2026-11-14T06:21:12.860651075Z
