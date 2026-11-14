@@ -3,7 +3,7 @@ schema: atelier.item
 schema_version: 3
 id: atelier-t5am
 title: Finish a merge through the forge's pull request, so Atelier works on a protected base
-status: draft
+status: ready
 mission: atelier-to83
 labels:
 - redesign
@@ -12,7 +12,9 @@ blocked_by:
 - atelier-ob9u
 - atelier-2vdq
 implementers: []
-ready: null
+ready:
+  by: 'sumeet, on 2026-11-13: execute atelier-to83, relayed by the planner thread'
+  at: 2026-11-14T00:56:53.839951546Z
 trivial: null
 caused_by: null
 created_at: 2026-11-13T06:14:32.695875418Z
